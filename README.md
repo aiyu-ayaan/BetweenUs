@@ -1,120 +1,325 @@
 # Nexora
 
-Discord-like communication platform with secure remote desktop access, built as
-a pnpm + Turborepo monorepo. `CLAUDE.md` holds the target architecture;
-`development/` tracks what is built and what comes next.
+A Discord-like communication platform with secure remote desktop access, built
+as a pnpm + Turborepo monorepo of independently deployable NestJS services and
+an Electron desktop client.
+
+Messages, attachments and call media are end-to-end encrypted: the server
+stores ciphertext and routes it, and never holds a key that opens it.
+
+`CLAUDE.md` is the target architecture. `development/` tracks what is built,
+why each decision was taken, and what is deliberately left open.
+
+---
 
 ## Status
 
-Working end to end: register / login, servers with per-member permissions,
-public and private text channels with end-to-end encrypted messages and
-realtime delivery, direct messages between friends, Discord-style voice
-channels over LiveKit with end-to-end encrypted media, screen share, presence
-with a choosable status and typing indicators - in an Electron desktop client.
+| Area | State |
+| --- | --- |
+| Accounts | Register, login, refresh-token rotation with reuse detection, Google and GitHub sign-in, admin panel |
+| Servers | Servers, roles, per-member permission overrides, invites by slug, server settings |
+| Channels | Public and private text channels, private channels as an allowlist, direct messages between friends |
+| Messages | End-to-end encrypted, realtime over WebSocket, history paging, attachments of any type |
+| Voice and video | LiveKit voice channels, camera, screen share with a source picker, end-to-end encrypted media |
+| Presence | Online / idle / do not disturb / invisible, typing indicators, voice rosters |
+| Notifications | Desktop notifications, system tray, start with the system, per-channel mute, quiet hours, persisted unread |
+| Remote desktop | Not built - `remote-gateway` and `remote-agent` are scaffolds |
 
-Not built yet: remote desktop, notifications, user profiles. See
-`development/PLANNING.md`, `development/E2EE.md` and `development/TODO.md`.
+Known limits are written down rather than implied: see `development/E2EE.md`
+for what the encryption does and does not protect, and `development/TODO.md`
+for everything each phase left open on purpose.
+
+---
+
+## Architecture
+
+Five concerns are kept apart, and the separation is the design: public ingress,
+internal routing, application logic, realtime media, and remote access.
+
+```
+                              Internet
+                                 │
+                          Cloudflare Tunnel          (no inbound ports opened)
+                                 │
+                        ┌────────▼────────┐
+                        │  Nginx :8080    │          routing, rate limits,
+                        │  API gateway    │          body caps, WS upgrade
+                        └────────┬────────┘
+                                 │
+   ┌──────────────┬──────────────┼───────────────┬──────────────┐
+   │              │              │               │              │
+┌──▼───┐   ┌──────▼─────┐  ┌─────▼─────┐  ┌──────▼──────┐ ┌─────▼──────┐
+│ auth │   │  server    │  │   chat    │  │  presence   │ │notification│
+│ 3001 │   │   3003     │  │   3004    │  │    3005     │ │    3006    │
+└──┬───┘   └──────┬─────┘  └─────┬─────┘  └──────┬──────┘ └─────┬──────┘
+   │              │              │               │              │
+   └──────────────┴──────┬───────┴───────────────┴──────────────┘
+                         │
+            ┌────────────┴────────────┐
+            │                         │
+      ┌─────▼──────┐            ┌─────▼─────┐
+      │ PostgreSQL │            │   Redis   │  pub/sub, presence,
+      │   :5432    │            │   :6379   │  rate limits, sessions
+      └────────────┘            └───────────┘
+
+  Desktop ──── WebRTC (E2EE media) ───▶ LiveKit SFU :7880   ◀── tokens from
+                                                                call-service :3007
+```
+
+Media never passes through a NestJS process. `call-service` decides who may
+join a room and mints a LiveKit token; the client dials the SFU directly and
+encrypts its own tracks with the channel key.
+
+### Services
+
+Each service is its own package with its own `package.json`, `Dockerfile` and
+`GET /health`, and can be deployed on its own.
+
+| Service | Port | Owns |
+| --- | --- | --- |
+| `api-gateway` | 8080 | Nginx config: routing, rate limiting, request caps, WebSocket upgrade. No business logic |
+| `auth-service` | 3001 | Registration, login, JWT access and refresh tokens with rotation, OAuth, the admin API |
+| `server-service` | 3003 | Servers, members, roles, permission overrides, channels, invites |
+| `chat-service` | 3004 | Messages, `/ws/chat` fanout, uploads, the E2EE key directory, friends and DMs |
+| `presence-service` | 3005 | `/ws/presence`, online status, typing, voice rosters, all Redis-backed |
+| `notification-service` | 3006 | Notification preferences, per-channel mutes, quiet hours, read markers |
+| `call-service` | 3007 | LiveKit room permissions and access tokens |
+| `remote-gateway` | 3008 | Scaffold - remote session relay and audit log |
+| `remote-agent` | — | Scaffold - screen capture, input, clipboard, file transfer |
+
+`user-service` is a scaffold too; its routes (profiles, friends, user search)
+are served by chat-service until it exists.
+
+### Shared packages
+
+Cross-cutting code only - no service's business logic lives here.
+
+| Package | Holds |
+| --- | --- |
+| `@nexora/shared-types` | DTOs, API contracts, WebSocket event unions. One source for client and server |
+| `@nexora/database` | Prisma schema and client, plus `resolveChannelAccess` - the single answer to "may this user do this here" |
+| `@nexora/auth` | JWT sign and verify, `JwtAuthGuard`, `@CurrentUser()`, secret sealing |
+| `@nexora/permissions` | Role constants and the override arithmetic (deny beats grant beats role) |
+| `@nexora/events` | Event names, payload contracts, and the Redis pub/sub bus |
+| `@nexora/nest-common` | Bootstrap, request ids, the error contract, `/health`, Redis-backed rate limiting |
+| `@nexora/storage` | Local-disk and S3 drivers behind one interface, including multipart upload |
+| `@nexora/websocket` | Shared socket plumbing |
+| `@nexora/logger` | Structured JSON logging with redaction |
+| `@nexora/config` | Typed environment loading |
+
+### Realtime
+
+- **`/ws/chat`** - JWT handshake, per-channel subscriptions, fanout driven by
+  Redis pub/sub so any number of chat-service instances stay in step.
+- **`/ws/presence`** - status, typing and voice rosters, with Redis holding the
+  live state rather than any single process.
+- **WebRTC to LiveKit** - voice, video and screen share. Never over WebSocket.
+
+### Data
+
+PostgreSQL holds persistent state through Prisma: users, identities, servers,
+members, roles, channels, channel allowlists, friendships, messages, device
+keys, wrapped channel keys, notification settings and read markers.
+
+Redis holds what is live and cheap to lose: presence, typing, voice rosters,
+pub/sub, rate-limit windows.
+
+Object storage (local disk or any S3-compatible bucket) holds files. Postgres
+keeps the metadata; blobs never go in a column.
+
+---
+
+## Security
+
+- **End-to-end encryption.** ECDH P-256 identity key per device, HKDF key
+  wrapping, AES-256-GCM for messages, attachments and call media. Private keys
+  are sealed with the OS keychain through Electron `safeStorage` and never
+  leave the machine. A call that cannot encrypt aborts rather than downgrading.
+- **Attachments are encrypted before upload**, and their manifest - name, real
+  type, size - travels inside the encrypted message body, not in columns. The
+  server cannot type what it stores, so it serves everything as
+  `application/octet-stream` with a download disposition.
+- **Authorization is server-side and central.** `resolveChannelAccess` answers
+  every channel question for chat-, call- and presence-service. A private
+  channel is an allowlist that ownership does not override, and a channel the
+  caller cannot see answers 404 rather than 403, so ids cannot be probed for.
+- **Refresh-token rotation with reuse detection** - replaying a consumed token
+  revokes the whole family.
+- **Rate limiting twice**: per address at the gateway, and again in the service
+  through Redis, so every instance shares one budget.
+- **Hardened renderer**: context isolation on, node integration off, sandbox
+  on, a permission handler that allows only microphone, camera and display
+  capture, and navigation locked to the app origin.
+- **Structured logs never carry** passwords, tokens, keys or message content.
+  Every request logs a request id, and the id survives a hop between services.
+
+`development/E2EE.md` states the threat model and the known gaps plainly.
+
+---
 
 ## Requirements
 
 - Node.js 20+
 - pnpm 9
-- Docker Desktop (only to run Postgres, Redis and LiveKit locally)
+- Docker Desktop - only for Postgres, Redis and LiveKit in development
 
 ## Quick start
 
 ```bash
-cp .env.example .env                                   # then set JWT secrets
-docker compose -f infrastructure/docker/docker-compose.dev.yml up -d
+cp .env.example .env            # then set the JWT secrets
+pnpm dev:infra                  # Postgres, Redis, LiveKit in Docker
 pnpm install
 pnpm db:generate
-pnpm db:migrate                                        # creates the schema
-                                                       # (prompts for a name on
-                                                       #  a new migration)
-pnpm db:seed                                           # optional: demo@nexora.local / nexora123
-pnpm dev                                               # all services + desktop
-pnpm dev:duo                                           # two signed-in test windows
+pnpm db:migrate                 # creates the schema
+pnpm db:seed                    # optional: demo@nexora.local / nexora123
+pnpm dev:backend                # every service, no renderer (leave running)
+pnpm dev:duo                    # second terminal: two signed-in test windows
 ```
 
-`pnpm dev:infra` / `pnpm dev:infra:down` are shortcuts for the compose commands.
-Only Postgres and Redis run in Docker for development - no local database
-install needed, and services run on the host for fast reloads.
+Use `pnpm dev:backend`, not `pnpm dev`: the latter also starts the desktop
+renderer on 5173, which `dev:duo` needs for its own Vite. `pnpm dev:desktop`
+runs a single client against a running backend.
 
-Default ports: gateway `8080`, auth `3001`, server `3003`, chat `3004`,
-presence `3005`, call `3007`, LiveKit `7880`, desktop renderer `5173`.
-
-`pnpm dev:duo` opens two Electron windows signed in as different users, each
-with its own profile and encryption key, which is the only sane way to test
-chat, voice and presence. See `development/TESTING.md`.
-
-To run everything in containers instead:
+Everything in containers instead:
 
 ```bash
 docker compose -f infrastructure/docker/docker-compose.yml up -d --build
 ```
 
+Default ports: gateway `8080`, auth `3001`, server `3003`, chat `3004`,
+presence `3005`, notification `3006`, call `3007`, LiveKit `7880`, renderer
+`5173`, admin panel `5174`.
+
+## Desktop client
+
+Electron with a hardened preload, React, Tailwind and Zustand. It keeps running
+in the system tray when the window is closed - which is what makes a
+notification possible while it is "shut" - and starts with the system by
+default, with both switches in Settings → Notifications.
+
+```
+pnpm dev:desktop     one client against a running backend
+pnpm dev:duo         two windows, two profiles, two encryption identities
+pnpm dev:admin       the admin panel on 5174
+pnpm admin:create    bootstrap the first administrator (password printed once)
+```
+
 ## File storage
 
-Uploads go through `@nexora/storage`, which picks its driver from the
-environment:
+`@nexora/storage` picks its driver from the environment:
 
-- **S3 variables empty (default):** files are written to `LOCAL_STORAGE_PATH`
-  (`./storage-data`) and served by chat-service at `/api/v1/uploads/<key>`. No
-  MinIO, no AWS account, nothing to configure.
-- **`S3_ENDPOINT`, `S3_BUCKET`, `S3_ACCESS_KEY` and `S3_SECRET_KEY` all set:**
-  the S3 driver takes over and returns bucket URLs. Partially filled config
-  stays on local disk rather than half-working.
-- `STORAGE_DRIVER=local|s3` forces a driver. Forcing `s3` without credentials
-  fails at boot instead of silently falling back.
-
-```
-POST /api/v1/uploads      multipart field "file", auth required
-GET  /api/v1/uploads/:key
-```
+- **S3 variables empty (default):** files land in `LOCAL_STORAGE_PATH`
+  (`./storage-data`) and chat-service serves them. Nothing to configure.
+- **`S3_ENDPOINT`, `S3_BUCKET`, `S3_ACCESS_KEY`, `S3_SECRET_KEY` all set:** the
+  S3 driver takes over. Partial configuration stays on local disk rather than
+  half-working.
+- `STORAGE_DRIVER=local|s3` forces one. Forcing `s3` without credentials fails
+  at boot instead of silently falling back.
 
 Keys are UUID-based, so a client filename never decides where a file lands.
-Content types are allowlisted, and anything not provably safe to render inline
-(SVG, PDF, text) is served with `Content-Disposition: attachment`.
+Anything over 8 MB uploads in parts, with the session carried by the client as
+a sealed ticket rather than held as state in a service.
+
+---
 
 ## Repository layout
 
 ```
-apps/desktop              Electron + React + Tailwind + Zustand client
-apps/services/*           NestJS microservices (auth, server, chat, call,
-                          presence built)
-packages/*                shared-types, auth, permissions, database, events,
-                          websocket, storage, logger, config, nest-common
+apps/
+  desktop/                Electron + React + Tailwind + Zustand client
+  admin/                  Admin panel (React, served under /admin)
+  services/
+    api-gateway/          Nginx configuration
+    auth-service/         Accounts, tokens, OAuth, admin API
+    server-service/       Servers, roles, channels
+    chat-service/         Messages, /ws/chat, uploads, E2EE directory
+    presence-service/     /ws/presence, status, typing, voice rosters
+    notification-service/ Preferences, mutes, quiet hours, read markers
+    call-service/         LiveKit tokens and room permissions
+    remote-gateway/       Scaffold
+    remote-agent/         Scaffold
+    user-service/         Scaffold
+packages/                 shared-types, database, auth, permissions, events,
+                          nest-common, storage, websocket, logger, config
 infrastructure/           docker compose, nginx, cloudflare, livekit
-development/              planning, MVP definition, E2EE design, testing, TODO
+development/              planning, MVP, E2EE design, testing guide, TODO
 ```
 
 ## Common commands
 
 | Command | Effect |
 | --- | --- |
+| `pnpm dev:backend` | Every service, no renderer |
+| `pnpm dev` | Everything, including the desktop renderer |
+| `pnpm dev:duo` | Two signed-in desktop windows for chat, voice and presence |
 | `pnpm build` | Build every package, service and the desktop bundle |
 | `pnpm typecheck` | Type-check the whole monorepo |
-| `pnpm check` | Run package self-checks (logger, auth, websocket, storage, desktop crypto) |
-| `pnpm dev:desktop` | Run only the desktop client |
-| `pnpm dev:duo` | Two signed-in desktop windows for chat/voice testing |
-| `pnpm db:studio` | Open Prisma Studio against the dev database |
+| `pnpm check` | Package self-checks - crypto, storage, logger, auth, permissions, websocket |
+| `pnpm db:migrate` / `db:seed` / `db:studio` | Schema, demo data, Prisma Studio |
+| `pnpm admin:create` | Create the first administrator |
 | `pnpm --filter @nexora/chat-service smoke` | End-to-end check against running services |
+| `pnpm --filter @nexora/presence-service smoke` | Presence, typing and voice rosters |
+| `pnpm --filter @nexora/notification-service smoke` | Preferences, unread counting, read markers |
+
+## Testing and CI
+
+Three layers, all runnable locally:
+
+1. **Self-checks** (`pnpm check`) need no infrastructure: the crypto
+   primitives, the storage drivers including a multipart round trip, the
+   permission arithmetic, the logger's redaction.
+2. **Smoke scripts** drive the real HTTP and WebSocket surface against running
+   services and exit non-zero on a failed assertion.
+3. **Manual walkthroughs** for what only a human can judge - two people in a
+   voice call, a shared screen, a notification arriving from the tray.
+   `development/TESTING.md` lists them.
+
+GitHub Actions runs install → lint → typecheck → build → self-checks, then an
+integration job with Postgres and Redis containers that applies the migrations,
+starts the services and runs every smoke script.
 
 ## API surface
 
 ```
 POST /api/v1/auth/register|login|refresh|logout    GET /api/v1/auth/me
-GET|POST /api/v1/servers         POST /api/v1/servers/join
-GET|PATCH|DELETE /api/v1/servers/:id      POST /api/v1/servers/:id/leave
-GET /api/v1/servers/:id/members  PATCH|DELETE /api/v1/servers/:id/members/:userId
-GET|POST /api/v1/channels        PATCH|DELETE /api/v1/channels/:id
-GET|PUT /api/v1/channels/:id/members      GET|POST /api/v1/messages
-GET /api/v1/users/search         GET|POST /api/v1/friends
-POST /api/v1/friends/:id/accept  DELETE /api/v1/friends/:id
+GET|POST /api/v1/servers          POST /api/v1/servers/join
+GET|PATCH|DELETE /api/v1/servers/:id       POST /api/v1/servers/:id/leave
+GET /api/v1/servers/:id/members   PATCH|DELETE /api/v1/servers/:id/members/:userId
+GET|POST /api/v1/channels         PATCH|DELETE /api/v1/channels/:id
+GET|PUT /api/v1/channels/:id/members       GET|POST /api/v1/messages
+GET /api/v1/users/search          GET|POST /api/v1/friends
+POST /api/v1/friends/:id/accept   DELETE /api/v1/friends/:id
 GET|POST /api/v1/dm
-POST /api/v1/uploads             GET /api/v1/uploads/:key
-GET|POST /api/v1/e2ee/devices    GET /api/v1/e2ee/keys/:channelId
-POST /api/v1/e2ee/keys           POST /api/v1/calls/token
-WS   /ws/chat                    WS  /ws/presence
-GET  /health (every service)
+POST /api/v1/uploads              GET /api/v1/uploads/:key
+GET|POST /api/v1/e2ee/devices     GET /api/v1/e2ee/keys/:channelId
+POST /api/v1/e2ee/keys            POST /api/v1/calls/token
+GET|PATCH /api/v1/notifications/preferences
+GET /api/v1/notifications/unread  POST /api/v1/notifications/read
+GET /api/v1/admin/...             (administrators only)
+WS   /ws/chat                     WS  /ws/presence
+GET  /health                      (every service)
 ```
+
+Errors share one shape everywhere:
+
+```json
+{ "error": { "code": "CHANNEL_NOT_FOUND", "message": "Channel not found", "requestId": "..." } }
+```
+
+## Conventions
+
+- TypeScript strict everywhere; no `any` in committed code.
+- Controllers stay thin, services hold the logic, persistence stays in services.
+- Every service exposes `GET /health` and answers the shared error contract.
+- Conventional commits (`feat:`, `fix:`, `chore:`, `docs:`).
+
+## Documentation
+
+| Document | Covers |
+| --- | --- |
+| `CLAUDE.md` | Target architecture, in full |
+| `development/PLANNING.md` | Phase map, every architectural decision and why |
+| `development/MVP.md` | What the first runnable version covered |
+| `development/E2EE.md` | Encryption design, threat model, known limits |
+| `development/TESTING.md` | Running two clients locally, and what to try |
+| `development/TODO.md` | Ordered backlog, including what each phase left open |
