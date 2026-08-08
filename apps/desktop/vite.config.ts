@@ -20,7 +20,13 @@ export default defineConfig({
         entry: 'electron/main.ts',
         ...(manageElectron ? {} : { onstart: () => undefined }),
       },
-      preload: { input: 'electron/preload.ts' },
+      preload: {
+        input: 'electron/preload.ts',
+        // The preload bundle's default hook reloads Electron - and "reload"
+        // means "start it" when no Electron was launched by the plugin, which
+        // would add a third, unmanaged window during `pnpm dev:duo`.
+        ...(manageElectron ? {} : { onstart: () => undefined }),
+      },
     }),
   ],
   server: {
