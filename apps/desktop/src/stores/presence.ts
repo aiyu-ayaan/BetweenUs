@@ -3,6 +3,7 @@
  * `/ws/presence` socket.
  */
 import { create } from 'zustand';
+import type { ActiveStatus, PresenceStatus } from '@nexora/shared-types';
 import { presenceSocket } from '../services/socket';
 import { notifyVoiceJoin } from '../services/notifications';
 import { useAuthStore } from './auth';
@@ -21,15 +22,21 @@ interface TypingEntry {
 
 interface PresenceState {
   online: Set<string>;
+  /** userId -> what that person appears as. Nobody in here reads `invisible`. */
+  statuses: Map<string, PresenceStatus>;
+  /** This user's own status, which is the only place `invisible` shows up. */
+  selfStatus: ActiveStatus;
   /** channelId -> userId -> entry */
   typing: Map<string, Map<string, TypingEntry>>;
   /** channelId -> user ids currently in that voice channel */
   voice: Map<string, string[]>;
 
   isOnline: (userId: string) => boolean;
+  statusOf: (userId: string) => PresenceStatus;
   typistsIn: (channelId: string) => string[];
   voiceMembers: (channelId: string) => string[];
   notifyTyping: (channelId: string) => void;
+  setStatus: (status: ActiveStatus) => void;
   reset: () => void;
 }
 
@@ -37,10 +44,14 @@ let lastTypingSentAt = 0;
 
 export const usePresenceStore = create<PresenceState>((set, get) => ({
   online: new Set(),
+  statuses: new Map(),
+  selfStatus: 'online',
   typing: new Map(),
   voice: new Map(),
 
   isOnline: (userId) => get().online.has(userId),
+
+  statusOf: (userId) => get().statuses.get(userId) ?? 'offline',
 
   typistsIn: (channelId) => {
     const now = Date.now();
@@ -58,7 +69,23 @@ export const usePresenceStore = create<PresenceState>((set, get) => ({
     presenceSocket.send({ type: 'typing.start', channelId });
   },
 
-  reset: () => set({ online: new Set(), typing: new Map(), voice: new Map() }),
+  /**
+   * Optimistic: the picker closes on the chosen value straight away, and the
+   * server's `status.self` confirms it a moment later.
+   */
+  setStatus: (status) => {
+    set({ selfStatus: status });
+    presenceSocket.send({ type: 'status.set', status });
+  },
+
+  reset: () =>
+    set({
+      online: new Set(),
+      statuses: new Map(),
+      selfStatus: 'online',
+      typing: new Map(),
+      voice: new Map(),
+    }),
 }));
 
 /**
@@ -91,16 +118,28 @@ presenceSocket.on((event) => {
     case 'presence.sync': {
       usePresenceStore.setState({
         online: new Set(event.users.map((user) => user.userId)),
+        statuses: new Map(event.users.map((user) => [user.userId, user.status])),
         voice: new Map(event.voice.map((entry) => [entry.channelId, entry.userIds])),
       });
       return;
     }
 
+    case 'status.self': {
+      usePresenceStore.setState({ selfStatus: event.status });
+      return;
+    }
+
     case 'presence.changed': {
       const online = new Set(state.online);
-      if (event.user.status === 'offline') online.delete(event.user.userId);
-      else online.add(event.user.userId);
-      usePresenceStore.setState({ online });
+      const statuses = new Map(state.statuses);
+      if (event.user.status === 'offline') {
+        online.delete(event.user.userId);
+        statuses.delete(event.user.userId);
+      } else {
+        online.add(event.user.userId);
+        statuses.set(event.user.userId, event.user.status);
+      }
+      usePresenceStore.setState({ online, statuses });
       return;
     }
 

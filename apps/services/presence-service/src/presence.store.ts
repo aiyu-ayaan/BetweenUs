@@ -11,11 +11,20 @@
 import { Injectable, OnModuleDestroy } from '@nestjs/common';
 import Redis from 'ioredis';
 import { envOr } from '@nexora/config';
-import type { PresenceState, VoiceState } from '@nexora/shared-types';
+import type {
+  ActiveStatus,
+  PresenceState,
+  PresenceStatus,
+  VoiceState,
+} from '@nexora/shared-types';
 
 const ONLINE_KEY = 'presence:online';
+const STATUS_KEY = 'presence:status';
 const VOICE_KEY = (channelId: string): string => `presence:voice:${channelId}`;
 const VOICE_INDEX = 'presence:voice:channels';
+
+/** Anything else in the hash is a status this build does not know; ignore it. */
+const ACTIVE_STATUSES: ActiveStatus[] = ['online', 'idle', 'dnd', 'invisible'];
 
 /** A client that has not checked in for this long is treated as gone. */
 export const STALE_AFTER_MS = 90_000;
@@ -35,13 +44,42 @@ export class PresenceStore implements OnModuleDestroy {
     await this.redis.zrem(ONLINE_KEY, userId);
   }
 
+  /**
+   * The status a user chose. It outlives the connection on purpose: someone who
+   * set themselves invisible expects to still be invisible after a restart.
+   */
+  async setStatus(userId: string, status: ActiveStatus): Promise<void> {
+    await this.redis.hset(STATUS_KEY, userId, status);
+  }
+
+  async statusOf(userId: string): Promise<ActiveStatus> {
+    const stored = await this.redis.hget(STATUS_KEY, userId);
+    return isActiveStatus(stored) ? stored : 'online';
+  }
+
+  /**
+   * What everyone else may see. An invisible user is reported `offline`, and
+   * that resolution happens here rather than in the client, because a status
+   * that only the UI hides is not invisible.
+   */
+  async visibleStatusOf(userId: string): Promise<PresenceStatus> {
+    const status = await this.statusOf(userId);
+    return status === 'invisible' ? 'offline' : status;
+  }
+
   async onlineUsers(): Promise<PresenceState[]> {
     const cutoff = Date.now() - STALE_AFTER_MS;
     // Drop stale entries as a side effect of reading, so no sweeper job is
     // needed for a set this small.
     await this.redis.zremrangebyscore(ONLINE_KEY, '-inf', cutoff);
     const ids = await this.redis.zrange(ONLINE_KEY, 0, -1);
-    return ids.map((userId) => ({ userId, status: 'online' as const }));
+
+    const states = await Promise.all(
+      ids.map(async (userId) => ({ userId, status: await this.visibleStatusOf(userId) })),
+    );
+    // An invisible user resolves to `offline`, which is the same as not being
+    // in the list at all - so leave them out rather than sending a contradiction.
+    return states.filter((state) => state.status !== 'offline');
   }
 
   async joinVoice(channelId: string, userId: string): Promise<VoiceState> {
@@ -81,4 +119,8 @@ export class PresenceStore implements OnModuleDestroy {
   async onModuleDestroy(): Promise<void> {
     await this.redis.quit();
   }
+}
+
+export function isActiveStatus(value: string | null): value is ActiveStatus {
+  return value !== null && (ACTIVE_STATUSES as string[]).includes(value);
 }

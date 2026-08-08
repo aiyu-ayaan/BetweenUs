@@ -373,7 +373,13 @@ export interface CallTokenResponse {
 
 // --- Presence ---
 
-export type PresenceStatus = 'online' | 'idle' | 'offline';
+/**
+ * What a user chose to appear as. `offline` is not choosable - it is what a
+ * disconnected client, or an invisible one, looks like to everybody else.
+ */
+export type ActiveStatus = 'online' | 'idle' | 'dnd' | 'invisible';
+
+export type PresenceStatus = ActiveStatus | 'offline';
 
 export interface PresenceState {
   userId: string;
@@ -389,6 +395,7 @@ export interface VoiceState {
 // --- Presence WebSocket protocol (/ws/presence) ---
 
 export type ClientPresenceEvent =
+  | { type: 'status.set'; status: ActiveStatus }
   | { type: 'typing.start'; channelId: string }
   | { type: 'voice.join'; channelId: string }
   | { type: 'voice.leave'; channelId: string }
@@ -396,6 +403,11 @@ export type ClientPresenceEvent =
 
 export type ServerPresenceEvent =
   | { type: 'ready'; userId: string }
+  /**
+   * The caller's own status, as chosen - the only place `invisible` is ever
+   * sent, because everyone else is told `offline` instead.
+   */
+  | { type: 'status.self'; status: ActiveStatus }
   /** Full snapshot on connect, then deltas. */
   | { type: 'presence.sync'; users: PresenceState[]; voice: VoiceState[] }
   | { type: 'presence.changed'; user: PresenceState }

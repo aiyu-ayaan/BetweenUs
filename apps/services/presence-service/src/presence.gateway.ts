@@ -15,7 +15,7 @@ import { PERMISSIONS } from '@nexora/permissions';
 import { Logger } from '@nexora/logger';
 import { authenticateHandshake } from '@nexora/websocket';
 import type { ClientPresenceEvent, ServerPresenceEvent } from '@nexora/shared-types';
-import { PresenceStore } from './presence.store';
+import { PresenceStore, isActiveStatus } from './presence.store';
 
 const HEARTBEAT_INTERVAL_MS = 30_000;
 
@@ -108,16 +108,24 @@ export class PresenceGateway implements OnModuleDestroy {
 
     this.send(socket, { type: 'ready', userId });
 
-    const [users, voice] = await Promise.all([
+    const [users, voice, own] = await Promise.all([
       this.store.onlineUsers(),
       this.store.allVoiceStates(),
+      // The chosen status survives a restart, so the picker has to be told what
+      // it currently is rather than assuming "online".
+      this.store.statusOf(userId),
     ]);
     this.send(socket, { type: 'presence.sync', users, voice });
+    this.send(socket, { type: 'status.self', status: own });
 
-    await this.events.publish(EVENTS.PRESENCE_CHANGED, {
-      user: { userId, status: 'online' },
-    });
+    await this.publishStatus(userId);
     this.logger.info('Presence connected', { userId });
+  }
+
+  /** Tells everyone else what this user looks like, invisible resolved away. */
+  private async publishStatus(userId: string): Promise<void> {
+    const status = await this.store.visibleStatusOf(userId);
+    await this.events.publish(EVENTS.PRESENCE_CHANGED, { user: { userId, status } });
   }
 
   private async onDisconnect(socket: WebSocket, userId: string): Promise<void> {
@@ -168,6 +176,23 @@ export class PresenceGateway implements OnModuleDestroy {
     }
 
     switch (event.type) {
+      case 'status.set': {
+        if (!isActiveStatus(event.status)) {
+          this.send(socket, {
+            type: 'error',
+            code: 'UNKNOWN_STATUS',
+            message: 'Unsupported status',
+          });
+          return;
+        }
+        await this.store.setStatus(state.userId, event.status);
+        // Every window of this user gets the real value; everyone else gets
+        // what `publishStatus` resolves it to.
+        this.sendToUser(state.userId, { type: 'status.self', status: event.status });
+        await this.publishStatus(state.userId);
+        return;
+      }
+
       case 'ping':
         await this.store.touch(state.userId);
         this.send(socket, { type: 'pong' });
@@ -220,6 +245,13 @@ export class PresenceGateway implements OnModuleDestroy {
   private async canAccessChannel(userId: string, channelId: string): Promise<boolean> {
     const access = await resolveChannelAccess(userId, channelId);
     return access !== null && access.permissions.includes(PERMISSIONS.VIEW_CHANNEL);
+  }
+
+  /** Every socket belonging to one user - a person may have several windows. */
+  private sendToUser(userId: string, event: ServerPresenceEvent): void {
+    for (const socket of this.server?.clients ?? []) {
+      if (this.state.get(socket)?.userId === userId) this.send(socket, event);
+    }
   }
 
   /** `exceptUserId` keeps a typing indicator from echoing to its own author. */
