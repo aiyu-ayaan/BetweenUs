@@ -213,6 +213,39 @@ export interface CallTokenResponse {
   identity: string;
 }
 
+// --- Presence ---
+
+export type PresenceStatus = 'online' | 'idle' | 'offline';
+
+export interface PresenceState {
+  userId: string;
+  status: PresenceStatus;
+}
+
+/** Who is currently connected to a voice channel's room. */
+export interface VoiceState {
+  channelId: string;
+  userIds: string[];
+}
+
+// --- Presence WebSocket protocol (/ws/presence) ---
+
+export type ClientPresenceEvent =
+  | { type: 'typing.start'; channelId: string }
+  | { type: 'voice.join'; channelId: string }
+  | { type: 'voice.leave'; channelId: string }
+  | { type: 'ping' };
+
+export type ServerPresenceEvent =
+  | { type: 'ready'; userId: string }
+  /** Full snapshot on connect, then deltas. */
+  | { type: 'presence.sync'; users: PresenceState[]; voice: VoiceState[] }
+  | { type: 'presence.changed'; user: PresenceState }
+  | { type: 'typing'; channelId: string; userId: string; username: string }
+  | { type: 'voice.changed'; voice: VoiceState }
+  | { type: 'pong' }
+  | { type: 'error'; code: string; message: string };
+
 // --- Chat WebSocket protocol (/ws/chat) ---
 
 export type ClientChatEvent =

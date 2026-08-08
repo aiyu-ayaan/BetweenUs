@@ -1,9 +1,10 @@
 /**
- * Call state for one channel at a time.
+ * Voice-channel state: the client is connected to at most one at a time.
  *
  * Signalling and media are LiveKit's job; this store only decides when to join,
- * installs the channel key so frames are end-to-end encrypted, and flattens the
- * room into tiles React can render.
+ * installs the channel key so frames are end-to-end encrypted, flattens the
+ * room into tiles React can render, and tells presence-service who is in the
+ * channel so other members see it without joining.
  */
 import { create } from 'zustand';
 import {
@@ -18,8 +19,9 @@ import {
 import E2eeWorker from 'livekit-client/e2ee-worker?worker';
 import { api } from '../services/api';
 import { callKeyForChannel } from '../services/e2ee';
+import { presenceSocket } from '../services/socket';
 
-export interface CallTile {
+export interface VoiceTile {
   identity: string;
   name: string;
   isLocal: boolean;
@@ -30,11 +32,11 @@ export interface CallTile {
   audioTrack: Track | null;
 }
 
-interface CallState {
+interface VoiceState {
   status: 'idle' | 'connecting' | 'connected';
   channelId: string | null;
   room: Room | null;
-  tiles: CallTile[];
+  tiles: VoiceTile[];
   micEnabled: boolean;
   cameraEnabled: boolean;
   screenEnabled: boolean;
@@ -49,7 +51,7 @@ interface CallState {
   toggleScreen: () => Promise<void>;
 }
 
-export const useCallStore = create<CallState>((set, get) => ({
+export const useVoiceStore = create<VoiceState>((set, get) => ({
   status: 'idle',
   channelId: null,
   room: null,
@@ -87,7 +89,7 @@ export const useCallStore = create<CallState>((set, get) => ({
         // Insertable streams unavailable (for example a non-secure context).
         // Refuse rather than silently downgrading to plaintext media.
         room.disconnect().catch(() => undefined);
-        throw new Error('This runtime cannot encrypt call media, so the call was cancelled');
+        throw new Error('This runtime cannot encrypt voice media, so the join was cancelled');
       }
 
       const refresh = (): void => set({ tiles: snapshot(room) });
@@ -107,32 +109,52 @@ export const useCallStore = create<CallState>((set, get) => ({
 
       await room.connect(credentials.url, credentials.token);
       // Autoplay policy: browsers need a gesture before remote audio plays, and
-      // joining a call is one.
+      // clicking a voice channel is one.
       await room.startAudio().catch(() => undefined);
-      await room.localParticipant.setMicrophoneEnabled(true);
+
+      // A missing or blocked microphone must not keep someone out of the
+      // channel - they can still listen, and the panel says the mic is off.
+      let micEnabled = true;
+      let micProblem: string | null = null;
+      try {
+        await room.localParticipant.setMicrophoneEnabled(true);
+      } catch (error) {
+        micEnabled = false;
+        micProblem =
+          error instanceof Error
+            ? `Joined without a microphone: ${error.message}`
+            : 'Joined without a microphone';
+      }
+
+      // Members who have not joined still see who is in here.
+      presenceSocket.send({ type: 'voice.join', channelId });
 
       set({
+        error: micProblem,
         status: 'connected',
         room,
         // Guaranteed: the join above aborts when E2EE cannot be turned on.
         encrypted: true,
-        micEnabled: true,
+        micEnabled,
         cameraEnabled: false,
         screenEnabled: false,
         tiles: snapshot(room),
       });
     } catch (error) {
+      // Mirrored into the dev terminal by the Electron main process.
+      console.error('voice join failed', error);
       set({
         status: 'idle',
         channelId: null,
         room: null,
-        error: error instanceof Error ? error.message : 'Could not join the call',
+        error: error instanceof Error ? error.message : 'Could not join the voice channel',
       });
     }
   },
 
   leave: async () => {
-    const room = get().room;
+    const { room, channelId } = get();
+    if (channelId) presenceSocket.send({ type: 'voice.leave', channelId });
     set({ status: 'idle', channelId: null, room: null, tiles: [], screenEnabled: false });
     await room?.disconnect();
   },
@@ -160,7 +182,7 @@ export const useCallStore = create<CallState>((set, get) => ({
   },
 }));
 
-function snapshot(room: Room): CallTile[] {
+function snapshot(room: Room): VoiceTile[] {
   const speaking = new Set(room.activeSpeakers.map((participant) => participant.identity));
   const participants: Array<LocalParticipant | RemoteParticipant> = [
     room.localParticipant,
@@ -170,7 +192,7 @@ function snapshot(room: Room): CallTile[] {
   return participants.map((participant) => toTile(participant, speaking.has(participant.identity)));
 }
 
-function toTile(participant: Participant, speaking: boolean): CallTile {
+function toTile(participant: Participant, speaking: boolean): VoiceTile {
   const camera = participant.getTrackPublication(Track.Source.Camera);
   const screen = participant.getTrackPublication(Track.Source.ScreenShare);
   const mic = participant.getTrackPublication(Track.Source.Microphone);

@@ -6,7 +6,7 @@
  * later touches this file only.
  */
 import Redis from 'ioredis';
-import type { Message } from '@nexora/shared-types';
+import type { Message, PresenceState, VoiceState } from '@nexora/shared-types';
 
 export const EVENTS = {
   USER_CREATED: 'user.created',
@@ -18,6 +18,9 @@ export const EVENTS = {
   WORKSPACE_MEMBER_REMOVED: 'workspace.member.removed',
   CHANNEL_CREATED: 'channel.created',
   CHANNEL_DELETED: 'channel.deleted',
+  PRESENCE_CHANGED: 'presence.changed',
+  PRESENCE_TYPING: 'presence.typing',
+  PRESENCE_VOICE: 'presence.voice',
   MESSAGE_CREATED: 'message.created',
   MESSAGE_UPDATED: 'message.updated',
   MESSAGE_DELETED: 'message.deleted',
@@ -33,6 +36,9 @@ export interface EventPayloads {
   [EVENTS.WORKSPACE_MEMBER_REMOVED]: { workspaceId: string; userId: string };
   [EVENTS.CHANNEL_CREATED]: { channelId: string; workspaceId: string };
   [EVENTS.CHANNEL_DELETED]: { channelId: string; workspaceId: string };
+  [EVENTS.PRESENCE_CHANGED]: { user: PresenceState };
+  [EVENTS.PRESENCE_TYPING]: { channelId: string; userId: string; username: string };
+  [EVENTS.PRESENCE_VOICE]: { voice: VoiceState };
   [EVENTS.MESSAGE_CREATED]: { message: Message };
   [EVENTS.MESSAGE_UPDATED]: { message: Message };
   [EVENTS.MESSAGE_DELETED]: { messageId: string; channelId: string };

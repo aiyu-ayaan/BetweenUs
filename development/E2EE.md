@@ -1,6 +1,6 @@
 # End-to-end encryption
 
-How Nexora keeps message text and call media out of the server's reach, what
+How Nexora keeps message text and voice/video media out of the server's reach, what
 that buys, and — just as important — what it does not.
 
 ## Threat model
@@ -11,7 +11,7 @@ a message or a media frame.
 
 Not protected against: a compromised client (the keys live there), and
 metadata. The server still knows who wrote to which channel and when, how big
-each message was, and who is in a call. Encrypting metadata is a different
+each message was, and who is in a voice channel. Encrypting metadata is a different
 project; see "Not covered" below.
 
 ## Pieces
@@ -23,7 +23,7 @@ project; see "Not covered" below.
 | Channel key (AES-256-GCM) | in memory on member devices | channel members |
 | Wrapped channel key | `channel_keys` table | only the recipient it was sealed for |
 | Message body | `messages.content` | channel members |
-| Call media | LiveKit frames | call participants |
+| Voice/video media | LiveKit frames | people in the voice channel |
 
 ## Flow
 
@@ -51,7 +51,7 @@ send a message                     read a message
    AES-GCM encrypt                    AES-GCM decrypt with the epoch's key
    POST ciphertext envelope            no key for that epoch -> placeholder text
 
-join a call
+join a voice channel
    channel key -> LiveKit ExternalE2EEKeyProvider
    the SFU forwards frames it cannot decode
 ```
@@ -89,10 +89,10 @@ decide who may publish it:
 - Existing entries are never overwritten.
 - Recipients must be members of the channel's workspace.
 
-## Calls
+## Voice channels
 
-A call reuses its channel's key, so joining needs no second exchange: whoever
-can read the channel can join its call. LiveKit encrypts frames in a worker via
+A voice channel reuses its channel's key, so joining needs no second exchange: whoever
+can read the channel can join its voice room. LiveKit encrypts frames in a worker via
 `ExternalE2EEKeyProvider`, and the join is aborted rather than downgraded if the
 runtime cannot do insertable streams.
 
@@ -112,7 +112,7 @@ runtime cannot do insertable streams.
    insertable streams may be unavailable there. Development (`http://localhost`)
    is a secure context and works.
 5. **Metadata is plaintext**: author, channel, timestamps, message sizes,
-   call participation.
+   voice-channel membership.
 6. **Attachments are not encrypted yet** — uploads still go to storage as they
    were sent.
 

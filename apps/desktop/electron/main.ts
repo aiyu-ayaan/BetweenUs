@@ -48,6 +48,15 @@ function createWindow(): BrowserWindow {
 
   window.once('ready-to-show', () => window.show());
 
+  // In development the renderer's console is the only place a failed join or a
+  // crypto error shows up, and `pnpm dev:duo` gives the windows no visible
+  // devtools - so mirror it into the terminal that started them.
+  if (rendererDevUrl) {
+    window.webContents.on('console-message', (_event, _level, message) => {
+      console.log(`[renderer${windowLabel ? ` ${windowLabel}` : ''}]`, message);
+    });
+  }
+
   // External links open in the user's browser, never inside the app shell.
   window.webContents.setWindowOpenHandler(({ url }) => {
     void shell.openExternal(url);
@@ -137,6 +146,12 @@ ipcMain.on('notification:show', (_event, payload: { title: string; body: string 
 void app.whenReady().then(() => {
   // Screen share: Chromium asks the app which surface to hand over. The MVP
   // picker is "the primary screen"; a source chooser UI is tracked in TODO.md.
+  // Voice channels need the microphone and camera; screen share needs display
+  // capture. Everything else a page might ask for is denied.
+  session.defaultSession.setPermissionRequestHandler((_contents, permission, callback) => {
+    callback(permission === 'media' || permission === 'display-capture');
+  });
+
   session.defaultSession.setDisplayMediaRequestHandler((_request, callback) => {
     void desktopCapturer.getSources({ types: ['screen'] }).then((sources) => {
       const screen = sources[0];

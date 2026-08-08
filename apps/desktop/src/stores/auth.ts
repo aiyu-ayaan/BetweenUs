@@ -1,8 +1,14 @@
 import { create } from 'zustand';
 import type { PublicUser } from '@nexora/shared-types';
 import { ApiError, api, configureApi } from '../services/api';
-import { chatSocket } from '../services/socket';
+import { chatSocket, presenceSocket } from '../services/socket';
 import { initIdentity, resetE2ee } from '../services/e2ee';
+
+/** Both realtime sockets carry the same access token and reconnect together. */
+function connectSockets(accessToken: string): void {
+  chatSocket.connect(accessToken);
+  presenceSocket.connect(accessToken);
+}
 
 const STORAGE_KEY = 'nexora.refreshToken';
 
@@ -48,25 +54,28 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   /** Silent sign-in on launch using the stored refresh token. */
   restore: async () => {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (!stored) return;
+    if (!localStorage.getItem(STORAGE_KEY)) return;
 
     set({ status: 'loading' });
+    const accessToken = await refreshSession();
+    if (!accessToken) {
+      set({ status: 'idle' });
+      return;
+    }
+
     try {
-      const tokens = await api.refresh(stored);
-      localStorage.setItem(STORAGE_KEY, tokens.refreshToken);
-      set({ accessToken: tokens.accessToken });
       const user = await api.me();
-      applySession(set, tokens.accessToken, tokens.refreshToken, user);
+      set({ user, status: 'authenticated', error: null });
+      void initIdentity(user.id).catch(() => undefined);
     } catch {
-      localStorage.removeItem(STORAGE_KEY);
-      set({ status: 'idle', accessToken: null, user: null });
+      set({ status: 'idle' });
     }
   },
 
   logout: async () => {
     const stored = localStorage.getItem(STORAGE_KEY);
     chatSocket.disconnect();
+    presenceSocket.disconnect();
     resetE2ee();
     localStorage.removeItem(STORAGE_KEY);
     set({ user: null, accessToken: null, status: 'idle' });
@@ -84,7 +93,7 @@ function applySession(
 ): void {
   localStorage.setItem(STORAGE_KEY, refreshToken);
   set({ user, accessToken, status: 'authenticated', error: null });
-  chatSocket.connect(accessToken);
+  connectSockets(accessToken);
   // Device key setup runs alongside the first workspace load; everything that
   // needs key material awaits the same promise, so the order does not matter.
   void initIdentity(user.id).catch(() => undefined);
@@ -95,22 +104,36 @@ function messageOf(error: unknown): string {
   return 'Could not reach the server. Is the backend running?';
 }
 
-// Rotating refresh: the API client asks for a fresh access token on a 401.
-configureApi(
-  () => useAuthStore.getState().accessToken,
-  async () => {
+/**
+ * Refresh tokens rotate, so two concurrent refreshes would race and one of them
+ * would present an already-consumed token and get the session killed. Every
+ * caller shares one in-flight request instead.
+ */
+let refreshInFlight: Promise<string | null> | null = null;
+
+function refreshSession(): Promise<string | null> {
+  if (refreshInFlight) return refreshInFlight;
+
+  refreshInFlight = (async () => {
     const stored = localStorage.getItem(STORAGE_KEY);
     if (!stored) return null;
     try {
       const tokens = await api.refresh(stored);
       localStorage.setItem(STORAGE_KEY, tokens.refreshToken);
       useAuthStore.setState({ accessToken: tokens.accessToken });
-      chatSocket.connect(tokens.accessToken);
+      connectSockets(tokens.accessToken);
       return tokens.accessToken;
     } catch {
       localStorage.removeItem(STORAGE_KEY);
       useAuthStore.setState({ user: null, accessToken: null, status: 'idle' });
       return null;
     }
-  },
-);
+  })().finally(() => {
+    refreshInFlight = null;
+  });
+
+  return refreshInFlight;
+}
+
+// Rotating refresh: the API client asks for a fresh access token on a 401.
+configureApi(() => useAuthStore.getState().accessToken, refreshSession);

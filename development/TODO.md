@@ -3,22 +3,13 @@
 Ordered backlog. Check items off as they land; keep the "Next up" section at
 the top honest — it is what a new session reads first.
 
-## Next up (phase 9: hardening)
+## Next up (phase 10: hardening)
 
-Run first — phase 8 was written on a machine without Docker, so none of it has
-been exercised against live infrastructure:
-
-- [ ] Apply `20260808150000_e2ee_keys` to a real Postgres (generated with
-      `prisma migrate diff`, never run)
-- [ ] Run `pnpm dev:duo` and exchange an encrypted message between two windows
-- [ ] Make a LiveKit call between the two windows: audio, video, screen share,
-      and confirm the panel reports end-to-end encryption
-- [ ] Run the extended `smoke.mjs` (E2EE section is untested)
-
-Then:
-
+- [ ] Two humans in a voice channel: audio both ways, camera, screen share
+- [ ] Watch typing indicators and online dots land in the UI
 - [ ] Promote `apps/services/chat-service/smoke.mjs` into CI as an integration
       test
+- [ ] Presence smoke test: connect two sockets, assert sync/typing/voice events
 - [ ] Verify the Nginx gateway path and container builds end to end
 - [ ] Unit tests for `AuthService` (register/login/refresh) with a Prisma mock
 - [ ] Integration test: register → create workspace → create channel → send message
@@ -82,7 +73,7 @@ Then:
 - [x] Workspace + channel sidebar, create dialogs
 - [x] Message list with realtime WebSocket updates
 
-### Phase 8 — encrypted chat and calls
+### Phase 8 — encrypted chat and voice
 - [x] `@nexora/shared-types` contracts for envelopes, device keys, channel keys
       and call tokens
 - [x] `device_keys` + `channel_keys` Prisma models and migration
@@ -106,15 +97,30 @@ Follow-ups this phase deliberately left open:
 - [ ] Identity verification UI (safety numbers) so a lying server is detectable
 - [ ] Encrypt attachments with the channel key too
 - [ ] Screen-share source picker instead of always taking the primary screen
-- [ ] Call signalling so a channel shows "call in progress" before joining
 - [ ] Secure context for packaged builds, so E2EE media works outside dev
+
+### Phase 9 — presence and voice channels
+- [x] `presence-service` with `/ws/presence`, Redis-backed online set, voice
+      rosters and typing fanout over Redis Pub/Sub
+- [x] Online dots in a member list, "is typing" above the composer
+- [x] Voice channels Discord-style: `VOICE` channel type in the sidebar, click
+      to join, roster visible without joining
+- [x] Removed the per-text-channel call button
+- [x] Voice panel: participants, mic/camera/screen toggles, disconnect
+- [x] Join no longer fails when the machine has no microphone
+- [x] Single-flight token refresh (concurrent refreshes were killing sessions)
+- [x] `LIVEKIT_URL` on `127.0.0.1`: Chromium tries `::1` first and the container
+      publishes IPv4 only
+- [x] `dev:duo` seeds a voice channel, skips the login screen, and mirrors
+      renderer errors into the terminal
 
 ## Backlog (later phases)
 
-### Phase 10 — presence
-- [ ] `presence-service` with Redis-backed online/idle/offline state
-- [ ] `/ws/presence` gateway, heartbeat, typing indicators
-- [ ] Desktop presence dots in member list
+### Presence follow-ups
+- [ ] Idle status (currently only online/offline)
+- [ ] Scope presence broadcasts to a workspace instead of every connected socket
+- [ ] Server-authoritative voice rosters via LiveKit webhooks, so a client that
+      lies about joining cannot appear in a channel
 
 ### Phase 11 — remote desktop
 - [ ] `remote-agent`: device identity, outbound WebSocket, screen capture, input

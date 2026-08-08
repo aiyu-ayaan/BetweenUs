@@ -10,7 +10,7 @@
  */
 import { spawn } from 'node:child_process';
 import { createRequire } from 'node:module';
-import { existsSync } from 'node:fs';
+import { existsSync, rmSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -21,9 +21,11 @@ const AUTH = process.env.AUTH_SERVICE_URL ?? 'http://127.0.0.1:3001';
 const WORKSPACE = process.env.WORKSPACE_SERVICE_URL ?? 'http://127.0.0.1:3003';
 const CHAT = process.env.CHAT_SERVICE_URL ?? 'http://127.0.0.1:3004';
 const CALL = process.env.CALL_SERVICE_URL ?? 'http://127.0.0.1:3007';
+const PRESENCE = process.env.PRESENCE_SERVICE_URL ?? 'http://127.0.0.1:3005';
 const RENDERER = 'http://localhost:5173';
 
-const PASSWORD = 'nexora-dev-pass';
+// Must satisfy the password policy in @nexora/auth: 8+ chars, a letter, a digit.
+const PASSWORD = 'nexora-dev-1';
 const USERS = [
   { label: 'Alice', email: 'alice@nexora.local', username: 'alice', profile: 'duo-a', x: 40, y: 60 },
   { label: 'Bob', email: 'bob@nexora.local', username: 'bob', profile: 'duo-b', x: 760, y: 60 },
@@ -97,12 +99,32 @@ async function seed() {
     { headers: asAlice },
   );
 
-  return { workspace, channel: channels[0] };
+  // A voice channel to click on, alongside the default #general text channel.
+  let voice = channels.find((channel) => channel.type === 'VOICE');
+  if (!voice) {
+    voice = await json(`${WORKSPACE}/api/v1/channels`, {
+      method: 'POST',
+      headers: asAlice,
+      body: JSON.stringify({ workspaceId: workspace.id, name: 'lounge', type: 'VOICE' }),
+    });
+  }
+
+  return { workspace, channel: channels[0], voice };
+}
+
+const mainBundle = path.join(desktopDir, 'dist-electron', 'main.js');
+
+/**
+ * Removes the previous main-process bundle so the wait below cannot pass on a
+ * stale one - launching Electron against yesterday's main.js silently drops
+ * whatever IPC handlers were added since.
+ */
+function clearMainBundle() {
+  rmSync(mainBundle, { force: true });
 }
 
 function waitForRenderer(timeoutMs = 60_000) {
   const deadline = Date.now() + timeoutMs;
-  const mainBundle = path.join(desktopDir, 'dist-electron', 'main.js');
 
   return new Promise((resolve, reject) => {
     const poll = async () => {
@@ -126,10 +148,12 @@ function waitForRenderer(timeoutMs = 60_000) {
 }
 
 function startVite() {
-  const command = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm';
-  return spawn(command, ['--filter', '@nexora/desktop', 'dev'], {
+  return spawn('pnpm', ['--filter', '@nexora/desktop', 'dev'], {
     cwd: repoRoot,
     stdio: 'inherit',
+    // Node refuses to spawn a .cmd shim directly on Windows; the arguments here
+    // are fixed, so there is nothing for a shell to interpolate.
+    shell: process.platform === 'win32',
     // The plugin still builds main/preload; it just does not launch Electron.
     env: { ...process.env, NEXORA_NO_ELECTRON: '1' },
   });
@@ -167,13 +191,20 @@ async function main() {
     process.exit(1);
   }
   if (!(await healthy('call-service', CALL))) {
-    console.warn('  ! call-service is down - chat will work, calls will not');
+    console.warn('  ! call-service is down - chat will work, voice will not');
+  }
+  if (!(await healthy('presence-service', PRESENCE))) {
+    console.warn('  ! presence-service is down - no online status or typing indicators');
   }
 
-  const { workspace, channel } = await seed();
-  console.log(`Workspace "${workspace.name}" (#${channel?.name ?? 'general'}) ready for`);
+  const { workspace, channel, voice } = await seed();
+  console.log(
+    `Workspace "${workspace.name}" ready: #${channel?.name ?? 'general'}, voice "${voice.name}"`,
+  );
+  console.log('Sign-in is automatic:');
   for (const user of USERS) console.log(`  - ${user.label} <${user.email}>`);
 
+  clearMainBundle();
   const vite = startVite();
   await waitForRenderer();
 
@@ -203,5 +234,7 @@ async function main() {
 
 main().catch((error) => {
   console.error(error.body ? `${error.message}\n${JSON.stringify(error.body)}` : error);
-  process.exit(1);
+  // Setting the code rather than calling process.exit lets the already-spawned
+  // children close their pipes; a hard exit here trips a libuv assertion.
+  process.exitCode = 1;
 });

@@ -1,9 +1,8 @@
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
 import type { Message } from '@nexora/shared-types';
 import { useChatStore } from '../../stores/chat';
-import { useCallStore } from '../../stores/call';
-import { CallPanel } from '../calls/CallPanel';
-import { HashIcon, LockIcon, PhoneIcon, SendIcon, UsersIcon } from '../../components/icons';
+import { usePresenceStore } from '../../stores/presence';
+import { HashIcon, LockIcon, SendIcon, UsersIcon } from '../../components/icons';
 
 export function ChatView(): JSX.Element {
   const { channels, messages, activeChannelId, loadingMessages, error } = useChatStore();
@@ -32,54 +31,18 @@ export function ChatView(): JSX.Element {
           </>
         )}
         <span
-          title="Messages and call media are encrypted on this device"
+          title="Messages and voice media are encrypted on this device"
           className="ml-auto flex items-center gap-1 text-xs text-emerald-300"
         >
           <LockIcon className="h-3.5 w-3.5" />
           E2EE
         </span>
-        <CallButton channelId={channel.id} channelName={channel.name} />
       </header>
 
-      <CallPanel channelId={channel.id} />
       <MessageList messages={messages} loading={loadingMessages} error={error} />
-      <MessageComposer channelName={channel.name} />
+      <TypingIndicator channelId={channel.id} />
+      <MessageComposer channelId={channel.id} channelName={channel.name} />
     </section>
-  );
-}
-
-function CallButton({
-  channelId,
-  channelName,
-}: {
-  channelId: string;
-  channelName: string;
-}): JSX.Element {
-  const status = useCallStore((state) => state.status);
-  const activeChannelId = useCallStore((state) => state.channelId);
-  const error = useCallStore((state) => state.error);
-  const join = useCallStore((state) => state.join);
-
-  const inThisChannel = status !== 'idle' && activeChannelId === channelId;
-
-  return (
-    <>
-      {error && (
-        <p role="alert" className="text-xs text-red-300">
-          {error}
-        </p>
-      )}
-      <button
-        type="button"
-        disabled={inThisChannel || status === 'connecting'}
-        onClick={() => void join(channelId)}
-        aria-label={`Start or join the call in ${channelName}`}
-        className="flex cursor-pointer items-center gap-1.5 rounded-md bg-surface-800 px-3 py-1.5 text-sm text-slate-200 transition-colors duration-200 hover:bg-surface-700 disabled:cursor-not-allowed disabled:text-slate-500"
-      >
-        <PhoneIcon className="h-4 w-4" />
-        {inThisChannel ? 'In call' : 'Call'}
-      </button>
-    </>
   );
 }
 
@@ -177,8 +140,31 @@ function MessageList({
   );
 }
 
-function MessageComposer({ channelName }: { channelName: string }): JSX.Element {
+function TypingIndicator({ channelId }: { channelId: string }): JSX.Element {
+  const typing = usePresenceStore((state) => state.typing.get(channelId));
+  const names = [...(typing?.values() ?? [])]
+    .filter((entry) => entry.until > Date.now())
+    .map((entry) => entry.username);
+
+  // Reserve the row even when empty, so the composer does not jump.
+  return (
+    <p className="h-5 px-5 text-xs text-slate-400" aria-live="polite">
+      {names.length === 1 && `${names[0]} is typing…`}
+      {names.length === 2 && `${names[0]} and ${names[1]} are typing…`}
+      {names.length > 2 && 'Several people are typing…'}
+    </p>
+  );
+}
+
+function MessageComposer({
+  channelId,
+  channelName,
+}: {
+  channelId: string;
+  channelName: string;
+}): JSX.Element {
   const sendMessage = useChatStore((state) => state.sendMessage);
+  const notifyTyping = usePresenceStore((state) => state.notifyTyping);
   const [content, setContent] = useState('');
   const [sending, setSending] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
@@ -224,7 +210,10 @@ function MessageComposer({ channelName }: { channelName: string }): JSX.Element 
           rows={1}
           value={content}
           maxLength={4000}
-          onChange={(event) => setContent(event.target.value)}
+          onChange={(event) => {
+            setContent(event.target.value);
+            if (event.target.value.length > 0) notifyTyping(channelId);
+          }}
           onKeyDown={onKeyDown}
           placeholder={`Message #${channelName}`}
           className="max-h-40 min-h-[24px] flex-1 resize-none bg-transparent py-1 text-slate-100 placeholder-slate-500 focus:outline-none"

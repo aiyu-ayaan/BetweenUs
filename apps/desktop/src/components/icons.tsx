@@ -117,6 +117,14 @@ export const ScreenShareIcon = (props: IconProps): JSX.Element => (
   </Base>
 );
 
+export const SpeakerIcon = (props: IconProps): JSX.Element => (
+  <Base {...props}>
+    <path d="M11 5 6 9H2v6h4l5 4V5Z" />
+    <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
+    <path d="M18.36 5.64a9 9 0 0 1 0 12.73" />
+  </Base>
+);
+
 export const LockIcon = (props: IconProps): JSX.Element => (
   <Base {...props}>
     <rect x="3" y="11" width="18" height="11" rx="2" />

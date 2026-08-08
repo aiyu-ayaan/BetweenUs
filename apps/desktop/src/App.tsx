@@ -1,6 +1,7 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useAuthStore } from './stores/auth';
 import { useChatStore } from './stores/chat';
+import { usePresenceStore } from './stores/presence';
 import { LoginScreen } from './features/auth/LoginScreen';
 import { WorkspaceRail } from './features/workspaces/WorkspaceRail';
 import { ChannelSidebar } from './features/channels/ChannelSidebar';
@@ -13,23 +14,44 @@ export default function App(): JSX.Element {
   const reset = useChatStore((state) => state.reset);
 
   const login = useAuthStore((state) => state.login);
+  // Sign-in is attempted before anything renders, so a restored or scripted
+  // session never flashes the login form on the way in.
+  const [booting, setBooting] = useState(true);
 
   useEffect(() => {
     void (async () => {
-      await restore();
-      if (useAuthStore.getState().status === 'authenticated') return;
-
-      // `pnpm dev:duo` hands each test window an identity so two clients can be
-      // driven side by side without typing credentials twice.
-      const credentials = await window.nexora?.devLogin();
-      if (credentials) await login(credentials.email, credentials.password);
+      try {
+        await restore();
+        if (useAuthStore.getState().status !== 'authenticated') {
+          // `pnpm dev:duo` hands each test window an identity so two clients can
+          // be driven side by side without typing credentials twice.
+          const credentials = await window.nexora?.devLogin();
+          if (credentials) await login(credentials.email, credentials.password);
+        }
+      } finally {
+        setBooting(false);
+      }
     })();
   }, [restore, login]);
 
+  const resetPresence = usePresenceStore((state) => state.reset);
+
   useEffect(() => {
-    if (status === 'authenticated') void loadWorkspaces();
-    else reset();
-  }, [status, loadWorkspaces, reset]);
+    if (status === 'authenticated') {
+      void loadWorkspaces();
+      return;
+    }
+    reset();
+    resetPresence();
+  }, [status, loadWorkspaces, reset, resetPresence]);
+
+  if (booting) {
+    return (
+      <div className="flex h-full items-center justify-center bg-surface-950" aria-busy="true">
+        <p className="animate-pulse text-lg font-semibold text-slate-300">Nexora</p>
+      </div>
+    );
+  }
 
   if (status !== 'authenticated') return <LoginScreen />;
 

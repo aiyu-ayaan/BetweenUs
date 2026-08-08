@@ -1,5 +1,11 @@
 import { create } from 'zustand';
-import type { Channel, Message, WorkspaceWithRole } from '@nexora/shared-types';
+import type {
+  Channel,
+  ChannelType,
+  Message,
+  WorkspaceMember,
+  WorkspaceWithRole,
+} from '@nexora/shared-types';
 import { api } from '../services/api';
 import { chatSocket } from '../services/socket';
 import { decryptForChannel, encryptForChannel, syncChannelKeys } from '../services/e2ee';
@@ -7,6 +13,7 @@ import { decryptForChannel, encryptForChannel, syncChannelKeys } from '../servic
 interface ChatState {
   workspaces: WorkspaceWithRole[];
   channels: Channel[];
+  members: WorkspaceMember[];
   messages: Message[];
   activeWorkspaceId: string | null;
   activeChannelId: string | null;
@@ -18,7 +25,7 @@ interface ChatState {
   selectChannel: (channelId: string) => Promise<void>;
   createWorkspace: (name: string) => Promise<void>;
   joinWorkspace: (slug: string) => Promise<void>;
-  createChannel: (name: string) => Promise<void>;
+  createChannel: (name: string, type?: ChannelType) => Promise<void>;
   sendMessage: (content: string) => Promise<void>;
   reset: () => void;
 }
@@ -26,6 +33,7 @@ interface ChatState {
 export const useChatStore = create<ChatState>((set, get) => ({
   workspaces: [],
   channels: [],
+  members: [],
   messages: [],
   activeWorkspaceId: null,
   activeChannelId: null,
@@ -40,10 +48,16 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   selectWorkspace: async (workspaceId) => {
-    set({ activeWorkspaceId: workspaceId, channels: [], messages: [] });
-    const channels = await api.channels(workspaceId);
-    set({ channels });
-    const first = channels[0];
+    set({ activeWorkspaceId: workspaceId, channels: [], members: [], messages: [] });
+
+    const [channels, members] = await Promise.all([
+      api.channels(workspaceId),
+      // Members carry the display names presence attaches status to.
+      api.members(workspaceId).catch(() => []),
+    ]);
+    set({ channels, members });
+
+    const first = channels.find((channel) => channel.type === 'TEXT');
     if (first) await get().selectChannel(first.id);
   },
 
@@ -87,12 +101,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
     await get().selectWorkspace(workspace.id);
   },
 
-  createChannel: async (name) => {
+  createChannel: async (name, type = 'TEXT') => {
     const workspaceId = get().activeWorkspaceId;
     if (!workspaceId) return;
-    const channel = await api.createChannel(workspaceId, name);
+    const channel = await api.createChannel(workspaceId, name, type);
     set({ channels: [...get().channels, channel] });
-    await get().selectChannel(channel.id);
+    // A voice channel is joined, not read, so selection stays where it was.
+    if (channel.type === 'TEXT') await get().selectChannel(channel.id);
   },
 
   sendMessage: async (content) => {
@@ -109,6 +124,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set({
       workspaces: [],
       channels: [],
+      members: [],
       messages: [],
       activeWorkspaceId: null,
       activeChannelId: null,

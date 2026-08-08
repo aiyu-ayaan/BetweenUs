@@ -6,12 +6,12 @@ a pnpm + Turborepo monorepo. `CLAUDE.md` holds the target architecture;
 
 ## Status
 
-Working end to end: register / login, workspaces, text channels, message history
-and realtime delivery, end-to-end encrypted messages, and voice/video/screen
-share calls over LiveKit with end-to-end encrypted media - in an Electron
-desktop client.
+Working end to end: register / login, workspaces, text channels with
+end-to-end encrypted messages and realtime delivery, Discord-style voice
+channels over LiveKit with end-to-end encrypted media, screen share, online
+status and typing indicators - in an Electron desktop client.
 
-Not built yet: remote desktop, presence, notifications, user profiles. See
+Not built yet: remote desktop, notifications, user profiles. See
 `development/PLANNING.md`, `development/E2EE.md` and `development/TODO.md`.
 
 ## Requirements
@@ -40,11 +40,11 @@ Only Postgres and Redis run in Docker for development - no local database
 install needed, and services run on the host for fast reloads.
 
 Default ports: gateway `8080`, auth `3001`, workspace `3003`, chat `3004`,
-call `3007`, LiveKit `7880`, desktop renderer `5173`.
+presence `3005`, call `3007`, LiveKit `7880`, desktop renderer `5173`.
 
 `pnpm dev:duo` opens two Electron windows signed in as different users, each
 with its own profile and encryption key, which is the only sane way to test
-chat and calls. See `development/TESTING.md`.
+chat, voice and presence. See `development/TESTING.md`.
 
 To run everything in containers instead:
 
@@ -79,7 +79,8 @@ Content types are allowlisted, and anything not provably safe to render inline
 
 ```
 apps/desktop              Electron + React + Tailwind + Zustand client
-apps/services/*           NestJS microservices (auth, workspace, chat, call built)
+apps/services/*           NestJS microservices (auth, workspace, chat, call,
+                          presence built)
 packages/*                shared-types, auth, permissions, database, events,
                           websocket, storage, logger, config, nest-common
 infrastructure/           docker compose, nginx, cloudflare, livekit
@@ -94,7 +95,7 @@ development/              planning, MVP definition, E2EE design, testing, TODO
 | `pnpm typecheck` | Type-check the whole workspace |
 | `pnpm check` | Run package self-checks (logger, auth, websocket, storage, desktop crypto) |
 | `pnpm dev:desktop` | Run only the desktop client |
-| `pnpm dev:duo` | Two signed-in desktop windows for chat/call testing |
+| `pnpm dev:duo` | Two signed-in desktop windows for chat/voice testing |
 | `pnpm db:studio` | Open Prisma Studio against the dev database |
 | `pnpm --filter @nexora/chat-service smoke` | End-to-end check against running services |
 
@@ -108,6 +109,6 @@ GET|POST /api/v1/channels        GET|POST /api/v1/messages
 POST /api/v1/uploads             GET /api/v1/uploads/:key
 GET|POST /api/v1/e2ee/devices    GET /api/v1/e2ee/keys/:channelId
 POST /api/v1/e2ee/keys           POST /api/v1/calls/token
-WS   /ws/chat
+WS   /ws/chat                    WS  /ws/presence
 GET  /health (every service)
 ```

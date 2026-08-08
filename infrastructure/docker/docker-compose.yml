@@ -39,6 +39,7 @@ services:
       - workspace-service
       - chat-service
       - call-service
+      - presence-service
     networks:
       - cloudflare-network
       - api-network
@@ -102,6 +103,23 @@ services:
     volumes:
       # Uploads survive container replacement when the local driver is active.
       - upload-data:/data/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - api-network
+      - data-network
+
+  presence-service:
+    build:
+      context: ../..
+      dockerfile: apps/services/presence-service/Dockerfile
+    restart: unless-stopped
+    environment:
+      <<: *service-env
+      PRESENCE_SERVICE_PORT: 3005
     depends_on:
       postgres:
         condition: service_healthy

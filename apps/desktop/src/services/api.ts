@@ -5,6 +5,7 @@ import type {
   CallTokenResponse,
   Channel,
   ChannelKeysResponse,
+  ChannelType,
   DeviceKey,
   Message,
   Paginated,
@@ -116,10 +117,10 @@ export const api = {
   channels: (workspaceId: string): Promise<Channel[]> =>
     request(`/api/v1/channels?workspaceId=${encodeURIComponent(workspaceId)}`),
 
-  createChannel: (workspaceId: string, name: string): Promise<Channel> =>
+  createChannel: (workspaceId: string, name: string, type: ChannelType = 'TEXT'): Promise<Channel> =>
     request('/api/v1/channels', {
       method: 'POST',
-      body: JSON.stringify({ workspaceId, name }),
+      body: JSON.stringify({ workspaceId, name, type }),
     }),
 
   messages: (channelId: string, before?: string): Promise<Paginated<Message>> =>

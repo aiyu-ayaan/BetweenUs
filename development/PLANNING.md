@@ -15,14 +15,15 @@ we get there in stages and what each stage delivers.
 | 5 | Chat service | Message REST + WebSocket gateway + Redis fanout | Done |
 | 6 | Gateway | Nginx REST/WebSocket routing, rate limits, prod compose | Done |
 | 7 | Desktop client | Electron + React + Tailwind + Zustand, end-to-end chat | Done |
-| 8 | Encrypted chat + calls | E2EE messages, call-service + LiveKit, two-window dev harness | Done |
-| 9 | Hardening | Tests, CI, error contract polish, request IDs everywhere | Next |
-| 10 | Presence | Presence service, online status, typing indicators | Planned |
+| 8 | Encrypted chat + voice | E2EE messages, LiveKit voice channels, two-window dev harness | Done |
+| 9 | Presence | presence-service, online status, typing indicators, voice rosters | Done |
+| 10 | Hardening | Tests, CI, error contract polish, request IDs everywhere | Next |
 | 11 | Remote desktop | remote-gateway, remote-agent, remote permissions, audit log | Planned |
 | 12 | Production ingress | Cloudflare Tunnel, TLS, secret management, deploy pipeline | Planned |
 
-Phase 8 swapped places with hardening: encryption changes the message format, so
-it was cheaper to land before tests were written against the old one.
+Hardening moved to phase 10: encryption changes the message format and presence
+adds a service, so both were cheaper to land before tests were written against
+the older shape.
 
 ## Architecture decisions made so far
 
@@ -44,9 +45,21 @@ it was cheaper to land before tests were written against the old one.
   separate, later concern (phase 12).
 - **Media never passes through NestJS.** `call-service` mints LiveKit access
   tokens and nothing else; the desktop client dials the SFU directly.
-- **One channel key, shared by chat and calls.** A member who can read a channel
-  can join its call, so a second key exchange for media would add code and no
-  security. Design and limits: `E2EE.md`.
+- **One channel key, shared by chat and voice.** A member who can read a channel
+  can join its voice room, so a second key exchange for media would add code and
+  no security. Design and limits: `E2EE.md`.
+- **Voice is a channel type, not a button on a text channel.** Discord's model:
+  `VOICE` channels are joined and show who is inside, so presence answers "who
+  is in there" without anyone joining first. The earlier per-text-channel call
+  button was removed.
+- **Presence is its own service.** `presence-service` owns `/ws/presence`,
+  keeps online/typing/voice state in Redis and fans changes out over Pub/Sub.
+  Typing and voice rosters could have ridden the chat socket, but presence is a
+  separate concern with a separate lifecycle, and the architecture already
+  reserved the service.
+- **LiveKit is dialled on `127.0.0.1`, not `localhost`.** Chromium resolves
+  `localhost` to `::1` first and the container publishes IPv4 only, so the
+  client silently failed to reach the SFU.
 - **Ciphertext lives in `messages.content`.** Encryption needed no schema change
   for messages and no service change beyond the size limit, because the server
   already treated the body as an opaque string.
@@ -67,46 +80,39 @@ pnpm dev
 
 Desktop app: `pnpm --filter @nexora/desktop dev`.
 
-Two signed-in windows for testing chat and calls: `pnpm dev:duo` — see
-`TESTING.md`.
+Two signed-in windows for testing chat, voice and presence: `pnpm dev:duo` —
+see `TESTING.md`.
 
-## Verification status (as of phase 8)
+## Verification status (as of phase 9)
 
-What has been proven on the development machine:
+Run live against Docker (Postgres, Redis, LiveKit in WSL) on 2026-08-08:
 
-- `pnpm build`, `pnpm typecheck` and `pnpm check` pass across all workspace
-  tasks, including the new `call-service` and the desktop crypto self-check.
-- `pnpm --filter @nexora/desktop check` proves the E2EE primitives: wrap/unwrap
-  between two identities, rejection of a third party's private key, message
-  round-trip, wrong-key and tampered-ciphertext rejection, and that plaintext
-  never survives serialisation.
-- `pnpm check` self-checks pass for logger (redaction), auth (token/password
-  round-trips, cross-token rejection), storage and websocket.
-- `auth-service` boots, serves `/health` (`degraded` with no database, as
-  designed) and returns the documented error shape with a request id on invalid
-  input.
-- The initial Prisma migration (`20260808091410_init`) applies to a real
-  Postgres and the seed runs.
-- As of phase 7, `apps/services/chat-service/smoke.mjs` passed against the three
-  services: register → `/me` → refresh (and rejection of the rotated token) →
-  workspace → channels → WebSocket subscribe → REST send → realtime receive →
-  history → anonymous socket closed with 4401 → upload → download → traversal
-  blocked.
+- `pnpm build`, `pnpm typecheck` and `pnpm check` pass across every workspace
+  task, including the desktop crypto self-check.
+- `20260808150000_e2ee_keys` applied to a real Postgres; `device_keys` and
+  `channel_keys` exist.
+- `apps/services/chat-service/smoke.mjs` passes end to end, including the E2EE
+  section: device directory, key publish/fetch, and epoch-ordering rejection.
+- `pnpm dev:duo` opens two signed-in windows; both reach chat and presence.
+- **Encrypted chat between two clients works**: Alice and Bob exchanged
+  messages, and `channel_keys` holds one wrapped key per member (epoch 1,
+  sealed by Alice) while `messages.content` holds ciphertext envelopes.
+- Voice tokens: `call-service` mints a LiveKit token for a channel member,
+  refuses a non-member with 404, and the LiveKit signal socket accepts that
+  token over `ws://127.0.0.1:7880`.
+- presence-service accepts both clients on `/ws/presence`.
 
-Not yet exercised — the machine this phase was written on has no Docker, so
-nothing that needs Postgres, Redis or LiveKit could be run:
+Not yet exercised:
 
-- The `20260808150000_e2ee_keys` migration. It was generated with
-  `prisma migrate diff` and has not been applied to a real database.
-- The E2EE section added to `smoke.mjs` (device directory, key publish/fetch,
-  epoch ordering).
-- Two clients exchanging an encrypted message end to end, and `pnpm dev:duo`
-  itself.
-- A LiveKit call: token minting, joining, E2EE media, screen share.
-- Redis Pub/Sub fanout across two chat-service instances.
-- Container builds from the service Dockerfiles and the Nginx gateway path.
+- Two people actually hearing each other in a voice channel: media flow,
+  E2EE frames, screen share (needs a human on each end).
+- Typing indicators and online dots observed in the UI (the sockets connect and
+  the events are wired, but nobody has watched them land).
+- Redis Pub/Sub fanout across two instances of the same service.
+- Container builds from the service Dockerfiles and the Nginx gateway path
+  (services are hit directly on their ports in development).
 
-Phase 9 turns the smoke script into automated tests in CI and clears this list.
+Phase 10 turns the smoke script into automated tests in CI and clears the rest.
 
 ## Companion documents
 

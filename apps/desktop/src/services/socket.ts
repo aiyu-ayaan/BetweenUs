@@ -1,4 +1,9 @@
-import type { ClientChatEvent, ServerChatEvent } from '@nexora/shared-types';
+import type {
+  ClientChatEvent,
+  ClientPresenceEvent,
+  ServerChatEvent,
+  ServerPresenceEvent,
+} from '@nexora/shared-types';
 
 // Same story as the REST base URL: the dev server proxies /ws/chat upstream.
 const WS_URL =
@@ -105,3 +110,87 @@ export class ChatSocket {
 }
 
 export const chatSocket = new ChatSocket();
+
+type PresenceListener = (event: ServerPresenceEvent) => void;
+
+/**
+ * `/ws/presence` socket: online status, typing indicators, voice membership.
+ *
+ * Separate from the chat socket because presence is a separate service - the
+ * client should not care that both happen to reach the same gateway host.
+ */
+export class PresenceSocket {
+  private socket: WebSocket | null = null;
+  private token: string | null = null;
+  private readonly listeners = new Set<PresenceListener>();
+  private reconnectAttempt = 0;
+  private reconnectTimer: number | null = null;
+  private closedByUs = false;
+
+  connect(token: string): void {
+    this.token = token;
+    this.closedByUs = false;
+    this.open();
+  }
+
+  private open(): void {
+    if (!this.token) return;
+    if (this.socket && this.socket.readyState <= WebSocket.OPEN) return;
+
+    const socket = new WebSocket(`${WS_URL}/ws/presence?token=${encodeURIComponent(this.token)}`);
+    this.socket = socket;
+
+    socket.onopen = () => {
+      this.reconnectAttempt = 0;
+    };
+
+    socket.onmessage = (raw) => {
+      let event: ServerPresenceEvent;
+      try {
+        event = JSON.parse(String(raw.data)) as ServerPresenceEvent;
+      } catch {
+        return;
+      }
+      for (const listener of this.listeners) listener(event);
+    };
+
+    socket.onclose = (event) => {
+      this.socket = null;
+      if (this.closedByUs || event.code === 4401) return;
+      this.scheduleReconnect();
+    };
+
+    socket.onerror = () => socket.close();
+  }
+
+  private scheduleReconnect(): void {
+    if (this.reconnectTimer !== null) return;
+    const delay = Math.min(1000 * 2 ** this.reconnectAttempt, 30_000);
+    this.reconnectAttempt += 1;
+    this.reconnectTimer = window.setTimeout(() => {
+      this.reconnectTimer = null;
+      this.open();
+    }, delay);
+  }
+
+  send(event: ClientPresenceEvent): void {
+    if (this.socket?.readyState === WebSocket.OPEN) this.socket.send(JSON.stringify(event));
+  }
+
+  on(listener: PresenceListener): () => void {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
+  }
+
+  disconnect(): void {
+    this.closedByUs = true;
+    if (this.reconnectTimer !== null) {
+      window.clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+    this.socket?.close();
+    this.socket = null;
+  }
+}
+
+export const presenceSocket = new PresenceSocket();
