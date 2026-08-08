@@ -1,1 +1,85 @@
-export { };
+/**
+ * Role and permission vocabulary. Constants and pure helpers only - no service
+ * business logic, no database access.
+ */
+import type { WorkspaceRole } from '@nexora/shared-types';
+
+export const WORKSPACE_ROLES = ['OWNER', 'ADMIN', 'MODERATOR', 'MEMBER', 'GUEST'] as const;
+
+export const PERMISSIONS = {
+  VIEW_CHANNEL: 'VIEW_CHANNEL',
+  SEND_MESSAGE: 'SEND_MESSAGE',
+  DELETE_MESSAGE: 'DELETE_MESSAGE',
+  MANAGE_CHANNEL: 'MANAGE_CHANNEL',
+  MANAGE_MEMBER: 'MANAGE_MEMBER',
+  MANAGE_ROLE: 'MANAGE_ROLE',
+  MANAGE_WORKSPACE: 'MANAGE_WORKSPACE',
+  START_CALL: 'START_CALL',
+  MANAGE_CALL: 'MANAGE_CALL',
+  REMOTE_VIEW: 'REMOTE_VIEW',
+  REMOTE_CONTROL: 'REMOTE_CONTROL',
+  REMOTE_FILE_TRANSFER: 'REMOTE_FILE_TRANSFER',
+  REMOTE_CLIPBOARD: 'REMOTE_CLIPBOARD',
+  REMOTE_AUDIO: 'REMOTE_AUDIO',
+  REMOTE_ADMIN: 'REMOTE_ADMIN',
+} as const;
+
+export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
+
+const MEMBER_PERMISSIONS: Permission[] = [
+  PERMISSIONS.VIEW_CHANNEL,
+  PERMISSIONS.SEND_MESSAGE,
+  PERMISSIONS.START_CALL,
+];
+
+const MODERATOR_PERMISSIONS: Permission[] = [
+  ...MEMBER_PERMISSIONS,
+  PERMISSIONS.DELETE_MESSAGE,
+  PERMISSIONS.MANAGE_CALL,
+];
+
+const ADMIN_PERMISSIONS: Permission[] = [
+  ...MODERATOR_PERMISSIONS,
+  PERMISSIONS.MANAGE_CHANNEL,
+  PERMISSIONS.MANAGE_MEMBER,
+  PERMISSIONS.MANAGE_ROLE,
+];
+
+/** Role -> permission map. Remote permissions are granted per machine, never by role. */
+export const ROLE_PERMISSIONS: Record<WorkspaceRole, Permission[]> = {
+  OWNER: [...ADMIN_PERMISSIONS, PERMISSIONS.MANAGE_WORKSPACE],
+  ADMIN: ADMIN_PERMISSIONS,
+  MODERATOR: MODERATOR_PERMISSIONS,
+  MEMBER: MEMBER_PERMISSIONS,
+  GUEST: [PERMISSIONS.VIEW_CHANNEL],
+};
+
+export function permissionsForRole(role: WorkspaceRole): Permission[] {
+  return ROLE_PERMISSIONS[role] ?? [];
+}
+
+export function hasPermission(role: WorkspaceRole, permission: Permission): boolean {
+  return permissionsForRole(role).includes(permission);
+}
+
+/** Remote-access permissions, granted per user per machine with optional expiry. */
+export const REMOTE_PERMISSIONS = [
+  PERMISSIONS.REMOTE_VIEW,
+  PERMISSIONS.REMOTE_CONTROL,
+  PERMISSIONS.REMOTE_FILE_TRANSFER,
+  PERMISSIONS.REMOTE_CLIPBOARD,
+  PERMISSIONS.REMOTE_AUDIO,
+  PERMISSIONS.REMOTE_ADMIN,
+] as const;
+
+export type RemotePermission = (typeof REMOTE_PERMISSIONS)[number];
+
+export interface RemoteGrant {
+  permission: RemotePermission;
+  /** ISO timestamp. Null means the grant does not expire. */
+  expiresAt: string | null;
+}
+
+export function isRemoteGrantActive(grant: RemoteGrant, now: Date = new Date()): boolean {
+  return grant.expiresAt === null || new Date(grant.expiresAt).getTime() > now.getTime();
+}
