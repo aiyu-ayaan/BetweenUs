@@ -1,15 +1,17 @@
 /** Self-check: `pnpm --filter @nexora/storage check`. Driver choice, traversal, round-trip. */
 import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync } from 'node:fs';
+import { utimes } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import {
   LocalStorageDriver,
+  assertPartNumber,
   assertSafeKey,
   buildKey,
   getStorage,
-  isAllowedUpload,
+  isAllowedPicture,
   isInlineSafe,
   isS3Configured,
   setStorage,
@@ -81,14 +83,47 @@ async function main(): Promise<void> {
 
     // Traversal must be refused by the driver, not just by the key check.
     await assert.rejects(local.put('../escape.txt', Buffer.from('x'), 'text/plain'));
+
+    // --- Multipart round-trip: the object is the parts concatenated in part
+    // order, whatever order they were uploaded or listed in.
+    const bigKey = buildKey('attachments/user-1', 'movie.bin');
+    const session = await local.createMultipart(bigKey, 'application/octet-stream');
+    const third = await local.uploadPart(session, 3, Buffer.from('ccc'));
+    const first = await local.uploadPart(session, 1, Buffer.from('aaa'));
+    const second = await local.uploadPart(session, 2, Buffer.from('bbb'));
+
+    const assembled = await local.completeMultipart(session, [third, first, second]);
+    assert.equal(assembled.size, 9);
+    const parts: Buffer[] = [];
+    for await (const chunk of await local.get(bigKey)) parts.push(Buffer.from(chunk as Buffer));
+    assert.equal(Buffer.concat(parts).toString(), 'aaabbbccc');
+
+    // Completing must leave no scratch parts behind.
+    assert.equal(await local.exists(`.multipart/${session.externalId}/00001`), false);
+
+    // A fresh upload survives the sweep; the same one, aged, does not.
+    const abandoned = await local.createMultipart(bigKey, 'application/octet-stream');
+    await local.uploadPart(abandoned, 1, Buffer.from('x'));
+    assert.equal(await local.sweepStaleMultipart(60_000), 0);
+
+    await utimes(join(root, '.multipart', abandoned.externalId), new Date(0), new Date(0));
+    assert.equal(await local.sweepStaleMultipart(60_000), 1);
+
+    await assert.rejects(local.completeMultipart(session, []));
+    assert.throws(() => assertPartNumber(0));
+    assert.throws(() => assertPartNumber(10_001));
+    assert.throws(() => assertPartNumber(1.5));
+    assertPartNumber(1);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
 
   // --- Upload policy.
-  assert.equal(isAllowedUpload('image/png'), true);
-  assert.equal(isAllowedUpload('image/png; charset=binary'), true);
-  assert.equal(isAllowedUpload('application/x-msdownload'), false);
+  assert.equal(isAllowedPicture('image/png'), true);
+  assert.equal(isAllowedPicture('image/png; charset=binary'), true);
+  // A picture is served inline, so a script container is not a picture.
+  assert.equal(isAllowedPicture('image/svg+xml'), false);
+  assert.equal(isAllowedPicture('application/x-msdownload'), false);
   assert.equal(isInlineSafe('image/png'), true);
   assert.equal(isInlineSafe('image/svg+xml'), false);
   assert.equal(isInlineSafe('application/pdf'), false);

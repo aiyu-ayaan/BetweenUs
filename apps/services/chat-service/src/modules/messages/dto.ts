@@ -5,9 +5,13 @@ export class CreateMessageDto implements CreateMessageRequest {
   @IsUUID()
   channelId!: string;
 
-  /** Ciphertext envelope, not plaintext - see development/E2EE.md. */
+  /**
+   * Ciphertext envelope, not plaintext - see development/E2EE.md. The ceiling
+   * is generous because the envelope also carries the attachment manifest:
+   * a key, a name, a size and a content type per file, all encrypted.
+   */
   @IsString()
-  @Length(1, 8000)
+  @Length(1, 32000)
   content!: string;
 }
 

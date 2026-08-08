@@ -24,6 +24,9 @@ x-service-env: &service-env
   # Empty S3 values keep uploads on the local volume mounted below.
   STORAGE_DRIVER: ${STORAGE_DRIVER:-}
   LOCAL_STORAGE_PATH: /data/uploads
+  MAX_UPLOAD_BYTES: ${MAX_UPLOAD_BYTES:-26214400}
+  MAX_ATTACHMENT_BYTES: ${MAX_ATTACHMENT_BYTES:-524288000}
+  MAX_PICTURE_BYTES: ${MAX_PICTURE_BYTES:-8388608}
   S3_ENDPOINT: ${S3_ENDPOINT:-}
   S3_BUCKET: ${S3_BUCKET:-}
   S3_REGION: ${S3_REGION:-us-east-1}
