@@ -9,12 +9,16 @@ key was exchanged between two separate devices.
 ```bash
 pnpm dev:infra          # Postgres, Redis, LiveKit
 pnpm db:migrate         # first run only
-pnpm dev                # backend services (leave running)
+pnpm dev:backend        # backend services only (leave running)
 pnpm dev:duo            # in a second terminal
 ```
 
+Use `pnpm dev:backend`, not `pnpm dev`: the second one also starts the desktop
+renderer on 5173, and `dev:duo` starts its own Vite there for the two windows
+to share. The symptom is `Port 5173 is already in use`.
+
 Docker runs inside WSL on some machines; `pnpm dev:infra` then has to run from
-the WSL shell, while `pnpm dev` and `pnpm dev:duo` stay on Windows.
+the WSL shell, while `pnpm dev:backend` and `pnpm dev:duo` stay on Windows.
 
 `dev:duo` opens **two Electron windows side by side, each already signed in**:
 

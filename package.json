@@ -6,6 +6,7 @@
   "scripts": {
     "build": "turbo run build",
     "dev": "turbo run dev",
+    "dev:backend": "turbo run dev --filter=./apps/services/*",
     "dev:infra": "docker compose -f infrastructure/docker/docker-compose.dev.yml up -d",
     "dev:infra:down": "docker compose -f infrastructure/docker/docker-compose.dev.yml down",
     "dev:desktop": "pnpm --filter @nexora/desktop dev",

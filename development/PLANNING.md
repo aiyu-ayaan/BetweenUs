@@ -331,13 +331,17 @@ cp .env.example .env
 docker compose -f infrastructure/docker/docker-compose.dev.yml up -d
 pnpm install
 pnpm db:generate && pnpm db:migrate
-pnpm dev
+pnpm dev:backend
 ```
+
+`pnpm dev:backend` runs the services and nothing else. `pnpm dev` also starts
+the desktop renderer on 5173, which then collides with `pnpm dev:duo` - that
+starts its own Vite, because it drives two Electron profiles against it.
 
 Desktop app: `pnpm --filter @nexora/desktop dev`.
 
-Two signed-in windows for testing chat, voice and presence: `pnpm dev:duo` —
-see `TESTING.md`.
+Two signed-in windows for testing chat, voice and presence: `pnpm dev:duo`
+alongside `pnpm dev:backend` — see `TESTING.md`.
 
 ## Verification status (as of phase 10, in progress)
 
