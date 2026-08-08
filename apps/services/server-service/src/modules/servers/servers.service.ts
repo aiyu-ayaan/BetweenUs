@@ -327,7 +327,7 @@ export class ServersService {
 
     await this.events.publish(EVENTS.CHANNEL_CREATED, {
       channelId: channel.id,
-      serverId: channel.serverId,
+      serverId: dto.serverId,
     });
 
     return toChannel(channel);
@@ -418,7 +418,9 @@ export class ServersService {
     channelId: string,
   ): Promise<{ id: string; serverId: string; isPrivate: boolean }> {
     const access = await resolveChannelAccess(userId, channelId);
-    if (!access) {
+    // A direct message has no server and nothing to manage, so it is not found
+    // here either - the same answer a stranger gets.
+    if (!access || access.serverId === null) {
       throw new NotFoundException({ code: 'CHANNEL_NOT_FOUND', message: 'Channel not found' });
     }
     this.require(access.permissions, PERMISSIONS.MANAGE_CHANNEL);
@@ -565,7 +567,7 @@ function toServer(row: {
 
 function toChannel(row: {
   id: string;
-  serverId: string;
+  serverId: string | null;
   name: string;
   type: string;
   topic: string | null;
@@ -576,7 +578,7 @@ function toChannel(row: {
     id: row.id,
     serverId: row.serverId,
     name: row.name,
-    type: row.type === 'VOICE' ? 'VOICE' : 'TEXT',
+    type: row.type === 'VOICE' ? 'VOICE' : row.type === 'DM' ? 'DM' : 'TEXT',
     topic: row.topic,
     isPrivate: row.isPrivate,
     createdAt: row.createdAt.toISOString(),

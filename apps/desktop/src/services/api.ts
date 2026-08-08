@@ -8,6 +8,8 @@ import type {
   ChannelMember,
   CreateChannelRequest,
   DeviceKey,
+  DirectChannel,
+  Friend,
   Message,
   OAuthProviderSummary,
   Paginated,
@@ -18,6 +20,7 @@ import type {
   UpdateChannelRequest,
   UpdateServerMemberRequest,
   UpdateServerRequest,
+  UserSummary,
 } from '@nexora/shared-types';
 
 // In development requests go to the Vite dev server, which proxies them to the
@@ -183,6 +186,27 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ channelId, content }),
     }),
+
+  // --- Friends and direct messages ---
+
+  searchUsers: (query: string): Promise<UserSummary[]> =>
+    request(`/api/v1/users/search?q=${encodeURIComponent(query)}`),
+
+  friends: (): Promise<Friend[]> => request('/api/v1/friends'),
+
+  addFriend: (username: string): Promise<Friend> =>
+    request('/api/v1/friends', { method: 'POST', body: JSON.stringify({ username }) }),
+
+  acceptFriend: (userId: string): Promise<Friend> =>
+    request(`/api/v1/friends/${userId}/accept`, { method: 'POST' }),
+
+  removeFriend: (userId: string): Promise<void> =>
+    request(`/api/v1/friends/${userId}`, { method: 'DELETE' }),
+
+  directChannels: (): Promise<DirectChannel[]> => request('/api/v1/dm'),
+
+  openDirectChannel: (userId: string): Promise<DirectChannel> =>
+    request('/api/v1/dm', { method: 'POST', body: JSON.stringify({ userId }) }),
 
   // --- End-to-end encryption key directory ---
 

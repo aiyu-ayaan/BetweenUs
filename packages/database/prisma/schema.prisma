@@ -22,6 +22,15 @@ enum ServerRole {
 enum ChannelType {
   TEXT
   VOICE
+  /// A direct message between two people. It is a channel with no server, so
+  /// history, paging, realtime fanout and encryption are the ones that already
+  /// exist - see development/PLANNING.md (phase 12).
+  DM
+}
+
+enum FriendshipStatus {
+  PENDING
+  ACCEPTED
 }
 
 /// Platform-wide role, distinct from ServerRole: ADMIN grants the admin
@@ -51,6 +60,8 @@ model User {
   ownedServers  Server[]        @relation("ServerOwner")
   memberships   ServerMember[]
   channelSeats  ChannelMember[]
+  friendshipsA  Friendship[]    @relation("FriendshipA")
+  friendshipsB  Friendship[]    @relation("FriendshipB")
   messages      Message[]
   deviceKey     DeviceKey?
   identities    UserIdentity[]
@@ -179,7 +190,9 @@ model ServerMember {
 
 model Channel {
   id        String      @id @default(uuid())
-  serverId  String
+  /// Null for a direct message, which belongs to its two participants rather
+  /// than to a server.
+  serverId  String?
   name      String
   type      ChannelType @default(TEXT)
   topic     String?
@@ -190,7 +203,7 @@ model Channel {
   createdAt DateTime    @default(now())
   updatedAt DateTime    @updatedAt
 
-  server   Server          @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  server   Server?         @relation(fields: [serverId], references: [id], onDelete: Cascade)
   members  ChannelMember[]
   messages Message[]
   keys     ChannelKey[]
@@ -213,6 +226,27 @@ model ChannelMember {
   @@unique([channelId, userId])
   @@index([userId])
   @@map("channel_members")
+}
+
+/// One row per relationship, not one per direction: a request and a friendship
+/// are the same thing in two states. The pair is stored with the lower user id
+/// first so the unique constraint catches two people requesting each other.
+model Friendship {
+  id          String           @id @default(uuid())
+  userAId     String
+  userBId     String
+  /// Who sent the request. Only the other side may accept it.
+  requesterId String
+  status      FriendshipStatus @default(PENDING)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  userA User @relation("FriendshipA", fields: [userAId], references: [id], onDelete: Cascade)
+  userB User @relation("FriendshipB", fields: [userBId], references: [id], onDelete: Cascade)
+
+  @@unique([userAId, userBId])
+  @@index([userBId])
+  @@map("friendships")
 }
 
 model Message {

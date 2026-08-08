@@ -9,18 +9,30 @@
  * with an unchanged signature.
  */
 import type { ServerRole } from '@nexora/shared-types';
-import { effectivePermissions, type Permission } from '@nexora/permissions';
+import { PERMISSIONS, effectivePermissions, type Permission } from '@nexora/permissions';
 import { prisma } from './client';
 
 export interface ChannelAccess {
   channelId: string;
-  serverId: string;
+  /** Null for a direct message, which belongs to its participants. */
+  serverId: string | null;
   isPrivate: boolean;
-  /** The caller's role in the channel's server. */
-  role: ServerRole;
+  /** The caller's role in the channel's server; null in a direct message. */
+  role: ServerRole | null;
   /** What the caller may actually do here, overrides applied. */
   permissions: Permission[];
 }
+
+/**
+ * What the two people in a direct message may do. It is fixed rather than
+ * derived: there is no role to derive it from, and a conversation between two
+ * people has no administration to speak of.
+ */
+const DM_PERMISSIONS: Permission[] = [
+  PERMISSIONS.VIEW_CHANNEL,
+  PERMISSIONS.SEND_MESSAGE,
+  PERMISSIONS.START_CALL,
+];
 
 /**
  * Null means "this channel does not exist as far as this user is concerned" -
@@ -40,6 +52,19 @@ export async function resolveChannelAccess(
     select: { id: true, serverId: true, isPrivate: true },
   });
   if (!channel) return null;
+
+  // A direct message has no server to take a role from; being one of the two
+  // people on it is the whole of the authorization.
+  if (channel.serverId === null) {
+    if (!(await isChannelMember(channelId, userId))) return null;
+    return {
+      channelId: channel.id,
+      serverId: null,
+      isPrivate: true,
+      role: null,
+      permissions: DM_PERMISSIONS,
+    };
+  }
 
   const membership = await prisma.serverMember.findUnique({
     where: { serverId_userId: { serverId: channel.serverId, userId } },
@@ -83,7 +108,8 @@ export async function channelAudience(channelId: string): Promise<string[]> {
   });
   if (!channel) return [];
 
-  if (channel.isPrivate) {
+  // A direct message and a private channel are the same question: who is on it.
+  if (channel.isPrivate || channel.serverId === null) {
     const seats = await prisma.channelMember.findMany({
       where: { channelId },
       select: { userId: true },

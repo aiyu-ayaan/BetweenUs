@@ -9,6 +9,12 @@ import { MessagesService } from './modules/messages/messages.service';
 import { UploadsController } from './modules/uploads/uploads.controller';
 import { E2eeController } from './modules/e2ee/e2ee.controller';
 import { E2eeService } from './modules/e2ee/e2ee.service';
+import {
+  DirectChannelsController,
+  FriendsController,
+  UserSearchController,
+} from './modules/friends/friends.controller';
+import { FriendsService } from './modules/friends/friends.service';
 import { ChatGateway } from './gateways/chat.gateway';
 
 const SERVICE_NAME = 'chat-service';
@@ -18,11 +24,15 @@ const SERVICE_NAME = 'chat-service';
     MessagesController,
     UploadsController,
     E2eeController,
+    UserSearchController,
+    FriendsController,
+    DirectChannelsController,
     createHealthController(SERVICE_NAME, pingDatabase),
   ],
   providers: [
     MessagesService,
     E2eeService,
+    FriendsService,
     ChatGateway,
     {
       provide: EventBus,

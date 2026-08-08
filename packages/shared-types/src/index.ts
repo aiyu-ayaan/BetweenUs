@@ -193,11 +193,12 @@ export interface UpdateServerMemberRequest {
 
 // --- Channels ---
 
-export type ChannelType = 'TEXT' | 'VOICE';
+export type ChannelType = 'TEXT' | 'VOICE' | 'DM';
 
 export interface Channel {
   id: string;
-  serverId: string;
+  /** Null for a direct message, which belongs to its two participants. */
+  serverId: string | null;
   name: string;
   type: ChannelType;
   topic: string | null;
@@ -239,6 +240,45 @@ export interface ChannelMember {
  */
 export interface SetChannelMembersRequest {
   userIds: string[];
+}
+
+// --- Friends and direct messages ---
+
+/** The public face of an account: what a search result or a DM header shows. */
+export interface UserSummary {
+  id: string;
+  username: string;
+  displayName: string;
+  avatarUrl: string | null;
+}
+
+export type FriendshipStatus = 'PENDING' | 'ACCEPTED';
+
+export interface Friend {
+  user: UserSummary;
+  status: FriendshipStatus;
+  /**
+   * Who asked, seen from the caller's side. Null once the friendship is
+   * accepted - by then it does not matter, and the UI stops asking.
+   */
+  direction: 'incoming' | 'outgoing' | null;
+  since: string;
+}
+
+export interface SendFriendRequestRequest {
+  /** Username rather than id: it is what the person can actually be told. */
+  username: string;
+}
+
+/** A direct message channel, named by the person on the other end of it. */
+export interface DirectChannel {
+  channelId: string;
+  participant: UserSummary;
+  createdAt: string;
+}
+
+export interface OpenDirectChannelRequest {
+  userId: string;
 }
 
 // --- Messages ---
