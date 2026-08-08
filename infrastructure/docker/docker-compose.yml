@@ -58,6 +58,27 @@ services:
       # Public ingress is opt-in: docker compose --profile public up
       - public
 
+  # One-shot: applies Prisma migrations before any service accepts traffic.
+  # Reuses the auth-service image because it already carries the schema and the
+  # Prisma CLI; nothing about it is auth-specific.
+  migrate:
+    build:
+      context: ../..
+      dockerfile: apps/services/auth-service/Dockerfile
+    restart: "no"
+    # Prisma verifies it can write to its engine directory; the image's `node`
+    # user cannot. Nothing else runs as root.
+    user: root
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-nexora}?schema=public
+    working_dir: /repo/packages/database
+    command: ["./node_modules/.bin/prisma", "migrate", "deploy"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - data-network
+
   auth-service:
     build:
       context: ../..
@@ -67,6 +88,8 @@ services:
       <<: *service-env
       AUTH_SERVICE_PORT: 3001
     depends_on:
+      migrate:
+        condition: service_completed_successfully
       postgres:
         condition: service_healthy
       redis:
@@ -84,6 +107,8 @@ services:
       <<: *service-env
       WORKSPACE_SERVICE_PORT: 3003
     depends_on:
+      migrate:
+        condition: service_completed_successfully
       postgres:
         condition: service_healthy
       redis:
@@ -104,6 +129,8 @@ services:
       # Uploads survive container replacement when the local driver is active.
       - upload-data:/data/uploads
     depends_on:
+      migrate:
+        condition: service_completed_successfully
       postgres:
         condition: service_healthy
       redis:
@@ -121,6 +148,8 @@ services:
       <<: *service-env
       PRESENCE_SERVICE_PORT: 3005
     depends_on:
+      migrate:
+        condition: service_completed_successfully
       postgres:
         condition: service_healthy
       redis:
@@ -143,6 +172,8 @@ services:
       LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:?LIVEKIT_API_KEY is required}
       LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:?LIVEKIT_API_SECRET is required}
     depends_on:
+      migrate:
+        condition: service_completed_successfully
       postgres:
         condition: service_healthy
     networks:

@@ -1,6 +1,7 @@
 # Build from the repo root: docker build -f apps/services/call-service/Dockerfile .
 FROM node:20-alpine AS base
-RUN corepack enable
+# Prisma's query engine links against OpenSSL, which the alpine image omits.
+RUN apk add --no-cache openssl && corepack enable
 WORKDIR /repo
 
 FROM base AS build
