@@ -380,6 +380,17 @@ Errors share one shape everywhere:
 - Every service exposes `GET /health` and answers the shared error contract.
 - Conventional commits (`feat:`, `fix:`, `chore:`, `docs:`).
 
+## Licence
+
+**Source-available, view only. Not open source, and not MIT.**
+
+You may read this code and refer to it. You may not copy, modify, redistribute,
+or use it - in whole or in part, in source or compiled form, commercially or
+not - without written permission from the copyright holder. Full terms in
+[`LICENSE`](LICENSE).
+
+Third-party dependencies keep their own licences.
+
 ## Documentation
 
 | Document | Covers |

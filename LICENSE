@@ -1,0 +1,42 @@
+Nexora — Source-Available License (view only)
+
+Copyright (c) 2026 aiyu-ayaan. All rights reserved.
+
+This software and its source code are made available for reading and reference
+only. This is not an open-source licence, and it is not MIT.
+
+PERMITTED
+
+  1. Viewing and reading this source code.
+  2. Referring to it in discussion, review, or education, with attribution.
+
+NOT PERMITTED without prior written permission from the copyright holder
+
+  1. Copying, reproducing, or redistributing this source code or any part of
+     it, in original or modified form.
+  2. Modifying this software, or creating derivative works from it.
+  3. Using this software or any part of it, in source or compiled form, in any
+     product, service, or project, whether commercial or not.
+  4. Running this software other than to evaluate it locally from this
+     repository.
+  5. Sublicensing, selling, renting, or transferring any rights in it.
+
+The only exception is the copying your computer performs on its own to let you
+read this repository — cloning it, and whatever your tools cache while you do.
+
+Contributions submitted to this repository are licensed to the copyright holder
+for use in this project, and stay under these terms.
+
+Third-party dependencies are not covered by this licence and remain under their
+own; see each package's licence in `node_modules` or its registry entry.
+
+NO WARRANTY
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+For permission beyond this licence, contact the copyright holder.

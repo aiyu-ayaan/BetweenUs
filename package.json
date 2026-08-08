@@ -3,6 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "packageManager": "pnpm@9.0.0",
+  "license": "SEE LICENSE IN LICENSE",
   "scripts": {
     "build": "turbo run build",
     "dev": "turbo run dev",
