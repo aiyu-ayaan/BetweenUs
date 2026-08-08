@@ -16,6 +16,16 @@ interface DevLogin {
   label: string;
 }
 
+/** A screen or window offered by the screen-share picker. */
+interface ScreenSource {
+  id: string;
+  name: string;
+  kind: 'screen' | 'window';
+  /** data: URI - the CSP allows those for images. */
+  thumbnail: string;
+  appIcon: string | null;
+}
+
 /** Exposed by electron/preload.ts through contextBridge. */
 interface Window {
   nexora?: {
@@ -24,6 +34,8 @@ interface Window {
     /** OS-keychain-backed storage for E2EE private keys. */
     secureGet: (key: string) => Promise<string | null>;
     secureSet: (key: string, value: string) => Promise<void>;
+    screenSources: () => Promise<ScreenSource[]>;
+    selectScreenSource: (id: string, audio: boolean) => Promise<void>;
     devLogin: () => Promise<DevLogin | null>;
   };
 }

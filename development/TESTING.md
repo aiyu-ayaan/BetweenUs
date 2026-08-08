@@ -59,11 +59,26 @@ Closing both windows stops the dev server. Ctrl+C does the same.
   voice* with a **Join Voice** button.
 - The sidebar panel says *Voice connected* with a padlock; without the padlock
   the join was aborted rather than downgraded to plaintext media.
-- Toggle microphone, camera and screen share, from either the sidebar panel or
-  the bar under the channel screen - both drive the same store, so they always
-  agree. Screen share picks the primary screen (Electron answers the picker in
-  the main process).
+- Toggle microphone and camera from either the sidebar panel or the bar under
+  the channel screen - both drive the same store, so they always agree.
 - A machine with no microphone still joins - the panel just shows the mic off.
+
+**Screen share and watching together**
+- The screen button opens a picker: **Screens** and **Applications** tabs with
+  live thumbnails, and a *Share system audio* checkbox that is only enabled on
+  Windows. Double-clicking a thumbnail shares it; Escape closes.
+- Sharing does not replace your camera tile - both are live at once. Your own
+  window shows the preview; the other window gets a banner reading *bob is
+  sharing a screen* with **Join stream**, and stays in the grid until it is
+  pressed.
+- **Join stream** opens the theatre: the screen fills the stage, the faces move
+  to a strip underneath. *Back to grid* leaves it without stopping the share;
+  *Stop sharing* ends it for everyone.
+- With system audio on Windows, sound from the shared window is heard in the
+  other window - that is the movie-night path, and it rides the same encrypted
+  session as the voice.
+- Speaking is marked amber on the tile. With more than nine people the grid
+  pages, and whoever spoke last minute is pulled onto page one.
 
 **Presence and typing**
 - The member list shows a green dot per online member; close one window and the

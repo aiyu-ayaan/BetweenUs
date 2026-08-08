@@ -52,6 +52,8 @@ export function VoicePanel({ channelName }: { channelName: string | null }): JSX
             </span>
             {!tile.micEnabled && <MicOffIcon className="ml-auto h-3.5 w-3.5 text-red-400" />}
             {tile.audioTrack && <AudioSink track={tile.audioTrack} />}
+            {/* A shared screen can bring its own sound - a film's, usually. */}
+            {tile.screenAudioTrack && <AudioSink track={tile.screenAudioTrack} />}
           </li>
         ))}
       </ul>

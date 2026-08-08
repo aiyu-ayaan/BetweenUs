@@ -1,0 +1,186 @@
+/**
+ * "What do you want to share?" - screens on one tab, windows on the other,
+ * each with a live thumbnail, the way Discord asks.
+ *
+ * The sources come from the main process over IPC; the renderer has no business
+ * enumerating them itself. Picking one records the choice in main and only then
+ * starts the capture, because Chromium asks which surface to hand over at
+ * capture time, far too late to put a chooser on screen.
+ */
+import { useEffect, useState } from 'react';
+import { useVoiceStore } from '../../stores/voice';
+import { ScreenShareIcon } from '../../components/icons';
+
+export function ScreenSharePicker({ onClose }: { onClose: () => void }): JSX.Element {
+  const shareScreen = useVoiceStore((state) => state.shareScreen);
+
+  const [sources, setSources] = useState<ScreenSource[] | null>(null);
+  const [failure, setFailure] = useState<string | null>(null);
+  const [tab, setTab] = useState<'screen' | 'window'>('screen');
+  const [selected, setSelected] = useState<string | null>(null);
+  // Only Windows can capture the machine's own output, so only there is the
+  // offer honest.
+  const audioSupported = window.nexora?.platform === 'win32';
+  const [withAudio, setWithAudio] = useState(audioSupported);
+
+  useEffect(() => {
+    const bridge = window.nexora;
+    if (!bridge) {
+      // A plain browser has no source list; the runtime asks on its own.
+      setSources([]);
+      return;
+    }
+    bridge
+      .screenSources()
+      .then(setSources)
+      .catch((error: unknown) => {
+        setFailure(error instanceof Error ? error.message : 'Could not list screens');
+        setSources([]);
+      });
+  }, []);
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  const shown = (sources ?? []).filter((source) => source.kind === tab);
+  const chosen = (sources ?? []).find((source) => source.id === selected) ?? null;
+
+  const start = (): void => {
+    onClose();
+    void shareScreen(chosen, withAudio && audioSupported);
+  };
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Choose what to share"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-6"
+      onClick={onClose}
+    >
+      <div
+        onClick={(event) => event.stopPropagation()}
+        className="flex max-h-full w-full max-w-3xl flex-col rounded-xl bg-surface-800 shadow-2xl"
+      >
+        <header className="flex items-center gap-3 border-b border-black/30 px-5 py-4">
+          <ScreenShareIcon className="h-5 w-5 text-slate-400" />
+          <h2 className="font-semibold text-slate-100">Screen share</h2>
+          <div className="ml-auto flex gap-1 rounded-md bg-surface-900 p-1">
+            <TabButton active={tab === 'screen'} onClick={() => setTab('screen')}>
+              Screens
+            </TabButton>
+            <TabButton active={tab === 'window'} onClick={() => setTab('window')}>
+              Applications
+            </TabButton>
+          </div>
+        </header>
+
+        <div className="min-h-0 flex-1 overflow-y-auto p-4">
+          {sources === null && <p className="py-10 text-center text-slate-400">Looking…</p>}
+
+          {failure && (
+            <p role="alert" className="mb-3 rounded bg-red-500/10 px-3 py-2 text-sm text-red-300">
+              {failure}
+            </p>
+          )}
+
+          {sources !== null && shown.length === 0 && (
+            <p className="py-10 text-center text-slate-500">
+              {tab === 'screen' ? 'No screens found.' : 'No open windows to share.'}
+            </p>
+          )}
+
+          <ul className="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-3">
+            {shown.map((source) => (
+              <li key={source.id}>
+                <button
+                  type="button"
+                  onClick={() => setSelected(source.id)}
+                  onDoubleClick={start}
+                  aria-pressed={selected === source.id}
+                  className={`w-full cursor-pointer overflow-hidden rounded-lg border-2 bg-surface-900 text-left transition-colors duration-200 ${
+                    selected === source.id
+                      ? 'border-accent'
+                      : 'border-transparent hover:border-surface-700'
+                  }`}
+                >
+                  <img
+                    src={source.thumbnail}
+                    alt=""
+                    className="aspect-video w-full bg-black object-contain"
+                  />
+                  <p className="flex items-center gap-1.5 px-2 py-1.5 text-xs text-slate-300">
+                    {source.appIcon && <img src={source.appIcon} alt="" className="h-4 w-4" />}
+                    <span className="truncate">{source.name}</span>
+                  </p>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        <footer className="flex items-center gap-3 border-t border-black/30 px-5 py-4">
+          <label
+            className={`flex items-center gap-2 text-sm ${
+              audioSupported ? 'text-slate-300' : 'text-slate-500'
+            }`}
+            title={audioSupported ? undefined : 'System audio capture is Windows-only'}
+          >
+            <input
+              type="checkbox"
+              disabled={!audioSupported}
+              checked={withAudio && audioSupported}
+              onChange={(event) => setWithAudio(event.target.checked)}
+              className="h-4 w-4 accent-accent"
+            />
+            Share system audio
+          </label>
+
+          <button
+            type="button"
+            onClick={onClose}
+            className="ml-auto cursor-pointer rounded-md px-4 py-2 text-sm text-slate-300 transition-colors duration-200 hover:bg-surface-700"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={start}
+            disabled={sources !== null && sources.length > 0 && !selected}
+            className="cursor-pointer rounded-md bg-accent px-4 py-2 text-sm font-semibold text-white transition-colors duration-200 hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Go live
+          </button>
+        </footer>
+      </div>
+    </div>
+  );
+}
+
+function TabButton({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: string;
+}): JSX.Element {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={`cursor-pointer rounded px-3 py-1 text-sm transition-colors duration-200 ${
+        active ? 'bg-surface-700 text-slate-100' : 'text-slate-400 hover:text-slate-200'
+      }`}
+    >
+      {children}
+    </button>
+  );
+}

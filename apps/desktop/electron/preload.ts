@@ -17,6 +17,19 @@ const api = {
   secureGet: (key: string): Promise<string | null> => ipcRenderer.invoke('secure:get', key),
   secureSet: (key: string, value: string): Promise<void> =>
     ipcRenderer.invoke('secure:set', key, value),
+  /** Screens and windows the user can share, with thumbnails, for the picker. */
+  screenSources: (): Promise<
+    Array<{
+      id: string;
+      name: string;
+      kind: 'screen' | 'window';
+      thumbnail: string;
+      appIcon: string | null;
+    }>
+  > => ipcRenderer.invoke('screen:sources'),
+  /** Records the picked surface; the next display capture gets exactly it. */
+  selectScreenSource: (id: string, audio: boolean): Promise<void> =>
+    ipcRenderer.invoke('screen:select', id, audio),
   /** Development only: credentials for an auto-signed-in test window. */
   devLogin: (): Promise<{ email: string; password: string; label: string } | null> =>
     ipcRenderer.invoke('dev:login'),

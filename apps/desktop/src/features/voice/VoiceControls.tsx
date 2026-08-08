@@ -4,8 +4,9 @@
  * It lives in both the sidebar panel and the voice channel screen, so it is its
  * own component: the two places must never disagree about what is on.
  */
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { useVoiceStore } from '../../stores/voice';
+import { ScreenSharePicker } from './ScreenSharePicker';
 import {
   MicIcon,
   MicOffIcon,
@@ -22,8 +23,11 @@ export function VoiceControls({ size = 'sm' }: { size?: 'sm' | 'lg' }): JSX.Elem
   const screenEnabled = useVoiceStore((state) => state.screenEnabled);
   const toggleMic = useVoiceStore((state) => state.toggleMic);
   const toggleCamera = useVoiceStore((state) => state.toggleCamera);
-  const toggleScreen = useVoiceStore((state) => state.toggleScreen);
+  const stopScreenShare = useVoiceStore((state) => state.stopScreenShare);
   const leave = useVoiceStore((state) => state.leave);
+
+  // Starting a share asks what to share first; stopping is immediate.
+  const [picking, setPicking] = useState(false);
 
   const disabled = status !== 'connected';
   const icon = size === 'lg' ? 'h-5 w-5' : 'h-4 w-4';
@@ -56,10 +60,12 @@ export function VoiceControls({ size = 'sm' }: { size?: 'sm' | 'lg' }): JSX.Elem
         disabled={disabled}
         pad={pad}
         label={screenEnabled ? 'Stop sharing screen' : 'Share screen'}
-        onClick={() => void toggleScreen()}
+        onClick={() => (screenEnabled ? void stopScreenShare() : setPicking(true))}
       >
         <ScreenShareIcon className={icon} />
       </ControlButton>
+
+      {picking && <ScreenSharePicker onClose={() => setPicking(false)} />}
 
       <button
         type="button"

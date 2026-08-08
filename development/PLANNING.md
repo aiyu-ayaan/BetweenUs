@@ -60,6 +60,23 @@ the older shape.
   so navigating to a text channel does not end the call - only the tiles go
   away. When this client is not in the call the roster comes from presence,
   which has names but no media; once connected it comes from LiveKit.
+- **A shared screen is its own stage, not a bigger tile.** Camera and screen are
+  separate publications in LiveKit and separate things on screen: a share never
+  takes over the sharer's tile. Everyone else gets a "NAME is sharing" banner
+  with a way in, and choosing it opens the theatre layout - the screen large,
+  the faces on a strip underneath - which is what a group watching something
+  together wants. Nobody is dragged into a stream they did not open.
+- **The grid pages instead of shrinking.** Nine tiles a page with pager arrows,
+  and whoever spoke in the last minute is pulled to the front, so an active
+  speaker is on page one without the grid reshuffling on every word. Teams'
+  bargain. Speaking is marked in amber on the tile.
+- **Chromium asks which screen to share too late to ask the user.** The
+  `setDisplayMediaRequestHandler` callback fires during capture, with no way to
+  put a chooser up and wait, so the order is inverted: the renderer lists the
+  sources over IPC, shows its own picker, records the choice in the main
+  process, and only then starts the capture the handler answers. The choice is
+  consumed once, so a capture that skipped the picker falls back to the primary
+  screen rather than silently re-sharing the last one.
 - **Presence is its own service.** `presence-service` owns `/ws/presence`,
   keeps online/typing/voice state in Redis and fans changes out over Pub/Sub.
   Typing and voice rosters could have ridden the chat socket, but presence is a

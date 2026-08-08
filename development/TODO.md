@@ -101,7 +101,8 @@ Follow-ups this phase deliberately left open:
 - [ ] Multi-device support: key list per user instead of one device key
 - [ ] Identity verification UI (safety numbers) so a lying server is detectable
 - [ ] Encrypt attachments with the channel key too
-- [ ] Screen-share source picker instead of always taking the primary screen
+- [x] Screen-share source picker instead of always taking the primary screen:
+      screens and windows with thumbnails, plus a system-audio option on Windows
 - [ ] Secure context for packaged builds, so E2EE media works outside dev
 
 ### Phase 9 — presence and voice channels
@@ -134,6 +135,11 @@ Follow-ups this phase deliberately left open:
       camera/screen video, an empty state with a Join Voice button, and controls
       under it. The first click on a voice channel joins, later clicks only
       reopen the screen. Video left the sidebar panel
+- [x] A shared screen is its own stage, not a replacement for the sharer's
+      camera tile: others get a "NAME is sharing" banner with Join stream, which
+      opens a theatre layout - screen large, faces on a strip underneath
+- [x] Grid pages at nine tiles with pager arrows, and recent speakers are pulled
+      to the front so an active speaker is on page one. Speaking is amber
 
 ## Backlog (later phases)
 

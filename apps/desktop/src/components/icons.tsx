@@ -132,6 +132,18 @@ export const LockIcon = (props: IconProps): JSX.Element => (
   </Base>
 );
 
+export const ChevronLeftIcon = (props: IconProps): JSX.Element => (
+  <Base {...props}>
+    <polyline points="15 18 9 12 15 6" />
+  </Base>
+);
+
+export const ChevronRightIcon = (props: IconProps): JSX.Element => (
+  <Base {...props}>
+    <polyline points="9 18 15 12 9 6" />
+  </Base>
+);
+
 export const CompassIcon = (props: IconProps): JSX.Element => (
   <Base {...props}>
     <circle cx="12" cy="12" r="10" />

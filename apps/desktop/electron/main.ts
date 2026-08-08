@@ -134,6 +134,40 @@ ipcMain.handle('dev:login', () => {
   return { email: devLoginEmail, password: devLoginPassword, label: windowLabel ?? 'dev' };
 });
 
+// --- Screen share source picker ---------------------------------------------
+//
+// Chromium asks the app which surface to hand over, but it asks at capture
+// time, when there is no way to put a chooser on screen and wait. So the
+// renderer picks first: it lists the sources, shows its own picker, records the
+// choice here, and only then starts the capture the handler below answers.
+
+interface PendingShare {
+  id: string;
+  audio: boolean;
+}
+
+let pendingShare: PendingShare | null = null;
+
+ipcMain.handle('screen:sources', async () => {
+  const sources = await desktopCapturer.getSources({
+    types: ['screen', 'window'],
+    thumbnailSize: { width: 320, height: 180 },
+    fetchWindowIcons: true,
+  });
+
+  return sources.map((source) => ({
+    id: source.id,
+    name: source.name,
+    kind: source.id.startsWith('screen:') ? 'screen' : 'window',
+    thumbnail: source.thumbnail.toDataURL(),
+    appIcon: source.appIcon && !source.appIcon.isEmpty() ? source.appIcon.toDataURL() : null,
+  }));
+});
+
+ipcMain.handle('screen:select', (_event, id: unknown, audio: unknown): void => {
+  pendingShare = typeof id === 'string' ? { id, audio: audio === true } : null;
+});
+
 ipcMain.on('notification:show', (_event, payload: { title: string; body: string }) => {
   if (!Notification.isSupported()) return;
   // Renderer-supplied strings only; nothing here is executed or shelled out.
@@ -144,8 +178,6 @@ ipcMain.on('notification:show', (_event, payload: { title: string; body: string 
 });
 
 void app.whenReady().then(() => {
-  // Screen share: Chromium asks the app which surface to hand over. The MVP
-  // picker is "the primary screen"; a source chooser UI is tracked in TODO.md.
   // Voice channels need the microphone and camera; screen share needs display
   // capture. Everything else a page might ask for is denied.
   session.defaultSession.setPermissionRequestHandler((_contents, permission, callback) => {
@@ -158,14 +190,23 @@ void app.whenReady().then(() => {
     );
   });
 
-  session.defaultSession.setDisplayMediaRequestHandler((_request, callback) => {
-    void desktopCapturer.getSources({ types: ['screen'] }).then((sources) => {
-      const screen = sources[0];
-      if (!screen) return callback({});
-      // Loopback system audio is a Windows-only capability in Electron.
-      callback(
-        process.platform === 'win32' ? { video: screen, audio: 'loopback' } : { video: screen },
-      );
+  session.defaultSession.setDisplayMediaRequestHandler((request, callback) => {
+    // Consumed once: a later capture that skipped the picker falls back to the
+    // primary screen rather than silently re-sharing the last choice.
+    const chosen = pendingShare;
+    pendingShare = null;
+
+    void desktopCapturer.getSources({ types: ['screen', 'window'] }).then((sources) => {
+      const source =
+        sources.find((candidate) => candidate.id === chosen?.id) ??
+        sources.find((candidate) => candidate.id.startsWith('screen:'));
+      if (!source) return callback({});
+
+      // Loopback system audio is a Windows-only capability in Electron, and
+      // handing back a track the page never asked for fails the request.
+      const withAudio =
+        request.audioRequested && (chosen?.audio ?? true) && process.platform === 'win32';
+      callback(withAudio ? { video: source, audio: 'loopback' } : { video: source });
     });
   });
 

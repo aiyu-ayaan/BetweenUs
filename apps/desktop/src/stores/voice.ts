@@ -31,8 +31,19 @@ export interface VoiceTile {
   speaking: boolean;
   micEnabled: boolean;
   videoTrack: Track | null;
-  screenTrack: Track | null;
   audioTrack: Track | null;
+  /** Audio that came with a shared screen - a film's soundtrack, usually. */
+  screenAudioTrack: Track | null;
+  /** Epoch ms of the last time this person was an active speaker. */
+  lastSpokeAt: number;
+}
+
+/** A screen someone is sharing. Separate from their tile: both can be on. */
+export interface VoiceShare {
+  identity: string;
+  name: string;
+  isLocal: boolean;
+  track: Track | null;
 }
 
 interface VoiceState {
@@ -40,6 +51,9 @@ interface VoiceState {
   channelId: string | null;
   room: Room | null;
   tiles: VoiceTile[];
+  shares: VoiceShare[];
+  /** Identity whose shared screen fills the stage, or null for the grid. */
+  watching: string | null;
   micEnabled: boolean;
   cameraEnabled: boolean;
   screenEnabled: boolean;
@@ -51,8 +65,17 @@ interface VoiceState {
   leave: () => Promise<void>;
   toggleMic: () => Promise<void>;
   toggleCamera: () => Promise<void>;
-  toggleScreen: () => Promise<void>;
+  shareScreen: (source: ScreenSource | null, withAudio: boolean) => Promise<void>;
+  stopScreenShare: () => Promise<void>;
+  watch: (identity: string | null) => void;
 }
+
+/**
+ * Identity -> when they last spoke. Kept outside the store because it is a
+ * running record rather than rendered state: the grid sorts by it so whoever
+ * just talked is on the first page.
+ */
+const lastSpoke = new Map<string, number>();
 
 function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : 'unknown error';
@@ -65,6 +88,8 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
   channelId: null,
   room: null,
   tiles: [],
+  shares: [],
+  watching: null,
   micEnabled: false,
   cameraEnabled: false,
   screenEnabled: false,
@@ -89,7 +114,16 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
       void existingRoom.disconnect().catch(() => undefined);
     }
 
-    set({ status: 'connecting', channelId, room: null, error: null, tiles: [] });
+    lastSpoke.clear();
+    set({
+      status: 'connecting',
+      channelId,
+      room: null,
+      error: null,
+      tiles: [],
+      shares: [],
+      watching: null,
+    });
 
     try {
       console.log('[voice.ts] 2. Fetching key & call token...');
@@ -134,7 +168,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
 
       const refresh = (): void => {
         if (get().room === room) {
-          set({ tiles: snapshot(room) });
+          set(snapshot(room));
         }
       };
 
@@ -147,11 +181,22 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
         .on(RoomEvent.TrackUnmuted, refresh)
         .on(RoomEvent.LocalTrackPublished, refresh)
         .on(RoomEvent.LocalTrackUnpublished, refresh)
-        .on(RoomEvent.ActiveSpeakersChanged, refresh)
+        .on(RoomEvent.ActiveSpeakersChanged, (speakers: Participant[]) => {
+          const now = Date.now();
+          for (const speaker of speakers) lastSpoke.set(speaker.identity, now);
+          refresh();
+        })
         .on(RoomEvent.Disconnected, () => {
           if (get().room === room) {
             presenceSocket.send({ type: 'voice.leave', channelId });
-            set({ status: 'idle', channelId: null, room: null, tiles: [] });
+            set({
+              status: 'idle',
+              channelId: null,
+              room: null,
+              tiles: [],
+              shares: [],
+              watching: null,
+            });
           }
         });
 
@@ -200,7 +245,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
         micEnabled,
         cameraEnabled: false,
         screenEnabled: false,
-        tiles: snapshot(room),
+        ...snapshot(room),
       });
     } catch (error) {
       if (joinCounter !== currentJoinId) return;
@@ -219,7 +264,17 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
     joinCounter++;
     const { room, channelId } = get();
     if (channelId) presenceSocket.send({ type: 'voice.leave', channelId });
-    set({ status: 'idle', channelId: null, room: null, tiles: [], screenEnabled: false, error: null });
+    lastSpoke.clear();
+    set({
+      status: 'idle',
+      channelId: null,
+      room: null,
+      tiles: [],
+      shares: [],
+      watching: null,
+      screenEnabled: false,
+      error: null,
+    });
     if (room) {
       await room.disconnect().catch(() => undefined);
     }
@@ -230,9 +285,9 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
     if (!room || status !== 'connected') return;
     try {
       await room.localParticipant.setMicrophoneEnabled(!micEnabled);
-      set({ micEnabled: !micEnabled, error: null, tiles: snapshot(room) });
+      set({ micEnabled: !micEnabled, error: null, ...snapshot(room) });
     } catch (error) {
-      set({ error: `Microphone: ${messageOf(error)}`, tiles: snapshot(room) });
+      set({ error: `Microphone: ${messageOf(error)}`, ...snapshot(room) });
     }
   },
 
@@ -241,38 +296,88 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
     if (!room || status !== 'connected') return;
     try {
       await room.localParticipant.setCameraEnabled(!cameraEnabled);
-      set({ cameraEnabled: !cameraEnabled, error: null, tiles: snapshot(room) });
+      set({ cameraEnabled: !cameraEnabled, error: null, ...snapshot(room) });
     } catch (error) {
-      set({ error: `Camera: ${messageOf(error)}`, tiles: snapshot(room) });
+      set({ error: `Camera: ${messageOf(error)}`, ...snapshot(room) });
     }
   },
 
-  toggleScreen: async () => {
-    const { room, screenEnabled, status } = get();
+  /**
+   * `source` is what the user picked in the picker; passing null shares the
+   * primary screen, which is what a runtime without the Electron bridge gets.
+   * The main process has to be told before capture starts - see electron/main.ts.
+   */
+  shareScreen: async (source, withAudio) => {
+    const { room, status } = get();
     if (!room || status !== 'connected') return;
     try {
-      await room.localParticipant.setScreenShareEnabled(!screenEnabled);
-      set({ screenEnabled: !screenEnabled, error: null, tiles: snapshot(room) });
+      await window.nexora?.selectScreenSource(source?.id ?? '', withAudio);
+      await room.localParticipant.setScreenShareEnabled(true, { audio: withAudio });
+      // Watch your own share, so you can see what the others are seeing.
+      set({
+        screenEnabled: true,
+        error: null,
+        watching: room.localParticipant.identity,
+        ...snapshot(room),
+      });
     } catch (error) {
-      set({ error: `Screen share: ${messageOf(error)}`, tiles: snapshot(room) });
+      set({ error: `Screen share: ${messageOf(error)}`, ...snapshot(room) });
     }
   },
+
+  stopScreenShare: async () => {
+    const { room, status, watching } = get();
+    if (!room || status !== 'connected') return;
+    try {
+      await room.localParticipant.setScreenShareEnabled(false);
+      const stoppedWhatWeWatched = watching === room.localParticipant.identity;
+      set({
+        screenEnabled: false,
+        error: null,
+        watching: stoppedWhatWeWatched ? null : watching,
+        ...snapshot(room),
+      });
+    } catch (error) {
+      set({ error: `Screen share: ${messageOf(error)}`, ...snapshot(room) });
+    }
+  },
+
+  watch: (identity) => set({ watching: identity }),
 }));
 
-function snapshot(room: Room): VoiceTile[] {
+function snapshot(room: Room): { tiles: VoiceTile[]; shares: VoiceShare[] } {
   const speaking = new Set(room.activeSpeakers.map((participant) => participant.identity));
   const participants: Array<LocalParticipant | RemoteParticipant> = [
     room.localParticipant,
     ...room.remoteParticipants.values(),
   ];
 
-  return participants.map((participant) => toTile(participant, speaking.has(participant.identity)));
+  const tiles = participants.map((participant) =>
+    toTile(participant, speaking.has(participant.identity)),
+  );
+
+  const shares = participants.flatMap((participant) => {
+    const screen = participant.getTrackPublication(Track.Source.ScreenShare);
+    if (!screen) return [];
+    return [
+      {
+        identity: participant.identity,
+        name: participant.name || participant.identity,
+        isLocal: participant.isLocal,
+        track: screen.track ?? null,
+      },
+    ];
+  });
+
+  return { tiles, shares };
 }
 
 function toTile(participant: Participant, speaking: boolean): VoiceTile {
   const camera = participant.getTrackPublication(Track.Source.Camera);
-  const screen = participant.getTrackPublication(Track.Source.ScreenShare);
   const mic = participant.getTrackPublication(Track.Source.Microphone);
+  const screenAudio = participant.getTrackPublication(Track.Source.ScreenShareAudio);
+
+  if (speaking) lastSpoke.set(participant.identity, Date.now());
 
   return {
     identity: participant.identity,
@@ -281,8 +386,9 @@ function toTile(participant: Participant, speaking: boolean): VoiceTile {
     speaking,
     micEnabled: Boolean(mic && !mic.isMuted),
     videoTrack: camera?.isMuted ? null : (camera?.track ?? null),
-    screenTrack: screen?.track ?? null,
     audioTrack: participant.isLocal ? null : (mic?.track ?? null),
+    screenAudioTrack: participant.isLocal ? null : (screenAudio?.track ?? null),
+    lastSpokeAt: lastSpoke.get(participant.identity) ?? 0,
   };
 }
 
