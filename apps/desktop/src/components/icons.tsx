@@ -235,3 +235,39 @@ export const UserIcon = (props: IconProps): JSX.Element => (
     <circle cx="12" cy="7" r="4" />
   </Base>
 );
+
+export const PaperclipIcon = (props: IconProps): JSX.Element => (
+  <Base {...props}>
+    <path d="M21.44 11.05 12.25 20.24a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+  </Base>
+);
+
+export const FileIcon = (props: IconProps): JSX.Element => (
+  <Base {...props}>
+    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+    <polyline points="14 2 14 8 20 8" />
+  </Base>
+);
+
+export const DownloadIcon = (props: IconProps): JSX.Element => (
+  <Base {...props}>
+    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+    <polyline points="7 10 12 15 17 10" />
+    <line x1="12" y1="15" x2="12" y2="3" />
+  </Base>
+);
+
+export const EyeIcon = (props: IconProps): JSX.Element => (
+  <Base {...props}>
+    <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z" />
+    <circle cx="12" cy="12" r="3" />
+  </Base>
+);
+
+export const ImageIcon = (props: IconProps): JSX.Element => (
+  <Base {...props}>
+    <rect x="3" y="3" width="18" height="18" rx="2" />
+    <circle cx="9" cy="9" r="1.5" />
+    <path d="m21 15-4.5-4.5L7 20" />
+  </Base>
+);
