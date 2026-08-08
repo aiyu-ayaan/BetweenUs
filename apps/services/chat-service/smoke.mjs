@@ -127,6 +127,73 @@ console.log('download ok', downloaded === 'smoke-png', download.headers.get('con
 const traversal = await fetch(`${CHAT}/api/v1/uploads/..%2F..%2Fpackage.json`);
 console.log('traversal blocked ok', traversal.status >= 400);
 
+// --- E2EE key directory -----------------------------------------------------
+// Crypto correctness is covered by the desktop self-check; this proves the
+// courier endpoints: publish a device key, read the member directory, store a
+// wrapped channel key and read it back.
+
+const devicePublicKey = JSON.stringify({ kty: 'EC', crv: 'P-256', x: 'smoke-x', y: 'smoke-y' });
+await json(`${CHAT}/api/v1/e2ee/devices`, {
+  method: 'POST',
+  headers: authed,
+  body: JSON.stringify({ publicKey: devicePublicKey }),
+});
+
+const devices = await json(`${CHAT}/api/v1/e2ee/devices?channelId=${channel.id}`, {
+  headers: authed,
+});
+console.log('device directory ok', devices.some((device) => device.userId === me.id));
+
+const empty = await json(`${CHAT}/api/v1/e2ee/keys/${channel.id}`, { headers: authed });
+console.log('unkeyed channel ok', empty.epoch === 0 && empty.keys.length === 0);
+
+await json(`${CHAT}/api/v1/e2ee/keys`, {
+  method: 'POST',
+  headers: authed,
+  body: JSON.stringify({
+    channelId: channel.id,
+    epoch: 1,
+    entries: [
+      {
+        recipientUserId: me.id,
+        senderPublicKey: devicePublicKey,
+        wrappedKey: 'c21va2Utd3JhcHBlZC1rZXk=',
+        iv: 'c21va2UtaXY=',
+      },
+    ],
+  }),
+});
+
+const keys = await json(`${CHAT}/api/v1/e2ee/keys/${channel.id}`, { headers: authed });
+console.log(
+  'channel key ok',
+  keys.epoch === 1 && keys.keys[0]?.wrappedKey === 'c21va2Utd3JhcHBlZC1rZXk=',
+);
+
+// Epoch 3 with epoch 1 in place must be refused: keys advance one step at a time.
+let epochRejected = false;
+try {
+  await json(`${CHAT}/api/v1/e2ee/keys`, {
+    method: 'POST',
+    headers: authed,
+    body: JSON.stringify({
+      channelId: channel.id,
+      epoch: 3,
+      entries: [
+        {
+          recipientUserId: me.id,
+          senderPublicKey: devicePublicKey,
+          wrappedKey: 'c21va2Utd3JhcHBlZC1rZXk=',
+          iv: 'c21va2UtaXY=',
+        },
+      ],
+    }),
+  });
+} catch {
+  epochRejected = true;
+}
+console.log('epoch ordering enforced ok', epochRejected);
+
 socket.close();
 console.log('\nSMOKE PASSED');
 process.exit(0);

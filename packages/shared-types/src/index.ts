@@ -146,6 +146,73 @@ export interface CreateMessageRequest {
   content: string;
 }
 
+// --- End-to-end encryption ---
+//
+// The server stores and routes only the ciphertext shapes below. Key material
+// exists in plaintext exclusively inside a client. See development/E2EE.md.
+
+/** What a client actually puts in `Message.content`. */
+export interface EncryptedEnvelope {
+  /** Envelope version, so a future format change stays readable. */
+  v: 1;
+  /** Which channel-key generation encrypted this. */
+  epoch: number;
+  /** Base64 AES-GCM nonce (12 bytes). */
+  iv: string;
+  /** Base64 AES-GCM ciphertext with appended tag. */
+  ct: string;
+}
+
+/** A user's published ECDH P-256 public key, JWK-serialised. */
+export interface DeviceKey {
+  userId: string;
+  publicKey: string;
+}
+
+export interface RegisterDeviceKeyRequest {
+  publicKey: string;
+}
+
+/** One channel key sealed for one recipient. */
+export interface ChannelKeyEntry {
+  recipientUserId: string;
+  senderUserId: string;
+  /** Sender's ECDH public key (JWK) - the recipient needs it to derive the secret. */
+  senderPublicKey: string;
+  wrappedKey: string;
+  iv: string;
+}
+
+export interface PublishChannelKeysRequest {
+  channelId: string;
+  epoch: number;
+  entries: Array<Omit<ChannelKeyEntry, 'senderUserId'>>;
+}
+
+export interface ChannelKeysResponse {
+  channelId: string;
+  /** Highest epoch that exists for this channel, 0 when the channel has no key yet. */
+  epoch: number;
+  /** Entries addressed to the caller, oldest epoch first. */
+  keys: Array<ChannelKeyEntry & { epoch: number }>;
+  /** Channel members with a device key but no entry at `epoch` - they need a re-wrap. */
+  missingRecipients: DeviceKey[];
+}
+
+// --- Calls ---
+
+export interface CallTokenRequest {
+  channelId: string;
+}
+
+export interface CallTokenResponse {
+  /** LiveKit server URL the client dials directly - media never touches NestJS. */
+  url: string;
+  token: string;
+  room: string;
+  identity: string;
+}
+
 // --- Chat WebSocket protocol (/ws/chat) ---
 
 export type ClientChatEvent =

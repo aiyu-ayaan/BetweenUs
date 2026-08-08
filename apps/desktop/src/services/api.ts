@@ -2,10 +2,14 @@ import type {
   ApiErrorBody,
   AuthResponse,
   AuthTokens,
+  CallTokenResponse,
   Channel,
+  ChannelKeysResponse,
+  DeviceKey,
   Message,
   Paginated,
   PublicUser,
+  PublishChannelKeysRequest,
   WorkspaceMember,
   WorkspaceWithRole,
 } from '@nexora/shared-types';
@@ -129,4 +133,23 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ channelId, content }),
     }),
+
+  // --- End-to-end encryption key directory ---
+
+  registerDeviceKey: (publicKey: string): Promise<DeviceKey> =>
+    request('/api/v1/e2ee/devices', { method: 'POST', body: JSON.stringify({ publicKey }) }),
+
+  channelDevices: (channelId: string): Promise<DeviceKey[]> =>
+    request(`/api/v1/e2ee/devices?channelId=${encodeURIComponent(channelId)}`),
+
+  channelKeys: (channelId: string): Promise<ChannelKeysResponse> =>
+    request(`/api/v1/e2ee/keys/${encodeURIComponent(channelId)}`),
+
+  publishChannelKeys: (body: PublishChannelKeysRequest): Promise<{ epoch: number; stored: number }> =>
+    request('/api/v1/e2ee/keys', { method: 'POST', body: JSON.stringify(body) }),
+
+  // --- Calls ---
+
+  callToken: (channelId: string): Promise<CallTokenResponse> =>
+    request('/api/v1/calls/token', { method: 'POST', body: JSON.stringify({ channelId }) }),
 };

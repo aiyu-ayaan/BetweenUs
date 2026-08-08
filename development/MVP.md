@@ -23,9 +23,17 @@ channel, and exchange messages in realtime between two desktop clients.
 | Uploads | File upload/download with local-disk storage by default, S3 when configured |
 | Dev infra | `docker-compose.dev.yml` with Postgres + Redis only |
 
-## Out of scope for MVP (next phases)
+The MVP is done. Encrypted messaging and calls landed in phase 8 on top of it —
+see `PLANNING.md` and `E2EE.md`; the list below is the scope line as it stood
+when the MVP shipped.
+
+## Out of scope for MVP (shipped in phase 8)
 
 - Voice / video / screen share (LiveKit, `call-service`)
+- End-to-end encryption of messages and call media
+
+## Out of scope for MVP (still ahead)
+
 - Remote desktop (`remote-gateway`, `remote-agent`, remote permissions)
 - Presence service, typing indicators
 - Notification service, push notifications

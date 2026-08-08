@@ -3,10 +3,22 @@
 Ordered backlog. Check items off as they land; keep the "Next up" section at
 the top honest — it is what a new session reads first.
 
-## Next up (phase 8: hardening)
+## Next up (phase 9: hardening)
+
+Run first — phase 8 was written on a machine without Docker, so none of it has
+been exercised against live infrastructure:
+
+- [ ] Apply `20260808150000_e2ee_keys` to a real Postgres (generated with
+      `prisma migrate diff`, never run)
+- [ ] Run `pnpm dev:duo` and exchange an encrypted message between two windows
+- [ ] Make a LiveKit call between the two windows: audio, video, screen share,
+      and confirm the panel reports end-to-end encryption
+- [ ] Run the extended `smoke.mjs` (E2EE section is untested)
+
+Then:
 
 - [ ] Promote `apps/services/chat-service/smoke.mjs` into CI as an integration
-      test (it already passes locally against Postgres + Redis)
+      test
 - [ ] Verify the Nginx gateway path and container builds end to end
 - [ ] Unit tests for `AuthService` (register/login/refresh) with a Prisma mock
 - [ ] Integration test: register → create workspace → create channel → send message
@@ -70,17 +82,39 @@ the top honest — it is what a new session reads first.
 - [x] Workspace + channel sidebar, create dialogs
 - [x] Message list with realtime WebSocket updates
 
+### Phase 8 — encrypted chat and calls
+- [x] `@nexora/shared-types` contracts for envelopes, device keys, channel keys
+      and call tokens
+- [x] `device_keys` + `channel_keys` Prisma models and migration
+- [x] `/api/v1/e2ee` in chat-service: device directory, channel-key publish and
+      fetch, epoch ordering and holder rules
+- [x] Desktop E2EE: ECDH P-256 identity per device, HKDF key wrapping,
+      AES-256-GCM messages, self-check covering the primitives
+- [x] Private keys sealed with Electron `safeStorage` through IPC
+- [x] `call-service`: LiveKit access tokens, membership-checked, `/health`
+- [x] LiveKit container, `livekit.yaml`, Nginx routes, compose wiring
+- [x] Desktop call UI: participant tiles, mic/camera/screen toggles, E2EE media
+      via `ExternalE2EEKeyProvider` (join aborts rather than downgrades)
+- [x] Screen-share capture handler in the Electron main process
+- [x] `pnpm dev:duo`: two seeded users, two Electron profiles, one dev server
+- [x] `development/E2EE.md` and `development/TESTING.md`
+
+Follow-ups this phase deliberately left open:
+
+- [ ] Rotate the channel key (epoch + 1) when a member is removed
+- [ ] Multi-device support: key list per user instead of one device key
+- [ ] Identity verification UI (safety numbers) so a lying server is detectable
+- [ ] Encrypt attachments with the channel key too
+- [ ] Screen-share source picker instead of always taking the primary screen
+- [ ] Call signalling so a channel shows "call in progress" before joining
+- [ ] Secure context for packaged builds, so E2EE media works outside dev
+
 ## Backlog (later phases)
 
-### Phase 9 — presence
+### Phase 10 — presence
 - [ ] `presence-service` with Redis-backed online/idle/offline state
 - [ ] `/ws/presence` gateway, heartbeat, typing indicators
 - [ ] Desktop presence dots in member list
-
-### Phase 10 — calls
-- [ ] `call-service`: LiveKit room lifecycle + access-token minting
-- [ ] LiveKit container in compose, `livekit.yaml` config
-- [ ] Desktop voice/video UI, screen-share picker via Electron `desktopCapturer`
 
 ### Phase 11 — remote desktop
 - [ ] `remote-agent`: device identity, outbound WebSocket, screen capture, input

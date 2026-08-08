@@ -1,1 +1,28 @@
+# LiveKit SFU configuration.
+#
+# Development values. The API secret here is a placeholder that only ever runs
+# on localhost - production reads keys from the environment (LIVEKIT_KEYS) and
+# must never use this file's key pair.
 port: 7880
+
+rtc:
+  tcp_port: 7881
+  port_range_start: 50000
+  port_range_end: 50019
+  # The server runs in a container while clients run on the host, so it must
+  # advertise an address the host can dial rather than its container IP.
+  use_external_ip: false
+  node_ip: 127.0.0.1
+
+keys:
+  devkey: nexora-dev-livekit-secret-change-me-please
+
+logging:
+  level: info
+  json: true
+
+room:
+  # Rooms are created implicitly by the first token holder to join and reaped
+  # shortly after the last participant leaves.
+  auto_create: true
+  empty_timeout: 60

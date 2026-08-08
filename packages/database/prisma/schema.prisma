@@ -38,8 +38,45 @@ model User {
   ownedWorkspaces  Workspace[]       @relation("WorkspaceOwner")
   memberships      WorkspaceMember[]
   messages         Message[]
+  deviceKey        DeviceKey?
 
   @@map("users")
+}
+
+/// Public half of a user's end-to-end encryption identity key (ECDH P-256, JWK).
+/// The private half never leaves the device; the server publishes this only so
+/// members can wrap channel keys for each other. One device per user for now -
+/// multi-device is tracked in development/TODO.md.
+model DeviceKey {
+  userId    String   @id
+  publicKey String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("device_keys")
+}
+
+/// A channel's symmetric content key, wrapped once per recipient. The server
+/// stores only ciphertext it cannot open: `wrappedKey` is sealed with the ECDH
+/// secret between `senderPublicKey` and the recipient's device key.
+model ChannelKey {
+  id              String   @id @default(uuid())
+  channelId       String
+  epoch           Int
+  recipientUserId String
+  senderUserId    String
+  senderPublicKey String
+  wrappedKey      String
+  iv              String
+  createdAt       DateTime @default(now())
+
+  channel Channel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+
+  @@unique([channelId, epoch, recipientUserId])
+  @@index([channelId, recipientUserId])
+  @@map("channel_keys")
 }
 
 model RefreshToken {
@@ -98,8 +135,9 @@ model Channel {
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
 
-  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspace Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   messages  Message[]
+  keys      ChannelKey[]
 
   @@unique([workspaceId, name])
   @@map("channels")
@@ -109,6 +147,7 @@ model Message {
   id        String    @id @default(uuid())
   channelId String
   authorId  String
+  // Opaque to the server: clients store a serialised `EncryptedEnvelope` here.
   content   String
   createdAt DateTime  @default(now())
   editedAt  DateTime?

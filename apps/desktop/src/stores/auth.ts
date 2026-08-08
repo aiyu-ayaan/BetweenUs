@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import type { PublicUser } from '@nexora/shared-types';
 import { ApiError, api, configureApi } from '../services/api';
 import { chatSocket } from '../services/socket';
+import { initIdentity, resetE2ee } from '../services/e2ee';
 
 const STORAGE_KEY = 'nexora.refreshToken';
 
@@ -66,6 +67,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   logout: async () => {
     const stored = localStorage.getItem(STORAGE_KEY);
     chatSocket.disconnect();
+    resetE2ee();
     localStorage.removeItem(STORAGE_KEY);
     set({ user: null, accessToken: null, status: 'idle' });
     if (stored) await api.logout(stored).catch(() => undefined);
@@ -83,6 +85,9 @@ function applySession(
   localStorage.setItem(STORAGE_KEY, refreshToken);
   set({ user, accessToken, status: 'authenticated', error: null });
   chatSocket.connect(accessToken);
+  // Device key setup runs alongside the first workspace load; everything that
+  // needs key material awaits the same promise, so the order does not matter.
+  void initIdentity(user.id).catch(() => undefined);
 }
 
 function messageOf(error: unknown): string {

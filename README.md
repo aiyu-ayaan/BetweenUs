@@ -4,19 +4,21 @@ Discord-like communication platform with secure remote desktop access, built as
 a pnpm + Turborepo monorepo. `CLAUDE.md` holds the target architecture;
 `development/` tracks what is built and what comes next.
 
-## MVP status
+## Status
 
 Working end to end: register / login, workspaces, text channels, message history
-and realtime delivery, in an Electron desktop client.
+and realtime delivery, end-to-end encrypted messages, and voice/video/screen
+share calls over LiveKit with end-to-end encrypted media - in an Electron
+desktop client.
 
-Not built yet: voice/video (LiveKit), remote desktop, presence, notifications,
-user profiles. See `development/MVP.md` and `development/TODO.md`.
+Not built yet: remote desktop, presence, notifications, user profiles. See
+`development/PLANNING.md`, `development/E2EE.md` and `development/TODO.md`.
 
 ## Requirements
 
 - Node.js 20+
 - pnpm 9
-- Docker Desktop (only to run Postgres and Redis locally)
+- Docker Desktop (only to run Postgres, Redis and LiveKit locally)
 
 ## Quick start
 
@@ -30,6 +32,7 @@ pnpm db:migrate                                        # creates the schema
                                                        #  a new migration)
 pnpm db:seed                                           # optional: demo@nexora.local / nexora123
 pnpm dev                                               # all services + desktop
+pnpm dev:duo                                           # two signed-in test windows
 ```
 
 `pnpm dev:infra` / `pnpm dev:infra:down` are shortcuts for the compose commands.
@@ -37,7 +40,11 @@ Only Postgres and Redis run in Docker for development - no local database
 install needed, and services run on the host for fast reloads.
 
 Default ports: gateway `8080`, auth `3001`, workspace `3003`, chat `3004`,
-desktop renderer `5173`.
+call `3007`, LiveKit `7880`, desktop renderer `5173`.
+
+`pnpm dev:duo` opens two Electron windows signed in as different users, each
+with its own profile and encryption key, which is the only sane way to test
+chat and calls. See `development/TESTING.md`.
 
 To run everything in containers instead:
 
@@ -72,11 +79,11 @@ Content types are allowlisted, and anything not provably safe to render inline
 
 ```
 apps/desktop              Electron + React + Tailwind + Zustand client
-apps/services/*           NestJS microservices (auth, workspace, chat built)
+apps/services/*           NestJS microservices (auth, workspace, chat, call built)
 packages/*                shared-types, auth, permissions, database, events,
                           websocket, storage, logger, config, nest-common
 infrastructure/           docker compose, nginx, cloudflare, livekit
-development/              planning, MVP definition, TODO backlog
+development/              planning, MVP definition, E2EE design, testing, TODO
 ```
 
 ## Common commands
@@ -85,12 +92,13 @@ development/              planning, MVP definition, TODO backlog
 | --- | --- |
 | `pnpm build` | Build every package, service and the desktop bundle |
 | `pnpm typecheck` | Type-check the whole workspace |
-| `pnpm check` | Run package self-checks (logger, auth, websocket, storage) |
+| `pnpm check` | Run package self-checks (logger, auth, websocket, storage, desktop crypto) |
 | `pnpm dev:desktop` | Run only the desktop client |
+| `pnpm dev:duo` | Two signed-in desktop windows for chat/call testing |
 | `pnpm db:studio` | Open Prisma Studio against the dev database |
 | `pnpm --filter @nexora/chat-service smoke` | End-to-end check against running services |
 
-## API surface (MVP)
+## API surface
 
 ```
 POST /api/v1/auth/register|login|refresh|logout    GET /api/v1/auth/me
@@ -98,6 +106,8 @@ GET|POST /api/v1/workspaces      POST /api/v1/workspaces/join
 GET /api/v1/workspaces/:id/members|channels
 GET|POST /api/v1/channels        GET|POST /api/v1/messages
 POST /api/v1/uploads             GET /api/v1/uploads/:key
+GET|POST /api/v1/e2ee/devices    GET /api/v1/e2ee/keys/:channelId
+POST /api/v1/e2ee/keys           POST /api/v1/calls/token
 WS   /ws/chat
 GET  /health (every service)
 ```

@@ -9,7 +9,9 @@ import type {
 } from '@nexora/shared-types';
 
 const PAGE_SIZE = 50;
-const MAX_CONTENT_LENGTH = 4000;
+// Content is an encrypted envelope, so the limit covers base64 expansion of a
+// 4000-character message plus the JSON wrapper.
+const MAX_CONTENT_LENGTH = 8000;
 
 @Injectable()
 export class MessagesService {

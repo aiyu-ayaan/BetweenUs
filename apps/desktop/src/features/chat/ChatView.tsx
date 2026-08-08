@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
 import type { Message } from '@nexora/shared-types';
 import { useChatStore } from '../../stores/chat';
-import { HashIcon, SendIcon, UsersIcon } from '../../components/icons';
+import { useCallStore } from '../../stores/call';
+import { CallPanel } from '../calls/CallPanel';
+import { HashIcon, LockIcon, PhoneIcon, SendIcon, UsersIcon } from '../../components/icons';
 
 export function ChatView(): JSX.Element {
   const { channels, messages, activeChannelId, loadingMessages, error } = useChatStore();
@@ -29,11 +31,55 @@ export function ChatView(): JSX.Element {
             <p className="truncate text-sm text-slate-400">{channel.topic}</p>
           </>
         )}
+        <span
+          title="Messages and call media are encrypted on this device"
+          className="ml-auto flex items-center gap-1 text-xs text-emerald-300"
+        >
+          <LockIcon className="h-3.5 w-3.5" />
+          E2EE
+        </span>
+        <CallButton channelId={channel.id} channelName={channel.name} />
       </header>
 
+      <CallPanel channelId={channel.id} />
       <MessageList messages={messages} loading={loadingMessages} error={error} />
       <MessageComposer channelName={channel.name} />
     </section>
+  );
+}
+
+function CallButton({
+  channelId,
+  channelName,
+}: {
+  channelId: string;
+  channelName: string;
+}): JSX.Element {
+  const status = useCallStore((state) => state.status);
+  const activeChannelId = useCallStore((state) => state.channelId);
+  const error = useCallStore((state) => state.error);
+  const join = useCallStore((state) => state.join);
+
+  const inThisChannel = status !== 'idle' && activeChannelId === channelId;
+
+  return (
+    <>
+      {error && (
+        <p role="alert" className="text-xs text-red-300">
+          {error}
+        </p>
+      )}
+      <button
+        type="button"
+        disabled={inThisChannel || status === 'connecting'}
+        onClick={() => void join(channelId)}
+        aria-label={`Start or join the call in ${channelName}`}
+        className="flex cursor-pointer items-center gap-1.5 rounded-md bg-surface-800 px-3 py-1.5 text-sm text-slate-200 transition-colors duration-200 hover:bg-surface-700 disabled:cursor-not-allowed disabled:text-slate-500"
+      >
+        <PhoneIcon className="h-4 w-4" />
+        {inThisChannel ? 'In call' : 'Call'}
+      </button>
+    </>
   );
 }
 

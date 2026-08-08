@@ -1,0 +1,170 @@
+/**
+ * End-to-end encryption primitives. WebCrypto only, no app imports, so this
+ * module also runs under Node for `pnpm --filter @nexora/desktop check`.
+ *
+ * Scheme (see development/E2EE.md):
+ *   - identity: ECDH P-256 key pair per device, private half never leaves it
+ *   - channel key: random AES-256-GCM key per channel, per epoch
+ *   - distribution: ECDH(sender, recipient) -> HKDF-SHA256 -> AES-GCM wrap
+ *   - messages and call media: AES-256-GCM under the channel key
+ */
+import type { EncryptedEnvelope } from '@nexora/shared-types';
+
+const subtle = globalThis.crypto.subtle;
+const encoder = new TextEncoder();
+const decoder = new TextDecoder();
+
+const IDENTITY_ALGORITHM = { name: 'ECDH', namedCurve: 'P-256' } as const;
+const WRAP_INFO = 'nexora/e2ee/v1/channel-key-wrap';
+const IV_BYTES = 12;
+const CHANNEL_KEY_BYTES = 32;
+
+export interface IdentityKeyPair {
+  /** JWK JSON. Published to the server. */
+  publicKey: string;
+  /** JWK JSON. Stays on the device, encrypted at rest by the main process. */
+  privateKey: string;
+}
+
+export interface WrappedChannelKey {
+  wrappedKey: string;
+  iv: string;
+}
+
+export async function generateIdentity(): Promise<IdentityKeyPair> {
+  const pair = await subtle.generateKey(IDENTITY_ALGORITHM, true, ['deriveBits']);
+  const [publicKey, privateKey] = await Promise.all([
+    subtle.exportKey('jwk', pair.publicKey),
+    subtle.exportKey('jwk', pair.privateKey),
+  ]);
+  return { publicKey: JSON.stringify(publicKey), privateKey: JSON.stringify(privateKey) };
+}
+
+export function generateChannelKey(): string {
+  const bytes = new Uint8Array(CHANNEL_KEY_BYTES);
+  globalThis.crypto.getRandomValues(bytes);
+  return toBase64(bytes);
+}
+
+export async function wrapChannelKey(
+  channelKey: string,
+  privateJwk: string,
+  peerPublicJwk: string,
+): Promise<WrappedChannelKey> {
+  const key = await deriveWrappingKey(privateJwk, peerPublicJwk);
+  const iv = randomIv();
+  const sealed = await subtle.encrypt({ name: 'AES-GCM', iv }, key, fromBase64(channelKey));
+  return { wrappedKey: toBase64(new Uint8Array(sealed)), iv: toBase64(iv) };
+}
+
+export async function unwrapChannelKey(
+  wrapped: WrappedChannelKey,
+  privateJwk: string,
+  peerPublicJwk: string,
+): Promise<string> {
+  const key = await deriveWrappingKey(privateJwk, peerPublicJwk);
+  const opened = await subtle.decrypt(
+    { name: 'AES-GCM', iv: fromBase64(wrapped.iv) },
+    key,
+    fromBase64(wrapped.wrappedKey),
+  );
+  return toBase64(new Uint8Array(opened));
+}
+
+export async function encryptMessage(
+  plaintext: string,
+  channelKey: string,
+  epoch: number,
+): Promise<EncryptedEnvelope> {
+  const key = await importContentKey(channelKey);
+  const iv = randomIv();
+  const sealed = await subtle.encrypt({ name: 'AES-GCM', iv }, key, encoder.encode(plaintext));
+  return { v: 1, epoch, iv: toBase64(iv), ct: toBase64(new Uint8Array(sealed)) };
+}
+
+export async function decryptMessage(
+  envelope: EncryptedEnvelope,
+  channelKey: string,
+): Promise<string> {
+  const key = await importContentKey(channelKey);
+  const opened = await subtle.decrypt(
+    { name: 'AES-GCM', iv: fromBase64(envelope.iv) },
+    key,
+    fromBase64(envelope.ct),
+  );
+  return decoder.decode(opened);
+}
+
+/**
+ * Reads a stored message body. Returns null for anything that is not an
+ * envelope, so plaintext rows written before E2EE still render.
+ */
+export function parseEnvelope(content: string): EncryptedEnvelope | null {
+  if (!content.startsWith('{')) return null;
+  try {
+    const parsed = JSON.parse(content) as Partial<EncryptedEnvelope>;
+    if (parsed.v !== 1) return null;
+    if (typeof parsed.iv !== 'string' || typeof parsed.ct !== 'string') return null;
+    if (typeof parsed.epoch !== 'number') return null;
+    return { v: 1, epoch: parsed.epoch, iv: parsed.iv, ct: parsed.ct };
+  } catch {
+    return null;
+  }
+}
+
+async function deriveWrappingKey(privateJwk: string, peerPublicJwk: string): Promise<CryptoKey> {
+  const [privateKey, publicKey] = await Promise.all([
+    subtle.importKey('jwk', JSON.parse(privateJwk) as JsonWebKey, IDENTITY_ALGORITHM, false, [
+      'deriveBits',
+    ]),
+    subtle.importKey('jwk', JSON.parse(peerPublicJwk) as JsonWebKey, IDENTITY_ALGORITHM, false, []),
+  ]);
+
+  // The raw ECDH output is a curve point, not a uniform key: run it through
+  // HKDF before it is used as an AES key.
+  const shared = await subtle.deriveBits({ name: 'ECDH', public: publicKey }, privateKey, 256);
+  const material = await subtle.importKey('raw', shared, 'HKDF', false, ['deriveKey']);
+
+  return subtle.deriveKey(
+    {
+      name: 'HKDF',
+      hash: 'SHA-256',
+      // A fixed salt is safe here: the pair is static and every wrap uses a
+      // fresh random IV. `info` domain-separates this use of the secret.
+      salt: new Uint8Array(new ArrayBuffer(32)),
+      info: encoder.encode(WRAP_INFO),
+    },
+    material,
+    { name: 'AES-GCM', length: 256 },
+    false,
+    ['encrypt', 'decrypt'],
+  );
+}
+
+function importContentKey(channelKey: string): Promise<CryptoKey> {
+  return subtle.importKey('raw', fromBase64(channelKey), { name: 'AES-GCM' }, false, [
+    'encrypt',
+    'decrypt',
+  ]);
+}
+
+// The typed arrays below are built on an explicit ArrayBuffer: WebCrypto's
+// BufferSource excludes SharedArrayBuffer-backed views.
+function randomIv() {
+  const iv = new Uint8Array(new ArrayBuffer(IV_BYTES));
+  globalThis.crypto.getRandomValues(iv);
+  return iv;
+}
+
+export function toBase64(bytes: Uint8Array): string {
+  let binary = '';
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary);
+}
+
+export function fromBase64(value: string) {
+  const binary = atob(value);
+  const bytes = new Uint8Array(new ArrayBuffer(binary.length));
+  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+  return bytes;
+}

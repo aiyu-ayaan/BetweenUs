@@ -43,6 +43,22 @@ services:
       timeout: 3s
       retries: 20
 
+  # Voice/video/screen-share SFU. Media goes desktop -> LiveKit directly and is
+  # end-to-end encrypted, so the server relays frames it cannot decrypt.
+  livekit:
+    image: livekit/livekit-server:v1.7
+    container_name: nexora-dev-livekit
+    restart: unless-stopped
+    command: ["--config", "/etc/livekit.yaml"]
+    volumes:
+      - ../livekit/livekit.yaml:/etc/livekit.yaml:ro
+    ports:
+      - "127.0.0.1:7880:7880"
+      - "127.0.0.1:7881:7881"
+      # ICE/UDP media. Kept to 20 ports: enough for small test calls and fast to
+      # publish on Docker Desktop.
+      - "127.0.0.1:50000-50019:50000-50019/udp"
+
 volumes:
   postgres-data:
   redis-data:

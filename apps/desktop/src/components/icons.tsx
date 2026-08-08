@@ -61,6 +61,69 @@ export const UsersIcon = (props: IconProps): JSX.Element => (
   </Base>
 );
 
+export const PhoneIcon = (props: IconProps): JSX.Element => (
+  <Base {...props}>
+    <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.79 19.79 0 0 1 2.09 4.18 2 2 0 0 1 4.08 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.9.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92Z" />
+  </Base>
+);
+
+export const PhoneOffIcon = (props: IconProps): JSX.Element => (
+  <Base {...props}>
+    <path d="M10.68 13.31a16 16 0 0 0 3.41 2.6l1.27-1.27a2 2 0 0 1 2.11-.45c.9.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.42 19.42 0 0 1-3.33-2.67" />
+    <path d="M5.06 5.06A19.79 19.79 0 0 1 2.09 4.18 2 2 0 0 1 4.08 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91" />
+    <line x1="2" y1="2" x2="22" y2="22" />
+  </Base>
+);
+
+export const MicIcon = (props: IconProps): JSX.Element => (
+  <Base {...props}>
+    <rect x="9" y="2" width="6" height="11" rx="3" />
+    <path d="M19 10v1a7 7 0 0 1-14 0v-1" />
+    <line x1="12" y1="18" x2="12" y2="22" />
+  </Base>
+);
+
+export const MicOffIcon = (props: IconProps): JSX.Element => (
+  <Base {...props}>
+    <path d="M15 9.34V5a3 3 0 0 0-5.94-.6" />
+    <path d="M9 9v4a3 3 0 0 0 5.12 2.12" />
+    <path d="M19 10v1a7 7 0 0 1-1.1 3.76" />
+    <path d="M5 10v1a7 7 0 0 0 10.7 5.95" />
+    <line x1="12" y1="18" x2="12" y2="22" />
+    <line x1="2" y1="2" x2="22" y2="22" />
+  </Base>
+);
+
+export const VideoIcon = (props: IconProps): JSX.Element => (
+  <Base {...props}>
+    <path d="m22 8-6 4 6 4V8Z" />
+    <rect x="2" y="6" width="14" height="12" rx="2" />
+  </Base>
+);
+
+export const VideoOffIcon = (props: IconProps): JSX.Element => (
+  <Base {...props}>
+    <path d="M10.66 6H14a2 2 0 0 1 2 2v2.34l1 1L22 8v8" />
+    <path d="M16 16a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h2" />
+    <line x1="2" y1="2" x2="22" y2="22" />
+  </Base>
+);
+
+export const ScreenShareIcon = (props: IconProps): JSX.Element => (
+  <Base {...props}>
+    <rect x="2" y="3" width="20" height="14" rx="2" />
+    <line x1="8" y1="21" x2="16" y2="21" />
+    <line x1="12" y1="17" x2="12" y2="21" />
+  </Base>
+);
+
+export const LockIcon = (props: IconProps): JSX.Element => (
+  <Base {...props}>
+    <rect x="3" y="11" width="18" height="11" rx="2" />
+    <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+  </Base>
+);
+
 export const CompassIcon = (props: IconProps): JSX.Element => (
   <Base {...props}>
     <circle cx="12" cy="12" r="10" />

@@ -12,9 +12,19 @@ export default function App(): JSX.Element {
   const loadWorkspaces = useChatStore((state) => state.loadWorkspaces);
   const reset = useChatStore((state) => state.reset);
 
+  const login = useAuthStore((state) => state.login);
+
   useEffect(() => {
-    void restore();
-  }, [restore]);
+    void (async () => {
+      await restore();
+      if (useAuthStore.getState().status === 'authenticated') return;
+
+      // `pnpm dev:duo` hands each test window an identity so two clients can be
+      // driven side by side without typing credentials twice.
+      const credentials = await window.nexora?.devLogin();
+      if (credentials) await login(credentials.email, credentials.password);
+    })();
+  }, [restore, login]);
 
   useEffect(() => {
     if (status === 'authenticated') void loadWorkspaces();

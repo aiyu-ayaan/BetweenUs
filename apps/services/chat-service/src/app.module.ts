@@ -7,6 +7,8 @@ import { RequestIdMiddleware, createHealthController } from '@nexora/nest-common
 import { MessagesController } from './modules/messages/messages.controller';
 import { MessagesService } from './modules/messages/messages.service';
 import { UploadsController } from './modules/uploads/uploads.controller';
+import { E2eeController } from './modules/e2ee/e2ee.controller';
+import { E2eeService } from './modules/e2ee/e2ee.service';
 import { ChatGateway } from './gateways/chat.gateway';
 
 const SERVICE_NAME = 'chat-service';
@@ -15,10 +17,12 @@ const SERVICE_NAME = 'chat-service';
   controllers: [
     MessagesController,
     UploadsController,
+    E2eeController,
     createHealthController(SERVICE_NAME, pingDatabase),
   ],
   providers: [
     MessagesService,
+    E2eeService,
     ChatGateway,
     {
       provide: EventBus,

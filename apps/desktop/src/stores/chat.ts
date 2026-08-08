@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import type { Channel, Message, WorkspaceWithRole } from '@nexora/shared-types';
 import { api } from '../services/api';
 import { chatSocket } from '../services/socket';
+import { decryptForChannel, encryptForChannel, syncChannelKeys } from '../services/e2ee';
 
 interface ChatState {
   workspaces: WorkspaceWithRole[];
@@ -53,11 +54,21 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set({ activeChannelId: channelId, messages: [], loadingMessages: true, error: null });
     chatSocket.subscribe(channelId);
 
+    // Members who joined after this channel was keyed need the key wrapped for
+    // them; opening the channel is the natural moment to do it.
+    void syncChannelKeys(channelId).catch(() => undefined);
+
     try {
       const page = await api.messages(channelId);
+      const items = await Promise.all(
+        page.items.map(async (message) => ({
+          ...message,
+          content: await decryptForChannel(channelId, message.content),
+        })),
+      );
       // Guard against a slow response for a channel the user already left.
       if (get().activeChannelId !== channelId) return;
-      set({ messages: page.items, loadingMessages: false });
+      set({ messages: items, loadingMessages: false });
     } catch (error) {
       set({ loadingMessages: false, error: (error as Error).message });
     }
@@ -87,9 +98,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
   sendMessage: async (content) => {
     const channelId = get().activeChannelId;
     if (!channelId) return;
+    // The server stores and forwards ciphertext only.
+    const envelope = await encryptForChannel(channelId, content);
     // No optimistic insert: the message arrives over the socket, so an
     // optimistic copy would have to be de-duplicated for no real gain.
-    await api.sendMessage(channelId, content);
+    await api.sendMessage(channelId, envelope);
   },
 
   reset: () =>
@@ -106,8 +119,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
 // Realtime messages land here regardless of which component is mounted.
 chatSocket.on((event) => {
   if (event.type !== 'message.created') return;
-  const state = useChatStore.getState();
-  if (event.message.channelId !== state.activeChannelId) return;
-  if (state.messages.some((message) => message.id === event.message.id)) return;
-  useChatStore.setState({ messages: [...state.messages, event.message] });
+  const incoming = event.message;
+  if (incoming.channelId !== useChatStore.getState().activeChannelId) return;
+
+  void decryptForChannel(incoming.channelId, incoming.content).then((content) => {
+    // Re-read: decryption is async, so the channel may have changed meanwhile.
+    const state = useChatStore.getState();
+    if (incoming.channelId !== state.activeChannelId) return;
+    if (state.messages.some((message) => message.id === incoming.id)) return;
+    useChatStore.setState({ messages: [...state.messages, { ...incoming, content }] });
+  });
 });

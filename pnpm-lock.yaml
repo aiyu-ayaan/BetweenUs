@@ -20,6 +20,9 @@ importers:
       '@nexora/shared-types':
         specifier: workspace:*
         version: link:../../packages/shared-types
+      livekit-client:
+        specifier: ^2.7.2
+        version: 2.21.0(@types/dom-mediacapture-record@1.0.22)
       react:
         specifier: ^18.3.1
         version: 18.3.1
@@ -57,6 +60,9 @@ importers:
       tailwindcss:
         specifier: ^3.4.7
         version: 3.4.19(tsx@4.23.11)
+      tsx:
+        specifier: ^4.16.5
+        version: 4.23.11
       typescript:
         specifier: ^5.5.4
         version: 5.9.3
@@ -133,7 +139,69 @@ importers:
         specifier: ^5.5.4
         version: 5.9.3
 
-  apps/services/call-service: {}
+  apps/services/call-service:
+    dependencies:
+      '@nestjs/common':
+        specifier: ^10.4.1
+        version: 10.4.22(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2)
+      '@nestjs/core':
+        specifier: ^10.4.1
+        version: 10.4.22(@nestjs/common@10.4.22(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/platform-express@10.4.22)(reflect-metadata@0.2.2)(rxjs@7.8.2)
+      '@nestjs/platform-express':
+        specifier: ^10.4.1
+        version: 10.4.22(@nestjs/common@10.4.22(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@10.4.22)
+      '@nexora/auth':
+        specifier: workspace:*
+        version: link:../../../packages/auth
+      '@nexora/config':
+        specifier: workspace:*
+        version: link:../../../packages/config
+      '@nexora/database':
+        specifier: workspace:*
+        version: link:../../../packages/database
+      '@nexora/logger':
+        specifier: workspace:*
+        version: link:../../../packages/logger
+      '@nexora/nest-common':
+        specifier: workspace:*
+        version: link:../../../packages/nest-common
+      '@nexora/permissions':
+        specifier: workspace:*
+        version: link:../../../packages/permissions
+      '@nexora/shared-types':
+        specifier: workspace:*
+        version: link:../../../packages/shared-types
+      class-transformer:
+        specifier: ^0.5.1
+        version: 0.5.1
+      class-validator:
+        specifier: ^0.14.1
+        version: 0.14.4
+      livekit-server-sdk:
+        specifier: ^2.7.2
+        version: 2.17.0
+      reflect-metadata:
+        specifier: ^0.2.2
+        version: 0.2.2
+      rxjs:
+        specifier: ^7.8.1
+        version: 7.8.2
+    devDependencies:
+      '@nestjs/cli':
+        specifier: ^10.4.4
+        version: 10.4.9
+      '@nestjs/schematics':
+        specifier: ^10.1.4
+        version: 10.2.3(chokidar@3.6.0)(typescript@5.9.3)
+      '@types/express':
+        specifier: ^4.17.21
+        version: 4.17.25
+      '@types/node':
+        specifier: ^20.14.10
+        version: 20.19.43
+      typescript:
+        specifier: ^5.5.4
+        version: 5.9.3
 
   apps/services/chat-service:
     dependencies:
@@ -665,6 +733,9 @@ packages:
   '@borewit/text-codec@0.2.2':
     resolution: {integrity: sha512-DDaRehssg1aNrH4+2hnj1B7vnUGEjU6OIlyRdkMd0aUdIUvKXrJfXsy8LVtXAy7DRvYVluWbMspsRhz2lcW0mQ==}
 
+  '@bufbuild/protobuf@1.10.1':
+    resolution: {integrity: sha512-wJ8ReQbHxsAfXhrf9ixl0aYbZorRuOWpBNzm8pL8ftmSxQx/wnJD5Eg861NwJU/czy2VXFIebCeZnZrI9rktIQ==}
+
   '@colors/colors@1.5.0':
     resolution: {integrity: sha512-ooWCrlZP11i8GImSjTHYHLkvFDP48nS4+204nGb1RiX/WXYHmJA2III9/e2DWVabCESdW7hBAEzHRqUn9OUVvQ==}
     engines: {node: '>=0.1.90'}
@@ -1015,6 +1086,12 @@ packages:
   '@jridgewell/trace-mapping@0.3.31':
     resolution: {integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==}
 
+  '@livekit/mutex@1.1.1':
+    resolution: {integrity: sha512-EsshAucklmpuUAfkABPxJNhzj9v2sG7JuzFDL4ML1oJQSV14sqrpTYnsaOudMAw9yOaW53NU3QQTlUQoRs4czw==}
+
+  '@livekit/protocol@1.50.4':
+    resolution: {integrity: sha512-L1uggNQAqyY21smQY8AllyOYbcv9Me9TaxwuLytL1R8ck9nbYPmQLNwEDi3pOFGAMa5F8I2nUi2Jc59W5awxlA==}
+
   '@ljharb/through@2.3.14':
     resolution: {integrity: sha512-ajBvlKpWucBB17FuQYUShqpqy8GRgYEpJW0vWJbUu1CV9lWyrDCapy0lScU8T8Z6qn49sSwJB3+M+evYIdGg+A==}
     engines: {node: '>= 0.4'}
@@ -1363,6 +1440,9 @@ packages:
 
   '@types/debug@4.1.13':
     resolution: {integrity: sha512-KSVgmQmzMwPlmtljOomayoR89W4FynCAi3E8PPs7vmDVPe84hT+vGPKkJfThkmXs0x0jAaa9U8uW8bbfyS2fWw==}
+
+  '@types/dom-mediacapture-record@1.0.22':
+    resolution: {integrity: sha512-mUMZLK3NvwRLcAAT9qmcK+9p7tpU2FHdDsntR3YI4+GY88XrgG4XiE7u1Q2LAN2/FZOz/tdMDC3GQCR4T8nFuw==}
 
   '@types/eslint-scope@3.7.7':
     resolution: {integrity: sha512-MzMFlSLBqNF2gcHWO0G1vP/YQyfvrxZ0bF+u7mzUdZ1/xK4A4sru+nraZz5i3iEIk1l1uyicaDVTB4QbbEkAYg==}
@@ -2547,6 +2627,12 @@ packages:
     resolution: {integrity: sha512-/imKNG4EbWNrVjoNC/1H5/9GFy+tqjGBHCaSsN+P2RnPqjsLmv6UD3Ej+Kj8nBWaRAwyk7kK5ZUc+OEatnTR3A==}
     hasBin: true
 
+  jose@5.10.0:
+    resolution: {integrity: sha512-s+3Al/p9g32Iq+oqXxkW//7jk2Vig6FF1CFqzVXoTUXt2qz89YWbL+OwS17NFYEvxC35n0FKeGO2LGYSxeM2Gg==}
+
+  jose@6.2.8:
+    resolution: {integrity: sha512-Bsdjwm3Qsd/P0jR+BHDe3LytDfY7WBq2HmCCLIwuVRHMuEC9ae7/R474GIUdF1NgCyZjzVo/A9DOiOBtXq8ZoQ==}
+
   js-tokens@4.0.0:
     resolution: {integrity: sha512-RdJUflcE3cUzKiMqQgsCu06FPu9UdIJO0beYbPhHN4k6apgJtifcoCtT9bcxOpYBtpD2kCM6Sbzg4CausW/PKQ==}
 
@@ -2621,6 +2707,15 @@ packages:
   lines-and-columns@1.2.4:
     resolution: {integrity: sha512-7ylylesZQ/PV29jhEDl3Ufjo6ZX7gCqJr5F7PKrqc93v7fzSymt1BpwEU8nAUXs8qzzvqhbjhK5QZg6Mt/HkBg==}
 
+  livekit-client@2.21.0:
+    resolution: {integrity: sha512-RBUhPkV/sl1nzl8lokVlK5uATPwn0AlsudCBZXissw/kDl9yz8ac4pNJ43iPpMVoHOeBYH/BZ3vUC1adqa/zFQ==}
+    peerDependencies:
+      '@types/dom-mediacapture-record': ^1
+
+  livekit-server-sdk@2.17.0:
+    resolution: {integrity: sha512-GWNEQrUD13UwZNrmosyTVFPgeBvSU2lFKGxdA4DaUI5F4sMb1cGeep/PPEE9vvRNELJYpxWS0ImS4gQmovKUDA==}
+    engines: {node: '>=18'}
+
   loader-runner@4.3.2:
     resolution: {integrity: sha512-DFEqQ3ihfS9blba08cLfYf1NRAIEm+dDjic073DRDc3/JspI/8wYmtDsHwd3+4hwvdxSK7PGaElfTmm0awWJ4w==}
     engines: {node: '>=6.11.5'}
@@ -2664,6 +2759,10 @@ packages:
   log-symbols@4.1.0:
     resolution: {integrity: sha512-8XPvpAA8uyhfteu8pIvQxpJZ7SYYdpUivZpGy6sFsBuKRY/7rQGavedeB8aK+Zkyq6upMFVL/9AW6vOYzfRyLg==}
     engines: {node: '>=10'}
+
+  loglevel@1.9.2:
+    resolution: {integrity: sha512-HgMmCqIJSAKqo68l0rS2AanEWfkxaZ5wNiEFb5ggm08lDs9Xl2KxBlX3PTcaD2chBM1gXAYf491/M2Rv8Jwayg==}
+    engines: {node: '>= 0.6.0'}
 
   loose-envify@1.4.0:
     resolution: {integrity: sha512-lyuxPGr/Wfhrlem2CL/UcnUc1zcqKAImBDzukY7Y5F/yQiNdko6+fRLevlw1HgMySw7f611UIY408EtxRSoK3Q==}
@@ -3204,6 +3303,13 @@ packages:
     resolution: {integrity: sha512-eflK8wEtyOE6+hsaRVPxvUKYCpRgzLqDTb8krvAsRIwOGlHoSgYLgBXoubGgLd2fT41/OUYdb48v4k4WWHQurA==}
     engines: {node: '>= 10.13.0'}
 
+  sdp-transform@2.15.0:
+    resolution: {integrity: sha512-KrOH82c/W+GYQ0LHqtr3caRpM3ITglq3ljGUIb8LTki7ByacJZ9z+piSGiwZDsRyhQbYBOBJgr2k6X4BZXi3Kw==}
+    hasBin: true
+
+  sdp@3.2.2:
+    resolution: {integrity: sha512-xZocWwfyp4hkbN4hLWxMjmv2Q8aNa9MhmOZ7L9aCZPT+dZsgRr6wZRrSYE3HTdyk/2pZKPSgqI7ns7Een1xMSA==}
+
   semver-compare@1.0.0:
     resolution: {integrity: sha512-YM3/ITh2MJ5MtzaM429anh+x2jiLVjqILF4m4oyQB18W7Ggea7BfqdH/wGMK7dDiMghv/6WG7znWMwUDzJiXow==}
 
@@ -3517,6 +3623,9 @@ packages:
     resolution: {integrity: sha512-TkRKr9sUTxEH8MdfuCSP7VizJyzRNMjj2J2do2Jr3Kym598JVdEksuzPQCnlFPW4ky9Q+iA+ma9BGm06XQBy8g==}
     engines: {node: '>= 0.6'}
 
+  typed-emitter@2.1.0:
+    resolution: {integrity: sha512-g/KzbYKbH5C2vPkaXGu8DJlHrGKHLsM25Zg9WuC9pMGfuvT+X25tZQWo5fK1BjBm8+UrVE9LDCvaY0CQk+fXDA==}
+
   typedarray@0.0.6:
     resolution: {integrity: sha512-/aCDEGatGvZ2BIk+HmLf4ifCJFwvKFNb9/JeZPMulfgFracn9QFcAf5GO8B/mweUjSoblS5In0cWhqpfs/5PQA==}
 
@@ -3658,6 +3767,10 @@ packages:
     peerDependenciesMeta:
       webpack-cli:
         optional: true
+
+  webrtc-adapter@9.0.6:
+    resolution: {integrity: sha512-CHbl2ZQbxx164IgWRgzJno4hWtM4tFbRam1QfI3Yxhs3w/DvqluVxVWeXs3oL5/fbGkSNLKo0Ty5MgUWceNhog==}
+    engines: {node: '>=6.0.0', npm: '>=3.10.0'}
 
   whatwg-url@5.0.0:
     resolution: {integrity: sha512-saE57nupxk6v3HY35+jzBwYa0rKSy0XR8JSxZPwgLr7ys0IBzhGviA1/TUGJLmSVqs8pb9AnvICXEuOHLprYTw==}
@@ -4077,6 +4190,8 @@ snapshots:
 
   '@borewit/text-codec@0.2.2': {}
 
+  '@bufbuild/protobuf@1.10.1': {}
+
   '@colors/colors@1.5.0':
     optional: true
 
@@ -4317,6 +4432,12 @@ snapshots:
     dependencies:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.5.5
+
+  '@livekit/mutex@1.1.1': {}
+
+  '@livekit/protocol@1.50.4':
+    dependencies:
+      '@bufbuild/protobuf': 1.10.1
 
   '@ljharb/through@2.3.14':
     dependencies:
@@ -4681,6 +4802,8 @@ snapshots:
   '@types/debug@4.1.13':
     dependencies:
       '@types/ms': 2.1.0
+
+  '@types/dom-mediacapture-record@1.0.22': {}
 
   '@types/eslint-scope@3.7.7':
     dependencies:
@@ -6200,6 +6323,10 @@ snapshots:
 
   jiti@1.21.7: {}
 
+  jose@5.10.0: {}
+
+  jose@6.2.8: {}
+
   js-tokens@4.0.0: {}
 
   js-yaml@4.3.1:
@@ -6275,6 +6402,25 @@ snapshots:
 
   lines-and-columns@1.2.4: {}
 
+  livekit-client@2.21.0(@types/dom-mediacapture-record@1.0.22):
+    dependencies:
+      '@livekit/mutex': 1.1.1
+      '@livekit/protocol': 1.50.4
+      '@types/dom-mediacapture-record': 1.0.22
+      events: 3.3.0
+      jose: 6.2.8
+      loglevel: 1.9.2
+      sdp-transform: 2.15.0
+      tslib: 2.8.1
+      typed-emitter: 2.1.0
+      webrtc-adapter: 9.0.6
+
+  livekit-server-sdk@2.17.0:
+    dependencies:
+      '@bufbuild/protobuf': 1.10.1
+      '@livekit/protocol': 1.50.4
+      jose: 5.10.0
+
   loader-runner@4.3.2: {}
 
   lodash.defaults@4.2.0: {}
@@ -6305,6 +6451,8 @@ snapshots:
     dependencies:
       chalk: 4.1.2
       is-unicode-supported: 0.1.0
+
+  loglevel@1.9.2: {}
 
   loose-envify@1.4.0:
     dependencies:
@@ -6812,6 +6960,10 @@ snapshots:
       ajv-formats: 2.1.1(ajv@8.20.0)
       ajv-keywords: 5.1.0(ajv@8.20.0)
 
+  sdp-transform@2.15.0: {}
+
+  sdp@3.2.2: {}
+
   semver-compare@1.0.0:
     optional: true
 
@@ -7152,6 +7304,10 @@ snapshots:
       media-typer: 0.3.0
       mime-types: 2.1.35
 
+  typed-emitter@2.1.0:
+    optionalDependencies:
+      rxjs: 7.8.2
+
   typedarray@0.0.6: {}
 
   typescript@5.7.2: {}
@@ -7271,6 +7427,10 @@ snapshots:
       - lightningcss
       - postcss
       - uglify-js
+
+  webrtc-adapter@9.0.6:
+    dependencies:
+      sdp: 3.2.2
 
   whatwg-url@5.0.0:
     dependencies:

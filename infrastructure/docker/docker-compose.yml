@@ -38,6 +38,7 @@ services:
       - auth-service
       - workspace-service
       - chat-service
+      - call-service
     networks:
       - cloudflare-network
       - api-network
@@ -109,6 +110,44 @@ services:
     networks:
       - api-network
       - data-network
+
+  call-service:
+    build:
+      context: ../..
+      dockerfile: apps/services/call-service/Dockerfile
+    restart: unless-stopped
+    environment:
+      <<: *service-env
+      CALL_SERVICE_PORT: 3007
+      # Clients dial LiveKit directly, so this is the public URL, not a
+      # container hostname.
+      LIVEKIT_URL: ${LIVEKIT_URL:?LIVEKIT_URL is required}
+      LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:?LIVEKIT_API_KEY is required}
+      LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:?LIVEKIT_API_SECRET is required}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - api-network
+      - data-network
+
+  livekit:
+    image: livekit/livekit-server:v1.7
+    restart: unless-stopped
+    command: ["--config", "/etc/livekit.yaml"]
+    environment:
+      # Overrides the key pair in the mounted config file.
+      LIVEKIT_KEYS: "${LIVEKIT_API_KEY:?LIVEKIT_API_KEY is required}: ${LIVEKIT_API_SECRET:?LIVEKIT_API_SECRET is required}"
+    volumes:
+      - ../livekit/livekit.yaml:/etc/livekit.yaml:ro
+    ports:
+      # Media ingress is its own path: WebRTC never goes through Nginx.
+      - "7880:7880"
+      - "7881:7881"
+      # Must match rtc.port_range_* in ../livekit/livekit.yaml.
+      - "50000-50019:50000-50019/udp"
+    networks:
+      - media-network
 
   postgres:
     image: postgres:16-alpine
