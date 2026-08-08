@@ -219,6 +219,9 @@ export class AuthService {
       data: {
         ...(username ? { username } : {}),
         ...(dto.displayName?.trim() ? { displayName: dto.displayName.trim() } : {}),
+        // null is a real value here - it clears the picture back to the
+        // initial - so only an absent key means "leave it alone".
+        ...(dto.avatarUrl !== undefined ? { avatarUrl: dto.avatarUrl } : {}),
       },
     });
     return toPublicUser(updated);

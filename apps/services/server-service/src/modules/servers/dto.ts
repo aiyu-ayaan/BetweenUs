@@ -7,8 +7,12 @@ import {
   IsString,
   IsUUID,
   Length,
+  Matches,
+  MaxLength,
+  ValidateIf,
 } from 'class-validator';
 import { SERVER_ROLES } from '@nexora/permissions';
+import { UPLOADED_PICTURE_URL } from '@nexora/shared-types';
 import type {
   ChannelType,
   CreateChannelRequest,
@@ -79,6 +83,16 @@ export class UpdateServerDto implements UpdateServerRequest {
   @IsString()
   @Length(2, 64)
   name?: string;
+
+  /**
+   * An uploaded picture, or null to go back to the initials. It has to be one
+   * of ours - see `UPLOADED_PICTURE_URL`.
+   */
+  @ValidateIf((dto: UpdateServerDto) => dto.iconUrl !== null && dto.iconUrl !== undefined)
+  @IsString()
+  @MaxLength(512)
+  @Matches(UPLOADED_PICTURE_URL, { message: 'iconUrl must be an uploaded picture' })
+  iconUrl?: string | null;
 }
 
 /**

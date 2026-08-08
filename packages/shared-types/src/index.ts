@@ -65,6 +65,8 @@ export interface ChangePasswordRequest {
 export interface UpdateAccountRequest {
   username?: string;
   displayName?: string;
+  /** Storage URL of an uploaded picture; null clears it back to the initial. */
+  avatarUrl?: string | null;
 }
 
 // --- OAuth login ---
@@ -302,6 +304,60 @@ export interface Message {
 export interface CreateMessageRequest {
   channelId: string;
   content: string;
+}
+
+/**
+ * What an avatar or a server icon URL is allowed to look like. It has to be an
+ * object this deployment stored: a picture renders in every client that can see
+ * the account or the server, so an arbitrary URL would be a beacon reporting
+ * back who looked at it, and an http one would be a mixed-content warning too.
+ *
+ * Either a path served by a service (`/api/v1/uploads/pictures/...`) or an
+ * https bucket URL - the operator chooses the host, so the check is on the
+ * shape and on the `pictures/` prefix the upload route generates.
+ */
+export const UPLOADED_PICTURE_URL = /^(\/|https:\/\/)[^\s]*\/pictures\/[^\s]+$/;
+
+// --- Attachments ---
+//
+// An attachment is a file encrypted under the channel key and uploaded on its
+// own; what identifies it - the name, the real content type, the nonce that
+// opens it - travels inside the encrypted message body, never as a column. The
+// server therefore stores an opaque blob and a ciphertext, and knows neither
+// what the file is called nor what it contains.
+
+export interface MessageAttachment {
+  /** Storage key of the ciphertext. */
+  key: string;
+  /** Where the ciphertext is fetched from. */
+  url: string;
+  /** The name the sender's file had. */
+  name: string;
+  /** The real content type, once decrypted. */
+  contentType: string;
+  /** Plaintext size in bytes, before encryption. */
+  size: number;
+  /** Base64 AES-GCM nonce for the file itself. */
+  iv: string;
+  /** Channel-key generation the file was sealed under. */
+  epoch: number;
+  /** Set when the plaintext was gzipped before it was encrypted. */
+  gzip?: boolean;
+  /** Pixel size of an image, so the layout can be reserved before it loads. */
+  width?: number;
+  height?: number;
+  /** Set when the client turned an over-long message into this text file. */
+  overflow?: boolean;
+}
+
+/**
+ * The plaintext inside `Message.content` once a message carries files. A
+ * message with no attachments is still encoded as bare text, so everything
+ * written before attachments existed keeps rendering.
+ */
+export interface MessageBody {
+  text: string;
+  attachments: MessageAttachment[];
 }
 
 // --- End-to-end encryption ---

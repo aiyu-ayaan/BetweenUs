@@ -516,7 +516,7 @@ export const MAX_UPLOAD_BYTES = Number(envOr('MAX_UPLOAD_BYTES', String(25 * 102
 
 /** Ceiling for a whole attachment, assembled from however many parts. */
 export const MAX_ATTACHMENT_BYTES = Number(
-  envOr('MAX_ATTACHMENT_BYTES', String(500 * 1024 * 1024)),
+  envOr('MAX_ATTACHMENT_BYTES', String(100 * 1024 * 1024)),
 );
 
 /** Ceiling for an avatar or a server icon, which the client downscales first. */

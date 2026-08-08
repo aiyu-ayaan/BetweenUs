@@ -1,4 +1,14 @@
-import { IsEmail, IsOptional, IsString, Length, Matches, MaxLength, MinLength } from 'class-validator';
+import {
+  IsEmail,
+  IsOptional,
+  IsString,
+  Length,
+  Matches,
+  MaxLength,
+  MinLength,
+  ValidateIf,
+} from 'class-validator';
+import { UPLOADED_PICTURE_URL } from '@nexora/shared-types';
 import type {
   ChangePasswordRequest,
   LoginRequest,
@@ -69,4 +79,15 @@ export class UpdateAccountDto implements UpdateAccountRequest {
   @IsString()
   @Length(1, 64)
   displayName?: string;
+
+  /**
+   * An uploaded picture, or null to go back to the initial. It has to be one of
+   * ours: an avatar renders in every client that can see the account, so an
+   * arbitrary URL here would be a beacon that reports back who looked at it.
+   */
+  @ValidateIf((dto: UpdateAccountDto) => dto.avatarUrl !== null && dto.avatarUrl !== undefined)
+  @IsString()
+  @MaxLength(512)
+  @Matches(UPLOADED_PICTURE_URL, { message: 'avatarUrl must be an uploaded picture' })
+  avatarUrl?: string | null;
 }
