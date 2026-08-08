@@ -26,8 +26,12 @@ export class RegisterDto implements RegisterRequest {
 }
 
 export class LoginDto implements LoginRequest {
-  @IsEmail()
-  @MaxLength(254)
+  /**
+   * Email or username. The admin account is created with a username and no
+   * memorable address, and people type whichever they remember anyway.
+   */
+  @IsString()
+  @Length(3, 254, { message: 'Enter your username or email address' })
   email!: string;
 
   @IsString()

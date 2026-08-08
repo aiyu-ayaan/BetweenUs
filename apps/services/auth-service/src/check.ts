@@ -59,8 +59,15 @@ function fakeDb(): AuthDb & { users: UserRow[]; tokens: TokenRow[] } {
         );
       },
       findUnique: async ({ where }: never) => {
-        const clause = where as { id?: string; email?: string };
-        return users.find((u) => (clause.id ? u.id === clause.id : u.email === clause.email)) ?? null;
+        const clause = where as { id?: string; email?: string; username?: string };
+        return (
+          users.find(
+            (u) =>
+              (clause.id !== undefined && u.id === clause.id) ||
+              (clause.email !== undefined && u.email === clause.email) ||
+              (clause.username !== undefined && u.username === clause.username),
+          ) ?? null
+        );
       },
       create: async ({ data }: never) => {
         const input = data as Pick<UserRow, 'email' | 'username' | 'displayName' | 'passwordHash'>;
@@ -150,6 +157,10 @@ async function main(): Promise<void> {
   // Login: right password in, wrong password and unknown account out - same code.
   const loggedIn = await auth.login({ email: 'AYAAN@nexora.local', password: 'hunter2000' });
   assert.equal(loggedIn.user.id, registered.user.id);
+
+  // The same field takes a username, which is how the admin account signs in.
+  const byUsername = await auth.login({ email: 'ayaan', password: 'hunter2000' });
+  assert.equal(byUsername.user.id, registered.user.id);
   await rejects(auth.login({ email: 'ayaan@nexora.local', password: 'wrong-pass1' }), 'INVALID_CREDENTIALS');
   await rejects(auth.login({ email: 'nobody@nexora.local', password: 'hunter2000' }), 'INVALID_CREDENTIALS');
 

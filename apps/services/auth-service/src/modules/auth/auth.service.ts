@@ -74,7 +74,12 @@ export class AuthService {
   }
 
   async login(dto: LoginDto): Promise<AuthResponse> {
-    const user = await this.db.user.findUnique({ where: { email: dto.email.toLowerCase().trim() } });
+    // The field is called `email` for compatibility but accepts either; an
+    // address always contains an @, a username never may.
+    const identifier = dto.email.toLowerCase().trim();
+    const user = await this.db.user.findUnique({
+      where: identifier.includes('@') ? { email: identifier } : { username: identifier },
+    });
 
     // Always run a comparison so a missing account and a wrong password cost the same.
     const passwordOk = user

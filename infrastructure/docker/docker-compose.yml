@@ -15,6 +15,11 @@ x-service-env: &service-env
   REDIS_URL: redis://redis:6379
   JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
   JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?JWT_REFRESH_SECRET is required}
+  # Seals OAuth client secrets at rest; falls back to JWT_SECRET when unset.
+  SETTINGS_SECRET: ${SETTINGS_SECRET:-}
+  # Where a browser reaches this deployment - the OAuth callback is built from it.
+  PUBLIC_API_URL: ${PUBLIC_API_URL:-http://localhost:8080}
+  OAUTH_ALLOWED_REDIRECTS: ${OAUTH_ALLOWED_REDIRECTS:-}
   CORS_ORIGIN: ${CORS_ORIGIN:-*}
   # Empty S3 values keep uploads on the local volume mounted below.
   STORAGE_DRIVER: ${STORAGE_DRIVER:-}
@@ -40,8 +45,18 @@ services:
       - chat-service
       - call-service
       - presence-service
+      - admin-web
     networks:
       - cloudflare-network
+      - api-network
+
+  # The admin panel: static bundle behind the same gateway.
+  admin-web:
+    build:
+      context: ../..
+      dockerfile: apps/admin/Dockerfile
+    restart: unless-stopped
+    networks:
       - api-network
 
   cloudflared:
