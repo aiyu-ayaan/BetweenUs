@@ -9,10 +9,8 @@ rtc:
   tcp_port: 7881
   port_range_start: 50000
   port_range_end: 50019
-  # The server runs in a container while clients run on the host, so it must
-  # advertise an address the host can dial rather than its container IP.
+  # The server runs in a container while clients run on the host.
   use_external_ip: false
-  node_ip: 127.0.0.1
 
 keys:
   devkey: nexora-dev-livekit-secret-change-me-please
