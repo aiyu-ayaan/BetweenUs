@@ -1,0 +1,98 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # CI-only secrets. Real deployments read these from the environment.
+  JWT_SECRET: ci-access-secret-not-used-anywhere-else
+  JWT_REFRESH_SECRET: ci-refresh-secret-not-used-anywhere-else
+  JWT_ACCESS_TTL: 15m
+  JWT_REFRESH_TTL: 30d
+  NODE_ENV: test
+  LOG_LEVEL: warn
+
+jobs:
+  verify:
+    name: Lint, typecheck, build, self-checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm build
+      # Package self-checks: crypto primitives, storage, logger redaction, and
+      # AuthService against an in-memory database.
+      - run: pnpm check
+
+  integration:
+    name: Integration smoke (REST + WebSocket)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: nexora
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/nexora?schema=public
+      REDIS_URL: redis://127.0.0.1:6379
+      LOCAL_STORAGE_PATH: ./storage-data
+      LOCAL_STORAGE_PUBLIC_PREFIX: /api/v1/uploads
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @nexora/database run migrate:deploy
+      - run: pnpm build
+
+      - name: Start services
+        run: |
+          for service in auth-service workspace-service chat-service presence-service; do
+            node "apps/services/$service/dist/main.js" > "/tmp/$service.log" 2>&1 &
+          done
+          for port in 3001 3003 3004 3005; do
+            for _ in $(seq 1 30); do
+              curl -sf "127.0.0.1:$port/health" > /dev/null && break
+              sleep 2
+            done
+            curl -sf "127.0.0.1:$port/health" || { echo "port $port never came up"; exit 1; }
+          done
+
+      - run: node apps/services/chat-service/smoke.mjs
+      - run: node apps/services/presence-service/smoke.mjs
+
+      - name: Service logs
+        if: failure()
+        run: tail -n 200 /tmp/*.log
