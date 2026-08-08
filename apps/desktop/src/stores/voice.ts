@@ -56,6 +56,12 @@ interface VoiceState {
   toggleScreen: () => Promise<void>;
 }
 
+function messageOf(error: unknown): string {
+  return error instanceof Error ? error.message : 'unknown error';
+}
+
+let joinCounter = 0;
+
 export const useVoiceStore = create<VoiceState>((set, get) => ({
   status: 'idle',
   channelId: null,
@@ -68,20 +74,28 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
   error: null,
 
   join: async (channelId) => {
-    // Joining the channel you are already in would connect a second session
-    // with the same identity, and LiveKit answers that by kicking the first.
     if (get().channelId === channelId && get().status !== 'idle') return;
 
-    if (get().status !== 'idle') await get().leave();
-    set({ status: 'connecting', channelId, error: null, tiles: [] });
+    const currentJoinId = ++joinCounter;
+
+    const existingRoom = get().room;
+    const existingChannelId = get().channelId;
+    if (existingChannelId) {
+      presenceSocket.send({ type: 'voice.leave', channelId: existingChannelId });
+    }
+    if (existingRoom) {
+      void existingRoom.disconnect().catch(() => undefined);
+    }
+
+    set({ status: 'connecting', channelId, room: null, error: null, tiles: [] });
 
     try {
-      // The key comes from the same exchange chat uses, so a member who can
-      // read the channel can join its call and nobody else can.
       const [key, credentials] = await Promise.all([
         callKeyForChannel(channelId),
         api.callToken(channelId),
       ]);
+
+      if (joinCounter !== currentJoinId) return;
 
       const keyProvider = new ExternalE2EEKeyProvider();
       const room = new Room({
@@ -92,16 +106,29 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
 
       await keyProvider.setKey(key);
 
+      if (joinCounter !== currentJoinId) {
+        void room.disconnect().catch(() => undefined);
+        return;
+      }
+
       try {
         await room.setE2EEEnabled(true);
       } catch {
-        // Insertable streams unavailable (for example a non-secure context).
-        // Refuse rather than silently downgrading to plaintext media.
         room.disconnect().catch(() => undefined);
         throw new Error('This runtime cannot encrypt voice media, so the join was cancelled');
       }
 
-      const refresh = (): void => set({ tiles: snapshot(room) });
+      if (joinCounter !== currentJoinId) {
+        void room.disconnect().catch(() => undefined);
+        return;
+      }
+
+      const refresh = (): void => {
+        if (get().room === room) {
+          set({ tiles: snapshot(room) });
+        }
+      };
+
       room
         .on(RoomEvent.ParticipantConnected, refresh)
         .on(RoomEvent.ParticipantDisconnected, refresh)
@@ -113,21 +140,26 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
         .on(RoomEvent.LocalTrackUnpublished, refresh)
         .on(RoomEvent.ActiveSpeakersChanged, refresh)
         .on(RoomEvent.Disconnected, () => {
-          // The room can end without us asking: a kick, a network drop, a
-          // duplicate identity. Presence must hear about those too, or the
-          // roster keeps showing someone who is no longer in the channel.
-          presenceSocket.send({ type: 'voice.leave', channelId });
-          set({ status: 'idle', channelId: null, room: null, tiles: [] });
+          if (get().room === room) {
+            presenceSocket.send({ type: 'voice.leave', channelId });
+            set({ status: 'idle', channelId: null, room: null, tiles: [] });
+          }
         });
 
-      await room.connect(credentials.url, credentials.token);
-      // Autoplay policy: browsers need a gesture before remote audio plays, and
-      // clicking a voice channel is one.
+      const connectPromise = room.connect(credentials.url, credentials.token);
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('Connection to voice server timed out')), 15_000),
+      );
+
+      await Promise.race([connectPromise, timeoutPromise]);
+
+      if (joinCounter !== currentJoinId) {
+        void room.disconnect().catch(() => undefined);
+        return;
+      }
+
       await room.startAudio().catch(() => undefined);
 
-      // A microphone that will not publish - missing, blocked, or a publish
-      // that never negotiated - must not keep someone out of the channel. They
-      // can still listen, and the panel shows the mic as off.
       let micEnabled = true;
       let micProblem: string | null = null;
       try {
@@ -135,17 +167,20 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
       } catch (error) {
         micEnabled = false;
         const reason = error instanceof Error ? error.message : 'unknown error';
-        micProblem = `Connected, but the microphone did not start (${reason}). Use the mic button to retry.`;
+        micProblem = `Connected, but microphone did not start (${reason}). Use the mic button to retry.`;
       }
 
-      // Members who have not joined still see who is in here.
+      if (joinCounter !== currentJoinId) {
+        void room.disconnect().catch(() => undefined);
+        return;
+      }
+
       presenceSocket.send({ type: 'voice.join', channelId });
 
       set({
         error: micProblem,
         status: 'connected',
         room,
-        // Guaranteed: the join above aborts when E2EE cannot be turned on.
         encrypted: true,
         micEnabled,
         cameraEnabled: false,
@@ -153,7 +188,8 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
         tiles: snapshot(room),
       });
     } catch (error) {
-      // Mirrored into the dev terminal by the Electron main process.
+      if (joinCounter !== currentJoinId) return;
+
       console.error('voice join failed', error);
       set({
         status: 'idle',
@@ -165,15 +201,18 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
   },
 
   leave: async () => {
+    joinCounter++;
     const { room, channelId } = get();
     if (channelId) presenceSocket.send({ type: 'voice.leave', channelId });
-    set({ status: 'idle', channelId: null, room: null, tiles: [], screenEnabled: false });
-    await room?.disconnect();
+    set({ status: 'idle', channelId: null, room: null, tiles: [], screenEnabled: false, error: null });
+    if (room) {
+      await room.disconnect().catch(() => undefined);
+    }
   },
 
   toggleMic: async () => {
-    const { room, micEnabled } = get();
-    if (!room) return;
+    const { room, micEnabled, status } = get();
+    if (!room || status !== 'connected') return;
     try {
       await room.localParticipant.setMicrophoneEnabled(!micEnabled);
       set({ micEnabled: !micEnabled, error: null, tiles: snapshot(room) });
@@ -183,8 +222,8 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
   },
 
   toggleCamera: async () => {
-    const { room, cameraEnabled } = get();
-    if (!room) return;
+    const { room, cameraEnabled, status } = get();
+    if (!room || status !== 'connected') return;
     try {
       await room.localParticipant.setCameraEnabled(!cameraEnabled);
       set({ cameraEnabled: !cameraEnabled, error: null, tiles: snapshot(room) });
@@ -194,10 +233,9 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
   },
 
   toggleScreen: async () => {
-    const { room, screenEnabled } = get();
-    if (!room) return;
+    const { room, screenEnabled, status } = get();
+    if (!room || status !== 'connected') return;
     try {
-      // The Electron main process answers the picker; see electron/main.ts.
       await room.localParticipant.setScreenShareEnabled(!screenEnabled);
       set({ screenEnabled: !screenEnabled, error: null, tiles: snapshot(room) });
     } catch (error) {
@@ -205,10 +243,6 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
     }
   },
 }));
-
-function messageOf(error: unknown): string {
-  return error instanceof Error ? error.message : 'unknown error';
-}
 
 function snapshot(room: Room): VoiceTile[] {
   const speaking = new Set(room.activeSpeakers.map((participant) => participant.identity));

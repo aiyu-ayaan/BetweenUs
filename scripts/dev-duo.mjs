@@ -148,12 +148,15 @@ function waitForRenderer(timeoutMs = 60_000) {
 }
 
 function startVite() {
-  return spawn('pnpm', ['--filter', '@nexora/desktop', 'dev'], {
+  const isWin = process.platform === 'win32';
+  const command = isWin ? 'cmd.exe' : 'pnpm';
+  const args = isWin
+    ? ['/c', 'pnpm', '--filter', '@nexora/desktop', 'dev']
+    : ['--filter', '@nexora/desktop', 'dev'];
+
+  return spawn(command, args, {
     cwd: repoRoot,
     stdio: 'inherit',
-    // Node refuses to spawn a .cmd shim directly on Windows; the arguments here
-    // are fixed, so there is nothing for a shell to interpolate.
-    shell: process.platform === 'win32',
     // The plugin still builds main/preload; it just does not launch Electron.
     env: { ...process.env, NEXORA_NO_ELECTRON: '1' },
   });
@@ -212,21 +215,35 @@ async function main() {
   console.log('\nTwo windows are open. Close both to stop, or press Ctrl+C.\n');
 
   let alive = windows.length;
+  const killProcess = (child) => {
+    if (!child || child.killed || !child.pid) return;
+    if (process.platform === 'win32') {
+      spawn('taskkill', ['/pid', String(child.pid), '/f', '/t'], { stdio: 'ignore' });
+    } else {
+      child.kill();
+    }
+  };
+
   const shutdown = () => {
-    for (const child of [...windows, vite]) child.kill();
+    for (const child of [...windows, vite]) killProcess(child);
   };
 
   for (const child of windows) {
     child.on('exit', () => {
       alive -= 1;
       if (alive === 0) {
-        vite.kill();
+        killProcess(vite);
         process.exit(0);
       }
     });
   }
 
   process.on('SIGINT', () => {
+    shutdown();
+    process.exit(0);
+  });
+
+  process.on('SIGTERM', () => {
     shutdown();
     process.exit(0);
   });

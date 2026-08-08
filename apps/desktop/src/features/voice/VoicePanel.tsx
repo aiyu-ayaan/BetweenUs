@@ -19,6 +19,7 @@ export function VoicePanel({ channelName }: { channelName: string | null }): JSX
   const cameraEnabled = useVoiceStore((state) => state.cameraEnabled);
   const screenEnabled = useVoiceStore((state) => state.screenEnabled);
   const tiles = useVoiceStore((state) => state.tiles);
+  const error = useVoiceStore((state) => state.error);
   const leave = useVoiceStore((state) => state.leave);
   const toggleMic = useVoiceStore((state) => state.toggleMic);
   const toggleCamera = useVoiceStore((state) => state.toggleCamera);
@@ -35,6 +36,12 @@ export function VoicePanel({ channelName }: { channelName: string | null }): JSX
         </span>
         {channelName && <span className="truncate text-slate-400">/ {channelName}</span>}
       </p>
+
+      {error && (
+        <p role="alert" className="mb-2 rounded bg-red-500/10 px-2 py-1 text-xs text-red-300">
+          {error}
+        </p>
+      )}
 
       {/* Video only appears once somebody actually turns a camera or screen on. */}
       {tiles.some((tile) => tile.videoTrack ?? tile.screenTrack) && (
@@ -71,6 +78,7 @@ export function VoicePanel({ channelName }: { channelName: string | null }): JSX
       <div className="flex items-center gap-1">
         <ControlButton
           active={micEnabled}
+          disabled={status !== 'connected'}
           label={micEnabled ? 'Mute microphone' : 'Unmute microphone'}
           onClick={() => void toggleMic()}
         >
@@ -79,6 +87,7 @@ export function VoicePanel({ channelName }: { channelName: string | null }): JSX
 
         <ControlButton
           active={cameraEnabled}
+          disabled={status !== 'connected'}
           label={cameraEnabled ? 'Turn camera off' : 'Turn camera on'}
           onClick={() => void toggleCamera()}
         >
@@ -87,6 +96,7 @@ export function VoicePanel({ channelName }: { channelName: string | null }): JSX
 
         <ControlButton
           active={screenEnabled}
+          disabled={status !== 'connected'}
           label={screenEnabled ? 'Stop sharing screen' : 'Share screen'}
           onClick={() => void toggleScreen()}
         >
@@ -109,11 +119,13 @@ export function VoicePanel({ channelName }: { channelName: string | null }): JSX
 
 function ControlButton({
   active,
+  disabled,
   label,
   onClick,
   children,
 }: {
   active: boolean;
+  disabled?: boolean;
   label: string;
   onClick: () => void;
   children: ReactNode;
@@ -122,11 +134,16 @@ function ControlButton({
     <button
       type="button"
       onClick={onClick}
+      disabled={disabled}
       aria-label={label}
       aria-pressed={active}
-      className={`cursor-pointer rounded-md p-2 transition-colors duration-200 ${
-        active ? 'bg-surface-700 text-slate-100' : 'bg-surface-800 text-slate-400'
-      } hover:bg-surface-700`}
+      className={`rounded-md p-2 transition-colors duration-200 ${
+        disabled
+          ? 'cursor-not-allowed bg-surface-800 text-slate-600 opacity-50'
+          : active
+          ? 'cursor-pointer bg-surface-700 text-slate-100 hover:bg-surface-700'
+          : 'cursor-pointer bg-surface-800 text-slate-400 hover:bg-surface-700'
+      }`}
     >
       {children}
     </button>
@@ -150,7 +167,6 @@ function VideoTile({ tile }: { tile: VoiceTile }): JSX.Element {
 /** Attaches a LiveKit track to a real DOM element and detaches on unmount. */
 function VideoSink({ track }: { track: Track }): JSX.Element {
   const ref = useRef<HTMLVideoElement>(null);
-
   useEffect(() => {
     const element = ref.current;
     if (!element) return;
@@ -165,7 +181,6 @@ function VideoSink({ track }: { track: Track }): JSX.Element {
 
 function AudioSink({ track }: { track: Track }): JSX.Element {
   const ref = useRef<HTMLAudioElement>(null);
-
   useEffect(() => {
     const element = ref.current;
     if (!element) return;
