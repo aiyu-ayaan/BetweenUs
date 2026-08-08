@@ -200,6 +200,161 @@ try {
 }
 ok('epoch ordering enforced', epochRejected);
 
+// --- Servers, permissions, private channels, friends and direct messages ---
+
+// A second account, so every rule below has someone to be enforced against.
+const otherAuth = await json(`${AUTH}/api/v1/auth/register`, {
+  method: 'POST',
+  body: JSON.stringify({
+    email: `smoke-b-${suffix}@nexora.local`,
+    username: `smokeb${suffix}`,
+    password: 'hunter2000',
+  }),
+});
+const other = { Authorization: `Bearer ${otherAuth.accessToken}` };
+const otherId = otherAuth.user.id;
+
+await json(`${SERVER}/api/v1/servers/join`, {
+  method: 'POST',
+  headers: other,
+  body: JSON.stringify({ slug: server.slug }),
+});
+
+const members = await json(`${SERVER}/api/v1/servers/${server.id}/members`, { headers: authed });
+ok('member list', members.length === 2);
+ok(
+  'effective permissions',
+  members.every((member) => Array.isArray(member.permissions) && member.permissions.length > 0),
+);
+
+// A plain member cannot create a channel until the permission is granted.
+let createRefused = false;
+try {
+  await json(`${SERVER}/api/v1/channels`, {
+    method: 'POST',
+    headers: other,
+    body: JSON.stringify({ serverId: server.id, name: `nope-${suffix}` }),
+  });
+} catch {
+  createRefused = true;
+}
+ok('MANAGE_CHANNEL enforced', createRefused);
+
+const promoted = await json(`${SERVER}/api/v1/servers/${server.id}/members/${otherId}`, {
+  method: 'PATCH',
+  headers: authed,
+  body: JSON.stringify({ grantedPermissions: ['MANAGE_CHANNEL'] }),
+});
+ok('permission granted', promoted.permissions.includes('MANAGE_CHANNEL'));
+
+const grantedChannel = await json(`${SERVER}/api/v1/channels`, {
+  method: 'POST',
+  headers: other,
+  body: JSON.stringify({ serverId: server.id, name: `granted-${suffix}` }),
+});
+ok('granted permission takes effect', grantedChannel.name === `granted-${suffix}`);
+
+// A denial beats the role, so taking the grant back with one closes the door.
+const denied = await json(`${SERVER}/api/v1/servers/${server.id}/members/${otherId}`, {
+  method: 'PATCH',
+  headers: authed,
+  body: JSON.stringify({ grantedPermissions: [], deniedPermissions: ['SEND_MESSAGE'] }),
+});
+ok('denial recorded', !denied.permissions.includes('SEND_MESSAGE'));
+
+let sendRefused = false;
+try {
+  await json(`${CHAT}/api/v1/messages`, {
+    method: 'POST',
+    headers: other,
+    body: JSON.stringify({ channelId: channel.id, content: 'should not arrive' }),
+  });
+} catch {
+  sendRefused = true;
+}
+ok('denial enforced by chat-service', sendRefused);
+
+// A private channel is invisible to a server member who is not on it.
+const privateChannel = await json(`${SERVER}/api/v1/channels`, {
+  method: 'POST',
+  headers: authed,
+  body: JSON.stringify({
+    serverId: server.id,
+    name: `secret-${suffix}`,
+    isPrivate: true,
+    memberIds: [],
+  }),
+});
+ok('private channel created', privateChannel.isPrivate === true);
+
+const visibleToOther = await json(`${SERVER}/api/v1/channels?serverId=${server.id}`, {
+  headers: other,
+});
+ok(
+  'private channel hidden from a non-member',
+  !visibleToOther.some((item) => item.id === privateChannel.id),
+);
+
+let historyRefused = false;
+try {
+  await json(`${CHAT}/api/v1/messages?channelId=${privateChannel.id}`, { headers: other });
+} catch {
+  historyRefused = true;
+}
+ok('private channel history refused', historyRefused);
+
+// Friends gate direct messages, so a DM before the friendship must fail.
+let dmRefused = false;
+try {
+  await json(`${CHAT}/api/v1/dm`, {
+    method: 'POST',
+    headers: authed,
+    body: JSON.stringify({ userId: otherId }),
+  });
+} catch {
+  dmRefused = true;
+}
+ok('direct message needs a friendship', dmRefused);
+
+const found = await json(`${CHAT}/api/v1/users/search?q=smokeb${suffix}`, { headers: authed });
+ok('user search', found.some((person) => person.id === otherId));
+
+await json(`${CHAT}/api/v1/friends`, {
+  method: 'POST',
+  headers: authed,
+  body: JSON.stringify({ username: otherAuth.user.username }),
+});
+const accepted = await json(`${CHAT}/api/v1/friends/${me.id}/accept`, {
+  method: 'POST',
+  headers: other,
+});
+ok('friend request accepted', accepted.status === 'ACCEPTED');
+
+const direct = await json(`${CHAT}/api/v1/dm`, {
+  method: 'POST',
+  headers: authed,
+  body: JSON.stringify({ userId: otherId }),
+});
+ok('direct channel opened', direct.participant.id === otherId);
+
+// Opening it again must find the same conversation, not start a second one.
+const reopened = await json(`${CHAT}/api/v1/dm`, {
+  method: 'POST',
+  headers: authed,
+  body: JSON.stringify({ userId: otherId }),
+});
+ok('direct channel is reused', reopened.channelId === direct.channelId);
+
+const dmMessage = await json(`${CHAT}/api/v1/messages`, {
+  method: 'POST',
+  headers: authed,
+  body: JSON.stringify({ channelId: direct.channelId, content: 'hello over DM' }),
+});
+const dmHistory = await json(`${CHAT}/api/v1/messages?channelId=${direct.channelId}`, {
+  headers: other,
+});
+ok('direct message delivered', dmHistory.items.some((item) => item.id === dmMessage.id));
+
 socket.close();
 console.log('\nSMOKE PASSED');
 process.exit(0);

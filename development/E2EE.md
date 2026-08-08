@@ -19,7 +19,7 @@ project; see "Not covered" below.
 | Piece | Where it lives | Who can read it |
 | --- | --- | --- |
 | Device identity key (ECDH P-256) | private half on the device, sealed by the OS keychain | that device |
-| Device public key | `device_keys` table | everyone in the workspace |
+| Device public key | `device_keys` table | everyone in the server |
 | Channel key (AES-256-GCM) | in memory on member devices | channel members |
 | Wrapped channel key | `channel_keys` table | only the recipient it was sealed for |
 | Message body | `messages.content` | channel members |
@@ -87,7 +87,7 @@ decide who may publish it:
 - Adding entries to an existing epoch requires already holding that epoch's key,
   so a member cannot overwrite a channel's key with one of their own.
 - Existing entries are never overwritten.
-- Recipients must be members of the channel's workspace.
+- Recipients must be members of the channel's server.
 
 ## Voice channels
 

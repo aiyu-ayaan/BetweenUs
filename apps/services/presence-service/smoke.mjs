@@ -140,6 +140,48 @@ ok('voice roster leave', left !== null);
 a.send({ type: 'ping' });
 ok('heartbeat', (await a.waitFor((event) => event.type === 'pong')) !== null);
 
+// Status. Bob is the one who changes, so the closing assertion about Alice
+// going offline still means what it says - the buffer is scanned from the
+// start, and two users' offline events would otherwise be indistinguishable.
+b.send({ type: 'status.set', status: 'dnd' });
+ok(
+  'status echoed to its owner',
+  (await b.waitFor((event) => event.type === 'status.self' && event.status === 'dnd')) !== null,
+);
+ok(
+  'status fanout',
+  (await a.waitFor(
+    (event) =>
+      event.type === 'presence.changed' &&
+      event.user.userId === bob.user.id &&
+      event.user.status === 'dnd',
+  )) !== null,
+);
+
+// Invisible is the one status nobody else may see: it must arrive as offline.
+b.send({ type: 'status.set', status: 'invisible' });
+ok(
+  'invisible echoed to its owner',
+  (await b.waitFor(
+    (event) => event.type === 'status.self' && event.status === 'invisible',
+  )) !== null,
+);
+ok(
+  'invisible reaches others as offline',
+  (await a.waitFor(
+    (event) =>
+      event.type === 'presence.changed' &&
+      event.user.userId === bob.user.id &&
+      event.user.status === 'offline',
+  )) !== null,
+);
+ok(
+  'invisible never leaks on the wire',
+  !a.events.some(
+    (event) => event.type === 'presence.changed' && event.user.status === 'invisible',
+  ),
+);
+
 // Closing a socket takes that user offline for everyone still connected.
 a.socket.close();
 const offline = await b.waitFor(

@@ -6,10 +6,11 @@ a pnpm + Turborepo monorepo. `CLAUDE.md` holds the target architecture;
 
 ## Status
 
-Working end to end: register / login, servers, text channels with
-end-to-end encrypted messages and realtime delivery, Discord-style voice
-channels over LiveKit with end-to-end encrypted media, screen share, online
-status and typing indicators - in an Electron desktop client.
+Working end to end: register / login, servers with per-member permissions,
+public and private text channels with end-to-end encrypted messages and
+realtime delivery, direct messages between friends, Discord-style voice
+channels over LiveKit with end-to-end encrypted media, screen share, presence
+with a choosable status and typing indicators - in an Electron desktop client.
 
 Not built yet: remote desktop, notifications, user profiles. See
 `development/PLANNING.md`, `development/E2EE.md` and `development/TODO.md`.
@@ -103,9 +104,14 @@ development/              planning, MVP definition, E2EE design, testing, TODO
 
 ```
 POST /api/v1/auth/register|login|refresh|logout    GET /api/v1/auth/me
-GET|POST /api/v1/servers      POST /api/v1/servers/join
-GET /api/v1/servers/:id/members|channels
-GET|POST /api/v1/channels        GET|POST /api/v1/messages
+GET|POST /api/v1/servers         POST /api/v1/servers/join
+GET|PATCH|DELETE /api/v1/servers/:id      POST /api/v1/servers/:id/leave
+GET /api/v1/servers/:id/members  PATCH|DELETE /api/v1/servers/:id/members/:userId
+GET|POST /api/v1/channels        PATCH|DELETE /api/v1/channels/:id
+GET|PUT /api/v1/channels/:id/members      GET|POST /api/v1/messages
+GET /api/v1/users/search         GET|POST /api/v1/friends
+POST /api/v1/friends/:id/accept  DELETE /api/v1/friends/:id
+GET|POST /api/v1/dm
 POST /api/v1/uploads             GET /api/v1/uploads/:key
 GET|POST /api/v1/e2ee/devices    GET /api/v1/e2ee/keys/:channelId
 POST /api/v1/e2ee/keys           POST /api/v1/calls/token

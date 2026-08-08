@@ -109,7 +109,57 @@ async function seed() {
     });
   }
 
-  return { server, channel: channels[0], voice };
+  // A private channel Bob is deliberately not on, so the rule can be seen
+  // rather than taken on trust: it is absent from Bob's sidebar entirely.
+  let secret = channels.find((channel) => channel.name === 'owners-only');
+  if (!secret) {
+    secret = await json(`${SERVER}/api/v1/channels`, {
+      method: 'POST',
+      headers: asAlice,
+      body: JSON.stringify({
+        serverId: server.id,
+        name: 'owners-only',
+        type: 'TEXT',
+        isPrivate: true,
+        memberIds: [],
+      }),
+    });
+  }
+
+  const friendship = await seedFriendship(alice, bob, asAlice, asBob);
+
+  return { server, channel: channels[0], voice, secret, friendship };
+}
+
+/**
+ * Alice and Bob start as friends with a conversation open, because a direct
+ * message needs two consenting accounts and typing the request by hand every
+ * time is exactly the friction `dev:duo` exists to remove.
+ */
+async function seedFriendship(alice, bob, asAlice, asBob) {
+  const existing = await json(`${CHAT}/api/v1/friends`, { headers: asAlice });
+  const already = existing.find((friend) => friend.user.id === bob.user.id);
+
+  if (!already) {
+    await json(`${CHAT}/api/v1/friends`, {
+      method: 'POST',
+      headers: asAlice,
+      body: JSON.stringify({ username: bob.user.username }),
+    });
+  }
+
+  if (already?.status !== 'ACCEPTED') {
+    await json(`${CHAT}/api/v1/friends/${alice.user.id}/accept`, {
+      method: 'POST',
+      headers: asBob,
+    });
+  }
+
+  return json(`${CHAT}/api/v1/dm`, {
+    method: 'POST',
+    headers: asAlice,
+    body: JSON.stringify({ userId: bob.user.id }),
+  });
 }
 
 const mainBundle = path.join(desktopDir, 'dist-electron', 'main.js');
@@ -200,9 +250,13 @@ async function main() {
     console.warn('  ! presence-service is down - no online status or typing indicators');
   }
 
-  const { server, channel, voice } = await seed();
+  const { server, channel, voice, secret, friendship } = await seed();
   console.log(
-    `Server "${server.name}" ready: #${channel?.name ?? 'general'}, voice "${voice.name}"`,
+    `Server "${server.name}" ready: #${channel?.name ?? 'general'}, voice "${voice.name}", ` +
+      `private #${secret.name} (Alice only)`,
+  );
+  console.log(
+    `Alice and Bob are friends, with a direct message open to ${friendship.participant.username}`,
   );
   console.log('Sign-in is automatic:');
   for (const user of USERS) console.log(`  - ${user.label} <${user.email}>`);

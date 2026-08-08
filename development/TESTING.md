@@ -20,18 +20,21 @@ the WSL shell, while `pnpm dev` and `pnpm dev:duo` stay on Windows.
 
 | Window | Account | Role |
 | --- | --- | --- |
-| Alice | `alice@nexora.local` | workspace owner |
+| Alice | `alice@nexora.local` | server owner |
 | Bob | `bob@nexora.local` | member |
 
-Password for both: `nexora-dev-1`. They share the workspace **Duo Test**, its
-`#general` text channel and its **lounge** voice channel.
+Password for both: `nexora-dev-1`. They share the server **Duo Test**, its
+`#general` text channel and its **lounge** voice channel. Alice also owns
+`#owners-only`, a private channel Bob is deliberately not on, and the two of
+them start as friends with a direct message already open.
 
 What the script does:
 
-1. Health-checks auth-, workspace- and chat-service, and refuses to start if
+1. Health-checks auth-, server- and chat-service, and refuses to start if
    any of them is down (it warns, but continues, when only call-service is).
 2. Registers the two accounts, or signs in if they already exist, creates the
-   workspace and joins Bob to it. Re-running is harmless.
+   server and joins Bob to it, creates the private channel, makes them friends
+   and opens their conversation. Re-running is harmless.
 3. Starts the Vite dev server **once**.
 4. Launches two Electron processes with `NEXORA_PROFILE=duo-a` / `duo-b`, so
    each window gets its own user-data directory — its own session, its own
@@ -45,7 +48,42 @@ Closing both windows stops the dev server. Ctrl+C does the same.
 **Chat**
 - Type in Alice's window; it appears in Bob's within a moment. The row in
   Postgres is a ciphertext envelope — check with `pnpm db:studio`.
-- Both windows show a green `E2EE` badge in the channel header.
+- There is no encryption badge in the header, by design: it is on for
+  everything, so saying so in every channel says nothing. See `E2EE.md`.
+
+**Private channels**
+- Alice's sidebar lists `#owners-only` with a padlock. Bob's sidebar does not
+  list it at all — not greyed out, absent — and that holds however senior he is
+  made, because the allowlist is the whole rule.
+- Create another one from the **+** beside TEXT CHANNELS: tick *Private
+  channel*, pick Bob, and it appears in his sidebar within a reload. Untick him
+  again in Server settings → Channels and it goes.
+
+**Direct messages and friends**
+- Click the Nexora button at the top of the rail in either window: the home
+  screen opens, with **Friends** and the conversation with the other person.
+- Send from Alice's DM; it lands in Bob's, notification and unread count
+  included, because a DM is a channel and nothing about it is special.
+- Friends → **Add friend** searches by username. Send a request from a third
+  account and watch the **Pending** tab count it in the other window.
+- Try to open a DM with somebody who is not a friend: the server refuses it
+  (`NOT_FRIENDS`), which is the rule that keeps search from being a spam
+  surface.
+
+**Roles and permissions**
+- Server settings → Roles & Permissions, pick Bob, set **Send messages** to
+  *Deny*. His composer still draws, but the send is refused by chat-service —
+  authorization is the server's, never the UI's.
+- Set **Create and manage channels** to *Allow* while leaving him a MEMBER: the
+  **+** appears beside his channel headings.
+- Bob cannot promote himself: the member editor refuses a role at or above the
+  editor's own, and refuses to grant a permission the editor does not hold.
+
+**Status**
+- Click your own avatar at the bottom of the sidebar and choose **Invisible**.
+  Your own window keeps showing you as invisible; the other window shows you as
+  offline, and `presence.changed` on the wire says `offline` too — check with
+  the presence smoke script, which asserts exactly that.
 
 **Voice channels**
 - Click **lounge** under VOICE CHANNELS in one window, then in the other. The
@@ -111,16 +149,26 @@ Both scripts need Postgres, Redis and the services running, and both exit
 non-zero on a failed assertion — CI runs exactly these.
 
 `node apps/services/chat-service/smoke.mjs` walks the REST and WebSocket
-surface end to end: register → refresh rotation → workspace → channel →
+surface end to end: register → refresh rotation → server → channel →
 WebSocket subscribe → send → realtime receive → history → upload/download →
 traversal blocked → E2EE device directory, key publish/fetch and epoch
 ordering.
 
+It then brings in a second account and asserts the phase 12 rules: that
+`MANAGE_CHANNEL` is enforced, that granting it to one member takes effect and
+denying `SEND_MESSAGE` is honoured by chat-service, that a private channel is
+absent from a non-member's listing and its history refused, that a direct
+message is refused between strangers and allowed between friends, that opening
+the same conversation twice reuses one channel, and that a message sent in it
+arrives.
+
 `node apps/services/presence-service/smoke.mjs` connects two authenticated
 sockets and asserts the handshake, `presence.sync`, online and offline fanout,
 typing (including that it is not echoed to its author), the voice roster on
-join and leave, the heartbeat, a rejected anonymous socket and a refused
-non-member voice join.
+join and leave, the heartbeat, a rejected anonymous socket, a refused
+non-member voice join, and status: that a chosen status reaches the other
+socket, that invisible reaches it as `offline`, and that the word `invisible`
+never appears in anyone else's payload.
 
 ## Self-checks and CI
 
@@ -130,7 +178,7 @@ crypto primitives, storage, logger redaction, the desktop E2EE round trip, and
 reuse detection, logout).
 
 `.github/workflows/ci.yml` runs those on every pull request, then a second job
-that starts Postgres and Redis, applies migrations, boots auth-, workspace-,
+that starts Postgres and Redis, applies migrations, boots auth-, server-,
 chat- and presence-service and runs both smoke scripts.
 
 ## Admin panel

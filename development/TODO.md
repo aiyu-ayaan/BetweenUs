@@ -5,41 +5,52 @@ the top honest — it is what a new session reads first.
 
 ## Next up
 
-Phase 12 is the current phase. Everything under it is in flight; the items
-below it are carry-overs that still need a human in front of the app.
+Phase 12 has landed; what is left of it needs a human in front of the app.
+The carried-over items below are older ones in the same state.
 
 ### Phase 12 — servers, permissions and direct messages
 
-- [ ] Rename workspace to server: Prisma models `Server`, `ServerMember`,
+- [x] Rename workspace to server: Prisma models `Server`, `ServerMember`,
       `ServerRole` with a migration, `/api/v1/servers`, `server-service`, and
       every reference in the client, compose files, Nginx, CI and dev scripts
-- [ ] Per-member permission overrides on `ServerMember` (granted / denied) on
+- [x] Per-member permission overrides on `ServerMember` (granted / denied) on
       top of the role defaults, and one `resolveChannelAccess` in
       `@nexora/database` replacing the copies in chat-, call- and
       presence-service
-- [ ] Server settings API: change a member's role, grant and revoke individual
+- [x] Server settings API: change a member's role, grant and revoke individual
       permissions, kick a member, rename or delete the server
-- [ ] Private channels: `Channel.isPrivate` and a `ChannelMember` allowlist,
+- [x] Private channels: `Channel.isPrivate` and a `ChannelMember` allowlist,
       chosen when the channel is created, honoured by listing, history, calls,
       presence and the E2EE key wrapper
-- [ ] Friends: search users by name, send, accept and decline requests, remove a
+- [x] Friends: search users by name, send, accept and decline requests, remove a
       friend
-- [ ] Direct messages: `Channel.serverId` nullable, `DM` channel type, the two
+- [x] Direct messages: `Channel.serverId` nullable, `DM` channel type, the two
       participants as channel members, opened only between accepted friends
-- [ ] Active status: online, idle, do not disturb, invisible — chosen in the
+- [x] Active status: online, idle, do not disturb, invisible — chosen in the
       client, stored in Redis, and resolved to offline for everyone else when it
       is invisible
-- [ ] Discord-parity client: colour tokens, server rail with a home button that
+- [x] Discord-parity client: colour tokens, server rail with a home button that
       opens direct messages, channel sidebar, grouped message list, member list
       on the right, DM screen
-- [ ] Global settings overlay: my account, profile, voice and video,
+- [x] Global settings overlay: my account, profile, voice and video,
       notifications, appearance, log out
-- [ ] Server settings screen: overview, roles and permissions, members,
+- [x] Server settings screen: overview, roles and permissions, members,
       channels, invites, delete server — no events, no boosting
-- [ ] Remove the E2EE badge from the channel header
-- [ ] `dev:duo` seeds a friendship, a direct message and a private channel; the
+- [x] Remove the E2EE badge from the channel header
+- [x] `dev:duo` seeds a friendship, a direct message and a private channel; the
       smoke scripts assert private-channel denial, a permission override, a
       friend request and DM delivery
+
+Phase 12 opened these, and left them open on purpose:
+
+- [ ] Rotate the channel key when someone is dropped from a private channel's
+      allowlist, so removal takes future messages away and not only the listing
+- [ ] Editing a private channel's allowlist from the UI (the endpoint exists;
+      only the create dialog uses it)
+- [ ] Invite codes with an expiry, instead of a permanent server slug
+- [ ] Custom named roles with a colour and an ordering
+- [ ] Idle status set automatically after a period of no input, rather than only
+      by hand
 
 ### Carried over
 
@@ -82,8 +93,8 @@ below it are carry-overs that still need a human in front of the app.
 - [x] `GET /api/v1/auth/me`
 - [x] `GET /health`
 
-### Phase 4 — workspace service
-- [x] Create / list workspaces, owner membership on create
+### Phase 4 — server service
+- [x] Create / list servers, owner membership on create
 - [x] Create / list channels, membership-checked
 - [x] `GET /health`
 
@@ -111,7 +122,7 @@ below it are carry-overs that still need a human in front of the app.
 - [x] Electron main + hardened preload (contextIsolation, no nodeIntegration)
 - [x] Vite + React + Tailwind + Zustand renderer
 - [x] Login / register screen
-- [x] Workspace + channel sidebar, create dialogs
+- [x] Server + channel sidebar, create dialogs
 - [x] Message list with realtime WebSocket updates
 
 ### Phase 8 — encrypted chat and voice
@@ -187,7 +198,7 @@ Follow-ups this phase deliberately left open:
 - [x] Unit tests for `AuthService` (register/login/refresh) with a Prisma mock —
       `pnpm --filter @nexora/auth-service check`, in-memory database
 - [x] Presence smoke test: two sockets, sync/typing/voice/offline asserted
-- [x] Integration test: register → create workspace → create channel → send
+- [x] Integration test: register → create server → create channel → send
       message (`chat-service/smoke.mjs`, now exits non-zero on a failed assert)
 - [x] Promote both smoke scripts into CI as integration tests
 - [x] GitHub Actions workflow: install → lint → typecheck → build → self-checks,
@@ -201,7 +212,7 @@ Follow-ups this phase deliberately left open:
 
 ### Presence follow-ups
 - [ ] Idle status (currently only online/offline)
-- [ ] Scope presence broadcasts to a workspace instead of every connected socket
+- [ ] Scope presence broadcasts to a server instead of every connected socket
 - [ ] Server-authoritative voice rosters via LiveKit webhooks, so a client that
       lies about joining cannot appear in a channel
 

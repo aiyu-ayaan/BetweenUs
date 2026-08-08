@@ -11,7 +11,7 @@ we get there in stages and what each stage delivers.
 | 1 | Dev infrastructure | Postgres + Redis via Docker Compose, env template | Done |
 | 2 | Shared packages | shared-types, config, logger, auth, permissions, events, database (Prisma) | Done |
 | 3 | Auth service | Register, login, refresh rotation, `/me`, `/health` | Done |
-| 4 | Workspace service | Workspaces, members, channels | Done |
+| 4 | Server service | Servers, members, channels | Done |
 | 5 | Chat service | Message REST + WebSocket gateway + Redis fanout | Done |
 | 6 | Gateway | Nginx REST/WebSocket routing, rate limits, prod compose | Done |
 | 7 | Desktop client | Electron + React + Tailwind + Zustand, end-to-end chat | Done |
@@ -261,13 +261,31 @@ Run live on 2026-08-08, on top of everything verified in phase 9 below:
 - Request logging observed: one line per request carrying `requestId`, and
   `userId` on authenticated routes.
 - **The container stack runs**: images build, the `migrate` service applies the
-  schema, and register / login / workspace list / workspace create / the message
+  schema, and register / login / server list / server create / the message
   and call routes answer through Nginx, with `x-request-id` passed through from
   the caller. Two bugs found doing it - no migration step, and no OpenSSL in the
   images - are fixed.
 
 Still unverified: CI itself has not run yet (the workflow lands with this
 phase), and the human-in-front-of-it items below.
+
+### Phase 12 verification
+
+Verified on 2026-08-09 by building and by the automated checks; the live
+walkthrough below it is not done yet.
+
+- `pnpm typecheck`, `pnpm build` and `pnpm check` pass across every workspace
+  task, including the new `@nexora/permissions` self-check, which covers the
+  override arithmetic: a grant adds, a deny beats both the role and an explicit
+  grant, and an unknown permission name is ignored rather than trusted.
+- The rename migration renames tables, columns, indexes and constraints in
+  place rather than recreating them, so an existing database keeps its rows.
+
+Not yet exercised: the migrations have not been applied to a running Postgres,
+neither smoke script has been run against the new endpoints, and nobody has
+driven the new client - the private-channel sidebar rule, the friends screen,
+a direct message between two windows, the status picker, and the roles screen
+all still need a human in front of them. `TESTING.md` says what to try.
 
 ### Phase 11 verification
 

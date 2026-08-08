@@ -6,7 +6,7 @@ is deliberately deferred — see `TODO.md` for the ordered backlog.
 ## Goal
 
 A developer clones the repo, starts Postgres + Redis with one Docker command,
-runs `pnpm dev`, and can: register, log in, create a workspace, create a text
+runs `pnpm dev`, and can: register, log in, create a server, create a text
 channel, and exchange messages in realtime between two desktop clients.
 
 ## In scope
@@ -14,10 +14,10 @@ channel, and exchange messages in realtime between two desktop clients.
 | Area | Included |
 | --- | --- |
 | Auth | Register, login, refresh-token rotation, `/me`, JWT access tokens |
-| Workspaces | Create workspace, list own workspaces, membership with role |
-| Channels | Create text channel in a workspace, list channels |
+| Servers | Create server, list own servers, membership with role |
+| Channels | Create text channel in a server, list channels |
 | Messages | Send, list history (paged), realtime delivery over WebSocket |
-| Desktop | Electron + React + Tailwind + Zustand: login, workspace/channel sidebar, message view |
+| Desktop | Electron + React + Tailwind + Zustand: login, server/channel sidebar, message view |
 | Gateway | Nginx routing REST + WebSocket to services |
 | Data | PostgreSQL via Prisma, Redis Pub/Sub for cross-instance message fanout |
 | Uploads | File upload/download with local-disk storage by default, S3 when configured |
@@ -53,8 +53,8 @@ Desktop (Electron)
       v
 Nginx  :8080
       |-- /api/v1/auth        -> auth-service       :3001
-      |-- /api/v1/workspaces  -> workspace-service  :3003
-      |-- /api/v1/channels    -> workspace-service  :3003
+      |-- /api/v1/servers  -> server-service  :3003
+      |-- /api/v1/channels    -> server-service  :3003
       |-- /api/v1/messages    -> chat-service       :3004
       `-- /ws/chat            -> chat-service       :3004 (WebSocket)
 
