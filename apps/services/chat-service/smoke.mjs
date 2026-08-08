@@ -116,23 +116,8 @@ const anonClosed = await new Promise((resolve) => {
 });
 ok('anonymous ws rejected', anonClosed === 4401, String(anonClosed));
 
-// Upload with no S3 configured must land on local disk.
-const form = new FormData();
-form.append('file', new Blob([Buffer.from('smoke-png')], { type: 'image/png' }), 'shot.png');
-const uploadResponse = await fetch(`${CHAT}/api/v1/uploads`, {
-  method: 'POST',
-  headers: authed,
-  body: form,
-});
-const uploaded = await uploadResponse.json();
-if (!uploadResponse.ok) throw new Error(`upload failed ${JSON.stringify(uploaded)}`);
-console.log('upload ok', uploaded.key, uploaded.size);
-
-const download = await fetch(`${CHAT}${uploaded.url}`);
-const downloaded = await download.text();
-ok('download', downloaded === 'smoke-png', download.headers.get('content-type'));
-
-// Traversal attempt must be refused.
+// Traversal attempt must be refused. The uploads themselves are exercised
+// further down, once there is a second account to prove a ticket is bound.
 const traversal = await fetch(`${CHAT}/api/v1/uploads/..%2F..%2Fpackage.json`);
 ok('traversal blocked', traversal.status >= 400, String(traversal.status));
 
@@ -354,6 +339,151 @@ const dmHistory = await json(`${CHAT}/api/v1/messages?channelId=${direct.channel
   headers: other,
 });
 ok('direct message delivered', dmHistory.items.some((item) => item.id === dmMessage.id));
+
+// --- Uploads ---------------------------------------------------------------
+//
+// Attachments are ciphertext by the time they arrive, so the interesting parts
+// are: any bytes are accepted, the object comes back byte for byte, a large one
+// survives being cut into parts, and a ticket belongs to the account that
+// opened it.
+
+const form = (parts) => {
+  const body = new FormData();
+  for (const [key, value] of Object.entries(parts)) {
+    if (value instanceof Blob) body.append(key, value, 'blob');
+    else body.append(key, String(value));
+  }
+  return body;
+};
+
+const post = async (url, body, headers) => {
+  const response = await fetch(url, { method: 'POST', body, headers });
+  const payload = await response.json().catch(() => null);
+  if (!response.ok) throw new Error(`${url} -> ${response.status} ${JSON.stringify(payload)}`);
+  return payload;
+};
+
+const attachmentBytes = Buffer.from('nexora attachment ciphertext');
+const stored = await post(
+  `${CHAT}/api/v1/uploads`,
+  form({ file: new Blob([attachmentBytes]) }),
+  authed,
+);
+ok('attachment uploaded', stored.key.startsWith('attachments/'), stored.key);
+
+const fetched = await fetch(`${CHAT}${stored.url}`);
+const fetchedBytes = Buffer.from(await fetched.arrayBuffer());
+ok('attachment round-trips', fetchedBytes.equals(attachmentBytes));
+ok(
+  'attachment is never served inline',
+  fetched.headers.get('content-type') === 'application/octet-stream' &&
+    fetched.headers.get('content-disposition') === 'attachment',
+  `${fetched.headers.get('content-type')} ${fetched.headers.get('content-disposition')}`,
+);
+
+// Multipart: three parts, uploaded out of order, must assemble in part order.
+const chunks = [Buffer.alloc(1024, 1), Buffer.alloc(1024, 2), Buffer.alloc(1024, 3)];
+const started = await json(`${CHAT}/api/v1/uploads/multipart`, {
+  method: 'POST',
+  headers: authed,
+  body: JSON.stringify({ size: 3072 }),
+});
+ok('multipart opened', Boolean(started.ticket) && started.maxPartBytes > 0);
+
+const uploadedParts = [];
+for (const index of [2, 0, 1]) {
+  uploadedParts.push(
+    await post(
+      `${CHAT}/api/v1/uploads/multipart/part`,
+      form({ ticket: started.ticket, partNumber: index + 1, file: new Blob([chunks[index]]) }),
+      authed,
+    ),
+  );
+}
+
+// A ticket is bound to the account that opened it, not merely unguessable.
+let foreignPartRejected = false;
+try {
+  await post(
+    `${CHAT}/api/v1/uploads/multipart/part`,
+    form({ ticket: started.ticket, partNumber: 4, file: new Blob([Buffer.alloc(8)]) }),
+    other,
+  );
+} catch {
+  foreignPartRejected = true;
+}
+ok('upload ticket is bound to its account', foreignPartRejected);
+
+const assembled = await json(`${CHAT}/api/v1/uploads/multipart/complete`, {
+  method: 'POST',
+  headers: authed,
+  body: JSON.stringify({ ticket: started.ticket, parts: uploadedParts }),
+});
+ok('multipart assembled', assembled.size === 3072, String(assembled.size));
+
+const assembledBytes = Buffer.from(
+  await (await fetch(`${CHAT}${assembled.url}`)).arrayBuffer(),
+);
+ok('multipart assembled in part order', assembledBytes.equals(Buffer.concat(chunks)));
+
+// Scratch space for parts is not an object anyone may read.
+const scratch = await fetch(`${CHAT}/api/v1/uploads/.multipart/anything/00001`);
+ok('multipart scratch is not downloadable', scratch.status === 400, String(scratch.status));
+
+// --- Pictures ---------------------------------------------------------------
+//
+// These are stored in the clear and served inline, so the type allowlist is
+// the whole of their safety.
+
+const png = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+  'base64',
+);
+const picture = await post(
+  `${CHAT}/api/v1/uploads/picture`,
+  form({ file: new File([png], 'me.png', { type: 'image/png' }) }),
+  authed,
+);
+ok('picture uploaded', picture.key.startsWith('pictures/'), picture.key);
+
+let scriptablePictureRejected = false;
+try {
+  await post(
+    `${CHAT}/api/v1/uploads/picture`,
+    form({ file: new File(['<svg onload="alert(1)"/>'], 'x.svg', { type: 'image/svg+xml' }) }),
+    authed,
+  );
+} catch {
+  scriptablePictureRejected = true;
+}
+ok('svg is refused as a picture', scriptablePictureRejected);
+
+const withAvatar = await json(`${AUTH}/api/v1/auth/account`, {
+  method: 'PATCH',
+  headers: authed,
+  body: JSON.stringify({ avatarUrl: picture.url }),
+});
+ok('avatar set', withAvatar.avatarUrl === picture.url);
+
+// An avatar pointing anywhere else would report back who looked at it.
+let foreignAvatarRejected = false;
+try {
+  await json(`${AUTH}/api/v1/auth/account`, {
+    method: 'PATCH',
+    headers: authed,
+    body: JSON.stringify({ avatarUrl: 'https://tracker.example/beacon.png' }),
+  });
+} catch {
+  foreignAvatarRejected = true;
+}
+ok('avatar must be an uploaded picture', foreignAvatarRejected);
+
+const cleared = await json(`${AUTH}/api/v1/auth/account`, {
+  method: 'PATCH',
+  headers: authed,
+  body: JSON.stringify({ avatarUrl: null }),
+});
+ok('avatar cleared', cleared.avatarUrl === null);
 
 socket.close();
 console.log('\nSMOKE PASSED');
