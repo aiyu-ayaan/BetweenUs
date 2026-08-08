@@ -1,30 +1,37 @@
 import { useState } from 'react';
 import type { Channel, ChannelType } from '@nexora/shared-types';
-import { useAuthStore } from '../../stores/auth';
+import { PERMISSIONS } from '@nexora/permissions';
 import { useChatStore } from '../../stores/chat';
 import { usePresenceStore } from '../../stores/presence';
 import { useVoiceStore } from '../../stores/voice';
 import { VoicePanel } from '../voice/VoicePanel';
-import { HashIcon, LogOutIcon, PlusIcon, SpeakerIcon } from '../../components/icons';
+import { UserPanel } from '../settings/UserPanel';
+import { CreateChannelDialog } from './CreateChannelDialog';
+import {
+  ChevronDownIcon,
+  HashIcon,
+  LockIcon,
+  PlusIcon,
+  SettingsIcon,
+  SpeakerIcon,
+  XIcon,
+} from '../../components/icons';
 
-export function ChannelSidebar(): JSX.Element {
-  const {
-    servers,
-    channels,
-    activeServerId,
-    activeChannelId,
-    unread,
-    selectChannel,
-    createChannel,
-  } = useChatStore();
-  const user = useAuthStore((state) => state.user);
-  const logout = useAuthStore((state) => state.logout);
+export function ChannelSidebar({
+  onOpenUserSettings,
+  onOpenServerSettings,
+}: {
+  onOpenUserSettings: () => void;
+  onOpenServerSettings: () => void;
+}): JSX.Element {
+  const { servers, channels, activeServerId, activeChannelId, unread, selectChannel } =
+    useChatStore();
 
   const [creating, setCreating] = useState<ChannelType | null>(null);
-  const [name, setName] = useState('');
+  const [menuOpen, setMenuOpen] = useState(false);
 
   const server = servers.find((item) => item.id === activeServerId);
-  const canManage = server?.role === 'OWNER' || server?.role === 'ADMIN';
+  const canManageChannels = server?.permissions.includes(PERMISSIONS.MANAGE_CHANNEL) ?? false;
 
   const textChannels = channels.filter((channel) => channel.type === 'TEXT');
   const voiceChannels = channels.filter((channel) => channel.type === 'VOICE');
@@ -32,42 +39,22 @@ export function ChannelSidebar(): JSX.Element {
   const voiceChannelId = useVoiceStore((state) => state.channelId);
   const connectedChannel = channels.find((channel) => channel.id === voiceChannelId);
 
-  const submit = async (): Promise<void> => {
-    const trimmed = name.trim();
-    if (!trimmed || !creating) return;
-    await createChannel({ name: trimmed, type: creating });
-    setName('');
-    setCreating(null);
-  };
-
-  const newChannelInput = (
-    <input
-      autoFocus
-      value={name}
-      onChange={(event) => setName(event.target.value)}
-      onBlur={() => setCreating(null)}
-      onKeyDown={(event) => {
-        if (event.key === 'Enter') void submit();
-        if (event.key === 'Escape') setCreating(null);
-      }}
-      aria-label={creating === 'VOICE' ? 'New voice channel name' : 'New text channel name'}
-      placeholder={creating === 'VOICE' ? 'new-voice' : 'new-channel'}
-      className="mt-1 w-full rounded border border-surface-700 bg-surface-900 px-2 py-1.5 text-sm transition-colors duration-200 focus:border-accent"
-    />
-  );
-
   return (
     <aside className="flex w-60 shrink-0 flex-col bg-surface-800">
-      <header className="flex h-12 items-center border-b border-black/30 px-4">
-        <h2 className="truncate font-semibold text-slate-100">
-          {server?.name ?? 'No server'}
-        </h2>
-      </header>
+      <ServerHeader
+        name={server?.name ?? 'No server'}
+        open={menuOpen}
+        onToggle={() => setMenuOpen((value) => !value)}
+        onOpenSettings={() => {
+          setMenuOpen(false);
+          onOpenServerSettings();
+        }}
+      />
 
       <nav aria-label="Channels" className="flex-1 overflow-y-auto px-2 pb-2">
         <SectionHeading
           label="Text channels"
-          onAdd={canManage ? () => setCreating('TEXT') : undefined}
+          onAdd={canManageChannels ? () => setCreating('TEXT') : undefined}
           addLabel="Create text channel"
         />
 
@@ -78,33 +65,32 @@ export function ChannelSidebar(): JSX.Element {
               type="button"
               onClick={() => void selectChannel(channel.id)}
               aria-current={channel.id === activeChannelId ? 'page' : undefined}
-              className={`flex w-full cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-left text-sm transition-colors duration-200 ${
+              className={`group flex w-full cursor-pointer items-center gap-1.5 rounded px-2 py-1.5 text-left text-[15px] transition-colors duration-200 ${
                 channel.id === activeChannelId
                   ? 'bg-surface-700 text-slate-50'
                   : 'text-slate-400 hover:bg-surface-700/60 hover:text-slate-200'
               }`}
             >
-              <HashIcon className="h-4 w-4 shrink-0" />
-              <span className={`truncate ${unread[channel.id] ? 'font-semibold text-slate-100' : ''}`}>
+              <ChannelGlyph channel={channel} />
+              <span className={`truncate ${unread[channel.id] ? 'font-semibold text-white' : ''}`}>
                 {channel.name}
               </span>
               {unread[channel.id] ? (
-                <span className="ml-auto rounded-full bg-accent px-1.5 text-xs font-semibold text-white">
+                <span className="ml-auto rounded-full bg-danger px-1.5 text-xs font-bold text-white">
                   {unread[channel.id]}
                   <span className="sr-only"> unread messages</span>
                 </span>
               ) : null}
             </button>
           ))}
-          {creating === 'TEXT' && newChannelInput}
-          {textChannels.length === 0 && creating !== 'TEXT' && (
+          {textChannels.length === 0 && (
             <p className="px-2 py-2 text-sm text-slate-500">No text channels yet.</p>
           )}
         </div>
 
         <SectionHeading
           label="Voice channels"
-          onAdd={canManage ? () => setCreating('VOICE') : undefined}
+          onAdd={canManageChannels ? () => setCreating('VOICE') : undefined}
           addLabel="Create voice channel"
         />
 
@@ -112,40 +98,97 @@ export function ChannelSidebar(): JSX.Element {
           {voiceChannels.map((channel) => (
             <VoiceChannelRow key={channel.id} channel={channel} />
           ))}
-          {creating === 'VOICE' && newChannelInput}
-          {voiceChannels.length === 0 && creating !== 'VOICE' && (
+          {voiceChannels.length === 0 && (
             <p className="px-2 py-2 text-sm text-slate-500">No voice channels yet.</p>
           )}
           <VoiceError />
         </div>
-
-        <MemberList />
       </nav>
 
       <VoicePanel channelName={connectedChannel?.name ?? null} />
+      <UserPanel onOpenSettings={onOpenUserSettings} />
 
-      <div className="flex items-center gap-2 bg-surface-950 px-3 py-2">
-        <div
-          aria-hidden="true"
-          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent text-sm font-semibold text-white"
-        >
-          {(user?.displayName ?? '?').charAt(0).toUpperCase()}
-        </div>
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-medium text-slate-100">{user?.displayName}</p>
-          <p className="truncate text-xs text-slate-400">@{user?.username}</p>
-        </div>
-        <button
-          type="button"
-          onClick={() => void logout()}
-          aria-label="Sign out"
-          title="Sign out"
-          className="cursor-pointer rounded p-2 text-slate-400 transition-colors duration-200 hover:bg-surface-800 hover:text-red-400"
-        >
-          <LogOutIcon className="h-4 w-4" />
-        </button>
-      </div>
+      {creating && (
+        <CreateChannelDialog type={creating} onClose={() => setCreating(null)} />
+      )}
     </aside>
+  );
+}
+
+/** A private channel says so in the sidebar; that is the whole affordance. */
+function ChannelGlyph({ channel }: { channel: Channel }): JSX.Element {
+  const Glyph = channel.type === 'VOICE' ? SpeakerIcon : HashIcon;
+  return (
+    <span className="relative flex h-5 w-5 shrink-0 items-center justify-center">
+      <Glyph className="h-5 w-5" />
+      {channel.isPrivate && (
+        <LockIcon className="absolute -bottom-0.5 -right-1 h-3 w-3 rounded-full bg-surface-800 text-slate-400" />
+      )}
+    </span>
+  );
+}
+
+function ServerHeader({
+  name,
+  open,
+  onToggle,
+  onOpenSettings,
+}: {
+  name: string;
+  open: boolean;
+  onToggle: () => void;
+  onOpenSettings: () => void;
+}): JSX.Element {
+  const activeServerId = useChatStore((state) => state.activeServerId);
+  const servers = useChatStore((state) => state.servers);
+  const leaveServer = useChatStore((state) => state.leaveServer);
+  const server = servers.find((item) => item.id === activeServerId);
+  const isOwner = server?.role === 'OWNER';
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        className="flex h-12 w-full cursor-pointer items-center gap-2 border-b border-black/20 px-4 text-left transition-colors duration-200 hover:bg-surface-700/50"
+      >
+        <h2 className="min-w-0 flex-1 truncate font-semibold text-slate-50">{name}</h2>
+        {open ? (
+          <XIcon className="h-4 w-4 text-slate-300" />
+        ) : (
+          <ChevronDownIcon className="h-4 w-4 text-slate-300" />
+        )}
+      </button>
+
+      {open && (
+        <div
+          role="menu"
+          className="absolute inset-x-2 top-full z-30 mt-1 overflow-hidden rounded-md bg-surface-950 py-2 shadow-2xl"
+        >
+          <button
+            type="button"
+            role="menuitem"
+            onClick={onOpenSettings}
+            className="flex w-full cursor-pointer items-center justify-between px-3 py-2 text-sm text-slate-200 hover:bg-accent hover:text-white"
+          >
+            Server settings
+            <SettingsIcon className="h-4 w-4" />
+          </button>
+          {!isOwner && (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => void leaveServer()}
+              className="flex w-full cursor-pointer items-center justify-between px-3 py-2 text-sm text-danger hover:bg-danger hover:text-white"
+            >
+              Leave server
+            </button>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -160,7 +203,7 @@ function SectionHeading({
 }): JSX.Element {
   return (
     <div className="flex items-center justify-between px-2 pb-1 pt-4">
-      <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">{label}</span>
+      <span className="text-xs font-bold uppercase tracking-wide text-slate-400">{label}</span>
       {onAdd && (
         <button
           type="button"
@@ -204,15 +247,17 @@ function VoiceChannelRow({ channel }: { channel: Channel }): JSX.Element {
         type="button"
         onClick={open}
         aria-current={viewing ? 'page' : undefined}
-        className={`flex w-full cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-left text-sm transition-colors duration-200 ${
+        className={`flex w-full cursor-pointer items-center gap-1.5 rounded px-2 py-1.5 text-left text-[15px] transition-colors duration-200 ${
           here || connectingHere || viewing
             ? 'bg-surface-700 text-slate-50'
             : 'text-slate-400 hover:bg-surface-700/60 hover:text-slate-200'
         }`}
       >
-        <SpeakerIcon className="h-4 w-4 shrink-0" />
+        <ChannelGlyph channel={channel} />
         <span className="truncate">{channel.name}</span>
-        {connectingHere && <span className="text-xs text-emerald-400 animate-pulse">connecting...</span>}
+        {connectingHere && (
+          <span className="animate-pulse text-xs text-status-online">connecting…</span>
+        )}
         {occupants.length > 0 && (
           <span className="ml-auto text-xs text-slate-500">{occupants.length}</span>
         )}
@@ -222,7 +267,7 @@ function VoiceChannelRow({ channel }: { channel: Channel }): JSX.Element {
         {occupants.map((userId) => {
           const member = members.find((item) => item.userId === userId);
           return (
-            <li key={userId} className="truncate py-0.5 text-xs text-slate-400">
+            <li key={userId} className="truncate py-0.5 text-sm text-slate-400">
               {member?.displayName ?? 'Someone'}
             </li>
           );
@@ -238,45 +283,8 @@ function VoiceError(): JSX.Element | null {
   if (!error) return null;
 
   return (
-    <p role="alert" className="mx-2 mt-1 rounded bg-red-500/10 px-2 py-1.5 text-xs text-red-300">
+    <p role="alert" className="mx-2 mt-1 rounded bg-danger/10 px-2 py-1.5 text-xs text-danger">
       {error}
     </p>
-  );
-}
-
-function MemberList(): JSX.Element | null {
-  const members = useChatStore((state) => state.members);
-  const online = usePresenceStore((state) => state.online);
-
-  if (members.length === 0) return null;
-
-  // Online first, so a busy server still shows who is reachable now.
-  const sorted = [...members].sort((left, right) => {
-    const delta = Number(online.has(right.userId)) - Number(online.has(left.userId));
-    return delta !== 0 ? delta : left.displayName.localeCompare(right.displayName);
-  });
-
-  return (
-    <>
-      <SectionHeading label={`Members - ${online.size} online`} addLabel="" />
-      <ul className="space-y-0.5">
-        {sorted.map((member) => (
-          <li key={member.userId} className="flex items-center gap-2 px-2 py-1 text-sm">
-            <span
-              aria-hidden="true"
-              className={`h-2 w-2 shrink-0 rounded-full ${
-                online.has(member.userId) ? 'bg-emerald-400' : 'bg-slate-600'
-              }`}
-            />
-            <span
-              className={`truncate ${online.has(member.userId) ? 'text-slate-300' : 'text-slate-500'}`}
-            >
-              {member.displayName}
-            </span>
-            <span className="sr-only">{online.has(member.userId) ? 'online' : 'offline'}</span>
-          </li>
-        ))}
-      </ul>
-    </>
   );
 }

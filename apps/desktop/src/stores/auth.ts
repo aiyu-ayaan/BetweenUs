@@ -21,6 +21,8 @@ interface AuthState {
   loginWithProvider: (provider: string) => Promise<void>;
   register: (email: string, username: string, password: string) => Promise<void>;
   restore: () => Promise<void>;
+  /** Re-reads the profile after it has been edited in settings. */
+  refreshUser: () => Promise<void>;
   logout: () => Promise<void>;
   clearError: () => void;
 }
@@ -32,6 +34,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   error: null,
 
   clearError: () => set({ error: null }),
+
+  refreshUser: async () => {
+    set({ user: await api.me() });
+  },
 
   login: async (email, password) => {
     set({ status: 'loading', error: null });

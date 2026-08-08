@@ -2,9 +2,11 @@ import { create } from 'zustand';
 import type {
   Channel,
   ChannelType,
+  DirectChannel,
   Message,
   ServerMember,
   ServerWithRole,
+  UpdateServerMemberRequest,
 } from '@nexora/shared-types';
 import { api } from '../services/api';
 import { chatSocket } from '../services/socket';
@@ -18,8 +20,12 @@ import { notifyMessage, windowIsFocused } from '../services/notifications';
 import { useAuthStore } from './auth';
 
 interface ChatState {
+  /** Home is the direct-message side of the app; a server is everything else. */
+  view: 'home' | 'server';
   servers: ServerWithRole[];
   channels: Channel[];
+  /** Open conversations, kept apart from a server's channels. */
+  directs: Channel[];
   members: ServerMember[];
   messages: Message[];
   activeServerId: string | null;
@@ -30,8 +36,13 @@ interface ChatState {
   error: string | null;
 
   loadServers: () => Promise<void>;
+  /** The channel on screen, wherever it lives. */
+  activeChannel: () => Channel | undefined;
+  showHome: () => void;
   selectServer: (serverId: string) => Promise<void>;
   selectChannel: (channelId: string) => Promise<void>;
+  loadDirects: () => Promise<void>;
+  openDirectChannel: (direct: DirectChannel) => Promise<void>;
   createServer: (name: string) => Promise<void>;
   joinServer: (slug: string) => Promise<void>;
   createChannel: (options: {
@@ -41,12 +52,22 @@ interface ChatState {
     memberIds?: string[];
   }) => Promise<void>;
   sendMessage: (content: string) => Promise<void>;
+  renameServer: (name: string) => Promise<void>;
+  leaveServer: () => Promise<void>;
+  deleteServer: () => Promise<void>;
+  updateMember: (userId: string, change: UpdateServerMemberRequest) => Promise<void>;
+  kickMember: (userId: string) => Promise<void>;
+  deleteChannel: (channelId: string) => Promise<void>;
+  /** Drops a server from the client after leaving or deleting it. */
+  forgetServer: (serverId: string) => void;
   reset: () => void;
 }
 
 export const useChatStore = create<ChatState>((set, get) => ({
+  view: 'home',
   servers: [],
   channels: [],
+  directs: [],
   members: [],
   messages: [],
   activeServerId: null,
@@ -58,12 +79,36 @@ export const useChatStore = create<ChatState>((set, get) => ({
   loadServers: async () => {
     const servers = await api.servers();
     set({ servers });
-    const first = servers[0];
-    if (first && !get().activeServerId) await get().selectServer(first.id);
+  },
+
+  activeChannel: () => {
+    const { channels, directs, activeChannelId } = get();
+    return [...channels, ...directs].find((channel) => channel.id === activeChannelId);
+  },
+
+  showHome: () => set({ view: 'home' }),
+
+  /**
+   * Conversations are loaded once at sign-in rather than when the home screen
+   * is opened, because a direct message has to be able to arrive and be
+   * notified about while the user is somewhere else entirely.
+   */
+  loadDirects: async () => {
+    const directs = (await api.directChannels().catch(() => [])).map(toDirectChannel);
+    set({ directs });
+    chatSocket.syncSubscriptions(subscribable(get().channels, directs));
+  },
+
+  openDirectChannel: async (direct) => {
+    const channel = toDirectChannel(direct);
+    const known = get().directs.some((item) => item.id === channel.id);
+    if (!known) set({ directs: [channel, ...get().directs] });
+    set({ view: 'home' });
+    await get().selectChannel(channel.id);
   },
 
   selectServer: async (serverId) => {
-    set({ activeServerId: serverId, channels: [], members: [], messages: [] });
+    set({ view: 'server', activeServerId: serverId, channels: [], members: [], messages: [] });
 
     const [channels, members] = await Promise.all([
       api.channels(serverId),
@@ -72,11 +117,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
     ]);
     set({ channels, members });
 
-    // Subscribed to every text channel, not only the open one: a message in
+    // Subscribed to every readable channel, not only the open one: a message in
     // another channel has to arrive for it to be counted or notified about.
-    chatSocket.syncSubscriptions(
-      channels.filter((channel) => channel.type === 'TEXT').map((channel) => channel.id),
-    );
+    chatSocket.syncSubscriptions(subscribable(channels, get().directs));
 
     const first = channels.find((channel) => channel.type === 'TEXT');
     if (first) await get().selectChannel(first.id);
@@ -152,10 +195,77 @@ export const useChatStore = create<ChatState>((set, get) => ({
     await api.sendMessage(channelId, envelope);
   },
 
+  renameServer: async (name) => {
+    const serverId = get().activeServerId;
+    if (!serverId) return;
+    const updated = await api.updateServer(serverId, { name });
+    set({
+      servers: get().servers.map((server) => (server.id === serverId ? updated : server)),
+    });
+  },
+
+  /** Leaving or deleting both end with no server on screen, so both go home. */
+  leaveServer: async () => {
+    const serverId = get().activeServerId;
+    if (!serverId) return;
+    await api.leaveServer(serverId);
+    get().forgetServer(serverId);
+  },
+
+  deleteServer: async () => {
+    const serverId = get().activeServerId;
+    if (!serverId) return;
+    await api.deleteServer(serverId);
+    get().forgetServer(serverId);
+  },
+
+  forgetServer: (serverId) => {
+    set({
+      servers: get().servers.filter((server) => server.id !== serverId),
+      view: 'home',
+      activeServerId: null,
+      activeChannelId: null,
+      channels: [],
+      members: [],
+      messages: [],
+    });
+    chatSocket.syncSubscriptions(subscribable([], get().directs));
+  },
+
+  updateMember: async (userId, change) => {
+    const serverId = get().activeServerId;
+    if (!serverId) return;
+    const member = await api.updateMember(serverId, userId, change);
+    set({
+      members: get().members.map((item) => (item.userId === userId ? member : item)),
+    });
+  },
+
+  kickMember: async (userId) => {
+    const serverId = get().activeServerId;
+    if (!serverId) return;
+    await api.removeMember(serverId, userId);
+    set({ members: get().members.filter((member) => member.userId !== userId) });
+  },
+
+  deleteChannel: async (channelId) => {
+    await api.deleteChannel(channelId);
+    const channels = get().channels.filter((channel) => channel.id !== channelId);
+    set({ channels });
+    chatSocket.syncSubscriptions(subscribable(channels, get().directs));
+    if (get().activeChannelId === channelId) {
+      const next = channels.find((channel) => channel.type === 'TEXT');
+      if (next) await get().selectChannel(next.id);
+      else set({ activeChannelId: null, messages: [] });
+    }
+  },
+
   reset: () =>
     set({
+      view: 'home',
       servers: [],
       channels: [],
+      directs: [],
       members: [],
       messages: [],
       activeServerId: null,
@@ -164,6 +274,29 @@ export const useChatStore = create<ChatState>((set, get) => ({
       error: null,
     }),
 }));
+
+/**
+ * A direct message is a channel; the client only has to give it the shape the
+ * rest of the app already knows, named after the person on the other end.
+ */
+function toDirectChannel(direct: DirectChannel): Channel {
+  return {
+    id: direct.channelId,
+    serverId: null,
+    name: direct.participant.displayName || direct.participant.username,
+    type: 'DM',
+    topic: null,
+    isPrivate: true,
+    createdAt: direct.createdAt,
+  };
+}
+
+/** Channels a message can arrive in - everything except voice. */
+function subscribable(channels: Channel[], directs: Channel[]): string[] {
+  return [...channels, ...directs]
+    .filter((channel) => channel.type !== 'VOICE')
+    .map((channel) => channel.id);
+}
 
 // Realtime messages land here regardless of which component is mounted, for
 // every subscribed channel - not only the one on screen.
@@ -191,7 +324,9 @@ chatSocket.on((event) => {
     notifyMessage({
       channelId: incoming.channelId,
       channelName:
-        state.channels.find((channel) => channel.id === incoming.channelId)?.name ?? 'a channel',
+        [...state.channels, ...state.directs].find(
+          (channel) => channel.id === incoming.channelId,
+        )?.name ?? 'a channel',
       author: incoming.author.displayName || incoming.author.username,
       // A message this device cannot read still deserves a notification, just
       // without quoting the placeholder into it.

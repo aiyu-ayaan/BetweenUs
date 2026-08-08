@@ -57,6 +57,9 @@ importers:
 
   apps/desktop:
     dependencies:
+      '@nexora/permissions':
+        specifier: workspace:*
+        version: link:../../packages/permissions
       '@nexora/shared-types':
         specifier: workspace:*
         version: link:../../packages/shared-types

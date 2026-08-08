@@ -17,6 +17,7 @@ import type {
   PublishChannelKeysRequest,
   ServerMember,
   ServerWithRole,
+  UpdateAccountRequest,
   UpdateChannelRequest,
   UpdateServerMemberRequest,
   UpdateServerRequest,
@@ -113,6 +114,16 @@ export const api = {
     }),
 
   me: (): Promise<PublicUser> => request('/api/v1/auth/me'),
+
+  updateAccount: (body: UpdateAccountRequest): Promise<PublicUser> =>
+    request('/api/v1/auth/account', { method: 'PATCH', body: JSON.stringify(body) }),
+
+  /** Signs every other session out; this one keeps its tokens. */
+  changePassword: (currentPassword: string, newPassword: string): Promise<void> =>
+    request('/api/v1/auth/account/password', {
+      method: 'POST',
+      body: JSON.stringify({ currentPassword, newPassword }),
+    }),
 
   /** Providers the operator enabled in the admin panel, for the login screen. */
   oauthProviders: (): Promise<OAuthProviderSummary[]> => request('/api/v1/auth/oauth/providers'),

@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import electron from 'vite-plugin-electron/simple';
@@ -29,6 +30,16 @@ export default defineConfig({
       },
     }),
   ],
+  resolve: {
+    alias: {
+      // The shared packages build to CommonJS for the Node services. Rollup
+      // cannot see named exports through that, so the renderer is pointed at
+      // the TypeScript source instead - which it can also tree-shake.
+      '@nexora/permissions': fileURLToPath(
+        new URL('../../packages/permissions/src/index.ts', import.meta.url),
+      ),
+    },
+  },
   server: {
     port: 5173,
     strictPort: true,
