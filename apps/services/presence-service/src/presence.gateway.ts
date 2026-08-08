@@ -99,6 +99,12 @@ export class PresenceGateway implements OnModuleDestroy {
 
   private async onConnect(socket: WebSocket, userId: string): Promise<void> {
     await this.store.touch(userId);
+
+    // A client that just connected is in no voice channel. Anything left over
+    // belongs to a session that died without saying goodbye - drop it, so a
+    // crashed window does not haunt the roster.
+    if (!this.hasOtherSocket(userId, socket)) await this.clearOtherVoiceChannels(userId, '');
+
     this.send(socket, { type: 'ready', userId });
 
     const [users, voice] = await Promise.all([
@@ -117,7 +123,7 @@ export class PresenceGateway implements OnModuleDestroy {
     this.state.delete(socket);
 
     // Another window of the same user may still be connected to this instance.
-    if (this.hasOtherSocket(userId)) return;
+    if (this.hasOtherSocket(userId, socket)) return;
 
     await this.store.goOffline(userId);
     for (const channelId of await this.store.voiceChannelsOf(userId)) {
@@ -130,8 +136,18 @@ export class PresenceGateway implements OnModuleDestroy {
     this.logger.info('Presence disconnected', { userId });
   }
 
-  private hasOtherSocket(userId: string): boolean {
+  private async clearOtherVoiceChannels(userId: string, keep: string): Promise<void> {
+    for (const channelId of await this.store.voiceChannelsOf(userId)) {
+      if (channelId === keep) continue;
+      const voice = await this.store.leaveVoice(channelId, userId);
+      await this.events.publish(EVENTS.PRESENCE_VOICE, { voice });
+    }
+  }
+
+  /** Is this user connected through some socket other than `except`? */
+  private hasOtherSocket(userId: string, except?: WebSocket): boolean {
     for (const socket of this.server?.clients ?? []) {
+      if (socket === except) continue;
       if (socket.readyState !== WebSocket.OPEN) continue;
       if (this.state.get(socket)?.userId === userId) return true;
     }
@@ -174,6 +190,12 @@ export class PresenceGateway implements OnModuleDestroy {
           });
           return;
         }
+
+        // A client is in at most one voice channel. Clearing the others here
+        // keeps a roster honest even when a leave was lost - a kicked client,
+        // a dropped socket, a crash.
+        await this.clearOtherVoiceChannels(state.userId, event.channelId);
+
         const voice = await this.store.joinVoice(event.channelId, state.userId);
         await this.events.publish(EVENTS.PRESENCE_VOICE, { voice });
         return;

@@ -63,6 +63,10 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
   error: null,
 
   join: async (channelId) => {
+    // Joining the channel you are already in would connect a second session
+    // with the same identity, and LiveKit answers that by kicking the first.
+    if (get().channelId === channelId && get().status !== 'idle') return;
+
     if (get().status !== 'idle') await get().leave();
     set({ status: 'connecting', channelId, error: null, tiles: [] });
 
@@ -104,6 +108,10 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
         .on(RoomEvent.LocalTrackUnpublished, refresh)
         .on(RoomEvent.ActiveSpeakersChanged, refresh)
         .on(RoomEvent.Disconnected, () => {
+          // The room can end without us asking: a kick, a network drop, a
+          // duplicate identity. Presence must hear about those too, or the
+          // roster keeps showing someone who is no longer in the channel.
+          presenceSocket.send({ type: 'voice.leave', channelId });
           set({ status: 'idle', channelId: null, room: null, tiles: [] });
         });
 
@@ -112,18 +120,17 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
       // clicking a voice channel is one.
       await room.startAudio().catch(() => undefined);
 
-      // A missing or blocked microphone must not keep someone out of the
-      // channel - they can still listen, and the panel says the mic is off.
+      // A microphone that will not publish - missing, blocked, or a publish
+      // that never negotiated - must not keep someone out of the channel. They
+      // can still listen, and the panel shows the mic as off.
       let micEnabled = true;
       let micProblem: string | null = null;
       try {
         await room.localParticipant.setMicrophoneEnabled(true);
       } catch (error) {
         micEnabled = false;
-        micProblem =
-          error instanceof Error
-            ? `Joined without a microphone: ${error.message}`
-            : 'Joined without a microphone';
+        const reason = error instanceof Error ? error.message : 'unknown error';
+        micProblem = `Connected, but the microphone did not start (${reason}). Use the mic button to retry.`;
       }
 
       // Members who have not joined still see who is in here.
@@ -162,25 +169,41 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
   toggleMic: async () => {
     const { room, micEnabled } = get();
     if (!room) return;
-    await room.localParticipant.setMicrophoneEnabled(!micEnabled);
-    set({ micEnabled: !micEnabled, tiles: snapshot(room) });
+    try {
+      await room.localParticipant.setMicrophoneEnabled(!micEnabled);
+      set({ micEnabled: !micEnabled, error: null, tiles: snapshot(room) });
+    } catch (error) {
+      set({ error: `Microphone: ${messageOf(error)}`, tiles: snapshot(room) });
+    }
   },
 
   toggleCamera: async () => {
     const { room, cameraEnabled } = get();
     if (!room) return;
-    await room.localParticipant.setCameraEnabled(!cameraEnabled);
-    set({ cameraEnabled: !cameraEnabled, tiles: snapshot(room) });
+    try {
+      await room.localParticipant.setCameraEnabled(!cameraEnabled);
+      set({ cameraEnabled: !cameraEnabled, error: null, tiles: snapshot(room) });
+    } catch (error) {
+      set({ error: `Camera: ${messageOf(error)}`, tiles: snapshot(room) });
+    }
   },
 
   toggleScreen: async () => {
     const { room, screenEnabled } = get();
     if (!room) return;
-    // The Electron main process answers the picker; see electron/main.ts.
-    await room.localParticipant.setScreenShareEnabled(!screenEnabled);
-    set({ screenEnabled: !screenEnabled, tiles: snapshot(room) });
+    try {
+      // The Electron main process answers the picker; see electron/main.ts.
+      await room.localParticipant.setScreenShareEnabled(!screenEnabled);
+      set({ screenEnabled: !screenEnabled, error: null, tiles: snapshot(room) });
+    } catch (error) {
+      set({ error: `Screen share: ${messageOf(error)}`, tiles: snapshot(room) });
+    }
   },
 }));
+
+function messageOf(error: unknown): string {
+  return error instanceof Error ? error.message : 'unknown error';
+}
 
 function snapshot(room: Room): VoiceTile[] {
   const speaking = new Set(room.activeSpeakers.map((participant) => participant.identity));
