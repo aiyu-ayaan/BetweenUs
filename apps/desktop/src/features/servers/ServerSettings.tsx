@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import type { Channel, ServerMember, ServerRole } from '@nexora/shared-types';
 import { ASSIGNABLE_PERMISSIONS, PERMISSIONS, SERVER_ROLES } from '@nexora/permissions';
 import { useAuthStore } from '../../stores/auth';
+import { PicturePicker } from '../../components/PicturePicker';
+import { ServerIcon } from '../../components/ServerIcon';
 import { useChatStore } from '../../stores/chat';
 import { Avatar } from '../../components/Avatar';
 import {
@@ -179,7 +181,7 @@ function DangerButton(): JSX.Element {
 function Overview(): JSX.Element {
   const servers = useChatStore((state) => state.servers);
   const activeServerId = useChatStore((state) => state.activeServerId);
-  const renameServer = useChatStore((state) => state.renameServer);
+  const saveServer = useChatStore((state) => state.saveServer);
   const server = servers.find((item) => item.id === activeServerId);
 
   const [name, setName] = useState(server?.name ?? '');
@@ -190,7 +192,7 @@ function Overview(): JSX.Element {
   const save = async (): Promise<void> => {
     setNote(null);
     try {
-      await renameServer(name.trim());
+      await saveServer({ name: name.trim() });
       setNote('Saved.');
     } catch (error) {
       setNote(error instanceof Error ? error.message : 'That could not be saved');
@@ -200,6 +202,18 @@ function Overview(): JSX.Element {
   return (
     <>
       <h1 className="text-xl font-semibold text-slate-50">Server overview</h1>
+
+      {canManage && (
+        <div className="mt-6">
+          <PicturePicker
+            label="server icon"
+            onChange={(iconUrl) => saveServer({ iconUrl })}
+            onClear={server?.iconUrl ? () => saveServer({ iconUrl: null }) : undefined}
+          >
+            <ServerIcon server={server} size="lg" />
+          </PicturePicker>
+        </div>
+      )}
 
       <label className="mt-6 block max-w-sm">
         <span className="block text-xs font-bold uppercase tracking-wide text-slate-400">

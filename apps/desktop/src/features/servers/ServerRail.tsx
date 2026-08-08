@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useChatStore } from '../../stores/chat';
 import { CompassIcon, MessageIcon, PlusIcon } from '../../components/icons';
+import { ServerIcon } from '../../components/ServerIcon';
 
 /**
  * The left rail: direct messages at the top, then one pill per server. The
@@ -56,7 +57,7 @@ export function ServerRail(): JSX.Element {
           onClick={() => void selectServer(server.id)}
           activeClasses="bg-accent text-white"
         >
-          <span className="text-sm font-semibold">{initials(server.name)}</span>
+          <ServerIcon server={server} />
         </RailButton>
       ))}
 
@@ -189,12 +190,4 @@ function RailButton({
       </button>
     </div>
   );
-}
-
-function initials(name: string): string {
-  return name
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((part) => part.charAt(0).toUpperCase())
-    .join('');
 }

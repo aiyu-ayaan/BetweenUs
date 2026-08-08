@@ -5,6 +5,7 @@ import { usePresenceStore } from '../../stores/presence';
 import { useVoiceStore } from '../../stores/voice';
 import { api } from '../../services/api';
 import { Avatar } from '../../components/Avatar';
+import { PicturePicker } from '../../components/PicturePicker';
 import {
   BellIcon,
   LogOutIcon,
@@ -168,6 +169,31 @@ function AccountSection(): JSX.Element {
             <p className="truncate text-xl font-bold text-slate-50">{user?.displayName}</p>
             <p className="truncate text-sm text-slate-400">@{user?.username}</p>
           </div>
+        </div>
+
+        <div className="border-t border-black/20 px-4 py-4">
+          <PicturePicker
+            label="avatar"
+            onChange={async (avatarUrl) => {
+              await api.updateAccount({ avatarUrl });
+              await refreshUser();
+            }}
+            onClear={
+              user?.avatarUrl
+                ? async () => {
+                    await api.updateAccount({ avatarUrl: null });
+                    await refreshUser();
+                  }
+                : undefined
+            }
+          >
+            <Avatar
+              name={user?.displayName ?? '?'}
+              avatarUrl={user?.avatarUrl}
+              size="lg"
+              ringColour="border-surface-800"
+            />
+          </PicturePicker>
         </div>
 
         <dl className="space-y-4 bg-surface-850 px-4 py-4">

@@ -8,6 +8,7 @@ import type {
   ServerMember,
   ServerWithRole,
   UpdateServerMemberRequest,
+  UpdateServerRequest,
 } from '@nexora/shared-types';
 import { api } from '../services/api';
 import { chatSocket } from '../services/socket';
@@ -63,7 +64,8 @@ interface ChatState {
     memberIds?: string[];
   }) => Promise<void>;
   sendMessage: (content: string, attachments?: MessageAttachment[]) => Promise<void>;
-  renameServer: (name: string) => Promise<void>;
+  /** Renames a server, sets its icon, or clears it - whatever the change holds. */
+  saveServer: (change: UpdateServerRequest) => Promise<void>;
   leaveServer: () => Promise<void>;
   deleteServer: () => Promise<void>;
   updateMember: (userId: string, change: UpdateServerMemberRequest) => Promise<void>;
@@ -207,10 +209,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
     await api.sendMessage(channelId, envelope);
   },
 
-  renameServer: async (name) => {
+  saveServer: async (change) => {
     const serverId = get().activeServerId;
     if (!serverId) return;
-    const updated = await api.updateServer(serverId, { name });
+    const updated = await api.updateServer(serverId, change);
     set({
       servers: get().servers.map((server) => (server.id === serverId ? updated : server)),
     });
