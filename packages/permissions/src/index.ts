@@ -62,6 +62,54 @@ export function hasPermission(role: ServerRole, permission: Permission): boolean
   return permissionsForRole(role).includes(permission);
 }
 
+/** True for a string that names a permission this build knows about. */
+export function isPermission(value: string): value is Permission {
+  return Object.prototype.hasOwnProperty.call(PERMISSIONS, value);
+}
+
+/**
+ * What a member may actually do: the role's defaults, plus what was granted to
+ * them individually, minus what was denied. Deny wins over grant so revoking a
+ * capability never depends on which role the member happens to hold.
+ *
+ * Unknown strings are ignored rather than rejected - a database written by a
+ * newer build must not break an older one.
+ */
+export function effectivePermissions(
+  role: ServerRole,
+  granted: readonly string[] = [],
+  denied: readonly string[] = [],
+): Permission[] {
+  const denySet = new Set(denied.filter(isPermission));
+  const allowed = new Set<Permission>(permissionsForRole(role));
+  for (const value of granted) if (isPermission(value)) allowed.add(value);
+  return [...allowed].filter((permission) => !denySet.has(permission));
+}
+
+export function memberHasPermission(
+  role: ServerRole,
+  permission: Permission,
+  granted: readonly string[] = [],
+  denied: readonly string[] = [],
+): boolean {
+  return effectivePermissions(role, granted, denied).includes(permission);
+}
+
+/**
+ * Permissions an administrator may hand out or take away. Server ownership is
+ * not delegable, so `MANAGE_SERVER` is not on the list - it comes with the role.
+ */
+export const ASSIGNABLE_PERMISSIONS: Permission[] = [
+  PERMISSIONS.VIEW_CHANNEL,
+  PERMISSIONS.SEND_MESSAGE,
+  PERMISSIONS.DELETE_MESSAGE,
+  PERMISSIONS.MANAGE_CHANNEL,
+  PERMISSIONS.MANAGE_MEMBER,
+  PERMISSIONS.MANAGE_ROLE,
+  PERMISSIONS.START_CALL,
+  PERMISSIONS.MANAGE_CALL,
+];
+
 /** Remote-access permissions, granted per user per machine with optional expiry. */
 export const REMOTE_PERMISSIONS = [
   PERMISSIONS.REMOTE_VIEW,

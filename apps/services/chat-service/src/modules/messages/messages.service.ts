@@ -1,12 +1,8 @@
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import { prisma } from '@nexora/database';
+import { prisma, resolveChannelAccess, type ChannelAccess } from '@nexora/database';
 import { EVENTS, EventBus } from '@nexora/events';
-import { PERMISSIONS, hasPermission } from '@nexora/permissions';
-import type {
-  Message,
-  Paginated,
-  ServerRole,
-} from '@nexora/shared-types';
+import { PERMISSIONS, type Permission } from '@nexora/permissions';
+import type { Message, Paginated } from '@nexora/shared-types';
 
 const PAGE_SIZE = 50;
 // Content is an encrypted envelope, so the limit covers base64 expansion of a
@@ -71,37 +67,28 @@ export class MessagesService {
   }
 
   /**
-   * A channel is readable only by members of its server. Chat-service reads
-   * membership from the shared schema in the MVP; when the schema is split this
-   * becomes a call to server-service.
+   * Access is resolved by `@nexora/database`, which is also what call- and
+   * presence-service ask; the three of them used to keep their own copy of this
+   * check. A channel the caller cannot see answers 404, not 403, so channel ids
+   * cannot be probed for.
    */
   async requireChannelAccess(
     userId: string,
     channelId: string,
-    permission: (typeof PERMISSIONS)[keyof typeof PERMISSIONS],
-  ): Promise<void> {
-    const channel = await prisma.channel.findUnique({
-      where: { id: channelId },
-      select: { serverId: true },
-    });
-    if (!channel) {
+    permission: Permission,
+  ): Promise<ChannelAccess> {
+    const access = await resolveChannelAccess(userId, channelId);
+    if (!access) {
       throw new NotFoundException({ code: 'CHANNEL_NOT_FOUND', message: 'Channel not found' });
     }
 
-    const membership = await prisma.serverMember.findUnique({
-      where: { serverId_userId: { serverId: channel.serverId, userId } },
-      select: { role: true },
-    });
-    if (!membership) {
-      throw new NotFoundException({ code: 'CHANNEL_NOT_FOUND', message: 'Channel not found' });
-    }
-
-    if (!hasPermission(membership.role as ServerRole, permission)) {
+    if (!access.permissions.includes(permission)) {
       throw new ForbiddenException({
         code: 'MISSING_PERMISSION',
         message: `Missing permission ${permission}`,
       });
     }
+    return access;
   }
 }
 

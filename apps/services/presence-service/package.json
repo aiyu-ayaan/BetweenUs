@@ -19,6 +19,7 @@
     "@nexora/database": "workspace:*",
     "@nexora/events": "workspace:*",
     "@nexora/logger": "workspace:*",
+    "@nexora/permissions": "workspace:*",
     "@nexora/nest-common": "workspace:*",
     "@nexora/shared-types": "workspace:*",
     "@nexora/websocket": "workspace:*",

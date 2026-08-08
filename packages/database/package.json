@@ -20,6 +20,8 @@
   },
   "dependencies": {
     "@nexora/config": "workspace:*",
+    "@nexora/permissions": "workspace:*",
+    "@nexora/shared-types": "workspace:*",
     "@prisma/client": "^5.18.0"
   },
   "devDependencies": {

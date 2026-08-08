@@ -13,9 +13,9 @@ import {
 } from '@nestjs/common';
 import { AccessToken } from 'livekit-server-sdk';
 import { envOr } from '@nexora/config';
-import { prisma } from '@nexora/database';
-import { PERMISSIONS, hasPermission } from '@nexora/permissions';
-import type { CallTokenResponse, ServerRole } from '@nexora/shared-types';
+import { resolveChannelAccess } from '@nexora/database';
+import { PERMISSIONS } from '@nexora/permissions';
+import type { CallTokenResponse } from '@nexora/shared-types';
 
 const TOKEN_TTL = '2h';
 
@@ -60,29 +60,17 @@ export class CallsService {
   }
 
   /**
-   * Duplicated from chat-service on purpose: each service owns its own
-   * authorization decision, and this becomes a server-service call when the
-   * shared Prisma schema is split (development/TODO.md).
+   * The same resolver chat- and presence-service use, so a private channel or a
+   * revoked permission takes effect here at the same moment it does there.
    */
   private async requireChannelAccess(userId: string, channelId: string): Promise<void> {
-    const channel = await prisma.channel.findUnique({
-      where: { id: channelId },
-      select: { serverId: true },
-    });
-    if (!channel) {
-      throw new NotFoundException({ code: 'CHANNEL_NOT_FOUND', message: 'Channel not found' });
-    }
-
-    const membership = await prisma.serverMember.findUnique({
-      where: { serverId_userId: { serverId: channel.serverId, userId } },
-      select: { role: true },
-    });
-    if (!membership) {
+    const access = await resolveChannelAccess(userId, channelId);
+    if (!access) {
       // 404, not 403: a non-member must not learn the channel exists.
       throw new NotFoundException({ code: 'CHANNEL_NOT_FOUND', message: 'Channel not found' });
     }
 
-    if (!hasPermission(membership.role as ServerRole, PERMISSIONS.START_CALL)) {
+    if (!access.permissions.includes(PERMISSIONS.START_CALL)) {
       throw new ForbiddenException({
         code: 'MISSING_PERMISSION',
         message: `Missing permission ${PERMISSIONS.START_CALL}`,

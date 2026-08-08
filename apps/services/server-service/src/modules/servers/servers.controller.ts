@@ -1,8 +1,26 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Query, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { CurrentUser, JwtAuthGuard, type AuthenticatedUser } from '@nexora/auth';
 import type { Channel, ServerMember, ServerWithRole } from '@nexora/shared-types';
 import { ServersService } from './servers.service';
-import { CreateChannelDto, CreateServerDto, JoinServerDto } from './dto';
+import {
+  CreateChannelDto,
+  CreateServerDto,
+  JoinServerDto,
+  UpdateServerDto,
+  UpdateServerMemberDto,
+} from './dto';
 
 @Controller('servers')
 @UseGuards(JwtAuthGuard)
@@ -30,12 +48,59 @@ export class ServersController {
     return this.servers.joinBySlug(user.id, dto.slug);
   }
 
+  @Patch(':serverId')
+  update(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('serverId', ParseUUIDPipe) serverId: string,
+    @Body() dto: UpdateServerDto,
+  ): Promise<ServerWithRole> {
+    return this.servers.update(user.id, serverId, dto);
+  }
+
+  @Delete(':serverId')
+  @HttpCode(204)
+  remove(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('serverId', ParseUUIDPipe) serverId: string,
+  ): Promise<void> {
+    return this.servers.remove(user.id, serverId);
+  }
+
+  @Post(':serverId/leave')
+  @HttpCode(204)
+  leave(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('serverId', ParseUUIDPipe) serverId: string,
+  ): Promise<void> {
+    return this.servers.leave(user.id, serverId);
+  }
+
   @Get(':serverId/members')
   members(
     @CurrentUser() user: AuthenticatedUser,
     @Param('serverId', ParseUUIDPipe) serverId: string,
   ): Promise<ServerMember[]> {
     return this.servers.members(user.id, serverId);
+  }
+
+  @Patch(':serverId/members/:userId')
+  updateMember(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('serverId', ParseUUIDPipe) serverId: string,
+    @Param('userId', ParseUUIDPipe) targetUserId: string,
+    @Body() dto: UpdateServerMemberDto,
+  ): Promise<ServerMember> {
+    return this.servers.updateMember(user.id, serverId, targetUserId, dto);
+  }
+
+  @Delete(':serverId/members/:userId')
+  @HttpCode(204)
+  removeMember(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('serverId', ParseUUIDPipe) serverId: string,
+    @Param('userId', ParseUUIDPipe) targetUserId: string,
+  ): Promise<void> {
+    return this.servers.removeMember(user.id, serverId, targetUserId);
   }
 
   @Get(':serverId/channels')

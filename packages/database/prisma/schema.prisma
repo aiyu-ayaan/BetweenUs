@@ -157,11 +157,16 @@ model Server {
 }
 
 model ServerMember {
-  id       String     @id @default(uuid())
-  serverId String
-  userId   String
-  role     ServerRole @default(MEMBER)
-  joinedAt DateTime   @default(now())
+  id                 String     @id @default(uuid())
+  serverId           String
+  userId             String
+  role               ServerRole @default(MEMBER)
+  /// Permissions this member holds beyond the role's defaults, so an
+  /// administrator can hand one person one capability without inventing a role.
+  grantedPermissions String[]   @default([])
+  /// Permissions withheld even though the role would grant them. Deny wins.
+  deniedPermissions  String[]   @default([])
+  joinedAt           DateTime   @default(now())
 
   server Server @relation(fields: [serverId], references: [id], onDelete: Cascade)
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)

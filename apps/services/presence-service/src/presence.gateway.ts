@@ -10,7 +10,8 @@ import { Injectable, OnModuleDestroy } from '@nestjs/common';
 import type { Server as HttpServer } from 'node:http';
 import { WebSocket, WebSocketServer } from 'ws';
 import { EVENTS, EventBus } from '@nexora/events';
-import { prisma } from '@nexora/database';
+import { resolveChannelAccess } from '@nexora/database';
+import { PERMISSIONS } from '@nexora/permissions';
 import { Logger } from '@nexora/logger';
 import { authenticateHandshake } from '@nexora/websocket';
 import type { ClientPresenceEvent, ServerPresenceEvent } from '@nexora/shared-types';
@@ -213,22 +214,12 @@ export class PresenceGateway implements OnModuleDestroy {
   }
 
   /**
-   * Membership check, same rule as chat: a channel belongs to a server and
-   * only its members may touch it. Becomes a server-service call when the
-   * shared schema is split.
+   * The same resolver chat- and call-service use. Typing and voice both need
+   * only to see the channel, so `VIEW_CHANNEL` is the bar.
    */
   private async canAccessChannel(userId: string, channelId: string): Promise<boolean> {
-    const channel = await prisma.channel.findUnique({
-      where: { id: channelId },
-      select: { serverId: true },
-    });
-    if (!channel) return false;
-
-    const membership = await prisma.serverMember.findUnique({
-      where: { serverId_userId: { serverId: channel.serverId, userId } },
-      select: { id: true },
-    });
-    return membership !== null;
+    const access = await resolveChannelAccess(userId, channelId);
+    return access !== null && access.permissions.includes(PERMISSIONS.VIEW_CHANNEL);
   }
 
   /** `exceptUserId` keeps a typing indicator from echoing to its own author. */

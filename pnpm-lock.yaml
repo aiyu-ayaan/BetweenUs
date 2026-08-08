@@ -359,6 +359,9 @@ importers:
       '@nexora/nest-common':
         specifier: workspace:*
         version: link:../../../packages/nest-common
+      '@nexora/permissions':
+        specifier: workspace:*
+        version: link:../../../packages/permissions
       '@nexora/shared-types':
         specifier: workspace:*
         version: link:../../../packages/shared-types
@@ -519,6 +522,12 @@ importers:
       '@nexora/config':
         specifier: workspace:*
         version: link:../config
+      '@nexora/permissions':
+        specifier: workspace:*
+        version: link:../permissions
+      '@nexora/shared-types':
+        specifier: workspace:*
+        version: link:../shared-types
       '@prisma/client':
         specifier: ^5.18.0
         version: 5.22.0(prisma@5.22.0)
@@ -616,6 +625,9 @@ importers:
         specifier: workspace:*
         version: link:../shared-types
     devDependencies:
+      '@types/node':
+        specifier: ^20.14.10
+        version: 20.19.43
       typescript:
         specifier: ^5.5.4
         version: 5.9.3

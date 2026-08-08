@@ -155,10 +155,17 @@ export interface Server {
 
 export interface ServerWithRole extends Server {
   role: ServerRole;
+  /** What the caller may do here, role defaults and overrides already applied. */
+  permissions: string[];
 }
 
 export interface CreateServerRequest {
   name: string;
+}
+
+export interface UpdateServerRequest {
+  name?: string;
+  iconUrl?: string | null;
 }
 
 export interface ServerMember {
@@ -168,7 +175,20 @@ export interface ServerMember {
   displayName: string;
   avatarUrl: string | null;
   role: ServerRole;
+  /** Effective permissions: the role's defaults plus grants, minus denials. */
+  permissions: string[];
+  /** Held beyond the role. Shown as the toggles an administrator switched on. */
+  grantedPermissions: string[];
+  /** Withheld despite the role. Deny wins over grant. */
+  deniedPermissions: string[];
   joinedAt: string;
+}
+
+/** Every field is optional; only what is sent is changed. */
+export interface UpdateServerMemberRequest {
+  role?: ServerRole;
+  grantedPermissions?: string[];
+  deniedPermissions?: string[];
 }
 
 // --- Channels ---

@@ -14,6 +14,8 @@ import type {
   PublishChannelKeysRequest,
   ServerMember,
   ServerWithRole,
+  UpdateServerMemberRequest,
+  UpdateServerRequest,
 } from '@nexora/shared-types';
 
 // In development requests go to the Vite dev server, which proxies them to the
@@ -122,8 +124,30 @@ export const api = {
   joinServer: (slug: string): Promise<ServerWithRole> =>
     request('/api/v1/servers/join', { method: 'POST', body: JSON.stringify({ slug }) }),
 
+  updateServer: (serverId: string, body: UpdateServerRequest): Promise<ServerWithRole> =>
+    request(`/api/v1/servers/${serverId}`, { method: 'PATCH', body: JSON.stringify(body) }),
+
+  deleteServer: (serverId: string): Promise<void> =>
+    request(`/api/v1/servers/${serverId}`, { method: 'DELETE' }),
+
+  leaveServer: (serverId: string): Promise<void> =>
+    request(`/api/v1/servers/${serverId}/leave`, { method: 'POST' }),
+
   members: (serverId: string): Promise<ServerMember[]> =>
     request(`/api/v1/servers/${serverId}/members`),
+
+  updateMember: (
+    serverId: string,
+    userId: string,
+    body: UpdateServerMemberRequest,
+  ): Promise<ServerMember> =>
+    request(`/api/v1/servers/${serverId}/members/${userId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    }),
+
+  removeMember: (serverId: string, userId: string): Promise<void> =>
+    request(`/api/v1/servers/${serverId}/members/${userId}`, { method: 'DELETE' }),
 
   channels: (serverId: string): Promise<Channel[]> =>
     request(`/api/v1/channels?serverId=${encodeURIComponent(serverId)}`),
