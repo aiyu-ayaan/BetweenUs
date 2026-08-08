@@ -91,12 +91,23 @@ function startedHidden(): boolean {
   return process.argv.includes('--hidden') || app.getLoginItemSettings().wasOpenedAtLogin;
 }
 
+/** Load application icon for windows and tray. */
+function getAppIcon(): Electron.NativeImage {
+  const iconPath = path.join(dirname, '../public/icon.png');
+  if (fs.existsSync(iconPath)) return nativeImage.createFromPath(iconPath);
+  const svgPath = path.join(dirname, '../public/icon.svg');
+  if (fs.existsSync(svgPath)) return nativeImage.createFromPath(svgPath);
+  return nativeImage.createEmpty();
+}
+
 function createWindow(hidden = false): BrowserWindow {
+  const appIcon = getAppIcon();
   const window = new BrowserWindow({
     width: 1280,
     height: 820,
     minWidth: 940,
     minHeight: 600,
+    icon: appIcon.isEmpty() ? undefined : appIcon,
     x: numberFromEnv('NEXORA_WINDOW_X'),
     y: numberFromEnv('NEXORA_WINDOW_Y'),
     title: windowLabel ? `Nexora - ${windowLabel}` : 'Nexora',
@@ -361,7 +372,9 @@ function setLaunchOnStartup(enabled: boolean): void {
 }
 
 function createTray(): void {
-  tray = new Tray(nativeImage.createFromDataURL(TRAY_ICON));
+  const icon = getAppIcon();
+  const trayIcon = icon.isEmpty() ? nativeImage.createFromDataURL(TRAY_ICON) : icon.resize({ width: 32, height: 32 });
+  tray = new Tray(trayIcon);
   // Windows and Linux: a plain click is "bring it back". macOS opens the menu
   // on click by convention, so there the menu is the only affordance.
   if (process.platform !== 'darwin') tray.on('click', showMainWindow);

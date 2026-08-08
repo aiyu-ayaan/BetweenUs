@@ -5,9 +5,13 @@ directories:
 files:
   - dist/**
   - dist-electron/**
+  - public/icon.png
 win:
   target: nsis
+  icon: public/icon.png
 mac:
   target: dmg
+  icon: public/icon.png
 linux:
   target: AppImage
+  icon: public/icon.png
