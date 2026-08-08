@@ -39,6 +39,11 @@ Left open on purpose:
       busy account makes that show
 - [ ] The tray icon is a data URI in the main process, not a real asset, and it
       does not follow a light or dark system theme
+- [ ] Decrypted history is cached in memory per channel, so it is gone after a
+      restart. Persisting it means encrypting it at rest with a device key -
+      worth doing, not free
+- [ ] The channel and member lists are refetched on every server switch; the
+      same "paint what is known, refresh behind it" trick would fit
 
 ### Phase 13 — media
 
