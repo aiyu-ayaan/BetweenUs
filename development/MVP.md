@@ -1,0 +1,68 @@
+# Nexora MVP
+
+Scope definition for the first runnable version. Everything outside "In scope"
+is deliberately deferred — see `TODO.md` for the ordered backlog.
+
+## Goal
+
+A developer clones the repo, starts Postgres + Redis with one Docker command,
+runs `pnpm dev`, and can: register, log in, create a workspace, create a text
+channel, and exchange messages in realtime between two desktop clients.
+
+## In scope
+
+| Area | Included |
+| --- | --- |
+| Auth | Register, login, refresh-token rotation, `/me`, JWT access tokens |
+| Workspaces | Create workspace, list own workspaces, membership with role |
+| Channels | Create text channel in a workspace, list channels |
+| Messages | Send, list history (paged), realtime delivery over WebSocket |
+| Desktop | Electron + React + Tailwind + Zustand: login, workspace/channel sidebar, message view |
+| Gateway | Nginx routing REST + WebSocket to services |
+| Data | PostgreSQL via Prisma, Redis Pub/Sub for cross-instance message fanout |
+| Dev infra | `docker-compose.dev.yml` with Postgres + Redis only |
+
+## Out of scope for MVP (next phases)
+
+- Voice / video / screen share (LiveKit, `call-service`)
+- Remote desktop (`remote-gateway`, `remote-agent`, remote permissions)
+- Presence service, typing indicators
+- Notification service, push notifications
+- User service (profiles, avatars, friends), object storage / attachments
+- OAuth logins, email verification, password reset
+- Direct messages, replies, reactions, message edit/delete
+- Full RBAC permission matrix (MVP has coarse roles: OWNER / MEMBER)
+- Cloudflare Tunnel production ingress, CI/CD pipeline, Kubernetes
+
+## Services running in MVP
+
+```
+Desktop (Electron)
+      |
+      v
+Nginx  :8080
+      |-- /api/v1/auth        -> auth-service       :3001
+      |-- /api/v1/workspaces  -> workspace-service  :3003
+      |-- /api/v1/channels    -> workspace-service  :3003
+      |-- /api/v1/messages    -> chat-service       :3004
+      `-- /ws/chat            -> chat-service       :3004 (WebSocket)
+
+Postgres :5432        Redis :6379
+```
+
+Scaffolded but intentionally empty: `user-service`, `presence-service`,
+`notification-service`, `call-service`, `remote-gateway`, `remote-agent`.
+
+## Known MVP shortcuts
+
+These are conscious trade-offs, each with an upgrade path:
+
+1. **Single Prisma schema shared by services.** The target architecture gives
+   each service its own data. Upgrade path: split the schema per service and
+   move cross-service reads behind REST/events. Tracked in `TODO.md`.
+2. **Coarse roles only.** `OWNER` / `MEMBER`, no granular permission checks
+   beyond membership. Upgrade path: `packages/permissions` already defines the
+   full permission constants; add role→permission mapping and a guard.
+3. **Redis Pub/Sub, not NATS.** As the architecture doc prescribes for stage 1.
+4. **No refresh-token family revocation on reuse detection.** Rotation is
+   implemented (old token deleted on use); reuse detection is next.
