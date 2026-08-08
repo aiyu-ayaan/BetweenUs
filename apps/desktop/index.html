@@ -3,10 +3,22 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <!-- Renderer loads no remote code; CSP blocks anything that tries. -->
+    <!--
+      Renderer loads no remote code; CSP blocks anything that tries.
+
+      connect-src lists every host the client may talk to: the Vite dev server,
+      the Nginx gateway, and the LiveKit SFU. LiveKit is dialled on 127.0.0.1
+      because Chromium resolves localhost to ::1 first and the dev container
+      publishes IPv4 only - and its signal handshake starts with an HTTP fetch,
+      so the http:// origin has to be listed as well as the ws:// one.
+      A deployment replaces these with its own hosts.
+
+      worker-src allows blob: because LiveKit runs end-to-end encryption in a
+      worker it creates itself.
+    -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' ws: http://localhost:8080 ws://localhost:8080"
+      content="default-src 'self'; script-src 'self'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; media-src 'self' blob:; connect-src 'self' http://localhost:5173 ws://localhost:5173 http://localhost:8080 ws://localhost:8080 http://127.0.0.1:7880 ws://127.0.0.1:7880"
     />
     <title>Nexora</title>
   </head>

@@ -5,8 +5,9 @@ the top honest — it is what a new session reads first.
 
 ## Next up (phase 10: hardening)
 
-- [ ] Two humans in a voice channel: audio both ways, camera, screen share
-- [ ] Watch typing indicators and online dots land in the UI
+- [ ] Two humans in a voice channel: audio actually heard, camera, screen share
+      (both clients already reach LiveKit and publish encrypted opus)
+- [ ] Watch a typing indicator land in the UI
 - [ ] Promote `apps/services/chat-service/smoke.mjs` into CI as an integration
       test
 - [ ] Presence smoke test: connect two sockets, assert sync/typing/voice events
@@ -113,6 +114,8 @@ Follow-ups this phase deliberately left open:
       publishes IPv4 only
 - [x] `dev:duo` seeds a voice channel, skips the login screen, and mirrors
       renderer errors into the terminal
+- [x] CSP allows the LiveKit origin - its signal handshake starts with an HTTP
+      fetch, which `connect-src` was blocking
 
 ## Backlog (later phases)
 

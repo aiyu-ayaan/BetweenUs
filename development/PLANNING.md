@@ -100,14 +100,20 @@ Run live against Docker (Postgres, Redis, LiveKit in WSL) on 2026-08-08:
 - Voice tokens: `call-service` mints a LiveKit token for a channel member,
   refuses a non-member with 404, and the LiveKit signal socket accepts that
   token over `ws://127.0.0.1:7880`.
-- presence-service accepts both clients on `/ws/presence`.
+- **Two clients in one voice channel**: both participants reach `participant
+  active` in LiveKit over UDP and publish `audio/opus` with `encryption: 1`,
+  which is the end-to-end encrypted path - the SFU forwards frames it cannot
+  decode.
+- presence-service: both clients connect to `/ws/presence`, appear in the Redis
+  online set, and the voice roster in Redis lists both members of the channel.
+  A scripted client reproduces `presence.sync` and `voice.changed`.
+- The member list showed "2 online" with green dots in the running app.
 
 Not yet exercised:
 
-- Two people actually hearing each other in a voice channel: media flow,
-  E2EE frames, screen share (needs a human on each end).
-- Typing indicators and online dots observed in the UI (the sockets connect and
-  the events are wired, but nobody has watched them land).
+- Audio actually heard by a human on each end, camera, and screen share.
+- Typing indicators observed in the UI (the events are wired and the server
+  publishes them, but nobody has watched one land).
 - Redis Pub/Sub fanout across two instances of the same service.
 - Container builds from the service Dockerfiles and the Nginx gateway path
   (services are hit directly on their ports in development).
