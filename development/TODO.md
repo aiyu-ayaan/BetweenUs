@@ -130,6 +130,10 @@ Follow-ups this phase deliberately left open:
 - [x] Microphone, camera and screen-share failures report their real reason and
       no longer read as a failed join
 - [x] LiveKit client debug logging in development, mirrored to the terminal
+- [x] Voice channel screen in the main content area: participant tiles with
+      camera/screen video, an empty state with a Join Voice button, and controls
+      under it. The first click on a voice channel joins, later clicks only
+      reopen the screen. Video left the sidebar panel
 
 ## Backlog (later phases)
 

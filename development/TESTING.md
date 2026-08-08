@@ -48,13 +48,21 @@ Closing both windows stops the dev server. Ctrl+C does the same.
 - Both windows show a green `E2EE` badge in the channel header.
 
 **Voice channels**
-- Click **lounge** under VOICE CHANNELS in one window, then in the other. Each
-  window lists everyone connected, and members who have not joined still see the
-  roster under the channel name.
-- The panel says *Voice connected* with a padlock; without the padlock the join
-  was aborted rather than downgraded to plaintext media.
-- Toggle microphone, camera and screen share. Screen share picks the primary
-  screen (Electron answers the picker in the main process).
+- Click **lounge** under VOICE CHANNELS in one window, then in the other. The
+  first click joins the call and opens the channel screen; clicking it again
+  only reopens the screen, it does not rejoin.
+- The channel screen shows a tile per participant - camera or shared screen when
+  there is one, the initial otherwise, with a green ring while that person is
+  speaking. Switch to `#general` and back: the call keeps running, because the
+  connection lives in the store, not in the screen.
+- Open a voice channel nobody is in and the screen reads *No one is currently in
+  voice* with a **Join Voice** button.
+- The sidebar panel says *Voice connected* with a padlock; without the padlock
+  the join was aborted rather than downgraded to plaintext media.
+- Toggle microphone, camera and screen share, from either the sidebar panel or
+  the bar under the channel screen - both drive the same store, so they always
+  agree. Screen share picks the primary screen (Electron answers the picker in
+  the main process).
 - A machine with no microphone still joins - the panel just shows the mic off.
 
 **Presence and typing**

@@ -6,6 +6,7 @@ import { LoginScreen } from './features/auth/LoginScreen';
 import { WorkspaceRail } from './features/workspaces/WorkspaceRail';
 import { ChannelSidebar } from './features/channels/ChannelSidebar';
 import { ChatView } from './features/chat/ChatView';
+import { VoiceChannelView } from './features/voice/VoiceChannelView';
 
 export default function App(): JSX.Element {
   const status = useAuthStore((state) => state.status);
@@ -59,7 +60,16 @@ export default function App(): JSX.Element {
     <div className="flex h-full overflow-hidden">
       <WorkspaceRail />
       <ChannelSidebar />
-      <ChatView />
+      <MainView />
     </div>
   );
+}
+
+/** A voice channel gets its own screen; everything else is chat. */
+function MainView(): JSX.Element {
+  const channels = useChatStore((state) => state.channels);
+  const activeChannelId = useChatStore((state) => state.activeChannelId);
+  const active = channels.find((channel) => channel.id === activeChannelId);
+
+  return active?.type === 'VOICE' ? <VoiceChannelView channel={active} /> : <ChatView />;
 }

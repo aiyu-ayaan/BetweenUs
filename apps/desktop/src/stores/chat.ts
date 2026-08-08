@@ -65,6 +65,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const previous = get().activeChannelId;
     if (previous && previous !== channelId) chatSocket.unsubscribe(previous);
 
+    // A voice channel opens its own screen; there is no history to fetch and no
+    // message socket to subscribe to.
+    if (get().channels.find((channel) => channel.id === channelId)?.type === 'VOICE') {
+      set({ activeChannelId: channelId, messages: [], loadingMessages: false, error: null });
+      return;
+    }
+
     set({ activeChannelId: channelId, messages: [], loadingMessages: true, error: null });
     chatSocket.subscribe(channelId);
 

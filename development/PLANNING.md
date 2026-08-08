@@ -52,6 +52,14 @@ the older shape.
   `VOICE` channels are joined and show who is inside, so presence answers "who
   is in there" without anyone joining first. The earlier per-text-channel call
   button was removed.
+- **A voice channel owns the main content area.** Selecting one swaps the chat
+  view for `VoiceChannelView`, the way Discord does it: the first click joins
+  and opens the screen, later clicks only reopen it. Cameras and shared screens
+  are shown there, where there is room for them, and the sidebar panel is left
+  as a compact status readout. The connection itself lives in the voice store,
+  so navigating to a text channel does not end the call - only the tiles go
+  away. When this client is not in the call the roster comes from presence,
+  which has names but no media; once connected it comes from LiveKit.
 - **Presence is its own service.** `presence-service` owns `/ws/presence`,
   keeps online/typing/voice state in Redis and fans changes out over Pub/Sub.
   Typing and voice rosters could have ridden the chat socket, but presence is a

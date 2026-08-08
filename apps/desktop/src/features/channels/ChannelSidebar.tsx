@@ -161,9 +161,14 @@ function SectionHeading({
   );
 }
 
-/** Clicking joins; the people already inside are listed underneath. */
+/**
+ * The first click joins the call and opens the channel screen; clicks after
+ * that only bring the screen back, so nobody re-joins a call they are in.
+ */
 function VoiceChannelRow({ channel }: { channel: Channel }): JSX.Element {
   const members = useChatStore((state) => state.members);
+  const activeChannelId = useChatStore((state) => state.activeChannelId);
+  const selectChannel = useChatStore((state) => state.selectChannel);
   const occupants = usePresenceStore((state) => state.voice.get(channel.id) ?? []);
   const join = useVoiceStore((state) => state.join);
   const status = useVoiceStore((state) => state.status);
@@ -171,15 +176,23 @@ function VoiceChannelRow({ channel }: { channel: Channel }): JSX.Element {
 
   const here = connectedTo === channel.id && status === 'connected';
   const connectingHere = connectedTo === channel.id && status === 'connecting';
+  const viewing = activeChannelId === channel.id;
+
+  const open = (): void => {
+    void selectChannel(channel.id);
+    if (connectedTo !== channel.id) void join(channel.id);
+  };
 
   return (
     <div>
       <button
         type="button"
-        onClick={() => void join(channel.id)}
-        disabled={here}
-        className={`flex w-full cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-left text-sm transition-colors duration-200 disabled:cursor-default ${
-          here || connectingHere ? 'bg-surface-700 text-slate-50' : 'text-slate-400 hover:bg-surface-700/60 hover:text-slate-200'
+        onClick={open}
+        aria-current={viewing ? 'page' : undefined}
+        className={`flex w-full cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-left text-sm transition-colors duration-200 ${
+          here || connectingHere || viewing
+            ? 'bg-surface-700 text-slate-50'
+            : 'text-slate-400 hover:bg-surface-700/60 hover:text-slate-200'
         }`}
       >
         <SpeakerIcon className="h-4 w-4 shrink-0" />

@@ -1,0 +1,110 @@
+/**
+ * The mic / camera / screen / hang-up row.
+ *
+ * It lives in both the sidebar panel and the voice channel screen, so it is its
+ * own component: the two places must never disagree about what is on.
+ */
+import type { ReactNode } from 'react';
+import { useVoiceStore } from '../../stores/voice';
+import {
+  MicIcon,
+  MicOffIcon,
+  PhoneOffIcon,
+  ScreenShareIcon,
+  VideoIcon,
+  VideoOffIcon,
+} from '../../components/icons';
+
+export function VoiceControls({ size = 'sm' }: { size?: 'sm' | 'lg' }): JSX.Element {
+  const status = useVoiceStore((state) => state.status);
+  const micEnabled = useVoiceStore((state) => state.micEnabled);
+  const cameraEnabled = useVoiceStore((state) => state.cameraEnabled);
+  const screenEnabled = useVoiceStore((state) => state.screenEnabled);
+  const toggleMic = useVoiceStore((state) => state.toggleMic);
+  const toggleCamera = useVoiceStore((state) => state.toggleCamera);
+  const toggleScreen = useVoiceStore((state) => state.toggleScreen);
+  const leave = useVoiceStore((state) => state.leave);
+
+  const disabled = status !== 'connected';
+  const icon = size === 'lg' ? 'h-5 w-5' : 'h-4 w-4';
+  const pad = size === 'lg' ? 'p-3' : 'p-2';
+
+  return (
+    <div className={`flex items-center ${size === 'lg' ? 'gap-2' : 'gap-1'}`}>
+      <ControlButton
+        active={micEnabled}
+        disabled={disabled}
+        pad={pad}
+        label={micEnabled ? 'Mute microphone' : 'Unmute microphone'}
+        onClick={() => void toggleMic()}
+      >
+        {micEnabled ? <MicIcon className={icon} /> : <MicOffIcon className={icon} />}
+      </ControlButton>
+
+      <ControlButton
+        active={cameraEnabled}
+        disabled={disabled}
+        pad={pad}
+        label={cameraEnabled ? 'Turn camera off' : 'Turn camera on'}
+        onClick={() => void toggleCamera()}
+      >
+        {cameraEnabled ? <VideoIcon className={icon} /> : <VideoOffIcon className={icon} />}
+      </ControlButton>
+
+      <ControlButton
+        active={screenEnabled}
+        disabled={disabled}
+        pad={pad}
+        label={screenEnabled ? 'Stop sharing screen' : 'Share screen'}
+        onClick={() => void toggleScreen()}
+      >
+        <ScreenShareIcon className={icon} />
+      </ControlButton>
+
+      <button
+        type="button"
+        onClick={() => void leave()}
+        aria-label="Disconnect from voice"
+        title="Disconnect"
+        className={`${size === 'lg' ? '' : 'ml-auto'} cursor-pointer rounded-md bg-red-500/90 ${pad} text-white transition-colors duration-200 hover:bg-red-500`}
+      >
+        <PhoneOffIcon className={icon} />
+      </button>
+    </div>
+  );
+}
+
+function ControlButton({
+  active,
+  disabled,
+  pad,
+  label,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  disabled?: boolean;
+  pad: string;
+  label: string;
+  onClick: () => void;
+  children: ReactNode;
+}): JSX.Element {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      aria-label={label}
+      aria-pressed={active}
+      className={`rounded-md ${pad} transition-colors duration-200 ${
+        disabled
+          ? 'cursor-not-allowed bg-surface-800 text-slate-600 opacity-50'
+          : active
+          ? 'cursor-pointer bg-surface-700 text-slate-100 hover:bg-surface-700'
+          : 'cursor-pointer bg-surface-800 text-slate-400 hover:bg-surface-700'
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
