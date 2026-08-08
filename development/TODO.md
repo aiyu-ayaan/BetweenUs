@@ -5,6 +5,10 @@ the top honest — it is what a new session reads first.
 
 ## Next up (phase 10: hardening)
 
+- [ ] Move `livekit/livekit-server` past v1.7 in both compose files.
+      `livekit-client` 2.7 logs "v1 RTC path not found. Consider upgrading your
+      LiveKit server version" and falls back, and the first microphone publish
+      can lose that race with "negotiation timed out"
 - [ ] Two humans in a voice channel: audio actually heard, camera, screen share
       (both clients already reach LiveKit and publish encrypted opus)
 - [ ] Watch a typing indicator land in the UI
@@ -115,7 +119,17 @@ Follow-ups this phase deliberately left open:
 - [x] `dev:duo` seeds a voice channel, skips the login screen, and mirrors
       renderer errors into the terminal
 - [x] CSP allows the LiveKit origin - its signal handshake starts with an HTTP
-      fetch, which `connect-src` was blocking
+      fetch, which `connect-src` was blocking, plus `worker-src blob:` for the
+      encryption worker LiveKit creates
+- [x] Leaving a voice channel clears the roster on every path, not only the
+      button: a kick, a drop or a crash reports it too, and presence-service
+      heals a drifted roster on join and on first connect
+- [x] Joining a channel you are already in is a no-op (it used to open a second
+      session and get the first kicked for duplicate identity)
+- [x] A hot reload hands the Room back before the module is replaced
+- [x] Microphone, camera and screen-share failures report their real reason and
+      no longer read as a failed join
+- [x] LiveKit client debug logging in development, mirrored to the terminal
 
 ## Backlog (later phases)
 

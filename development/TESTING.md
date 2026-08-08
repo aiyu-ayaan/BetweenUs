@@ -77,8 +77,20 @@ WebSocket subscribe → send → realtime receive → history → upload/downloa
 traversal blocked → E2EE device directory, key publish/fetch and epoch
 ordering. It needs Postgres, Redis and the services running.
 
-Renderer errors from both windows are mirrored into the terminal that ran
-`pnpm dev:duo`, prefixed with `[renderer Alice]` / `[renderer Bob]`.
+Renderer output from both windows is mirrored into the terminal that ran
+`pnpm dev:duo`, prefixed with `[renderer Alice]` / `[renderer Bob]`. In
+development that includes LiveKit's own debug log, so a failed publish shows
+its negotiation and ICE steps rather than one summary line.
+
+Server-side state is worth checking directly when something looks wrong:
+
+```bash
+docker exec nexora-dev-redis redis-cli zrange presence:online 0 -1
+docker exec nexora-dev-redis redis-cli keys 'presence:voice:*'
+docker logs nexora-dev-livekit --since 5m | grep mediaTrack
+```
+
+A published track logs `"encryption":1` — that is the end-to-end encrypted path.
 
 ## Troubleshooting
 
@@ -88,5 +100,7 @@ Renderer errors from both windows are mirrored into the terminal that ran
 | Join fails with "Failed to fetch" | `LIVEKIT_URL` points at `localhost`; use `127.0.0.1`, because Chromium tries `::1` first and the container publishes IPv4 only |
 | Voice connects, no audio or video | LiveKit UDP ports 50000-50019 not published; check `docker compose -f infrastructure/docker/docker-compose.dev.yml ps` |
 | No online dots or typing indicators | presence-service is down; `curl 127.0.0.1:3005/health` |
+| "microphone did not start (negotiation timed out)" | Known: the pinned LiveKit server predates the client's signal path — see PLANNING.md, "Open issue: flaky first publish". Press the mic button to retry |
+| Voice churns: join, leave, join again | Editing desktop source while connected. A hot reload disconnects the room on purpose; rejoin after the reload |
 | Messages show the lock placeholder | This device has no key for that epoch — a member holding it must open the channel once to re-wrap |
 | Windows open on top of each other | Positions are fixed at x=40 and x=760; on a small display, drag them apart |

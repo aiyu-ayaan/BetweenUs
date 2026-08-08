@@ -103,17 +103,41 @@ Run live against Docker (Postgres, Redis, LiveKit in WSL) on 2026-08-08:
 - **Two clients in one voice channel**: both participants reach `participant
   active` in LiveKit over UDP and publish `audio/opus` with `encryption: 1`,
   which is the end-to-end encrypted path - the SFU forwards frames it cannot
-  decode.
+  decode. One client sees the other's `trackPublished`.
 - presence-service: both clients connect to `/ws/presence`, appear in the Redis
   online set, and the voice roster in Redis lists both members of the channel.
   A scripted client reproduces `presence.sync` and `voice.changed`.
-- The member list showed "2 online" with green dots in the running app.
+- The member list showed "2 online" with green dots in the running app, and the
+  voice roster under the channel named the connected member.
+- Voice roster join/leave verified with a scripted presence client: listed after
+  `voice.join`, gone after `voice.leave`.
 
 Not yet exercised:
 
 - Audio actually heard by a human on each end, camera, and screen share.
 - Typing indicators observed in the UI (the events are wired and the server
   publishes them, but nobody has watched one land).
+
+### Open issue: flaky first publish
+
+Joining sometimes reports *"the microphone did not start (negotiation timed
+out)"* even though the connection itself is up. LiveKit's debug log shows why:
+
+```
+Initial connection failed: v1 RTC path not found.
+Consider upgrading your LiveKit server version - Retrying
+negotiation due to track publish failed, retrying after reconnect
+```
+
+`livekit-client` 2.7 opens the v2 signal path first and falls back; the pinned
+`livekit/livekit-server:v1.7` does not serve it, so the first publish races the
+fallback reconnect and can time out. The fix is to move the image forward to a
+server that speaks the client's protocol - one line in both compose files.
+
+Two other causes were ruled out along the way and are fixed: a hot reload used
+to leave an orphaned Room connected under the same identity, which LiveKit
+answers by kicking the older session (`DUPLICATE_IDENTITY`), and clicking an
+already-joined channel did the same thing.
 - Redis Pub/Sub fanout across two instances of the same service.
 - Container builds from the service Dockerfiles and the Nginx gateway path
   (services are hit directly on their ports in development).
