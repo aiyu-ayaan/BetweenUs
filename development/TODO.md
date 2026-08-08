@@ -5,10 +5,10 @@ the top honest — it is what a new session reads first.
 
 ## Next up (phase 10: hardening)
 
-- [ ] Move `livekit/livekit-server` past v1.7 in both compose files.
-      `livekit-client` 2.7 logs "v1 RTC path not found. Consider upgrading your
-      LiveKit server version" and falls back, and the first microphone publish
-      can lose that race with "negotiation timed out"
+- [x] Move `livekit/livekit-server` to v1.13.5 in both compose files. v1.7
+      predated `SessionDescription.id`, so the client never saw its publisher
+      offer acknowledged and every publish failed with "negotiation timed out".
+      Keep the tag in step with `livekit-client` in `apps/desktop`
 - [ ] Two humans in a voice channel: audio actually heard, camera, screen share
       (both clients already reach LiveKit and publish encrypted opus)
 - [ ] Watch a typing indicator land in the UI

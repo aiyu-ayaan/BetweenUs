@@ -118,10 +118,11 @@ Not yet exercised:
 - Typing indicators observed in the UI (the events are wired and the server
   publishes them, but nobody has watched one land).
 
-### Open issue: flaky first publish
+### Fixed: publishing failed against an outdated SFU
 
-Joining sometimes reports *"the microphone did not start (negotiation timed
-out)"* even though the connection itself is up. LiveKit's debug log shows why:
+Joining reported *"the microphone did not start (negotiation timed out)"* while
+the connection itself was up, and the mic, camera and screen-share buttons all
+failed the same way afterwards. LiveKit's debug log named it:
 
 ```
 Initial connection failed: v1 RTC path not found.
@@ -129,10 +130,18 @@ Consider upgrading your LiveKit server version - Retrying
 negotiation due to track publish failed, retrying after reconnect
 ```
 
-`livekit-client` 2.7 opens the v2 signal path first and falls back; the pinned
-`livekit/livekit-server:v1.7` does not serve it, so the first publish races the
-fallback reconnect and can time out. The fix is to move the image forward to a
-server that speaks the client's protocol - one line in both compose files.
+The root cause is a protocol gap, not ICE or a permission. `livekit-client`
+tags every publisher offer with an incrementing `SessionDescription.id` and
+resolves the publish only when an answer echoes an id past that checkpoint.
+`livekit/livekit-server:v1.7` predates that field, so its answers came back
+with id `0`, the client's `OfferAnswered` check never passed, and every publish
+- microphone, camera, screen share - rejected on the 15s deadline even though
+the SDP answer had been applied. Media was never the problem, which is why the
+room still connected and the roster still populated.
+
+Fixed by moving both compose files to `livekit/livekit-server:v1.13.5`. The
+image tag must now be kept in step with the `livekit-client` version in
+`apps/desktop`.
 
 Two other causes were ruled out along the way and are fixed: a hot reload used
 to leave an orphaned Room connected under the same identity, which LiveKit

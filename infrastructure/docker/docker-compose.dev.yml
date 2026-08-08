@@ -46,7 +46,11 @@ services:
   # Voice/video/screen-share SFU. Media goes desktop -> LiveKit directly and is
   # end-to-end encrypted, so the server relays frames it cannot decrypt.
   livekit:
-    image: livekit/livekit-server:v1.7
+    # Must stay in step with the livekit-client version in apps/desktop: the
+    # client tags every publisher offer with an id and waits for the answer to
+    # echo it. Servers older than v1.9 drop the field, so every publish (mic,
+    # camera, screen share) fails with "negotiation timed out".
+    image: livekit/livekit-server:v1.13.5
     container_name: nexora-dev-livekit
     restart: unless-stopped
     command: ["--config", "/etc/livekit.yaml"]

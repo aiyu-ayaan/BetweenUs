@@ -100,7 +100,7 @@ A published track logs `"encryption":1` — that is the end-to-end encrypted pat
 | Join fails with "Failed to fetch" | `LIVEKIT_URL` points at `localhost`; use `127.0.0.1`, because Chromium tries `::1` first and the container publishes IPv4 only |
 | Voice connects, no audio or video | LiveKit UDP ports 50000-50019 not published; check `docker compose -f infrastructure/docker/docker-compose.dev.yml ps` |
 | No online dots or typing indicators | presence-service is down; `curl 127.0.0.1:3005/health` |
-| "microphone did not start (negotiation timed out)" | Known: the pinned LiveKit server predates the client's signal path — see PLANNING.md, "Open issue: flaky first publish". Press the mic button to retry |
+| "microphone did not start (negotiation timed out)", and the mic/camera/screen buttons then fail too | The LiveKit container is older than `livekit-client` expects, so it never acknowledges a publisher offer. `docker compose -f infrastructure/docker/docker-compose.dev.yml up -d livekit` to pull the pinned v1.13.5 |
 | Voice churns: join, leave, join again | Editing desktop source while connected. A hot reload disconnects the room on purpose; rejoin after the reload |
 | Messages show the lock placeholder | This device has no key for that epoch — a member holding it must open the channel once to re-wrap |
 | Windows open on top of each other | Positions are fixed at x=40 and x=760; on a small display, drag them apart |
