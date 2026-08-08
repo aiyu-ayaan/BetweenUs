@@ -5,27 +5,12 @@ the top honest — it is what a new session reads first.
 
 ## Next up (phase 10: hardening)
 
-- [x] Move `livekit/livekit-server` to v1.13.5 in both compose files. v1.7
-      predated `SessionDescription.id`, so the client never saw its publisher
-      offer acknowledged and every publish failed with "negotiation timed out".
-      Keep the tag in step with `livekit-client` in `apps/desktop`
-- [x] Refresh-token reuse detection (revoke whole token family on replay)
-- [x] Rate limit login/register at the service level, not only in Nginx
-- [x] Unit tests for `AuthService` (register/login/refresh) with a Prisma mock —
-      `pnpm --filter @nexora/auth-service check`, in-memory database
-- [x] Presence smoke test: two sockets, sync/typing/voice/offline asserted
-- [x] Integration test: register → create workspace → create channel → send
-      message (`chat-service/smoke.mjs`, now exits non-zero on a failed assert)
-- [x] Promote both smoke scripts into CI as integration tests
-- [x] GitHub Actions workflow: install → lint → typecheck → build → self-checks,
-      plus an integration job with Postgres and Redis service containers
-- [x] Request id assigned at bootstrap and logged with every completed request,
-      with the authenticated user when there is one
+What is left needs a human in front of the app, or is a follow-up the work
+above opened.
+
 - [ ] Two humans in a voice channel: audio actually heard, camera, screen share
       (both clients already reach LiveKit and publish encrypted opus)
 - [ ] Watch a typing indicator land in the UI
-- [x] Verify the Nginx gateway path and container builds end to end — needed a
-      `migrate` service in the production compose file and OpenSSL in the images
 - [ ] Per-user rate limit on login, not only per client address (a botnet spread
       across addresses still gets 20/min each against one account)
 
@@ -146,6 +131,26 @@ Follow-ups this phase deliberately left open:
       opens a theatre layout - screen large, faces on a strip underneath
 - [x] Grid pages at nine tiles with pager arrows, and recent speakers are pulled
       to the front so an active speaker is on page one. Speaking is amber
+
+### Phase 10 — hardening
+- [x] Move `livekit/livekit-server` to v1.13.5 in both compose files. v1.7
+      predated `SessionDescription.id`, so the client never saw its publisher
+      offer acknowledged and every publish failed with "negotiation timed out".
+      Keep the tag in step with `livekit-client` in `apps/desktop`
+- [x] Refresh-token reuse detection (revoke whole token family on replay)
+- [x] Rate limit login/register at the service level, not only in Nginx
+- [x] Unit tests for `AuthService` (register/login/refresh) with a Prisma mock —
+      `pnpm --filter @nexora/auth-service check`, in-memory database
+- [x] Presence smoke test: two sockets, sync/typing/voice/offline asserted
+- [x] Integration test: register → create workspace → create channel → send
+      message (`chat-service/smoke.mjs`, now exits non-zero on a failed assert)
+- [x] Promote both smoke scripts into CI as integration tests
+- [x] GitHub Actions workflow: install → lint → typecheck → build → self-checks,
+      plus an integration job with Postgres and Redis service containers
+- [x] Request id assigned at bootstrap and logged with every completed request,
+      with the authenticated user when there is one
+- [x] Verify the Nginx gateway path and container builds end to end — needed a
+      `migrate` service in the production compose file and OpenSSL in the images
 
 ## Backlog (later phases)
 
