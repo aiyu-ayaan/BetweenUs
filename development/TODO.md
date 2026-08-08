@@ -5,8 +5,46 @@ the top honest — it is what a new session reads first.
 
 ## Next up
 
-Phase 12 has landed; what is left of it needs a human in front of the app.
-The carried-over items below are older ones in the same state.
+Phase 13 has landed in code; what is left of it needs a human in front of the
+app, and so does most of phase 12. The carried-over items are older ones in the
+same state.
+
+### Phase 13 — media
+
+- [x] Attachments encrypted under the channel key before upload, with the
+      manifest (name, real type, size, nonce, epoch) inside the encrypted
+      message body rather than in columns
+- [x] Any file type, because the server never learns what it is; served as
+      `application/octet-stream` with a download disposition, always
+- [x] Client-side compression before encryption: oversized photos redrawn to
+      1920px webp, text-shaped files gzipped through `CompressionStream`
+- [x] Multipart upload for anything over 8 MB, with the session held as a
+      sealed ticket the client carries instead of state in a service
+- [x] Attach from a picker, a drag and drop, or a paste; chips with sizes and
+      per-file upload progress
+- [x] Images inline at their stored dimensions, text files previewed with an
+      expand, everything else a card with a download; full-size overlay
+- [x] A message over 2000 characters is sent as `message.txt` with a preview
+- [x] Avatars and server icons: square-cropped and rescaled in the client,
+      uploaded in the clear, settable only to a picture this deployment stored
+- [x] Server icons rendered in the rail (`iconUrl` existed and nothing used it)
+- [x] Smoke coverage: byte-for-byte round trip, part ordering, ticket bound to
+      its account, scratch space not downloadable, SVG refused as a picture,
+      foreign avatar URL refused
+
+Left open on purpose:
+
+- [ ] Nothing deletes an attachment's blob when its message is deleted; the
+      ciphertext stays in storage until something sweeps it
+- [ ] `sweepStaleMultipart` exists on the local driver but nothing calls it on
+      a schedule, and S3's own lifecycle rule is not configured either
+- [ ] An attachment is sealed in one operation, so the client holds the whole
+      file in memory; chunked AEAD would lift the 100 MB ceiling
+- [ ] No video transcoding — a large video is sent as it is. Doing it properly
+      means ffmpeg in the client
+- [ ] Two humans exchanging a file: sent from one machine, opened on another
+- [ ] An attachment sent before someone joined a private channel is unreadable
+      to them, the same way its messages are; key rotation has the same gap
 
 ### Phase 12 — servers, permissions and direct messages
 

@@ -20,14 +20,61 @@ we get there in stages and what each stage delivers.
 | 10 | Hardening | Tests, CI, error contract polish, request IDs everywhere | In progress |
 | 11 | Admin panel, OAuth, notifications | Admin web app, Google/GitHub sign-in, desktop notifications | Done |
 | 12 | Servers, permissions, DMs | Workspace renamed to server, per-member permissions, private channels, friends and direct messages, Discord-parity client | In progress |
-| 13 | Remote desktop | remote-gateway, remote-agent, remote permissions, audit log | Planned |
-| 14 | Production ingress | Cloudflare Tunnel, TLS, secret management, deploy pipeline | Planned |
+| 13 | Media | Encrypted attachments of any type, client-side compression, multipart upload, avatars and server icons | In progress |
+| 14 | Remote desktop | remote-gateway, remote-agent, remote permissions, audit log | Planned |
+| 15 | Production ingress | Cloudflare Tunnel, TLS, secret management, deploy pipeline | Planned |
 
 Hardening moved to phase 10: encryption changes the message format and presence
 adds a service, so both were cheaper to land before tests were written against
 the older shape.
 
 ## Architecture decisions made so far
+
+### Media: attachments, pictures and uploads (phase 13)
+
+- **An attachment is encrypted before it is uploaded, and that is what lets a
+  channel carry anything.** The alternative was the MIME allowlist the upload
+  route started with, which is a losing game: every type someone wants is one
+  more entry, and every entry is one more thing that might be rendered in the
+  app origin. Sealing the file under the channel key first turns the question
+  off. The server receives bytes it cannot type, stores them as
+  `application/octet-stream`, and always serves them as a download; the client
+  is the only thing that ever sees a file's real type.
+- **The manifest lives inside the encrypted body, not in columns.** A file's
+  name, its real content type and its plaintext size are all things worth
+  hiding, and an `attachments` table would have published every one of them.
+  The message plaintext becomes a small JSON document instead, behind a marker
+  starting with a NUL so no typed message can be mistaken for one. A message
+  with no files is still stored as bare text, so nothing written before this
+  changed shape.
+- **Compression is the client's job, and it happens before encryption.**
+  Ciphertext does not compress, so there is no server-side option at all.
+  Oversized photos are redrawn to 1920px webp with a canvas, text-shaped files
+  go through `CompressionStream`, and everything already compressed - video,
+  archives, anything under a few kilobytes - is left alone. Video transcoding is
+  deliberately not attempted: doing it properly means ffmpeg in the client, and
+  doing it badly is worse than sending the file.
+- **Large uploads are multipart, and the session is a sealed ticket rather than
+  server state.** A session table or a Redis key would both work; a ticket the
+  client holds needs neither, cannot be forged, and lets any replica accept the
+  next part. It is sealed with the same `sealSecret` that protects OAuth client
+  secrets, carries the account it was opened by and an expiry, and is checked
+  against both on every part.
+- **An over-long message is sent as a text file.** Discord's behaviour, and for
+  the same reason: the alternative is either truncating what someone wrote or
+  letting one message bury a channel. It arrives as `message.txt` with a
+  preview, so it still reads as a message.
+- **Avatars and server icons are the one thing stored in the clear.** They have
+  to be: a member list renders them for people who hold no channel key. So they
+  get the opposite treatment from attachments - a strict raster-image allowlist,
+  a small size cap, a square crop and a rescale done in the client before
+  upload, and they are the only objects ever served inline. `E2EE.md` says so
+  plainly, because a profile picture that people believe is encrypted is worse
+  than one they know is not.
+- **A settable picture URL has to be one of ours.** An avatar renders in every
+  client that can see the account, so an arbitrary URL there is a beacon that
+  reports back who looked and when. Both the account and the server endpoints
+  check the shape and the `pictures/` prefix rather than trusting the client.
 
 ### Servers, permissions and direct messages (phase 12)
 
@@ -155,7 +202,7 @@ the older shape.
   config means local disk under `LOCAL_STORAGE_PATH`. Production sets the S3
   variables and the same code path uses the bucket.
 - **Nginx as internal gateway**, no business logic. Cloudflare Tunnel is a
-  separate, later concern (phase 13).
+  separate, later concern (phase 15).
 - **Media never passes through NestJS.** `call-service` mints LiveKit access
   tokens and nothing else; the desktop client dials the SFU directly.
 - **One channel key, shared by chat and voice.** A member who can read a channel

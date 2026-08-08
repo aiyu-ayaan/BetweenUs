@@ -51,6 +51,29 @@ Closing both windows stops the dev server. Ctrl+C does the same.
 - There is no encryption badge in the header, by design: it is on for
   everything, so saying so in every channel says nothing. See `E2EE.md`.
 
+**Attachments**
+- Drag a photo onto the composer, or paste a screenshot. It uploads with a
+  progress line, appears inline in both windows, and clicking it opens the
+  full-size view. The object in `storage-data` is ciphertext — open it and it
+  is not a PNG, which is the point.
+- Send a file with no preview - a `.zip`, an `.exe`, anything. It arrives as a
+  card with a download, and the response headers say `application/octet-stream`
+  and `attachment`, whatever the file really is.
+- Paste more than 2000 characters and send. It arrives as `message.txt` with
+  the first lines shown and an expand, not as a truncated message.
+- Something over 8 MB uploads in parts: the progress line moves in steps rather
+  than jumping to 100.
+
+**Profile pictures**
+- User settings → My Account → *Upload avatar*. It shows up in Alice's own
+  panel, and in the member list and message rows in Bob's window after his
+  client next reads the member list. **Remove** puts the initial back.
+- Server settings → Overview → *Upload server icon*. The rail pill becomes the
+  picture in both windows.
+- Unlike everything else, these are stored in the clear and served inline — the
+  file in `storage-data/pictures` opens in an image viewer. That is deliberate
+  and documented in `E2EE.md`.
+
 **Private channels**
 - Alice's sidebar lists `#owners-only` with a padlock. Bob's sidebar does not
   list it at all — not greyed out, absent — and that holds however senior he is
@@ -150,9 +173,15 @@ non-zero on a failed assertion — CI runs exactly these.
 
 `node apps/services/chat-service/smoke.mjs` walks the REST and WebSocket
 surface end to end: register → refresh rotation → server → channel →
-WebSocket subscribe → send → realtime receive → history → upload/download →
-traversal blocked → E2EE device directory, key publish/fetch and epoch
-ordering.
+WebSocket subscribe → send → realtime receive → history → traversal blocked →
+E2EE device directory, key publish/fetch and epoch ordering.
+
+For uploads it asserts what can actually break now that files are ciphertext:
+an attachment round-trips byte for byte and is never served inline, a multipart
+upload assembles in part order however the parts arrived, an upload ticket is
+refused for an account that did not open it, the scratch space parts live in is
+not downloadable, an SVG is refused as a profile picture, and an avatar URL
+pointing at somebody else's host is refused.
 
 It then brings in a second account and asserts the phase 12 rules: that
 `MANAGE_CHANNEL` is enforced, that granting it to one member takes effect and
@@ -173,9 +202,11 @@ never appears in anyone else's payload.
 ## Self-checks and CI
 
 `pnpm check` runs the package self-checks with no infrastructure at all: the
-crypto primitives, storage, logger redaction, the desktop E2EE round trip, and
-`AuthService` against an in-memory database (register, login, refresh rotation,
-reuse detection, logout).
+crypto primitives, storage (including a multipart round trip and the sweep for
+abandoned uploads), logger redaction, the desktop E2EE round trip, the message
+body encoding that carries attachment manifests, and `AuthService` against an
+in-memory database (register, login, refresh rotation, reuse detection,
+logout).
 
 `.github/workflows/ci.yml` runs those on every pull request, then a second job
 that starts Postgres and Redis, applies migrations, boots auth-, server-,

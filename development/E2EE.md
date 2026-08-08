@@ -23,7 +23,9 @@ project; see "Not covered" below.
 | Channel key (AES-256-GCM) | in memory on member devices | channel members |
 | Wrapped channel key | `channel_keys` table | only the recipient it was sealed for |
 | Message body | `messages.content` | channel members |
+| Attachment bytes | object storage | channel members |
 | Voice/video media | LiveKit frames | people in the voice channel |
+| Avatars and server icons | object storage | **anyone with the URL** |
 
 ## Flow
 
@@ -77,6 +79,44 @@ pair is static and every wrap uses its own IV.
 Anything that is not a valid envelope renders as-is, so rows written before
 E2EE still display.
 
+The *plaintext* inside that envelope is the message text on its own, unless the
+message carries files. Then it is a JSON document behind a marker beginning
+with a NUL — a character a textarea cannot produce, so no typed message can
+impersonate one:
+
+```
+\u0000nexora-body:1
+{ "text": "look at this", "attachments": [ { "key": "...", "iv": "...", "epoch": 1,
+  "name": "holiday.webp", "contentType": "image/webp", "size": 812345 } ] }
+```
+
+Because the manifest is inside the ciphertext, the server does not learn a
+file's name, its type, or its plaintext size — only that some bytes were
+uploaded and some ciphertext was stored.
+
+## Attachments
+
+A file is sealed under the channel key before it is uploaded, with its own
+nonce and the same epoch bookkeeping a message has. What reaches the server is
+a blob it cannot type, which is exactly why a channel can carry any file at
+all: there is nothing left to allowlist, and nothing that could be served in a
+way a browser would execute. Attachments are always served as
+`application/octet-stream` with `Content-Disposition: attachment`, and the
+client fetches, decrypts and renders them itself.
+
+Compression happens before encryption, because ciphertext does not compress:
+an oversized photo is redrawn to 1920px webp and text-shaped files are gzipped,
+both in the client. A file too large for one request goes up in parts; the
+parts are slices of the same single ciphertext, so a part on its own is not
+separately decryptable.
+
+**Avatars and server icons are not encrypted.** They cannot be: a member list
+has to render them for people who hold no channel key, and a direct-message
+list has to render them for someone who was never in a channel with you at all.
+So they are stored in the clear, checked against a raster-image allowlist on
+the way in, and served inline — the only objects in the system that are. Do not
+put anything private in a profile picture.
+
 ## What the server enforces
 
 The server is a courier. It cannot read key material, so its only job is to
@@ -113,8 +153,15 @@ runtime cannot do insertable streams.
    is a secure context and works.
 5. **Metadata is plaintext**: author, channel, timestamps, message sizes,
    voice-channel membership.
-6. **Attachments are not encrypted yet** — uploads still go to storage as they
-   were sent.
+6. **Avatars and server icons are plaintext**, by necessity — see
+   "Attachments" above.
+7. **An attachment is sealed in one operation**, so the client holds the whole
+   file in memory while it encrypts, which is why it refuses files over
+   `MAX_ATTACHMENT_BYTES`. Chunked AEAD — one sealed frame per upload part —
+   is the upgrade if larger files are wanted.
+8. **Nothing deletes an attachment's blob.** Deleting a message drops the
+   manifest that names it; the ciphertext stays in storage until something
+   sweeps it.
 
 ## Not covered
 

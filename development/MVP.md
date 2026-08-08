@@ -20,7 +20,7 @@ channel, and exchange messages in realtime between two desktop clients.
 | Desktop | Electron + React + Tailwind + Zustand: login, server/channel sidebar, message view |
 | Gateway | Nginx routing REST + WebSocket to services |
 | Data | PostgreSQL via Prisma, Redis Pub/Sub for cross-instance message fanout |
-| Uploads | File upload/download with local-disk storage by default, S3 when configured |
+| Uploads | File upload/download with local-disk storage by default, S3 when configured (encrypted attachments and profile pictures landed in phase 13) |
 | Dev infra | `docker-compose.dev.yml` with Postgres + Redis only |
 
 The MVP is done. Encrypted messaging and calls landed in phase 8 on top of it —
