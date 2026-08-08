@@ -1,6 +1,9 @@
 import type { ClientChatEvent, ServerChatEvent } from '@nexora/shared-types';
 
-const WS_URL = import.meta.env.VITE_WS_URL ?? 'ws://localhost:8080';
+// Same story as the REST base URL: the dev server proxies /ws/chat upstream.
+const WS_URL =
+  import.meta.env.VITE_WS_URL ??
+  (import.meta.env.DEV ? `ws://${window.location.host}` : 'ws://localhost:8080');
 
 type Listener = (event: ServerChatEvent) => void;
 

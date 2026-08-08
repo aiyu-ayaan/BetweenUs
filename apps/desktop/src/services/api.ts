@@ -10,7 +10,10 @@ import type {
   WorkspaceWithRole,
 } from '@nexora/shared-types';
 
-const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8080';
+// In development requests go to the Vite dev server, which proxies them to the
+// services (see vite.config.ts). A packaged build talks to the Nginx gateway.
+const API_URL =
+  import.meta.env.VITE_API_URL ?? (import.meta.env.DEV ? '' : 'http://localhost:8080');
 
 export class ApiError extends Error {
   constructor(

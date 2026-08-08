@@ -77,11 +77,11 @@ const received = new Promise((resolve, reject) => {
     if (event.type === 'ready') {
       socket.send(JSON.stringify({ type: 'channel.subscribe', channelId: channel.id }));
       setTimeout(() => {
-        void json(`${CHAT}/api/v1/messages`, {
+        json(`${CHAT}/api/v1/messages`, {
           method: 'POST',
           headers: authed,
           body: JSON.stringify({ channelId: channel.id, content: 'hello from smoke test' }),
-        });
+        }).catch((error) => reject(new Error(`send failed: ${error.message}`)));
       }, 300);
     }
     if (event.type === 'message.created') {

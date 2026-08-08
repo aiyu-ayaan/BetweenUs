@@ -2,3 +2,12 @@ packages:
   - "apps/*"
   - "apps/services/*"
   - "packages/*"
+
+# Dependencies allowed to run install scripts (pnpm 10 blocks them by default).
+# Electron downloads its binary in a postinstall; without this the desktop app
+# cannot start.
+onlyBuiltDependencies:
+  - "@prisma/client"
+  - electron
+  - esbuild
+  - prisma
