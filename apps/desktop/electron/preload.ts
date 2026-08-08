@@ -39,6 +39,12 @@ const api = {
   /** Records the picked surface; the next display capture gets exactly it. */
   selectScreenSource: (id: string, audio: boolean): Promise<void> =>
     ipcRenderer.invoke('screen:select', id, audio),
+  /**
+   * Opens `startUrl` in the user's browser and resolves with the one-time code
+   * the finished sign-in redirects back to a temporary loopback server.
+   */
+  startOAuth: (startUrl: string): Promise<string | null> =>
+    ipcRenderer.invoke('oauth:start', startUrl),
   /** Development only: credentials for an auto-signed-in test window. */
   devLogin: (): Promise<{ email: string; password: string; label: string } | null> =>
     ipcRenderer.invoke('dev:login'),

@@ -8,6 +8,7 @@ import {
   session,
   shell,
 } from 'electron';
+import { createServer } from 'node:http';
 import { fileURLToPath } from 'node:url';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -210,6 +211,65 @@ ipcMain.on(
     notification.show();
   },
 );
+
+// --- OAuth sign-in ----------------------------------------------------------
+//
+// The provider page opens in the user's real browser, not in an Electron
+// window: Google refuses embedded webviews, and a password manager cannot help
+// inside one either. auth-service does the code exchange and redirects back to
+// a loopback server this process starts for the occasion, carrying a one-time
+// code the renderer trades for a session.
+
+/** Abandoned if the user never finishes in the browser. */
+const OAUTH_TIMEOUT_MS = 5 * 60 * 1000;
+
+ipcMain.handle('oauth:start', async (_event, startUrl: unknown): Promise<string | null> => {
+  if (typeof startUrl !== 'string') return null;
+  const target = new URL(startUrl);
+  if (target.protocol !== 'http:' && target.protocol !== 'https:') return null;
+
+  return new Promise<string | null>((resolve) => {
+    let settled = false;
+    const finish = (code: string | null): void => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      server.close();
+      resolve(code);
+    };
+
+    const server = createServer((request, response) => {
+      const url = new URL(request.url ?? '/', 'http://127.0.0.1');
+      const code = url.searchParams.get('code');
+
+      response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+      response.end(
+        `<!doctype html><meta charset="utf-8"><title>Nexora</title>` +
+          `<body style="font-family:system-ui;background:#0B1120;color:#e2e8f0;display:grid;place-items:center;height:100vh;margin:0">` +
+          `<p>${code ? 'Signed in. You can close this tab.' : 'Sign-in failed. You can close this tab.'}</p>`,
+      );
+
+      // The window is behind the browser at this point; bring it forward.
+      if (code && mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.show();
+        mainWindow.focus();
+      }
+      finish(code);
+    });
+
+    const timer = setTimeout(() => finish(null), OAUTH_TIMEOUT_MS);
+
+    // Port 0: the OS picks a free one, so two windows can sign in at once.
+    server.listen(0, '127.0.0.1', () => {
+      const address = server.address();
+      if (address === null || typeof address === 'string') return finish(null);
+      target.searchParams.set('redirect', `http://127.0.0.1:${address.port}`);
+      void shell.openExternal(target.toString());
+    });
+
+    server.on('error', () => finish(null));
+  });
+});
 
 void app.whenReady().then(() => {
   // Voice channels need the microphone and camera; screen share needs display

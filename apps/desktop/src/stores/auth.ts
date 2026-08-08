@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import type { PublicUser } from '@nexora/shared-types';
-import { ApiError, api, configureApi } from '../services/api';
+import { ApiError, api, apiBaseUrl, configureApi } from '../services/api';
 import { chatSocket, presenceSocket } from '../services/socket';
 import { initIdentity, resetE2ee } from '../services/e2ee';
 
@@ -18,6 +18,7 @@ interface AuthState {
   status: 'idle' | 'loading' | 'authenticated';
   error: string | null;
   login: (email: string, password: string) => Promise<void>;
+  loginWithProvider: (provider: string) => Promise<void>;
   register: (email: string, username: string, password: string) => Promise<void>;
   restore: () => Promise<void>;
   logout: () => Promise<void>;
@@ -36,6 +37,33 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({ status: 'loading', error: null });
     try {
       const result = await api.login(email, password);
+      applySession(set, result.accessToken, result.refreshToken, result.user);
+    } catch (error) {
+      set({ status: 'idle', error: messageOf(error) });
+    }
+  },
+
+  /**
+   * Provider sign-in. The browser does the provider part; this window only
+   * waits for the one-time code and trades it for a session.
+   */
+  loginWithProvider: async (provider) => {
+    const bridge = window.nexora;
+    if (!bridge) {
+      set({ error: 'Provider sign-in needs the desktop app' });
+      return;
+    }
+
+    set({ status: 'loading', error: null });
+    try {
+      const code = await bridge.startOAuth(
+        `${apiBaseUrl()}/api/v1/auth/oauth/${provider}/start`,
+      );
+      if (!code) {
+        set({ status: 'idle', error: 'Sign-in was cancelled' });
+        return;
+      }
+      const result = await api.oauthExchange(code);
       applySession(set, result.accessToken, result.refreshToken, result.user);
     } catch (error) {
       set({ status: 'idle', error: messageOf(error) });

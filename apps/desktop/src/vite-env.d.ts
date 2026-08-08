@@ -38,6 +38,7 @@ interface Window {
     secureSet: (key: string, value: string) => Promise<void>;
     screenSources: () => Promise<ScreenSource[]>;
     selectScreenSource: (id: string, audio: boolean) => Promise<void>;
+    startOAuth: (startUrl: string) => Promise<string | null>;
     devLogin: () => Promise<DevLogin | null>;
   };
 }

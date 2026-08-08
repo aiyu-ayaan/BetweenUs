@@ -8,6 +8,7 @@ import type {
   ChannelType,
   DeviceKey,
   Message,
+  OAuthProviderSummary,
   Paginated,
   PublicUser,
   PublishChannelKeysRequest,
@@ -76,6 +77,9 @@ async function request<T>(path: string, init: RequestInit = {}, retry = true): P
   return payload as T;
 }
 
+/** Where the browser has to reach this deployment; `/start` is opened there. */
+export const apiBaseUrl = (): string => API_URL || window.location.origin;
+
 export const api = {
   register: (email: string, username: string, password: string): Promise<AuthResponse> =>
     request('/api/v1/auth/register', {
@@ -102,6 +106,13 @@ export const api = {
     }),
 
   me: (): Promise<PublicUser> => request('/api/v1/auth/me'),
+
+  /** Providers the operator enabled in the admin panel, for the login screen. */
+  oauthProviders: (): Promise<OAuthProviderSummary[]> => request('/api/v1/auth/oauth/providers'),
+
+  /** Trades the one-time code the browser flow handed back for a session. */
+  oauthExchange: (code: string): Promise<AuthResponse> =>
+    request('/api/v1/auth/oauth/exchange', { method: 'POST', body: JSON.stringify({ code }) }),
 
   workspaces: (): Promise<WorkspaceWithRole[]> => request('/api/v1/workspaces'),
 

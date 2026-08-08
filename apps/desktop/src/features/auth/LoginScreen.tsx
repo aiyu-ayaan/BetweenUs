@@ -1,14 +1,26 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
+import type { OAuthProviderSummary } from '@nexora/shared-types';
 import { useAuthStore } from '../../stores/auth';
+import { api } from '../../services/api';
 
 export function LoginScreen(): JSX.Element {
   const [mode, setMode] = useState<'login' | 'register'>('login');
   const [email, setEmail] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  /** Empty until the server answers; nothing is offered that is not configured. */
+  const [providers, setProviders] = useState<OAuthProviderSummary[]>([]);
 
-  const { login, register, status, error, clearError } = useAuthStore();
+  const { login, loginWithProvider, register, status, error, clearError } = useAuthStore();
   const busy = status === 'loading';
+
+  useEffect(() => {
+    void api
+      .oauthProviders()
+      .then(setProviders)
+      // A server that cannot answer just means no provider buttons.
+      .catch(() => setProviders([]));
+  }, []);
 
   const submit = async (event: FormEvent): Promise<void> => {
     event.preventDefault();
@@ -116,6 +128,34 @@ export function LoginScreen(): JSX.Element {
             {busy ? 'Please wait…' : mode === 'login' ? 'Sign in' : 'Create account'}
           </button>
         </form>
+
+        {providers.length > 0 && (
+          <div className="mt-6">
+            <div className="mb-3 flex items-center gap-3">
+              <span className="h-px flex-1 bg-surface-700" />
+              <span className="text-xs uppercase tracking-wide text-slate-500">or continue with</span>
+              <span className="h-px flex-1 bg-surface-700" />
+            </div>
+
+            <div className="space-y-2">
+              {providers.map((provider) => (
+                <button
+                  key={provider.provider}
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void loginWithProvider(provider.provider)}
+                  className="w-full cursor-pointer rounded-md border border-surface-700 bg-surface-900 px-4 py-2.5 font-medium text-slate-100 transition-colors duration-200 hover:border-accent disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  Continue with {provider.label}
+                </button>
+              ))}
+            </div>
+
+            <p className="mt-2 text-center text-xs text-slate-500">
+              Opens your browser; come back here when it is done.
+            </p>
+          </div>
+        )}
 
         <button
           type="button"
