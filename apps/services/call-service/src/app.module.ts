@@ -1,8 +1,8 @@
-import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
+import { Module } from '@nestjs/common';
 import { envOr } from '@nexora/config';
 import { pingDatabase } from '@nexora/database';
 import { Logger, createLogger } from '@nexora/logger';
-import { RequestIdMiddleware, createHealthController } from '@nexora/nest-common';
+import { createHealthController } from '@nexora/nest-common';
 import { CallsController } from './modules/calls/calls.controller';
 import { CallsService } from './modules/calls/calls.service';
 
@@ -18,8 +18,4 @@ const SERVICE_NAME = 'call-service';
     },
   ],
 })
-export class AppModule implements NestModule {
-  configure(consumer: MiddlewareConsumer): void {
-    consumer.apply(RequestIdMiddleware).forRoutes('*');
-  }
-}
+export class AppModule {}

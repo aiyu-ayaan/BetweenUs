@@ -1,9 +1,9 @@
-import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
+import { Module } from '@nestjs/common';
 import { envOr } from '@nexora/config';
 import { EventBus } from '@nexora/events';
 import { pingDatabase } from '@nexora/database';
 import { Logger, createLogger } from '@nexora/logger';
-import { RequestIdMiddleware, createHealthController } from '@nexora/nest-common';
+import { createHealthController } from '@nexora/nest-common';
 import { MessagesController } from './modules/messages/messages.controller';
 import { MessagesService } from './modules/messages/messages.service';
 import { UploadsController } from './modules/uploads/uploads.controller';
@@ -35,8 +35,4 @@ const SERVICE_NAME = 'chat-service';
     },
   ],
 })
-export class AppModule implements NestModule {
-  configure(consumer: MiddlewareConsumer): void {
-    consumer.apply(RequestIdMiddleware).forRoutes('*');
-  }
-}
+export class AppModule {}

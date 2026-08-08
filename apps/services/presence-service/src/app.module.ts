@@ -1,8 +1,8 @@
-import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
+import { Module } from '@nestjs/common';
 import { envOr } from '@nexora/config';
 import { EventBus } from '@nexora/events';
 import { Logger, createLogger } from '@nexora/logger';
-import { RequestIdMiddleware, createHealthController } from '@nexora/nest-common';
+import { createHealthController } from '@nexora/nest-common';
 import { PresenceGateway } from './presence.gateway';
 import { PresenceStore } from './presence.store';
 
@@ -23,8 +23,4 @@ const SERVICE_NAME = 'presence-service';
     },
   ],
 })
-export class AppModule implements NestModule {
-  configure(consumer: MiddlewareConsumer): void {
-    consumer.apply(RequestIdMiddleware).forRoutes('*');
-  }
-}
+export class AppModule {}

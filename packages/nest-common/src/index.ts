@@ -14,7 +14,6 @@ import {
   HttpException,
   HttpStatus,
   Injectable,
-  NestMiddleware,
   Type,
   ValidationPipe,
   INestApplication,
@@ -33,15 +32,42 @@ export interface RequestWithId extends Request {
 }
 
 /** Assigns (or reuses) a request id so logs and error bodies can be correlated. */
-@Injectable()
-export class RequestIdMiddleware implements NestMiddleware {
-  use(req: RequestWithId, res: Response, next: NextFunction): void {
-    const incoming = req.headers[REQUEST_ID_HEADER];
-    const requestId = typeof incoming === 'string' && incoming.length > 0 ? incoming : randomUUID();
-    req.requestId = requestId;
-    res.setHeader(REQUEST_ID_HEADER, requestId);
+function assignRequestId(req: RequestWithId, res: Response): string {
+  const incoming = req.headers[REQUEST_ID_HEADER];
+  const requestId = typeof incoming === 'string' && incoming.length > 0 ? incoming : randomUUID();
+  req.requestId = requestId;
+  res.setHeader(REQUEST_ID_HEADER, requestId);
+  return requestId;
+}
+
+/**
+ * Request id + one structured line per completed request.
+ *
+ * Mounted in `bootstrapService`, so every service gets it without wiring, and
+ * before the router, so an id exists even for a 404 that reaches no controller.
+ * The id comes from the caller when it sends one, which is what makes a trace
+ * survive a hop between services.
+ */
+function requestContextMiddleware(logger: Logger) {
+  return (req: RequestWithId, res: Response, next: NextFunction): void => {
+    const requestId = assignRequestId(req, res);
+    const startedAt = Date.now();
+
+    res.on('finish', () => {
+      // Health probes every few seconds would drown everything else.
+      if (req.path === '/health') return;
+
+      const userId = (req as { user?: { id?: string } }).user?.id;
+      logger.child({ requestId, ...(userId ? { userId } : {}) }).info('Request completed', {
+        method: req.method,
+        path: req.path,
+        status: res.statusCode,
+        durationMs: Date.now() - startedAt,
+      });
+    });
+
     next();
-  }
+  };
 }
 
 /** Maps a thrown error code onto the machine-readable `error.code` field. */
@@ -209,6 +235,8 @@ export async function bootstrapService(options: BootstrapOptions): Promise<INest
   const isProduction = envOr('NODE_ENV', 'development') === 'production';
 
   const app = await NestFactory.create(options.module as never, { logger: false });
+
+  app.use(requestContextMiddleware(logger));
 
   // `/health` stays unprefixed so orchestrators probe one stable path.
   app.setGlobalPrefix(options.globalPrefix ?? 'api/v1', { exclude: ['health'] });
