@@ -42,13 +42,80 @@ export interface AuthTokens {
   expiresIn: number;
 }
 
+export type GlobalRole = 'USER' | 'ADMIN';
+
 export interface PublicUser {
   id: string;
   email: string;
   username: string;
   displayName: string;
   avatarUrl: string | null;
+  /** Platform role, not workspace membership. ADMIN unlocks the admin panel. */
+  role: GlobalRole;
+  /** True for an account issued a generated password; it can do nothing else. */
+  mustChangePassword: boolean;
   createdAt: string;
+}
+
+export interface ChangePasswordRequest {
+  currentPassword: string;
+  newPassword: string;
+}
+
+export interface UpdateAccountRequest {
+  username?: string;
+  displayName?: string;
+}
+
+// --- OAuth login ---
+
+/** Providers the operator has switched on, as the login screen sees them. */
+export interface OAuthProviderSummary {
+  provider: 'google' | 'github';
+  label: string;
+}
+
+export interface OAuthExchangeRequest {
+  /** One-time code handed to the loopback redirect after the provider callback. */
+  code: string;
+}
+
+// --- Admin panel ---
+
+export interface AdminStatus {
+  /** False until `pnpm admin:create` has been run; the panel explains that. */
+  hasAdmin: boolean;
+}
+
+export interface AdminUser extends PublicUser {
+  disabledAt: string | null;
+  /** Providers this account can also sign in with. */
+  identities: string[];
+  workspaceCount: number;
+  lastSeenAt: string | null;
+}
+
+export interface AdminUserUpdate {
+  role?: GlobalRole;
+  disabled?: boolean;
+}
+
+/** Never carries the secret itself - only whether one is stored. */
+export interface AdminOAuthProvider {
+  provider: 'google' | 'github';
+  label: string;
+  enabled: boolean;
+  clientId: string;
+  hasSecret: boolean;
+  /** What to paste into the provider's console as the authorised callback. */
+  callbackUrl: string;
+}
+
+export interface AdminOAuthProviderUpdate {
+  enabled: boolean;
+  clientId: string;
+  /** Omitted means "keep the stored secret"; a value replaces it. */
+  clientSecret?: string;
 }
 
 export interface AuthResponse extends AuthTokens {

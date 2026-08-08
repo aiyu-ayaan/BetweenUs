@@ -1,9 +1,9 @@
-import { Body, Controller, Get, HttpCode, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Patch, Post, UseGuards } from '@nestjs/common';
 import { CurrentUser, JwtAuthGuard, type AuthenticatedUser } from '@nexora/auth';
 import type { AuthResponse, AuthTokens, PublicUser } from '@nexora/shared-types';
 import { rateLimit } from '@nexora/nest-common';
 import { AuthService } from './auth.service';
-import { LoginDto, RefreshDto, RegisterDto } from './dto';
+import { ChangePasswordDto, LoginDto, RefreshDto, RegisterDto, UpdateAccountDto } from './dto';
 
 /**
  * Login and register share one budget per client address: a credential-stuffing
@@ -49,5 +49,25 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   me(@CurrentUser() user: AuthenticatedUser): Promise<PublicUser> {
     return this.auth.me(user.id);
+  }
+
+  /** Available to any signed-in account, not only admins. */
+  @Post('account/password')
+  @HttpCode(200)
+  @UseGuards(JwtAuthGuard)
+  changePassword(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: ChangePasswordDto,
+  ): Promise<AuthResponse> {
+    return this.auth.changePassword(user.id, dto);
+  }
+
+  @Patch('account')
+  @UseGuards(JwtAuthGuard)
+  updateAccount(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: UpdateAccountDto,
+  ): Promise<PublicUser> {
+    return this.auth.updateAccount(user.id, dto);
   }
 }

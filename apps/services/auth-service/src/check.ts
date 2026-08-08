@@ -27,6 +27,9 @@ interface UserRow {
   displayName: string;
   avatarUrl: string | null;
   passwordHash: string;
+  role: 'USER' | 'ADMIN';
+  mustChangePassword: boolean;
+  disabledAt: Date | null;
   createdAt: Date;
 }
 
@@ -61,8 +64,22 @@ function fakeDb(): AuthDb & { users: UserRow[]; tokens: TokenRow[] } {
       },
       create: async ({ data }: never) => {
         const input = data as Pick<UserRow, 'email' | 'username' | 'displayName' | 'passwordHash'>;
-        const row: UserRow = { id: randomUUID(), avatarUrl: null, createdAt: new Date(), ...input };
+        const row: UserRow = {
+          id: randomUUID(),
+          avatarUrl: null,
+          role: 'USER',
+          mustChangePassword: false,
+          disabledAt: null,
+          createdAt: new Date(),
+          ...input,
+        };
         users.push(row);
+        return row;
+      },
+      update: async ({ where, data }: never) => {
+        const row = users.find((u) => u.id === (where as { id: string }).id);
+        if (!row) throw new Error('user not found');
+        Object.assign(row, data);
         return row;
       },
     },
@@ -156,6 +173,33 @@ async function main(): Promise<void> {
   const again = await auth.login({ email: 'ayaan@nexora.local', password: 'hunter2000' });
   await auth.logout(again.refreshToken);
   await rejects(auth.refresh(again.refreshToken), 'REFRESH_TOKEN_REUSED');
+
+  // Changing the password ends every old session and hands back a new one.
+  const changed = await auth.changePassword(again.user.id, {
+    currentPassword: 'hunter2000',
+    newPassword: 'brand-new-pass9',
+  });
+  assert.equal(changed.user.mustChangePassword, false);
+  assert.ok(changed.accessToken && changed.refreshToken);
+  await rejects(
+    auth.login({ email: 'ayaan@nexora.local', password: 'hunter2000' }),
+    'INVALID_CREDENTIALS',
+  );
+  await rejects(
+    auth.changePassword(again.user.id, { currentPassword: 'wrong-pass1', newPassword: 'another-pass9' }),
+    'INVALID_CREDENTIALS',
+  );
+  // The token minted by the password change still works.
+  const afterChange = await auth.refresh(changed.refreshToken);
+  assert.ok(afterChange.accessToken);
+
+  // A disabled account cannot log in, whatever the password is.
+  db.users[0]!.disabledAt = new Date();
+  await rejects(
+    auth.login({ email: 'ayaan@nexora.local', password: 'brand-new-pass9' }),
+    'ACCOUNT_DISABLED',
+  );
+  db.users[0]!.disabledAt = null;
 
   const me = await auth.me(registered.user.id);
   assert.equal(me.username, 'ayaan');

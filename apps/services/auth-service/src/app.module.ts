@@ -6,13 +6,24 @@ import { createHealthController } from '@nexora/nest-common';
 import { AuthController } from './modules/auth/auth.controller';
 import { AuthService } from './modules/auth/auth.service';
 import { authDatabaseProvider } from './modules/auth/auth.db';
+import { AdminController } from './modules/admin/admin.controller';
+import { AdminService } from './modules/admin/admin.service';
+import { OAuthController } from './modules/oauth/oauth.controller';
+import { OAuthService } from './modules/oauth/oauth.service';
 
 const SERVICE_NAME = 'auth-service';
 
 @Module({
-  controllers: [AuthController, createHealthController(SERVICE_NAME, pingDatabase)],
+  controllers: [
+    AuthController,
+    AdminController,
+    OAuthController,
+    createHealthController(SERVICE_NAME, pingDatabase),
+  ],
   providers: [
     AuthService,
+    AdminService,
+    OAuthService,
     authDatabaseProvider,
     {
       provide: EventBus,
