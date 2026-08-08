@@ -20,6 +20,27 @@ const api = {
     return () => ipcRenderer.removeListener('notification:activate', listener);
   },
   /**
+   * Total unread, for the tray tooltip and the dock badge. Sent on every
+   * change; the main process owns what to do with it per platform.
+   */
+  setUnreadCount: (count: number): void => {
+    ipcRenderer.send('unread:set', count);
+  },
+  /**
+   * Machine-local switches: start with the system, and close to the tray.
+   * `canManageAutoStart` is false in a development window, which must not
+   * register a temp profile pointed at a Vite server into the startup list.
+   */
+  getAppSettings: (): Promise<{
+    launchOnStartup: boolean;
+    closeToTray: boolean;
+    canManageAutoStart: boolean;
+  }> => ipcRenderer.invoke('settings:get'),
+  setAppSettings: (
+    patch: Partial<{ launchOnStartup: boolean; closeToTray: boolean }>,
+  ): Promise<{ launchOnStartup: boolean; closeToTray: boolean }> =>
+    ipcRenderer.invoke('settings:set', patch),
+  /**
    * Encrypted-at-rest storage for E2EE private keys. The main process seals the
    * value with the OS keychain; the renderer never touches the file.
    */

@@ -33,6 +33,18 @@ interface Window {
     notify: (title: string, body: string, channelId?: string) => void;
     /** Returns an unsubscribe function. */
     onNotificationActivate: (handler: (channelId: string) => void) => () => void;
+    /** Total unread, for the tray tooltip and the dock badge. */
+    setUnreadCount: (count: number) => void;
+    /** Machine-local switches; account preferences live in notification-service. */
+    getAppSettings: () => Promise<{
+      launchOnStartup: boolean;
+      closeToTray: boolean;
+      /** False in a development window, which must not register auto-start. */
+      canManageAutoStart: boolean;
+    }>;
+    setAppSettings: (
+      patch: Partial<{ launchOnStartup: boolean; closeToTray: boolean }>,
+    ) => Promise<{ launchOnStartup: boolean; closeToTray: boolean }>;
     /** OS-keychain-backed storage for E2EE private keys. */
     secureGet: (key: string) => Promise<string | null>;
     secureSet: (key: string, value: string) => Promise<void>;

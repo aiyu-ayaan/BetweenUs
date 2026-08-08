@@ -3,8 +3,10 @@ import {
   BrowserWindow,
   Menu,
   Notification,
+  Tray,
   desktopCapturer,
   ipcMain,
+  nativeImage,
   safeStorage,
   session,
   shell,
@@ -30,7 +32,66 @@ const windowLabel = process.env.NEXORA_WINDOW_LABEL;
 /** The window a notification click brings back. */
 let mainWindow: BrowserWindow | null = null;
 
-function createWindow(): BrowserWindow {
+/** Set on `before-quit`, so closing the window can mean "hide" until then. */
+let quitting = false;
+
+// --- App settings -----------------------------------------------------------
+//
+// Two switches that belong to this machine rather than to the account: whether
+// Nexora starts with the session, and whether closing the window leaves it
+// running in the tray. Notification preferences proper live on the account, in
+// notification-service. Both default on, Discord-style, and both are in the
+// settings UI - an auto-start nobody can turn off is malware behaviour.
+
+interface AppSettings {
+  launchOnStartup: boolean;
+  closeToTray: boolean;
+}
+
+const DEFAULT_SETTINGS: AppSettings = { launchOnStartup: true, closeToTray: true };
+
+const settingsFile = (): string => path.join(app.getPath('userData'), 'nexora-settings.json');
+
+function readSettings(): AppSettings {
+  try {
+    const stored = JSON.parse(fs.readFileSync(settingsFile(), 'utf8')) as Partial<AppSettings>;
+    return {
+      launchOnStartup: stored.launchOnStartup ?? DEFAULT_SETTINGS.launchOnStartup,
+      closeToTray: stored.closeToTray ?? DEFAULT_SETTINGS.closeToTray,
+    };
+  } catch {
+    return { ...DEFAULT_SETTINGS };
+  }
+}
+
+function writeSettings(settings: AppSettings): void {
+  fs.writeFileSync(settingsFile(), JSON.stringify(settings), 'utf8');
+}
+
+/**
+ * A development window must never register itself to start with the session:
+ * `pnpm dev:duo` would leave two temp-profile Electrons in the user's startup
+ * list, pointed at a Vite server that is not running.
+ */
+const managesAutoStart = !rendererDevUrl && !profile;
+
+function applyAutoStart(enabled: boolean): void {
+  if (!managesAutoStart) return;
+  app.setLoginItemSettings({
+    openAtLogin: enabled,
+    // Started by the session manager, Nexora goes straight to the tray rather
+    // than throwing a window in front of whatever the user is doing.
+    args: ['--hidden'],
+    openAsHidden: true,
+  });
+}
+
+/** True when this launch came from the session manager rather than the user. */
+function startedHidden(): boolean {
+  return process.argv.includes('--hidden') || app.getLoginItemSettings().wasOpenedAtLogin;
+}
+
+function createWindow(hidden = false): BrowserWindow {
   const window = new BrowserWindow({
     width: 1280,
     height: 820,
@@ -51,11 +112,22 @@ function createWindow(): BrowserWindow {
     },
   });
 
-  window.once('ready-to-show', () => window.show());
+  window.once('ready-to-show', () => {
+    if (!hidden) window.show();
+  });
   window.on('focus', () => window.flashFrame(false));
   mainWindow = window;
   window.on('closed', () => {
     if (mainWindow === window) mainWindow = null;
+  });
+
+  // Closing the window puts Nexora in the tray instead of ending it, so the
+  // sockets stay up and a message still raises a notification. Quit is on the
+  // tray menu (and the settings switch turns this off).
+  window.on('close', (event) => {
+    if (quitting || !readSettings().closeToTray) return;
+    event.preventDefault();
+    window.hide();
   });
 
   // In development the renderer's console is the only place a failed join or a
@@ -213,6 +285,104 @@ ipcMain.on(
   },
 );
 
+// --- System tray ------------------------------------------------------------
+//
+// The tray is what makes the rest of this work: with it, closing the window
+// only hides it, so the chat socket stays connected and a message that arrives
+// while Nexora is "closed" still raises a notification.
+//
+// The icon is a data URI rather than a file because electron-builder packages
+// `dist/` and `dist-electron/` only; a 32px mark is not worth an asset pipeline
+// and a packaging rule to go with it.
+const TRAY_ICON =
+  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAf0lEQVR42mNgwAMiUj/9pwZm' +
+  'IAVQy1KyHENry/E6gl6WY3UEvS3HcMTIdsBAWQ53BDGK0AGl6ih2AC7D6eoAbBaMPAegWzIgDkC2aOQ6AGYZ3RxAiqNoWh' +
+  'CNOoCULErTumDUAaRUWEOzOh62raLRRung6ZgMiq7ZoOicDkT3HAAbx8q7ivG47wAAAABJRU5ErkJggg==';
+
+let tray: Tray | null = null;
+/** Total unread, mirrored into the tooltip and the dock/taskbar badge. */
+let unreadCount = 0;
+
+function showMainWindow(): void {
+  const window = mainWindow ?? createWindow();
+  if (window.isMinimized()) window.restore();
+  window.show();
+  window.focus();
+}
+
+function trayTooltip(): string {
+  const name = windowLabel ? `Nexora - ${windowLabel}` : 'Nexora';
+  return unreadCount > 0 ? `${name} (${unreadCount} unread)` : name;
+}
+
+function refreshTray(): void {
+  if (!tray) return;
+  tray.setToolTip(trayTooltip());
+  tray.setContextMenu(
+    Menu.buildFromTemplate([
+      { label: 'Open Nexora', click: showMainWindow },
+      { type: 'separator' },
+      ...(managesAutoStart
+        ? ([
+            {
+              label: 'Start with the system',
+              type: 'checkbox',
+              checked: readSettings().launchOnStartup,
+              click: (item) => setLaunchOnStartup(item.checked),
+            },
+          ] as Electron.MenuItemConstructorOptions[])
+        : []),
+      {
+        label: 'Quit Nexora',
+        click: () => {
+          quitting = true;
+          app.quit();
+        },
+      },
+    ]),
+  );
+}
+
+function setLaunchOnStartup(enabled: boolean): void {
+  writeSettings({ ...readSettings(), launchOnStartup: enabled });
+  applyAutoStart(enabled);
+  refreshTray();
+}
+
+function createTray(): void {
+  tray = new Tray(nativeImage.createFromDataURL(TRAY_ICON));
+  // Windows and Linux: a plain click is "bring it back". macOS opens the menu
+  // on click by convention, so there the menu is the only affordance.
+  if (process.platform !== 'darwin') tray.on('click', showMainWindow);
+  refreshTray();
+}
+
+ipcMain.handle('settings:get', (): AppSettings & { canManageAutoStart: boolean } => ({
+  ...readSettings(),
+  canManageAutoStart: managesAutoStart,
+}));
+
+ipcMain.handle('settings:set', (_event, patch: unknown): AppSettings => {
+  const incoming = (patch ?? {}) as Partial<AppSettings>;
+  const settings = readSettings();
+  if (typeof incoming.launchOnStartup === 'boolean') {
+    settings.launchOnStartup = incoming.launchOnStartup;
+  }
+  if (typeof incoming.closeToTray === 'boolean') settings.closeToTray = incoming.closeToTray;
+
+  writeSettings(settings);
+  applyAutoStart(settings.launchOnStartup);
+  refreshTray();
+  return settings;
+});
+
+ipcMain.on('unread:set', (_event, count: unknown) => {
+  unreadCount = typeof count === 'number' && count > 0 ? Math.floor(count) : 0;
+  refreshTray();
+  // A no-op on Windows, where the taskbar has no count to set.
+  if (app.isReady()) app.setBadgeCount(unreadCount);
+});
+
 // --- OAuth sign-in ----------------------------------------------------------
 //
 // The provider page opens in the user's real browser, not in an Electron
@@ -272,6 +442,15 @@ ipcMain.handle('oauth:start', async (_event, startUrl: unknown): Promise<string 
   });
 });
 
+// One copy per machine: with a tray icon and auto-start, launching the shortcut
+// again means "come back", not "start a second Nexora". `pnpm dev:duo` is the
+// exception it exists for - two profiles, deliberately, side by side.
+if (!profile && !app.requestSingleInstanceLock()) {
+  app.quit();
+} else {
+  app.on('second-instance', () => showMainWindow());
+}
+
 void app.whenReady().then(() => {
   // No File / Edit / View / Window / Help bar: this is a chat app, not a
   // document editor, and every entry it offered duplicated something the UI
@@ -311,13 +490,26 @@ void app.whenReady().then(() => {
     });
   });
 
-  createWindow();
+  createTray();
+  // Auto-start is on by default; the first run is what registers it.
+  applyAutoStart(readSettings().launchOnStartup);
+
+  createWindow(startedHidden());
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
+    else showMainWindow();
   });
 });
 
+app.on('before-quit', () => {
+  quitting = true;
+});
+
+// The tray keeps the app alive with no window on screen, which is the point of
+// closing to it. Without a tray - a dev window, or a platform where it failed -
+// the old behaviour stands, or nothing would ever end the process.
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') app.quit();
+  if (process.platform === 'darwin' || tray) return;
+  app.quit();
 });
