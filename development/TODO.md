@@ -5,8 +5,43 @@ the top honest — it is what a new session reads first.
 
 ## Next up
 
-Phase 10 items still open need a human in front of the app; the rest are
-follow-ups the admin panel and OAuth work opened.
+Phase 12 is the current phase. Everything under it is in flight; the items
+below it are carry-overs that still need a human in front of the app.
+
+### Phase 12 — servers, permissions and direct messages
+
+- [ ] Rename workspace to server: Prisma models `Server`, `ServerMember`,
+      `ServerRole` with a migration, `/api/v1/servers`, `server-service`, and
+      every reference in the client, compose files, Nginx, CI and dev scripts
+- [ ] Per-member permission overrides on `ServerMember` (granted / denied) on
+      top of the role defaults, and one `resolveChannelAccess` in
+      `@nexora/database` replacing the copies in chat-, call- and
+      presence-service
+- [ ] Server settings API: change a member's role, grant and revoke individual
+      permissions, kick a member, rename or delete the server
+- [ ] Private channels: `Channel.isPrivate` and a `ChannelMember` allowlist,
+      chosen when the channel is created, honoured by listing, history, calls,
+      presence and the E2EE key wrapper
+- [ ] Friends: search users by name, send, accept and decline requests, remove a
+      friend
+- [ ] Direct messages: `Channel.serverId` nullable, `DM` channel type, the two
+      participants as channel members, opened only between accepted friends
+- [ ] Active status: online, idle, do not disturb, invisible — chosen in the
+      client, stored in Redis, and resolved to offline for everyone else when it
+      is invisible
+- [ ] Discord-parity client: colour tokens, server rail with a home button that
+      opens direct messages, channel sidebar, grouped message list, member list
+      on the right, DM screen
+- [ ] Global settings overlay: my account, profile, voice and video,
+      notifications, appearance, log out
+- [ ] Server settings screen: overview, roles and permissions, members,
+      channels, invites, delete server — no events, no boosting
+- [ ] Remove the E2EE badge from the channel header
+- [ ] `dev:duo` seeds a friendship, a direct message and a private channel; the
+      smoke scripts assert private-channel denial, a permission override, a
+      friend request and DM delivery
+
+### Carried over
 
 - [ ] Two humans in a voice channel: audio actually heard, camera, screen share
       (both clients already reach LiveKit and publish encrypted opus)
@@ -188,13 +223,13 @@ Follow-ups this phase deliberately left open:
 - [x] Desktop notifications for messages and voice joins, with unread counts,
       taskbar flash and click-to-open
 
-### Phase 12 — remote desktop
+### Phase 13 — remote desktop
 - [ ] `remote-agent`: device identity, outbound WebSocket, screen capture, input
 - [ ] `remote-gateway`: session relay, authorization, audit log
 - [ ] Remote permission model (`REMOTE_VIEW`, `REMOTE_CONTROL`, …) with expiry
 - [ ] Desktop remote client view
 
-### Phase 13 — production
+### Phase 14 — production
 - [ ] Cloudflare Tunnel config + `cloudflared` container wired to Nginx
 - [ ] Secret management, no secrets in compose files
 - [ ] Docker image build + push pipeline, health-checked deploys
@@ -202,5 +237,6 @@ Follow-ups this phase deliberately left open:
 ### Cross-cutting debt
 - [ ] Split the shared Prisma schema into per-service schemas
 - [ ] Replace Redis Pub/Sub with NATS when fanout volume needs it
-- [ ] Full RBAC permission checks (currently membership + coarse role only)
+- [ ] Custom named roles with a colour and an ordering, instead of the five
+      built-ins plus per-member overrides phase 12 ships
 - [ ] `user-service` (profiles, avatars, friends) and `notification-service`

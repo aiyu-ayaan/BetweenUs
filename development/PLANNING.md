@@ -19,14 +19,82 @@ we get there in stages and what each stage delivers.
 | 9 | Presence | presence-service, online status, typing indicators, voice rosters | Done |
 | 10 | Hardening | Tests, CI, error contract polish, request IDs everywhere | In progress |
 | 11 | Admin panel, OAuth, notifications | Admin web app, Google/GitHub sign-in, desktop notifications | Done |
-| 12 | Remote desktop | remote-gateway, remote-agent, remote permissions, audit log | Planned |
-| 13 | Production ingress | Cloudflare Tunnel, TLS, secret management, deploy pipeline | Planned |
+| 12 | Servers, permissions, DMs | Workspace renamed to server, per-member permissions, private channels, friends and direct messages, Discord-parity client | In progress |
+| 13 | Remote desktop | remote-gateway, remote-agent, remote permissions, audit log | Planned |
+| 14 | Production ingress | Cloudflare Tunnel, TLS, secret management, deploy pipeline | Planned |
 
 Hardening moved to phase 10: encryption changes the message format and presence
 adds a service, so both were cheaper to land before tests were written against
 the older shape.
 
 ## Architecture decisions made so far
+
+### Servers, permissions and direct messages (phase 12)
+
+- **"Workspace" is renamed to "server" everywhere, not just in the UI.** Discord
+  calls the thing a server and so does everyone using this product; keeping a
+  second word for it in the schema, the routes and the types would mean
+  translating in every conversation and in every code review forever. The rename
+  reaches the Prisma models (`Server`, `ServerMember`, `ServerRole`), the REST
+  surface (`/api/v1/servers`), the service directory (`server-service`) and the
+  client. It is a mechanical change, and it is cheapest now, while there is one
+  schema and four callers.
+- **Permissions are a role plus per-member overrides, not a role system.**
+  Discord's model is custom roles with permission bitfields, colours and an
+  ordering, and most of that machinery exists to serve servers with thousands of
+  members. What was actually asked for is that an administrator can give one
+  person one capability. So `ServerMember` keeps its role and gains two arrays -
+  granted and denied - and the effective permission set is
+  `roleDefaults ∪ granted \ denied`. Custom named roles can be layered on later
+  without changing any call site, because every call site asks the same
+  question: does this member hold this permission.
+- **One effective-permission resolver, used by all four services.** Chat, call
+  and presence each carried their own copy of "look up the channel, look up the
+  membership, check the role", which is three places to forget about private
+  channels and direct messages. The lookup moves into `@nexora/database` as
+  `resolveChannelAccess`, and the three services call it. It is the same
+  shortcut as the shared schema, and it splits the same way: when each service
+  owns its data this becomes an RPC with an unchanged signature.
+- **A private channel is an allowlist, not a permission.** Membership of a
+  server no longer implies membership of every channel in it: a channel is
+  either open to the server or restricted to the users named on it, chosen when
+  it is created. Modelling it as a permission would have meant inventing a
+  permission per channel; a `ChannelMember` row per person is the smaller idea
+  and the one that answers "who can read this" directly - which is also the
+  question the E2EE key wrapper has to answer, so private channels get
+  encryption scoped to their allowlist for free.
+- **A direct message is a channel with no server.** DMs need history, paging,
+  realtime fanout, notifications, unread counts and end-to-end encryption -
+  every one of which already exists for channels. A second message model would
+  duplicate all of it. So `Channel.serverId` becomes nullable, `DM` joins the
+  channel types, and the two participants are `ChannelMember` rows. Everything
+  downstream of the channel id keeps working untouched.
+- **Friendship is one row, ordered by user id.** A request and an acceptance are
+  the same relationship in two states, so storing one row with a requester, an
+  addressee and a status avoids the reconciliation that two rows would need. The
+  pair is stored with the lower id first and a unique constraint on it, because
+  the alternative is two people sending each other a request and both being
+  right.
+- **Only friends can open a direct message.** Anyone can search for a user by
+  name, because that is how a request gets sent at all, but a channel is only
+  created between accepted friends. Without that rule the search endpoint is a
+  spam surface, and adding a block list later has one place to hook into.
+- **Status is a claim by the client, presence keeps the truth.** Online, idle,
+  do not disturb and invisible are what the user chose; connected or not is what
+  the server knows. Redis holds both, and invisible is resolved server-side to
+  `offline` before anyone else is told - a status that leaks in the payload is
+  not invisible. The user's own client still sees its real status, so the
+  picker can show what was picked.
+- **Global settings are a full-screen overlay, and server settings are their
+  own screen.** They are different jobs at different scopes and Discord splits
+  them for that reason: one is about this account and this installation, the
+  other about one community. Nothing about boosting or scheduled events exists
+  in this product, so neither section exists in the settings it would sit in.
+- **The E2EE badge is gone from the channel header.** Encryption is not a
+  feature that needs advertising in the corner of every conversation; it is
+  either on for everything or the join is aborted, which is already the rule for
+  media. The padlock stays where a failure would be actionable - the voice
+  panel - and `E2EE.md` still documents the design.
 
 ### Admin panel, OAuth and notifications (phase 11)
 
