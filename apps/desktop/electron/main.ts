@@ -25,6 +25,9 @@ const devLoginEmail = process.env.NEXORA_DEV_EMAIL;
 const devLoginPassword = process.env.NEXORA_DEV_PASSWORD;
 const windowLabel = process.env.NEXORA_WINDOW_LABEL;
 
+/** The window a notification click brings back. */
+let mainWindow: BrowserWindow | null = null;
+
 function createWindow(): BrowserWindow {
   const window = new BrowserWindow({
     width: 1280,
@@ -47,6 +50,11 @@ function createWindow(): BrowserWindow {
   });
 
   window.once('ready-to-show', () => window.show());
+  window.on('focus', () => window.flashFrame(false));
+  mainWindow = window;
+  window.on('closed', () => {
+    if (mainWindow === window) mainWindow = null;
+  });
 
   // In development the renderer's console is the only place a failed join or a
   // crypto error shows up, and `pnpm dev:duo` gives the windows no visible
@@ -168,14 +176,40 @@ ipcMain.handle('screen:select', (_event, id: unknown, audio: unknown): void => {
   pendingShare = typeof id === 'string' ? { id, audio: audio === true } : null;
 });
 
-ipcMain.on('notification:show', (_event, payload: { title: string; body: string }) => {
-  if (!Notification.isSupported()) return;
-  // Renderer-supplied strings only; nothing here is executed or shelled out.
-  new Notification({
-    title: windowLabel ? `${windowLabel}: ${String(payload.title)}` : String(payload.title),
-    body: String(payload.body),
-  }).show();
-});
+// --- Notifications ----------------------------------------------------------
+//
+// The renderer decides *whether* to notify (it knows what is on screen and who
+// is speaking); the main process owns the OS-level part: the notification
+// itself, the taskbar flash, and bringing the window back on a click.
+
+ipcMain.on(
+  'notification:show',
+  (_event, payload: { title: string; body: string; channelId?: string }) => {
+    const window = mainWindow;
+    if (window && !window.isFocused()) window.flashFrame(true);
+    if (!Notification.isSupported()) return;
+
+    // Renderer-supplied strings only; nothing here is executed or shelled out.
+    const notification = new Notification({
+      title: windowLabel ? `${windowLabel}: ${String(payload.title)}` : String(payload.title),
+      body: String(payload.body),
+    });
+
+    notification.on('click', () => {
+      if (!window || window.isDestroyed()) return;
+      if (window.isMinimized()) window.restore();
+      window.flashFrame(false);
+      window.show();
+      window.focus();
+      // Let the renderer navigate to whatever the notification was about.
+      if (typeof payload.channelId === 'string') {
+        window.webContents.send('notification:activate', payload.channelId);
+      }
+    });
+
+    notification.show();
+  },
+);
 
 void app.whenReady().then(() => {
   // Voice channels need the microphone and camera; screen share needs display

@@ -8,7 +8,14 @@ import type {
 } from '@nexora/shared-types';
 import { api } from '../services/api';
 import { chatSocket } from '../services/socket';
-import { decryptForChannel, encryptForChannel, syncChannelKeys } from '../services/e2ee';
+import {
+  UNDECRYPTABLE,
+  decryptForChannel,
+  encryptForChannel,
+  syncChannelKeys,
+} from '../services/e2ee';
+import { notifyMessage, windowIsFocused } from '../services/notifications';
+import { useAuthStore } from './auth';
 
 interface ChatState {
   workspaces: WorkspaceWithRole[];
@@ -17,6 +24,8 @@ interface ChatState {
   messages: Message[];
   activeWorkspaceId: string | null;
   activeChannelId: string | null;
+  /** channelId -> unread message count, for the dot in the sidebar. */
+  unread: Record<string, number>;
   loadingMessages: boolean;
   error: string | null;
 
@@ -37,6 +46,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   messages: [],
   activeWorkspaceId: null,
   activeChannelId: null,
+  unread: {},
   loadingMessages: false,
   error: null,
 
@@ -57,13 +67,23 @@ export const useChatStore = create<ChatState>((set, get) => ({
     ]);
     set({ channels, members });
 
+    // Subscribed to every text channel, not only the open one: a message in
+    // another channel has to arrive for it to be counted or notified about.
+    chatSocket.syncSubscriptions(
+      channels.filter((channel) => channel.type === 'TEXT').map((channel) => channel.id),
+    );
+
     const first = channels.find((channel) => channel.type === 'TEXT');
     if (first) await get().selectChannel(first.id);
   },
 
   selectChannel: async (channelId) => {
-    const previous = get().activeChannelId;
-    if (previous && previous !== channelId) chatSocket.unsubscribe(previous);
+    // Opening a channel clears its unread mark.
+    if (get().unread[channelId]) {
+      const unread = { ...get().unread };
+      delete unread[channelId];
+      set({ unread });
+    }
 
     // A voice channel opens its own screen; there is no history to fetch and no
     // message socket to subscribe to.
@@ -135,21 +155,43 @@ export const useChatStore = create<ChatState>((set, get) => ({
       messages: [],
       activeWorkspaceId: null,
       activeChannelId: null,
+      unread: {},
       error: null,
     }),
 }));
 
-// Realtime messages land here regardless of which component is mounted.
+// Realtime messages land here regardless of which component is mounted, for
+// every subscribed channel - not only the one on screen.
 chatSocket.on((event) => {
   if (event.type !== 'message.created') return;
   const incoming = event.message;
-  if (incoming.channelId !== useChatStore.getState().activeChannelId) return;
 
   void decryptForChannel(incoming.channelId, incoming.content).then((content) => {
     // Re-read: decryption is async, so the channel may have changed meanwhile.
     const state = useChatStore.getState();
-    if (incoming.channelId !== state.activeChannelId) return;
-    if (state.messages.some((message) => message.id === incoming.id)) return;
-    useChatStore.setState({ messages: [...state.messages, { ...incoming, content }] });
+    const active = incoming.channelId === state.activeChannelId;
+    const mine = incoming.author.id === useAuthStore.getState().user?.id;
+
+    if (active && !state.messages.some((message) => message.id === incoming.id)) {
+      useChatStore.setState({ messages: [...state.messages, { ...incoming, content }] });
+    }
+
+    if (mine) return;
+
+    if (!active || !windowIsFocused()) {
+      const count = (state.unread[incoming.channelId] ?? 0) + 1;
+      useChatStore.setState({ unread: { ...state.unread, [incoming.channelId]: count } });
+    }
+
+    notifyMessage({
+      channelId: incoming.channelId,
+      channelName:
+        state.channels.find((channel) => channel.id === incoming.channelId)?.name ?? 'a channel',
+      author: incoming.author.displayName || incoming.author.username,
+      // A message this device cannot read still deserves a notification, just
+      // without quoting the placeholder into it.
+      text: content === UNDECRYPTABLE ? null : content,
+      active,
+    });
   });
 });

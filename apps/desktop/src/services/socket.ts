@@ -83,6 +83,23 @@ export class ChatSocket {
     this.send({ type: 'channel.subscribe', channelId });
   }
 
+  /**
+   * Subscribes to exactly `channelIds`, dropping anything else.
+   *
+   * The client stays subscribed to every text channel it can read, not only the
+   * one on screen - otherwise a message in another channel never arrives and
+   * there is nothing to notify about.
+   */
+  syncSubscriptions(channelIds: string[]): void {
+    const wanted = new Set(channelIds);
+    for (const channelId of this.channels) {
+      if (!wanted.has(channelId)) this.unsubscribe(channelId);
+    }
+    for (const channelId of wanted) {
+      if (!this.channels.has(channelId)) this.subscribe(channelId);
+    }
+  }
+
   unsubscribe(channelId: string): void {
     this.channels.delete(channelId);
     this.send({ type: 'channel.unsubscribe', channelId });

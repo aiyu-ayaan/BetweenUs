@@ -4,6 +4,10 @@
  */
 import { create } from 'zustand';
 import { presenceSocket } from '../services/socket';
+import { notifyVoiceJoin } from '../services/notifications';
+import { useAuthStore } from './auth';
+import { useChatStore } from './chat';
+import { useVoiceStore } from './voice';
 
 /** How long a typing indicator stays up after the last keystroke event. */
 const TYPING_TTL_MS = 5_000;
@@ -57,6 +61,29 @@ export const usePresenceStore = create<PresenceState>((set, get) => ({
   reset: () => set({ online: new Set(), typing: new Map(), voice: new Map() }),
 }));
 
+/**
+ * Someone joining a voice channel is this app's closest thing to a ringing
+ * phone, so it is worth a notification - unless it is this user, or a channel
+ * they are already sitting in, where the tile appearing says it better.
+ */
+function announceVoiceJoins(channelId: string, before: string[], after: string[]): void {
+  const joined = after.filter((userId) => !before.includes(userId));
+  if (joined.length === 0) return;
+
+  const me = useAuthStore.getState().user?.id;
+  if (useVoiceStore.getState().channelId === channelId) return;
+
+  const { channels, members } = useChatStore.getState();
+  const channel = channels.find((item) => item.id === channelId);
+  if (!channel) return;
+
+  for (const userId of joined) {
+    if (userId === me) continue;
+    const member = members.find((item) => item.userId === userId);
+    notifyVoiceJoin(channelId, channel.name, member?.displayName ?? 'Someone');
+  }
+}
+
 presenceSocket.on((event) => {
   const state = usePresenceStore.getState();
 
@@ -91,8 +118,10 @@ presenceSocket.on((event) => {
 
     case 'voice.changed': {
       const voice = new Map(state.voice);
+      const before = voice.get(event.voice.channelId) ?? [];
       voice.set(event.voice.channelId, event.voice.userIds);
       usePresenceStore.setState({ voice });
+      announceVoiceJoins(event.voice.channelId, before, event.voice.userIds);
       return;
     }
 

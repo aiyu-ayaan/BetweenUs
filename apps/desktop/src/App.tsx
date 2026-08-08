@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useAuthStore } from './stores/auth';
 import { useChatStore } from './stores/chat';
 import { usePresenceStore } from './stores/presence';
+import { onNotificationActivate } from './services/notifications';
 import { LoginScreen } from './features/auth/LoginScreen';
 import { WorkspaceRail } from './features/workspaces/WorkspaceRail';
 import { ChannelSidebar } from './features/channels/ChannelSidebar';
@@ -36,6 +37,12 @@ export default function App(): JSX.Element {
   }, [restore, login]);
 
   const resetPresence = usePresenceStore((state) => state.reset);
+
+  // Clicking a notification brings the window back and opens what it was about.
+  useEffect(
+    () => onNotificationActivate((channelId) => void useChatStore.getState().selectChannel(channelId)),
+    [],
+  );
 
   useEffect(() => {
     if (status === 'authenticated') {

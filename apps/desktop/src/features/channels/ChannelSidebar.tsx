@@ -8,8 +8,15 @@ import { VoicePanel } from '../voice/VoicePanel';
 import { HashIcon, LogOutIcon, PlusIcon, SpeakerIcon } from '../../components/icons';
 
 export function ChannelSidebar(): JSX.Element {
-  const { workspaces, channels, activeWorkspaceId, activeChannelId, selectChannel, createChannel } =
-    useChatStore();
+  const {
+    workspaces,
+    channels,
+    activeWorkspaceId,
+    activeChannelId,
+    unread,
+    selectChannel,
+    createChannel,
+  } = useChatStore();
   const user = useAuthStore((state) => state.user);
   const logout = useAuthStore((state) => state.logout);
 
@@ -78,7 +85,15 @@ export function ChannelSidebar(): JSX.Element {
               }`}
             >
               <HashIcon className="h-4 w-4 shrink-0" />
-              <span className="truncate">{channel.name}</span>
+              <span className={`truncate ${unread[channel.id] ? 'font-semibold text-slate-100' : ''}`}>
+                {channel.name}
+              </span>
+              {unread[channel.id] ? (
+                <span className="ml-auto rounded-full bg-accent px-1.5 text-xs font-semibold text-white">
+                  {unread[channel.id]}
+                  <span className="sr-only"> unread messages</span>
+                </span>
+              ) : null}
             </button>
           ))}
           {creating === 'TEXT' && newChannelInput}

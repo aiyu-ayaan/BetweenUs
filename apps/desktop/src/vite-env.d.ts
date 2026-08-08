@@ -30,7 +30,9 @@ interface ScreenSource {
 interface Window {
   nexora?: {
     platform: string;
-    notify: (title: string, body: string) => void;
+    notify: (title: string, body: string, channelId?: string) => void;
+    /** Returns an unsubscribe function. */
+    onNotificationActivate: (handler: (channelId: string) => void) => () => void;
     /** OS-keychain-backed storage for E2EE private keys. */
     secureGet: (key: string) => Promise<string | null>;
     secureSet: (key: string, value: string) => Promise<void>;

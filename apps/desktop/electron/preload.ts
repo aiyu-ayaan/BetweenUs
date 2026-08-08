@@ -6,9 +6,18 @@ import { contextBridge, ipcRenderer } from 'electron';
  */
 const api = {
   platform: process.platform,
-  /** Desktop notification via the main process (works when the window is hidden). */
-  notify: (title: string, body: string): void => {
-    ipcRenderer.send('notification:show', { title, body });
+  /**
+   * Desktop notification via the main process (works when the window is
+   * hidden). `channelId` is handed back on click so the app can open it.
+   */
+  notify: (title: string, body: string, channelId?: string): void => {
+    ipcRenderer.send('notification:show', { title, body, channelId });
+  },
+  /** Fires when a notification is clicked, with the channel it was about. */
+  onNotificationActivate: (handler: (channelId: string) => void): (() => void) => {
+    const listener = (_event: unknown, channelId: string): void => handler(channelId);
+    ipcRenderer.on('notification:activate', listener);
+    return () => ipcRenderer.removeListener('notification:activate', listener);
   },
   /**
    * Encrypted-at-rest storage for E2EE private keys. The main process seals the
