@@ -492,6 +492,44 @@ export type ServerPresenceEvent =
   | { type: 'pong' }
   | { type: 'error'; code: string; message: string };
 
+// --- Notifications ---
+
+/**
+ * Notification preferences, owned by the account rather than the client, so a
+ * mute set on one machine holds on the next one.
+ */
+export interface NotificationPreferences {
+  enabled: boolean;
+  /**
+   * Quiet hours as minutes from midnight on the client's own clock (so the
+   * server needs no timezone). Null on either end means no quiet hours; a
+   * window may wrap midnight - start 1320, end 480 is 22:00 to 08:00.
+   */
+  quietStartMinute: number | null;
+  quietEndMinute: number | null;
+  mutedChannelIds: string[];
+}
+
+export interface UpdateNotificationPreferencesRequest {
+  enabled?: boolean;
+  quietStartMinute?: number | null;
+  quietEndMinute?: number | null;
+  /** Replaces the whole list; send the list you want, not a delta. */
+  mutedChannelIds?: string[];
+}
+
+/** Messages a user has not read in one channel, derived from the read marker. */
+export interface ChannelUnread {
+  channelId: string;
+  count: number;
+  lastReadAt: string | null;
+}
+
+/** "I am looking at this channel now" - the marker is always the current time. */
+export interface MarkChannelReadRequest {
+  channelId: string;
+}
+
 // --- Chat WebSocket protocol (/ws/chat) ---
 
 export type ClientChatEvent =

@@ -79,7 +79,7 @@ jobs:
 
       - name: Start services
         run: |
-          for service in auth-service server-service chat-service presence-service; do
+          for service in auth-service server-service chat-service presence-service notification-service; do
             node "apps/services/$service/dist/main.js" > "/tmp/$service.log" 2>&1 &
           done
           for port in 3001 3003 3004 3005; do
@@ -92,6 +92,7 @@ jobs:
 
       - run: node apps/services/chat-service/smoke.mjs
       - run: node apps/services/presence-service/smoke.mjs
+      - run: node apps/services/notification-service/smoke.mjs
 
       - name: Service logs
         if: failure()

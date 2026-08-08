@@ -48,6 +48,7 @@ services:
       - chat-service
       - call-service
       - presence-service
+      - notification-service
       - admin-web
     networks:
       - cloudflare-network
@@ -146,6 +147,25 @@ services:
     volumes:
       # Uploads survive container replacement when the local driver is active.
       - upload-data:/data/uploads
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - api-network
+      - data-network
+
+  notification-service:
+    build:
+      context: ../..
+      dockerfile: apps/services/notification-service/Dockerfile
+    restart: unless-stopped
+    environment:
+      <<: *service-env
+      NOTIFICATION_SERVICE_PORT: 3006
     depends_on:
       migrate:
         condition: service_completed_successfully

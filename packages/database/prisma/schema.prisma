@@ -65,8 +65,49 @@ model User {
   messages      Message[]
   deviceKey     DeviceKey?
   identities    UserIdentity[]
+  notifications NotificationSetting?
+  channelReads  ChannelRead[]
 
   @@map("users")
+}
+
+/// Per-account notification settings, owned by notification-service. One row
+/// per user, written the first time anything is changed - an account with no
+/// row is an account with the defaults.
+model NotificationSetting {
+  userId String @id
+  /// Off entirely; the client raises nothing while this is false.
+  enabled Boolean @default(true)
+  /// Quiet hours as minutes from midnight on the client's own clock, so the
+  /// server never has to know a timezone. Null on either end means no quiet
+  /// hours. A window is allowed to wrap midnight (start 1320, end 480).
+  quietStartMinute Int?
+  quietEndMinute   Int?
+  /// Channels this account never wants raised.
+  /// ponytail: an array column, not a join table - the list is small and is
+  /// only ever read whole. Split it out when a mute grows its own settings.
+  mutedChannelIds String[] @default([])
+  updatedAt       DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("notification_settings")
+}
+
+/// How far a user has read a channel. Unread counts are derived from it rather
+/// than stored, so they survive a restart and follow the account to another
+/// machine instead of living in one client's memory.
+model ChannelRead {
+  userId     String
+  channelId  String
+  lastReadAt DateTime @default(now())
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  channel Channel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+
+  @@id([userId, channelId])
+  @@index([channelId])
+  @@map("channel_reads")
 }
 
 /// A third-party login linked to an account. The provider's own user id is what
@@ -207,6 +248,7 @@ model Channel {
   members  ChannelMember[]
   messages Message[]
   keys     ChannelKey[]
+  reads    ChannelRead[]
 
   @@unique([serverId, name])
   @@map("channels")

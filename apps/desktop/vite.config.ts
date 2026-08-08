@@ -8,6 +8,7 @@ const SERVER = process.env.SERVER_SERVICE_URL ?? 'http://127.0.0.1:3003';
 const CHAT = process.env.CHAT_SERVICE_URL ?? 'http://127.0.0.1:3004';
 const CALL = process.env.CALL_SERVICE_URL ?? 'http://127.0.0.1:3007';
 const PRESENCE = process.env.PRESENCE_SERVICE_URL ?? 'http://127.0.0.1:3005';
+const NOTIFICATION = process.env.NOTIFICATION_SERVICE_URL ?? 'http://127.0.0.1:3006';
 
 // `pnpm dev:duo` starts Electron itself - twice, with separate profiles - so it
 // tells the plugin to build the main/preload bundles and stop there.
@@ -57,6 +58,7 @@ export default defineConfig({
       '/api/v1/uploads': CHAT,
       '/api/v1/e2ee': CHAT,
       '/api/v1/calls': CALL,
+      '/api/v1/notifications': NOTIFICATION,
       '/ws/chat': { target: CHAT, ws: true },
       '/ws/presence': { target: PRESENCE, ws: true },
     },
