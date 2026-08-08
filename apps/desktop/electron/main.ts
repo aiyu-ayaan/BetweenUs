@@ -1,6 +1,7 @@
 import {
   app,
   BrowserWindow,
+  Menu,
   Notification,
   desktopCapturer,
   ipcMain,
@@ -272,6 +273,12 @@ ipcMain.handle('oauth:start', async (_event, startUrl: unknown): Promise<string 
 });
 
 void app.whenReady().then(() => {
+  // No File / Edit / View / Window / Help bar: this is a chat app, not a
+  // document editor, and every entry it offered duplicated something the UI
+  // already does. macOS is left alone - there the application menu is where
+  // Cmd+C, Cmd+Q and Hide live, and removing it breaks them.
+  if (process.platform !== 'darwin') Menu.setApplicationMenu(null);
+
   // Voice channels need the microphone and camera; screen share needs display
   // capture. Everything else a page might ask for is denied.
   session.defaultSession.setPermissionRequestHandler((_contents, permission, callback) => {
