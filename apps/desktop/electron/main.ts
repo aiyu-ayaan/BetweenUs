@@ -93,10 +93,22 @@ function startedHidden(): boolean {
 
 /** Load application icon for windows and tray. */
 function getAppIcon(): Electron.NativeImage {
-  const iconPath = path.join(dirname, '../public/icon.png');
-  if (fs.existsSync(iconPath)) return nativeImage.createFromPath(iconPath);
-  const svgPath = path.join(dirname, '../public/icon.svg');
-  if (fs.existsSync(svgPath)) return nativeImage.createFromPath(svgPath);
+  const possiblePaths = [
+    path.join(dirname, '../public/icon.png'),
+    path.join(dirname, '../dist/icon.png'),
+    path.join(dirname, '../build/icon.png'),
+    path.join(dirname, '../public/icon.svg'),
+    path.join(dirname, '../dist/icon.svg'),
+    path.join(process.cwd(), 'apps/desktop/public/icon.png'),
+    path.join(process.cwd(), 'apps/desktop/public/icon.svg'),
+    path.join(process.cwd(), 'public/icon.png'),
+  ];
+  for (const p of possiblePaths) {
+    if (fs.existsSync(p)) {
+      const img = nativeImage.createFromPath(p);
+      if (!img.isEmpty()) return img;
+    }
+  }
   return nativeImage.createEmpty();
 }
 
@@ -122,6 +134,10 @@ function createWindow(hidden = false): BrowserWindow {
       webviewTag: false,
     },
   });
+
+  if (!appIcon.isEmpty()) {
+    window.setIcon(appIcon);
+  }
 
   window.once('ready-to-show', () => {
     if (!hidden) window.show();
@@ -476,6 +492,10 @@ if (!profile && !app.requestSingleInstanceLock()) {
 }
 
 void app.whenReady().then(() => {
+  if (process.platform === 'win32') {
+    app.setAppUserModelId(profile ? `com.nexora.desktop.${profile}` : 'com.nexora.desktop');
+  }
+
   // No File / Edit / View / Window / Help bar: this is a chat app, not a
   // document editor, and every entry it offered duplicated something the UI
   // already does. macOS is left alone - there the application menu is where
