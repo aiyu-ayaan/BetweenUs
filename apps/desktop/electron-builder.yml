@@ -1,0 +1,4 @@
+appId: com.nexora.desktop
+productName: Nexora
+directories:
+  output: dist

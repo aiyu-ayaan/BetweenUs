@@ -1,0 +1,9 @@
+{
+    "name": "@nexora/desktop",
+    "private": true,
+    "version": "0.1.0",
+    "scripts": {
+        "dev": "echo \"Desktop app scaffold\"",
+        "build": "echo \"Desktop app scaffold\""
+    }
+}
