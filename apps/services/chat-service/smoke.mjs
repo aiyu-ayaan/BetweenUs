@@ -15,6 +15,15 @@ const json = async (url, options = {}) => {
   return body;
 };
 
+/** A false assertion fails the run: this script is the CI integration test. */
+const ok = (label, condition, detail = '') => {
+  if (!condition) {
+    console.error(`FAIL ${label} ${detail}`);
+    process.exit(1);
+  }
+  console.log(`${label} ok`, detail);
+};
+
 const suffix = Date.now().toString(36);
 const email = `smoke-${suffix}@nexora.local`;
 
@@ -28,13 +37,13 @@ const token = auth.accessToken;
 const authed = { Authorization: `Bearer ${token}` };
 
 const me = await json(`${AUTH}/api/v1/auth/me`, { headers: authed });
-console.log('me ok', me.email === email);
+ok('me', me.email === email);
 
 const refreshed = await json(`${AUTH}/api/v1/auth/refresh`, {
   method: 'POST',
   body: JSON.stringify({ refreshToken: auth.refreshToken }),
 });
-console.log('refresh ok', Boolean(refreshed.accessToken));
+ok('refresh', Boolean(refreshed.accessToken));
 
 // Rotation: the consumed refresh token must not work twice.
 let reuseRejected = false;
@@ -46,7 +55,7 @@ try {
 } catch {
   reuseRejected = true;
 }
-console.log('refresh rotation ok', reuseRejected);
+ok('refresh rotation', reuseRejected);
 
 const workspace = await json(`${WORKSPACE}/api/v1/workspaces`, {
   method: 'POST',
@@ -97,7 +106,7 @@ const message = await received;
 console.log('realtime ok', message.content, 'by', message.author.username);
 
 const history = await json(`${CHAT}/api/v1/messages?channelId=${channel.id}`, { headers: authed });
-console.log('history ok', history.items.length === 1);
+ok('history', history.items.length === 1, `${history.items.length} item`);
 
 // Unauthenticated socket must be closed, not downgraded.
 const anonClosed = await new Promise((resolve) => {
@@ -105,7 +114,7 @@ const anonClosed = await new Promise((resolve) => {
   anon.on('close', (code) => resolve(code));
   anon.on('error', () => resolve(-1));
 });
-console.log('anonymous ws rejected ok', anonClosed === 4401);
+ok('anonymous ws rejected', anonClosed === 4401, String(anonClosed));
 
 // Upload with no S3 configured must land on local disk.
 const form = new FormData();
@@ -121,11 +130,11 @@ console.log('upload ok', uploaded.key, uploaded.size);
 
 const download = await fetch(`${CHAT}${uploaded.url}`);
 const downloaded = await download.text();
-console.log('download ok', downloaded === 'smoke-png', download.headers.get('content-type'));
+ok('download', downloaded === 'smoke-png', download.headers.get('content-type'));
 
 // Traversal attempt must be refused.
 const traversal = await fetch(`${CHAT}/api/v1/uploads/..%2F..%2Fpackage.json`);
-console.log('traversal blocked ok', traversal.status >= 400);
+ok('traversal blocked', traversal.status >= 400, String(traversal.status));
 
 // --- E2EE key directory -----------------------------------------------------
 // Crypto correctness is covered by the desktop self-check; this proves the
@@ -142,10 +151,10 @@ await json(`${CHAT}/api/v1/e2ee/devices`, {
 const devices = await json(`${CHAT}/api/v1/e2ee/devices?channelId=${channel.id}`, {
   headers: authed,
 });
-console.log('device directory ok', devices.some((device) => device.userId === me.id));
+ok('device directory', devices.some((device) => device.userId === me.id));
 
 const empty = await json(`${CHAT}/api/v1/e2ee/keys/${channel.id}`, { headers: authed });
-console.log('unkeyed channel ok', empty.epoch === 0 && empty.keys.length === 0);
+ok('unkeyed channel', empty.epoch === 0 && empty.keys.length === 0);
 
 await json(`${CHAT}/api/v1/e2ee/keys`, {
   method: 'POST',
@@ -165,10 +174,7 @@ await json(`${CHAT}/api/v1/e2ee/keys`, {
 });
 
 const keys = await json(`${CHAT}/api/v1/e2ee/keys/${channel.id}`, { headers: authed });
-console.log(
-  'channel key ok',
-  keys.epoch === 1 && keys.keys[0]?.wrappedKey === 'c21va2Utd3JhcHBlZC1rZXk=',
-);
+ok('channel key', keys.epoch === 1 && keys.keys[0]?.wrappedKey === 'c21va2Utd3JhcHBlZC1rZXk=');
 
 // Epoch 3 with epoch 1 in place must be refused: keys advance one step at a time.
 let epochRejected = false;
@@ -192,7 +198,7 @@ try {
 } catch {
   epochRejected = true;
 }
-console.log('epoch ordering enforced ok', epochRejected);
+ok('epoch ordering enforced', epochRejected);
 
 socket.close();
 console.log('\nSMOKE PASSED');
