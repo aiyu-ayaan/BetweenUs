@@ -6,7 +6,10 @@ import { Avatar } from '../../components/Avatar';
 import { AttachmentList } from './Attachments';
 import { formatBytes, uploadAttachment } from '../../services/attachments';
 import { OVERFLOW_CHARS, overflowFile } from '../../services/message-body';
+import { isChannelMuted, onPreferencesChanged, setChannelMuted } from '../../services/notifications';
 import {
+  BellIcon,
+  BellOffIcon,
   FileIcon,
   HashIcon,
   ImageIcon,
@@ -17,6 +20,33 @@ import {
   UsersIcon,
   XIcon,
 } from '../../components/icons';
+
+/**
+ * Mutes this channel for the account, not for this window: the setting is
+ * stored by notification-service, so the next machine to sign in honours it.
+ */
+function MuteButton({ channelId }: { channelId: string }): JSX.Element {
+  const [muted, setMuted] = useState(() => isChannelMuted(channelId));
+
+  // Re-read on every preference change, including the one this button caused
+  // and the ones the settings screen makes.
+  useEffect(() => onPreferencesChanged(() => setMuted(isChannelMuted(channelId))), [channelId]);
+
+  return (
+    <button
+      type="button"
+      onClick={() => void setChannelMuted(channelId, !muted).catch(() => undefined)}
+      aria-pressed={muted}
+      aria-label={muted ? 'Unmute this channel' : 'Mute this channel'}
+      title={muted ? 'Muted - no notifications' : 'Mute this channel'}
+      className={`cursor-pointer rounded p-1.5 transition-colors duration-200 hover:bg-surface-700 hover:text-slate-50 ${
+        muted ? 'text-slate-500' : 'text-slate-300'
+      }`}
+    >
+      {muted ? <BellOffIcon className="h-5 w-5" /> : <BellIcon className="h-5 w-5" />}
+    </button>
+  );
+}
 
 export function ChatView({ onToggleMembers }: { onToggleMembers?: () => void }): JSX.Element {
   const { messages, loadingMessages, error } = useChatStore();
@@ -54,17 +84,21 @@ export function ChatView({ onToggleMembers }: { onToggleMembers?: () => void }):
           </>
         )}
 
-        {onToggleMembers && !isDirect && (
-          <button
-            type="button"
-            onClick={onToggleMembers}
-            aria-label="Toggle member list"
-            title="Members"
-            className="ml-auto cursor-pointer rounded p-1.5 text-slate-300 transition-colors duration-200 hover:bg-surface-700 hover:text-slate-50"
-          >
-            <UsersIcon className="h-5 w-5" />
-          </button>
-        )}
+        <div className="ml-auto flex items-center gap-0.5">
+          <MuteButton channelId={channel.id} />
+
+          {onToggleMembers && !isDirect && (
+            <button
+              type="button"
+              onClick={onToggleMembers}
+              aria-label="Toggle member list"
+              title="Members"
+              className="cursor-pointer rounded p-1.5 text-slate-300 transition-colors duration-200 hover:bg-surface-700 hover:text-slate-50"
+            >
+              <UsersIcon className="h-5 w-5" />
+            </button>
+          )}
+        </div>
       </header>
 
       <MessageList

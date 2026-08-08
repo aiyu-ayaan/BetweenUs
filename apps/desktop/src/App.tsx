@@ -3,7 +3,11 @@ import { useAuthStore } from './stores/auth';
 import { useChatStore } from './stores/chat';
 import { useFriendsStore } from './stores/friends';
 import { usePresenceStore } from './stores/presence';
-import { onNotificationActivate } from './services/notifications';
+import {
+  loadNotificationPreferences,
+  onNotificationActivate,
+  resetNotificationPreferences,
+} from './services/notifications';
 import { LoginScreen } from './features/auth/LoginScreen';
 import { ServerRail } from './features/servers/ServerRail';
 import { ServerSettings } from './features/servers/ServerSettings';
@@ -21,6 +25,7 @@ export default function App(): JSX.Element {
   const loadServers = useChatStore((state) => state.loadServers);
   const loadDirects = useChatStore((state) => state.loadDirects);
   const loadFriends = useFriendsStore((state) => state.load);
+  const loadUnread = useChatStore((state) => state.loadUnread);
   const reset = useChatStore((state) => state.reset);
   const resetFriends = useFriendsStore((state) => state.reset);
 
@@ -61,12 +66,25 @@ export default function App(): JSX.Element {
       void loadServers();
       void loadDirects();
       void loadFriends();
+      // Preferences before unread: the badge is harmless either way, but a
+      // notification raised in the half-second between them would ignore a mute.
+      void loadNotificationPreferences().then(() => loadUnread());
       return;
     }
     reset();
     resetFriends();
     resetPresence();
-  }, [status, loadServers, loadDirects, loadFriends, reset, resetFriends, resetPresence]);
+    resetNotificationPreferences();
+  }, [
+    status,
+    loadServers,
+    loadDirects,
+    loadFriends,
+    loadUnread,
+    reset,
+    resetFriends,
+    resetPresence,
+  ]);
 
   if (booting) {
     return (

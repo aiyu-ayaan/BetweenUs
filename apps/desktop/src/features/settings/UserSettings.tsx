@@ -1,9 +1,15 @@
 import { useEffect, useState } from 'react';
 import type { ActiveStatus } from '@nexora/shared-types';
 import { useAuthStore } from '../../stores/auth';
+import { useChatStore } from '../../stores/chat';
 import { usePresenceStore } from '../../stores/presence';
 import { useVoiceStore } from '../../stores/voice';
 import { api } from '../../services/api';
+import {
+  notificationPreferences,
+  onPreferencesChanged,
+  updateNotificationPreferences,
+} from '../../services/notifications';
 import { Avatar } from '../../components/Avatar';
 import { PicturePicker } from '../../components/PicturePicker';
 import {
@@ -295,16 +301,131 @@ function VoiceSection(): JSX.Element {
 
 function NotificationsSection(): JSX.Element {
   const selfStatus = usePresenceStore((state) => state.selfStatus);
+  const channels = useChatStore((state) => state.channels);
+  const directs = useChatStore((state) => state.directs);
+  const [preferences, setPreferences] = useState(notificationPreferences);
+  const [machine, setMachine] = useState<{
+    launchOnStartup: boolean;
+    closeToTray: boolean;
+    canManageAutoStart: boolean;
+  } | null>(null);
+
+  useEffect(() => onPreferencesChanged(setPreferences), []);
+  useEffect(() => {
+    void window.nexora?.getAppSettings().then(setMachine);
+  }, []);
+
+  const save = (patch: Partial<typeof preferences>): void => {
+    void updateNotificationPreferences(patch).catch(() => undefined);
+  };
+
+  const saveMachine = (patch: { launchOnStartup?: boolean; closeToTray?: boolean }): void => {
+    void window.nexora?.setAppSettings(patch).then((next) => {
+      setMachine((current) => (current ? { ...current, ...next } : current));
+    });
+  };
+
+  const channelName = (channelId: string): string =>
+    [...channels, ...directs].find((channel) => channel.id === channelId)?.name ??
+    'a channel you have left';
+
+  const quietHoursOn =
+    preferences.quietStartMinute !== null && preferences.quietEndMinute !== null;
 
   return (
     <>
       <h1 className="text-xl font-semibold text-slate-50">Notifications</h1>
       <p className="mt-2 text-sm text-slate-400">
         A desktop notification is raised for anything you cannot already see: a message in another
-        channel, or in this one while the window is not focused.
+        channel, or in this one while the window is not focused. Mutes and quiet hours are stored
+        on your account, so they hold on every machine you sign in from.
       </p>
 
-      <dl className="mt-5 space-y-4 rounded-lg bg-surface-800 p-4">
+      <div className="mt-5 space-y-1 rounded-lg bg-surface-800 p-4">
+        <Switch
+          label="Desktop notifications"
+          hint="Off silences all of them, on every device."
+          checked={preferences.enabled}
+          onChange={(enabled) => save({ enabled })}
+        />
+        <Switch
+          label="Quiet hours"
+          hint="Nothing is raised between these times. The window may cross midnight."
+          checked={quietHoursOn}
+          onChange={(on) =>
+            save(
+              on
+                ? { quietStartMinute: 22 * 60, quietEndMinute: 8 * 60 }
+                : { quietStartMinute: null, quietEndMinute: null },
+            )
+          }
+        />
+        {quietHoursOn && (
+          <div className="flex gap-4 pt-1">
+            <TimeField
+              label="From"
+              minute={preferences.quietStartMinute ?? 0}
+              onChange={(quietStartMinute) => save({ quietStartMinute })}
+            />
+            <TimeField
+              label="Until"
+              minute={preferences.quietEndMinute ?? 0}
+              onChange={(quietEndMinute) => save({ quietEndMinute })}
+            />
+          </div>
+        )}
+      </div>
+
+      <h2 className="mt-8 text-base font-semibold text-slate-100">This computer</h2>
+      <div className="mt-3 space-y-1 rounded-lg bg-surface-800 p-4">
+        <Switch
+          label="Open Nexora when the system starts"
+          hint="Starts in the tray, without a window in front of what you were doing."
+          checked={machine?.launchOnStartup ?? false}
+          disabled={machine === null || !machine.canManageAutoStart}
+          onChange={(launchOnStartup) => saveMachine({ launchOnStartup })}
+        />
+        <Switch
+          label="Keep running in the tray when the window is closed"
+          hint="Off makes closing the window quit Nexora, and notifications stop with it."
+          checked={machine?.closeToTray ?? false}
+          disabled={machine === null}
+          onChange={(closeToTray) => saveMachine({ closeToTray })}
+        />
+        {machine !== null && !machine.canManageAutoStart && (
+          <p className="pt-2 text-sm text-slate-500">
+            A development window does not register itself to start with the system.
+          </p>
+        )}
+      </div>
+
+      <h2 className="mt-8 text-base font-semibold text-slate-100">Muted channels</h2>
+      {preferences.mutedChannelIds.length === 0 ? (
+        <p className="mt-3 text-sm text-slate-400">
+          Nothing is muted. Mute a channel from the bell in its header.
+        </p>
+      ) : (
+        <ul className="mt-3 divide-y divide-surface-700 rounded-lg bg-surface-800">
+          {preferences.mutedChannelIds.map((channelId) => (
+            <li key={channelId} className="flex items-center justify-between px-4 py-3">
+              <span className="text-slate-100">#{channelName(channelId)}</span>
+              <button
+                type="button"
+                onClick={() =>
+                  save({
+                    mutedChannelIds: preferences.mutedChannelIds.filter((id) => id !== channelId),
+                  })
+                }
+                className="cursor-pointer rounded bg-surface-700 px-3 py-1.5 text-sm text-slate-100 transition-colors duration-200 hover:bg-surface-600"
+              >
+                Unmute
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <dl className="mt-8 space-y-4 rounded-lg bg-surface-800 p-4">
         <Field
           label="Do Not Disturb"
           value={
@@ -314,10 +435,74 @@ function NotificationsSection(): JSX.Element {
           }
         />
       </dl>
-      <p className="mt-4 text-sm text-slate-500">
-        Per-channel muting and quiet hours are not built yet (development/TODO.md).
-      </p>
     </>
+  );
+}
+
+function Switch({
+  label,
+  hint,
+  checked,
+  disabled = false,
+  onChange,
+}: {
+  label: string;
+  hint?: string;
+  checked: boolean;
+  disabled?: boolean;
+  onChange: (checked: boolean) => void;
+}): JSX.Element {
+  return (
+    <label
+      className={`flex items-start justify-between gap-6 py-2 ${
+        disabled ? 'opacity-50' : 'cursor-pointer'
+      }`}
+    >
+      <span>
+        <span className="block text-slate-100">{label}</span>
+        {hint && <span className="mt-0.5 block text-sm text-slate-400">{hint}</span>}
+      </span>
+      <input
+        type="checkbox"
+        checked={checked}
+        disabled={disabled}
+        onChange={(event) => onChange(event.target.checked)}
+        className="mt-1 h-5 w-5 shrink-0 cursor-pointer accent-accent"
+      />
+    </label>
+  );
+}
+
+/** A time of day, held as minutes from midnight on this machine's clock. */
+function TimeField({
+  label,
+  minute,
+  onChange,
+}: {
+  label: string;
+  minute: number;
+  onChange: (minute: number) => void;
+}): JSX.Element {
+  const value = `${String(Math.floor(minute / 60)).padStart(2, '0')}:${String(
+    minute % 60,
+  ).padStart(2, '0')}`;
+
+  return (
+    <label className="block">
+      <span className="block text-xs font-bold uppercase tracking-wide text-slate-400">
+        {label}
+      </span>
+      <input
+        type="time"
+        value={value}
+        onChange={(event) => {
+          // An empty input clears the value, which is not a time of day.
+          const [hours = NaN, minutes = NaN] = event.target.value.split(':').map(Number);
+          if (Number.isFinite(hours) && Number.isFinite(minutes)) onChange(hours * 60 + minutes);
+        }}
+        className="mt-2 rounded bg-surface-950 px-3 py-2 text-slate-100 focus:outline-none focus:ring-2 focus:ring-accent"
+      />
+    </label>
   );
 }
 

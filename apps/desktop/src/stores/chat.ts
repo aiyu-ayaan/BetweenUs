@@ -19,7 +19,7 @@ import {
   syncChannelKeys,
 } from '../services/e2ee';
 import { decodeBody, encodeBody } from '../services/message-body';
-import { notifyMessage, windowIsFocused } from '../services/notifications';
+import { notifyMessage, publishUnreadCount, windowIsFocused } from '../services/notifications';
 import { useAuthStore } from './auth';
 
 /**
@@ -48,6 +48,8 @@ interface ChatState {
   error: string | null;
 
   loadServers: () => Promise<void>;
+  /** Read markers live on the account, so a badge survives a restart. */
+  loadUnread: () => Promise<void>;
   /** The channel on screen, wherever it lives. */
   activeChannel: () => Channel | undefined;
   showHome: () => void;
@@ -92,6 +94,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
   loadServers: async () => {
     const servers = await api.servers();
     set({ servers });
+  },
+
+  loadUnread: async () => {
+    const counts = await api.unread().catch(() => []);
+    const unread: Record<string, number> = {};
+    for (const entry of counts) if (entry.count > 0) unread[entry.channelId] = entry.count;
+    setUnread(unread);
   },
 
   activeChannel: () => {
@@ -139,12 +148,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   selectChannel: async (channelId) => {
-    // Opening a channel clears its unread mark.
+    // Opening a channel clears its unread mark here and on the account, so the
+    // next window to sign in does not show a badge for something already read.
     if (get().unread[channelId]) {
       const unread = { ...get().unread };
       delete unread[channelId];
-      set({ unread });
+      setUnread(unread);
     }
+    void api.markChannelRead(channelId).catch(() => undefined);
 
     // A voice channel opens its own screen; there is no history to fetch and no
     // message socket to subscribe to.
@@ -274,7 +285,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
   },
 
-  reset: () =>
+  reset: () => {
+    setUnread({});
     set({
       view: 'home',
       servers: [],
@@ -284,10 +296,19 @@ export const useChatStore = create<ChatState>((set, get) => ({
       messages: [],
       activeServerId: null,
       activeChannelId: null,
-      unread: {},
       error: null,
-    }),
+    });
+  },
 }));
+
+/**
+ * The one place unread counts are written, because two things follow every
+ * change: the sidebar dots and the tray tooltip / dock badge.
+ */
+function setUnread(unread: Record<string, number>): void {
+  useChatStore.setState({ unread });
+  publishUnreadCount(Object.values(unread).reduce((total, count) => total + count, 0));
+}
 
 /** Splits a decrypted body into the text and the files it carried. */
 function toDecrypted(message: Message, plaintext: string): DecryptedMessage {
@@ -348,7 +369,7 @@ chatSocket.on((event) => {
 
     if (!active || !windowIsFocused()) {
       const count = (state.unread[incoming.channelId] ?? 0) + 1;
-      useChatStore.setState({ unread: { ...state.unread, [incoming.channelId]: count } });
+      setUnread({ ...state.unread, [incoming.channelId]: count });
     }
 
     notifyMessage({

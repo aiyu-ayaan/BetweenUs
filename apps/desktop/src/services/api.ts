@@ -6,11 +6,13 @@ import type {
   Channel,
   ChannelKeysResponse,
   ChannelMember,
+  ChannelUnread,
   CreateChannelRequest,
   DeviceKey,
   DirectChannel,
   Friend,
   Message,
+  NotificationPreferences,
   OAuthProviderSummary,
   Paginated,
   PublicUser,
@@ -22,6 +24,7 @@ import type {
   UploadedPart,
   UpdateAccountRequest,
   UpdateChannelRequest,
+  UpdateNotificationPreferencesRequest,
   UpdateServerMemberRequest,
   UpdateServerRequest,
   UserSummary,
@@ -316,6 +319,27 @@ export const api = {
 
   publishChannelKeys: (body: PublishChannelKeysRequest): Promise<{ epoch: number; stored: number }> =>
     request('/api/v1/e2ee/keys', { method: 'POST', body: JSON.stringify(body) }),
+
+  // --- Notifications ---
+
+  notificationPreferences: (): Promise<NotificationPreferences> =>
+    request('/api/v1/notifications/preferences'),
+
+  updateNotificationPreferences: (
+    body: UpdateNotificationPreferencesRequest,
+  ): Promise<NotificationPreferences> =>
+    request('/api/v1/notifications/preferences', {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    }),
+
+  unread: (): Promise<ChannelUnread[]> => request('/api/v1/notifications/unread'),
+
+  markChannelRead: (channelId: string): Promise<ChannelUnread> =>
+    request('/api/v1/notifications/read', {
+      method: 'POST',
+      body: JSON.stringify({ channelId }),
+    }),
 
   // --- Calls ---
 
