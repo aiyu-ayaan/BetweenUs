@@ -12,6 +12,7 @@ import {
   Room,
   RoomEvent,
   Track,
+  setLogLevel,
   type LocalParticipant,
   type Participant,
   type RemoteParticipant,
@@ -20,6 +21,10 @@ import E2eeWorker from 'livekit-client/e2ee-worker?worker';
 import { api } from '../services/api';
 import { callKeyForChannel } from '../services/e2ee';
 import { presenceSocket } from '../services/socket';
+
+// LiveKit's own diagnostics land in the terminal through the main process, so a
+// failed publish says why instead of just "negotiation timed out".
+if (import.meta.env.DEV) setLogLevel('debug');
 
 export interface VoiceTile {
   identity: string;
@@ -231,4 +236,13 @@ function toTile(participant: Participant, speaking: boolean): VoiceTile {
     // Local audio is never played back locally - that is an echo, not a feature.
     audioTrack: participant.isLocal ? null : (mic?.track ?? null),
   };
+}
+
+// A hot reload replaces this module while the old Room is still connected, and
+// LiveKit answers a second session with the same identity by kicking the first
+// - which looks exactly like a broken publish. Hand the room back first.
+if (import.meta.hot) {
+  import.meta.hot.dispose(() => {
+    void useVoiceStore.getState().leave();
+  });
 }
