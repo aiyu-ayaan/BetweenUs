@@ -1,4 +1,13 @@
 appId: com.nexora.desktop
 productName: Nexora
 directories:
-  output: dist
+  output: release
+files:
+  - dist/**
+  - dist-electron/**
+win:
+  target: nsis
+mac:
+  target: dmg
+linux:
+  target: AppImage
