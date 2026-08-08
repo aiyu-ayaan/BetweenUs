@@ -21,14 +21,59 @@ we get there in stages and what each stage delivers.
 | 11 | Admin panel, OAuth, notifications | Admin web app, Google/GitHub sign-in, desktop notifications | Done |
 | 12 | Servers, permissions, DMs | Workspace renamed to server, per-member permissions, private channels, friends and direct messages, Discord-parity client | In progress |
 | 13 | Media | Encrypted attachments of any type, client-side compression, multipart upload, avatars and server icons | In progress |
-| 14 | Remote desktop | remote-gateway, remote-agent, remote permissions, audit log | Planned |
-| 15 | Production ingress | Cloudflare Tunnel, TLS, secret management, deploy pipeline | Planned |
+| 14 | Notifications | notification-service, system tray, start with the system, mutes and quiet hours | Done |
+| 15 | Remote desktop | remote-gateway, remote-agent, remote permissions, audit log | Planned |
+| 16 | Production ingress | Cloudflare Tunnel, TLS, secret management, deploy pipeline | Planned |
 
 Hardening moved to phase 10: encryption changes the message format and presence
 adds a service, so both were cheaper to land before tests were written against
 the older shape.
 
 ## Architecture decisions made so far
+
+### Notifications, the tray and starting with the system (phase 14)
+
+- **notification-service raises no notifications.** It sounds like a
+  contradiction and is the whole design: the desktop client already receives
+  every message over `/ws/chat`, and only the client knows what is on screen.
+  Adding a second delivery path would mean either duplicate notifications or a
+  server that has to model window focus. What the client cannot own is the part
+  that has to outlive it - which channels are muted, when the quiet hours are,
+  and how far each channel has been read - so that is what the service owns.
+  When a web or Android client arrives it asks the same three questions and
+  gets the same answers, which is what "one backend, many clients" has to mean
+  for a preference.
+- **Unread is derived from a read marker, not counted into a column.** One row
+  per user per channel holding `lastReadAt`, and the count is messages after it
+  that someone else wrote. A stored counter has to be decremented by every path
+  that could mark something read, and drifts the first time one of them is
+  missed; a marker cannot drift. It also answers "unread since when" for a
+  client that has been offline for a week.
+- **A channel with no marker counts from when the user could first see it** -
+  their server join, their addition to a private channel, or the channel's
+  creation. Counting from the start of history would greet anyone joining an
+  established server with a thousand unread messages, which is not information.
+- **Quiet hours are minutes from midnight on the client's clock.** The server
+  stores two integers and never learns a timezone; a window that wraps midnight
+  (start 1320, end 480) is a comparison the client makes, not a range the
+  database has to understand. A traveller's quiet hours follow the machine they
+  are on, which is the behaviour people expect from "do not disturb me at
+  night".
+- **Closing the window hides it; the tray keeps the app alive.** Notifications
+  that only arrive while the app is on screen are not notifications. The tray
+  icon is what makes closing safe - the socket stays connected, the tray
+  tooltip carries the unread count, and Quit is on its menu. Both this and
+  auto-start are switches in settings, defaulting on: an auto-start with no way
+  to turn it off is malware behaviour, not a feature.
+- **A development window never registers auto-start.** `pnpm dev:duo` would
+  otherwise leave two temp-profile Electrons in the user's startup list,
+  pointed at a Vite server that is not running. Same reason the single-instance
+  lock is skipped when a profile is set: two windows there are the point.
+- **Do Not Disturb is enforced in one place with everything else.** It was
+  advertised in settings and enforced nowhere. There is now one predicate -
+  account switch, channel mute, quiet hours, DND status - and every path that
+  raises a notification goes through it, rather than each remembering the four
+  rules for itself.
 
 ### Media: attachments, pictures and uploads (phase 13)
 
@@ -457,7 +502,27 @@ built from `PUBLIC_API_URL`. Behind Cloudflare that is the public hostname, not
 | Job | Does |
 | --- | --- |
 | `verify` | install → lint → typecheck → build → `pnpm check` (package self-checks) |
-| `integration` | Postgres + Redis service containers, migrations, four services started from their builds, then both smoke scripts |
+| `integration` | Postgres + Redis service containers, migrations, five services started from their builds, then the smoke scripts |
+
+### Phase 14 verification
+
+Run live against the development stack on 2026-08-09:
+
+- Migration applied to a running Postgres (`prisma migrate deploy`), all eight
+  migrations green.
+- `apps/services/notification-service/smoke.mjs` passes against auth-,
+  server-, chat- and notification-service: preference round trip with the
+  mute list deduplicated, a patch leaving untouched fields alone, a minute
+  outside the day refused with 400, your own message never unread, someone
+  else's counted, history from before joining not counted, the read marker
+  clearing the count, an unreadable channel answering 404 rather than 403, and
+  the routes refusing an anonymous caller.
+- `pnpm typecheck` and `pnpm build` pass across all 28 workspace tasks.
+
+Not yet exercised by a human: the tray itself - closing to it, the unread
+tooltip, restoring from a click, quitting from the menu - and an auto-start
+that survives a real reboot. Both need a packaged build on a machine someone
+is sitting at; `TESTING.md` says what to try.
 
 ## Companion documents
 

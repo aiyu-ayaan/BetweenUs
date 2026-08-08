@@ -36,8 +36,9 @@ when the MVP shipped.
 
 - Remote desktop (`remote-gateway`, `remote-agent`, remote permissions)
 - Presence service, typing indicators
-- Notification service and push notifications (the desktop client raises local
-  notifications itself since phase 11; there is still no server-side service)
+- Push notifications to a signed-out or sleeping client (the desktop client
+  raises local notifications since phase 11, and `notification-service` holds
+  the mutes, quiet hours and read state since phase 14)
 - User service (profiles, avatars, friends); message-attachment linking
 - ~~OAuth logins~~ (shipped in phase 11: Google and GitHub, configured from the
   admin panel), email verification, password reset
@@ -61,8 +62,9 @@ Nginx  :8080
 Postgres :5432        Redis :6379
 ```
 
-Scaffolded but intentionally empty: `user-service`, `presence-service`,
-`notification-service`, `call-service`, `remote-gateway`, `remote-agent`.
+Scaffolded but intentionally empty: `user-service`, `remote-gateway`,
+`remote-agent`. Built since the MVP: `presence-service`, `call-service`,
+`notification-service`.
 
 ## Known MVP shortcuts
 

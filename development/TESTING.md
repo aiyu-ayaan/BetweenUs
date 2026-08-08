@@ -166,9 +166,34 @@ Closing both windows stops the dev server. Ctrl+C does the same.
   generates a new device key and old messages show the "no key on this device"
   placeholder — that is the design, not a bug (see `E2EE.md`, limit 1).
 
+## Notifications, the tray and auto-start
+
+Most of this needs a packaged build (`pnpm --filter @nexora/desktop build`
+then electron-builder), because a development window deliberately refuses to
+register itself to start with the system.
+
+1. **Muting.** Open a channel, click the bell in its header. Have the other
+   window send to it - no notification, and the bell reads as muted. Sign in on
+   another machine (or wipe the profile and sign in again): still muted, because
+   the setting is on the account, not the window.
+2. **Quiet hours.** Settings → Notifications → Quiet hours, set a window that
+   contains the current time. Nothing is raised until it passes. Set one that
+   crosses midnight and check the boundary either side.
+3. **Do Not Disturb.** Set the status from the user panel; notifications stop
+   until it changes.
+4. **Unread survives a restart.** Leave messages unread, quit, sign in again -
+   the sidebar dots and the tray tooltip come back with the same counts. Open
+   the channel and they clear on the account, not only in this window.
+5. **Close to tray.** Close the window. The process stays up, the tray icon
+   stays there, and a message arriving now still raises a notification.
+   Clicking the tray icon brings the window back; Quit on its menu ends it.
+6. **Start with the system.** On in settings by default. Reboot: Nexora comes
+   back in the tray with no window in front of what you were doing. Turn it off
+   and reboot again - it stays gone.
+
 ## Backend smoke tests
 
-Both scripts need Postgres, Redis and the services running, and both exit
+The scripts need Postgres, Redis and the services running, and both exit
 non-zero on a failed assertion — CI runs exactly these.
 
 `node apps/services/chat-service/smoke.mjs` walks the REST and WebSocket
@@ -198,6 +223,13 @@ join and leave, the heartbeat, a rejected anonymous socket, a refused
 non-member voice join, and status: that a chosen status reaches the other
 socket, that invisible reaches it as `offline`, and that the word `invisible`
 never appears in anyone else's payload.
+
+`node apps/services/notification-service/smoke.mjs` covers preferences and
+read state: the preference round trip with the mute list deduplicated, a patch
+that leaves untouched fields alone, a minute outside the day refused, your own
+message never unread, someone else's counted, history from before you joined
+not counted, the read marker clearing the count, a channel you cannot see
+answering 404 rather than 403, and an anonymous caller refused.
 
 ## Self-checks and CI
 

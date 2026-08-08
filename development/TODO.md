@@ -5,9 +5,40 @@ the top honest — it is what a new session reads first.
 
 ## Next up
 
-Phase 13 has landed in code; what is left of it needs a human in front of the
-app, and so does most of phase 12. The carried-over items are older ones in the
-same state.
+Phases 13 and 14 have landed in code; what is left of them needs a human in
+front of the app, and so does most of phase 12. The carried-over items are
+older ones in the same state.
+
+### Phase 14 — notifications, the tray and auto-start
+
+- [x] `notification-service` as its own deployable package: preferences and
+      read state on the account, a gateway route, a compose service and a
+      `dev:duo` health warning
+- [x] Per-channel mute (a bell in the channel header) and quiet hours, stored
+      on the account rather than in one client
+- [x] Unread state persisted as a read marker per channel, so a badge survives
+      a restart and follows the account; loaded at sign-in, cleared on open
+- [x] Do Not Disturb actually enforced, alongside the mute, the quiet hours and
+      the account switch, in one predicate every notification path goes through
+- [x] System tray: unread-aware tooltip, click to restore, Quit on its menu,
+      and closing the window hides to it so notifications keep arriving
+- [x] Start with the system, on by default, with a switch in settings; a
+      development window never registers it
+- [x] Single-instance lock, so launching the shortcut again means "come back"
+- [x] Smoke coverage: preference round trip, unread counting, history from
+      before joining not counted, and an unreadable channel answering 404
+
+Left open on purpose:
+
+- [ ] Nothing raises a notification while the client is signed out or the
+      machine is asleep - that needs a push transport (APNs / FCM / Web Push),
+      which is what a web and Android client will want anyway
+- [ ] A mention is not distinguished from an ordinary message, so there is no
+      "mentions only" mute level yet
+- [ ] Unread counts are one query per channel; a single grouped query if a
+      busy account makes that show
+- [ ] The tray icon is a data URI in the main process, not a real asset, and it
+      does not follow a light or dark system theme
 
 ### Phase 13 — media
 
@@ -105,8 +136,6 @@ Phase 12 opened these, and left them open on purpose:
 - [ ] OAuth sign-in for the admin panel itself (it is password-only today)
 - [ ] Audit log of admin actions - who disabled or deleted whom, and when
 - [ ] Pagination in the users table (capped at 100 rows today)
-- [ ] Notification preferences: per-channel mute, and a quiet-hours switch
-- [ ] Unread state is per session; persist it so it survives a restart
 
 ## Done
 
@@ -272,13 +301,13 @@ Follow-ups this phase deliberately left open:
 - [x] Desktop notifications for messages and voice joins, with unread counts,
       taskbar flash and click-to-open
 
-### Phase 13 — remote desktop
+### Phase 15 — remote desktop
 - [ ] `remote-agent`: device identity, outbound WebSocket, screen capture, input
 - [ ] `remote-gateway`: session relay, authorization, audit log
 - [ ] Remote permission model (`REMOTE_VIEW`, `REMOTE_CONTROL`, …) with expiry
 - [ ] Desktop remote client view
 
-### Phase 14 — production
+### Phase 16 — production
 - [ ] Cloudflare Tunnel config + `cloudflared` container wired to Nginx
 - [ ] Secret management, no secrets in compose files
 - [ ] Docker image build + push pipeline, health-checked deploys
@@ -288,4 +317,5 @@ Follow-ups this phase deliberately left open:
 - [ ] Replace Redis Pub/Sub with NATS when fanout volume needs it
 - [ ] Custom named roles with a colour and an ordering, instead of the five
       built-ins plus per-member overrides phase 12 ships
-- [ ] `user-service` (profiles, avatars, friends) and `notification-service`
+- [ ] `user-service` (profiles, avatars, friends): those routes are served by
+      chat-service today
