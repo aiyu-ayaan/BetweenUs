@@ -70,6 +70,73 @@ Media never passes through a NestJS process. `call-service` decides who may
 join a room and mints a LiveKit token; the client dials the SFU directly and
 encrypts its own tracks with the channel key.
 
+### How a request actually flows
+
+Sending a message, from the keystroke to the other person's screen. Every layer
+does one job, and the boundaries are where the security properties live.
+
+```
+┌──────────────────────────────────────────────────────────────────────┐
+│ 1  Electron renderer                                                 │
+│    Zustand store → encrypt with the channel key (AES-256-GCM)        │
+│    Plaintext stops here. Everything below sees ciphertext.           │
+└───────────────────────────────┬──────────────────────────────────────┘
+                                │  POST /api/v1/messages   (JWT bearer)
+┌───────────────────────────────▼──────────────────────────────────────┐
+│ 2  Nginx :8080          (in development, the Vite proxy stands in)   │
+│    Route by path · rate limit · body cap · forward x-request-id      │
+│    No business logic, no database, no idea what a message is.        │
+└───────────────────────────────┬──────────────────────────────────────┘
+                                │  http://chat-service:3004
+┌───────────────────────────────▼──────────────────────────────────────┐
+│ 3  chat-service (NestJS)                                             │
+│    JwtAuthGuard         → who is this                                │
+│    ValidationPipe / DTO → is the body the right shape                │
+│    Controller (thin)    → hands off, decides nothing                 │
+│    MessagesService      → resolveChannelAccess(user, channel):       │
+│                           membership, role, overrides, allowlist     │
+└───────────────────────────────┬──────────────────────────────────────┘
+                                │  typed Prisma calls
+┌───────────────────────────────▼──────────────────────────────────────┐
+│ 4  Prisma (@nexora/database)                                         │
+│    One schema, one generated client, one connection pool.            │
+│    Typed queries in, rows out - the only thing that speaks SQL.      │
+└───────────────────────────────┬──────────────────────────────────────┘
+                                │
+┌───────────────────────────────▼──────────────────────────────────────┐
+│ 5  PostgreSQL :5432                                                  │
+│    messages(id, channelId, authorId, content = ciphertext, …)        │
+└───────────────────────────────┬──────────────────────────────────────┘
+                                │  row written
+┌───────────────────────────────▼──────────────────────────────────────┐
+│ 6  Redis :6379 - publish `message.created`                           │
+│    Fanout, not storage: every chat-service instance is subscribed,   │
+│    so a client on another instance is reached just the same.         │
+└───────────────────────────────┬──────────────────────────────────────┘
+                                │
+┌───────────────────────────────▼──────────────────────────────────────┐
+│ 7  /ws/chat gateways → sockets subscribed to that channel            │
+│    → each renderer decrypts with its own copy of the channel key,    │
+│      updates the store, and decides whether to notify                │
+└──────────────────────────────────────────────────────────────────────┘
+```
+
+The sender's own client is on that same socket path: there is no optimistic
+insert, so a message appears when it is real, and the copy that appears is the
+one that came back through the fanout.
+
+Reads take the first five steps and stop: `GET /api/v1/messages` is the same
+guard, the same access check, and one indexed Prisma query on
+`(channelId, createdAt)`. The client caches the decrypted result per channel in
+memory, so reopening a conversation paints immediately and refreshes behind it.
+
+Two paths deliberately skip this stack:
+
+- **Media** goes `desktop → LiveKit SFU` over WebRTC. `call-service` only mints
+  the token that says which room the user may join.
+- **Attachments** are sealed in the renderer and uploaded as bytes; the server
+  stores an object it cannot type and hands back a key.
+
 ### Services
 
 Each service is its own package with its own `package.json`, `Dockerfile` and
