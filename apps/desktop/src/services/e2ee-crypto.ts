@@ -96,6 +96,36 @@ export async function decryptMessage(
 }
 
 /**
+ * Seals raw bytes - a file - under the channel key. Separate from
+ * `encryptMessage` because the result is uploaded as a blob rather than
+ * stored in a message, so it stays binary instead of becoming base64.
+ *
+ * ponytail: the whole file is sealed in one AES-GCM operation, which means it
+ * is held in memory twice while that happens. That is why the client refuses
+ * attachments over MAX_ATTACHMENT_BYTES. Chunked AEAD - one sealed frame per
+ * upload part, each with its own nonce - is the upgrade if larger files matter.
+ */
+export async function encryptBytes(
+  plaintext: Uint8Array<ArrayBuffer>,
+  channelKey: string,
+): Promise<{ iv: string; ciphertext: Uint8Array<ArrayBuffer> }> {
+  const key = await importContentKey(channelKey);
+  const iv = randomIv();
+  const sealed = await subtle.encrypt({ name: 'AES-GCM', iv }, key, plaintext);
+  return { iv: toBase64(iv), ciphertext: new Uint8Array(sealed) };
+}
+
+export async function decryptBytes(
+  ciphertext: Uint8Array<ArrayBuffer>,
+  iv: string,
+  channelKey: string,
+): Promise<Uint8Array<ArrayBuffer>> {
+  const key = await importContentKey(channelKey);
+  const opened = await subtle.decrypt({ name: 'AES-GCM', iv: fromBase64(iv) }, key, ciphertext);
+  return new Uint8Array(opened);
+}
+
+/**
  * Reads a stored message body. Returns null for anything that is not an
  * envelope, so plaintext rows written before E2EE still render.
  */

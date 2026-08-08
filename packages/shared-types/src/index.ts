@@ -326,6 +326,26 @@ export const UPLOADED_PICTURE_URL = /^(\/|https:\/\/)[^\s]*\/pictures\/[^\s]+$/;
 // server therefore stores an opaque blob and a ciphertext, and knows neither
 // what the file is called nor what it contains.
 
+/** What the upload routes answer with, whatever driver stored the bytes. */
+export interface UploadedObject {
+  key: string;
+  size: number;
+  contentType: string;
+  url: string;
+}
+
+/** Opened by `POST /uploads/multipart`; the ticket is the whole session. */
+export interface StartMultipartResponse {
+  ticket: string;
+  /** Largest body one part may have, so the client can size its chunks. */
+  maxPartBytes: number;
+}
+
+export interface UploadedPart {
+  partNumber: number;
+  etag: string;
+}
+
 export interface MessageAttachment {
   /** Storage key of the ciphertext. */
   key: string;

@@ -8,7 +8,9 @@
 import type { EncryptedEnvelope } from '@nexora/shared-types';
 import { api } from './api';
 import {
+  decryptBytes,
   decryptMessage,
+  encryptBytes,
   encryptMessage,
   generateChannelKey,
   generateIdentity,
@@ -95,6 +97,32 @@ export async function decryptForChannel(channelId: string, content: string): Pro
   } catch {
     return UNDECRYPTABLE;
   }
+}
+
+/**
+ * Seals a file under the channel's current key. The epoch comes back with it,
+ * because the recipient has to know which generation opens it - the same
+ * bookkeeping `EncryptedEnvelope` does for a message.
+ */
+export async function encryptFileForChannel(
+  channelId: string,
+  bytes: Uint8Array<ArrayBuffer>,
+): Promise<{ ciphertext: Uint8Array<ArrayBuffer>; iv: string; epoch: number }> {
+  const state = await ensureChannelKey(channelId);
+  const key = state.keys.get(state.epoch);
+  if (!key) throw new MissingChannelKeyError();
+  const { iv, ciphertext } = await encryptBytes(bytes, key);
+  return { ciphertext, iv, epoch: state.epoch };
+}
+
+/** Throws rather than returning a placeholder: a file either opens or it does not. */
+export async function decryptFileForChannel(
+  channelId: string,
+  ciphertext: Uint8Array<ArrayBuffer>,
+  iv: string,
+  epoch: number,
+): Promise<Uint8Array<ArrayBuffer>> {
+  return decryptBytes(ciphertext, iv, await keyForEpoch(channelId, epoch));
 }
 
 /**

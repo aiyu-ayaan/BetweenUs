@@ -17,6 +17,9 @@ import type {
   PublishChannelKeysRequest,
   ServerMember,
   ServerWithRole,
+  StartMultipartResponse,
+  UploadedObject,
+  UploadedPart,
   UpdateAccountRequest,
   UpdateChannelRequest,
   UpdateServerMemberRequest,
@@ -78,6 +81,38 @@ async function request<T>(path: string, init: RequestInit = {}, retry = true): P
     throw new ApiError(
       body?.error?.code ?? 'REQUEST_FAILED',
       body?.error?.message ?? 'Request failed',
+      response.status,
+    );
+  }
+
+  return payload as T;
+}
+
+/**
+ * Same contract as `request`, for a body the browser has to frame itself.
+ * `fetch` sets the multipart boundary in the Content-Type header, so this one
+ * must not send a Content-Type of its own.
+ */
+async function upload<T>(path: string, form: FormData, retry = true): Promise<T> {
+  const token = getAccessToken();
+  const response = await fetch(`${API_URL}${path}`, {
+    method: 'POST',
+    body: form,
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+
+  if (response.status === 401 && retry) {
+    const refreshed = await refreshAccessToken();
+    if (refreshed) return upload<T>(path, form, false);
+  }
+
+  const payload: unknown = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    const body = payload as ApiErrorBody | null;
+    throw new ApiError(
+      body?.error?.code ?? 'UPLOAD_FAILED',
+      body?.error?.message ?? 'The upload failed',
       response.status,
     );
   }
@@ -197,6 +232,55 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ channelId, content }),
     }),
+
+  // --- Uploads ---
+  //
+  // Pictures go up as they are; attachments go up already encrypted, which is
+  // why nothing here is told what the file is or what it is called.
+
+  uploadPicture: (file: Blob, name: string): Promise<UploadedObject> => {
+    const form = new FormData();
+    form.append('file', file, name);
+    return upload('/api/v1/uploads/picture', form);
+  },
+
+  uploadAttachment: (ciphertext: Blob): Promise<UploadedObject> => {
+    const form = new FormData();
+    form.append('file', ciphertext, 'blob');
+    return upload('/api/v1/uploads', form);
+  },
+
+  startMultipart: (size: number): Promise<StartMultipartResponse> =>
+    request('/api/v1/uploads/multipart', { method: 'POST', body: JSON.stringify({ size }) }),
+
+  uploadPart: (ticket: string, partNumber: number, part: Blob): Promise<UploadedPart> => {
+    const form = new FormData();
+    form.append('ticket', ticket);
+    form.append('partNumber', String(partNumber));
+    form.append('file', part, 'part');
+    return upload('/api/v1/uploads/multipart/part', form);
+  },
+
+  completeMultipart: (ticket: string, parts: UploadedPart[]): Promise<UploadedObject> =>
+    request('/api/v1/uploads/multipart/complete', {
+      method: 'POST',
+      body: JSON.stringify({ ticket, parts }),
+    }),
+
+  abortMultipart: (ticket: string): Promise<void> =>
+    request('/api/v1/uploads/multipart', { method: 'DELETE', body: JSON.stringify({ ticket }) }),
+
+  /** Fetches a stored object's bytes. Attachments come back as ciphertext. */
+  fetchObject: async (url: string): Promise<Uint8Array<ArrayBuffer>> => {
+    const token = getAccessToken();
+    const response = await fetch(url.startsWith('http') ? url : `${API_URL}${url}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!response.ok) {
+      throw new ApiError('OBJECT_NOT_FOUND', 'That file is no longer available', response.status);
+    }
+    return new Uint8Array(await response.arrayBuffer());
+  },
 
   // --- Friends and direct messages ---
 

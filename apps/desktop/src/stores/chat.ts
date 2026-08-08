@@ -4,6 +4,7 @@ import type {
   ChannelType,
   DirectChannel,
   Message,
+  MessageAttachment,
   ServerMember,
   ServerWithRole,
   UpdateServerMemberRequest,
@@ -16,8 +17,18 @@ import {
   encryptForChannel,
   syncChannelKeys,
 } from '../services/e2ee';
+import { decodeBody, encodeBody } from '../services/message-body';
 import { notifyMessage, windowIsFocused } from '../services/notifications';
 import { useAuthStore } from './auth';
+
+/**
+ * A message as the client holds it: decrypted, and with the attachment
+ * manifest lifted out of the body. The server never sees this shape - it
+ * stores one ciphertext string.
+ */
+export interface DecryptedMessage extends Message {
+  attachments: MessageAttachment[];
+}
 
 interface ChatState {
   /** Home is the direct-message side of the app; a server is everything else. */
@@ -27,7 +38,7 @@ interface ChatState {
   /** Open conversations, kept apart from a server's channels. */
   directs: Channel[];
   members: ServerMember[];
-  messages: Message[];
+  messages: DecryptedMessage[];
   activeServerId: string | null;
   activeChannelId: string | null;
   /** channelId -> unread message count, for the dot in the sidebar. */
@@ -51,7 +62,7 @@ interface ChatState {
     isPrivate?: boolean;
     memberIds?: string[];
   }) => Promise<void>;
-  sendMessage: (content: string) => Promise<void>;
+  sendMessage: (content: string, attachments?: MessageAttachment[]) => Promise<void>;
   renameServer: (name: string) => Promise<void>;
   leaveServer: () => Promise<void>;
   deleteServer: () => Promise<void>;
@@ -150,10 +161,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     try {
       const page = await api.messages(channelId);
       const items = await Promise.all(
-        page.items.map(async (message) => ({
-          ...message,
-          content: await decryptForChannel(channelId, message.content),
-        })),
+        page.items.map(async (message) => toDecrypted(message, await decryptForChannel(channelId, message.content))),
       );
       // Guard against a slow response for a channel the user already left.
       if (get().activeChannelId !== channelId) return;
@@ -185,11 +193,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
     if (channel.type === 'TEXT') await get().selectChannel(channel.id);
   },
 
-  sendMessage: async (content) => {
+  sendMessage: async (content, attachments = []) => {
     const channelId = get().activeChannelId;
     if (!channelId) return;
-    // The server stores and forwards ciphertext only.
-    const envelope = await encryptForChannel(channelId, content);
+    // The server stores and forwards ciphertext only - and the attachment
+    // manifest is inside it, so the names and types are encrypted too.
+    const envelope = await encryptForChannel(
+      channelId,
+      encodeBody({ text: content, attachments }),
+    );
     // No optimistic insert: the message arrives over the socket, so an
     // optimistic copy would have to be de-duplicated for no real gain.
     await api.sendMessage(channelId, envelope);
@@ -275,6 +287,21 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }),
 }));
 
+/** Splits a decrypted body into the text and the files it carried. */
+function toDecrypted(message: Message, plaintext: string): DecryptedMessage {
+  // An undecryptable body is a placeholder, not a body - do not try to read
+  // an attachment manifest out of it.
+  if (plaintext === UNDECRYPTABLE) return { ...message, content: plaintext, attachments: [] };
+  const body = decodeBody(plaintext);
+  return { ...message, content: body.text, attachments: body.attachments };
+}
+
+function notificationText(message: DecryptedMessage): string | null {
+  if (message.content === UNDECRYPTABLE) return null;
+  if (message.content.trim()) return message.content;
+  return message.attachments.length > 0 ? 'Sent an attachment' : null;
+}
+
 /**
  * A direct message is a channel; the client only has to give it the shape the
  * rest of the app already knows, named after the person on the other end.
@@ -304,14 +331,15 @@ chatSocket.on((event) => {
   if (event.type !== 'message.created') return;
   const incoming = event.message;
 
-  void decryptForChannel(incoming.channelId, incoming.content).then((content) => {
+  void decryptForChannel(incoming.channelId, incoming.content).then((plaintext) => {
+    const message = toDecrypted(incoming, plaintext);
     // Re-read: decryption is async, so the channel may have changed meanwhile.
     const state = useChatStore.getState();
     const active = incoming.channelId === state.activeChannelId;
     const mine = incoming.author.id === useAuthStore.getState().user?.id;
 
-    if (active && !state.messages.some((message) => message.id === incoming.id)) {
-      useChatStore.setState({ messages: [...state.messages, { ...incoming, content }] });
+    if (active && !state.messages.some((existing) => existing.id === incoming.id)) {
+      useChatStore.setState({ messages: [...state.messages, message] });
     }
 
     if (mine) return;
@@ -329,8 +357,9 @@ chatSocket.on((event) => {
         )?.name ?? 'a channel',
       author: incoming.author.displayName || incoming.author.username,
       // A message this device cannot read still deserves a notification, just
-      // without quoting the placeholder into it.
-      text: content === UNDECRYPTABLE ? null : content,
+      // without quoting the placeholder into it. Nor is a file's name quoted:
+      // the notification goes to the OS, which is outside the encrypted path.
+      text: notificationText(message),
       active,
     });
   });
