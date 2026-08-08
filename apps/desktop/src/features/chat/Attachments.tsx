@@ -15,7 +15,7 @@ import {
   readAttachmentText,
   saveAttachment,
 } from '../../services/attachments';
-import { DownloadIcon, EyeIcon, FileIcon, XIcon } from '../../components/icons';
+import { DownloadIcon, EyeIcon, FileIcon, PlayIcon, XIcon } from '../../components/icons';
 
 /** Text small enough to read in the message list without opening anything. */
 const INLINE_TEXT_CHARS = 800;
@@ -41,6 +41,8 @@ export function AttachmentList({
                 attachment={attachment}
                 onOpen={() => setPreview(attachment)}
               />
+            ) : isPlayable(attachment) ? (
+              <MediaAttachment channelId={channelId} attachment={attachment} />
             ) : isTextual(attachment) ? (
               <TextAttachment
                 channelId={channelId}
@@ -74,7 +76,37 @@ function isTextual(attachment: MessageAttachment): boolean {
   );
 }
 
+/** Video and audio the runtime can play back rather than only hand over. */
+function isPlayable(attachment: MessageAttachment): boolean {
+  return (
+    attachment.contentType.startsWith('video/') || attachment.contentType.startsWith('audio/')
+  );
+}
+
 // --- Images -----------------------------------------------------------------
+
+/**
+ * The box a preview is allowed to occupy in the message list. A photo from a
+ * phone is 3000px tall; rendered at its own size one message would be the
+ * whole channel. So it is fitted into this box with its aspect ratio kept, and
+ * the full size is one click away.
+ */
+const PREVIEW_WIDTH = 360;
+const PREVIEW_HEIGHT = 240;
+
+/** The size a preview renders at: the original, shrunk to fit, never enlarged. */
+function fitted(attachment: MessageAttachment): { width: number; height: number } | null {
+  if (!attachment.width || !attachment.height) return null;
+  const scale = Math.min(
+    1,
+    PREVIEW_WIDTH / attachment.width,
+    PREVIEW_HEIGHT / attachment.height,
+  );
+  return {
+    width: Math.round(attachment.width * scale),
+    height: Math.round(attachment.height * scale),
+  };
+}
 
 function ImageAttachment({
   channelId,
@@ -87,27 +119,100 @@ function ImageAttachment({
 }): JSX.Element {
   const { url, error } = useDecrypted(channelId, attachment);
 
-  // The stored pixel size reserves the space before the bytes arrive, so the
-  // message list does not jump as images resolve.
-  const ratio =
-    attachment.width && attachment.height ? attachment.width / attachment.height : 16 / 9;
-
   if (error) return <FileCard channelId={channelId} attachment={attachment} note={error} />;
+
+  // The stored pixel size also reserves the space before the bytes arrive, so
+  // the message list does not jump as images resolve. Without it - a GIF, which
+  // is never re-encoded and so has no recorded size - CSS does the same job
+  // once the image loads.
+  const box = fitted(attachment);
 
   return (
     <button
       type="button"
       onClick={onOpen}
       title={`${attachment.name} - ${formatBytes(attachment.size)}`}
-      className="block w-full cursor-pointer overflow-hidden rounded-lg border border-black/20 bg-surface-850"
-      style={{ maxWidth: Math.min(attachment.width ?? 400, 400) }}
+      className="block cursor-pointer overflow-hidden rounded-lg border border-black/20 bg-surface-850"
+      style={box ? { width: box.width, height: box.height } : undefined}
     >
       {url ? (
-        <img src={url} alt={attachment.name} className="h-auto w-full object-cover" />
+        <img
+          src={url}
+          alt={attachment.name}
+          className="h-full w-full object-contain"
+          style={box ? undefined : { maxWidth: PREVIEW_WIDTH, maxHeight: PREVIEW_HEIGHT }}
+        />
       ) : (
-        <div className="w-full animate-pulse bg-surface-800" style={{ aspectRatio: ratio }} />
+        <div className="h-full w-full animate-pulse bg-surface-800" />
       )}
     </button>
+  );
+}
+
+// --- Video and audio --------------------------------------------------------
+
+/**
+ * A player, not a download link. The source is an object URL over the
+ * decrypted bytes, so the whole file has to arrive before playback starts -
+ * there is no range request to make against a blob, and the ciphertext is one
+ * sealed unit anyway. That is why it waits for a click rather than fetching
+ * 36 MB the moment the message scrolls past.
+ */
+function MediaAttachment({
+  channelId,
+  attachment,
+}: {
+  channelId: string;
+  attachment: MessageAttachment;
+}): JSX.Element {
+  const [wanted, setWanted] = useState(false);
+  const { url, error } = useDecrypted(channelId, wanted ? attachment : null);
+  const isVideo = attachment.contentType.startsWith('video/');
+
+  if (error) return <FileCard channelId={channelId} attachment={attachment} note={error} />;
+
+  if (!wanted) {
+    return (
+      <FileCard
+        channelId={channelId}
+        attachment={attachment}
+        onPlay={() => setWanted(true)}
+      />
+    );
+  }
+
+  return (
+    <div className="overflow-hidden rounded-lg border border-black/20 bg-surface-850">
+      {url ? (
+        isVideo ? (
+          <video
+            src={url}
+            controls
+            autoPlay
+            className="block max-h-[320px] w-full bg-black"
+            style={{ maxWidth: PREVIEW_WIDTH * 1.4 }}
+          />
+        ) : (
+          <audio src={url} controls autoPlay className="block w-full" />
+        )
+      ) : (
+        <p className="px-3 py-6 text-center text-sm text-slate-400">
+          Decrypting {attachment.name}…
+        </p>
+      )}
+      <div className="flex items-center gap-2 border-t border-black/20 px-3 py-1.5">
+        <span className="truncate text-xs text-slate-400">
+          {attachment.name} · {formatBytes(attachment.size)}
+        </span>
+        <div className="ml-auto">
+          <IconButton
+            label="Download"
+            onClick={() => void saveAttachment(channelId, attachment)}
+            icon={<DownloadIcon className="h-4 w-4" />}
+          />
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -172,22 +277,36 @@ function FileCard({
   channelId,
   attachment,
   note,
+  onPlay,
 }: {
   channelId: string;
   attachment: MessageAttachment;
   note?: string;
+  /** Present for video and audio: fetch and decrypt, then play it here. */
+  onPlay?: () => void;
 }): JSX.Element {
   const [failure, setFailure] = useState<string | null>(null);
 
   return (
     <div className="flex items-center gap-3 rounded-lg border border-black/20 bg-surface-850 px-3 py-2.5">
-      <FileIcon className="h-8 w-8 shrink-0 text-accent" />
+      {onPlay ? (
+        <PlayIcon className="h-8 w-8 shrink-0 text-accent" />
+      ) : (
+        <FileIcon className="h-8 w-8 shrink-0 text-accent" />
+      )}
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-medium text-slate-100">{attachment.name}</p>
         <p className="truncate text-xs text-slate-400">
           {note ?? failure ?? formatBytes(attachment.size)}
         </p>
       </div>
+      {onPlay && (
+        <IconButton
+          label={`Play ${attachment.name}`}
+          onClick={onPlay}
+          icon={<PlayIcon className="h-4 w-4" />}
+        />
+      )}
       <IconButton
         label={`Download ${attachment.name}`}
         onClick={() => {

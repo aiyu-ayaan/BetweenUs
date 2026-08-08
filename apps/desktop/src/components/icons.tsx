@@ -271,3 +271,9 @@ export const ImageIcon = (props: IconProps): JSX.Element => (
     <path d="m21 15-4.5-4.5L7 20" />
   </Base>
 );
+
+export const PlayIcon = (props: IconProps): JSX.Element => (
+  <Base {...props}>
+    <polygon points="6 4 20 12 6 20 6 4" />
+  </Base>
+);
