@@ -258,8 +258,19 @@ ipcMain.handle('screen:select', (_event, id: unknown, audio: unknown): void => {
 
 ipcMain.on(
   'notification:show',
-  (_event, payload: { title: string; body: string; channelId?: string }) => {
+  (
+    _event,
+    payload: { title: string; body: string; channelId?: string; active?: boolean },
+  ) => {
     const window = mainWindow;
+    // The renderer says whether this is the channel on screen; the main process
+    // is the one that knows whether the window really has focus. `hasFocus()`
+    // in the renderer is false with devtools attached and true for a window
+    // buried behind another, which is how notifications ended up appearing for
+    // the conversation the user was reading.
+    const visible = window !== null && !window.isDestroyed() && window.isVisible();
+    if (payload.active === true && visible && window.isFocused()) return;
+
     if (window && !window.isFocused()) window.flashFrame(true);
     if (!Notification.isSupported()) return;
 

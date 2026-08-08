@@ -117,13 +117,15 @@ interface MessageNotification {
 }
 
 export function notifyMessage(message: MessageNotification): void {
-  if (message.active && windowIsFocused()) return;
   if (silenced(message.channelId)) return;
 
+  // Whether the window is really focused is the main process's answer, not
+  // this one's - so `active` is passed along rather than resolved here.
   window.nexora?.notify(
     `${message.author} in #${message.channelName}`,
     message.text ?? 'Sent an encrypted message',
     message.channelId,
+    message.active,
   );
 }
 

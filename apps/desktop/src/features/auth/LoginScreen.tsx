@@ -1,11 +1,12 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import type { OAuthProviderSummary } from '@nexora/shared-types';
-import { useAuthStore } from '../../stores/auth';
+import { rememberedEmail, useAuthStore } from '../../stores/auth';
 import { api } from '../../services/api';
 
 export function LoginScreen(): JSX.Element {
   const [mode, setMode] = useState<'login' | 'register'>('login');
-  const [email, setEmail] = useState('');
+  // Signing in again on this machine should not mean typing the address again.
+  const [email, setEmail] = useState(rememberedEmail);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   /** Empty until the server answers; nothing is offered that is not configured. */

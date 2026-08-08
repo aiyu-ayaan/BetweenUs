@@ -11,6 +11,18 @@ function connectSockets(accessToken: string): void {
 }
 
 const STORAGE_KEY = 'nexora.refreshToken';
+/**
+ * The address of the last account signed in on this machine, so the form comes
+ * back filled in. Only the address: a password belongs in the OS keychain or
+ * nowhere, and the refresh token above is what actually keeps a session alive
+ * across restarts.
+ */
+const EMAIL_KEY = 'nexora.lastEmail';
+
+/** Prefills the login form. Empty on a machine nobody has signed in on. */
+export function rememberedEmail(): string {
+  return localStorage.getItem(EMAIL_KEY) ?? '';
+}
 
 interface AuthState {
   user: PublicUser | null;
@@ -43,6 +55,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({ status: 'loading', error: null });
     try {
       const result = await api.login(email, password);
+      localStorage.setItem(EMAIL_KEY, email);
       applySession(set, result.accessToken, result.refreshToken, result.user);
     } catch (error) {
       set({ status: 'idle', error: messageOf(error) });
@@ -80,6 +93,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({ status: 'loading', error: null });
     try {
       const result = await api.register(email, username, password);
+      localStorage.setItem(EMAIL_KEY, email);
       applySession(set, result.accessToken, result.refreshToken, result.user);
     } catch (error) {
       set({ status: 'idle', error: messageOf(error) });

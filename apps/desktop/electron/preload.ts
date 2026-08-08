@@ -8,10 +8,12 @@ const api = {
   platform: process.platform,
   /**
    * Desktop notification via the main process (works when the window is
-   * hidden). `channelId` is handed back on click so the app can open it.
+   * hidden). `channelId` is handed back on click so the app can open it, and
+   * `active` says this is the channel on screen - the main process drops it
+   * when that channel is on screen in a focused window.
    */
-  notify: (title: string, body: string, channelId?: string): void => {
-    ipcRenderer.send('notification:show', { title, body, channelId });
+  notify: (title: string, body: string, channelId?: string, active = false): void => {
+    ipcRenderer.send('notification:show', { title, body, channelId, active });
   },
   /** Fires when a notification is clicked, with the channel it was about. */
   onNotificationActivate: (handler: (channelId: string) => void): (() => void) => {

@@ -30,7 +30,7 @@ interface ScreenSource {
 interface Window {
   nexora?: {
     platform: string;
-    notify: (title: string, body: string, channelId?: string) => void;
+    notify: (title: string, body: string, channelId?: string, active?: boolean) => void;
     /** Returns an unsubscribe function. */
     onNotificationActivate: (handler: (channelId: string) => void) => () => void;
     /** Total unread, for the tray tooltip and the dock badge. */

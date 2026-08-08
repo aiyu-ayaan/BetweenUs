@@ -44,6 +44,14 @@ interface ChatState {
   activeChannelId: string | null;
   /** channelId -> unread message count, for the dot in the sidebar. */
   unread: Record<string, number>;
+  /**
+   * Decrypted history per channel, so reopening one paints immediately instead
+   * of clearing the view and waiting for a fetch and fifty decryptions.
+   *
+   * Memory only, and deliberately: this is plaintext, and writing it to disk
+   * would undo what the encryption is for. It dies with the window.
+   */
+  history: Record<string, DecryptedMessage[]>;
   loadingMessages: boolean;
   error: string | null;
 
@@ -88,6 +96,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   activeServerId: null,
   activeChannelId: null,
   unread: {},
+  history: {},
   loadingMessages: false,
   error: null,
 
@@ -164,7 +173,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
       return;
     }
 
-    set({ activeChannelId: channelId, messages: [], loadingMessages: true, error: null });
+    // Whatever was read before is still true; show it now and refresh behind
+    // it, rather than blanking the view for the round trip.
+    const cached = get().history[channelId];
+    set({
+      activeChannelId: channelId,
+      messages: cached ?? [],
+      loadingMessages: cached === undefined,
+      error: null,
+    });
     chatSocket.subscribe(channelId);
 
     // Members who joined after this channel was keyed need the key wrapped for
@@ -176,7 +193,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const items = await Promise.all(
         page.items.map(async (message) => toDecrypted(message, await decryptForChannel(channelId, message.content))),
       );
-      // Guard against a slow response for a channel the user already left.
+      // The cache is written even when the user has already moved on - the
+      // fetch was paid for, and the next visit gets it for free.
+      set({ history: { ...get().history, [channelId]: items } });
       if (get().activeChannelId !== channelId) return;
       set({ messages: items, loadingMessages: false });
     } catch (error) {
@@ -296,6 +315,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       messages: [],
       activeServerId: null,
       activeChannelId: null,
+      history: {},
       error: null,
     });
   },
@@ -360,6 +380,15 @@ chatSocket.on((event) => {
     const state = useChatStore.getState();
     const active = incoming.channelId === state.activeChannelId;
     const mine = incoming.author.id === useAuthStore.getState().user?.id;
+
+    // Append to the cache as well as the view, so a channel read earlier in
+    // the session is up to date when it is opened again.
+    const cachedHistory = state.history[incoming.channelId];
+    if (cachedHistory && !cachedHistory.some((existing) => existing.id === incoming.id)) {
+      useChatStore.setState({
+        history: { ...state.history, [incoming.channelId]: [...cachedHistory, message] },
+      });
+    }
 
     if (active && !state.messages.some((existing) => existing.id === incoming.id)) {
       useChatStore.setState({ messages: [...state.messages, message] });
