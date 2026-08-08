@@ -12,6 +12,8 @@ import {
   hashToken,
   signAccessToken,
   signRefreshToken,
+  openSecret,
+  sealSecret,
   validatePasswordStrength,
   verifyAccessToken,
   verifyPassword,
@@ -48,6 +50,16 @@ async function main(): Promise<void> {
   assert.equal(validatePasswordStrength('hunter2000'), null);
   assert.notEqual(validatePasswordStrength('short1'), null);
   assert.notEqual(validatePasswordStrength('nodigitshere'), null);
+
+  // Sealed config secrets round-trip, differ per call, and refuse to open when
+  // the ciphertext was touched.
+  const sealed = sealSecret('client-secret-value');
+  assert.equal(openSecret(sealed), 'client-secret-value');
+  assert.notEqual(sealed, sealSecret('client-secret-value'));
+  const [version, iv, ciphertext, tag] = sealed.split('.');
+  const flipped = `${ciphertext?.startsWith('A') ? 'B' : 'A'}${ciphertext?.slice(1) ?? ''}`;
+  assert.equal(openSecret([version, iv, flipped, tag].join('.')), null);
+  assert.equal(openSecret('nonsense'), null);
 
   console.log('auth check ok');
 }

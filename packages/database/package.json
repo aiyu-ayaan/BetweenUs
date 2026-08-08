@@ -12,6 +12,7 @@
     "migrate:deploy": "prisma migrate deploy",
     "studio": "dotenv -e ../../.env -- prisma studio",
     "seed": "dotenv -e ../../.env -- tsx prisma/seed.ts",
+    "admin:create": "dotenv -e ../../.env -- tsx prisma/create-admin.ts",
     "postinstall": "prisma generate"
   },
   "prisma": {

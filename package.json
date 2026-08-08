@@ -16,6 +16,7 @@
     "db:generate": "pnpm --filter @nexora/database generate",
     "db:migrate": "pnpm --filter @nexora/database migrate",
     "db:seed": "pnpm --filter @nexora/database seed",
+    "admin:create": "pnpm --filter @nexora/database admin:create",
     "db:studio": "pnpm --filter @nexora/database studio"
   },
   "devDependencies": {

@@ -24,6 +24,13 @@ enum ChannelType {
   VOICE
 }
 
+/// Platform-wide role, distinct from WorkspaceRole: ADMIN grants the admin
+/// panel, not membership rights inside any workspace.
+enum GlobalRole {
+  USER
+  ADMIN
+}
+
 model User {
   id           String   @id @default(uuid())
   email        String   @unique
@@ -31,6 +38,12 @@ model User {
   displayName  String
   passwordHash String
   avatarUrl    String?
+  role         GlobalRole @default(USER)
+  /// Set for accounts created with a generated password (the bootstrap admin);
+  /// they can do nothing until they choose their own.
+  mustChangePassword Boolean @default(false)
+  /// A disabled account keeps its data but cannot log in or refresh.
+  disabledAt   DateTime?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -39,8 +52,40 @@ model User {
   memberships      WorkspaceMember[]
   messages         Message[]
   deviceKey        DeviceKey?
+  identities       UserIdentity[]
 
   @@map("users")
+}
+
+/// A third-party login linked to an account. The provider's own user id is what
+/// identifies the person on the next login; email can change on their side.
+model UserIdentity {
+  id                String   @id @default(uuid())
+  userId            String
+  provider          String
+  providerAccountId String
+  email             String?
+  createdAt         DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+  @@map("user_identities")
+}
+
+/// OAuth provider credentials, configured from the admin panel rather than the
+/// environment, so enabling a login is an operator action and not a redeploy.
+/// `clientSecret` is stored sealed - see packages/auth `sealSecret`.
+model OAuthProvider {
+  provider     String   @id
+  enabled      Boolean  @default(false)
+  clientId     String
+  clientSecret String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@map("oauth_providers")
 }
 
 /// Public half of a user's end-to-end encryption identity key (ECDH P-256, JWK).
