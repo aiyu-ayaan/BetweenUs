@@ -18,6 +18,7 @@ import { MemberList } from './features/members/MemberList';
 import { ChatView } from './features/chat/ChatView';
 import { UserSettings } from './features/settings/UserSettings';
 import { VoiceChannelView } from './features/voice/VoiceChannelView';
+import { NexoraLogoIcon } from './components/icons';
 
 export default function App(): JSX.Element {
   const status = useAuthStore((state) => state.status);
@@ -88,8 +89,11 @@ export default function App(): JSX.Element {
 
   if (booting) {
     return (
-      <div className="flex h-full items-center justify-center bg-surface-950" aria-busy="true">
-        <p className="animate-pulse text-lg font-semibold text-slate-300">Nexora</p>
+      <div className="flex h-full flex-col items-center justify-center gap-3 bg-surface-950" aria-busy="true">
+        <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-600 via-indigo-700 to-slate-900 p-3 shadow-xl shadow-purple-500/20 ring-1 ring-white/20 animate-pulse">
+          <NexoraLogoIcon className="h-full w-full text-white" />
+        </div>
+        <p className="animate-pulse text-lg font-semibold tracking-wide text-slate-200">Nexora</p>
       </div>
     );
   }

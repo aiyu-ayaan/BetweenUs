@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useChatStore } from '../../stores/chat';
-import { CompassIcon, MessageIcon, PlusIcon } from '../../components/icons';
+import { CompassIcon, NexoraLogoIcon, PlusIcon } from '../../components/icons';
 import { ServerIcon } from '../../components/ServerIcon';
 
 /**
@@ -44,7 +44,7 @@ export function ServerRail(): JSX.Element {
         onClick={showHome}
         activeClasses="bg-accent text-white"
       >
-        <MessageIcon className="h-6 w-6" />
+        <NexoraLogoIcon className="h-7 w-7" />
       </RailButton>
 
       <hr className="w-8 border-t-2 border-surface-800" />

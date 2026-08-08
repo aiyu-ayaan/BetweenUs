@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import type { OAuthProviderSummary } from '@nexora/shared-types';
 import { rememberedEmail, useAuthStore } from '../../stores/auth';
 import { api } from '../../services/api';
+import { NexoraLogoIcon } from '../../components/icons';
 
 export function LoginScreen(): JSX.Element {
   const [mode, setMode] = useState<'login' | 'register'>('login');
@@ -31,8 +32,11 @@ export function LoginScreen(): JSX.Element {
 
   return (
     <div className="flex h-full items-center justify-center bg-surface-950 px-4">
-      <div className="w-full max-w-md rounded-xl bg-surface-800 p-8 shadow-2xl">
+      <div className="w-full max-w-md rounded-xl bg-surface-800 p-8 shadow-2xl border border-surface-700/50">
         <div className="mb-6 text-center">
+          <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-600 via-indigo-700 to-slate-900 p-2.5 shadow-lg shadow-purple-500/20 ring-1 ring-white/20">
+            <NexoraLogoIcon className="h-full w-full text-white" />
+          </div>
           <h1 className="text-2xl font-semibold text-slate-50">
             {mode === 'login' ? 'Welcome back' : 'Create your account'}
           </h1>
