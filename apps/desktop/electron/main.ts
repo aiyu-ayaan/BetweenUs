@@ -149,7 +149,13 @@ void app.whenReady().then(() => {
   // Voice channels need the microphone and camera; screen share needs display
   // capture. Everything else a page might ask for is denied.
   session.defaultSession.setPermissionRequestHandler((_contents, permission, callback) => {
-    callback(permission === 'media' || permission === 'display-capture');
+    const perm = permission as string;
+    callback(
+      perm === 'media' ||
+        perm === 'audioCapture' ||
+        perm === 'videoCapture' ||
+        perm === 'display-capture',
+    );
   });
 
   session.defaultSession.setDisplayMediaRequestHandler((_request, callback) => {

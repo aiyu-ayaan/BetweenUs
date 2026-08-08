@@ -22,8 +22,6 @@ import { api } from '../services/api';
 import { callKeyForChannel } from '../services/e2ee';
 import { presenceSocket } from '../services/socket';
 
-// LiveKit's own diagnostics land in the terminal through the main process, so a
-// failed publish says why instead of just "negotiation timed out".
 if (import.meta.env.DEV) setLogLevel('debug');
 
 export interface VoiceTile {
@@ -74,7 +72,11 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
   error: null,
 
   join: async (channelId) => {
-    if (get().channelId === channelId && get().status !== 'idle') return;
+    console.log('[voice.ts] 1. Starting join for channel:', channelId);
+    if (get().channelId === channelId && get().status !== 'idle') {
+      console.log('[voice.ts] Already in or connecting to channel:', channelId);
+      return;
+    }
 
     const currentJoinId = ++joinCounter;
 
@@ -90,10 +92,13 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
     set({ status: 'connecting', channelId, room: null, error: null, tiles: [] });
 
     try {
+      console.log('[voice.ts] 2. Fetching key & call token...');
       const [key, credentials] = await Promise.all([
         callKeyForChannel(channelId),
         api.callToken(channelId),
       ]);
+
+      console.log('[voice.ts] 3. Got credentials url:', credentials.url);
 
       if (joinCounter !== currentJoinId) return;
 
@@ -104,6 +109,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
         e2ee: { keyProvider, worker: new E2eeWorker() },
       });
 
+      console.log('[voice.ts] 4. Setting E2EE key...');
       await keyProvider.setKey(key);
 
       if (joinCounter !== currentJoinId) {
@@ -112,8 +118,11 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
       }
 
       try {
+        console.log('[voice.ts] 5. Enabling E2EE...');
         await room.setE2EEEnabled(true);
-      } catch {
+        console.log('[voice.ts] 5b. E2EE enabled successfully');
+      } catch (e2eeErr) {
+        console.error('[voice.ts] 5x. E2EE enable failed:', e2eeErr);
         room.disconnect().catch(() => undefined);
         throw new Error('This runtime cannot encrypt voice media, so the join was cancelled');
       }
@@ -146,12 +155,14 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
           }
         });
 
+      console.log('[voice.ts] 6. Connecting to LiveKit room...');
       const connectPromise = room.connect(credentials.url, credentials.token);
       const timeoutPromise = new Promise<never>((_, reject) =>
         setTimeout(() => reject(new Error('Connection to voice server timed out')), 15_000),
       );
 
       await Promise.race([connectPromise, timeoutPromise]);
+      console.log('[voice.ts] 6b. Room connected successfully!');
 
       if (joinCounter !== currentJoinId) {
         void room.disconnect().catch(() => undefined);
@@ -163,10 +174,13 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
       let micEnabled = true;
       let micProblem: string | null = null;
       try {
+        console.log('[voice.ts] 7. Enabling microphone...');
         await room.localParticipant.setMicrophoneEnabled(true);
+        console.log('[voice.ts] 7b. Microphone enabled!');
       } catch (error) {
         micEnabled = false;
         const reason = error instanceof Error ? error.message : 'unknown error';
+        console.warn('[voice.ts] 7x. Microphone failed to enable:', reason);
         micProblem = `Connected, but microphone did not start (${reason}). Use the mic button to retry.`;
       }
 
@@ -177,6 +191,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
 
       presenceSocket.send({ type: 'voice.join', channelId });
 
+      console.log('[voice.ts] 8. Join complete!');
       set({
         error: micProblem,
         status: 'connected',
@@ -190,7 +205,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
     } catch (error) {
       if (joinCounter !== currentJoinId) return;
 
-      console.error('voice join failed', error);
+      console.error('[voice.ts] JOIN ERROR:', error);
       set({
         status: 'idle',
         channelId: null,
@@ -267,14 +282,10 @@ function toTile(participant: Participant, speaking: boolean): VoiceTile {
     micEnabled: Boolean(mic && !mic.isMuted),
     videoTrack: camera?.isMuted ? null : (camera?.track ?? null),
     screenTrack: screen?.track ?? null,
-    // Local audio is never played back locally - that is an echo, not a feature.
     audioTrack: participant.isLocal ? null : (mic?.track ?? null),
   };
 }
 
-// A hot reload replaces this module while the old Room is still connected, and
-// LiveKit answers a second session with the same identity by kicking the first
-// - which looks exactly like a broken publish. Hand the room back first.
 if (import.meta.hot) {
   import.meta.hot.dispose(() => {
     void useVoiceStore.getState().leave();

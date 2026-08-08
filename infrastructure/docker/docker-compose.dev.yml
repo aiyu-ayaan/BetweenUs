@@ -57,7 +57,7 @@ services:
       - "127.0.0.1:7881:7881"
       # ICE/UDP media. Kept to 20 ports: enough for small test calls and fast to
       # publish on Docker Desktop.
-      - "127.0.0.1:50000-50019:50000-50019/udp"
+      - "50000-50019:50000-50019/udp"
 
 volumes:
   postgres-data:

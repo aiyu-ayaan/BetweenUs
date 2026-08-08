@@ -169,20 +169,22 @@ function VoiceChannelRow({ channel }: { channel: Channel }): JSX.Element {
   const status = useVoiceStore((state) => state.status);
   const connectedTo = useVoiceStore((state) => state.channelId);
 
-  const here = connectedTo === channel.id;
+  const here = connectedTo === channel.id && status === 'connected';
+  const connectingHere = connectedTo === channel.id && status === 'connecting';
 
   return (
     <div>
       <button
         type="button"
         onClick={() => void join(channel.id)}
-        disabled={here || status === 'connecting'}
+        disabled={here}
         className={`flex w-full cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-left text-sm transition-colors duration-200 disabled:cursor-default ${
-          here ? 'bg-surface-700 text-slate-50' : 'text-slate-400 hover:bg-surface-700/60 hover:text-slate-200'
+          here || connectingHere ? 'bg-surface-700 text-slate-50' : 'text-slate-400 hover:bg-surface-700/60 hover:text-slate-200'
         }`}
       >
         <SpeakerIcon className="h-4 w-4 shrink-0" />
         <span className="truncate">{channel.name}</span>
+        {connectingHere && <span className="text-xs text-emerald-400 animate-pulse">connecting...</span>}
         {occupants.length > 0 && (
           <span className="ml-auto text-xs text-slate-500">{occupants.length}</span>
         )}
