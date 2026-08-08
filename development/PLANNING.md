@@ -50,6 +50,28 @@ pnpm dev
 
 Desktop app: `pnpm --filter @nexora/desktop dev`.
 
+## Verification status (as of phase 7)
+
+What has been proven on the development machine:
+
+- `pnpm build` and `pnpm typecheck` pass across all 22 workspace tasks.
+- `pnpm check` self-checks pass for logger (redaction), auth (token/password
+  round-trips, cross-token rejection) and websocket (room bookkeeping,
+  handshake token parsing).
+- `auth-service` boots, serves `/health` (`degraded` with no database, as
+  designed) and returns the documented error shape with a request id on invalid
+  input.
+
+Not yet exercised, because Docker is not installed on this machine:
+
+- Prisma migration against a real Postgres instance
+- The full register → workspace → channel → realtime message flow
+- Redis Pub/Sub fanout across two chat-service instances
+- Container builds from the service Dockerfiles
+
+Run the quick start in `README.md` on a machine with Docker to close these.
+Phase 8 turns them into automated tests.
+
 ## Conventions
 
 - TypeScript strict everywhere. No `any` in committed code.

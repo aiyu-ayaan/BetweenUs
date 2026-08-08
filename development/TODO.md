@@ -5,6 +5,9 @@ the top honest — it is what a new session reads first.
 
 ## Next up (phase 8: hardening)
 
+- [ ] Run the quick start against real Postgres/Redis and confirm the full
+      register → workspace → channel → realtime message flow (blocked so far:
+      Docker is not installed on the development machine)
 - [ ] Unit tests for `AuthService` (register/login/refresh) with a Prisma mock
 - [ ] Integration test: register → create workspace → create channel → send message
 - [ ] GitHub Actions workflow: install → lint → typecheck → build
