@@ -1,5 +1,5 @@
 /**
- * Development seed: one demo user with a workspace and two channels.
+ * Development seed: one demo user with a server and two channels.
  * Run with `pnpm db:seed`. Idempotent - safe to run repeatedly.
  */
 import { PrismaClient } from '@prisma/client';
@@ -21,12 +21,12 @@ async function main(): Promise<void> {
     },
   });
 
-  const workspace = await prisma.workspace.upsert({
-    where: { slug: 'demo-workspace' },
+  const server = await prisma.server.upsert({
+    where: { slug: 'demo-server' },
     update: {},
     create: {
-      name: 'Demo Workspace',
-      slug: 'demo-workspace',
+      name: 'Demo Server',
+      slug: 'demo-server',
       ownerId: user.id,
       members: { create: { userId: user.id, role: 'OWNER' } },
     },
@@ -34,9 +34,9 @@ async function main(): Promise<void> {
 
   for (const name of ['general', 'random']) {
     await prisma.channel.upsert({
-      where: { workspaceId_name: { workspaceId: workspace.id, name } },
+      where: { serverId_name: { serverId: server.id, name } },
       update: {},
-      create: { workspaceId: workspace.id, name, type: 'TEXT' },
+      create: { serverId: server.id, name, type: 'TEXT' },
     });
   }
 

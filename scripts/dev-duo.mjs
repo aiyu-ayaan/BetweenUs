@@ -1,7 +1,7 @@
 /**
  * `pnpm dev:duo` - two signed-in desktop windows for testing chat and calls.
  *
- * It seeds two accounts that share one workspace, starts the Vite dev server
+ * It seeds two accounts that share one server, starts the Vite dev server
  * once, then launches two Electron processes with separate profiles so each
  * window has its own session, its own localStorage and - importantly for E2EE -
  * its own device key.
@@ -18,7 +18,7 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'
 const desktopDir = path.join(repoRoot, 'apps', 'desktop');
 
 const AUTH = process.env.AUTH_SERVICE_URL ?? 'http://127.0.0.1:3001';
-const WORKSPACE = process.env.WORKSPACE_SERVICE_URL ?? 'http://127.0.0.1:3003';
+const SERVER = process.env.SERVER_SERVICE_URL ?? 'http://127.0.0.1:3003';
 const CHAT = process.env.CHAT_SERVICE_URL ?? 'http://127.0.0.1:3004';
 const CALL = process.env.CALL_SERVICE_URL ?? 'http://127.0.0.1:3007';
 const PRESENCE = process.env.PRESENCE_SERVICE_URL ?? 'http://127.0.0.1:3005';
@@ -30,7 +30,7 @@ const USERS = [
   { label: 'Alice', email: 'alice@nexora.local', username: 'alice', profile: 'duo-a', x: 40, y: 60 },
   { label: 'Bob', email: 'bob@nexora.local', username: 'bob', profile: 'duo-b', x: 760, y: 60 },
 ];
-const WORKSPACE_NAME = 'Duo Test';
+const SERVER_NAME = 'Duo Test';
 
 async function json(url, options = {}) {
   const response = await fetch(url, {
@@ -78,38 +78,38 @@ async function seed() {
   const asAlice = { Authorization: `Bearer ${alice.accessToken}` };
   const asBob = { Authorization: `Bearer ${bob.accessToken}` };
 
-  const owned = await json(`${WORKSPACE}/api/v1/workspaces`, { headers: asAlice });
-  const workspace =
-    owned.find((item) => item.name === WORKSPACE_NAME) ??
-    (await json(`${WORKSPACE}/api/v1/workspaces`, {
+  const owned = await json(`${SERVER}/api/v1/servers`, { headers: asAlice });
+  const server =
+    owned.find((item) => item.name === SERVER_NAME) ??
+    (await json(`${SERVER}/api/v1/servers`, {
       method: 'POST',
       headers: asAlice,
-      body: JSON.stringify({ name: WORKSPACE_NAME }),
+      body: JSON.stringify({ name: SERVER_NAME }),
     }));
 
   // Joining is an upsert, so running this repeatedly is harmless.
-  await json(`${WORKSPACE}/api/v1/workspaces/join`, {
+  await json(`${SERVER}/api/v1/servers/join`, {
     method: 'POST',
     headers: asBob,
-    body: JSON.stringify({ slug: workspace.slug }),
+    body: JSON.stringify({ slug: server.slug }),
   });
 
   const channels = await json(
-    `${WORKSPACE}/api/v1/channels?workspaceId=${workspace.id}`,
+    `${SERVER}/api/v1/channels?serverId=${server.id}`,
     { headers: asAlice },
   );
 
   // A voice channel to click on, alongside the default #general text channel.
   let voice = channels.find((channel) => channel.type === 'VOICE');
   if (!voice) {
-    voice = await json(`${WORKSPACE}/api/v1/channels`, {
+    voice = await json(`${SERVER}/api/v1/channels`, {
       method: 'POST',
       headers: asAlice,
-      body: JSON.stringify({ workspaceId: workspace.id, name: 'lounge', type: 'VOICE' }),
+      body: JSON.stringify({ serverId: server.id, name: 'lounge', type: 'VOICE' }),
     });
   }
 
-  return { workspace, channel: channels[0], voice };
+  return { server, channel: channels[0], voice };
 }
 
 const mainBundle = path.join(desktopDir, 'dist-electron', 'main.js');
@@ -186,7 +186,7 @@ async function main() {
   console.log('Checking services...');
   const checks = await Promise.all([
     healthy('auth-service', AUTH),
-    healthy('workspace-service', WORKSPACE),
+    healthy('server-service', SERVER),
     healthy('chat-service', CHAT),
   ]);
   if (checks.some((ok) => !ok)) {
@@ -200,9 +200,9 @@ async function main() {
     console.warn('  ! presence-service is down - no online status or typing indicators');
   }
 
-  const { workspace, channel, voice } = await seed();
+  const { server, channel, voice } = await seed();
   console.log(
-    `Workspace "${workspace.name}" ready: #${channel?.name ?? 'general'}, voice "${voice.name}"`,
+    `Server "${server.name}" ready: #${channel?.name ?? 'general'}, voice "${voice.name}"`,
   );
   console.log('Sign-in is automatic:');
   for (const user of USERS) console.log(`  - ${user.label} <${user.email}>`);

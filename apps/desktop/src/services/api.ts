@@ -12,8 +12,8 @@ import type {
   Paginated,
   PublicUser,
   PublishChannelKeysRequest,
-  WorkspaceMember,
-  WorkspaceWithRole,
+  ServerMember,
+  ServerWithRole,
 } from '@nexora/shared-types';
 
 // In development requests go to the Vite dev server, which proxies them to the
@@ -114,24 +114,24 @@ export const api = {
   oauthExchange: (code: string): Promise<AuthResponse> =>
     request('/api/v1/auth/oauth/exchange', { method: 'POST', body: JSON.stringify({ code }) }),
 
-  workspaces: (): Promise<WorkspaceWithRole[]> => request('/api/v1/workspaces'),
+  servers: (): Promise<ServerWithRole[]> => request('/api/v1/servers'),
 
-  createWorkspace: (name: string): Promise<WorkspaceWithRole> =>
-    request('/api/v1/workspaces', { method: 'POST', body: JSON.stringify({ name }) }),
+  createServer: (name: string): Promise<ServerWithRole> =>
+    request('/api/v1/servers', { method: 'POST', body: JSON.stringify({ name }) }),
 
-  joinWorkspace: (slug: string): Promise<WorkspaceWithRole> =>
-    request('/api/v1/workspaces/join', { method: 'POST', body: JSON.stringify({ slug }) }),
+  joinServer: (slug: string): Promise<ServerWithRole> =>
+    request('/api/v1/servers/join', { method: 'POST', body: JSON.stringify({ slug }) }),
 
-  members: (workspaceId: string): Promise<WorkspaceMember[]> =>
-    request(`/api/v1/workspaces/${workspaceId}/members`),
+  members: (serverId: string): Promise<ServerMember[]> =>
+    request(`/api/v1/servers/${serverId}/members`),
 
-  channels: (workspaceId: string): Promise<Channel[]> =>
-    request(`/api/v1/channels?workspaceId=${encodeURIComponent(workspaceId)}`),
+  channels: (serverId: string): Promise<Channel[]> =>
+    request(`/api/v1/channels?serverId=${encodeURIComponent(serverId)}`),
 
-  createChannel: (workspaceId: string, name: string, type: ChannelType = 'TEXT'): Promise<Channel> =>
+  createChannel: (serverId: string, name: string, type: ChannelType = 'TEXT'): Promise<Channel> =>
     request('/api/v1/channels', {
       method: 'POST',
-      body: JSON.stringify({ workspaceId, name, type }),
+      body: JSON.stringify({ serverId, name, type }),
     }),
 
   messages: (channelId: string, before?: string): Promise<Paginated<Message>> =>

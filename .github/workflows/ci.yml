@@ -79,7 +79,7 @@ jobs:
 
       - name: Start services
         run: |
-          for service in auth-service workspace-service chat-service presence-service; do
+          for service in auth-service server-service chat-service presence-service; do
             node "apps/services/$service/dist/main.js" > "/tmp/$service.log" 2>&1 &
           done
           for port in 3001 3003 3004 3005; do

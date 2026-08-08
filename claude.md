@@ -11,7 +11,7 @@ Build a Discord-like communication and remote-access platform.
 Core capabilities:
 
 - User authentication
-- Workspaces / servers
+- Servers
 - Text channels
 - Direct messages
 - Voice calls
@@ -131,17 +131,17 @@ Responsibilities:
 
 ---
 
-## Workspace Service
+## Server Service
 
 Responsibilities:
 
-- Workspaces / servers
-- Workspace members
+- Servers
+- Server members
 - Roles
 - Permissions
 - Channel management
 - Invitations
-- Workspace settings
+- Server settings
 
 ---
 
@@ -379,7 +379,7 @@ Expected services:
 - `nginx` or `traefik`
 - `auth-service`
 - `user-service`
-- `workspace-service`
+- `server-service`
 - `chat-service`
 - `presence-service`
 - `notification-service`
@@ -411,7 +411,7 @@ PostgreSQL stores persistent application data.
 Examples:
 
 - Users
-- Workspaces
+- Servers
 - Members
 - Roles
 - Permissions
@@ -491,9 +491,9 @@ user.updated
 user.online
 user.offline
 
-workspace.created
-workspace.member.added
-workspace.member.removed
+server.created
+server.member.added
+server.member.removed
 
 channel.created
 channel.deleted
@@ -543,7 +543,7 @@ project/
 │       ├── api-gateway/
 │       ├── auth-service/
 │       ├── user-service/
-│       ├── workspace-service/
+│       ├── server-service/
 │       ├── chat-service/
 │       ├── presence-service/
 │       ├── notification-service/
@@ -678,7 +678,7 @@ REST:
 ```text
 /api/v1/auth
 /api/v1/users
-/api/v1/workspaces
+/api/v1/servers
 /api/v1/channels
 /api/v1/messages
 /api/v1/roles
@@ -995,7 +995,7 @@ Do NOT put:
 
 - Chat logic
 - User logic
-- Workspace logic
+- Server logic
 - Permission business logic
 - Remote desktop logic
 
@@ -1146,7 +1146,7 @@ Important E2E flows:
 ```text
 Registration
 Login
-Workspace creation
+Server creation
 Channel creation
 Send message
 Realtime message delivery
@@ -1312,7 +1312,7 @@ Do not merge these responsibilities without strong reason.
           │                      │
           ▼                      ▼
    ┌─────────────┐       ┌─────────────┐
-   │ Workspace   │       │  Presence   │
+   │ Server   │       │  Presence   │
    │   Service   │       │   Service   │
    └─────────────┘       └─────────────┘
           │                      │

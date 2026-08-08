@@ -6,7 +6,7 @@ a pnpm + Turborepo monorepo. `CLAUDE.md` holds the target architecture;
 
 ## Status
 
-Working end to end: register / login, workspaces, text channels with
+Working end to end: register / login, servers, text channels with
 end-to-end encrypted messages and realtime delivery, Discord-style voice
 channels over LiveKit with end-to-end encrypted media, screen share, online
 status and typing indicators - in an Electron desktop client.
@@ -39,7 +39,7 @@ pnpm dev:duo                                           # two signed-in test wind
 Only Postgres and Redis run in Docker for development - no local database
 install needed, and services run on the host for fast reloads.
 
-Default ports: gateway `8080`, auth `3001`, workspace `3003`, chat `3004`,
+Default ports: gateway `8080`, auth `3001`, server `3003`, chat `3004`,
 presence `3005`, call `3007`, LiveKit `7880`, desktop renderer `5173`.
 
 `pnpm dev:duo` opens two Electron windows signed in as different users, each
@@ -79,7 +79,7 @@ Content types are allowlisted, and anything not provably safe to render inline
 
 ```
 apps/desktop              Electron + React + Tailwind + Zustand client
-apps/services/*           NestJS microservices (auth, workspace, chat, call,
+apps/services/*           NestJS microservices (auth, server, chat, call,
                           presence built)
 packages/*                shared-types, auth, permissions, database, events,
                           websocket, storage, logger, config, nest-common
@@ -92,7 +92,7 @@ development/              planning, MVP definition, E2EE design, testing, TODO
 | Command | Effect |
 | --- | --- |
 | `pnpm build` | Build every package, service and the desktop bundle |
-| `pnpm typecheck` | Type-check the whole workspace |
+| `pnpm typecheck` | Type-check the whole monorepo |
 | `pnpm check` | Run package self-checks (logger, auth, websocket, storage, desktop crypto) |
 | `pnpm dev:desktop` | Run only the desktop client |
 | `pnpm dev:duo` | Two signed-in desktop windows for chat/voice testing |
@@ -103,8 +103,8 @@ development/              planning, MVP definition, E2EE design, testing, TODO
 
 ```
 POST /api/v1/auth/register|login|refresh|logout    GET /api/v1/auth/me
-GET|POST /api/v1/workspaces      POST /api/v1/workspaces/join
-GET /api/v1/workspaces/:id/members|channels
+GET|POST /api/v1/servers      POST /api/v1/servers/join
+GET /api/v1/servers/:id/members|channels
 GET|POST /api/v1/channels        GET|POST /api/v1/messages
 POST /api/v1/uploads             GET /api/v1/uploads/:key
 GET|POST /api/v1/e2ee/devices    GET /api/v1/e2ee/keys/:channelId

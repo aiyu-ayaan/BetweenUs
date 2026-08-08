@@ -2,9 +2,9 @@
  * Role and permission vocabulary. Constants and pure helpers only - no service
  * business logic, no database access.
  */
-import type { WorkspaceRole } from '@nexora/shared-types';
+import type { ServerRole } from '@nexora/shared-types';
 
-export const WORKSPACE_ROLES = ['OWNER', 'ADMIN', 'MODERATOR', 'MEMBER', 'GUEST'] as const;
+export const SERVER_ROLES = ['OWNER', 'ADMIN', 'MODERATOR', 'MEMBER', 'GUEST'] as const;
 
 export const PERMISSIONS = {
   VIEW_CHANNEL: 'VIEW_CHANNEL',
@@ -13,7 +13,7 @@ export const PERMISSIONS = {
   MANAGE_CHANNEL: 'MANAGE_CHANNEL',
   MANAGE_MEMBER: 'MANAGE_MEMBER',
   MANAGE_ROLE: 'MANAGE_ROLE',
-  MANAGE_WORKSPACE: 'MANAGE_WORKSPACE',
+  MANAGE_SERVER: 'MANAGE_SERVER',
   START_CALL: 'START_CALL',
   MANAGE_CALL: 'MANAGE_CALL',
   REMOTE_VIEW: 'REMOTE_VIEW',
@@ -46,19 +46,19 @@ const ADMIN_PERMISSIONS: Permission[] = [
 ];
 
 /** Role -> permission map. Remote permissions are granted per machine, never by role. */
-export const ROLE_PERMISSIONS: Record<WorkspaceRole, Permission[]> = {
-  OWNER: [...ADMIN_PERMISSIONS, PERMISSIONS.MANAGE_WORKSPACE],
+export const ROLE_PERMISSIONS: Record<ServerRole, Permission[]> = {
+  OWNER: [...ADMIN_PERMISSIONS, PERMISSIONS.MANAGE_SERVER],
   ADMIN: ADMIN_PERMISSIONS,
   MODERATOR: MODERATOR_PERMISSIONS,
   MEMBER: MEMBER_PERMISSIONS,
   GUEST: [PERMISSIONS.VIEW_CHANNEL],
 };
 
-export function permissionsForRole(role: WorkspaceRole): Permission[] {
+export function permissionsForRole(role: ServerRole): Permission[] {
   return ROLE_PERMISSIONS[role] ?? [];
 }
 
-export function hasPermission(role: WorkspaceRole, permission: Permission): boolean {
+export function hasPermission(role: ServerRole, permission: Permission): boolean {
   return permissionsForRole(role).includes(permission);
 }
 

@@ -213,19 +213,19 @@ export class PresenceGateway implements OnModuleDestroy {
   }
 
   /**
-   * Membership check, same rule as chat: a channel belongs to a workspace and
-   * only its members may touch it. Becomes a workspace-service call when the
+   * Membership check, same rule as chat: a channel belongs to a server and
+   * only its members may touch it. Becomes a server-service call when the
    * shared schema is split.
    */
   private async canAccessChannel(userId: string, channelId: string): Promise<boolean> {
     const channel = await prisma.channel.findUnique({
       where: { id: channelId },
-      select: { workspaceId: true },
+      select: { serverId: true },
     });
     if (!channel) return false;
 
-    const membership = await prisma.workspaceMember.findUnique({
-      where: { workspaceId_userId: { workspaceId: channel.workspaceId, userId } },
+    const membership = await prisma.serverMember.findUnique({
+      where: { serverId_userId: { serverId: channel.serverId, userId } },
       select: { id: true },
     });
     return membership !== null;

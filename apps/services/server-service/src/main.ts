@@ -3,8 +3,8 @@ import { bootstrapService } from '@nexora/nest-common';
 import { AppModule } from './app.module';
 
 void bootstrapService({
-  service: 'workspace-service',
+  service: 'server-service',
   module: AppModule,
-  portVar: 'WORKSPACE_SERVICE_PORT',
+  portVar: 'SERVER_SERVICE_PORT',
   defaultPort: 3003,
 });

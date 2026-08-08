@@ -401,9 +401,7 @@ importers:
 
   apps/services/remote-gateway: {}
 
-  apps/services/user-service: {}
-
-  apps/services/workspace-service:
+  apps/services/server-service:
     dependencies:
       '@nestjs/common':
         specifier: ^10.4.1
@@ -466,6 +464,8 @@ importers:
       typescript:
         specifier: ^5.5.4
         version: 5.9.3
+
+  apps/services/user-service: {}
 
   packages/auth:
     dependencies:

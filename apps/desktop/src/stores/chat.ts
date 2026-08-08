@@ -3,8 +3,8 @@ import type {
   Channel,
   ChannelType,
   Message,
-  WorkspaceMember,
-  WorkspaceWithRole,
+  ServerMember,
+  ServerWithRole,
 } from '@nexora/shared-types';
 import { api } from '../services/api';
 import { chatSocket } from '../services/socket';
@@ -18,52 +18,52 @@ import { notifyMessage, windowIsFocused } from '../services/notifications';
 import { useAuthStore } from './auth';
 
 interface ChatState {
-  workspaces: WorkspaceWithRole[];
+  servers: ServerWithRole[];
   channels: Channel[];
-  members: WorkspaceMember[];
+  members: ServerMember[];
   messages: Message[];
-  activeWorkspaceId: string | null;
+  activeServerId: string | null;
   activeChannelId: string | null;
   /** channelId -> unread message count, for the dot in the sidebar. */
   unread: Record<string, number>;
   loadingMessages: boolean;
   error: string | null;
 
-  loadWorkspaces: () => Promise<void>;
-  selectWorkspace: (workspaceId: string) => Promise<void>;
+  loadServers: () => Promise<void>;
+  selectServer: (serverId: string) => Promise<void>;
   selectChannel: (channelId: string) => Promise<void>;
-  createWorkspace: (name: string) => Promise<void>;
-  joinWorkspace: (slug: string) => Promise<void>;
+  createServer: (name: string) => Promise<void>;
+  joinServer: (slug: string) => Promise<void>;
   createChannel: (name: string, type?: ChannelType) => Promise<void>;
   sendMessage: (content: string) => Promise<void>;
   reset: () => void;
 }
 
 export const useChatStore = create<ChatState>((set, get) => ({
-  workspaces: [],
+  servers: [],
   channels: [],
   members: [],
   messages: [],
-  activeWorkspaceId: null,
+  activeServerId: null,
   activeChannelId: null,
   unread: {},
   loadingMessages: false,
   error: null,
 
-  loadWorkspaces: async () => {
-    const workspaces = await api.workspaces();
-    set({ workspaces });
-    const first = workspaces[0];
-    if (first && !get().activeWorkspaceId) await get().selectWorkspace(first.id);
+  loadServers: async () => {
+    const servers = await api.servers();
+    set({ servers });
+    const first = servers[0];
+    if (first && !get().activeServerId) await get().selectServer(first.id);
   },
 
-  selectWorkspace: async (workspaceId) => {
-    set({ activeWorkspaceId: workspaceId, channels: [], members: [], messages: [] });
+  selectServer: async (serverId) => {
+    set({ activeServerId: serverId, channels: [], members: [], messages: [] });
 
     const [channels, members] = await Promise.all([
-      api.channels(workspaceId),
+      api.channels(serverId),
       // Members carry the display names presence attaches status to.
-      api.members(workspaceId).catch(() => []),
+      api.members(serverId).catch(() => []),
     ]);
     set({ channels, members });
 
@@ -115,23 +115,23 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
   },
 
-  createWorkspace: async (name) => {
-    const workspace = await api.createWorkspace(name);
-    set({ workspaces: [...get().workspaces, workspace] });
-    await get().selectWorkspace(workspace.id);
+  createServer: async (name) => {
+    const server = await api.createServer(name);
+    set({ servers: [...get().servers, server] });
+    await get().selectServer(server.id);
   },
 
-  joinWorkspace: async (slug) => {
-    const workspace = await api.joinWorkspace(slug);
-    const known = get().workspaces.some((item) => item.id === workspace.id);
-    if (!known) set({ workspaces: [...get().workspaces, workspace] });
-    await get().selectWorkspace(workspace.id);
+  joinServer: async (slug) => {
+    const server = await api.joinServer(slug);
+    const known = get().servers.some((item) => item.id === server.id);
+    if (!known) set({ servers: [...get().servers, server] });
+    await get().selectServer(server.id);
   },
 
   createChannel: async (name, type = 'TEXT') => {
-    const workspaceId = get().activeWorkspaceId;
-    if (!workspaceId) return;
-    const channel = await api.createChannel(workspaceId, name, type);
+    const serverId = get().activeServerId;
+    if (!serverId) return;
+    const channel = await api.createChannel(serverId, name, type);
     set({ channels: [...get().channels, channel] });
     // A voice channel is joined, not read, so selection stays where it was.
     if (channel.type === 'TEXT') await get().selectChannel(channel.id);
@@ -149,11 +149,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   reset: () =>
     set({
-      workspaces: [],
+      servers: [],
       channels: [],
       members: [],
       messages: [],
-      activeWorkspaceId: null,
+      activeServerId: null,
       activeChannelId: null,
       unread: {},
       error: null,

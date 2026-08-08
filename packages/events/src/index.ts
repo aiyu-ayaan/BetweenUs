@@ -13,9 +13,9 @@ export const EVENTS = {
   USER_UPDATED: 'user.updated',
   USER_ONLINE: 'user.online',
   USER_OFFLINE: 'user.offline',
-  WORKSPACE_CREATED: 'workspace.created',
-  WORKSPACE_MEMBER_ADDED: 'workspace.member.added',
-  WORKSPACE_MEMBER_REMOVED: 'workspace.member.removed',
+  SERVER_CREATED: 'server.created',
+  SERVER_MEMBER_ADDED: 'server.member.added',
+  SERVER_MEMBER_REMOVED: 'server.member.removed',
   CHANNEL_CREATED: 'channel.created',
   CHANNEL_DELETED: 'channel.deleted',
   PRESENCE_CHANGED: 'presence.changed',
@@ -31,11 +31,11 @@ export interface EventPayloads {
   [EVENTS.USER_UPDATED]: { userId: string };
   [EVENTS.USER_ONLINE]: { userId: string };
   [EVENTS.USER_OFFLINE]: { userId: string };
-  [EVENTS.WORKSPACE_CREATED]: { workspaceId: string; ownerId: string };
-  [EVENTS.WORKSPACE_MEMBER_ADDED]: { workspaceId: string; userId: string };
-  [EVENTS.WORKSPACE_MEMBER_REMOVED]: { workspaceId: string; userId: string };
-  [EVENTS.CHANNEL_CREATED]: { channelId: string; workspaceId: string };
-  [EVENTS.CHANNEL_DELETED]: { channelId: string; workspaceId: string };
+  [EVENTS.SERVER_CREATED]: { serverId: string; ownerId: string };
+  [EVENTS.SERVER_MEMBER_ADDED]: { serverId: string; userId: string };
+  [EVENTS.SERVER_MEMBER_REMOVED]: { serverId: string; userId: string };
+  [EVENTS.CHANNEL_CREATED]: { channelId: string; serverId: string };
+  [EVENTS.CHANNEL_DELETED]: { channelId: string; serverId: string };
   [EVENTS.PRESENCE_CHANGED]: { user: PresenceState };
   [EVENTS.PRESENCE_TYPING]: { channelId: string; userId: string; username: string };
   [EVENTS.PRESENCE_VOICE]: { voice: VoiceState };

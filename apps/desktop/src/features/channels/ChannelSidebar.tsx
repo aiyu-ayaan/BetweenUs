@@ -9,9 +9,9 @@ import { HashIcon, LogOutIcon, PlusIcon, SpeakerIcon } from '../../components/ic
 
 export function ChannelSidebar(): JSX.Element {
   const {
-    workspaces,
+    servers,
     channels,
-    activeWorkspaceId,
+    activeServerId,
     activeChannelId,
     unread,
     selectChannel,
@@ -23,8 +23,8 @@ export function ChannelSidebar(): JSX.Element {
   const [creating, setCreating] = useState<ChannelType | null>(null);
   const [name, setName] = useState('');
 
-  const workspace = workspaces.find((item) => item.id === activeWorkspaceId);
-  const canManage = workspace?.role === 'OWNER' || workspace?.role === 'ADMIN';
+  const server = servers.find((item) => item.id === activeServerId);
+  const canManage = server?.role === 'OWNER' || server?.role === 'ADMIN';
 
   const textChannels = channels.filter((channel) => channel.type === 'TEXT');
   const voiceChannels = channels.filter((channel) => channel.type === 'VOICE');
@@ -60,7 +60,7 @@ export function ChannelSidebar(): JSX.Element {
     <aside className="flex w-60 shrink-0 flex-col bg-surface-800">
       <header className="flex h-12 items-center border-b border-black/30 px-4">
         <h2 className="truncate font-semibold text-slate-100">
-          {workspace?.name ?? 'No workspace'}
+          {server?.name ?? 'No server'}
         </h2>
       </header>
 
@@ -250,7 +250,7 @@ function MemberList(): JSX.Element | null {
 
   if (members.length === 0) return null;
 
-  // Online first, so a busy workspace still shows who is reachable now.
+  // Online first, so a busy server still shows who is reachable now.
   const sorted = [...members].sort((left, right) => {
     const delta = Number(online.has(right.userId)) - Number(online.has(left.userId));
     return delta !== 0 ? delta : left.displayName.localeCompare(right.displayName);

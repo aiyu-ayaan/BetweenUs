@@ -1,13 +1,13 @@
 import { IsIn, IsOptional, IsString, IsUUID, Length } from 'class-validator';
-import type { ChannelType, CreateChannelRequest, CreateWorkspaceRequest } from '@nexora/shared-types';
+import type { ChannelType, CreateChannelRequest, CreateServerRequest } from '@nexora/shared-types';
 
-export class CreateWorkspaceDto implements CreateWorkspaceRequest {
+export class CreateServerDto implements CreateServerRequest {
   @IsString()
   @Length(2, 64)
   name!: string;
 }
 
-export class JoinWorkspaceDto {
+export class JoinServerDto {
   @IsString()
   @Length(2, 64)
   slug!: string;
@@ -15,7 +15,7 @@ export class JoinWorkspaceDto {
 
 export class CreateChannelDto implements CreateChannelRequest {
   @IsUUID()
-  workspaceId!: string;
+  serverId!: string;
 
   @IsString()
   @Length(1, 32)

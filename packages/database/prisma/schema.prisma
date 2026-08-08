@@ -1,4 +1,4 @@
-// MVP schema. One schema shared by auth-, workspace- and chat-service; each
+// MVP schema. One schema shared by auth-, server- and chat-service; each
 // service touches only the models it owns. Splitting per service is tracked in
 // development/TODO.md (cross-cutting debt).
 
@@ -11,7 +11,7 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-enum WorkspaceRole {
+enum ServerRole {
   OWNER
   ADMIN
   MODERATOR
@@ -24,35 +24,35 @@ enum ChannelType {
   VOICE
 }
 
-/// Platform-wide role, distinct from WorkspaceRole: ADMIN grants the admin
-/// panel, not membership rights inside any workspace.
+/// Platform-wide role, distinct from ServerRole: ADMIN grants the admin
+/// panel, not membership rights inside any server.
 enum GlobalRole {
   USER
   ADMIN
 }
 
 model User {
-  id           String   @id @default(uuid())
-  email        String   @unique
-  username     String   @unique
-  displayName  String
-  passwordHash String
-  avatarUrl    String?
-  role         GlobalRole @default(USER)
+  id                 String     @id @default(uuid())
+  email              String     @unique
+  username           String     @unique
+  displayName        String
+  passwordHash       String
+  avatarUrl          String?
+  role               GlobalRole @default(USER)
   /// Set for accounts created with a generated password (the bootstrap admin);
   /// they can do nothing until they choose their own.
-  mustChangePassword Boolean @default(false)
+  mustChangePassword Boolean    @default(false)
   /// A disabled account keeps its data but cannot log in or refresh.
-  disabledAt   DateTime?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  disabledAt         DateTime?
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
 
-  refreshTokens    RefreshToken[]
-  ownedWorkspaces  Workspace[]       @relation("WorkspaceOwner")
-  memberships      WorkspaceMember[]
-  messages         Message[]
-  deviceKey        DeviceKey?
-  identities       UserIdentity[]
+  refreshTokens RefreshToken[]
+  ownedServers  Server[]       @relation("ServerOwner")
+  memberships   ServerMember[]
+  messages      Message[]
+  deviceKey     DeviceKey?
+  identities    UserIdentity[]
 
   @@map("users")
 }
@@ -126,11 +126,11 @@ model ChannelKey {
 
 model RefreshToken {
   // `id` is the JWT `jti`, so revoking a token is a delete by id.
-  id        String   @id
+  id        String    @id
   userId    String
   tokenHash String
   expiresAt DateTime
-  createdAt DateTime @default(now())
+  createdAt DateTime  @default(now())
   revokedAt DateTime?
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -139,7 +139,7 @@ model RefreshToken {
   @@map("refresh_tokens")
 }
 
-model Workspace {
+model Server {
   id        String   @id @default(uuid())
   name      String
   slug      String   @unique
@@ -148,43 +148,43 @@ model Workspace {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  owner    User              @relation("WorkspaceOwner", fields: [ownerId], references: [id], onDelete: Cascade)
-  members  WorkspaceMember[]
+  owner    User           @relation("ServerOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  members  ServerMember[]
   channels Channel[]
 
   @@index([ownerId])
-  @@map("workspaces")
+  @@map("servers")
 }
 
-model WorkspaceMember {
-  id          String        @id @default(uuid())
-  workspaceId String
-  userId      String
-  role        WorkspaceRole @default(MEMBER)
-  joinedAt    DateTime      @default(now())
+model ServerMember {
+  id       String     @id @default(uuid())
+  serverId String
+  userId   String
+  role     ServerRole @default(MEMBER)
+  joinedAt DateTime   @default(now())
 
-  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  server Server @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@unique([workspaceId, userId])
+  @@unique([serverId, userId])
   @@index([userId])
-  @@map("workspace_members")
+  @@map("server_members")
 }
 
 model Channel {
-  id          String      @id @default(uuid())
-  workspaceId String
-  name        String
-  type        ChannelType @default(TEXT)
-  topic       String?
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
+  id        String      @id @default(uuid())
+  serverId  String
+  name      String
+  type      ChannelType @default(TEXT)
+  topic     String?
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
 
-  workspace Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  messages  Message[]
-  keys      ChannelKey[]
+  server   Server       @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  messages Message[]
+  keys     ChannelKey[]
 
-  @@unique([workspaceId, name])
+  @@unique([serverId, name])
   @@map("channels")
 }
 

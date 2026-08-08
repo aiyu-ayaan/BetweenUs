@@ -41,7 +41,7 @@ services:
       - ../nginx/nginx.conf:/etc/nginx/nginx.conf:ro
     depends_on:
       - auth-service
-      - workspace-service
+      - server-service
       - chat-service
       - call-service
       - presence-service
@@ -113,14 +113,14 @@ services:
       - api-network
       - data-network
 
-  workspace-service:
+  server-service:
     build:
       context: ../..
-      dockerfile: apps/services/workspace-service/Dockerfile
+      dockerfile: apps/services/server-service/Dockerfile
     restart: unless-stopped
     environment:
       <<: *service-env
-      WORKSPACE_SERVICE_PORT: 3003
+      SERVER_SERVICE_PORT: 3003
     depends_on:
       migrate:
         condition: service_completed_successfully

@@ -5,7 +5,7 @@ import { PERMISSIONS, hasPermission } from '@nexora/permissions';
 import type {
   Message,
   Paginated,
-  WorkspaceRole,
+  ServerRole,
 } from '@nexora/shared-types';
 
 const PAGE_SIZE = 50;
@@ -71,9 +71,9 @@ export class MessagesService {
   }
 
   /**
-   * A channel is readable only by members of its workspace. Chat-service reads
+   * A channel is readable only by members of its server. Chat-service reads
    * membership from the shared schema in the MVP; when the schema is split this
-   * becomes a call to workspace-service.
+   * becomes a call to server-service.
    */
   async requireChannelAccess(
     userId: string,
@@ -82,21 +82,21 @@ export class MessagesService {
   ): Promise<void> {
     const channel = await prisma.channel.findUnique({
       where: { id: channelId },
-      select: { workspaceId: true },
+      select: { serverId: true },
     });
     if (!channel) {
       throw new NotFoundException({ code: 'CHANNEL_NOT_FOUND', message: 'Channel not found' });
     }
 
-    const membership = await prisma.workspaceMember.findUnique({
-      where: { workspaceId_userId: { workspaceId: channel.workspaceId, userId } },
+    const membership = await prisma.serverMember.findUnique({
+      where: { serverId_userId: { serverId: channel.serverId, userId } },
       select: { role: true },
     });
     if (!membership) {
       throw new NotFoundException({ code: 'CHANNEL_NOT_FOUND', message: 'Channel not found' });
     }
 
-    if (!hasPermission(membership.role as WorkspaceRole, permission)) {
+    if (!hasPermission(membership.role as ServerRole, permission)) {
       throw new ForbiddenException({
         code: 'MISSING_PERMISSION',
         message: `Missing permission ${permission}`,

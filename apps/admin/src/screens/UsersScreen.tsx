@@ -67,7 +67,7 @@ export function UsersScreen({ currentUserId }: { currentUserId: string }): JSX.E
             <tr>
               <th scope="col" className="px-4 py-3">User</th>
               <th scope="col" className="px-4 py-3">Sign-in</th>
-              <th scope="col" className="px-4 py-3">Workspaces</th>
+              <th scope="col" className="px-4 py-3">Servers</th>
               <th scope="col" className="px-4 py-3">Joined</th>
               <th scope="col" className="px-4 py-3">Status</th>
               <th scope="col" className="px-4 py-3 text-right">Actions</th>
@@ -85,7 +85,7 @@ export function UsersScreen({ currentUserId }: { currentUserId: string }): JSX.E
                 <td className="px-4 py-3 text-slate-400">
                   {user.identities.length > 0 ? user.identities.join(', ') : 'password'}
                 </td>
-                <td className="px-4 py-3 text-slate-400">{user.workspaceCount}</td>
+                <td className="px-4 py-3 text-slate-400">{user.serverCount}</td>
                 <td className="px-4 py-3 text-slate-400">
                   {new Date(user.createdAt).toLocaleDateString()}
                 </td>

@@ -1,8 +1,8 @@
-// End-to-end smoke: register -> workspace -> channel -> WS subscribe -> send -> receive.
+// End-to-end smoke: register -> server -> channel -> WS subscribe -> send -> receive.
 import WebSocket from 'ws';
 
 const AUTH = 'http://127.0.0.1:3001';
-const WORKSPACE = 'http://127.0.0.1:3003';
+const SERVER = 'http://127.0.0.1:3003';
 const CHAT = 'http://127.0.0.1:3004';
 
 const json = async (url, options = {}) => {
@@ -57,23 +57,23 @@ try {
 }
 ok('refresh rotation', reuseRejected);
 
-const workspace = await json(`${WORKSPACE}/api/v1/workspaces`, {
+const server = await json(`${SERVER}/api/v1/servers`, {
   method: 'POST',
   headers: authed,
   body: JSON.stringify({ name: `Smoke ${suffix}` }),
 });
-console.log('workspace ok', workspace.slug, workspace.role);
+console.log('server ok', server.slug, server.role);
 
 const channels = await json(
-  `${WORKSPACE}/api/v1/channels?workspaceId=${workspace.id}`,
+  `${SERVER}/api/v1/channels?serverId=${server.id}`,
   { headers: authed },
 );
 console.log('default channel ok', channels[0]?.name);
 
-const channel = await json(`${WORKSPACE}/api/v1/channels`, {
+const channel = await json(`${SERVER}/api/v1/channels`, {
   method: 'POST',
   headers: authed,
-  body: JSON.stringify({ workspaceId: workspace.id, name: 'Smoke Test Room' }),
+  body: JSON.stringify({ serverId: server.id, name: 'Smoke Test Room' }),
 });
 console.log('channel ok', channel.name);
 

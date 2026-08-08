@@ -15,7 +15,7 @@ import { AccessToken } from 'livekit-server-sdk';
 import { envOr } from '@nexora/config';
 import { prisma } from '@nexora/database';
 import { PERMISSIONS, hasPermission } from '@nexora/permissions';
-import type { CallTokenResponse, WorkspaceRole } from '@nexora/shared-types';
+import type { CallTokenResponse, ServerRole } from '@nexora/shared-types';
 
 const TOKEN_TTL = '2h';
 
@@ -61,20 +61,20 @@ export class CallsService {
 
   /**
    * Duplicated from chat-service on purpose: each service owns its own
-   * authorization decision, and this becomes a workspace-service call when the
+   * authorization decision, and this becomes a server-service call when the
    * shared Prisma schema is split (development/TODO.md).
    */
   private async requireChannelAccess(userId: string, channelId: string): Promise<void> {
     const channel = await prisma.channel.findUnique({
       where: { id: channelId },
-      select: { workspaceId: true },
+      select: { serverId: true },
     });
     if (!channel) {
       throw new NotFoundException({ code: 'CHANNEL_NOT_FOUND', message: 'Channel not found' });
     }
 
-    const membership = await prisma.workspaceMember.findUnique({
-      where: { workspaceId_userId: { workspaceId: channel.workspaceId, userId } },
+    const membership = await prisma.serverMember.findUnique({
+      where: { serverId_userId: { serverId: channel.serverId, userId } },
       select: { role: true },
     });
     if (!membership) {
@@ -82,7 +82,7 @@ export class CallsService {
       throw new NotFoundException({ code: 'CHANNEL_NOT_FOUND', message: 'Channel not found' });
     }
 
-    if (!hasPermission(membership.role as WorkspaceRole, PERMISSIONS.START_CALL)) {
+    if (!hasPermission(membership.role as ServerRole, PERMISSIONS.START_CALL)) {
       throw new ForbiddenException({
         code: 'MISSING_PERMISSION',
         message: `Missing permission ${PERMISSIONS.START_CALL}`,

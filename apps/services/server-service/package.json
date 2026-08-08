@@ -1,5 +1,5 @@
 {
-  "name": "@nexora/workspace-service",
+  "name": "@nexora/server-service",
   "private": true,
   "version": "0.1.0",
   "main": "dist/main.js",

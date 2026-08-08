@@ -2,9 +2,9 @@ import { useState } from 'react';
 import { useChatStore } from '../../stores/chat';
 import { CompassIcon, PlusIcon } from '../../components/icons';
 
-/** Left rail of workspace pills, Discord-style. */
-export function WorkspaceRail(): JSX.Element {
-  const { workspaces, activeWorkspaceId, selectWorkspace, createWorkspace, joinWorkspace } =
+/** Left rail of server pills, Discord-style. */
+export function ServerRail(): JSX.Element {
+  const { servers, activeServerId, selectServer, createServer, joinServer } =
     useChatStore();
   const [dialog, setDialog] = useState<'none' | 'create' | 'join'>('none');
   const [value, setValue] = useState('');
@@ -15,8 +15,8 @@ export function WorkspaceRail(): JSX.Element {
     if (!trimmed || busy) return;
     setBusy(true);
     try {
-      if (dialog === 'create') await createWorkspace(trimmed);
-      else await joinWorkspace(trimmed);
+      if (dialog === 'create') await createServer(trimmed);
+      else await joinServer(trimmed);
       setDialog('none');
       setValue('');
     } finally {
@@ -26,18 +26,18 @@ export function WorkspaceRail(): JSX.Element {
 
   return (
     <nav
-      aria-label="Workspaces"
+      aria-label="Servers"
       className="flex w-[72px] shrink-0 flex-col items-center gap-2 bg-surface-950 py-3"
     >
-      {workspaces.map((workspace) => {
-        const active = workspace.id === activeWorkspaceId;
+      {servers.map((server) => {
+        const active = server.id === activeServerId;
         return (
           <button
-            key={workspace.id}
+            key={server.id}
             type="button"
-            onClick={() => void selectWorkspace(workspace.id)}
-            title={workspace.name}
-            aria-label={workspace.name}
+            onClick={() => void selectServer(server.id)}
+            title={server.name}
+            aria-label={server.name}
             aria-current={active ? 'true' : undefined}
             className={`flex h-12 w-12 cursor-pointer items-center justify-center rounded-2xl text-sm font-semibold transition-colors duration-200 ${
               active
@@ -45,7 +45,7 @@ export function WorkspaceRail(): JSX.Element {
                 : 'bg-surface-800 text-slate-300 hover:bg-accent hover:text-white'
             }`}
           >
-            {initials(workspace.name)}
+            {initials(server.name)}
           </button>
         );
       })}
@@ -53,8 +53,8 @@ export function WorkspaceRail(): JSX.Element {
       <button
         type="button"
         onClick={() => setDialog('create')}
-        aria-label="Create workspace"
-        title="Create workspace"
+        aria-label="Create server"
+        title="Create server"
         className="flex h-12 w-12 cursor-pointer items-center justify-center rounded-2xl bg-surface-800 text-emerald-400 transition-colors duration-200 hover:bg-emerald-500 hover:text-white"
       >
         <PlusIcon className="h-5 w-5" />
@@ -63,8 +63,8 @@ export function WorkspaceRail(): JSX.Element {
       <button
         type="button"
         onClick={() => setDialog('join')}
-        aria-label="Join workspace by slug"
-        title="Join workspace"
+        aria-label="Join server by slug"
+        title="Join server"
         className="flex h-12 w-12 cursor-pointer items-center justify-center rounded-2xl bg-surface-800 text-slate-300 transition-colors duration-200 hover:bg-accent hover:text-white"
       >
         <CompassIcon className="h-5 w-5" />
@@ -74,7 +74,7 @@ export function WorkspaceRail(): JSX.Element {
         <div
           role="dialog"
           aria-modal="true"
-          aria-label={dialog === 'create' ? 'Create workspace' : 'Join workspace'}
+          aria-label={dialog === 'create' ? 'Create server' : 'Join server'}
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4"
           onClick={() => setDialog('none')}
         >
@@ -83,13 +83,13 @@ export function WorkspaceRail(): JSX.Element {
             onClick={(event) => event.stopPropagation()}
           >
             <h2 className="text-lg font-semibold">
-              {dialog === 'create' ? 'Create a workspace' : 'Join a workspace'}
+              {dialog === 'create' ? 'Create a server' : 'Join a server'}
             </h2>
-            <label htmlFor="workspace-input" className="mt-4 block text-xs uppercase text-slate-400">
-              {dialog === 'create' ? 'Workspace name' : 'Workspace slug'}
+            <label htmlFor="server-input" className="mt-4 block text-xs uppercase text-slate-400">
+              {dialog === 'create' ? 'Server name' : 'Server slug'}
             </label>
             <input
-              id="workspace-input"
+              id="server-input"
               autoFocus
               value={value}
               onChange={(event) => setValue(event.target.value)}

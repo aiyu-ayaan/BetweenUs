@@ -1,11 +1,11 @@
 // Presence smoke: two sockets, one channel. Covers the handshake, presence.sync,
 // online/offline fanout, typing echo rules and the voice roster.
 //
-// Needs Postgres, Redis, auth-service, workspace-service and presence-service.
+// Needs Postgres, Redis, auth-service, server-service and presence-service.
 import WebSocket from 'ws';
 
 const AUTH = 'http://127.0.0.1:3001';
-const WORKSPACE = 'http://127.0.0.1:3003';
+const SERVER = 'http://127.0.0.1:3003';
 const PRESENCE = 'ws://127.0.0.1:3005/ws/presence';
 
 const json = async (url, options = {}) => {
@@ -72,16 +72,16 @@ const bob = await register('b');
 console.log('accounts ok', alice.user.username, bob.user.username);
 
 const aliceAuth = { Authorization: `Bearer ${alice.accessToken}` };
-const workspace = await json(`${WORKSPACE}/api/v1/workspaces`, {
+const server = await json(`${SERVER}/api/v1/servers`, {
   method: 'POST',
   headers: aliceAuth,
   body: JSON.stringify({ name: `Presence ${Date.now().toString(36)}` }),
 });
 
-const voiceChannel = await json(`${WORKSPACE}/api/v1/channels`, {
+const voiceChannel = await json(`${SERVER}/api/v1/channels`, {
   method: 'POST',
   headers: aliceAuth,
-  body: JSON.stringify({ workspaceId: workspace.id, name: 'lounge', type: 'VOICE' }),
+  body: JSON.stringify({ serverId: server.id, name: 'lounge', type: 'VOICE' }),
 });
 console.log('voice channel ok', voiceChannel.name, voiceChannel.type);
 
@@ -117,7 +117,7 @@ const typing = await b.waitFor((event) => event.type === 'typing');
 ok('typing fanout', typing?.userId === alice.user.id && typing.channelId === voiceChannel.id);
 ok('typing not echoed to author', !a.events.some((event) => event.type === 'typing'));
 
-// Bob is not a member of Alice's workspace, so the channel is not his to touch.
+// Bob is not a member of Alice's server, so the channel is not his to touch.
 b.send({ type: 'voice.join', channelId: voiceChannel.id });
 const forbidden = await b.waitFor((event) => event.type === 'error');
 ok('non-member voice join refused', forbidden?.code === 'CHANNEL_FORBIDDEN');

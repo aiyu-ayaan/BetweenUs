@@ -42,7 +42,7 @@ function toAdminUser(user: UserWithDetail): AdminUser {
     createdAt: user.createdAt.toISOString(),
     disabledAt: user.disabledAt?.toISOString() ?? null,
     identities: user.identities.map((identity) => identity.provider),
-    workspaceCount: user._count.memberships,
+    serverCount: user._count.memberships,
     lastSeenAt: user.refreshTokens[0]?.createdAt.toISOString() ?? null,
   };
 }

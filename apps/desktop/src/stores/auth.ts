@@ -122,7 +122,7 @@ function applySession(
   localStorage.setItem(STORAGE_KEY, refreshToken);
   set({ user, accessToken, status: 'authenticated', error: null });
   connectSockets(accessToken);
-  // Device key setup runs alongside the first workspace load; everything that
+  // Device key setup runs alongside the first server load; everything that
   // needs key material awaits the same promise, so the order does not matter.
   void initIdentity(user.id).catch(() => undefined);
 }

@@ -48,8 +48,8 @@ export class PublishChannelKeysDto implements PublishChannelKeysRequest {
   epoch!: number;
 
   @IsArray()
-  // One entry per workspace member; a bigger bundle than this is not a real
-  // workspace, it is someone probing the endpoint.
+  // One entry per server member; a bigger bundle than this is not a real
+  // server, it is someone probing the endpoint.
   @ArrayMaxSize(500)
   @ValidateNested({ each: true })
   @Type(() => ChannelKeyEntryDto)

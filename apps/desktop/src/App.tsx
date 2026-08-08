@@ -4,7 +4,7 @@ import { useChatStore } from './stores/chat';
 import { usePresenceStore } from './stores/presence';
 import { onNotificationActivate } from './services/notifications';
 import { LoginScreen } from './features/auth/LoginScreen';
-import { WorkspaceRail } from './features/workspaces/WorkspaceRail';
+import { ServerRail } from './features/servers/ServerRail';
 import { ChannelSidebar } from './features/channels/ChannelSidebar';
 import { ChatView } from './features/chat/ChatView';
 import { VoiceChannelView } from './features/voice/VoiceChannelView';
@@ -12,7 +12,7 @@ import { VoiceChannelView } from './features/voice/VoiceChannelView';
 export default function App(): JSX.Element {
   const status = useAuthStore((state) => state.status);
   const restore = useAuthStore((state) => state.restore);
-  const loadWorkspaces = useChatStore((state) => state.loadWorkspaces);
+  const loadServers = useChatStore((state) => state.loadServers);
   const reset = useChatStore((state) => state.reset);
 
   const login = useAuthStore((state) => state.login);
@@ -46,12 +46,12 @@ export default function App(): JSX.Element {
 
   useEffect(() => {
     if (status === 'authenticated') {
-      void loadWorkspaces();
+      void loadServers();
       return;
     }
     reset();
     resetPresence();
-  }, [status, loadWorkspaces, reset, resetPresence]);
+  }, [status, loadServers, reset, resetPresence]);
 
   if (booting) {
     return (
@@ -65,7 +65,7 @@ export default function App(): JSX.Element {
 
   return (
     <div className="flex h-full overflow-hidden">
-      <WorkspaceRail />
+      <ServerRail />
       <ChannelSidebar />
       <MainView />
     </div>

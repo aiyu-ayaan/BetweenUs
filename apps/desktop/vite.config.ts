@@ -3,7 +3,7 @@ import react from '@vitejs/plugin-react';
 import electron from 'vite-plugin-electron/simple';
 
 const AUTH = process.env.AUTH_SERVICE_URL ?? 'http://127.0.0.1:3001';
-const WORKSPACE = process.env.WORKSPACE_SERVICE_URL ?? 'http://127.0.0.1:3003';
+const SERVER = process.env.SERVER_SERVICE_URL ?? 'http://127.0.0.1:3003';
 const CHAT = process.env.CHAT_SERVICE_URL ?? 'http://127.0.0.1:3004';
 const CALL = process.env.CALL_SERVICE_URL ?? 'http://127.0.0.1:3007';
 const PRESENCE = process.env.PRESENCE_SERVICE_URL ?? 'http://127.0.0.1:3005';
@@ -37,8 +37,8 @@ export default defineConfig({
     // mirrors infrastructure/nginx/nginx.conf.
     proxy: {
       '/api/v1/auth': AUTH,
-      '/api/v1/workspaces': WORKSPACE,
-      '/api/v1/channels': WORKSPACE,
+      '/api/v1/servers': SERVER,
+      '/api/v1/channels': SERVER,
       '/api/v1/messages': CHAT,
       '/api/v1/uploads': CHAT,
       '/api/v1/e2ee': CHAT,

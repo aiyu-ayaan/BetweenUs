@@ -148,10 +148,10 @@ export class E2eeService {
   private async memberIds(channelId: string): Promise<string[]> {
     const channel = await prisma.channel.findUniqueOrThrow({
       where: { id: channelId },
-      select: { workspaceId: true },
+      select: { serverId: true },
     });
-    const members = await prisma.workspaceMember.findMany({
-      where: { workspaceId: channel.workspaceId },
+    const members = await prisma.serverMember.findMany({
+      where: { serverId: channel.serverId },
       select: { userId: true },
     });
     return members.map((member) => member.userId);

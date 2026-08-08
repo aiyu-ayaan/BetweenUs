@@ -5,20 +5,20 @@ import { pingDatabase } from '@nexora/database';
 import { createHealthController } from '@nexora/nest-common';
 import {
   ChannelsController,
-  WorkspacesController,
-} from './modules/workspaces/workspaces.controller';
-import { WorkspacesService } from './modules/workspaces/workspaces.service';
+  ServersController,
+} from './modules/servers/servers.controller';
+import { ServersService } from './modules/servers/servers.service';
 
-const SERVICE_NAME = 'workspace-service';
+const SERVICE_NAME = 'server-service';
 
 @Module({
   controllers: [
-    WorkspacesController,
+    ServersController,
     ChannelsController,
     createHealthController(SERVICE_NAME, pingDatabase),
   ],
   providers: [
-    WorkspacesService,
+    ServersService,
     {
       provide: EventBus,
       useFactory: () => new EventBus(envOr('REDIS_URL', 'redis://localhost:6379'), SERVICE_NAME),

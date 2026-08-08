@@ -50,7 +50,7 @@ export interface PublicUser {
   username: string;
   displayName: string;
   avatarUrl: string | null;
-  /** Platform role, not workspace membership. ADMIN unlocks the admin panel. */
+  /** Platform role, not server membership. ADMIN unlocks the admin panel. */
   role: GlobalRole;
   /** True for an account issued a generated password; it can do nothing else. */
   mustChangePassword: boolean;
@@ -91,7 +91,7 @@ export interface AdminUser extends PublicUser {
   disabledAt: string | null;
   /** Providers this account can also sign in with. */
   identities: string[];
-  workspaceCount: number;
+  serverCount: number;
   lastSeenAt: string | null;
 }
 
@@ -140,11 +140,11 @@ export interface JwtRefreshPayload {
   exp?: number;
 }
 
-// --- Workspaces ---
+// --- Servers ---
 
-export type WorkspaceRole = 'OWNER' | 'ADMIN' | 'MODERATOR' | 'MEMBER' | 'GUEST';
+export type ServerRole = 'OWNER' | 'ADMIN' | 'MODERATOR' | 'MEMBER' | 'GUEST';
 
-export interface Workspace {
+export interface Server {
   id: string;
   name: string;
   slug: string;
@@ -153,21 +153,21 @@ export interface Workspace {
   createdAt: string;
 }
 
-export interface WorkspaceWithRole extends Workspace {
-  role: WorkspaceRole;
+export interface ServerWithRole extends Server {
+  role: ServerRole;
 }
 
-export interface CreateWorkspaceRequest {
+export interface CreateServerRequest {
   name: string;
 }
 
-export interface WorkspaceMember {
+export interface ServerMember {
   id: string;
   userId: string;
   username: string;
   displayName: string;
   avatarUrl: string | null;
-  role: WorkspaceRole;
+  role: ServerRole;
   joinedAt: string;
 }
 
@@ -177,7 +177,7 @@ export type ChannelType = 'TEXT' | 'VOICE';
 
 export interface Channel {
   id: string;
-  workspaceId: string;
+  serverId: string;
   name: string;
   type: ChannelType;
   topic: string | null;
@@ -185,7 +185,7 @@ export interface Channel {
 }
 
 export interface CreateChannelRequest {
-  workspaceId: string;
+  serverId: string;
   name: string;
   type?: ChannelType;
 }
