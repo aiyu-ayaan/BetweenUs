@@ -80,6 +80,19 @@ Closing both windows stops the dev server. Ctrl+C does the same.
 - Speaking is marked amber on the tile. With more than nine people the grid
   pages, and whoever spoke last minute is pulled onto page one.
 
+**Notifications**
+- Send from one window while the other is on a different channel, or not
+  focused: the other raises a desktop notification and its taskbar entry
+  flashes. Clicking the notification brings that window forward and opens the
+  channel the message was in.
+- A channel with unread messages shows a count in the sidebar; opening it
+  clears the count.
+- Join **lounge** from one window while the other is elsewhere: the other is
+  notified that someone joined the voice channel. Nobody is notified about
+  their own join, or about a channel they are already sitting in.
+- No notification arrives for the channel that is open in a focused window -
+  that is the rule, not a missing event.
+
 **Presence and typing**
 - The member list shows a green dot per online member; close one window and the
   other greys that member out within a moment.
@@ -120,6 +133,31 @@ reuse detection, logout).
 that starts Postgres and Redis, applies migrations, boots auth-, workspace-,
 chat- and presence-service and runs both smoke scripts.
 
+## Admin panel
+
+```bash
+pnpm admin:create        # prints a username and a generated password, once
+pnpm dev:admin           # http://localhost:5174/admin/
+```
+
+Worth walking through:
+
+- Before `pnpm admin:create` has ever run, the panel refuses to show a form and
+  names the command instead. (`GET /api/v1/admin/status` answers `hasAdmin`.)
+- The first login lands on "Choose a password" and nothing else is reachable
+  until it is done - the admin API answers `PASSWORD_CHANGE_REQUIRED`.
+- Users: search, promote, demote, disable, enable, delete. The last enabled
+  administrator cannot be demoted, disabled or deleted, and nobody can demote or
+  delete themselves.
+- Sign-in providers: enabling without a client secret is refused. With both
+  fields filled and the switch on, the desktop login screen shows the provider
+  button on its next load; switching it off removes it.
+- My account: change username, display name and password. Changing the password
+  signs other sessions out and keeps this one.
+
+Lost the password: `pnpm admin:create --reset` issues a new one and revokes the
+sessions the old one left behind.
+
 ## Testing the container stack
 
 ```bash
@@ -158,6 +196,9 @@ A published track logs `"encryption":1` — that is the end-to-end encrypted pat
 | "microphone did not start (negotiation timed out)", and the mic/camera/screen buttons then fail too | The LiveKit container is older than `livekit-client` expects, so it never acknowledges a publisher offer. `docker compose -f infrastructure/docker/docker-compose.dev.yml up -d livekit` to pull the pinned v1.13.5 |
 | Voice churns: join, leave, join again | Editing desktop source while connected. A hot reload disconnects the room on purpose; rejoin after the reload |
 | Messages show the lock placeholder | This device has no key for that epoch — a member holding it must open the channel once to re-wrap |
+| Provider buttons missing on the login screen | Nobody enabled a provider in the admin panel, or its client id/secret is incomplete |
+| OAuth ends on a browser error page | `PUBLIC_API_URL` does not match the callback URL registered with Google or GitHub |
+| Admin panel says no administrator exists | `pnpm admin:create` has not been run against this database |
 | Windows open on top of each other | Positions are fixed at x=40 and x=760; on a small display, drag them apart |
 | Login answers 429 | The per-address credentials limit (20/min) kicked in; wait out the window |
 | Signed out of every window at once | A refresh token was replayed, which revokes the whole family. Usually two clients sharing one token — check for a stale profile directory |

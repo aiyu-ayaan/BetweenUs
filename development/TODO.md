@@ -3,16 +3,26 @@
 Ordered backlog. Check items off as they land; keep the "Next up" section at
 the top honest — it is what a new session reads first.
 
-## Next up (phase 10: hardening)
+## Next up
 
-What is left needs a human in front of the app, or is a follow-up the work
-above opened.
+Phase 10 items still open need a human in front of the app; the rest are
+follow-ups the admin panel and OAuth work opened.
 
 - [ ] Two humans in a voice channel: audio actually heard, camera, screen share
       (both clients already reach LiveKit and publish encrypted opus)
 - [ ] Watch a typing indicator land in the UI
 - [ ] Per-user rate limit on login, not only per client address (a botnet spread
       across addresses still gets 20/min each against one account)
+- [ ] Sign in with Google or GitHub end to end against real provider apps
+      (the flow is wired and the panel stores credentials; nobody has run it
+      through a real Google or GitHub client yet)
+- [ ] Admin panel served through the gateway container path (verified in dev on
+      5174, not yet through `admin-web` behind Nginx)
+- [ ] OAuth sign-in for the admin panel itself (it is password-only today)
+- [ ] Audit log of admin actions - who disabled or deleted whom, and when
+- [ ] Pagination in the users table (capped at 100 rows today)
+- [ ] Notification preferences: per-channel mute, and a quiet-hours switch
+- [ ] Unread state is per session; persist it so it survives a restart
 
 ## Done
 
@@ -160,13 +170,31 @@ Follow-ups this phase deliberately left open:
 - [ ] Server-authoritative voice rosters via LiveKit webhooks, so a client that
       lies about joining cannot appear in a channel
 
-### Phase 11 — remote desktop
+### Phase 11 — admin panel, OAuth and notifications
+- [x] `GlobalRole`, `mustChangePassword`, `disabledAt`, `UserIdentity` and
+      `OAuthProvider` in the schema, with a migration
+- [x] `pnpm admin:create` (and `--reset`): bootstrap admin, password printed once
+- [x] `/api/v1/admin`: status, user directory with search, promote/demote,
+      disable/enable, delete, OAuth provider config
+- [x] Guard rails: last administrator cannot be removed, demoted or disabled;
+      no self-demotion or self-deletion; disabling revokes live sessions
+- [x] Account endpoints for every user: change password, change username and
+      display name
+- [x] `apps/admin`: bootstrap gate, login, forced password change, users table,
+      provider config, own-account page
+- [x] Google and GitHub sign-in: server-side code exchange, one-time code to a
+      loopback redirect, provider buttons that appear only when configured
+- [x] Client secrets sealed at rest, never returned by the API
+- [x] Desktop notifications for messages and voice joins, with unread counts,
+      taskbar flash and click-to-open
+
+### Phase 12 — remote desktop
 - [ ] `remote-agent`: device identity, outbound WebSocket, screen capture, input
 - [ ] `remote-gateway`: session relay, authorization, audit log
 - [ ] Remote permission model (`REMOTE_VIEW`, `REMOTE_CONTROL`, …) with expiry
 - [ ] Desktop remote client view
 
-### Phase 12 — production
+### Phase 13 — production
 - [ ] Cloudflare Tunnel config + `cloudflared` container wired to Nginx
 - [ ] Secret management, no secrets in compose files
 - [ ] Docker image build + push pipeline, health-checked deploys

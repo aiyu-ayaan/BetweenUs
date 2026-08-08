@@ -36,9 +36,11 @@ when the MVP shipped.
 
 - Remote desktop (`remote-gateway`, `remote-agent`, remote permissions)
 - Presence service, typing indicators
-- Notification service, push notifications
+- Notification service and push notifications (the desktop client raises local
+  notifications itself since phase 11; there is still no server-side service)
 - User service (profiles, avatars, friends); message-attachment linking
-- OAuth logins, email verification, password reset
+- ~~OAuth logins~~ (shipped in phase 11: Google and GitHub, configured from the
+  admin panel), email verification, password reset
 - Direct messages, replies, reactions, message edit/delete
 - Full RBAC permission matrix (MVP has coarse roles: OWNER / MEMBER)
 - Cloudflare Tunnel production ingress, CI/CD pipeline, Kubernetes

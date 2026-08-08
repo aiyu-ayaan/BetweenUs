@@ -18,14 +18,59 @@ we get there in stages and what each stage delivers.
 | 8 | Encrypted chat + voice | E2EE messages, LiveKit voice channels, two-window dev harness | Done |
 | 9 | Presence | presence-service, online status, typing indicators, voice rosters | Done |
 | 10 | Hardening | Tests, CI, error contract polish, request IDs everywhere | In progress |
-| 11 | Remote desktop | remote-gateway, remote-agent, remote permissions, audit log | Planned |
-| 12 | Production ingress | Cloudflare Tunnel, TLS, secret management, deploy pipeline | Planned |
+| 11 | Admin panel, OAuth, notifications | Admin web app, Google/GitHub sign-in, desktop notifications | Done |
+| 12 | Remote desktop | remote-gateway, remote-agent, remote permissions, audit log | Planned |
+| 13 | Production ingress | Cloudflare Tunnel, TLS, secret management, deploy pipeline | Planned |
 
 Hardening moved to phase 10: encryption changes the message format and presence
 adds a service, so both were cheaper to land before tests were written against
 the older shape.
 
 ## Architecture decisions made so far
+
+### Admin panel, OAuth and notifications (phase 11)
+
+- **The admin panel is its own web app, not a screen in the desktop client.**
+  Operating the platform and using it are different jobs; a browser reaches the
+  panel from anywhere and needs no install. It is `apps/admin`, served under
+  `/admin` by the same gateway, and it talks to the same API as everything else.
+- **The panel has no sign-up; the first administrator comes from the CLI.**
+  `pnpm admin:create` runs where the database already is, which is the only
+  place that proves the operator owns the deployment. A page open to the
+  internet that mints the first admin is a race anyone can win. When no
+  administrator exists the panel says which command to run rather than offering
+  a form, and the generated password is printed once and must be replaced on
+  first login - it has been in a terminal, and terminals have scrollback.
+- **Admin authorisation is a database lookup, not a token claim.** A 15-minute
+  access token would carry a role that a demotion cannot take back. Admin
+  traffic is rare, so the lookup costs nothing that matters.
+- **OAuth credentials live in the database, entered in the panel.** Enabling
+  Google or GitHub sign-in is an operator action, not a redeploy, and the
+  clients discover which providers to offer by asking - nothing is hard-coded
+  into a login screen. Client secrets are sealed with AES-256-GCM
+  (`SETTINGS_SECRET`, falling back to `JWT_SECRET`) and never sent back out.
+- **The OAuth exchange happens in auth-service, and the browser does the
+  provider part.** The client secret must not reach a client, and Google
+  refuses embedded webviews - so the desktop app opens the real browser,
+  auth-service trades the code for a profile, and the finished session comes
+  back to a loopback server as a one-time code the client redeems. The same
+  shape serves a future web client, with an allowed origin instead of loopback.
+  The redirect target is restricted to loopback plus `OAUTH_ALLOWED_REDIRECTS`,
+  because an open redirect here hands sessions to whoever asks.
+- **A provider login links before it creates.** Provider account id first, then
+  verified email, and only then a new account - otherwise signing in with
+  Google after registering with the same address silently forks the person into
+  two accounts.
+- **Notifications are decided in the renderer and delivered by the main
+  process.** Only the renderer knows whether the channel is on screen and the
+  window focused; only the main process can raise an OS notification, flash the
+  taskbar and restore a hidden window. The rule is one line: notify unless the
+  user can already see it.
+- **The client subscribes to every text channel it can read, not just the open
+  one.** Without that, a message in another channel never reaches the client and
+  there is nothing to notify about. Unread counts fall out of the same change.
+
+### Earlier decisions
 
 - **One Prisma schema in `packages/database` for the MVP.** Per-service
   databases are the target, but three services against one schema keeps the MVP
@@ -42,7 +87,7 @@ the older shape.
   config means local disk under `LOCAL_STORAGE_PATH`. Production sets the S3
   variables and the same code path uses the bucket.
 - **Nginx as internal gateway**, no business logic. Cloudflare Tunnel is a
-  separate, later concern (phase 12).
+  separate, later concern (phase 13).
 - **Media never passes through NestJS.** `call-service` mints LiveKit access
   tokens and nothing else; the desktop client dials the SFU directly.
 - **One channel key, shared by chat and voice.** A member who can read a channel
@@ -156,6 +201,28 @@ Run live on 2026-08-08, on top of everything verified in phase 9 below:
 Still unverified: CI itself has not run yet (the workflow lands with this
 phase), and the human-in-front-of-it items below.
 
+### Phase 11 verification
+
+Run live against the development stack on 2026-08-09:
+
+- `pnpm admin:create` creates `nexoraadmin` and prints a generated password;
+  the account is ADMIN with `mustChangePassword` set.
+- Login by username works; the admin API answers `PASSWORD_CHANGE_REQUIRED`
+  until the password is changed, then serves the directory.
+- Promote, demote, disable, enable and delete all work; self-demotion is
+  refused (`CANNOT_DEMOTE_SELF`), a non-admin gets 403 and an anonymous caller
+  401.
+- Enabling a provider without a secret is refused (`INCOMPLETE_PROVIDER`); with
+  one, `GET /api/v1/auth/oauth/providers` starts listing it, and disabling it
+  removes it again. The stored secret is never returned - only `hasSecret`.
+- The panel itself was driven in a browser: bootstrap gate, login, users table
+  with 19 accounts, provider page showing the callback URL to register, and the
+  account page.
+
+Not yet exercised: a real Google or GitHub client (the exchange has only been
+tested against the panel's own stored credentials), and the panel behind the
+gateway container rather than the dev server.
+
 ### Phase 9 verification
 
 Run live against Docker (Postgres, Redis, LiveKit in WSL) on 2026-08-08:
@@ -232,6 +299,23 @@ Reads `.env` for secrets and refuses to start without `JWT_SECRET`,
 `JWT_REFRESH_SECRET` and the `LIVEKIT_*` values. The `migrate` service applies
 the schema before anything serves traffic. Nginx listens on `8080`; public
 ingress through `cloudflared` is opt-in with `--profile public`.
+
+## Admin panel
+
+```bash
+pnpm admin:create        # once, prints a username and a generated password
+pnpm dev:admin           # http://localhost:5174/admin/
+```
+
+In a container deployment the panel is served at `/admin` by the gateway. The
+first login forces a password change; after that, Users manages accounts and
+Sign-in providers configures Google and GitHub. Enabling a provider is what
+makes its button appear on the desktop login screen - clients ask the server
+which providers to offer and draw nothing that is not configured.
+
+Google and GitHub need the callback URL the provider page prints, which is
+built from `PUBLIC_API_URL`. Behind Cloudflare that is the public hostname, not
+`localhost`.
 
 ## Continuous integration
 
