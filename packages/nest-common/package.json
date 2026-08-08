@@ -1,0 +1,32 @@
+{
+  "name": "@nexora/nest-common",
+  "private": true,
+  "version": "0.1.0",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsc -p tsconfig.json --watch --preserveWatchOutput",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@nexora/config": "workspace:*",
+    "@nexora/logger": "workspace:*",
+    "@nexora/shared-types": "workspace:*"
+  },
+  "peerDependencies": {
+    "@nestjs/common": "^10.4.1",
+    "@nestjs/core": "^10.4.1"
+  },
+  "devDependencies": {
+    "@nestjs/common": "^10.4.1",
+    "@nestjs/core": "^10.4.1",
+    "@nestjs/platform-express": "^10.4.1",
+    "@types/express": "^4.17.21",
+    "@types/node": "^20.14.10",
+    "class-transformer": "^0.5.1",
+    "class-validator": "^0.14.1",
+    "express": "^4.19.2",
+    "typescript": "^5.5.4"
+  }
+}
