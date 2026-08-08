@@ -6,12 +6,17 @@ import { Logger, createLogger } from '@nexora/logger';
 import { RequestIdMiddleware, createHealthController } from '@nexora/nest-common';
 import { MessagesController } from './modules/messages/messages.controller';
 import { MessagesService } from './modules/messages/messages.service';
+import { UploadsController } from './modules/uploads/uploads.controller';
 import { ChatGateway } from './gateways/chat.gateway';
 
 const SERVICE_NAME = 'chat-service';
 
 @Module({
-  controllers: [MessagesController, createHealthController(SERVICE_NAME, pingDatabase)],
+  controllers: [
+    MessagesController,
+    UploadsController,
+    createHealthController(SERVICE_NAME, pingDatabase),
+  ],
   providers: [
     MessagesService,
     ChatGateway,

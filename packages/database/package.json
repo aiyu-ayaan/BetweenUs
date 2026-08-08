@@ -9,10 +9,10 @@
     "dev": "tsc -p tsconfig.json --watch --preserveWatchOutput",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "generate": "prisma generate",
-    "migrate": "prisma migrate dev",
+    "migrate": "dotenv -e ../../.env -- prisma migrate dev",
     "migrate:deploy": "prisma migrate deploy",
-    "studio": "prisma studio",
-    "seed": "tsx prisma/seed.ts"
+    "studio": "dotenv -e ../../.env -- prisma studio",
+    "seed": "dotenv -e ../../.env -- tsx prisma/seed.ts"
   },
   "prisma": {
     "schema": "prisma/schema.prisma"
@@ -24,6 +24,7 @@
   "devDependencies": {
     "@nexora/auth": "workspace:*",
     "@types/node": "^20.14.10",
+    "dotenv-cli": "^7.4.2",
     "prisma": "^5.18.0",
     "tsx": "^4.16.5",
     "typescript": "^5.5.4"

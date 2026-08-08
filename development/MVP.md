@@ -20,6 +20,7 @@ channel, and exchange messages in realtime between two desktop clients.
 | Desktop | Electron + React + Tailwind + Zustand: login, workspace/channel sidebar, message view |
 | Gateway | Nginx routing REST + WebSocket to services |
 | Data | PostgreSQL via Prisma, Redis Pub/Sub for cross-instance message fanout |
+| Uploads | File upload/download with local-disk storage by default, S3 when configured |
 | Dev infra | `docker-compose.dev.yml` with Postgres + Redis only |
 
 ## Out of scope for MVP (next phases)
@@ -28,7 +29,7 @@ channel, and exchange messages in realtime between two desktop clients.
 - Remote desktop (`remote-gateway`, `remote-agent`, remote permissions)
 - Presence service, typing indicators
 - Notification service, push notifications
-- User service (profiles, avatars, friends), object storage / attachments
+- User service (profiles, avatars, friends); message-attachment linking
 - OAuth logins, email verification, password reset
 - Direct messages, replies, reactions, message edit/delete
 - Full RBAC permission matrix (MVP has coarse roles: OWNER / MEMBER)

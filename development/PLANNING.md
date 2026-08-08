@@ -33,6 +33,10 @@ we get there in stages and what each stage delivers.
 - **JWT verified locally in every service** using `@nexora/auth`, no auth
   round-trip per request. Access tokens are short-lived (15m), refresh tokens
   are stored hashed in Postgres and rotated on use.
+- **Storage driver chosen by environment, local disk by default.** A developer
+  should not need MinIO or an AWS account to upload a file, so an empty S3
+  config means local disk under `LOCAL_STORAGE_PATH`. Production sets the S3
+  variables and the same code path uses the bucket.
 - **Nginx as internal gateway**, no business logic. Cloudflare Tunnel is a
   separate, later concern (phase 12).
 - **Media never passes through NestJS.** Nothing in the MVP touches media, so
@@ -62,15 +66,20 @@ What has been proven on the development machine:
   designed) and returns the documented error shape with a request id on invalid
   input.
 
-Not yet exercised, because Docker is not installed on this machine:
+- The initial Prisma migration (`20260808091410_init`) applies to a real
+  Postgres and the seed runs.
+- `apps/services/chat-service/smoke.mjs` passes against the three services:
+  register → `/me` → refresh (and rejection of the rotated token) → workspace →
+  channels → WebSocket subscribe → REST send → realtime receive → history →
+  anonymous socket closed with 4401 → upload → download → traversal blocked.
 
-- Prisma migration against a real Postgres instance
-- The full register → workspace → channel → realtime message flow
+Not yet exercised:
+
 - Redis Pub/Sub fanout across two chat-service instances
-- Container builds from the service Dockerfiles
+- Container builds from the service Dockerfiles and the Nginx gateway path
+  (services were hit directly on their ports)
 
-Run the quick start in `README.md` on a machine with Docker to close these.
-Phase 8 turns them into automated tests.
+Phase 8 turns the smoke script into automated tests in CI.
 
 ## Conventions
 

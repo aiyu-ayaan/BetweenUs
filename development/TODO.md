@@ -5,9 +5,9 @@ the top honest — it is what a new session reads first.
 
 ## Next up (phase 8: hardening)
 
-- [ ] Run the quick start against real Postgres/Redis and confirm the full
-      register → workspace → channel → realtime message flow (blocked so far:
-      Docker is not installed on the development machine)
+- [ ] Promote `apps/services/chat-service/smoke.mjs` into CI as an integration
+      test (it already passes locally against Postgres + Redis)
+- [ ] Verify the Nginx gateway path and container builds end to end
 - [ ] Unit tests for `AuthService` (register/login/refresh) with a Prisma mock
 - [ ] Integration test: register → create workspace → create channel → send message
 - [ ] GitHub Actions workflow: install → lint → typecheck → build
@@ -50,6 +50,15 @@ the top honest — it is what a new session reads first.
 - [x] Redis Pub/Sub fanout so multiple instances stay in sync
 - [x] `GET /health`
 
+### Storage
+- [x] `@nexora/storage` with local-disk and S3 drivers, chosen from env
+- [x] `POST /api/v1/uploads` and `GET /api/v1/uploads/:key` in chat-service
+- [x] Key generation, traversal guard, content-type allowlist, inline/attachment
+      disposition rules
+- [ ] Attachment model on `Message` so uploads attach to a message
+- [ ] Avatar upload wired to the user profile
+- [ ] Orphan sweep for uploaded objects never referenced by a message
+
 ### Phase 6 — gateway
 - [x] Nginx REST + WebSocket routing, rate limiting, body size limits
 - [x] Production `docker-compose.yml` with per-network isolation
@@ -88,5 +97,4 @@ the top honest — it is what a new session reads first.
 - [ ] Split the shared Prisma schema into per-service schemas
 - [ ] Replace Redis Pub/Sub with NATS when fanout volume needs it
 - [ ] Full RBAC permission checks (currently membership + coarse role only)
-- [ ] S3-compatible object storage for avatars and attachments
 - [ ] `user-service` (profiles, avatars, friends) and `notification-service`
