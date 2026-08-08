@@ -11,7 +11,8 @@
   "dependencies": {
     "@nexora/config": "workspace:*",
     "@nexora/logger": "workspace:*",
-    "@nexora/shared-types": "workspace:*"
+    "@nexora/shared-types": "workspace:*",
+    "ioredis": "^5.4.1"
   },
   "peerDependencies": {
     "@nestjs/common": "^10.4.1",

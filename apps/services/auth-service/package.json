@@ -7,7 +7,8 @@
     "build": "nest build",
     "dev": "nest start --watch",
     "start": "node dist/main.js",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "check": "tsc -p tsconfig.json && node dist/check.js"
   },
   "dependencies": {
     "@nestjs/common": "^10.4.1",

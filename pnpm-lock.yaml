@@ -535,6 +535,9 @@ importers:
       '@nexora/shared-types':
         specifier: workspace:*
         version: link:../shared-types
+      ioredis:
+        specifier: ^5.4.1
+        version: 5.11.1
     devDependencies:
       '@nestjs/common':
         specifier: ^10.4.1

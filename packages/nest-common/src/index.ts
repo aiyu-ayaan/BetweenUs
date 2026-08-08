@@ -5,18 +5,22 @@
 import { randomUUID } from 'node:crypto';
 import {
   ArgumentsHost,
+  CanActivate,
   Catch,
   Controller,
   ExceptionFilter,
+  ExecutionContext,
   Get,
   HttpException,
   HttpStatus,
   Injectable,
   NestMiddleware,
+  Type,
   ValidationPipe,
   INestApplication,
 } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
+import Redis, { type Redis as RedisClient } from 'ioredis';
 import type { NextFunction, Request, Response } from 'express';
 import { envOr, envNumber, loadEnv } from '@nexora/config';
 import { createLogger, type LogLevel, type Logger } from '@nexora/logger';
@@ -107,6 +111,69 @@ export class ApiExceptionFilter implements ExceptionFilter {
     const body: ApiErrorBody = { error: { code, message, requestId } };
     response.status(status).json(body);
   }
+}
+
+/**
+ * Fixed-window rate limit, counted in Redis so every instance shares one budget.
+ *
+ * Nginx already limits by IP at the edge; this is the service-level backstop for
+ * traffic that reaches a service another way (another container, a port-forward,
+ * a future gateway). Credentials endpoints are the ones that matter.
+ *
+ * ponytail: fixed window, not a sliding one - a burst can straddle two windows
+ * and get 2x the budget. Move to a sorted-set sliding window if that matters.
+ */
+let rateLimitRedis: RedisClient | null = null;
+
+function redisForRateLimit(): RedisClient {
+  rateLimitRedis ??= new Redis(envOr('REDIS_URL', 'redis://localhost:6379'), {
+    maxRetriesPerRequest: 1,
+  });
+  return rateLimitRedis;
+}
+
+/** Real client address: Nginx forwards the original in `x-forwarded-for`. */
+function clientAddress(request: Request): string {
+  const forwarded = request.headers['x-forwarded-for'];
+  const first = (Array.isArray(forwarded) ? forwarded[0] : forwarded)?.split(',')[0]?.trim();
+  return first || request.ip || request.socket.remoteAddress || 'unknown';
+}
+
+export interface RateLimitOptions {
+  /** Requests allowed per window, per client address. */
+  limit: number;
+  windowSeconds: number;
+  /** Bucket name; defaults to the request path. Share it to pool two routes. */
+  name?: string;
+}
+
+export function rateLimit(options: RateLimitOptions): Type<CanActivate> {
+  @Injectable()
+  class RateLimitGuard implements CanActivate {
+    async canActivate(context: ExecutionContext): Promise<boolean> {
+      const request = context.switchToHttp().getRequest<Request>();
+      const window = Math.floor(Date.now() / (options.windowSeconds * 1000));
+      const key = `ratelimit:${options.name ?? request.path}:${clientAddress(request)}:${window}`;
+
+      let hits: number;
+      try {
+        hits = await redisForRateLimit().incr(key);
+        if (hits === 1) await redisForRateLimit().expire(key, options.windowSeconds);
+      } catch {
+        // Redis down: fail open. Locking everyone out of login is the worse outage.
+        return true;
+      }
+
+      if (hits > options.limit) {
+        throw new HttpException(
+          { code: 'RATE_LIMITED', message: 'Too many requests, try again later' },
+          HttpStatus.TOO_MANY_REQUESTS,
+        );
+      }
+      return true;
+    }
+  }
+  return RateLimitGuard;
 }
 
 /** Every service mounts this at `/health`. Keep the payload free of infra detail. */

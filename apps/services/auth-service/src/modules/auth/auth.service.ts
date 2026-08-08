@@ -1,5 +1,6 @@
 import {
   ConflictException,
+  Inject,
   Injectable,
   UnauthorizedException,
   BadRequestException,
@@ -14,18 +15,25 @@ import {
   verifyPassword,
   verifyRefreshToken,
 } from '@nexora/auth';
-import { prisma, type User } from '@nexora/database';
+import { type User } from '@nexora/database';
+import { AuthDatabase, type AuthDb } from './auth.db';
 import { EVENTS, EventBus } from '@nexora/events';
 import { envOr } from '@nexora/config';
+import { createLogger, type LogLevel } from '@nexora/logger';
 import type { AuthResponse, AuthTokens, PublicUser } from '@nexora/shared-types';
 import type { LoginDto, RegisterDto } from './dto';
+
+const logger = createLogger('auth-service', envOr('LOG_LEVEL', 'info') as LogLevel);
 
 /** Days a refresh token stays valid; mirrors JWT_REFRESH_TTL for the DB row. */
 const REFRESH_DAYS = Number(envOr('JWT_REFRESH_TTL', '30d').replace(/\D/g, '')) || 30;
 
 @Injectable()
 export class AuthService {
-  constructor(private readonly events: EventBus) {}
+  constructor(
+    private readonly events: EventBus,
+    @Inject(AuthDatabase) private readonly db: AuthDb,
+  ) {}
 
   async register(dto: RegisterDto): Promise<AuthResponse> {
     const policyError = validatePasswordStrength(dto.password);
@@ -34,7 +42,7 @@ export class AuthService {
     const email = dto.email.toLowerCase().trim();
     const username = dto.username.trim();
 
-    const existing = await prisma.user.findFirst({
+    const existing = await this.db.user.findFirst({
       where: { OR: [{ email }, { username }] },
       select: { email: true },
     });
@@ -46,7 +54,7 @@ export class AuthService {
       });
     }
 
-    const user = await prisma.user.create({
+    const user = await this.db.user.create({
       data: {
         email,
         username,
@@ -66,7 +74,7 @@ export class AuthService {
   }
 
   async login(dto: LoginDto): Promise<AuthResponse> {
-    const user = await prisma.user.findUnique({ where: { email: dto.email.toLowerCase().trim() } });
+    const user = await this.db.user.findUnique({ where: { email: dto.email.toLowerCase().trim() } });
 
     // Always run a comparison so a missing account and a wrong password cost the same.
     const passwordOk = user
@@ -96,25 +104,32 @@ export class AuthService {
       });
     }
 
-    const stored = await prisma.refreshToken.findUnique({ where: { id: payload.jti } });
-    if (
-      !stored ||
-      stored.revokedAt !== null ||
-      stored.expiresAt.getTime() < Date.now() ||
-      stored.tokenHash !== hashToken(refreshToken)
-    ) {
+    const stored = await this.db.refreshToken.findUnique({ where: { id: payload.jti } });
+
+    // Reuse detection: a token this account already spent (or a forgery carrying
+    // a real jti) means the token leaked. The holder is unknown, so every live
+    // token for the account dies and both parties have to log in again.
+    if (stored && (stored.revokedAt !== null || stored.tokenHash !== hashToken(refreshToken))) {
+      await this.revokeFamily(stored.userId, 'reuse');
+      throw new UnauthorizedException({
+        code: 'REFRESH_TOKEN_REUSED',
+        message: 'Refresh token was already used; all sessions have been signed out',
+      });
+    }
+
+    if (!stored || stored.expiresAt.getTime() < Date.now()) {
       throw new UnauthorizedException({
         code: 'INVALID_REFRESH_TOKEN',
         message: 'Refresh token is invalid or expired',
       });
     }
 
-    const user = await prisma.user.findUnique({ where: { id: stored.userId } });
+    const user = await this.db.user.findUnique({ where: { id: stored.userId } });
     if (!user) {
       throw new UnauthorizedException({ code: 'INVALID_REFRESH_TOKEN', message: 'Unknown account' });
     }
 
-    await prisma.refreshToken.update({
+    await this.db.refreshToken.update({
       where: { id: stored.id },
       data: { revokedAt: new Date() },
     });
@@ -125,7 +140,7 @@ export class AuthService {
   async logout(refreshToken: string): Promise<void> {
     try {
       const payload = verifyRefreshToken(refreshToken);
-      await prisma.refreshToken.updateMany({
+      await this.db.refreshToken.updateMany({
         where: { id: payload.jti, revokedAt: null },
         data: { revokedAt: new Date() },
       });
@@ -135,18 +150,28 @@ export class AuthService {
   }
 
   async me(userId: string): Promise<PublicUser> {
-    const user = await prisma.user.findUnique({ where: { id: userId } });
+    const user = await this.db.user.findUnique({ where: { id: userId } });
     if (!user) {
       throw new UnauthorizedException({ code: 'UNKNOWN_USER', message: 'Account no longer exists' });
     }
     return toPublicUser(user);
   }
 
+  /** Signs out every session of an account. Used when a refresh token leaks. */
+  private async revokeFamily(userId: string, reason: string): Promise<void> {
+    const { count } = await this.db.refreshToken.updateMany({
+      where: { userId, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
+    // Audit trail: a reuse warning is the signal that a token was stolen.
+    logger.warn('Refresh tokens revoked', { userId, reason, revoked: count });
+  }
+
   private async issueTokens(user: User): Promise<AuthTokens> {
     const accessToken = signAccessToken(user);
     const { token: refreshToken, jti } = signRefreshToken(user.id);
 
-    await prisma.refreshToken.create({
+    await this.db.refreshToken.create({
       data: {
         id: jti,
         userId: user.id,
