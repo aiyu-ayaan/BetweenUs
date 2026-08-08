@@ -72,7 +72,7 @@ export function VoiceControls({ size = 'sm' }: { size?: 'sm' | 'lg' }): JSX.Elem
         onClick={() => void leave()}
         aria-label="Disconnect from voice"
         title="Disconnect"
-        className={`${size === 'lg' ? '' : 'ml-auto'} cursor-pointer rounded-md bg-red-500/90 ${pad} text-white transition-colors duration-200 hover:bg-red-500`}
+        className={`${size === 'lg' ? '' : 'ml-auto'} flex items-center justify-center cursor-pointer rounded-md bg-red-600 ${pad} text-white transition-colors duration-200 hover:bg-red-500 active:bg-red-700`}
       >
         <PhoneOffIcon className={icon} />
       </button>
@@ -102,7 +102,7 @@ function ControlButton({
       disabled={disabled}
       aria-label={label}
       aria-pressed={active}
-      className={`rounded-md ${pad} transition-colors duration-200 ${
+      className={`flex items-center justify-center rounded-md ${pad} transition-colors duration-200 ${
         disabled
           ? 'cursor-not-allowed bg-surface-800 text-slate-600 opacity-50'
           : active
