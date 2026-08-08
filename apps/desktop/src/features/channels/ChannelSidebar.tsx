@@ -35,7 +35,7 @@ export function ChannelSidebar(): JSX.Element {
   const submit = async (): Promise<void> => {
     const trimmed = name.trim();
     if (!trimmed || !creating) return;
-    await createChannel(trimmed, creating);
+    await createChannel({ name: trimmed, type: creating });
     setName('');
     setCreating(null);
   };

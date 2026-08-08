@@ -34,7 +34,12 @@ interface ChatState {
   selectChannel: (channelId: string) => Promise<void>;
   createServer: (name: string) => Promise<void>;
   joinServer: (slug: string) => Promise<void>;
-  createChannel: (name: string, type?: ChannelType) => Promise<void>;
+  createChannel: (options: {
+    name: string;
+    type?: ChannelType;
+    isPrivate?: boolean;
+    memberIds?: string[];
+  }) => Promise<void>;
   sendMessage: (content: string) => Promise<void>;
   reset: () => void;
 }
@@ -128,10 +133,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
     await get().selectServer(server.id);
   },
 
-  createChannel: async (name, type = 'TEXT') => {
+  createChannel: async ({ name, type = 'TEXT', isPrivate, memberIds }) => {
     const serverId = get().activeServerId;
     if (!serverId) return;
-    const channel = await api.createChannel(serverId, name, type);
+    const channel = await api.createChannel({ serverId, name, type, isPrivate, memberIds });
     set({ channels: [...get().channels, channel] });
     // A voice channel is joined, not read, so selection stays where it was.
     if (channel.type === 'TEXT') await get().selectChannel(channel.id);

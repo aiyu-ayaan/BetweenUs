@@ -201,6 +201,8 @@ export interface Channel {
   name: string;
   type: ChannelType;
   topic: string | null;
+  /** Visible only to the users on its allowlist - see `ChannelMember`. */
+  isPrivate: boolean;
   createdAt: string;
 }
 
@@ -208,6 +210,35 @@ export interface CreateChannelRequest {
   serverId: string;
   name: string;
   type?: ChannelType;
+  isPrivate?: boolean;
+  /**
+   * Who may see a private channel. The creator is always added, so an empty
+   * list makes a channel only its creator can open.
+   */
+  memberIds?: string[];
+}
+
+export interface UpdateChannelRequest {
+  name?: string;
+  topic?: string | null;
+}
+
+/** One user allowed into a private channel. */
+export interface ChannelMember {
+  userId: string;
+  username: string;
+  displayName: string;
+  avatarUrl: string | null;
+  addedAt: string;
+}
+
+/**
+ * Replaces the allowlist wholesale. The caller is always kept on it, because
+ * removing yourself from a private channel you are editing locks you out of the
+ * screen you are standing on.
+ */
+export interface SetChannelMembersRequest {
+  userIds: string[];
 }
 
 // --- Messages ---

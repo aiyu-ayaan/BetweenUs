@@ -48,8 +48,9 @@ model User {
   updatedAt          DateTime   @updatedAt
 
   refreshTokens RefreshToken[]
-  ownedServers  Server[]       @relation("ServerOwner")
+  ownedServers  Server[]        @relation("ServerOwner")
   memberships   ServerMember[]
+  channelSeats  ChannelMember[]
   messages      Message[]
   deviceKey     DeviceKey?
   identities    UserIdentity[]
@@ -182,15 +183,36 @@ model Channel {
   name      String
   type      ChannelType @default(TEXT)
   topic     String?
+  /// A private channel is visible only to the users listed in `members`. Server
+  /// membership grants nothing here - not even to an administrator, who has to
+  /// be added like anyone else. See development/PLANNING.md (phase 12).
+  isPrivate Boolean     @default(false)
   createdAt DateTime    @default(now())
   updatedAt DateTime    @updatedAt
 
-  server   Server       @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  server   Server          @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  members  ChannelMember[]
   messages Message[]
   keys     ChannelKey[]
 
   @@unique([serverId, name])
   @@map("channels")
+}
+
+/// One row per user allowed into a private channel. Rows on a public channel
+/// are ignored, so making a channel private later needs no backfill.
+model ChannelMember {
+  id        String   @id @default(uuid())
+  channelId String
+  userId    String
+  addedAt   DateTime @default(now())
+
+  channel Channel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([channelId, userId])
+  @@index([userId])
+  @@map("channel_members")
 }
 
 model Message {

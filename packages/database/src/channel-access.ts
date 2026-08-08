@@ -15,6 +15,7 @@ import { prisma } from './client';
 export interface ChannelAccess {
   channelId: string;
   serverId: string;
+  isPrivate: boolean;
   /** The caller's role in the channel's server. */
   role: ServerRole;
   /** What the caller may actually do here, overrides applied. */
@@ -25,6 +26,10 @@ export interface ChannelAccess {
  * Null means "this channel does not exist as far as this user is concerned" -
  * callers answer 404 for both a missing channel and one they cannot see, so a
  * stranger cannot probe for channel ids.
+ *
+ * A private channel is an allowlist and nothing else overrides it: server
+ * membership, a role and even ownership grant no access to a channel the user
+ * is not named on. The way in is to be added.
  */
 export async function resolveChannelAccess(
   userId: string,
@@ -32,7 +37,7 @@ export async function resolveChannelAccess(
 ): Promise<ChannelAccess | null> {
   const channel = await prisma.channel.findUnique({
     where: { id: channelId },
-    select: { id: true, serverId: true },
+    select: { id: true, serverId: true, isPrivate: true },
   });
   if (!channel) return null;
 
@@ -42,10 +47,13 @@ export async function resolveChannelAccess(
   });
   if (!membership) return null;
 
+  if (channel.isPrivate && !(await isChannelMember(channelId, userId))) return null;
+
   const role = membership.role as ServerRole;
   return {
     channelId: channel.id,
     serverId: channel.serverId,
+    isPrivate: channel.isPrivate,
     role,
     permissions: effectivePermissions(
       role,
@@ -53,6 +61,41 @@ export async function resolveChannelAccess(
       membership.deniedPermissions,
     ),
   };
+}
+
+export async function isChannelMember(channelId: string, userId: string): Promise<boolean> {
+  const seat = await prisma.channelMember.findUnique({
+    where: { channelId_userId: { channelId, userId } },
+    select: { id: true },
+  });
+  return seat !== null;
+}
+
+/**
+ * Who may read a channel: the allowlist when it is private, every server member
+ * otherwise. This is the set the end-to-end encryption key is wrapped for, so
+ * "who can read this" has exactly one answer.
+ */
+export async function channelAudience(channelId: string): Promise<string[]> {
+  const channel = await prisma.channel.findUnique({
+    where: { id: channelId },
+    select: { serverId: true, isPrivate: true },
+  });
+  if (!channel) return [];
+
+  if (channel.isPrivate) {
+    const seats = await prisma.channelMember.findMany({
+      where: { channelId },
+      select: { userId: true },
+    });
+    return seats.map((seat) => seat.userId);
+  }
+
+  const members = await prisma.serverMember.findMany({
+    where: { serverId: channel.serverId },
+    select: { userId: true },
+  });
+  return members.map((member) => member.userId);
 }
 
 /** Convenience for the common "access plus one permission" check. */

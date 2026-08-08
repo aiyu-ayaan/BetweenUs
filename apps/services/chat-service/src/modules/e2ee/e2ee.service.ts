@@ -9,7 +9,7 @@
  * (recorded as a deliberate shortcut in development/PLANNING.md).
  */
 import { ForbiddenException, Injectable } from '@nestjs/common';
-import { prisma } from '@nexora/database';
+import { channelAudience, prisma } from '@nexora/database';
 import { PERMISSIONS } from '@nexora/permissions';
 import type {
   ChannelKeysResponse,
@@ -145,16 +145,13 @@ export class E2eeService {
     return { epoch: dto.epoch, stored: result.count };
   }
 
+  /**
+   * Who the key is wrapped for. `channelAudience` is the allowlist on a private
+   * channel and every server member otherwise, so the people who can read the
+   * channel and the people who get a key are the same set by construction.
+   */
   private async memberIds(channelId: string): Promise<string[]> {
-    const channel = await prisma.channel.findUniqueOrThrow({
-      where: { id: channelId },
-      select: { serverId: true },
-    });
-    const members = await prisma.serverMember.findMany({
-      where: { serverId: channel.serverId },
-      select: { userId: true },
-    });
-    return members.map((member) => member.userId);
+    return channelAudience(channelId);
   }
 
   private async missingAtEpoch(channelId: string, epoch: number): Promise<DeviceKey[]> {

@@ -1,6 +1,7 @@
 import {
   ArrayMaxSize,
   IsArray,
+  IsBoolean,
   IsIn,
   IsOptional,
   IsString,
@@ -13,6 +14,8 @@ import type {
   CreateChannelRequest,
   CreateServerRequest,
   ServerRole,
+  SetChannelMembersRequest,
+  UpdateChannelRequest,
   UpdateServerMemberRequest,
   UpdateServerRequest,
 } from '@nexora/shared-types';
@@ -40,6 +43,35 @@ export class CreateChannelDto implements CreateChannelRequest {
   @IsOptional()
   @IsIn(['TEXT', 'VOICE'])
   type?: ChannelType;
+
+  @IsOptional()
+  @IsBoolean()
+  isPrivate?: boolean;
+
+  @IsOptional()
+  @IsArray()
+  @IsUUID('4', { each: true })
+  @ArrayMaxSize(256)
+  memberIds?: string[];
+}
+
+export class UpdateChannelDto implements UpdateChannelRequest {
+  @IsOptional()
+  @IsString()
+  @Length(1, 32)
+  name?: string;
+
+  @IsOptional()
+  @IsString()
+  @Length(0, 256)
+  topic?: string;
+}
+
+export class SetChannelMembersDto implements SetChannelMembersRequest {
+  @IsArray()
+  @IsUUID('4', { each: true })
+  @ArrayMaxSize(256)
+  userIds!: string[];
 }
 
 export class UpdateServerDto implements UpdateServerRequest {

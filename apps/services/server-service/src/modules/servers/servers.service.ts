@@ -1,9 +1,11 @@
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import { prisma } from '@nexora/database';
+import { prisma, resolveChannelAccess } from '@nexora/database';
 import { EVENTS, EventBus } from '@nexora/events';
 import type {
   Channel,
+  ChannelMember as ChannelMemberDto,
   CreateChannelRequest,
+  UpdateChannelRequest,
   Server,
   ServerMember,
   ServerRole,
@@ -285,24 +287,41 @@ export class ServersService {
     };
   }
 
+  /** Public channels, plus the private ones this user is named on. */
   async listChannels(userId: string, serverId: string): Promise<Channel[]> {
     await this.requireMembership(userId, serverId);
 
     const channels = await prisma.channel.findMany({
-      where: { serverId },
+      where: {
+        serverId,
+        OR: [{ isPrivate: false }, { members: { some: { userId } } }],
+      },
       orderBy: { createdAt: 'asc' },
     });
     return channels.map(toChannel);
   }
 
+  /**
+   * A private channel is created with its allowlist, because the moment between
+   * "channel exists" and "allowlist applied" is a moment when everyone can read
+   * it. The creator is always on the list - otherwise they cannot open what they
+   * just made.
+   */
   async createChannel(userId: string, dto: CreateChannelRequest): Promise<Channel> {
     await this.requirePermission(userId, dto.serverId, PERMISSIONS.MANAGE_CHANNEL);
+
+    const isPrivate = dto.isPrivate === true;
+    const seats = isPrivate
+      ? await this.serverMemberIds(dto.serverId, [...(dto.memberIds ?? []), userId])
+      : [];
 
     const channel = await prisma.channel.create({
       data: {
         serverId: dto.serverId,
         name: normalizeChannelName(dto.name),
         type: dto.type ?? 'TEXT',
+        isPrivate,
+        members: { create: seats.map((memberId) => ({ userId: memberId })) },
       },
     });
 
@@ -312,6 +331,110 @@ export class ServersService {
     });
 
     return toChannel(channel);
+  }
+
+  async updateChannel(
+    userId: string,
+    channelId: string,
+    dto: UpdateChannelRequest,
+  ): Promise<Channel> {
+    const channel = await this.requireChannelManagement(userId, channelId);
+
+    const updated = await prisma.channel.update({
+      where: { id: channel.id },
+      data: {
+        ...(dto.name !== undefined ? { name: normalizeChannelName(dto.name) } : {}),
+        ...(dto.topic !== undefined ? { topic: dto.topic } : {}),
+      },
+    });
+    return toChannel(updated);
+  }
+
+  async deleteChannel(userId: string, channelId: string): Promise<void> {
+    const channel = await this.requireChannelManagement(userId, channelId);
+    await prisma.channel.delete({ where: { id: channel.id } });
+    await this.events.publish(EVENTS.CHANNEL_DELETED, {
+      channelId: channel.id,
+      serverId: channel.serverId,
+    });
+  }
+
+  async channelMembers(userId: string, channelId: string): Promise<ChannelMemberDto[]> {
+    const access = await resolveChannelAccess(userId, channelId);
+    if (!access) {
+      throw new NotFoundException({ code: 'CHANNEL_NOT_FOUND', message: 'Channel not found' });
+    }
+
+    const seats = await prisma.channelMember.findMany({
+      where: { channelId },
+      include: { user: true },
+      orderBy: { addedAt: 'asc' },
+    });
+
+    return seats.map((seat) => ({
+      userId: seat.userId,
+      username: seat.user.username,
+      displayName: seat.user.displayName,
+      avatarUrl: seat.user.avatarUrl,
+      addedAt: seat.addedAt.toISOString(),
+    }));
+  }
+
+  /**
+   * Replaces the allowlist. Removing someone leaves the messages they already
+   * hold a key for readable to them - rotating the channel key on removal is
+   * still open (development/TODO.md), and pretending otherwise would be worse
+   * than saying so.
+   */
+  async setChannelMembers(
+    userId: string,
+    channelId: string,
+    userIds: string[],
+  ): Promise<ChannelMemberDto[]> {
+    const channel = await this.requireChannelManagement(userId, channelId);
+    if (!channel.isPrivate) {
+      throw new ForbiddenException({
+        code: 'CHANNEL_NOT_PRIVATE',
+        message: 'A public channel has no allowlist',
+      });
+    }
+
+    const seats = await this.serverMemberIds(channel.serverId, [...userIds, userId]);
+
+    await prisma.$transaction([
+      prisma.channelMember.deleteMany({ where: { channelId, userId: { notIn: seats } } }),
+      prisma.channelMember.createMany({
+        data: seats.map((memberId) => ({ channelId, userId: memberId })),
+        skipDuplicates: true,
+      }),
+    ]);
+
+    return this.channelMembers(userId, channelId);
+  }
+
+  /** Channel management needs the permission *and* access to the channel. */
+  private async requireChannelManagement(
+    userId: string,
+    channelId: string,
+  ): Promise<{ id: string; serverId: string; isPrivate: boolean }> {
+    const access = await resolveChannelAccess(userId, channelId);
+    if (!access) {
+      throw new NotFoundException({ code: 'CHANNEL_NOT_FOUND', message: 'Channel not found' });
+    }
+    this.require(access.permissions, PERMISSIONS.MANAGE_CHANNEL);
+    return { id: access.channelId, serverId: access.serverId, isPrivate: access.isPrivate };
+  }
+
+  /** Keeps the allowlist to real members of the server, de-duplicated. */
+  private async serverMemberIds(serverId: string, candidates: string[]): Promise<string[]> {
+    const wanted = [...new Set(candidates)];
+    if (wanted.length === 0) return [];
+
+    const members = await prisma.serverMember.findMany({
+      where: { serverId, userId: { in: wanted } },
+      select: { userId: true },
+    });
+    return members.map((member) => member.userId);
   }
 
   /**
@@ -446,6 +569,7 @@ function toChannel(row: {
   name: string;
   type: string;
   topic: string | null;
+  isPrivate: boolean;
   createdAt: Date;
 }): Channel {
   return {
@@ -454,6 +578,7 @@ function toChannel(row: {
     name: row.name,
     type: row.type === 'VOICE' ? 'VOICE' : 'TEXT',
     topic: row.topic,
+    isPrivate: row.isPrivate,
     createdAt: row.createdAt.toISOString(),
   };
 }

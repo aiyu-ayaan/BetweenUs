@@ -5,7 +5,8 @@ import type {
   CallTokenResponse,
   Channel,
   ChannelKeysResponse,
-  ChannelType,
+  ChannelMember,
+  CreateChannelRequest,
   DeviceKey,
   Message,
   OAuthProviderSummary,
@@ -14,6 +15,7 @@ import type {
   PublishChannelKeysRequest,
   ServerMember,
   ServerWithRole,
+  UpdateChannelRequest,
   UpdateServerMemberRequest,
   UpdateServerRequest,
 } from '@nexora/shared-types';
@@ -152,10 +154,22 @@ export const api = {
   channels: (serverId: string): Promise<Channel[]> =>
     request(`/api/v1/channels?serverId=${encodeURIComponent(serverId)}`),
 
-  createChannel: (serverId: string, name: string, type: ChannelType = 'TEXT'): Promise<Channel> =>
-    request('/api/v1/channels', {
-      method: 'POST',
-      body: JSON.stringify({ serverId, name, type }),
+  createChannel: (body: CreateChannelRequest): Promise<Channel> =>
+    request('/api/v1/channels', { method: 'POST', body: JSON.stringify(body) }),
+
+  updateChannel: (channelId: string, body: UpdateChannelRequest): Promise<Channel> =>
+    request(`/api/v1/channels/${channelId}`, { method: 'PATCH', body: JSON.stringify(body) }),
+
+  deleteChannel: (channelId: string): Promise<void> =>
+    request(`/api/v1/channels/${channelId}`, { method: 'DELETE' }),
+
+  channelMembers: (channelId: string): Promise<ChannelMember[]> =>
+    request(`/api/v1/channels/${channelId}/members`),
+
+  setChannelMembers: (channelId: string, userIds: string[]): Promise<ChannelMember[]> =>
+    request(`/api/v1/channels/${channelId}/members`, {
+      method: 'PUT',
+      body: JSON.stringify({ userIds }),
     }),
 
   messages: (channelId: string, before?: string): Promise<Paginated<Message>> =>

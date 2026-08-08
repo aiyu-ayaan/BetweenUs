@@ -8,16 +8,24 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  Put,
   Query,
   UseGuards,
 } from '@nestjs/common';
 import { CurrentUser, JwtAuthGuard, type AuthenticatedUser } from '@nexora/auth';
-import type { Channel, ServerMember, ServerWithRole } from '@nexora/shared-types';
+import type {
+  Channel,
+  ChannelMember,
+  ServerMember,
+  ServerWithRole,
+} from '@nexora/shared-types';
 import { ServersService } from './servers.service';
 import {
   CreateChannelDto,
   CreateServerDto,
   JoinServerDto,
+  SetChannelMembersDto,
+  UpdateChannelDto,
   UpdateServerDto,
   UpdateServerMemberDto,
 } from './dto';
@@ -131,5 +139,40 @@ export class ChannelsController {
     @Body() dto: CreateChannelDto,
   ): Promise<Channel> {
     return this.servers.createChannel(user.id, dto);
+  }
+
+  @Patch(':channelId')
+  update(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('channelId', ParseUUIDPipe) channelId: string,
+    @Body() dto: UpdateChannelDto,
+  ): Promise<Channel> {
+    return this.servers.updateChannel(user.id, channelId, dto);
+  }
+
+  @Delete(':channelId')
+  @HttpCode(204)
+  remove(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('channelId', ParseUUIDPipe) channelId: string,
+  ): Promise<void> {
+    return this.servers.deleteChannel(user.id, channelId);
+  }
+
+  @Get(':channelId/members')
+  members(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('channelId', ParseUUIDPipe) channelId: string,
+  ): Promise<ChannelMember[]> {
+    return this.servers.channelMembers(user.id, channelId);
+  }
+
+  @Put(':channelId/members')
+  setMembers(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('channelId', ParseUUIDPipe) channelId: string,
+    @Body() dto: SetChannelMembersDto,
+  ): Promise<ChannelMember[]> {
+    return this.servers.setChannelMembers(user.id, channelId, dto.userIds);
   }
 }
