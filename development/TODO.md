@@ -9,19 +9,25 @@ the top honest — it is what a new session reads first.
       predated `SessionDescription.id`, so the client never saw its publisher
       offer acknowledged and every publish failed with "negotiation timed out".
       Keep the tag in step with `livekit-client` in `apps/desktop`
+- [x] Refresh-token reuse detection (revoke whole token family on replay)
+- [x] Rate limit login/register at the service level, not only in Nginx
+- [x] Unit tests for `AuthService` (register/login/refresh) with a Prisma mock —
+      `pnpm --filter @nexora/auth-service check`, in-memory database
+- [x] Presence smoke test: two sockets, sync/typing/voice/offline asserted
+- [x] Integration test: register → create workspace → create channel → send
+      message (`chat-service/smoke.mjs`, now exits non-zero on a failed assert)
+- [x] Promote both smoke scripts into CI as integration tests
+- [x] GitHub Actions workflow: install → lint → typecheck → build → self-checks,
+      plus an integration job with Postgres and Redis service containers
+- [x] Request id assigned at bootstrap and logged with every completed request,
+      with the authenticated user when there is one
 - [ ] Two humans in a voice channel: audio actually heard, camera, screen share
       (both clients already reach LiveKit and publish encrypted opus)
 - [ ] Watch a typing indicator land in the UI
-- [ ] Promote `apps/services/chat-service/smoke.mjs` into CI as an integration
-      test
-- [ ] Presence smoke test: connect two sockets, assert sync/typing/voice events
-- [ ] Verify the Nginx gateway path and container builds end to end
-- [ ] Unit tests for `AuthService` (register/login/refresh) with a Prisma mock
-- [ ] Integration test: register → create workspace → create channel → send message
-- [ ] GitHub Actions workflow: install → lint → typecheck → build
-- [ ] Request-ID middleware wired into the logger context in every service
-- [ ] Refresh-token reuse detection (revoke whole token family on replay)
-- [ ] Rate limit login/register at the service level, not only in Nginx
+- [x] Verify the Nginx gateway path and container builds end to end — needed a
+      `migrate` service in the production compose file and OpenSSL in the images
+- [ ] Per-user rate limit on login, not only per client address (a botnet spread
+      across addresses still gets 20/min each against one account)
 
 ## Done
 

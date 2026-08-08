@@ -73,5 +73,5 @@ These are conscious trade-offs, each with an upgrade path:
    beyond membership. Upgrade path: `packages/permissions` already defines the
    full permission constants; add role→permission mapping and a guard.
 3. **Redis Pub/Sub, not NATS.** As the architecture doc prescribes for stage 1.
-4. **No refresh-token family revocation on reuse detection.** Rotation is
-   implemented (old token deleted on use); reuse detection is next.
+4. ~~**No refresh-token family revocation on reuse detection.**~~ Closed in
+   phase 10: replaying a spent token revokes every live token for the account.

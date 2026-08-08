@@ -92,13 +92,45 @@ Closing both windows stops the dev server. Ctrl+C does the same.
   generates a new device key and old messages show the "no key on this device"
   placeholder — that is the design, not a bug (see `E2EE.md`, limit 1).
 
-## Backend smoke test
+## Backend smoke tests
+
+Both scripts need Postgres, Redis and the services running, and both exit
+non-zero on a failed assertion — CI runs exactly these.
 
 `node apps/services/chat-service/smoke.mjs` walks the REST and WebSocket
 surface end to end: register → refresh rotation → workspace → channel →
 WebSocket subscribe → send → realtime receive → history → upload/download →
 traversal blocked → E2EE device directory, key publish/fetch and epoch
-ordering. It needs Postgres, Redis and the services running.
+ordering.
+
+`node apps/services/presence-service/smoke.mjs` connects two authenticated
+sockets and asserts the handshake, `presence.sync`, online and offline fanout,
+typing (including that it is not echoed to its author), the voice roster on
+join and leave, the heartbeat, a rejected anonymous socket and a refused
+non-member voice join.
+
+## Self-checks and CI
+
+`pnpm check` runs the package self-checks with no infrastructure at all: the
+crypto primitives, storage, logger redaction, the desktop E2EE round trip, and
+`AuthService` against an in-memory database (register, login, refresh rotation,
+reuse detection, logout).
+
+`.github/workflows/ci.yml` runs those on every pull request, then a second job
+that starts Postgres and Redis, applies migrations, boots auth-, workspace-,
+chat- and presence-service and runs both smoke scripts.
+
+## Testing the container stack
+
+```bash
+docker compose -f infrastructure/docker/docker-compose.yml up -d --build
+curl 127.0.0.1:8080/health
+```
+
+Everything runs in containers behind Nginx on `8080`, migrations included, so
+this is the path that catches what host development hides: image builds,
+service-name networking and gateway routing. Stop the dev stack first — both
+bind the same host ports.
 
 Renderer output from both windows is mirrored into the terminal that ran
 `pnpm dev:duo`, prefixed with `[renderer Alice]` / `[renderer Bob]`. In
@@ -127,3 +159,5 @@ A published track logs `"encryption":1` — that is the end-to-end encrypted pat
 | Voice churns: join, leave, join again | Editing desktop source while connected. A hot reload disconnects the room on purpose; rejoin after the reload |
 | Messages show the lock placeholder | This device has no key for that epoch — a member holding it must open the channel once to re-wrap |
 | Windows open on top of each other | Positions are fixed at x=40 and x=760; on a small display, drag them apart |
+| Login answers 429 | The per-address credentials limit (20/min) kicked in; wait out the window |
+| Signed out of every window at once | A refresh token was replayed, which revokes the whole family. Usually two clients sharing one token — check for a stale profile directory |

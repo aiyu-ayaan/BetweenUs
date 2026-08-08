@@ -17,7 +17,7 @@ we get there in stages and what each stage delivers.
 | 7 | Desktop client | Electron + React + Tailwind + Zustand, end-to-end chat | Done |
 | 8 | Encrypted chat + voice | E2EE messages, LiveKit voice channels, two-window dev harness | Done |
 | 9 | Presence | presence-service, online status, typing indicators, voice rosters | Done |
-| 10 | Hardening | Tests, CI, error contract polish, request IDs everywhere | Next |
+| 10 | Hardening | Tests, CI, error contract polish, request IDs everywhere | In progress |
 | 11 | Remote desktop | remote-gateway, remote-agent, remote permissions, audit log | Planned |
 | 12 | Production ingress | Cloudflare Tunnel, TLS, secret management, deploy pipeline | Planned |
 
@@ -88,6 +88,32 @@ the older shape.
 - **Ciphertext lives in `messages.content`.** Encryption needed no schema change
   for messages and no service change beyond the size limit, because the server
   already treated the body as an opaque string.
+- **A leaked refresh token signs out the whole account.** Rotation alone lets a
+  thief keep a stolen token alive: whoever refreshes first wins and the other
+  party never finds out. Presenting a token that was already spent now revokes
+  every live token for that account, because the server cannot tell victim from
+  thief. The cost is a re-login after a genuine race (two windows refreshing at
+  once), which the desktop client already avoids with single-flight refresh.
+- **Rate limiting lives in Nginx and in the service.** The edge limit is the one
+  that carries the load, but it only covers traffic that came through the edge.
+  Credential endpoints keep a Redis-counted budget of their own so a container
+  on the internal network, a port-forward or a future second gateway is limited
+  too. Redis being down fails open: locking everyone out of login is the worse
+  outage.
+- **`AuthService` takes its Prisma slice through an injection token.** Every
+  other service imports the `prisma` singleton directly, and that stays; auth is
+  the one whose logic is worth testing without a database, so it is the one that
+  gets the seam.
+- **Request ids are assigned in `bootstrapService`, not per module.** One
+  middleware, mounted before routing, means an id exists even for a request that
+  reaches no controller, and no service can forget to wire it. It logs one line
+  per completed request - id, user, method, path, status, duration - and skips
+  `/health` so probes do not drown the log.
+- **CI runs the smoke scripts rather than a second test suite.** The scripts
+  already walk the real REST and WebSocket surface end to end, so the cheapest
+  useful CI is to give them Postgres and Redis service containers and run them.
+  They had to learn to exit non-zero first - a failed assertion used to print
+  `ok false` and pass.
 - **The E2EE key directory lives in `chat-service`.** Device public keys are
   user-level data and belong in `user-service` once it exists; putting them in
   chat-service kept this to one module, one Nginx route and one client service.
@@ -108,7 +134,29 @@ Desktop app: `pnpm --filter @nexora/desktop dev`.
 Two signed-in windows for testing chat, voice and presence: `pnpm dev:duo` —
 see `TESTING.md`.
 
-## Verification status (as of phase 9)
+## Verification status (as of phase 10, in progress)
+
+Run live on 2026-08-08, on top of everything verified in phase 9 below:
+
+- `pnpm --filter @nexora/auth-service check` drives register, login, refresh
+  rotation, reuse detection, logout and `/me` against an in-memory database.
+- Rate limiting observed: 24 rapid logins against a running auth-service gave
+  401 until the budget ran out, then 429.
+- Both smoke scripts pass against the running stack:
+  `apps/services/chat-service/smoke.mjs` and
+  `apps/services/presence-service/smoke.mjs`.
+- Request logging observed: one line per request carrying `requestId`, and
+  `userId` on authenticated routes.
+- **The container stack runs**: images build, the `migrate` service applies the
+  schema, and register / login / workspace list / workspace create / the message
+  and call routes answer through Nginx, with `x-request-id` passed through from
+  the caller. Two bugs found doing it - no migration step, and no OpenSSL in the
+  images - are fixed.
+
+Still unverified: CI itself has not run yet (the workflow lands with this
+phase), and the human-in-front-of-it items below.
+
+### Phase 9 verification
 
 Run live against Docker (Postgres, Redis, LiveKit in WSL) on 2026-08-08:
 
@@ -173,10 +221,26 @@ to leave an orphaned Room connected under the same identity, which LiveKit
 answers by kicking the older session (`DUPLICATE_IDENTITY`), and clicking an
 already-joined channel did the same thing.
 - Redis Pub/Sub fanout across two instances of the same service.
-- Container builds from the service Dockerfiles and the Nginx gateway path
-  (services are hit directly on their ports in development).
 
-Phase 10 turns the smoke script into automated tests in CI and clears the rest.
+## Running the whole stack in containers
+
+```bash
+docker compose -f infrastructure/docker/docker-compose.yml up -d --build
+```
+
+Reads `.env` for secrets and refuses to start without `JWT_SECRET`,
+`JWT_REFRESH_SECRET` and the `LIVEKIT_*` values. The `migrate` service applies
+the schema before anything serves traffic. Nginx listens on `8080`; public
+ingress through `cloudflared` is opt-in with `--profile public`.
+
+## Continuous integration
+
+`.github/workflows/ci.yml` runs on every pull request and on `master`:
+
+| Job | Does |
+| --- | --- |
+| `verify` | install → lint → typecheck → build → `pnpm check` (package self-checks) |
+| `integration` | Postgres + Redis service containers, migrations, four services started from their builds, then both smoke scripts |
 
 ## Companion documents
 
