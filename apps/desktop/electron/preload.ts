@@ -75,6 +75,17 @@ const api = {
    * event the gateway already checked against the session's permissions.
    */
   remoteInputSupported: (): Promise<boolean> => ipcRenderer.invoke('remote:supported'),
+  /** Why control is not working, for the settings panel. */
+  remoteInputDiagnostics: (): Promise<{
+    supported: boolean;
+    running: boolean;
+    error: string | null;
+  }> => ipcRenderer.invoke('remote:diagnostics'),
+  /** The OS clipboard, for syncing it across a remote session. */
+  clipboardRead: (): Promise<string> => ipcRenderer.invoke('clipboard:read'),
+  clipboardWrite: (text: string): void => {
+    ipcRenderer.send('clipboard:write', text);
+  },
   remoteMouse: (input: {
     action: 'move' | 'down' | 'up' | 'wheel';
     x: number;

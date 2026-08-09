@@ -37,7 +37,21 @@ a human in front of the app, and so does most of phase 12.
       P/Invokes user32 - no native module, no rebuild per Electron version
 - [x] A machine list beside Friends, an Access dialog for handing out
       permissions with an expiry, and the machine's audit trail behind a tab
-- [x] Smoke coverage for the refusals, in CI
+- [x] Control is a mode, not a permission: a session watches until control is
+      taken, and Escape always hands it back. A session that was not granted
+      control can ask for it the way RDP does, and whoever is at the machine
+      answers - the one case where a person present outranks a stored grant.
+      Lent control is written to the session row and audited, never to the grant
+- [x] Clipboard sync both ways over `REMOTE_CLIPBOARD`, through Electron's own
+      clipboard rather than the renderer's (which needs a permission this app
+      denies), with the last value remembered so it does not loop
+- [x] Fixed: control did nothing at all. The input helper was piped into
+      `powershell -Command -`, which consumes stdin as the script itself, so the
+      event stream and the program were the same pipe. It is a file run with
+      `-File` now, its stderr is surfaced in Settings → Remote Access instead of
+      being swallowed, and the numeric casts that threw on a scroll upwards
+      moved into C#
+- [x] Smoke coverage for the refusals and for the control handshake, in CI
 
 Left open on purpose:
 
@@ -45,6 +59,10 @@ Left open on purpose:
       uinput) are a backend each behind the same three-function interface
 - [ ] `REMOTE_FILE_TRANSFER` and `REMOTE_AUDIO` exist in the vocabulary and do
       nothing: no file transfer, and the agent publishes no audio
+- [ ] Clipboard sync is text only and polled once a second - there is no
+      reliable clipboard event on any platform. Files and images through a
+      clipboard are a transfer mechanism, which is the file-transfer permission's
+      job rather than this one's
 - [ ] A remote session is not end-to-end encrypted, unlike a voice channel -
       there is no channel key to reuse and no key exchange between two machines
       that never spoke. The SFU the operator runs can see the frames

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { useRemoteStore } from '../../stores/remote';
 import { MonitorIcon, PhoneOffIcon } from '../../components/icons';
 
@@ -9,9 +9,11 @@ import { MonitorIcon, PhoneOffIcon } from '../../components/icons';
  * machines have different resolutions and different scaling, and the agent is
  * the only side that knows what its own display measures.
  *
- * Keyboard capture is deliberately narrow. It is on only while the pointer is
- * over the screen and control was granted, and it never swallows the shortcut
- * that gets you out.
+ * Control is a mode, not a permission: watching is the default even for a
+ * session allowed to control, and taking it is one button. A session that was
+ * not granted control asks the machine for it instead, RDP style, and somebody
+ * sitting there answers. Escape always hands it back and never travels - one
+ * key has to stay local or an unresponsive session traps the keyboard.
  */
 export function RemoteSessionView(): JSX.Element {
   const session = useRemoteStore((state) => state.session);
@@ -23,9 +25,15 @@ export function RemoteSessionView(): JSX.Element {
   const sendKey = useRemoteStore((state) => state.sendKey);
   const can = useRemoteStore((state) => state.can);
 
+  const controlling = useRemoteStore((state) => state.controlling);
+  const requesting = useRemoteStore((state) => state.requestingControl);
+  const requestControl = useRemoteStore((state) => state.requestControl);
+  const releaseControl = useRemoteStore((state) => state.releaseControl);
+  const error = useRemoteStore((state) => state.error);
+
   const videoRef = useRef<HTMLVideoElement | null>(null);
-  const [controlling, setControlling] = useState(false);
   const mayControl = can('REMOTE_CONTROL');
+  const clipboard = can('REMOTE_CLIPBOARD');
 
   useEffect(() => {
     const element = videoRef.current;
@@ -44,9 +52,10 @@ export function RemoteSessionView(): JSX.Element {
     if (!controlling || !mayControl) return;
 
     const onKey = (event: KeyboardEvent): void => {
-      // Escape is the way out of the session, so it never travels.
+      // Escape hands control back, so it never travels: without one key that
+      // always stays local, a session that stops responding traps the keyboard.
       if (event.key === 'Escape') {
-        setControlling(false);
+        releaseControl();
         return;
       }
       event.preventDefault();
@@ -64,7 +73,7 @@ export function RemoteSessionView(): JSX.Element {
       window.removeEventListener('keydown', onKey);
       window.removeEventListener('keyup', onKey);
     };
-  }, [controlling, mayControl, sendKey]);
+  }, [controlling, mayControl, sendKey, releaseControl]);
 
   const pointFrom = (event: React.MouseEvent<HTMLVideoElement>): { x: number; y: number } => {
     const rect = event.currentTarget.getBoundingClientRect();
@@ -83,33 +92,53 @@ export function RemoteSessionView(): JSX.Element {
         <MonitorIcon className="h-5 w-5 text-slate-400" />
         <span className="truncate font-medium text-slate-100">{session?.machineName}</span>
         <span className="rounded bg-surface-700 px-2 py-0.5 text-xs text-slate-300">
-          {mayControl ? 'Control' : 'View only'}
+          {controlling ? 'Controlling' : 'Watching'}
         </span>
+        {clipboard && (
+          <span className="hidden rounded bg-surface-700 px-2 py-0.5 text-xs text-slate-400 sm:inline">
+            Clipboard shared
+          </span>
+        )}
         {status === 'waiting' && (
           <span className="text-sm text-slate-400">Waiting for the machine…</span>
         )}
 
-        {mayControl && (
-          <label className="ml-auto flex cursor-pointer items-center gap-2 text-sm text-slate-300">
-            <input
-              type="checkbox"
-              checked={controlling}
-              onChange={(event) => setControlling(event.target.checked)}
-              className="cursor-pointer"
-            />
-            Send my keyboard <span className="text-slate-500">(Esc releases)</span>
-          </label>
-        )}
+        {/* One button. Control that was granted up front starts straight away;
+            otherwise this asks the machine and somebody there answers. */}
+        <button
+          type="button"
+          disabled={requesting || !track}
+          onClick={() => (controlling ? releaseControl() : requestControl())}
+          className={`ml-auto cursor-pointer rounded px-3 py-1.5 text-sm font-medium transition-colors duration-200 disabled:cursor-not-allowed disabled:opacity-50 ${
+            controlling
+              ? 'bg-surface-600 text-slate-100 hover:bg-surface-500'
+              : 'bg-accent text-white hover:bg-accent-hover'
+          }`}
+        >
+          {controlling
+            ? 'Release control (Esc)'
+            : requesting
+              ? 'Asking the machine…'
+              : mayControl
+                ? 'Take control'
+                : 'Request control'}
+        </button>
 
         <button
           type="button"
           onClick={() => void disconnect()}
-          className={`${mayControl ? '' : 'ml-auto '}flex cursor-pointer items-center gap-2 rounded bg-red-600 px-3 py-1.5 text-sm font-medium text-white transition-colors duration-200 hover:bg-red-500`}
+          className="flex cursor-pointer items-center gap-2 rounded bg-red-600 px-3 py-1.5 text-sm font-medium text-white transition-colors duration-200 hover:bg-red-500"
         >
           <PhoneOffIcon className="h-4 w-4" />
           Disconnect
         </button>
       </header>
+
+      {error && (
+        <p role="alert" className="bg-red-500/10 px-4 py-2 text-center text-sm text-red-300">
+          {error}
+        </p>
+      )}
 
       <div className="relative flex min-h-0 flex-1 items-center justify-center">
         {track ? (
@@ -117,7 +146,7 @@ export function RemoteSessionView(): JSX.Element {
             ref={videoRef}
             muted
             playsInline
-            className={`max-h-full max-w-full ${mayControl ? 'cursor-none' : ''}`}
+            className={`max-h-full max-w-full ${controlling ? 'cursor-none' : ''}`}
             onMouseMove={(event) => sendMouse({ action: 'move', ...pointFrom(event) })}
             onMouseDown={(event) =>
               sendMouse({ action: 'down', button: buttonOf(event.button), ...pointFrom(event) })

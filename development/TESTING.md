@@ -311,21 +311,30 @@ paths are the ones where the person connecting is *not* the owner.
 3. **Connect to your own machine.** Click Connect. No prompt should appear -
    the owner reaching their own desktop is the case this exists for - and the
    screen should arrive within a second or two.
-4. **Control.** Tick "Send my keyboard". Move the mouse over the video, click,
-   drag a window, type into something, right-click for a context menu. Esc
-   releases the keyboard back to your own machine rather than travelling.
-5. **Somebody else.** From the machine's Access dialog, give a second account
+4. **Control.** The session starts watching, not driving. Click **Take
+   control**, then move the mouse over the video, click, drag a window, type
+   into something, right-click for a context menu, scroll both ways. Esc hands
+   control back rather than travelling to the machine.
+5. **Request control.** From an account granted `REMOTE_VIEW` only, the same
+   button reads **Request control**: a prompt appears on the machine, and
+   whoever is there gives or keeps control. Refusing leaves the session
+   watching; granting lasts until the session ends or control is released, and
+   never touches the stored grant.
+6. **Clipboard.** With `REMOTE_CLIPBOARD` held, copy text on one machine and
+   paste on the other, both directions. It is polled once a second, so give it
+   a moment; it is text only.
+7. **Somebody else.** From the machine's Access dialog, give a second account
    `REMOTE_VIEW` only. Connect as them: a prompt appears **on the machine**,
    and nothing is captured until it is answered. Refuse it once, and let it
    time out once (thirty seconds) - both end the session.
-6. **View-only really is.** Accept the session, then try to move the mouse over
+8. **View-only really is.** Accept the session, then try to move the mouse over
    the video. Nothing happens on the machine, and the machine's History tab
    shows `input.refused`.
-7. **Revoke while live.** With that session running, untick everything in the
+9. **Revoke while live.** With that session running, untick everything in the
    Access dialog. The controller's window should say the session ended, the red
    banner on the machine should disappear, and History should show
    `session.ended` with reason `revoked`.
-8. **Temporary access.** Set an expiry a few minutes out, confirm the machine
+10. **Temporary access.** Set an expiry a few minutes out, confirm the machine
    still appears for that account, then wait past it: the machine leaves their
    list and a session is refused with 404.
 
@@ -481,7 +490,9 @@ A published track logs `"encryption":1` — that is the end-to-end encrypted pat
 | Remote machine shows offline with the switch on | The agent socket needs the gateway: `curl 127.0.0.1:3008/health`, and check `/ws/remote` is proxied if you are going through Nginx |
 | "This machine is no longer enrolled" | Its row was deleted, or it was re-enrolled elsewhere, so the stored token no longer matches. Turn the switch off and on to enrol again |
 | Remote session connects but the screen never arrives | The agent could not capture - check the machine's own console. LiveKit must also be reachable from *both* ends, not only the controller |
+| Nothing happens on the remote machine when you move the mouse | Control is a mode: click **Take control** first. If that is already on, Settings → Remote Access on the machine shows what the input helper reported |
 | Mouse moves but nothing is clicked on the remote machine | Injection is Windows-only; on macOS and Linux a session is view-only by design |
+| Clipboard does not cross | `REMOTE_CLIPBOARD` has to be granted, and it is polled once a second - it is not instant |
 | `dev:duo` windows say "Request failed" and "Signing in to localhost:8080" | An old `VITE_API_URL` in `.env` pointing at the Nginx container, which `pnpm dev:backend` does not run. Development ignores that variable now; rebuild if the window predates that |
 | Windows open on top of each other | Positions are fixed at x=40 and x=760; on a small display, drag them apart |
 | Login answers 429 | The per-address credentials limit (20/min) kicked in; wait out the window |

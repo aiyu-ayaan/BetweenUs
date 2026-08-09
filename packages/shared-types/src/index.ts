@@ -711,6 +711,15 @@ export type ClientRemoteEvent =
   | { type: 'input.mouse'; action: 'move' | 'down' | 'up' | 'wheel'; x: number; y: number; button?: 'left' | 'right' | 'middle'; deltaY?: number }
   | { type: 'input.key'; action: 'down' | 'up'; key: string; code: string; modifiers: string[] }
   | { type: 'clipboard.set'; text: string }
+  /**
+   * Asks the machine for the mouse and keyboard, the way RDP does. Answered
+   * immediately when the session was already granted control; otherwise it is
+   * put to whoever is sitting at the machine, who is the one authority higher
+   * than a stored grant.
+   */
+  | { type: 'control.request' }
+  /** Hands control back without ending the session. */
+  | { type: 'control.release' }
   | { type: 'session.end' }
   | { type: 'ping' };
 
@@ -721,6 +730,8 @@ export type AgentRemoteEvent =
   | { type: 'session.refused'; sessionId: string; reason: string }
   | { type: 'session.ended'; sessionId: string }
   | { type: 'clipboard.text'; sessionId: string; text: string }
+  | { type: 'control.granted'; sessionId: string }
+  | { type: 'control.denied'; sessionId: string; reason?: string }
   | { type: 'pong' };
 
 /** Sent by the gateway to either kind of socket. */
@@ -742,6 +753,20 @@ export type ServerRemoteEvent =
   | { type: 'input.mouse'; action: 'move' | 'down' | 'up' | 'wheel'; x: number; y: number; button?: 'left' | 'right' | 'middle'; deltaY?: number }
   | { type: 'input.key'; action: 'down' | 'up'; key: string; code: string; modifiers: string[] }
   | { type: 'clipboard.set'; text: string }
+  /** To the agent: somebody is asking for control and the machine must answer. */
+  | { type: 'control.requested'; sessionId: string; controllerName: string }
+  /**
+   * To the controller: what this session may do now. Sent whenever control is
+   * taken, granted, refused or released - the client renders from this rather
+   * than from what it asked for.
+   */
+  | {
+      type: 'control.changed';
+      sessionId: string;
+      permissions: RemotePermission[];
+      granted: boolean;
+      reason?: string;
+    }
   | { type: 'pong' }
   | { type: 'error'; code: string; message: string };
 

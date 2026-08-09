@@ -36,6 +36,16 @@ interface RemoteState {
   endedReason: string | null;
   /** The agent's screen, once it is publishing. */
   track: MediaStreamTrack | null;
+  /**
+   * What this session may do *now*. It starts as the session's frozen
+   * permissions and changes when the machine lends or takes back control, so
+   * the UI never renders from what it asked for.
+   */
+  permissions: RemotePermission[];
+  /** True while the mouse and keyboard are being sent. Off is "just watching". */
+  controlling: boolean;
+  /** Set while waiting for somebody at the machine to answer. */
+  requestingControl: boolean;
 
   load: () => Promise<void>;
   connect: (machineId: string) => Promise<void>;
@@ -43,6 +53,9 @@ interface RemoteState {
   sendMouse: (input: Omit<Extract<ClientRemoteEvent, { type: 'input.mouse' }>, 'type'>) => void;
   sendKey: (input: Omit<Extract<ClientRemoteEvent, { type: 'input.key' }>, 'type'>) => void;
   can: (permission: RemotePermission) => boolean;
+  /** Takes control, asking the machine for it when it was not granted up front. */
+  requestControl: () => void;
+  releaseControl: () => void;
   reset: () => void;
 }
 
@@ -58,6 +71,9 @@ export const useRemoteStore = create<RemoteState>((set, get) => ({
   status: 'ended',
   endedReason: null,
   track: null,
+  permissions: [],
+  controlling: false,
+  requestingControl: false,
 
   load: async () => {
     set({ loading: true, error: null });
@@ -86,7 +102,13 @@ export const useRemoteStore = create<RemoteState>((set, get) => ({
       return;
     }
 
-    set({ session, status: 'waiting' });
+    set({
+      session,
+      status: 'waiting',
+      permissions: session.permissions,
+      controlling: false,
+      requestingControl: false,
+    });
     openSocket(session, set, get);
     await joinRoom(session, set);
   },
@@ -103,11 +125,19 @@ export const useRemoteStore = create<RemoteState>((set, get) => ({
     // The socket closing already tells the gateway, but a window that is being
     // torn down may not get the close out; the HTTP call is the belt.
     if (session) await api.endRemoteSession(session.sessionId).catch(() => undefined);
-    set({ session: null, status: 'ended', track: null });
+    stopClipboardSync();
+    set({
+      session: null,
+      status: 'ended',
+      track: null,
+      permissions: [],
+      controlling: false,
+      requestingControl: false,
+    });
   },
 
   sendMouse: (input) => {
-    if (!get().can('REMOTE_CONTROL')) return;
+    if (!get().controlling || !get().can('REMOTE_CONTROL')) return;
     if (input.action === 'move') {
       const now = Date.now();
       if (now - lastMoveAt < MOVE_INTERVAL_MS) return;
@@ -117,11 +147,32 @@ export const useRemoteStore = create<RemoteState>((set, get) => ({
   },
 
   sendKey: (input) => {
-    if (!get().can('REMOTE_CONTROL')) return;
+    if (!get().controlling || !get().can('REMOTE_CONTROL')) return;
     send({ type: 'input.key', ...input });
   },
 
-  can: (permission) => get().session?.permissions.includes(permission) ?? false,
+  can: (permission) => get().permissions.includes(permission),
+
+  /**
+   * One button, two behaviours. A session already granted control just starts
+   * sending; one that was not asks the machine, and somebody sitting at it
+   * answers - which is how RDP works, and the one case where a person present
+   * outranks a stored grant.
+   */
+  requestControl: () => {
+    if (!get().session) return;
+    if (get().can('REMOTE_CONTROL')) {
+      set({ controlling: true });
+      return;
+    }
+    set({ requestingControl: true });
+    send({ type: 'control.request' });
+  },
+
+  releaseControl: () => {
+    set({ controlling: false });
+    send({ type: 'control.release' });
+  },
 
   reset: () => {
     void get().disconnect();
@@ -152,6 +203,15 @@ function openSocket(
     }
 
     switch (event.type) {
+      case 'control.changed':
+        set({
+          permissions: event.permissions,
+          requestingControl: false,
+          controlling: event.granted,
+          ...(event.granted ? {} : { error: event.reason ?? null }),
+        });
+        return;
+
       case 'agent.state':
         if (event.state === 'refused') {
           set({ status: 'ended', endedReason: event.reason ?? 'The machine refused' });
@@ -164,7 +224,10 @@ function openSocket(
         return;
 
       case 'clipboard.set':
-        void navigator.clipboard.writeText(event.text).catch(() => undefined);
+        // Remembered before writing so the poller does not read it straight
+        // back out and send it round again.
+        lastClipboard = event.text;
+        window.nexora?.clipboardWrite(event.text);
         return;
 
       case 'error':
@@ -192,6 +255,7 @@ async function joinRoom(session: RemoteSessionResponse, set: Setter): Promise<vo
   next.on(RoomEvent.TrackSubscribed, (track: RemoteTrack) => {
     if (track.kind !== Track.Kind.Video) return;
     set({ track: track.mediaStreamTrack, status: 'live' });
+    startClipboardSync();
   });
   next.on(RoomEvent.TrackUnsubscribed, () => set({ track: null }));
   next.on(RoomEvent.Disconnected, () => {
@@ -211,6 +275,35 @@ async function joinRoom(session: RemoteSessionResponse, set: Setter): Promise<vo
       endedReason: error instanceof Error ? error.message : 'Could not reach the media server',
     });
   }
+}
+
+/**
+ * Clipboard sync, controller side. Polled for the same reason the agent polls:
+ * there is no reliable clipboard change event, and a second is fast enough for
+ * copy-then-paste.
+ */
+let clipboardTimer: number | null = null;
+let lastClipboard = '';
+
+function startClipboardSync(): void {
+  stopClipboardSync();
+  const bridge = window.nexora;
+  if (!bridge) return;
+
+  clipboardTimer = window.setInterval(() => {
+    if (!useRemoteStore.getState().can('REMOTE_CLIPBOARD')) return;
+    void bridge.clipboardRead().then((text) => {
+      if (!text || text === lastClipboard) return;
+      lastClipboard = text;
+      send({ type: 'clipboard.set', text });
+    });
+  }, 1000);
+}
+
+function stopClipboardSync(): void {
+  if (clipboardTimer !== null) window.clearInterval(clipboardTimer);
+  clipboardTimer = null;
+  lastClipboard = '';
 }
 
 function send(event: ClientRemoteEvent): void {

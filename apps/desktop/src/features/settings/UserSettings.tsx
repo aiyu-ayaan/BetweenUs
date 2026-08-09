@@ -546,6 +546,14 @@ function RemoteSection(): JSX.Element {
   const controlSupported = useAgentStore((state) => state.controlSupported);
   const session = useAgentStore((state) => state.session);
   const enable = useAgentStore((state) => state.enable);
+  const [inputError, setInputError] = useState<string | null>(null);
+
+  // Control failing silently was the worst part of the first version: the
+  // session looked fine and the mouse simply did not move.
+  useEffect(() => {
+    void window.nexora?.remoteInputDiagnostics().then((report) => setInputError(report.error));
+  }, [session]);
+
   const disable = useAgentStore((state) => state.disable);
   const endSession = useAgentStore((state) => state.endSession);
 
@@ -574,6 +582,13 @@ function RemoteSection(): JSX.Element {
       {error && (
         <p role="alert" className="mt-3 rounded-md bg-red-500/10 px-3 py-2 text-sm text-red-300">
           {error}
+        </p>
+      )}
+
+      {enabled && controlSupported && inputError && (
+        <p role="alert" className="mt-3 rounded-md bg-red-500/10 px-3 py-2 text-sm text-red-300">
+          The input helper reported: {inputError}. A controller can watch this screen but not
+          touch it until that is fixed.
         </p>
       )}
 

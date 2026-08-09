@@ -57,6 +57,13 @@ interface Window {
     startOAuth: (startUrl: string) => Promise<string | null>;
     /** Remote desktop, agent side. Input injection is Windows-only for now. */
     remoteInputSupported: () => Promise<boolean>;
+    remoteInputDiagnostics: () => Promise<{
+      supported: boolean;
+      running: boolean;
+      error: string | null;
+    }>;
+    clipboardRead: () => Promise<string>;
+    clipboardWrite: (text: string) => void;
     remoteMouse: (input: {
       action: 'move' | 'down' | 'up' | 'wheel';
       x: number;

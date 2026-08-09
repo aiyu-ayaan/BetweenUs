@@ -1,6 +1,7 @@
 import {
   app,
   BrowserWindow,
+  clipboard,
   Menu,
   Notification,
   Tray,
@@ -16,7 +17,13 @@ import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import fs from 'node:fs';
 import path from 'node:path';
-import { applyKey, applyMouse, inputSupported, stopInputBackend } from './remote-input';
+import {
+  applyKey,
+  applyMouse,
+  inputDiagnostics,
+  inputSupported,
+  stopInputBackend,
+} from './remote-input';
 
 const dirname = path.dirname(fileURLToPath(import.meta.url));
 const rendererDevUrl = process.env.VITE_DEV_SERVER_URL;
@@ -287,6 +294,25 @@ ipcMain.handle('screen:select', (_event, id: unknown, audio: unknown): void => {
 // renderer cannot do: putting a mouse and a keyboard into the machine itself.
 
 ipcMain.handle('remote:supported', (): boolean => inputSupported());
+
+ipcMain.handle('remote:diagnostics', () => inputDiagnostics());
+
+// Clipboard sync goes through Electron's own clipboard rather than the
+// renderer's `navigator.clipboard`: reading in a renderer needs a permission
+// this app denies by policy, and the OS clipboard is exactly the thing both
+// ends of a session are trying to share.
+ipcMain.handle('clipboard:read', (): string => {
+  try {
+    return clipboard.readText();
+  } catch {
+    return '';
+  }
+});
+
+ipcMain.on('clipboard:write', (_event, text: unknown) => {
+  if (typeof text !== 'string') return;
+  clipboard.writeText(text);
+});
 
 ipcMain.handle('remote:machine-name', (): string => {
   try {

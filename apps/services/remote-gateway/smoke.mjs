@@ -237,9 +237,47 @@ controller.send(JSON.stringify({ type: 'input.mouse', action: 'move', x: 10, y: 
 const denied = await waitFor(controller, 'error');
 ok('input refused without REMOTE_CONTROL', denied.code === 'REMOTE_CONTROL_REQUIRED');
 
+// --- Requesting control, the way RDP does -----------------------------------
+//
+// A view-only session may ask; the machine answers. This is the one place a
+// person sitting at the machine outranks the stored grant, so it is worth
+// asserting that the answer is what changes the session and not the asking.
+
+controller.send(JSON.stringify({ type: 'control.request' }));
+const asked = await waitFor(agent, 'control.requested');
+ok('the machine was asked', asked.sessionId === session.sessionId);
+
+agent.send(JSON.stringify({ type: 'control.denied', sessionId: session.sessionId }));
+const refusedControl = await waitFor(controller, 'control.changed');
+ok('a refusal grants nothing', refusedControl.granted === false);
+ok('and leaves the session view-only', refusedControl.permissions.join() === 'REMOTE_VIEW');
+
+controller.send(JSON.stringify({ type: 'control.request' }));
+await waitFor(agent, 'control.requested');
+agent.send(JSON.stringify({ type: 'control.granted', sessionId: session.sessionId }));
+const grantedControl = await waitFor(controller, 'control.changed');
+ok('the machine can lend control', grantedControl.granted === true);
+ok(
+  'the session gains it',
+  grantedControl.permissions.includes('REMOTE_CONTROL'),
+  grantedControl.permissions.join(),
+);
+
+// And the input that was refused a moment ago now goes through.
+controller.send(JSON.stringify({ type: 'input.mouse', action: 'move', x: 0.5, y: 0.5 }));
+const relayed = await waitFor(agent, 'input.mouse');
+ok('input reaches the machine once control is lent', relayed.action === 'move');
+
+// Handing it back narrows the session again, without ending it.
+controller.send(JSON.stringify({ type: 'control.release' }));
+const released = await waitFor(controller, 'control.changed');
+ok('releasing takes it away', !released.permissions.includes('REMOTE_CONTROL'));
+
 const audit = await json(`${REMOTE}/api/v1/remote/machines/${machineId}/audit`, {
   headers: ownerAuth,
 });
+ok('the control request was audited', audit.some((entry) => entry.action === 'control.requested'));
+ok('the grant was audited', audit.some((entry) => entry.action === 'control.granted'));
 ok('the refusal was audited', audit.some((entry) => entry.action === 'input.refused'));
 ok('the session start was audited', audit.some((entry) => entry.action === 'session.started'));
 

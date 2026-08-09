@@ -39,6 +39,12 @@ interface ActiveSession {
   permissions: RemotePermission[];
 }
 
+/** Somebody asking for the mouse and keyboard part way through a session. */
+interface ControlRequest {
+  sessionId: string;
+  controllerName: string;
+}
+
 interface AgentState {
   /** The switch in settings. Off is off: no socket, no enrolment, nothing. */
   enabled: boolean;
@@ -50,11 +56,15 @@ interface AgentState {
   controlSupported: boolean;
   /** Waiting for the person at this machine to say yes. */
   pending: PendingSession | null;
+  /** A live session where the controller has asked for control. */
+  controlRequest: ControlRequest | null;
   session: ActiveSession | null;
   enable: () => Promise<void>;
   disable: () => Promise<void>;
   accept: () => void;
   refuse: (reason?: string) => void;
+  /** Answers a request for the mouse and keyboard on a session already running. */
+  answerControl: (granted: boolean) => void;
   /** Ends the session from this side - the machine's owner pulling the plug. */
   endSession: () => void;
   /** Called at sign-in; reconnects if the switch was left on. */
@@ -78,6 +88,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
   error: null,
   controlSupported: false,
   pending: null,
+  controlRequest: null,
   session: null,
 
   enable: async () => {
@@ -109,6 +120,28 @@ export const useAgentStore = create<AgentState>((set, get) => ({
     clearConsentTimer();
     set({ pending: null });
     send({ type: 'session.refused', sessionId: pending.sessionId, reason });
+  },
+
+  answerControl: (granted) => {
+    const request = get().controlRequest;
+    if (!request) return;
+    set({ controlRequest: null });
+    send(
+      granted
+        ? { type: 'control.granted', sessionId: request.sessionId }
+        : { type: 'control.denied', sessionId: request.sessionId, reason: 'declined' },
+    );
+    if (granted) {
+      const session = get().session;
+      if (session) {
+        set({
+          session: {
+            ...session,
+            permissions: [...session.permissions, 'REMOTE_CONTROL'],
+          },
+        });
+      }
+    }
   },
 
   endSession: () => {
@@ -249,9 +282,28 @@ async function onEvent(event: ServerRemoteEvent): Promise<void> {
     case 'session.ended':
       clearConsentTimer();
       media.delete(event.sessionId);
-      useAgentStore.setState({ pending: null });
+      useAgentStore.setState({ pending: null, controlRequest: null });
       await teardown(event.reason);
       return;
+
+    case 'control.requested':
+      useAgentStore.setState({
+        controlRequest: {
+          sessionId: event.sessionId,
+          controllerName: event.controllerName,
+        },
+      });
+      return;
+
+    // Control handed back, or taken away. The banner reads from this, so it
+    // stops claiming somebody can type when they no longer can.
+    case 'control.changed': {
+      const session = useAgentStore.getState().session;
+      if (session && session.sessionId === event.sessionId) {
+        useAgentStore.setState({ session: { ...session, permissions: event.permissions } });
+      }
+      return;
+    }
 
     // Input has already been checked against the session's permissions by the
     // gateway; this side only applies it.
@@ -264,7 +316,10 @@ async function onEvent(event: ServerRemoteEvent): Promise<void> {
       return;
 
     case 'clipboard.set':
-      await navigator.clipboard.writeText(event.text).catch(() => undefined);
+      // Remembered before writing, so the poller below does not read it back
+      // out and send it straight to the other end again.
+      lastClipboard = event.text;
+      window.nexora?.clipboardWrite(event.text);
       return;
 
     default:
@@ -313,6 +368,7 @@ async function startPublishing(pending: PendingSession): Promise<void> {
       },
     });
     send({ type: 'session.accepted', sessionId: pending.sessionId });
+    startClipboardSync(pending.sessionId);
   } catch (error) {
     send({
       type: 'session.refused',
@@ -323,8 +379,44 @@ async function startPublishing(pending: PendingSession): Promise<void> {
   }
 }
 
+/**
+ * Clipboard sync, machine side.
+ *
+ * Polled rather than evented, because no platform offers a reliable clipboard
+ * change event and Electron does not expose one. A second is fast enough for
+ * copy-then-paste and cheap enough to ignore.
+ *
+ * ponytail: text only. Files and images through a clipboard are a transfer
+ * mechanism, and that is REMOTE_FILE_TRANSFER's job rather than this one's.
+ */
+let clipboardTimer: number | null = null;
+let lastClipboard = '';
+
+function startClipboardSync(sessionId: string): void {
+  stopClipboardSync();
+  const bridge = window.nexora;
+  if (!bridge) return;
+
+  clipboardTimer = window.setInterval(() => {
+    const session = useAgentStore.getState().session;
+    if (!session || !session.permissions.includes('REMOTE_CLIPBOARD')) return;
+    void bridge.clipboardRead().then((text) => {
+      if (!text || text === lastClipboard) return;
+      lastClipboard = text;
+      send({ type: 'clipboard.text', sessionId, text });
+    });
+  }, 1000);
+}
+
+function stopClipboardSync(): void {
+  if (clipboardTimer !== null) window.clearInterval(clipboardTimer);
+  clipboardTimer = null;
+  lastClipboard = '';
+}
+
 async function teardown(_reason: string): Promise<void> {
   clearConsentTimer();
+  stopClipboardSync();
   const current = room;
   room = null;
   useAgentStore.setState({ session: null });
@@ -348,5 +440,11 @@ export async function stopAgent(): Promise<void> {
   await teardown('signed-out');
   socket?.close();
   socket = null;
-  useAgentStore.setState({ status: 'off', pending: null, session: null, machineId: null });
+  useAgentStore.setState({
+    status: 'off',
+    pending: null,
+    controlRequest: null,
+    session: null,
+    machineId: null,
+  });
 }

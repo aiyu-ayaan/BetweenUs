@@ -52,6 +52,11 @@ interface ControllerSocket {
   machineId: string;
   userId: string;
   username: string;
+  /**
+   * Mutable, unlike the row it started from: the machine can lend control
+   * mid-session and take it back. Every change is written to the session row
+   * too, so the audit trail and a restart agree with what the relay enforces.
+   */
   permissions: RemotePermission[];
   alive: boolean;
 }
@@ -218,6 +223,48 @@ export class RemoteGateway implements OnModuleDestroy {
         this.tearDown(event.sessionId, 'agent');
         return;
 
+      case 'control.granted':
+      case 'control.denied': {
+        const controller = this.controllers.get(event.sessionId);
+        const controllerState = controller ? this.state.get(controller) : undefined;
+        if (!controller || controllerState?.kind !== 'controller') return;
+
+        const granted = event.type === 'control.granted';
+        const refusal = event.type === 'control.denied' ? (event.reason ?? 'declined') : null;
+        if (granted && !controllerState.permissions.includes(PERMISSIONS.REMOTE_CONTROL)) {
+          // Somebody at the machine said yes. That is a higher authority than a
+          // stored grant, so it stands - but only for this session: it is
+          // written to the session row, never to the grant.
+          controllerState.permissions = [
+            ...controllerState.permissions,
+            PERMISSIONS.REMOTE_CONTROL,
+          ];
+          await prisma.remoteSession
+            .update({
+              where: { id: event.sessionId },
+              data: { permissions: controllerState.permissions },
+            })
+            .catch(() => undefined);
+        }
+
+        await recordRemoteAudit({
+          machineId: state.machineId,
+          sessionId: event.sessionId,
+          actorId: controllerState.userId,
+          action: granted ? 'control.granted' : 'control.denied',
+          detail: granted ? {} : { reason: refusal },
+        });
+
+        this.send(controller, {
+          type: 'control.changed',
+          sessionId: event.sessionId,
+          permissions: controllerState.permissions,
+          granted,
+          ...(granted ? {} : { reason: refusal ?? 'The machine refused' }),
+        });
+        return;
+      }
+
       case 'clipboard.text': {
         // The machine's clipboard travelling to the controller needs the same
         // permission as the other direction.
@@ -349,6 +396,67 @@ export class RemoteGateway implements OnModuleDestroy {
     if (event.type === 'session.end') {
       await this.remote.endSession(state.sessionId, 'controller');
       this.tearDown(state.sessionId, 'controller');
+      return;
+    }
+
+    // Asking for control, RDP style. A session already granted it is answered
+    // here and never bothers the machine; one that was not has to be let in by
+    // whoever is sitting at it.
+    if (event.type === 'control.request') {
+      if (state.permissions.includes(PERMISSIONS.REMOTE_CONTROL)) {
+        this.send(socket, {
+          type: 'control.changed',
+          sessionId: state.sessionId,
+          permissions: state.permissions,
+          granted: true,
+        });
+        return;
+      }
+
+      const agent = this.agents.get(state.machineId);
+      if (!agent) {
+        this.send(socket, { type: 'error', code: 'AGENT_OFFLINE', message: 'The machine is gone' });
+        return;
+      }
+
+      await recordRemoteAudit({
+        machineId: state.machineId,
+        sessionId: state.sessionId,
+        actorId: state.userId,
+        action: 'control.requested',
+      });
+      this.send(agent, {
+        type: 'control.requested',
+        sessionId: state.sessionId,
+        controllerName: state.username,
+      });
+      return;
+    }
+
+    // Handing control back mid-session. Only what the machine lent is taken
+    // away - a session granted control up front keeps it.
+    if (event.type === 'control.release') {
+      state.permissions = state.permissions.filter(
+        (permission) => permission !== PERMISSIONS.REMOTE_CONTROL,
+      );
+      await prisma.remoteSession
+        .update({ where: { id: state.sessionId }, data: { permissions: state.permissions } })
+        .catch(() => undefined);
+      this.send(socket, {
+        type: 'control.changed',
+        sessionId: state.sessionId,
+        permissions: state.permissions,
+        granted: false,
+      });
+      const agent = this.agents.get(state.machineId);
+      if (agent) {
+        this.send(agent, {
+          type: 'control.changed',
+          sessionId: state.sessionId,
+          permissions: state.permissions,
+          granted: false,
+        });
+      }
       return;
     }
 
