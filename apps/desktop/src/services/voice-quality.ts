@@ -1,0 +1,198 @@
+/**
+ * How a microphone is captured and encoded, and why the defaults are not it.
+ *
+ * A voice channel was published with LiveKit's defaults: `AudioPresets.music`
+ * (48 kbps), mono, echo cancellation / noise suppression / gain control left at
+ * whatever the browser felt like, one device (the system default), and no way
+ * for anybody to change any of it. That is fine on a headset in a quiet room and
+ * audibly worse than Discord anywhere else - a fan, a mechanical keyboard or a
+ * flatmate ends up in the room with you, and somebody with two microphones has
+ * no way to say which one.
+ *
+ * What Discord actually does, and what is reachable from here:
+ *
+ * - **Ask the platform for its best denoiser.** Discord ships Krisp, an ML model
+ *   in a native library. Chromium has grown `voiceIsolation`, which is the same
+ *   idea behind a constraint: a stronger, model-based suppressor that keeps a
+ *   voice and drops everything else. Where it exists it replaces
+ *   `noiseSuppression`; where it does not, it is ignored and the ordinary WebRTC
+ *   suppressor still runs. Nothing to ship, nothing to load.
+ * - **Gate the quiet.** Suppression cleans up a signal; it does not decide that
+ *   nobody is talking. Discord's input sensitivity does, and it is what makes a
+ *   Discord call silent between sentences. That is `mic-gate.ts`, driven by the
+ *   threshold here.
+ * - **Spend a sensible bitrate.** 64 kbps mono is Discord's voice channel and is
+ *   transparent for speech; 128 kbps stereo is what a music bot or a "hi-fi"
+ *   mode wants. LiveKit's `AudioPresets` are nothing but these numbers, so they
+ *   are written out here where the reason for them can sit beside them.
+ * - **Let the two modes be opposite.** Everything that makes speech clear ruins
+ *   music: gain control pumps, suppression eats reverb tails, DTX cuts a quiet
+ *   passage out entirely, and mono throws half a recording away. Rather than a
+ *   quality slider that means nothing, the mode says what the microphone is
+ *   *for*, exactly as the screen-share picker asks what is on the screen
+ *   (`share-quality.ts`).
+ *
+ * The pure part lives here, with a self-check, because a wrong constraint object
+ * is inaudible until somebody else is listening to it.
+ */
+import type { AudioCaptureOptions, TrackPublishOptions } from 'livekit-client';
+
+/** LiveKit does not export its processor types from the package root. */
+export type AudioProcessor = NonNullable<AudioCaptureOptions['processor']>;
+
+/**
+ * What the microphone is for. Not a quality slider - the two want opposite
+ * processing, and neither is "better".
+ */
+export type VoiceMode = 'clear' | 'hifi';
+
+export interface VoiceSettings {
+  mode: VoiceMode;
+  /** `null` means the system default device, which is what most people want. */
+  inputDeviceId: string | null;
+  outputDeviceId: string | null;
+  echoCancellation: boolean;
+  noiseSuppression: boolean;
+  autoGainControl: boolean;
+  /**
+   * dBFS below which the microphone is closed, or `null` for an open mic.
+   * Discord calls this input sensitivity.
+   */
+  gateThresholdDb: number | null;
+}
+
+export const DEFAULT_VOICE_SETTINGS: VoiceSettings = {
+  mode: 'clear',
+  inputDeviceId: null,
+  outputDeviceId: null,
+  echoCancellation: true,
+  noiseSuppression: true,
+  autoGainControl: true,
+  // Quiet enough that a normal voice is nowhere near it, loud enough to sit
+  // above room tone on a cheap microphone.
+  gateThresholdDb: -50,
+};
+
+/**
+ * The usable ends of the sensitivity slider. Below -80 dBFS is under the noise
+ * floor of every microphone made, and above -20 dBFS a shout would not open it.
+ */
+export const GATE_RANGE = { minDb: -80, maxDb: -20 } as const;
+
+/** Opus bitrate ceilings. LiveKit's `AudioPresets` are exactly these numbers. */
+const BITRATE = {
+  // Discord's voice channel. Transparent for speech; anything more is spent on
+  // reproducing a room nobody wants reproduced.
+  clear: 64_000,
+  // Two channels of music, which is four times the information a voice is.
+  hifi: 128_000,
+} as const;
+
+/**
+ * The three switches, resolved for a mode.
+ *
+ * `voiceIsolation` is the interesting one: where Chromium supports it, it is a
+ * model-based suppressor in the same league as Krisp and it takes over from
+ * `noiseSuppression` entirely. Where it does not, an unknown constraint is
+ * ignored - so asking costs nothing and never fails a capture.
+ */
+export function micProcessing(settings: VoiceSettings): Pick<
+  AudioCaptureOptions,
+  'echoCancellation' | 'noiseSuppression' | 'autoGainControl' | 'voiceIsolation'
+> {
+  if (settings.mode === 'hifi') {
+    // Not a preference: every one of these is destructive to music, and a mode
+    // that says "this is an instrument" has already answered the question.
+    return {
+      echoCancellation: false,
+      noiseSuppression: false,
+      autoGainControl: false,
+      voiceIsolation: false,
+    };
+  }
+
+  return {
+    echoCancellation: settings.echoCancellation,
+    noiseSuppression: settings.noiseSuppression,
+    autoGainControl: settings.autoGainControl,
+    voiceIsolation: settings.noiseSuppression,
+  };
+}
+
+/** Capture constraints for the microphone, gate included when one is asked for. */
+export function micCapture(
+  settings: VoiceSettings,
+  processor?: AudioProcessor,
+): AudioCaptureOptions {
+  return {
+    ...micProcessing(settings),
+    channelCount: settings.mode === 'hifi' ? 2 : 1,
+    // `exact` is deliberately not used: a device that has been unplugged since
+    // it was chosen should fall back to the default rather than fail the join.
+    ...(settings.inputDeviceId ? { deviceId: settings.inputDeviceId } : {}),
+    ...(processor ? { processor } : {}),
+  };
+}
+
+/** Publish options for the microphone track. */
+export function micPublish(settings: VoiceSettings): TrackPublishOptions {
+  const hifi = settings.mode === 'hifi';
+
+  return {
+    audioPreset: { maxBitrate: hifi ? BITRATE.hifi : BITRATE.clear },
+    // DTX stops sending during silence, which is most of a call and none of a
+    // recording - a held piano note is exactly what it deletes.
+    dtx: !hifi,
+    // Redundant audio data: a packet carries the previous one as well, so a
+    // single loss is inaudible. Cheap at these bitrates and worth it for both.
+    red: true,
+    forceStereo: hifi,
+  };
+}
+
+export interface GateState {
+  open: boolean;
+  /** Seconds on the audio clock until which the gate stays open regardless. */
+  heldUntil: number;
+}
+
+export const GATE_CLOSED: GateState = { open: false, heldUntil: 0 };
+
+/**
+ * One step of the noise gate.
+ *
+ * Three behaviours, and all three matter: it opens the instant the level
+ * crosses the threshold (a gate that fades in eats the start of a word), it
+ * holds open for a moment afterwards (so the gap between two words is not a
+ * gap in the call), and it needs the level to fall further than the threshold
+ * before it closes (without that, a voice sitting exactly on the line chatters
+ * the gate open and shut).
+ *
+ * `nowSeconds` is the audio clock, not the wall clock.
+ *
+ * Deliberately self-contained - no module-level constants, no imports. This
+ * function's own source is stringified into an AudioWorklet by `mic-gate.ts`,
+ * so anything it closes over would not exist on the audio thread.
+ */
+export function stepGate(
+  state: GateState,
+  levelDb: number,
+  thresholdDb: number,
+  nowSeconds: number,
+): GateState {
+  const HOLD_SECONDS = 0.3;
+  const HYSTERESIS_DB = 6;
+
+  const loud = levelDb >= thresholdDb;
+  const open = loud || nowSeconds < state.heldUntil || (state.open && levelDb >= thresholdDb - HYSTERESIS_DB);
+
+  return { open, heldUntil: loud ? nowSeconds + HOLD_SECONDS : state.heldUntil };
+}
+
+/**
+ * RMS amplitude (0..1) as dBFS, floored at -100 so silence is a number rather
+ * than `-Infinity`. Self-contained for the same reason `stepGate` is.
+ */
+export function amplitudeToDb(rms: number): number {
+  return rms > 0.00001 ? 20 * Math.log10(rms) : -100;
+}
