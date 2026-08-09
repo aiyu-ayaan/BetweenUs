@@ -296,6 +296,38 @@ register itself to start with the system.
    back in the tray with no window in front of what you were doing. Turn it off
    and reboot again - it stays gone.
 
+## Remote desktop
+
+Needs two machines, or two accounts and a second machine - the interesting
+paths are the ones where the person connecting is *not* the owner.
+
+1. **Enrol.** Settings → Remote Access → Allow remote access. The panel should
+   report the machine name and "reachable". On a non-Windows machine it also
+   warns that control is unavailable; that is expected.
+2. **See it.** Sign in on another device, open **Remote machines** beside
+   Friends. The machine is there with a green dot. Turn the switch off on the
+   first machine and the dot goes grey within a heartbeat.
+3. **Connect to your own machine.** Click Connect. No prompt should appear -
+   the owner reaching their own desktop is the case this exists for - and the
+   screen should arrive within a second or two.
+4. **Control.** Tick "Send my keyboard". Move the mouse over the video, click,
+   drag a window, type into something, right-click for a context menu. Esc
+   releases the keyboard back to your own machine rather than travelling.
+5. **Somebody else.** From the machine's Access dialog, give a second account
+   `REMOTE_VIEW` only. Connect as them: a prompt appears **on the machine**,
+   and nothing is captured until it is answered. Refuse it once, and let it
+   time out once (thirty seconds) - both end the session.
+6. **View-only really is.** Accept the session, then try to move the mouse over
+   the video. Nothing happens on the machine, and the machine's History tab
+   shows `input.refused`.
+7. **Revoke while live.** With that session running, untick everything in the
+   Access dialog. The controller's window should say the session ended, the red
+   banner on the machine should disappear, and History should show
+   `session.ended` with reason `revoked`.
+8. **Temporary access.** Set an expiry a few minutes out, confirm the machine
+   still appears for that account, then wait past it: the machine leaves their
+   list and a session is refused with 404.
+
 ## Backend smoke tests
 
 The scripts need Postgres, Redis and the services running, and both exit
@@ -349,6 +381,14 @@ join and leave, the heartbeat, a rejected anonymous socket, a refused
 non-member voice join, and status: that a chosen status reaches the other
 socket, that invisible reaches it as `offline`, and that the word `invisible`
 never appears in anyone else's payload.
+
+`node apps/services/remote-gateway/smoke.mjs` covers remote access, and is all
+negative cases: a stranger gets 404 rather than 403 on a machine they cannot
+reach, a viewer cannot hand out access, an invented permission and an expiry in
+the past are refused, granting control implies view, a wrong agent token is
+refused, a session id cannot be borrowed by another account, an input event
+without `REMOTE_CONTROL` is refused and audited, and revoking a grant ends the
+session running under it.
 
 `node apps/services/notification-service/smoke.mjs` covers preferences and
 read state: the preference round trip with the mute list deduplicated, a patch
@@ -437,6 +477,10 @@ A published track logs `"encryption":1` — that is the end-to-end encrypted pat
 | Provider buttons missing on the login screen | Nobody enabled a provider in the admin panel, or its client id/secret is incomplete |
 | OAuth ends on a browser error page | `PUBLIC_API_URL` does not match the callback URL registered with Google or GitHub |
 | Admin panel says no administrator exists | `pnpm admin:create` has not been run against this database |
+| Remote machine shows offline with the switch on | The agent socket needs the gateway: `curl 127.0.0.1:3008/health`, and check `/ws/remote` is proxied if you are going through Nginx |
+| "This machine is no longer enrolled" | Its row was deleted, or it was re-enrolled elsewhere, so the stored token no longer matches. Turn the switch off and on to enrol again |
+| Remote session connects but the screen never arrives | The agent could not capture - check the machine's own console. LiveKit must also be reachable from *both* ends, not only the controller |
+| Mouse moves but nothing is clicked on the remote machine | Injection is Windows-only; on macOS and Linux a session is view-only by design |
 | Windows open on top of each other | Positions are fixed at x=40 and x=760; on a small display, drag them apart |
 | Login answers 429 | The per-address credentials limit (20/min) kicked in; wait out the window |
 | Signed out of every window at once | A refresh token was replayed, which revokes the whole family. Usually two clients sharing one token — check for a stale profile directory |

@@ -151,8 +151,8 @@ Each service is its own package with its own `package.json`, `Dockerfile` and
 | `presence-service` | 3005 | `/ws/presence`, online status, typing, voice rosters, all Redis-backed |
 | `notification-service` | 3006 | Notification preferences, per-channel mutes, quiet hours, read markers |
 | `call-service` | 3007 | LiveKit room permissions and access tokens |
-| `remote-gateway` | 3008 | Scaffold - remote session relay and audit log |
-| `remote-agent` | — | Scaffold - screen capture, input, clipboard, file transfer |
+| `remote-gateway` | 3008 | Remote machines, per-machine permissions, session relay on `/ws/remote`, audit log |
+| `remote-agent` | — | Scaffold, for a headless machine. On a desktop the agent is the app itself |
 
 `user-service` is a scaffold too; its routes (profiles, friends, user search)
 are served by chat-service until it exists.
@@ -164,7 +164,7 @@ Cross-cutting code only - no service's business logic lives here.
 | Package | Holds |
 | --- | --- |
 | `@nexora/shared-types` | DTOs, API contracts, WebSocket event unions. One source for client and server |
-| `@nexora/database` | Prisma schema and client, plus `resolveChannelAccess` - the single answer to "may this user do this here" |
+| `@nexora/database` | Prisma schema and client, plus `resolveChannelAccess` and `resolveRemoteAccess` - the single answers to "may this user do this here" and "…to this machine" |
 | `@nexora/auth` | JWT sign and verify, `JwtAuthGuard`, `@CurrentUser()`, secret sealing |
 | `@nexora/permissions` | Role constants and the override arithmetic (deny beats grant beats role) |
 | `@nexora/events` | Event names, payload contracts, and the Redis pub/sub bus |
@@ -180,13 +180,18 @@ Cross-cutting code only - no service's business logic lives here.
   Redis pub/sub so any number of chat-service instances stay in step.
 - **`/ws/presence`** - status, typing and voice rosters, with Redis holding the
   live state rather than any single process.
-- **WebRTC to LiveKit** - voice, video and screen share. Never over WebSocket.
+- **`/ws/remote`** - the relay between a remote session's controller and the
+  agent on the machine, with every input event checked against the permissions
+  frozen on the session.
+- **WebRTC to LiveKit** - voice, video, screen share and a remote machine's
+  screen. Never over WebSocket.
 
 ### Data
 
 PostgreSQL holds persistent state through Prisma: users, identities, servers,
 members, roles, channels, channel allowlists, friendships, messages, device
-keys, wrapped channel keys, notification settings and read markers.
+keys, wrapped channel keys, notification settings, read markers, remote
+machines, remote grants, remote sessions and the remote audit trail.
 
 Redis holds what is live and cheap to lose: presence, typing, voice rosters,
 pub/sub, rate-limit windows.
@@ -295,6 +300,50 @@ WebRTC media is the one exception, and it is inherent rather than a shortcut:
 the SFU negotiates its own path on `7881/tcp` and `50000-50019/udp`. One
 hostname carries signalling, not media.
 
+## Remote desktop
+
+A machine offers itself by turning on **Settings → Remote Access**. It enrols
+under the account signed in on it, keeps its credential in the OS keychain and
+dials *out* to the gateway - nothing listens, no port is opened, and 3389 is
+published nowhere in this stack.
+
+Access is granted per person per machine, never by a server role: owning a
+machine grants everything on it, and anybody else holds exactly what they were
+given, optionally until a date. `REMOTE_VIEW`, `REMOTE_CONTROL` and
+`REMOTE_CLIPBOARD` are implemented; `REMOTE_FILE_TRANSFER` and `REMOTE_AUDIO`
+exist in the vocabulary and do nothing yet.
+
+The screen travels over the same SFU voice channels use. The gateway relays
+input and refuses anything the session was not granted, so a view-only session
+cannot type however the client is built - and refusals are audited alongside
+the sessions themselves, which a machine's owner can read.
+
+The owner connecting to their own machine starts immediately; anyone else
+raises a prompt on the machine that refuses itself if nobody answers, and a
+banner stays up for as long as the session does. Mouse and keyboard injection
+is Windows-only for now - elsewhere a session can watch but not touch.
+
+## Public ingress
+
+Nexora is one public hostname. If a `cloudflared` already runs on the server,
+add one ingress entry:
+
+```yaml
+- hostname: nexora.example.com
+  service: http://localhost:8080     # GATEWAY_PORT
+```
+
+and reload it - no extra container. To let Nexora bring its own tunnel instead:
+
+```bash
+CLOUDFLARE_TUNNEL_TOKEN=... docker compose   -f infrastructure/docker/docker-compose.yml --profile public up -d
+```
+
+`infrastructure/cloudflare/tunnel.yml` documents both, including the one thing
+that does not go through a tunnel: WebRTC media negotiates its own UDP path to
+the SFU (`7881/tcp`, `50000-50019/udp`). Chat, files and everything else are
+complete over the tunnel on their own.
+
 ## File storage
 
 `@nexora/storage` picks its driver from the environment:
@@ -327,8 +376,8 @@ apps/
     presence-service/     /ws/presence, status, typing, voice rosters
     notification-service/ Preferences, mutes, quiet hours, read markers
     call-service/         LiveKit tokens and room permissions
-    remote-gateway/       Scaffold
-    remote-agent/         Scaffold
+    remote-gateway/       Remote machines, permissions, session relay, audit
+    remote-agent/         Scaffold - for a headless machine with no app on it
     user-service/         Scaffold
 packages/                 shared-types, database, auth, permissions, events,
                           nest-common, storage, websocket, logger, config
@@ -351,6 +400,7 @@ development/              planning, MVP, E2EE design, testing guide, TODO
 | `pnpm --filter @nexora/chat-service smoke` | End-to-end check against running services |
 | `pnpm --filter @nexora/presence-service smoke` | Presence, typing and voice rosters |
 | `pnpm --filter @nexora/notification-service smoke` | Preferences, unread counting, read markers |
+| `pnpm --filter @nexora/remote-gateway smoke` | Enrolment, grants, and what the remote relay refuses |
 
 ## Testing and CI
 
@@ -386,8 +436,12 @@ GET|POST /api/v1/e2ee/devices     GET /api/v1/e2ee/keys/:channelId
 POST /api/v1/e2ee/keys            POST /api/v1/calls/token
 GET|PATCH /api/v1/notifications/preferences
 GET /api/v1/notifications/unread  POST /api/v1/notifications/read
+GET|POST /api/v1/remote/machines  PATCH|DELETE /api/v1/remote/machines/:id
+GET|PUT /api/v1/remote/machines/:id/grants
+GET /api/v1/remote/machines/:id/audit
+POST /api/v1/remote/sessions      DELETE /api/v1/remote/sessions/:id
 GET /api/v1/admin/...             (administrators only)
-WS   /ws/chat                     WS  /ws/presence
+WS   /ws/chat                     WS  /ws/presence      WS /ws/remote
 GET  /health                      (every service)
 ```
 

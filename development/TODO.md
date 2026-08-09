@@ -5,11 +5,87 @@ the top honest — it is what a new session reads first.
 
 ## Next up
 
-Phase 16 has landed in code and in the desktop self-checks; the picker and the
-`/livekit` route have not been driven by a human yet. Phases 15 and 15b landed
-before it, and the client side of 15b is in the same state. Phases 13 and 14
-landed earlier; what is left of them needs a human in front of the app, and so
-does most of phase 12. The carried-over items are older ones in the same state.
+Phases 17 and 18 have landed in code, in the smoke script and in CI; none of
+the remote-desktop client side has been driven by a human, and no tunnel has
+been stood up. Phase 16 landed before them and is in the same state, as is the
+client side of 15b. Phases 13 and 14 landed earlier; what is left of them needs
+a human in front of the app, and so does most of phase 12.
+
+### Phase 17 — remote desktop
+
+- [x] `remote-gateway`: enrolment, per-machine grants, session lifecycle,
+      `/ws/remote` relay and an append-only audit trail, on its own Docker
+      network with Postgres and nothing else
+- [x] `RemoteMachine`, `RemoteGrant`, `RemoteSession`, `RemoteAudit` with a
+      migration, and `resolveRemoteAccess` as the single answer to "may this
+      user do this to this machine"
+- [x] Remote permissions granted per person per machine with an optional
+      expiry, never by a server role; the permissions self-check asserts no role
+      can produce one and the member editor cannot assign one
+- [x] The agent lives in the desktop app: a switch in Settings → Remote Access
+      enrols the machine, seals its token in the OS keychain, and dials out.
+      Nothing listens on the machine and no port is opened
+- [x] A session's permissions are frozen when it opens and the relay enforces
+      them; a refused event is audited as well as rejected, and revoking a grant
+      ends the session running under it
+- [x] Screen over the SFU voice already uses - agent publishes, controller
+      subscribes, no pixels through NestJS
+- [x] Consent: the owner from another device starts immediately; anyone else
+      raises a prompt on the machine that refuses itself if nobody answers, and
+      a banner stays up for as long as the session does
+- [x] Mouse and keyboard injection through a long-lived PowerShell process that
+      P/Invokes user32 - no native module, no rebuild per Electron version
+- [x] A machine list beside Friends, an Access dialog for handing out
+      permissions with an expiry, and the machine's audit trail behind a tab
+- [x] Smoke coverage for the refusals, in CI
+
+Left open on purpose:
+
+- [ ] Input injection is Windows-only. macOS (CGEventPost) and Linux (XTEST or
+      uinput) are a backend each behind the same three-function interface
+- [ ] `REMOTE_FILE_TRANSFER` and `REMOTE_AUDIO` exist in the vocabulary and do
+      nothing: no file transfer, and the agent publishes no audio
+- [ ] A remote session is not end-to-end encrypted, unlike a voice channel -
+      there is no channel key to reuse and no key exchange between two machines
+      that never spoke. The SFU the operator runs can see the frames
+      (`E2EE.md`, limit 10)
+- [ ] The agent always shares the primary screen; no picker, and no second
+      monitor
+- [ ] Sessions are relayed in one process's memory, so agent and controller
+      must land on the same instance - true for the single replica compose runs,
+      not for two. Redis Pub/Sub keyed by session id is the upgrade
+- [ ] `machineForAgentToken` compares against every machine's hash, which is one
+      full table read per agent connection. Fine at hundreds of machines, not at
+      hundreds of thousands - a lookup key alongside the hash fixes it
+- [ ] Nothing sweeps ended sessions or old audit rows; both grow forever
+- [ ] `apps/services/remote-agent` is still a scaffold. A headless server has no
+      Nexora window to run the agent inside, and that is what it is for
+- [ ] The controller sends key events with an empty `modifiers` list; a
+      Ctrl+Alt+Del or a Windows-key chord is not delivered as a chord
+- [ ] No bandwidth or quality control - the screen is published at whatever
+      LiveKit picks
+
+### Phase 18 — production ingress
+
+- [x] Cloudflare Tunnel both ways round: one already running on the host adds a
+      single ingress entry pointing at `GATEWAY_PORT`, or `--profile public`
+      brings a container. `infrastructure/cloudflare/tunnel.yml` documents both
+- [x] The gateway has a healthcheck, and the tunnel container waits on it
+      rather than on the container merely existing
+- [x] Image pipeline: one job per service pushing to GHCR on a tag or by hand,
+      so a deployment pins something built once
+
+Left open on purpose:
+
+- [ ] WebRTC media does not go through the tunnel: `7881/tcp` and
+      `50000-50019/udp` have to be reachable, or a TURN server on 443 has to
+      exist. That is the real remaining gap for a deployment behind NAT
+- [ ] Secrets are environment variables read from `.env`. No Docker secrets, no
+      external secret manager, no rotation
+- [ ] Nothing deploys: the images are built and pushed, and putting them on a
+      machine is still manual
+- [ ] No TLS between Cloudflare and Nginx (the tunnel is the encrypted hop) and
+      no way to run Nginx with a certificate of its own
 
 ### Phase 16 — one address, any server
 
@@ -440,16 +516,11 @@ Follow-ups this phase deliberately left open:
 - [x] Desktop notifications for messages and voice joins, with unread counts,
       taskbar flash and click-to-open
 
-### Phase 17 — remote desktop
-- [ ] `remote-agent`: device identity, outbound WebSocket, screen capture, input
-- [ ] `remote-gateway`: session relay, authorization, audit log
-- [ ] Remote permission model (`REMOTE_VIEW`, `REMOTE_CONTROL`, …) with expiry
-- [ ] Desktop remote client view
-
-### Phase 18 — production
-- [ ] Cloudflare Tunnel config + `cloudflared` container wired to Nginx
-- [ ] Secret management, no secrets in compose files
-- [ ] Docker image build + push pipeline, health-checked deploys
+### Phase 19 — what a deployment still needs
+- [ ] TURN on 443 so voice, screen share and remote desktop work from behind a
+      NAT that blocks the SFU's UDP range
+- [ ] Secret management beyond `.env`, and rotation
+- [ ] Something that actually deploys the images the pipeline pushes
 
 ### Cross-cutting debt
 - [ ] Split the shared Prisma schema into per-service schemas

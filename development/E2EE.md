@@ -178,6 +178,18 @@ runtime cannot do insertable streams.
     would be the end of the design; the panel says how far its search reached
     rather than pretending to cover the whole channel.
 
+12. **A remote-desktop session is not end-to-end encrypted.** Voice channels
+    are, because a channel key already exists and every participant holds it. A
+    remote session has neither: the two machines have never exchanged a key, and
+    the room is created for one session between one agent and one controller.
+    So the screen is encrypted in transit (DTLS-SRTP to the SFU and out again)
+    but the SFU can decrypt it - and the SFU is a container the operator runs,
+    which is a different trust boundary from "the server cannot read your
+    messages". Closing it means a key agreed between agent and controller
+    through the gateway without the gateway learning it, which is a phase of its
+    own. Until then: a remote session trusts the deployment's SFU, and that is
+    worth knowing before pointing one at a machine you care about.
+
 ## Not covered
 
 Metadata privacy, sealed sender, forward secrecy (no ratchet: one key per epoch

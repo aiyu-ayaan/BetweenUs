@@ -25,14 +25,86 @@ we get there in stages and what each stage delivers.
 | 15 | Social graph and realtime | Message deletion, adding people to a server, friend and membership events over `/ws/chat` | In progress |
 | 15b | Message actions | Tombstones, editing, pins, reactions, emoji, in-client search, right-click menu | In progress |
 | 16 | One address, any server | A single URL for a whole deployment, resolved at runtime, changeable from the login screen | In progress |
-| 17 | Remote desktop | remote-gateway, remote-agent, remote permissions, audit log | Planned |
-| 18 | Production ingress | Cloudflare Tunnel, TLS, secret management, deploy pipeline | Planned |
+| 17 | Remote desktop | remote-gateway, the agent inside the desktop app, per-machine permissions, audit log | In progress |
+| 18 | Production ingress | Cloudflare Tunnel (host or container), gateway healthcheck, image pipeline | In progress |
 
 Hardening moved to phase 10: encryption changes the message format and presence
 adds a service, so both were cheaper to land before tests were written against
 the older shape.
 
 ## Architecture decisions made so far
+
+### Remote desktop (phase 17)
+
+The most dangerous thing this platform can do, so it is the most separated: its
+own service, its own permission vocabulary that no role grants, its own network
+in the compose file, and an audit trail nothing in the application updates or
+deletes.
+
+**The agent is the desktop app.** `apps/services/remote-agent` stays a scaffold
+for a headless server. On a machine somebody uses, the app is already there and
+already has everything an agent needs - `desktopCapturer`, a LiveKit publisher,
+and `safeStorage` to keep a credential in. Writing a second process to do what
+the first one already does would have been scaffolding for its own sake.
+
+**The machine dials out.** It enrols under the account signed in on it, gets a
+token back once, stores it hashed on the server and sealed in the OS keychain
+on the machine, and connects to `/ws/remote`. Nothing ever connects *towards* a
+machine; there is no inbound port and no 3389 anywhere in the stack. A stolen
+token is revoked by enrolling again, which rotates it.
+
+**Permissions are per machine and expire.** `resolveRemoteAccess` is the single
+answer, the way `resolveChannelAccess` is for channels: owning the machine, or
+an unexpired grant, and null for everything else - so a machine somebody has no
+access to answers 404 and machine ids are not probeable. An expired grant keeps
+its row rather than being swept, because "access lapsed" is something an owner
+should be able to see. Granting control implies view: a session that can type
+into a screen nobody is watching is not worth being able to grant.
+
+**A session freezes what it was granted.** The permissions are copied onto the
+session row when it opens, and the relay checks every event against that copy.
+That makes a mid-session change a decision instead of a race: revoking a grant
+*ends* the session rather than quietly narrowing it. Refused events are audited
+as well as rejected - a client that keeps asking for something it never had is
+worth being able to see afterwards.
+
+**Media is the voice path.** The agent publishes its screen into a LiveKit room
+of its own and the controller subscribes; the gateway mints both tokens, the
+agent's as publish-only and the controller's as subscribe-only. No second media
+stack, and no pixels through NestJS. Unlike a voice channel this is *not* end
+to end encrypted - there is no channel key to reuse and no key exchange between
+two machines that have never spoken - so the SFU, which the operator runs, can
+see the frames. `E2EE.md` records it as a limit rather than leaving it implied.
+
+**Consent depends on who is asking.** The owner reaching their own desktop from
+another device is the case remote access exists for, and making them walk over
+and click yes would defeat it, so that starts immediately. Anyone else raises a
+prompt on the machine that refuses itself if nobody answers: a grant is
+permission to ask, not permission to start.
+
+**Input injection is a PowerShell process, not a native module.** Electron's
+`sendInputEvent` reaches the app's own window, which is the one place a remote
+session does not care about. The alternatives were a native addon (node-gyp, a
+rebuild per Electron version, a prebuilt binary per platform) or spawning
+something per event (far too slow to drag a window with). Instead one
+long-lived PowerShell process P/Invokes `user32` and is fed one short line per
+event. Windows only; macOS and Linux report unsupported and a session there is
+view-only, with the backend interface already the seam a CGEventPost or XTEST
+implementation would slot into.
+
+### Public ingress, on a server that already has a tunnel (phase 18)
+
+The original plan assumed `cloudflared` would be Nexora's own container. On a
+box already running one tunnel for everything, that is the wrong shape: a
+second tunnel, a second token, a second thing to keep alive.
+
+Both now work and the difference is one line. The gateway publishes on the host
+as `GATEWAY_PORT`, so an existing tunnel adds one ingress entry pointing at
+`http://localhost:8080`. The `--profile public` container is unchanged for
+anyone who wants Nexora to bring its own, and now waits on a gateway
+healthcheck rather than on the container merely existing. What a tunnel cannot
+carry is stated rather than implied: WebRTC media negotiates its own UDP path
+to the SFU, and needs those ports or a TURN server.
 
 ### One address, any server (phase 16)
 
@@ -563,6 +635,32 @@ Run live on 2026-08-08, on top of everything verified in phase 9 below:
 
 Still unverified: CI itself has not run yet (the workflow lands with this
 phase), and the human-in-front-of-it items below.
+
+### Phase 17 and 18 verification
+
+Machine checks, on 2026-08-09:
+
+- `pnpm typecheck` and `pnpm build` pass across the workspace, remote-gateway
+  included.
+- `apps/services/remote-gateway/smoke.mjs` is in CI beside the other three. It
+  drives the negative cases: a stranger gets 404 rather than 403 on a machine
+  they have no access to, a viewer cannot hand out access, an invented
+  permission and an expiry in the past are both refused, granting control
+  implies view, a session id cannot be borrowed by another account, an input
+  event without `REMOTE_CONTROL` is refused *and* audited, and revoking a grant
+  ends the session running under it.
+
+Needs a human in front of it, and none of it has been driven yet:
+
+- Two machines: enrol one, connect from the other, watch the screen arrive.
+- The consent prompt, which needs a second account rather than the owner - and
+  the refusal that happens when nobody answers within thirty seconds.
+- Mouse and keyboard actually landing on a Windows machine, including a drag, a
+  right-click menu and a non-US keyboard layout.
+- Revoking a grant while a session is live: the controller's window should say
+  the session ended, and the machine should stop capturing.
+- The whole stack behind a real Cloudflare Tunnel, both ways round - one
+  already running on the host, and the `--profile public` container.
 
 ### Phase 16 verification
 
