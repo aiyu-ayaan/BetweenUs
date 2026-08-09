@@ -266,13 +266,13 @@ async function currentIdentity(): Promise<IdentityKeyPair> {
  * keychain (Electron `safeStorage`). Outside Electron - a browser opened on the
  * Vite dev server - there is no keychain, so localStorage is the fallback.
  */
-async function secureGet(key: string): Promise<string | null> {
+export async function secureGet(key: string): Promise<string | null> {
   const bridge = window.nexora?.secureGet;
   if (bridge) return bridge(key);
   return localStorage.getItem(`nexora.secure.${key}`);
 }
 
-async function secureSet(key: string, value: string): Promise<void> {
+export async function secureSet(key: string, value: string): Promise<void> {
   const bridge = window.nexora?.secureSet;
   if (bridge) {
     await bridge(key, value);

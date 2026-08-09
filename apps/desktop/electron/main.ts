@@ -12,9 +12,11 @@ import {
   shell,
 } from 'electron';
 import { createServer } from 'node:http';
+import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import fs from 'node:fs';
 import path from 'node:path';
+import { applyKey, applyMouse, inputSupported, stopInputBackend } from './remote-input';
 
 const dirname = path.dirname(fileURLToPath(import.meta.url));
 const rendererDevUrl = process.env.VITE_DEV_SERVER_URL;
@@ -276,6 +278,39 @@ ipcMain.handle('screen:sources', async () => {
 ipcMain.handle('screen:select', (_event, id: unknown, audio: unknown): void => {
   pendingShare = typeof id === 'string' ? { id, audio: audio === true } : null;
 });
+
+// --- Remote desktop, agent side ---------------------------------------------
+//
+// The renderer holds the socket to remote-gateway and decides nothing about
+// permissions - the gateway already refused anything the session was not
+// granted before it reached here. What the main process owns is the part the
+// renderer cannot do: putting a mouse and a keyboard into the machine itself.
+
+ipcMain.handle('remote:supported', (): boolean => inputSupported());
+
+ipcMain.handle('remote:machine-name', (): string => {
+  try {
+    return os.hostname();
+  } catch {
+    return 'This machine';
+  }
+});
+
+ipcMain.on('remote:mouse', (_event, input: unknown) => {
+  const payload = input as { action?: string; x?: number; y?: number };
+  if (typeof payload?.x !== 'number' || typeof payload.y !== 'number') return;
+  if (!['move', 'down', 'up', 'wheel'].includes(String(payload.action))) return;
+  applyMouse(input as Parameters<typeof applyMouse>[0]);
+});
+
+ipcMain.on('remote:key', (_event, input: unknown) => {
+  const payload = input as { action?: string; key?: string; code?: string };
+  if (payload?.action !== 'down' && payload?.action !== 'up') return;
+  if (typeof payload.key !== 'string' || typeof payload.code !== 'string') return;
+  applyKey(input as Parameters<typeof applyKey>[0]);
+});
+
+ipcMain.on('remote:stop', () => stopInputBackend());
 
 // --- Notifications ----------------------------------------------------------
 //
@@ -548,6 +583,7 @@ void app.whenReady().then(() => {
 
 app.on('before-quit', () => {
   quitting = true;
+  stopInputBackend();
 });
 
 // The tray keeps the app alive with no window on screen, which is the point of

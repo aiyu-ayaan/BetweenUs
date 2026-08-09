@@ -68,6 +68,32 @@ const api = {
    */
   startOAuth: (startUrl: string): Promise<string | null> =>
     ipcRenderer.invoke('oauth:start', startUrl),
+  /**
+   * Remote desktop, agent side. `remoteInput` applies one event from a
+   * controller to this machine; it is the only thing in this bridge that acts
+   * outside the app's own window, so the renderer only ever calls it for an
+   * event the gateway already checked against the session's permissions.
+   */
+  remoteInputSupported: (): Promise<boolean> => ipcRenderer.invoke('remote:supported'),
+  remoteMouse: (input: {
+    action: 'move' | 'down' | 'up' | 'wheel';
+    x: number;
+    y: number;
+    button?: 'left' | 'right' | 'middle';
+    deltaY?: number;
+  }): void => {
+    ipcRenderer.send('remote:mouse', input);
+  },
+  remoteKey: (input: { action: 'down' | 'up'; key: string; code: string }): void => {
+    ipcRenderer.send('remote:key', input);
+  },
+  /** Ends the input helper when the last session closes. */
+  remoteInputStop: (): void => {
+    ipcRenderer.send('remote:stop');
+  },
+  /** The machine's name as the operating system knows it, for enrolment. */
+  machineName: (): Promise<string> => ipcRenderer.invoke('remote:machine-name'),
+
   /** Development only: credentials for an auto-signed-in test window. */
   devLogin: (): Promise<{ email: string; password: string; label: string } | null> =>
     ipcRenderer.invoke('dev:login'),

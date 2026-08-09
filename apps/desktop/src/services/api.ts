@@ -8,6 +8,7 @@ import type {
   ChannelMember,
   ChannelUnread,
   CreateChannelRequest,
+  EnrolMachineResponse,
   DeviceKey,
   DirectChannel,
   Friend,
@@ -17,6 +18,11 @@ import type {
   Paginated,
   PublicUser,
   PublishChannelKeysRequest,
+  RemoteAuditEntry,
+  RemoteGrantSummary,
+  RemoteMachineSummary,
+  RemotePermission,
+  RemoteSessionResponse,
   ServerMember,
   ServerWithRole,
   StartMultipartResponse,
@@ -376,6 +382,51 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ channelId }),
     }),
+
+  // --- Remote desktop ---
+
+  /** Machines this account owns, plus the ones it holds a live grant on. */
+  machines: (): Promise<RemoteMachineSummary[]> => request('/api/v1/remote/machines'),
+
+  /** The agent's own call. `machineId` re-enrols and rotates the token. */
+  enrolMachine: (name: string, platform: string, machineId?: string): Promise<EnrolMachineResponse> =>
+    request('/api/v1/remote/machines', {
+      method: 'POST',
+      body: JSON.stringify({ name, platform, ...(machineId ? { machineId } : {}) }),
+    }),
+
+  renameMachine: (machineId: string, name: string): Promise<RemoteMachineSummary> =>
+    request(`/api/v1/remote/machines/${machineId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ name }),
+    }),
+
+  removeMachine: (machineId: string): Promise<void> =>
+    request(`/api/v1/remote/machines/${machineId}`, { method: 'DELETE' }),
+
+  machineGrants: (machineId: string): Promise<RemoteGrantSummary[]> =>
+    request(`/api/v1/remote/machines/${machineId}/grants`),
+
+  /** An empty permission list revokes; there is no separate delete. */
+  setMachineGrant: (
+    machineId: string,
+    userId: string,
+    permissions: RemotePermission[],
+    expiresAt?: string | null,
+  ): Promise<RemoteGrantSummary[]> =>
+    request(`/api/v1/remote/machines/${machineId}/grants`, {
+      method: 'PUT',
+      body: JSON.stringify({ userId, permissions, expiresAt: expiresAt ?? null }),
+    }),
+
+  machineAudit: (machineId: string): Promise<RemoteAuditEntry[]> =>
+    request(`/api/v1/remote/machines/${machineId}/audit`),
+
+  startRemoteSession: (machineId: string): Promise<RemoteSessionResponse> =>
+    request('/api/v1/remote/sessions', { method: 'POST', body: JSON.stringify({ machineId }) }),
+
+  endRemoteSession: (sessionId: string): Promise<void> =>
+    request(`/api/v1/remote/sessions/${sessionId}`, { method: 'DELETE' }),
 
   // --- Calls ---
 

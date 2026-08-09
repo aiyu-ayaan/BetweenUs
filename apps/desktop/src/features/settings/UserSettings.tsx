@@ -11,6 +11,7 @@ import {
   updateNotificationPreferences,
 } from '../../services/notifications';
 import { serverUrl } from '../../services/endpoint';
+import { useAgentStore } from '../../services/remote-agent';
 import { ServerPicker } from '../auth/ServerPicker';
 import { Avatar } from '../../components/Avatar';
 import { PicturePicker } from '../../components/PicturePicker';
@@ -18,17 +19,19 @@ import {
   BellIcon,
   LogOutIcon,
   MicIcon,
+  MonitorIcon,
   PaletteIcon,
   UserIcon,
   XIcon,
 } from '../../components/icons';
 
-type Section = 'account' | 'voice' | 'notifications' | 'appearance';
+type Section = 'account' | 'voice' | 'notifications' | 'remote' | 'appearance';
 
 const SECTIONS: Array<{ id: Section; label: string; icon: typeof UserIcon }> = [
   { id: 'account', label: 'My Account', icon: UserIcon },
   { id: 'voice', label: 'Voice & Video', icon: MicIcon },
   { id: 'notifications', label: 'Notifications', icon: BellIcon },
+  { id: 'remote', label: 'Remote Access', icon: MonitorIcon },
   { id: 'appearance', label: 'Appearance', icon: PaletteIcon },
 ];
 
@@ -99,6 +102,7 @@ export function UserSettings({ onClose }: { onClose: () => void }): JSX.Element 
           {section === 'account' && <AccountSection />}
           {section === 'voice' && <VoiceSection />}
           {section === 'notifications' && <NotificationsSection />}
+          {section === 'remote' && <RemoteSection />}
           {section === 'appearance' && <AppearanceSection />}
         </div>
 
@@ -527,6 +531,101 @@ function TimeField({
       />
     </label>
   );
+}
+
+/**
+ * This machine offering itself for remote access. Off by default and off is
+ * off: no enrolment, no socket, nothing to reach.
+ */
+function RemoteSection(): JSX.Element {
+  const enabled = useAgentStore((state) => state.enabled);
+  const status = useAgentStore((state) => state.status);
+  const error = useAgentStore((state) => state.error);
+  const machineName = useAgentStore((state) => state.machineName);
+  const machineId = useAgentStore((state) => state.machineId);
+  const controlSupported = useAgentStore((state) => state.controlSupported);
+  const session = useAgentStore((state) => state.session);
+  const enable = useAgentStore((state) => state.enable);
+  const disable = useAgentStore((state) => state.disable);
+  const endSession = useAgentStore((state) => state.endSession);
+
+  return (
+    <>
+      <h1 className="text-xl font-semibold text-slate-50">Remote Access</h1>
+      <p className="mt-2 text-sm text-slate-400">
+        Lets you - and anyone you give access to - see and use this machine from another device.
+        Nothing listens for a connection: this machine dials out to the gateway, so no port is
+        opened on it.
+      </p>
+
+      <div className="mt-5 space-y-1">
+        <Switch
+          label="Allow remote access to this machine"
+          hint={
+            enabled
+              ? `Enrolled as "${machineName}" · ${statusLabel(status)}`
+              : 'Off. Turning it on enrols this machine under your account.'
+          }
+          checked={enabled}
+          onChange={(next) => void (next ? enable() : disable())}
+        />
+      </div>
+
+      {error && (
+        <p role="alert" className="mt-3 rounded-md bg-red-500/10 px-3 py-2 text-sm text-red-300">
+          {error}
+        </p>
+      )}
+
+      {enabled && !controlSupported && (
+        <p className="mt-3 rounded-md bg-amber-500/10 px-3 py-2 text-sm text-amber-200">
+          Mouse and keyboard control is Windows-only for now. On this machine a session can watch
+          the screen but not touch it.
+        </p>
+      )}
+
+      {session && (
+        <div className="mt-5 rounded-lg bg-surface-800 p-4">
+          <p className="text-sm text-slate-100">
+            <span className="font-medium">{session.controllerName}</span> is connected to this
+            machine.
+          </p>
+          <p className="mt-1 text-xs text-slate-400">
+            {session.permissions.includes('REMOTE_CONTROL')
+              ? 'They can use the mouse and keyboard.'
+              : 'They can see the screen only.'}
+          </p>
+          <button
+            type="button"
+            onClick={endSession}
+            className="mt-3 cursor-pointer rounded bg-red-600 px-4 py-2 text-sm font-medium text-white transition-colors duration-200 hover:bg-red-500"
+          >
+            End the session
+          </button>
+        </div>
+      )}
+
+      {enabled && machineId && (
+        <p className="mt-5 text-xs text-slate-500">
+          Who may reach this machine is set in Remote machines → Access, not here: it belongs to
+          the machine rather than to this window.
+        </p>
+      )}
+    </>
+  );
+}
+
+function statusLabel(status: 'off' | 'connecting' | 'online' | 'error'): string {
+  switch (status) {
+    case 'online':
+      return 'reachable';
+    case 'connecting':
+      return 'connecting…';
+    case 'error':
+      return 'not reachable';
+    default:
+      return 'off';
+  }
 }
 
 function AppearanceSection(): JSX.Element {

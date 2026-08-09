@@ -8,12 +8,16 @@ import {
   onNotificationActivate,
   resetNotificationPreferences,
 } from './services/notifications';
+import { stopAgent, useAgentStore } from './services/remote-agent';
+import { useRemoteStore } from './stores/remote';
 import { LoginScreen } from './features/auth/LoginScreen';
 import { ServerRail } from './features/servers/ServerRail';
 import { ServerSettings } from './features/servers/ServerSettings';
 import { ChannelSidebar } from './features/channels/ChannelSidebar';
 import { HomeSidebar } from './features/home/HomeSidebar';
 import { FriendsView } from './features/home/FriendsView';
+import { RemoteView } from './features/remote/RemoteView';
+import { RemoteConsent } from './features/remote/RemoteConsent';
 import { MemberList } from './features/members/MemberList';
 import { ChatView } from './features/chat/ChatView';
 import { PinnedPanel } from './features/chat/PinnedPanel';
@@ -89,6 +93,10 @@ export default function App(): JSX.Element {
       void loadServers();
       void loadDirects();
       void loadFriends();
+      // The agent only offers this machine while somebody is signed in on it:
+      // enrolment belongs to an account, and so does the audit trail.
+      const userId = useAuthStore.getState().user?.id;
+      if (userId) void useAgentStore.getState().restore(userId);
       // Preferences before unread: the badge is harmless either way, but a
       // notification raised in the half-second between them would ignore a mute.
       void loadNotificationPreferences().then(() => loadUnread());
@@ -98,6 +106,8 @@ export default function App(): JSX.Element {
     resetFriends();
     resetPresence();
     resetNotificationPreferences();
+    useRemoteStore.getState().reset();
+    void stopAgent();
   }, [
     status,
     loadServers,
@@ -138,13 +148,13 @@ function Workbench(): JSX.Element {
   const rightPanel = useChatStore((state) => state.rightPanel);
 
   const [settings, setSettings] = useState<'none' | 'user' | 'server'>('none');
-  const [showingFriends, setShowingFriends] = useState(true);
+  const [homeScreen, setHomeScreen] = useState<'friends' | 'remote' | null>('friends');
   const [showMembers, setShowMembers] = useState(true);
 
   // Opening a conversation is what leaves the friends screen; nothing else has
   // to know about that flag.
   useEffect(() => {
-    if (activeChannelId) setShowingFriends(false);
+    if (activeChannelId) setHomeScreen(null);
   }, [activeChannelId]);
 
   return (
@@ -153,8 +163,10 @@ function Workbench(): JSX.Element {
 
       {view === 'home' ? (
         <HomeSidebar
-          showingFriends={showingFriends}
-          onShowFriends={() => setShowingFriends(true)}
+          showingFriends={homeScreen === 'friends'}
+          onShowFriends={() => setHomeScreen('friends')}
+          showingRemote={homeScreen === 'remote'}
+          onShowRemote={() => setHomeScreen('remote')}
           onOpenUserSettings={() => setSettings('user')}
         />
       ) : (
@@ -164,7 +176,9 @@ function Workbench(): JSX.Element {
         />
       )}
 
-      {view === 'home' && showingFriends ? (
+      {view === 'home' && homeScreen === 'remote' ? (
+        <RemoteView />
+      ) : view === 'home' && homeScreen === 'friends' ? (
         <FriendsView />
       ) : channel?.type === 'VOICE' ? (
         <VoiceChannelView channel={channel} />
@@ -179,6 +193,10 @@ function Workbench(): JSX.Element {
           {rightPanel === 'members' && view === 'server' && showMembers && <MemberList />}
         </>
       )}
+
+      {/* Somebody asking to reach this machine has to be answered wherever the
+          window happens to be, so the prompt sits above everything. */}
+      <RemoteConsent />
 
       {settings === 'user' && <UserSettings onClose={() => setSettings('none')} />}
       {settings === 'server' && <ServerSettings onClose={() => setSettings('none')} />}

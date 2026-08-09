@@ -55,6 +55,18 @@ interface Window {
     screenSources: () => Promise<ScreenSource[]>;
     selectScreenSource: (id: string, audio: boolean) => Promise<void>;
     startOAuth: (startUrl: string) => Promise<string | null>;
+    /** Remote desktop, agent side. Input injection is Windows-only for now. */
+    remoteInputSupported: () => Promise<boolean>;
+    remoteMouse: (input: {
+      action: 'move' | 'down' | 'up' | 'wheel';
+      x: number;
+      y: number;
+      button?: 'left' | 'right' | 'middle';
+      deltaY?: number;
+    }) => void;
+    remoteKey: (input: { action: 'down' | 'up'; key: string; code: string }) => void;
+    remoteInputStop: () => void;
+    machineName: () => Promise<string>;
     devLogin: () => Promise<DevLogin | null>;
   };
 }
