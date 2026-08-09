@@ -49,6 +49,12 @@ interface RemoteState {
 
   load: () => Promise<void>;
   connect: (machineId: string) => Promise<void>;
+  /**
+   * Reaches whoever is sharing a screen in a voice channel, by their user id.
+   * Watching somebody's screen and wanting the mouse is one thought, so it is
+   * one button there rather than a trip through the machine list.
+   */
+  connectToOwner: (userId: string, alsoRequestControl?: boolean) => Promise<void>;
   disconnect: () => Promise<void>;
   sendMouse: (input: Omit<Extract<ClientRemoteEvent, { type: 'input.mouse' }>, 'type'>) => void;
   sendKey: (input: Omit<Extract<ClientRemoteEvent, { type: 'input.key' }>, 'type'>) => void;
@@ -62,6 +68,8 @@ interface RemoteState {
 let socket: WebSocket | null = null;
 let room: Room | null = null;
 let lastMoveAt = 0;
+/** Set when the session was opened by "Request control"; fired once it is up. */
+let requestControlOnOpen = false;
 
 export const useRemoteStore = create<RemoteState>((set, get) => ({
   machines: [],
@@ -113,8 +121,31 @@ export const useRemoteStore = create<RemoteState>((set, get) => ({
     await joinRoom(session, set);
   },
 
+  connectToOwner: async (userId, alsoRequestControl = false) => {
+    let machines = get().machines;
+    if (machines.length === 0) {
+      await get().load();
+      machines = get().machines;
+    }
+
+    const theirs = machines.filter((machine) => machine.ownerId === userId);
+    const machine = theirs.find((candidate) => candidate.online) ?? theirs[0];
+    if (!machine) {
+      set({ error: 'You have no remote access to a machine of theirs' });
+      return;
+    }
+    if (!machine.online) {
+      set({ error: `${machine.name} is not online` });
+      return;
+    }
+
+    requestControlOnOpen = alsoRequestControl;
+    await get().connect(machine.id);
+  },
+
   disconnect: async () => {
     const session = get().session;
+    requestControlOnOpen = false;
     socket?.close();
     socket = null;
 
@@ -194,6 +225,14 @@ function openSocket(
   );
   socket = next;
 
+  // A session opened from "Request control" asks the moment there is something
+  // to ask over; `send` is a no-op before the socket is up.
+  next.onopen = () => {
+    if (!requestControlOnOpen) return;
+    requestControlOnOpen = false;
+    get().requestControl();
+  };
+
   next.onmessage = (raw) => {
     let event: ServerRemoteEvent;
     try {
@@ -247,9 +286,17 @@ function openSocket(
   next.onerror = () => next.close();
 }
 
-/** Subscribes to the agent's screen. Nothing is published from this side. */
+/**
+ * Subscribes to the agent's screen. Nothing is published from this side.
+ *
+ * `adaptiveStream` is off on purpose, unlike a voice call: it sizes the
+ * subscription to the video element, so a remote desktop in a window smaller
+ * than the machine's screen was downscaled and then stretched back up, which is
+ * what made the picture soft no matter what the agent published. A desktop
+ * arrives at the size it was captured and the element does the fitting.
+ */
 async function joinRoom(session: RemoteSessionResponse, set: Setter): Promise<void> {
-  const next = new Room({ adaptiveStream: true, dynacast: true });
+  const next = new Room({ adaptiveStream: false, dynacast: false });
   room = next;
 
   next.on(RoomEvent.TrackSubscribed, (track: RemoteTrack) => {

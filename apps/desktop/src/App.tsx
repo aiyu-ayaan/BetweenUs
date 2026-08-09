@@ -18,6 +18,7 @@ import { HomeSidebar } from './features/home/HomeSidebar';
 import { FriendsView } from './features/home/FriendsView';
 import { RemoteView } from './features/remote/RemoteView';
 import { RemoteConsent } from './features/remote/RemoteConsent';
+import { RemoteSessionView } from './features/remote/RemoteSessionView';
 import { MemberList } from './features/members/MemberList';
 import { ChatView } from './features/chat/ChatView';
 import { PinnedPanel } from './features/chat/PinnedPanel';
@@ -146,6 +147,7 @@ function Workbench(): JSX.Element {
   const channel = useChatStore((state) => state.activeChannel());
 
   const rightPanel = useChatStore((state) => state.rightPanel);
+  const remoteSession = useRemoteStore((state) => state.session);
 
   const [settings, setSettings] = useState<'none' | 'user' | 'server'>('none');
   const [homeScreen, setHomeScreen] = useState<'friends' | 'remote' | null>('friends');
@@ -192,6 +194,16 @@ function Workbench(): JSX.Element {
           {rightPanel === 'search' && <SearchPanel />}
           {rightPanel === 'members' && view === 'server' && showMembers && <MemberList />}
         </>
+      )}
+
+      {/* A remote session covers the window wherever it was started from - the
+          machine list, or the "Request control" button on somebody's screen
+          share in a voice channel. Leaving it inside the machine list meant the
+          second of those had nowhere to appear. */}
+      {remoteSession && (
+        <div className="fixed inset-0 z-40 flex">
+          <RemoteSessionView />
+        </div>
       )}
 
       {/* Somebody asking to reach this machine has to be answered wherever the

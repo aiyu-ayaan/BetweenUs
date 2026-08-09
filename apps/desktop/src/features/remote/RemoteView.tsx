@@ -11,7 +11,6 @@ import { useAuthStore } from '../../stores/auth';
 import { api } from '../../services/api';
 import { Avatar } from '../../components/Avatar';
 import { MonitorIcon, ShieldIcon, XIcon } from '../../components/icons';
-import { RemoteSessionView } from './RemoteSessionView';
 
 /** Labels, and the order they read in: what you can see, then what you can do. */
 const PERMISSION_LABELS: Array<{ id: RemotePermission; label: string; hint: string }> = [
@@ -29,7 +28,6 @@ export function RemoteView(): JSX.Element {
   const error = useRemoteStore((state) => state.error);
   const load = useRemoteStore((state) => state.load);
   const connect = useRemoteStore((state) => state.connect);
-  const session = useRemoteStore((state) => state.session);
 
   const [managing, setManaging] = useState<RemoteMachineSummary | null>(null);
 
@@ -37,8 +35,9 @@ export function RemoteView(): JSX.Element {
     void load();
   }, [load]);
 
-  if (session) return <RemoteSessionView />;
-
+  // A live session is drawn over the whole window by `App`, not here: it can be
+  // started from a screen share in a voice channel too, and that has no machine
+  // list to take over.
   return (
     <div className="flex min-w-0 flex-1 flex-col bg-surface-700">
       <header className="flex h-12 shrink-0 items-center gap-2 border-b border-black/20 px-4">

@@ -25,6 +25,7 @@ import type { Channel } from '@nexora/shared-types';
 import type { Track } from 'livekit-client';
 import { useChatStore } from '../../stores/chat';
 import { usePresenceStore } from '../../stores/presence';
+import { useRemoteStore } from '../../stores/remote';
 import { useVoiceStore, type VoiceShare, type VoiceTile } from '../../stores/voice';
 import { VoiceControls } from './VoiceControls';
 import { VideoSink } from './MediaSink';
@@ -261,6 +262,7 @@ function Theatre({ share, tiles }: { share: VoiceShare; tiles: Stage[] }): JSX.E
         </p>
 
         <div className="absolute right-2 top-2 flex gap-2">
+          {!share.isLocal && <RequestControlButton userId={share.identity} name={share.name} />}
           {share.isLocal && (
             <button
               type="button"
@@ -289,6 +291,43 @@ function Theatre({ share, tiles }: { share: VoiceShare; tiles: Stage[] }): JSX.E
         ))}
       </ul>
     </div>
+  );
+}
+
+/**
+ * "I can see your screen, now let me drive" - the thought that follows watching
+ * a share often enough to be worth a button.
+ *
+ * A screen share is not a remote session and this does not turn one into one:
+ * it opens a proper session against that person's machine, which needs a grant
+ * they gave beforehand and raises the same consent prompt on their side. The
+ * button is only a shortcut past the machine list, never past the permission.
+ */
+function RequestControlButton({ userId, name }: { userId: string; name: string }): JSX.Element | null {
+  const machines = useRemoteStore((state) => state.machines);
+  const load = useRemoteStore((state) => state.load);
+  const connectToOwner = useRemoteStore((state) => state.connectToOwner);
+  const session = useRemoteStore((state) => state.session);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  // Nothing to offer when this account has no access to a machine of theirs,
+  // and nothing to offer while a session is already open.
+  const machine = machines.find((candidate) => candidate.ownerId === userId);
+  if (!machine || session) return null;
+
+  return (
+    <button
+      type="button"
+      disabled={!machine.online}
+      title={machine.online ? `Ask ${name} for the mouse and keyboard` : `${machine.name} is offline`}
+      onClick={() => void connectToOwner(userId, true)}
+      className="cursor-pointer rounded-md bg-accent px-3 py-1 text-xs font-semibold text-white transition-colors duration-200 hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
+    >
+      Request control
+    </button>
   );
 }
 
