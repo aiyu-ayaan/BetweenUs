@@ -4,6 +4,9 @@ import { useAuthStore } from '../../stores/auth';
 import { useChatStore } from '../../stores/chat';
 import { usePresenceStore } from '../../stores/presence';
 import { useVoiceStore } from '../../stores/voice';
+import { useAudioSettings } from '../../stores/audioSettings';
+import { monitorMic, type MicLevel } from '../../services/mic-gate';
+import { DEFAULT_VOICE_SETTINGS, GATE_RANGE } from '../../services/voice-quality';
 import { api } from '../../services/api';
 import {
   notificationPreferences,
@@ -304,25 +307,238 @@ function VoiceSection(): JSX.Element {
   const status = useVoiceStore((state) => state.status);
   const micEnabled = useVoiceStore((state) => state.micEnabled);
   const cameraEnabled = useVoiceStore((state) => state.cameraEnabled);
+  const settings = useAudioSettings((state) => state.settings);
+  const update = useAudioSettings((state) => state.update);
+
+  const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
+  const [level, setLevel] = useState<MicLevel>({ db: -100, open: false });
+  const [testing, setTesting] = useState(false);
+  const [problem, setProblem] = useState<string | null>(null);
+
+  // Device labels are blank until the microphone has been granted once, which
+  // is why the list is read again after the meter has opened one.
+  const readDevices = (): void => {
+    void navigator.mediaDevices.enumerateDevices().then(setDevices).catch(() => undefined);
+  };
+  useEffect(readDevices, []);
+
+  useEffect(() => {
+    if (!testing) return;
+    let stop: (() => void) | null = null;
+    let cancelled = false;
+
+    void monitorMic(settings.inputDeviceId, settings.gateThresholdDb, setLevel)
+      .then((release) => {
+        if (cancelled) release();
+        else {
+          stop = release;
+          readDevices();
+        }
+      })
+      .catch((error: unknown) => {
+        setTesting(false);
+        setProblem(error instanceof Error ? error.message : 'That microphone could not be opened');
+      });
+
+    return () => {
+      cancelled = true;
+      stop?.();
+      setLevel({ db: -100, open: false });
+    };
+    // The monitor is reopened when the device changes; the threshold is read
+    // when it opens and pushed into the running gate below.
+  }, [testing, settings.inputDeviceId]);
+
+  const hifi = settings.mode === 'hifi';
 
   return (
     <>
       <h1 className="text-xl font-semibold text-slate-50">Voice &amp; Video</h1>
       <p className="mt-2 text-sm text-slate-400">
-        Devices are chosen by the operating system. What is shown here is the state of the call
-        this window is in.
+        These are settings of this machine, not of your account - the microphone that suits this
+        room is not the one that suits another. Changes apply to a call already running.
       </p>
 
-      <dl className="mt-5 space-y-4 rounded-lg bg-surface-800 p-4">
+      <h2 className="mt-8 text-base font-semibold text-slate-50">Devices</h2>
+      <div className="mt-3 space-y-4 rounded-lg bg-surface-800 p-4">
+        <DeviceSelect
+          label="Input device"
+          kind="audioinput"
+          devices={devices}
+          value={settings.inputDeviceId}
+          onChange={(inputDeviceId) => update({ inputDeviceId })}
+        />
+        <DeviceSelect
+          label="Output device"
+          kind="audiooutput"
+          devices={devices}
+          value={settings.outputDeviceId}
+          onChange={(outputDeviceId) => update({ outputDeviceId })}
+        />
+      </div>
+
+      <h2 className="mt-8 text-base font-semibold text-slate-50">Input sensitivity</h2>
+      <p className="mt-1 text-sm text-slate-400">
+        Below this, the microphone is closed - which is what keeps a fan, a keyboard or a room out
+        of the call between sentences. Set it so the bar sits under the marker when you are quiet
+        and well past it when you talk.
+      </p>
+      <div className="mt-3 space-y-3 rounded-lg bg-surface-800 p-4">
+        <Switch
+          label="Automatically close the microphone"
+          hint="Off is an open mic: everything the microphone hears is sent."
+          checked={settings.gateThresholdDb !== null}
+          onChange={(on) => update({ gateThresholdDb: on ? DEFAULT_VOICE_SETTINGS.gateThresholdDb : null })}
+        />
+        <LevelMeter db={level.db} thresholdDb={settings.gateThresholdDb} live={testing} />
+        {settings.gateThresholdDb !== null && (
+          <input
+            type="range"
+            min={GATE_RANGE.minDb}
+            max={GATE_RANGE.maxDb}
+            step={1}
+            value={settings.gateThresholdDb}
+            onChange={(event) => update({ gateThresholdDb: Number(event.target.value) })}
+            className="w-full cursor-pointer accent-accent"
+          />
+        )}
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => {
+              setProblem(null);
+              setTesting((on) => !on);
+            }}
+            className="cursor-pointer rounded bg-surface-950 px-4 py-2 text-sm font-medium text-slate-100 transition-colors duration-200 hover:bg-surface-700"
+          >
+            {testing ? 'Stop test' : "Let's check"}
+          </button>
+          {problem && <span className="text-sm text-danger">{problem}</span>}
+        </div>
+      </div>
+
+      <h2 className="mt-8 text-base font-semibold text-slate-50">Processing</h2>
+      <div className="mt-3 space-y-1 rounded-lg bg-surface-800 p-4">
+        <Switch
+          label="Noise suppression"
+          hint="Asks for the strongest suppressor this machine has - where the runtime supports voice isolation, that is a model that keeps a voice and drops the rest."
+          checked={settings.noiseSuppression}
+          disabled={hifi}
+          onChange={(noiseSuppression) => update({ noiseSuppression })}
+        />
+        <Switch
+          label="Echo cancellation"
+          hint="Without it, anybody on speakers sends the call back into itself."
+          checked={settings.echoCancellation}
+          disabled={hifi}
+          onChange={(echoCancellation) => update({ echoCancellation })}
+        />
+        <Switch
+          label="Automatic gain control"
+          hint="Evens out a quiet or a loud voice. Turn it off if your microphone is already set up."
+          checked={settings.autoGainControl}
+          disabled={hifi}
+          onChange={(autoGainControl) => update({ autoGainControl })}
+        />
+        <Switch
+          label="High fidelity mode"
+          hint="For an instrument or a record rather than a voice: stereo at twice the bitrate, with all of the above turned off, because every one of them is destructive to anything that is not speech."
+          checked={hifi}
+          onChange={(on) => update({ mode: on ? 'hifi' : 'clear' })}
+        />
+      </div>
+
+      <h2 className="mt-8 text-base font-semibold text-slate-50">This call</h2>
+      <dl className="mt-3 space-y-4 rounded-lg bg-surface-800 p-4">
         <Field label="Connection" value={status === 'connected' ? 'In a voice channel' : 'Not connected'} />
         <Field label="Microphone" value={micEnabled ? 'On' : 'Off'} />
         <Field label="Camera" value={cameraEnabled ? 'On' : 'Off'} />
+        <Field
+          label="Quality"
+          value={hifi ? '128 kbps stereo, unprocessed' : '64 kbps mono, processed for speech'}
+        />
         <Field
           label="Encryption"
           value="End-to-end, with the channel key. A call that cannot encrypt is aborted rather than downgraded."
         />
       </dl>
     </>
+  );
+}
+
+/**
+ * A device list. `null` is the system default and stays the default: a machine
+ * whose chosen microphone has been unplugged should fall back rather than fail.
+ */
+function DeviceSelect({
+  label,
+  kind,
+  devices,
+  value,
+  onChange,
+}: {
+  label: string;
+  kind: MediaDeviceKind;
+  devices: MediaDeviceInfo[];
+  value: string | null;
+  onChange: (deviceId: string | null) => void;
+}): JSX.Element {
+  const options = devices.filter((device) => device.kind === kind && device.deviceId !== 'default');
+
+  return (
+    <label className="block">
+      <span className="block text-xs font-bold uppercase tracking-wide text-slate-400">{label}</span>
+      <select
+        value={value ?? ''}
+        onChange={(event) => onChange(event.target.value || null)}
+        className="mt-2 w-full cursor-pointer rounded bg-surface-950 px-3 py-2 text-slate-100 focus:outline-none focus:ring-2 focus:ring-accent"
+      >
+        <option value="">System default</option>
+        {options.map((device) => (
+          <option key={device.deviceId} value={device.deviceId}>
+            {device.label || 'Unnamed device'}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+/**
+ * The bar is the microphone's level; the notch is the threshold. Amber while
+ * the gate is closed and accent while it is open, so "am I being heard" is
+ * answered by a colour rather than by arithmetic.
+ */
+function LevelMeter({
+  db,
+  thresholdDb,
+  live,
+}: {
+  db: number;
+  thresholdDb: number | null;
+  live: boolean;
+}): JSX.Element {
+  const asPercent = (value: number): number =>
+    Math.min(100, Math.max(0, ((value - GATE_RANGE.minDb) / (GATE_RANGE.maxDb - GATE_RANGE.minDb)) * 100));
+
+  // Read from the level rather than from the monitor's own gate, so dragging
+  // the slider recolours the bar immediately instead of after a reopened
+  // microphone - the same decision, made a few milliseconds later.
+  const open = thresholdDb === null || db >= thresholdDb;
+
+  return (
+    <div className="relative h-3 overflow-hidden rounded-full bg-surface-950">
+      <div
+        className={`h-full transition-[width] duration-75 ${open ? 'bg-accent' : 'bg-status-idle/60'}`}
+        style={{ width: `${live ? asPercent(db) : 0}%` }}
+      />
+      {thresholdDb !== null && (
+        <div
+          className="absolute inset-y-0 w-0.5 bg-slate-200"
+          style={{ left: `${asPercent(thresholdDb)}%` }}
+        />
+      )}
+    </div>
   );
 }
 
