@@ -8,6 +8,9 @@ import assert from 'node:assert/strict';
 import {
   ASSIGNABLE_PERMISSIONS,
   PERMISSIONS,
+  REMOTE_PERMISSIONS,
+  SERVER_ROLES,
+  isRemotePermission,
   effectivePermissions,
   hasPermission,
   isPermission,
@@ -61,5 +64,16 @@ assert.equal(new Set(doubled).size, doubled.length, 'effective permissions must 
 // Ownership and remote access are never handed out through the member editor.
 assert.ok(!ASSIGNABLE_PERMISSIONS.includes(PERMISSIONS.MANAGE_SERVER));
 assert.ok(!ASSIGNABLE_PERMISSIONS.includes(PERMISSIONS.REMOTE_CONTROL));
+
+// Remote permissions are held per machine: no role implies one, and the member
+// editor cannot hand one out either.
+for (const role of SERVER_ROLES) {
+  for (const remote of REMOTE_PERMISSIONS) {
+    assert.ok(!permissionsForRole(role).includes(remote), `${role} must not imply ${remote}`);
+    assert.ok(!ASSIGNABLE_PERMISSIONS.includes(remote), `${remote} must not be assignable`);
+  }
+}
+assert.ok(isRemotePermission(PERMISSIONS.REMOTE_CONTROL));
+assert.ok(!isRemotePermission(PERMISSIONS.SEND_MESSAGE));
 
 console.log('permissions self-check ok');

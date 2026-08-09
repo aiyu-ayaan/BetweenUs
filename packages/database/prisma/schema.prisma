@@ -70,6 +70,11 @@ model User {
   identities    UserIdentity[]
   notifications NotificationSetting?
   channelReads  ChannelRead[]
+  remoteMachines RemoteMachine[] @relation("RemoteMachineOwner")
+  remoteGrants   RemoteGrant[]   @relation("RemoteGrantUser")
+  remoteGranted  RemoteGrant[]   @relation("RemoteGrantGrantedBy")
+  remoteSessions RemoteSession[] @relation("RemoteSessionUser")
+  remoteAudit    RemoteAudit[]   @relation("RemoteAuditActor")
 
   @@map("users")
 }
@@ -342,4 +347,113 @@ model MessageReaction {
   @@unique([messageId, userId, emoji])
   @@index([messageId])
   @@map("message_reactions")
+}
+
+// --- Remote desktop (phase 17) ------------------------------------------------
+//
+// Kept apart from chat and media on purpose: a remote session is the most
+// dangerous thing this platform can do, so it has its own service, its own
+// permission set that no role grants by default, and its own audit trail.
+
+/// A machine that has enrolled an agent. The agent connects outbound to
+/// remote-gateway; nothing ever dials the machine, and no inbound port is
+/// opened on it.
+model RemoteMachine {
+  id       String @id @default(uuid())
+  /// Whoever enrolled it. The owner always has every remote permission on it
+  /// and is the only one who may hand them out.
+  ownerId  String
+  name     String
+  platform String
+
+  /// The agent's credential, stored as a SHA-256 hash the way a password is.
+  /// It is shown once, at enrolment, and rotated by enrolling again.
+  ///
+  /// ponytail: a shared secret, not a device keypair. It is what cloudflared
+  /// and every other outbound agent uses; a signed handshake is the upgrade if
+  /// a stolen token at rest ever becomes the threat that matters.
+  agentTokenHash String
+  /// Null until the agent has connected once.
+  lastSeenAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  owner    User            @relation("RemoteMachineOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  grants   RemoteGrant[]
+  sessions RemoteSession[]
+  audit    RemoteAudit[]
+
+  @@index([ownerId])
+  @@map("remote_machines")
+}
+
+/// What one person may do to one machine. Absent means no access at all -
+/// remote permissions are never implied by a server role.
+model RemoteGrant {
+  id        String @id @default(uuid())
+  machineId String
+  userId    String
+  /// REMOTE_VIEW, REMOTE_CONTROL, REMOTE_FILE_TRANSFER, REMOTE_CLIPBOARD,
+  /// REMOTE_AUDIO, REMOTE_ADMIN. Unknown strings are ignored when resolving,
+  /// so a row written by a newer build cannot break an older one.
+  permissions String[] @default([])
+  /// Temporary access: past this moment the grant resolves to nothing. Null is
+  /// open-ended.
+  expiresAt DateTime?
+  grantedById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  machine   RemoteMachine @relation(fields: [machineId], references: [id], onDelete: Cascade)
+  user      User          @relation("RemoteGrantUser", fields: [userId], references: [id], onDelete: Cascade)
+  grantedBy User?         @relation("RemoteGrantGrantedBy", fields: [grantedById], references: [id], onDelete: SetNull)
+
+  @@unique([machineId, userId])
+  @@index([userId])
+  @@map("remote_grants")
+}
+
+/// One connection from one person to one machine. The permissions are frozen
+/// when it starts, so revoking a grant mid-session is a decision the gateway
+/// takes deliberately (it ends the session) rather than an accident of timing.
+model RemoteSession {
+  id          String    @id @default(uuid())
+  machineId   String
+  userId      String
+  permissions String[]  @default([])
+  startedAt   DateTime  @default(now())
+  endedAt     DateTime?
+  /// Why it stopped: "controller", "agent", "revoked", "agent-offline".
+  endedReason String?
+
+  machine RemoteMachine @relation(fields: [machineId], references: [id], onDelete: Cascade)
+  user    User          @relation("RemoteSessionUser", fields: [userId], references: [id], onDelete: Cascade)
+  audit   RemoteAudit[]
+
+  @@index([machineId, startedAt])
+  @@index([userId, startedAt])
+  @@map("remote_sessions")
+}
+
+/// Append-only record of everything that happened to a machine. Nothing here is
+/// ever updated or deleted by the application; a machine's owner can read it.
+model RemoteAudit {
+  id        String  @id @default(uuid())
+  machineId String
+  sessionId String?
+  /// Who did it. Null when it was the agent itself rather than a person.
+  actorId String?
+  /// machine.enrolled, machine.renamed, permission.changed, session.started,
+  /// session.ended, session.refused.
+  action String
+  detail Json?
+
+  createdAt DateTime @default(now())
+
+  machine RemoteMachine  @relation(fields: [machineId], references: [id], onDelete: Cascade)
+  session RemoteSession? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  actor   User?          @relation("RemoteAuditActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([machineId, createdAt])
+  @@map("remote_audit")
 }

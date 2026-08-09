@@ -28,6 +28,7 @@ export const PERMISSIONS = {
 
 export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
 
+
 const MEMBER_PERMISSIONS: Permission[] = [
   PERMISSIONS.VIEW_CHANNEL,
   PERMISSIONS.SEND_MESSAGE,
@@ -134,4 +135,13 @@ export interface RemoteGrant {
 
 export function isRemoteGrantActive(grant: RemoteGrant, now: Date = new Date()): boolean {
   return grant.expiresAt === null || new Date(grant.expiresAt).getTime() > now.getTime();
+}
+
+/**
+ * True for a string that names a remote permission this build knows about.
+ * Remote access is never implied by a server role, so this is the only gate:
+ * a name that is not here grants nothing.
+ */
+export function isRemotePermission(value: string): value is RemotePermission {
+  return (REMOTE_PERMISSIONS as readonly string[]).includes(value);
 }

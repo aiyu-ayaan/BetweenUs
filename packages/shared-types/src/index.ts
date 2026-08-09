@@ -616,6 +616,135 @@ export type ServerChatEvent =
   | { type: 'pong' }
   | { type: 'error'; code: string; message: string };
 
+// --- Remote desktop (phase 17) ---
+//
+// A remote session is deliberately its own vocabulary: nothing here is reused
+// from chat or calls, so a change to one cannot quietly widen the other.
+
+export type RemotePermission =
+  | 'REMOTE_VIEW'
+  | 'REMOTE_CONTROL'
+  | 'REMOTE_FILE_TRANSFER'
+  | 'REMOTE_CLIPBOARD'
+  | 'REMOTE_AUDIO'
+  | 'REMOTE_ADMIN';
+
+/** A machine as the person looking at the list sees it. */
+export interface RemoteMachineSummary {
+  id: string;
+  name: string;
+  platform: string;
+  ownerId: string;
+  ownerUsername: string;
+  /** True when the agent currently holds a socket to the gateway. */
+  online: boolean;
+  lastSeenAt: string | null;
+  /** What the caller may do here, expiry already applied. */
+  permissions: RemotePermission[];
+  /** When the caller's access lapses. Null for the owner and for open-ended. */
+  expiresAt: string | null;
+  createdAt: string;
+}
+
+/** Enrolment. The token comes back once and is never returned again. */
+export interface EnrolMachineRequest {
+  name: string;
+  platform: string;
+  /** Re-enrolling an existing machine rotates its token instead of adding one. */
+  machineId?: string;
+}
+
+export interface EnrolMachineResponse {
+  machine: RemoteMachineSummary;
+  agentToken: string;
+}
+
+export interface RemoteGrantSummary {
+  userId: string;
+  username: string;
+  displayName: string;
+  avatarUrl: string | null;
+  permissions: RemotePermission[];
+  expiresAt: string | null;
+}
+
+export interface SetRemoteGrantRequest {
+  userId: string;
+  /** An empty list revokes: there is no separate delete. */
+  permissions: RemotePermission[];
+  /** ISO date; omitted or null is open-ended. */
+  expiresAt?: string | null;
+}
+
+export interface StartRemoteSessionRequest {
+  machineId: string;
+}
+
+/**
+ * Media rides the SFU the voice channels already use: the agent publishes its
+ * screen into a room of its own and the controller subscribes. Nothing about a
+ * remote session passes pixels through NestJS.
+ */
+export interface RemoteSessionResponse {
+  sessionId: string;
+  machineId: string;
+  machineName: string;
+  /** Frozen when the session started; the gateway enforces these, not the UI. */
+  permissions: RemotePermission[];
+  room: string;
+  livekitUrl: string;
+  token: string;
+}
+
+export interface RemoteAuditEntry {
+  id: string;
+  action: string;
+  actorId: string | null;
+  actorUsername: string | null;
+  sessionId: string | null;
+  detail: Record<string, unknown> | null;
+  createdAt: string;
+}
+
+/** Sent by a controller's socket. Input is refused unless the session allows it. */
+export type ClientRemoteEvent =
+  | { type: 'input.mouse'; action: 'move' | 'down' | 'up' | 'wheel'; x: number; y: number; button?: 'left' | 'right' | 'middle'; deltaY?: number }
+  | { type: 'input.key'; action: 'down' | 'up'; key: string; code: string; modifiers: string[] }
+  | { type: 'clipboard.set'; text: string }
+  | { type: 'session.end' }
+  | { type: 'ping' };
+
+/** Sent by an agent's socket. */
+export type AgentRemoteEvent =
+  | { type: 'agent.ready'; screens: number }
+  | { type: 'session.accepted'; sessionId: string }
+  | { type: 'session.refused'; sessionId: string; reason: string }
+  | { type: 'session.ended'; sessionId: string }
+  | { type: 'clipboard.text'; sessionId: string; text: string }
+  | { type: 'pong' };
+
+/** Sent by the gateway to either kind of socket. */
+export type ServerRemoteEvent =
+  | { type: 'ready'; role: 'agent' | 'controller'; machineId?: string; sessionId?: string }
+  | {
+      type: 'session.start';
+      sessionId: string;
+      /** For the agent: who is asking, and what they were granted. */
+      controllerId: string;
+      controllerName: string;
+      permissions: RemotePermission[];
+      room: string;
+      livekitUrl: string;
+      token: string;
+    }
+  | { type: 'session.ended'; sessionId: string; reason: string }
+  | { type: 'agent.state'; sessionId: string; state: 'accepted' | 'refused'; reason?: string }
+  | { type: 'input.mouse'; action: 'move' | 'down' | 'up' | 'wheel'; x: number; y: number; button?: 'left' | 'right' | 'middle'; deltaY?: number }
+  | { type: 'input.key'; action: 'down' | 'up'; key: string; code: string; modifiers: string[] }
+  | { type: 'clipboard.set'; text: string }
+  | { type: 'pong' }
+  | { type: 'error'; code: string; message: string };
+
 // --- Health ---
 
 export interface HealthResponse {
