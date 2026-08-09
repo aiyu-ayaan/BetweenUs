@@ -34,11 +34,11 @@ const REPORT_INTERVAL = 0.05;
 
 /**
  * A function's compiled name is not its source name after a production build,
- * so the worklet's calls are bound to names this rewrites in rather than to
- * whatever esbuild decided to call them.
+ * and a build is free to emit it as an arrow. Binding the source to a name here
+ * survives both: a named function expression and an arrow are both expressions.
  */
 function named(fn: { toString(): string }, name: string): string {
-  return fn.toString().replace(/^function\s*[\w$]*/, `function ${name}`);
+  return `const ${name} = ${fn.toString()};`;
 }
 
 const WORKLET_SOURCE = `
@@ -105,11 +105,15 @@ registerProcessor('nexora-gate', NexoraGate);
 `;
 
 let moduleUrl: string | null = null;
+/** Registering the same processor name twice in one context throws. */
+const registered = new WeakSet<AudioContext>();
 
 async function addWorklet(context: AudioContext): Promise<boolean> {
+  if (registered.has(context)) return true;
   try {
     moduleUrl ??= URL.createObjectURL(new Blob([WORKLET_SOURCE], { type: 'text/javascript' }));
     await context.audioWorklet.addModule(moduleUrl);
+    registered.add(context);
     return true;
   } catch (error) {
     console.warn('[mic-gate] no worklet, microphone passes through ungated:', error);
