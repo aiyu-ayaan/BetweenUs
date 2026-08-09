@@ -5,8 +5,11 @@ the top honest — it is what a new session reads first.
 
 ## Next up
 
-Phase 21 - screen share encoding, so a film is watchable and a desktop is
-sharp - has landed in code and in a self-check. Phase 20 - giving control of a
+Phase 22 - the microphone: devices, noise suppression, an input-sensitivity
+gate and two encoding modes - has landed in code and in a self-check. It has no
+server side, so there is no smoke test; it needs two humans in a call, and one
+of them needs a noisy room. Phase 21 - screen share encoding, so a film is
+watchable and a desktop is sharp - has landed in code and in a self-check. Phase 20 - giving control of a
 screen share inside a call, and named cursors on it - has landed in code and in
 the geometry self-check. Neither has a server side and therefore neither has a
 smoke test; both need two humans in a call.
@@ -130,6 +133,66 @@ Left open on purpose:
       "balanced / sharp / smooth" choice the way RustDesk offers, and nothing
       raises the frame rate back up once a link recovers faster than the
       encoder notices
+
+### Phase 22 — a microphone worth listening to
+
+A voice channel published LiveKit's defaults: 48 kbps mono, whatever processing
+the browser felt like, the system's default device, and no way for anybody to
+change any of it. Fine on a headset in a quiet room and audibly worse than
+Discord anywhere else - a fan, a keyboard or a flatmate came along with the
+voice, and somebody with two microphones could not say which one. The numbers
+and the reasoning live in `apps/desktop/src/services/voice-quality.ts`, the gate
+in `mic-gate.ts`.
+
+- [x] Noise suppression asks for `voiceIsolation` as well - Chromium's
+      model-based suppressor, which is the nearest thing to Discord's Krisp
+      that ships with the runtime. Where it exists it replaces
+      `noiseSuppression`; where it does not, an unknown constraint is ignored,
+      so asking costs nothing and never fails a capture
+- [x] An input-sensitivity gate, which is what actually makes a Discord call
+      silent between sentences: suppression cleans up a signal, it does not
+      decide that nobody is talking. It runs in an AudioWorklet, so it is not
+      throttled when the window goes to the background and it can act between
+      samples rather than on a 100 ms poll, which is what would clip the first
+      consonant of every sentence. 5 ms to open, 150 ms to close, a 300 ms hold
+      through the gap between words and a 6 dB hysteresis band so a voice on
+      the line does not chatter it
+- [x] The worklet is assembled from `stepGate`'s own source rather than a copy,
+      so the logic under the self-check is the logic on the audio thread
+- [x] Two modes rather than a quality slider, the same shape as the screen
+      share picker: **clear** is 64 kbps mono with speech processing and DTX,
+      **high fidelity** is 128 kbps stereo with none of it - every one of those
+      is destructive to anything that is not a voice, and DTX deletes a held
+      note outright
+- [x] Input and output device pickers, stored per machine rather than per
+      account: the microphone that suits this room is not the one that suits
+      another. A device that has been unplugged falls back to the default
+      instead of failing the join
+- [x] Switching mid-call costs whatever it has to and no more: a threshold is a
+      message to the audio thread, the three processing switches are
+      `applyConstraints` on the open track, and only a new device or a new mode
+      republishes
+- [x] "Let's check" opens the microphone on its own with a live meter, so a
+      threshold can be set without being in a call
+- [x] `voice-quality.check.ts` covers both modes, the constraint objects, the
+      gate's three behaviours and the worklet splice, in CI
+
+Left open on purpose:
+
+- [ ] No push to talk. The gate is voice activity only, and a key held down is
+      a main-process shortcut plus a message to the same worklet
+- [ ] No per-person volume or mute in the client, which is the other half of
+      what Discord's audio settings are for
+- [ ] Nothing measures the result: no bitrate, no packet loss, no "your
+      microphone is not being heard" warning, the same gap phase 21 left
+- [ ] The gate is level-based, not a voice-activity model. A door slamming
+      opens it; Discord's does the same, but Krisp's does not
+- [ ] The meter opens a second capture of the same microphone rather than
+      tapping the live one. Windows is happy to do that; a platform that is
+      not would show a dead meter during a call
+- [ ] Output device selection depends on `setSinkId`, and the *system* default
+      is followed only until a device is chosen - nothing notices when Windows
+      changes its default afterwards
 
 ### Phase 21 — a screen share worth watching
 

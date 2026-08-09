@@ -636,6 +636,32 @@ Run live on 2026-08-08, on top of everything verified in phase 9 below:
 Still unverified: CI itself has not run yet (the workflow lands with this
 phase), and the human-in-front-of-it items below.
 
+### Phase 22 — microphone capture
+
+The same shape of problem as phase 21, one layer over: the defaults were the
+whole answer, and nobody could change any of them.
+`apps/desktop/src/services/voice-quality.ts` holds the numbers,
+`mic-gate.ts` the gate, `stores/audioSettings.ts` what this machine chose.
+
+| Was | Is | Why |
+| --- | --- | --- |
+| 48 kbps mono, always | 64 kbps mono, or 128 stereo in high fidelity | 64 is Discord's voice channel and transparent for speech; music is four times the information |
+| Browser default processing | Echo cancellation, suppression and gain control as switches, off wholesale for music | Every one of them is built for speech and destructive to anything else |
+| `noiseSuppression` | Also `voiceIsolation` | Chromium's model-based suppressor - the nearest thing to Krisp that ships with the runtime. Ignored where absent |
+| No gate | An AudioWorklet gate with a sensitivity slider | Suppression cleans a signal; it does not decide nobody is talking. This is what makes a call silent between sentences |
+| System default device | Input and output pickers, per machine | The microphone that suits this room is not the one that suits another |
+
+The gate runs on the audio thread for two reasons that are easy to get wrong:
+a main-thread timer stops when Electron backgrounds the window, and a decision
+made on a 100 ms poll clips the first consonant of every sentence. It is
+assembled from `stepGate`'s own source, so the function the self-check exercises
+is the function that runs there - which is why that function closes over
+nothing.
+
+What this is not is Krisp. The gate is level-based, so a slammed door opens it;
+there is no push to talk, no per-person volume, and nothing reports what the
+microphone actually achieved. `TODO.md` phase 22 lists that.
+
 ### Phase 21 — screen share encoding
 
 The defaults were the problem, and they were the problem in five places at

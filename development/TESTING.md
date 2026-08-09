@@ -377,6 +377,41 @@ paths are the ones where the person connecting is *not* the owner.
    inbound bitrate should sit in the megabits, not the hundreds of kilobits,
    and the frame rate should hold. Nothing in the app reports this yet.
 
+## How a microphone sounds
+
+Settings → Voice & Video. Everything here applies to a call already running,
+so leave a second account listening in the same voice channel.
+
+1. **Pick a device.** Both lists should name real devices once the microphone
+   has been granted once (before that, the operating system hides the labels
+   and they read "Unnamed device"). Switch input mid-call: the other side
+   should keep hearing you, from the other microphone. Switch output and the
+   call should move to the other speakers. Unplug the chosen microphone and
+   rejoin - it must fall back to the default rather than fail the join.
+2. **Set the sensitivity.** Click **Let's check**. The bar follows your voice
+   and the notch is the threshold: amber under it, blue over it. Set it so
+   room tone sits below and speech well above. Type on a mechanical keyboard
+   while silent - the bar should twitch under the notch and the far end should
+   hear nothing.
+3. **It does not clip a word.** With the gate on, say a sentence starting with
+   a soft consonant ("something", "fifty") to the far end. The first syllable
+   must arrive whole. If words start late, the gate is opening too slowly.
+4. **Suppression.** Run a fan or a hiss beside the microphone with **Noise
+   suppression** on, then off, and ask the far end. On a runtime with voice
+   isolation the difference is dramatic; on one without it, it is the ordinary
+   WebRTC suppressor and the difference is smaller. Neither should fail.
+5. **Echo.** On speakers rather than headphones, with echo cancellation on,
+   the other person should not hear themselves. Turn it off and they will -
+   which is the point of the switch, and why it defaults on.
+6. **High fidelity.** Play an instrument or a record into the microphone with
+   the mode on: it should arrive in stereo, without the pumping that gain
+   control causes, and quiet passages should not be cut out. Check the three
+   processing switches go grey - the mode has answered the question.
+7. **What it costs.** `chrome://webrtc-internals` on the receiving side: about
+   64 kbps for a voice and about 128 for high fidelity, with the outbound
+   dropping close to nothing during silence in the first case and staying up in
+   the second.
+
 ## Giving control in a call
 
 Needs two accounts in the same voice channel, and the machine sharing has to
@@ -486,7 +521,9 @@ abandoned uploads), logger redaction, the desktop E2EE round trip, the message
 body encoding that carries attachment manifests, the server-address parsing
 behind the login screen's server picker, the letterbox arithmetic that puts a
 named cursor and a click in the right place on a shared screen, the screen-
-share encoder profiles and their bitrate ceilings, and
+share encoder profiles and their bitrate ceilings, the microphone profiles and
+the noise gate (including compiling the worklet that gate's own source is
+spliced into), and
 `AuthService` against an in-memory database (register, login, refresh
 rotation, reuse detection, logout).
 
