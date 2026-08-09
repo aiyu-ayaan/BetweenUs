@@ -6,6 +6,7 @@ import { create } from 'zustand';
 import type { DirectChannel, Friend, UserSummary } from '@nexora/shared-types';
 import { api } from '../services/api';
 import { chatSocket } from '../services/socket';
+import { useAuthStore } from './auth';
 import { useChatStore } from './chat';
 
 interface FriendsState {
@@ -64,7 +65,9 @@ export const useFriendsStore = create<FriendsState>((set, get) => ({
       const friend = await api.addFriend(username);
       set({ friends: upsert(get().friends, friend) });
     } catch (error) {
-      set({ error: message(error) });
+      if (useAuthStore.getState().status === 'authenticated') {
+        set({ error: message(error) });
+      }
       throw error;
     }
   },

@@ -258,12 +258,26 @@ runs a single client against a running backend.
 Everything in containers instead:
 
 ```bash
-docker compose -f infrastructure/docker/docker-compose.yml up -d --build
+pnpm prod:up                      # starts the full production container stack
+# Or: docker compose --env-file .env -f infrastructure/docker/docker-compose.yml up -d --build
 ```
 
 Default ports: gateway `8080`, auth `3001`, server `3003`, chat `3004`,
 presence `3005`, notification `3006`, call `3007`, LiveKit `7880`, renderer
 `5173`, admin panel `5174`.
+
+## Production app builds & packaging
+
+To build and package production release artifacts:
+
+```bash
+# 1. Build all packages, backend microservices, and web frontends:
+pnpm build
+
+# 2. Package the Desktop Client executable (Electron installer/binary):
+pnpm desktop:package
+```
+Output binaries are written to `apps/desktop/dist/`.
 
 ## Desktop client
 

@@ -191,8 +191,11 @@ security group. These are the ports the tunnel cannot stand in for.
 ## 5. Step 3 - bring the stack up
 
 ```bash
-docker compose --env-file .env -f infrastructure/docker/docker-compose.yml \
-  up -d --build
+# Shortcut:
+pnpm prod:up
+
+# Direct compose command:
+docker compose --env-file .env -f infrastructure/docker/docker-compose.yml up -d --build
 ```
 
 What happens, in order:
