@@ -14,6 +14,7 @@ import {
 import { SERVER_ROLES } from '@nexora/permissions';
 import { UPLOADED_PICTURE_URL } from '@nexora/shared-types';
 import type {
+  AddServerMemberRequest,
   ChannelType,
   CreateChannelRequest,
   CreateServerRequest,
@@ -34,6 +35,12 @@ export class JoinServerDto {
   @IsString()
   @Length(2, 64)
   slug!: string;
+}
+
+export class AddServerMemberDto implements AddServerMemberRequest {
+  @IsString()
+  @Length(2, 32)
+  username!: string;
 }
 
 export class CreateChannelDto implements CreateChannelRequest {

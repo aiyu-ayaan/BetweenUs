@@ -5,6 +5,7 @@
 import { create } from 'zustand';
 import type { DirectChannel, Friend, UserSummary } from '@nexora/shared-types';
 import { api } from '../services/api';
+import { chatSocket } from '../services/socket';
 import { useChatStore } from './chat';
 
 interface FriendsState {
@@ -87,6 +88,18 @@ export const useFriendsStore = create<FriendsState>((set, get) => ({
 
   reset: () => set({ friends: [], directChannels: [], searchResults: [], error: null }),
 }));
+
+/**
+ * A request, an acceptance, a removal or a new conversation on the other side:
+ * the server says only that something changed, and both lists are re-read. They
+ * are one call each and rarely change, so a payload per recipient would buy
+ * nothing - see the note on `ServerChatEvent`.
+ */
+chatSocket.on((event) => {
+  if (event.type !== 'friends.changed') return;
+  void useFriendsStore.getState().load();
+  void useChatStore.getState().loadDirects();
+});
 
 function upsert(friends: Friend[], incoming: Friend): Friend[] {
   const without = friends.filter((friend) => friend.user.id !== incoming.user.id);

@@ -24,6 +24,7 @@ export const EVENTS = {
   MESSAGE_CREATED: 'message.created',
   MESSAGE_UPDATED: 'message.updated',
   MESSAGE_DELETED: 'message.deleted',
+  FRIEND_CHANGED: 'friend.changed',
 } as const;
 
 export interface EventPayloads {
@@ -42,6 +43,11 @@ export interface EventPayloads {
   [EVENTS.MESSAGE_CREATED]: { message: Message };
   [EVENTS.MESSAGE_UPDATED]: { message: Message };
   [EVENTS.MESSAGE_DELETED]: { messageId: string; channelId: string };
+  /**
+   * Both sides of the friendship, because either of them may be connected to a
+   * different instance and both screens have to change.
+   */
+  [EVENTS.FRIEND_CHANGED]: { userIds: string[] };
 }
 
 export type EventName = keyof EventPayloads;

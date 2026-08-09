@@ -16,7 +16,7 @@ channel, and exchange messages in realtime between two desktop clients.
 | Auth | Register, login, refresh-token rotation, `/me`, JWT access tokens |
 | Servers | Create server, list own servers, membership with role |
 | Channels | Create text channel in a server, list channels |
-| Messages | Send, list history (paged), realtime delivery over WebSocket |
+| Messages | Send, list history (paged), realtime delivery over WebSocket (deletion landed in phase 15) |
 | Desktop | Electron + React + Tailwind + Zustand: login, server/channel sidebar, message view |
 | Gateway | Nginx routing REST + WebSocket to services |
 | Data | PostgreSQL via Prisma, Redis Pub/Sub for cross-instance message fanout |
@@ -42,7 +42,8 @@ when the MVP shipped.
 - User service (profiles, avatars, friends); message-attachment linking
 - ~~OAuth logins~~ (shipped in phase 11: Google and GitHub, configured from the
   admin panel), email verification, password reset
-- Direct messages, replies, reactions, message edit/delete
+- Replies, reactions, message editing (~~direct messages~~ shipped in phase 12,
+  ~~message deletion~~ in phase 15)
 - Full RBAC permission matrix (MVP has coarse roles: OWNER / MEMBER)
 - Cloudflare Tunnel production ingress, CI/CD pipeline, Kubernetes
 

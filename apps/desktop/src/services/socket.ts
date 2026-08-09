@@ -23,6 +23,8 @@ export class ChatSocket {
   private token: string | null = null;
   private readonly listeners = new Set<Listener>();
   private readonly channels = new Set<string>();
+  /** Servers this client watches for membership changes. */
+  private readonly servers = new Set<string>();
   private reconnectAttempt = 0;
   private reconnectTimer: number | null = null;
   private closedByUs = false;
@@ -45,6 +47,9 @@ export class ChatSocket {
       // Re-subscribe: the server keeps no membership across connections.
       for (const channelId of this.channels) {
         this.send({ type: 'channel.subscribe', channelId });
+      }
+      for (const serverId of this.servers) {
+        this.send({ type: 'server.subscribe', serverId });
       }
     };
 
@@ -105,6 +110,26 @@ export class ChatSocket {
     this.send({ type: 'channel.unsubscribe', channelId });
   }
 
+  /**
+   * Watches exactly these servers. Separate from channel subscriptions because
+   * a member joining or leaving is not news about any one channel, and a client
+   * has to hear it for every server it is in, not only the one on screen.
+   */
+  syncServers(serverIds: string[]): void {
+    const wanted = new Set(serverIds);
+    for (const serverId of this.servers) {
+      if (!wanted.has(serverId)) {
+        this.servers.delete(serverId);
+        this.send({ type: 'server.unsubscribe', serverId });
+      }
+    }
+    for (const serverId of wanted) {
+      if (this.servers.has(serverId)) continue;
+      this.servers.add(serverId);
+      this.send({ type: 'server.subscribe', serverId });
+    }
+  }
+
   on(listener: Listener): () => void {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
@@ -117,6 +142,7 @@ export class ChatSocket {
   disconnect(): void {
     this.closedByUs = true;
     this.channels.clear();
+    this.servers.clear();
     if (this.reconnectTimer !== null) {
       window.clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;

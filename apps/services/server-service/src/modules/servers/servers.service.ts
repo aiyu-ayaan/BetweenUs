@@ -180,6 +180,40 @@ export class ServersService {
     return toMember(updated);
   }
 
+  /**
+   * Adds someone by username, from the members screen. They join as a MEMBER
+   * whatever the actor's own role is - handing out a role is a separate,
+   * `MANAGE_ROLE` decision, and this one only needs `MANAGE_MEMBER`.
+   *
+   * Someone already in the server is returned as they are rather than refused:
+   * the outcome the caller asked for is already true.
+   */
+  async addMember(actorId: string, serverId: string, username: string): Promise<ServerMember> {
+    const actor = await this.requireMembershipRow(actorId, serverId);
+    this.require(permissionsOf(actor), PERMISSIONS.MANAGE_MEMBER);
+
+    const user = await prisma.user.findUnique({
+      where: { username: username.trim() },
+      select: { id: true, disabledAt: true },
+    });
+    if (!user || user.disabledAt !== null) {
+      throw new NotFoundException({ code: 'USER_NOT_FOUND', message: 'No such user' });
+    }
+
+    const existing = await prisma.serverMember.findUnique({
+      where: { serverId_userId: { serverId, userId: user.id } },
+      include: { user: true },
+    });
+    if (existing) return toMember(existing);
+
+    const member = await prisma.serverMember.create({
+      data: { serverId, userId: user.id, role: 'MEMBER' },
+      include: { user: true },
+    });
+    await this.events.publish(EVENTS.SERVER_MEMBER_ADDED, { serverId, userId: user.id });
+    return toMember(member);
+  }
+
   /** Removes someone else from the server. Leaving is `leave`, below. */
   async removeMember(actorId: string, serverId: string, targetUserId: string): Promise<void> {
     const actor = await this.requireMembershipRow(actorId, serverId);

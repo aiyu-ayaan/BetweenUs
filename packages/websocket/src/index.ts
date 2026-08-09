@@ -101,3 +101,4 @@ export class RoomRegistry<TSocket> {
 
 export const channelRoom = (channelId: string): string => `channel:${channelId}`;
 export const userRoom = (userId: string): string => `user:${userId}`;
+export const serverRoom = (serverId: string): string => `server:${serverId}`;

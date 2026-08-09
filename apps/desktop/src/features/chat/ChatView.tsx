@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
 import type { Channel, MessageAttachment } from '@nexora/shared-types';
 import { useChatStore, type DecryptedMessage } from '../../stores/chat';
+import { useAuthStore } from '../../stores/auth';
 import { usePresenceStore } from '../../stores/presence';
 import { Avatar } from '../../components/Avatar';
 import { AttachmentList } from './Attachments';
@@ -17,6 +18,7 @@ import {
   MessageIcon,
   PaperclipIcon,
   SendIcon,
+  TrashIcon,
   UsersIcon,
   XIcon,
 } from '../../components/icons';
@@ -125,6 +127,10 @@ function MessageList({
   channel: Channel;
 }): JSX.Element {
   const bottom = useRef<HTMLDivElement>(null);
+  const me = useAuthStore((state) => state.user);
+  // Own messages anywhere; anyone else's only with the moderator permission,
+  // which no direct message ever carries.
+  const canModerate = useChatStore((state) => state.canModerateMessages());
 
   useEffect(() => {
     bottom.current?.scrollIntoView({ behavior: 'smooth' });
@@ -173,7 +179,7 @@ function MessageList({
           return (
             <li
               key={message.id}
-              className={`group rounded px-2 hover:bg-surface-950/25 ${
+              className={`group relative rounded px-2 hover:bg-surface-950/25 ${
                 grouped ? 'py-0.5 pl-[60px]' : 'mt-4 flex gap-3 py-0.5'
               }`}
             >
@@ -203,12 +209,58 @@ function MessageList({
                 )}
                 <AttachmentList channelId={channel.id} attachments={message.attachments} />
               </div>
+
+              {(message.author.id === me?.id || canModerate) && (
+                <DeleteMessageButton messageId={message.id} />
+              )}
             </li>
           );
         })}
       </ul>
       <div ref={bottom} />
     </div>
+  );
+}
+
+/**
+ * Hover action on a message. Deleting takes two clicks rather than a modal:
+ * the first arms it, the second does it, and moving the mouse away disarms it.
+ * A dialog for a one-line message is more ceremony than the act deserves, and
+ * the undo is a re-send.
+ */
+function DeleteMessageButton({ messageId }: { messageId: string }): JSX.Element {
+  const deleteMessage = useChatStore((state) => state.deleteMessage);
+  const [armed, setArmed] = useState(false);
+  const [failure, setFailure] = useState<string | null>(null);
+
+  return (
+    <span
+      onMouseLeave={() => setArmed(false)}
+      className="absolute right-3 top-0 hidden -translate-y-1/2 items-center gap-2 rounded bg-surface-800 px-1 py-0.5 shadow group-hover:flex"
+    >
+      {failure && <span className="px-1 text-xs text-danger">{failure}</span>}
+      <button
+        type="button"
+        onClick={() => {
+          if (!armed) {
+            setArmed(true);
+            return;
+          }
+          setFailure(null);
+          void deleteMessage(messageId).catch((error: unknown) => {
+            setArmed(false);
+            setFailure(error instanceof Error ? error.message : 'That could not be deleted');
+          });
+        }}
+        aria-label={armed ? 'Confirm deleting this message' : 'Delete this message'}
+        title={armed ? 'Click again to delete' : 'Delete message'}
+        className={`cursor-pointer rounded p-1.5 transition-colors duration-200 ${
+          armed ? 'bg-danger text-white' : 'text-slate-400 hover:text-danger'
+        }`}
+      >
+        <TrashIcon className="h-4 w-4" />
+      </button>
+    </span>
   );
 }
 

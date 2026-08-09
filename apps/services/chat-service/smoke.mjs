@@ -340,6 +340,202 @@ const dmHistory = await json(`${CHAT}/api/v1/messages?channelId=${direct.channel
 });
 ok('direct message delivered', dmHistory.items.some((item) => item.id === dmMessage.id));
 
+// --- Deleting messages -----------------------------------------------------
+
+await fetch(`${CHAT}/api/v1/messages/${dmMessage.id}`, { method: 'DELETE', headers: authed });
+const afterDelete = await json(`${CHAT}/api/v1/messages?channelId=${direct.channelId}`, {
+  headers: other,
+});
+ok(
+  'author deletes their own message',
+  !afterDelete.items.some((item) => item.id === dmMessage.id),
+);
+
+// Someone else's message, without the permission: refused.
+const doomed = await json(`${CHAT}/api/v1/messages`, {
+  method: 'POST',
+  headers: authed,
+  body: JSON.stringify({ channelId: channel.id, content: 'delete me if you can' }),
+});
+const strangerDelete = await fetch(`${CHAT}/api/v1/messages/${doomed.id}`, {
+  method: 'DELETE',
+  headers: other,
+});
+ok('deleting another message needs DELETE_MESSAGE', strangerDelete.status === 403);
+
+await json(`${SERVER}/api/v1/servers/${server.id}/members/${otherId}`, {
+  method: 'PATCH',
+  headers: authed,
+  body: JSON.stringify({ grantedPermissions: ['DELETE_MESSAGE'] }),
+});
+const moderatorDelete = await fetch(`${CHAT}/api/v1/messages/${doomed.id}`, {
+  method: 'DELETE',
+  headers: other,
+});
+ok('DELETE_MESSAGE lets a moderator delete it', moderatorDelete.status === 204);
+
+const afterModeration = await json(`${CHAT}/api/v1/messages?channelId=${channel.id}`, {
+  headers: authed,
+});
+ok('deleted message leaves history', !afterModeration.items.some((item) => item.id === doomed.id));
+
+// Deleting it twice is a 404, not a second deletion.
+const secondDelete = await fetch(`${CHAT}/api/v1/messages/${doomed.id}`, {
+  method: 'DELETE',
+  headers: authed,
+});
+ok('an already deleted message is not found', secondDelete.status === 404);
+
+// --- Adding someone to a server --------------------------------------------
+
+const thirdAuth = await json(`${AUTH}/api/v1/auth/register`, {
+  method: 'POST',
+  body: JSON.stringify({
+    email: `smoke-c-${suffix}@nexora.local`,
+    username: `smokec${suffix}`,
+    password: 'hunter2000',
+  }),
+});
+const third = { Authorization: `Bearer ${thirdAuth.accessToken}` };
+
+const added = await json(`${SERVER}/api/v1/servers/${server.id}/members`, {
+  method: 'POST',
+  headers: authed,
+  body: JSON.stringify({ username: thirdAuth.user.username }),
+});
+ok('member added by username', added.userId === thirdAuth.user.id && added.role === 'MEMBER');
+
+const theirServers = await json(`${SERVER}/api/v1/servers`, { headers: third });
+ok('the added member sees the server', theirServers.some((item) => item.id === server.id));
+
+// Adding again is the outcome they asked for, not an error.
+const addedTwice = await json(`${SERVER}/api/v1/servers/${server.id}/members`, {
+  method: 'POST',
+  headers: authed,
+  body: JSON.stringify({ username: thirdAuth.user.username }),
+});
+ok('adding an existing member is idempotent', addedTwice.userId === added.userId);
+
+const unprivileged = await fetch(`${SERVER}/api/v1/servers/${server.id}/members`, {
+  method: 'POST',
+  headers: { ...third, 'Content-Type': 'application/json' },
+  body: JSON.stringify({ username: `smokeb${suffix}` }),
+});
+ok('adding a member needs MANAGE_MEMBER', unprivileged.status === 403);
+
+const unknown = await fetch(`${SERVER}/api/v1/servers/${server.id}/members`, {
+  method: 'POST',
+  headers: { ...authed, 'Content-Type': 'application/json' },
+  body: JSON.stringify({ username: `nobody${suffix}` }),
+});
+ok('adding an unknown username is not found', unknown.status === 404);
+
+// --- Realtime fanout: deletions, friendships, membership -------------------
+//
+// One socket for the second account, watching a channel it can read and the
+// server it belongs to. Everything below is driven over REST by somebody else
+// and has to arrive here without a refresh.
+
+const watcher = new WebSocket(`ws://127.0.0.1:3004/ws/chat?token=${encodeURIComponent(otherAuth.accessToken)}`);
+const seen = [];
+await new Promise((resolve, reject) => {
+  const timer = setTimeout(() => reject(new Error('watcher socket never became ready')), 10_000);
+  watcher.on('message', (raw) => {
+    const event = JSON.parse(raw.toString());
+    seen.push(event);
+    if (event.type === 'ready') {
+      watcher.send(JSON.stringify({ type: 'channel.subscribe', channelId: channel.id }));
+      watcher.send(JSON.stringify({ type: 'server.subscribe', serverId: server.id }));
+      // The subscriptions are answered in order, so a short wait is enough for
+      // both to have been applied before anything is published.
+      setTimeout(() => {
+        clearTimeout(timer);
+        resolve();
+      }, 300);
+    }
+  });
+  watcher.on('error', reject);
+});
+
+/** Waits for the first event of a type to land, or gives up. */
+const awaitEvent = async (type, predicate = () => true, timeoutMs = 5000) => {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const match = seen.find((event) => event.type === type && predicate(event));
+    if (match) return match;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  return null;
+};
+
+const doomedLive = await json(`${CHAT}/api/v1/messages`, {
+  method: 'POST',
+  headers: authed,
+  body: JSON.stringify({ channelId: channel.id, content: 'about to vanish' }),
+});
+await fetch(`${CHAT}/api/v1/messages/${doomedLive.id}`, { method: 'DELETE', headers: authed });
+ok(
+  'message.deleted fans out to the channel',
+  (await awaitEvent('message.deleted', (event) => event.messageId === doomedLive.id)) !== null,
+);
+
+// --- Removing a friend -----------------------------------------------------
+
+const unfriended = await fetch(`${CHAT}/api/v1/friends/${otherId}`, {
+  method: 'DELETE',
+  headers: authed,
+});
+ok('friend removed', unfriended.status === 204);
+ok('friends.changed reaches the other side', (await awaitEvent('friends.changed')) !== null);
+
+const remaining = await json(`${CHAT}/api/v1/friends`, { headers: authed });
+ok('friend list drops them', !remaining.some((entry) => entry.user.id === otherId));
+
+// A membership change is server news, not channel news.
+await fetch(`${SERVER}/api/v1/servers/${server.id}/members/${thirdAuth.user.id}`, {
+  method: 'DELETE',
+  headers: authed,
+});
+ok(
+  'server.members.changed fans out to the server',
+  (await awaitEvent('server.members.changed', (event) => event.serverId === server.id)) !== null,
+);
+
+// The person who was removed may no longer watch the server.
+const strangerSocket = new WebSocket(
+  `ws://127.0.0.1:3004/ws/chat?token=${encodeURIComponent(thirdAuth.accessToken)}`,
+);
+const strangerRefused = await new Promise((resolve, reject) => {
+  const timer = setTimeout(() => resolve(null), 5000);
+  strangerSocket.on('message', (raw) => {
+    const event = JSON.parse(raw.toString());
+    if (event.type === 'ready') {
+      strangerSocket.send(JSON.stringify({ type: 'server.subscribe', serverId: server.id }));
+    }
+    if (event.type === 'error') {
+      clearTimeout(timer);
+      resolve(event.code);
+    }
+  });
+  strangerSocket.on('error', reject);
+});
+ok('server subscription is membership-checked', strangerRefused === 'SERVER_FORBIDDEN');
+strangerSocket.close();
+watcher.close();
+
+// With the friendship gone, so is the right to open a new conversation.
+let reopenRefused = false;
+try {
+  await json(`${CHAT}/api/v1/dm`, {
+    method: 'POST',
+    headers: authed,
+    body: JSON.stringify({ userId: otherId }),
+  });
+} catch {
+  reopenRefused = true;
+}
+ok('a removed friend cannot be messaged again', reopenRefused);
+
 // --- Uploads ---------------------------------------------------------------
 //
 // Attachments are ciphertext by the time they arrive, so the interesting parts

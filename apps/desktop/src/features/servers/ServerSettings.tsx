@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
-import type { Channel, ServerMember, ServerRole } from '@nexora/shared-types';
+import type { Channel, ServerMember, ServerRole, UserSummary } from '@nexora/shared-types';
 import { ASSIGNABLE_PERMISSIONS, PERMISSIONS, SERVER_ROLES } from '@nexora/permissions';
+import { api } from '../../services/api';
 import { useAuthStore } from '../../stores/auth';
 import { PicturePicker } from '../../components/PicturePicker';
 import { ServerIcon } from '../../components/ServerIcon';
@@ -489,6 +490,8 @@ function Members(): JSX.Element {
     <>
       <h1 className="text-xl font-semibold text-slate-50">Members — {members.length}</h1>
 
+      {canManage && <AddMember />}
+
       <input
         value={query}
         onChange={(event) => setQuery(event.target.value)}
@@ -532,6 +535,118 @@ function Members(): JSX.Element {
         ))}
       </ul>
     </>
+  );
+}
+
+/**
+ * Adds someone straight from the members screen. It searches the directory the
+ * friends screen searches - the same endpoint, because "find a person by name"
+ * is one question - and adding is by username, which is what the server takes.
+ */
+function AddMember(): JSX.Element {
+  const members = useChatStore((state) => state.members);
+  const addMember = useChatStore((state) => state.addMember);
+
+  const [query, setQuery] = useState('');
+  const [results, setResults] = useState<UserSummary[]>([]);
+  const [note, setNote] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  // Anyone already in the server is dropped from the results: offering to add
+  // them again is an invitation to a confusing no-op.
+  const candidates = results.filter(
+    (person) => !members.some((member) => member.userId === person.id),
+  );
+
+  const find = (value: string): void => {
+    setQuery(value);
+    setNote(null);
+    if (value.trim().length < 2) {
+      setResults([]);
+      return;
+    }
+    void api
+      .searchUsers(value.trim())
+      .then(setResults)
+      .catch(() => setResults([]));
+  };
+
+  const add = async (username: string): Promise<void> => {
+    setBusy(true);
+    setNote(null);
+    try {
+      await addMember(username);
+      setNote(`${username} is in the server.`);
+      setQuery('');
+      setResults([]);
+    } catch (error) {
+      setNote(error instanceof Error ? error.message : 'That person could not be added');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <section className="mt-5 rounded-lg bg-surface-800 p-4">
+      <h2 className="text-xs font-bold uppercase tracking-wide text-slate-400">Add a member</h2>
+      <p className="mt-1 text-sm text-slate-400">
+        They join as a member. Give them a role afterwards on Roles &amp; Permissions.
+      </p>
+
+      <div className="mt-3 flex items-center gap-2">
+        <input
+          value={query}
+          onChange={(event) => find(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' && query.trim() && !busy) void add(query.trim());
+          }}
+          placeholder="Search by username"
+          aria-label="Search for someone to add"
+          className="w-full max-w-sm rounded bg-surface-950 px-3 py-2 text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-accent"
+        />
+        <button
+          type="button"
+          disabled={busy || query.trim().length < 2}
+          onClick={() => void add(query.trim())}
+          className="cursor-pointer rounded bg-accent px-4 py-2 text-sm font-medium text-white transition-colors duration-200 hover:bg-accent-hover disabled:opacity-40"
+        >
+          Add
+        </button>
+      </div>
+
+      {note && (
+        <p role="status" className="mt-2 text-sm text-slate-300">
+          {note}
+        </p>
+      )}
+
+      {candidates.length > 0 && (
+        <ul className="mt-3 divide-y divide-surface-700/60 rounded bg-surface-850">
+          {candidates.map((person) => (
+            <li key={person.id} className="flex items-center gap-3 px-3 py-2">
+              <Avatar
+                name={person.displayName}
+                avatarUrl={person.avatarUrl}
+                size="sm"
+                ringColour="border-surface-850"
+              />
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm text-slate-100">{person.displayName}</span>
+                <span className="block truncate text-xs text-slate-500">@{person.username}</span>
+              </span>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => void add(person.username)}
+                className="cursor-pointer rounded border border-accent px-3 py-1 text-sm text-accent transition-colors duration-200 hover:bg-accent hover:text-white disabled:opacity-40"
+              >
+                Add
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }
 

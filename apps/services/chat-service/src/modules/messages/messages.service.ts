@@ -67,6 +67,52 @@ export class MessagesService {
   }
 
   /**
+   * Deletes a message. The author may always delete their own; anyone else
+   * needs `DELETE_MESSAGE` in that channel, which is what a moderator holds.
+   *
+   * It is a soft delete: `deletedAt` is set and the body is emptied, so the row
+   * still anchors the `before` cursor of a page that was already handed out and
+   * the ciphertext stops existing at the same moment. Attachment blobs are not
+   * swept yet - development/TODO.md carries that, and it is a storage job, not
+   * a message one.
+   */
+  async remove(userId: string, messageId: string): Promise<void> {
+    const row = await prisma.message.findFirst({
+      where: { id: messageId, deletedAt: null },
+      select: { id: true, channelId: true, authorId: true },
+    });
+    // A message in a channel the caller cannot see must answer the same way as
+    // one that never existed.
+    if (!row) {
+      throw new NotFoundException({ code: 'MESSAGE_NOT_FOUND', message: 'Message not found' });
+    }
+
+    const access = await this.requireChannelAccess(
+      userId,
+      row.channelId,
+      PERMISSIONS.VIEW_CHANNEL,
+    );
+    if (
+      row.authorId !== userId &&
+      !access.permissions.includes(PERMISSIONS.DELETE_MESSAGE)
+    ) {
+      throw new ForbiddenException({
+        code: 'MISSING_PERMISSION',
+        message: 'You can only delete your own messages here',
+      });
+    }
+
+    await prisma.message.update({
+      where: { id: row.id },
+      data: { deletedAt: new Date(), content: '' },
+    });
+    await this.events.publish(EVENTS.MESSAGE_DELETED, {
+      messageId: row.id,
+      channelId: row.channelId,
+    });
+  }
+
+  /**
    * Access is resolved by `@nexora/database`, which is also what call- and
    * presence-service ask; the three of them used to keep their own copy of this
    * check. A channel the caller cannot see answers 404, not 403, so channel ids

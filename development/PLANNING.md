@@ -22,14 +22,63 @@ we get there in stages and what each stage delivers.
 | 12 | Servers, permissions, DMs | Workspace renamed to server, per-member permissions, private channels, friends and direct messages, Discord-parity client | In progress |
 | 13 | Media | Encrypted attachments of any type, client-side compression, multipart upload, avatars and server icons | In progress |
 | 14 | Notifications | notification-service, system tray, start with the system, mutes and quiet hours | Done |
-| 15 | Remote desktop | remote-gateway, remote-agent, remote permissions, audit log | Planned |
-| 16 | Production ingress | Cloudflare Tunnel, TLS, secret management, deploy pipeline | Planned |
+| 15 | Social graph and realtime | Message deletion, adding people to a server, friend and membership events over `/ws/chat` | In progress |
+| 16 | Remote desktop | remote-gateway, remote-agent, remote permissions, audit log | Planned |
+| 17 | Production ingress | Cloudflare Tunnel, TLS, secret management, deploy pipeline | Planned |
 
 Hardening moved to phase 10: encryption changes the message format and presence
 adds a service, so both were cheaper to land before tests were written against
 the older shape.
 
 ## Architecture decisions made so far
+
+### The social graph in realtime (phase 15)
+
+- **A message is deleted softly, and its body is emptied in the same write.**
+  The row stays because a client may still be holding a page cursor that points
+  at it, and because history paging is ordered by `createdAt` - removing the row
+  would make a cursor that was valid a second ago point at nothing. What does
+  not stay is the ciphertext: `content` is set to an empty string, so the
+  deletion is a deletion and not a hidden row somebody can still read out of the
+  database. Attachment blobs are a separate, unsolved sweep (`TODO.md`).
+- **Deleting is the author's right, or the moderator's permission.** The author
+  never needs a permission for their own message; anyone else needs
+  `DELETE_MESSAGE` in that channel, which the role table already gives a
+  moderator. A direct message has no server and therefore no moderator, which
+  falls out of the model rather than needing a rule of its own.
+- **Two kinds of server event: one carries, one announces.** A message is
+  carried in full, because the client has to render it without a round trip. A
+  friendship, a member list or a conversation is announced - `friends.changed`,
+  `server.members.changed` - and the client re-reads the list. The reason is not
+  laziness about payloads: the `Friend` DTO is written from the reader's side
+  (who asked, which direction), so one payload cannot serve both ends of the
+  same friendship without the server composing it twice and addressing each copy
+  separately. The lists are small and change rarely, so a refetch is the cheaper
+  and less breakable half of that trade.
+- **Rooms now come in three kinds: channel, user and server.** A channel room
+  was enough while every event was about a message. A friend request is
+  addressed at a person, so each socket joins `user:<id>` when it connects; a
+  membership change is about a community, so a client subscribes to
+  `server:<id>` for each server it is in, and the gateway re-checks membership
+  on every subscribe the same way it does for channels. A socket that is in both
+  rooms for one event is delivered to once.
+- **A client watches every server it is in, not the one on screen.** Same rule
+  the channel subscriptions already follow, for the same reason: being added to
+  or removed from a server has to reach the client wherever it happens to be
+  looking. Being removed from the server currently open closes it rather than
+  leaving a sidebar full of channels the account can no longer read.
+- **Adding a member is by username, and the added person joins as a MEMBER.**
+  The slug is a decent invite when someone can be told it out of band, and a
+  poor one when an administrator is already standing in the members screen
+  looking at the person's name. Adding needs `MANAGE_MEMBER`; giving them a role
+  is a separate `MANAGE_ROLE` decision on the next screen, so neither permission
+  becomes a way to acquire the other. Adding someone already in the server
+  returns them unchanged - the outcome the caller asked for is already true.
+- **The member search is the friend search.** "Find a person by name" is one
+  question, so the members screen calls `/api/v1/users/search` rather than
+  growing a per-server directory endpoint. It filters out people already in the
+  server client-side, because offering to add them again is a no-op dressed as
+  an action.
 
 ### Notifications, the tray and starting with the system (phase 14)
 
@@ -247,7 +296,7 @@ the older shape.
   config means local disk under `LOCAL_STORAGE_PATH`. Production sets the S3
   variables and the same code path uses the bucket.
 - **Nginx as internal gateway**, no business logic. Cloudflare Tunnel is a
-  separate, later concern (phase 15).
+  separate, later concern (phase 17).
 - **Media never passes through NestJS.** `call-service` mints LiveKit access
   tokens and nothing else; the desktop client dials the SFU directly.
 - **One channel key, shared by chat and voice.** A member who can read a channel
@@ -364,6 +413,31 @@ Run live on 2026-08-08, on top of everything verified in phase 9 below:
 
 Still unverified: CI itself has not run yet (the workflow lands with this
 phase), and the human-in-front-of-it items below.
+
+### Phase 15 verification
+
+Run live against the development stack on 2026-08-09:
+
+- `pnpm typecheck`, `pnpm build` and `pnpm check` pass across every workspace
+  task; no migration was needed, because deletion uses the `deletedAt` column
+  the message model already had.
+- `apps/services/chat-service/smoke.mjs` passes end to end with its new
+  sections: an author deleting their own message, a stranger refused with 403
+  until `DELETE_MESSAGE` is granted and then allowed, a deleted message gone
+  from history and a second delete answering 404; a member added by username,
+  the addition visible in that account's own server list, adding twice
+  idempotent, adding without `MANAGE_MEMBER` refused and an unknown username
+  404; removing a friend taking the right to reopen the conversation.
+- The realtime fanout is asserted on a second live socket, not inferred:
+  `message.deleted` arrives in the channel, `friends.changed` at the other side
+  of the friendship, `server.members.changed` at a member watching the server,
+  and a `server.subscribe` from an account that was just removed is refused with
+  `SERVER_FORBIDDEN`.
+
+Not yet exercised by a human: the client side of all of it - the hover bin and
+its two-click arming, the add-member search on the members screen, and a rail
+that grows or loses a server while somebody is looking at it. `TESTING.md` says
+what to try.
 
 ### Phase 12 verification
 

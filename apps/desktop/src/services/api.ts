@@ -200,6 +200,13 @@ export const api = {
       body: JSON.stringify(body),
     }),
 
+  /** Adds someone to the server by username, from the members screen. */
+  addMember: (serverId: string, username: string): Promise<ServerMember> =>
+    request(`/api/v1/servers/${serverId}/members`, {
+      method: 'POST',
+      body: JSON.stringify({ username }),
+    }),
+
   removeMember: (serverId: string, userId: string): Promise<void> =>
     request(`/api/v1/servers/${serverId}/members/${userId}`, { method: 'DELETE' }),
 
@@ -235,6 +242,10 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ channelId, content }),
     }),
+
+  /** Author or moderator; the row survives as a tombstone, the body does not. */
+  deleteMessage: (messageId: string): Promise<void> =>
+    request(`/api/v1/messages/${messageId}`, { method: 'DELETE' }),
 
   // --- Uploads ---
   //

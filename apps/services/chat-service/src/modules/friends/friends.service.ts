@@ -8,6 +8,7 @@
  */
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { prisma } from '@nexora/database';
+import { EVENTS, EventBus } from '@nexora/events';
 import type {
   DirectChannel,
   Friend,
@@ -26,6 +27,8 @@ interface UserRow {
 
 @Injectable()
 export class FriendsService {
+  constructor(private readonly events: EventBus) {}
+
   /**
    * Finds people by username or display name. Anyone is findable, because a
    * request cannot be sent to someone who cannot be found; what is gated is the
@@ -102,12 +105,14 @@ export class FriendsService {
           data: { status: 'ACCEPTED' },
         });
       }
+      await this.announce(userId, target.id);
       return this.friendOf(userId, existing.id);
     }
 
     const created = await prisma.friendship.create({
       data: { userAId, userBId, requesterId: userId, status: 'PENDING' },
     });
+    await this.announce(userId, target.id);
     return this.friendOf(userId, created.id);
   }
 
@@ -123,6 +128,7 @@ export class FriendsService {
     }
 
     await prisma.friendship.update({ where: { id: friendship.id }, data: { status: 'ACCEPTED' } });
+    await this.announce(userId, otherUserId);
     return this.friendOf(userId, friendship.id);
   }
 
@@ -130,6 +136,16 @@ export class FriendsService {
   async remove(userId: string, otherUserId: string): Promise<void> {
     const friendship = await this.require(userId, otherUserId);
     await prisma.friendship.delete({ where: { id: friendship.id } });
+    await this.announce(userId, otherUserId);
+  }
+
+  /**
+   * Tells both sides to reload their list. The event carries no `Friend` of its
+   * own because the DTO is written from the reader's side - direction, and who
+   * asked - so one payload cannot serve both of them.
+   */
+  private async announce(userId: string, otherUserId: string): Promise<void> {
+    await this.events.publish(EVENTS.FRIEND_CHANGED, { userIds: [userId, otherUserId] });
   }
 
   /** Direct message channels this user is part of, most recent first. */
@@ -194,6 +210,9 @@ export class FriendsService {
     if (!other) {
       throw new NotFoundException({ code: 'CHANNEL_NOT_FOUND', message: 'Channel not found' });
     }
+    // A conversation opened from one side has to appear on the other, or the
+    // first message arrives in a channel that client has never heard of.
+    if (!existing) await this.announce(userId, otherUserId);
 
     return {
       channelId: channel.id,

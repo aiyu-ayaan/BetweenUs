@@ -21,6 +21,7 @@ import type {
 } from '@nexora/shared-types';
 import { ServersService } from './servers.service';
 import {
+  AddServerMemberDto,
   CreateChannelDto,
   CreateServerDto,
   JoinServerDto,
@@ -89,6 +90,15 @@ export class ServersController {
     @Param('serverId', ParseUUIDPipe) serverId: string,
   ): Promise<ServerMember[]> {
     return this.servers.members(user.id, serverId);
+  }
+
+  @Post(':serverId/members')
+  addMember(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('serverId', ParseUUIDPipe) serverId: string,
+    @Body() dto: AddServerMemberDto,
+  ): Promise<ServerMember> {
+    return this.servers.addMember(user.id, serverId, dto.username);
   }
 
   @Patch(':serverId/members/:userId')

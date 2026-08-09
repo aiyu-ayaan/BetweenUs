@@ -5,9 +5,47 @@ the top honest — it is what a new session reads first.
 
 ## Next up
 
-Phases 13 and 14 have landed in code; what is left of them needs a human in
-front of the app, and so does most of phase 12. The carried-over items are
-older ones in the same state.
+Phase 15 has landed in code and in the smoke script. Phases 13 and 14 landed
+earlier; what is left of them needs a human in front of the app, and so does
+most of phase 12. The carried-over items are older ones in the same state.
+
+### Phase 15 — the social graph in realtime
+
+- [x] Delete a message: `DELETE /api/v1/messages/:id`, the author always and
+      anyone else with `DELETE_MESSAGE`; a soft delete that empties the body, so
+      history paging keeps its cursor and the ciphertext stops existing
+- [x] A bin on hover in the client, armed by the first click and fired by the
+      second — no modal for a one-line message
+- [x] Add someone to a server by username from the members screen
+      (`POST /api/v1/servers/:id/members`, `MANAGE_MEMBER`), joining as a
+      MEMBER; adding someone already in it returns them unchanged
+- [x] The members screen searches the same user directory the friends screen
+      does, and leaves out anyone already in the server
+- [x] `/ws/chat` grew the events the social features need: `message.deleted`,
+      `friends.changed` and `server.members.changed`, with user rooms for
+      what is addressed at a person and server rooms for what is addressed at a
+      community; a `server.subscribe` is membership-checked like a channel one
+- [x] Friend requests, acceptances, removals and a newly opened conversation
+      reach the other side without a reload
+- [x] A client watches every server it is in, so being added or removed lands
+      wherever it is looking; being removed from the open server closes it
+- [x] Smoke coverage: the permission rules above, plus a second socket asserting
+      all three fanouts and a refused `server.subscribe`
+
+Left open on purpose:
+
+- [ ] Editing a message. The composer, the envelope and `editedAt` all exist;
+      what is missing is a decision about whether an edit rewrites the
+      ciphertext in place or supersedes it, which matters for the copies other
+      clients already decrypted
+- [ ] Nothing deletes an attachment's blob when its message is deleted — the
+      same sweep phase 13 left open, now with a second thing that needs it
+- [ ] A deleted message leaves no tombstone in the UI ("message deleted"); it
+      simply goes, which is a surprise in a conversation two people are reading
+- [ ] An added member gets no notification, only a server that appears; there
+      is no invite to accept or decline
+- [ ] `server.members.changed` makes the client re-read the member list, so a
+      busy server refetches on every join and leave
 
 ### Phase 14 — notifications, the tray and auto-start
 
@@ -306,13 +344,13 @@ Follow-ups this phase deliberately left open:
 - [x] Desktop notifications for messages and voice joins, with unread counts,
       taskbar flash and click-to-open
 
-### Phase 15 — remote desktop
+### Phase 16 — remote desktop
 - [ ] `remote-agent`: device identity, outbound WebSocket, screen capture, input
 - [ ] `remote-gateway`: session relay, authorization, audit log
 - [ ] Remote permission model (`REMOTE_VIEW`, `REMOTE_CONTROL`, …) with expiry
 - [ ] Desktop remote client view
 
-### Phase 16 — production
+### Phase 17 — production
 - [ ] Cloudflare Tunnel config + `cloudflared` container wired to Nginx
 - [ ] Secret management, no secrets in compose files
 - [ ] Docker image build + push pipeline, health-checked deploys

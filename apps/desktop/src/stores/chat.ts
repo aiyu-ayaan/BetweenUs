@@ -10,6 +10,7 @@ import type {
   UpdateServerMemberRequest,
   UpdateServerRequest,
 } from '@nexora/shared-types';
+import { PERMISSIONS } from '@nexora/permissions';
 import { api } from '../services/api';
 import { chatSocket } from '../services/socket';
 import {
@@ -74,10 +75,18 @@ interface ChatState {
     memberIds?: string[];
   }) => Promise<void>;
   sendMessage: (content: string, attachments?: MessageAttachment[]) => Promise<void>;
+  /** Own message always; anyone else's with DELETE_MESSAGE in that server. */
+  deleteMessage: (messageId: string) => Promise<void>;
+  /** True when this account may delete a message it did not write. */
+  canModerateMessages: () => boolean;
+  /** Re-reads the member list of the server on screen. */
+  refreshMembers: () => Promise<void>;
   /** Renames a server, sets its icon, or clears it - whatever the change holds. */
   saveServer: (change: UpdateServerRequest) => Promise<void>;
   leaveServer: () => Promise<void>;
   deleteServer: () => Promise<void>;
+  /** Adds someone to the server on screen, by the username they can be told. */
+  addMember: (username: string) => Promise<void>;
   updateMember: (userId: string, change: UpdateServerMemberRequest) => Promise<void>;
   kickMember: (userId: string) => Promise<void>;
   deleteChannel: (channelId: string) => Promise<void>;
@@ -103,6 +112,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
   loadServers: async () => {
     const servers = await api.servers();
     set({ servers });
+    // Watch every server, not only the open one: being added to or removed
+    // from one has to reach this client wherever it happens to be looking.
+    chatSocket.syncServers(servers.map((server) => server.id));
   },
 
   loadUnread: async () => {
@@ -239,6 +251,30 @@ export const useChatStore = create<ChatState>((set, get) => ({
     await api.sendMessage(channelId, envelope);
   },
 
+  /**
+   * The message is dropped from the view here as well as when the socket
+   * event arrives, so the click feels immediate; the event is what tells
+   * every other client, and re-removing something already gone is a no-op.
+   */
+  deleteMessage: async (messageId) => {
+    await api.deleteMessage(messageId);
+    forgetMessage(messageId);
+  },
+
+  canModerateMessages: () => {
+    const { servers, activeServerId } = get();
+    const server = servers.find((item) => item.id === activeServerId);
+    return server?.permissions.includes(PERMISSIONS.DELETE_MESSAGE) ?? false;
+  },
+
+  refreshMembers: async () => {
+    const serverId = get().activeServerId;
+    if (!serverId) return;
+    const members = await api.members(serverId).catch(() => null);
+    // Re-read: the user may have switched servers while this was in flight.
+    if (members && get().activeServerId === serverId) set({ members });
+  },
+
   saveServer: async (change) => {
     const serverId = get().activeServerId;
     if (!serverId) return;
@@ -264,8 +300,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   forgetServer: (serverId) => {
+    const servers = get().servers.filter((server) => server.id !== serverId);
+    chatSocket.syncServers(servers.map((server) => server.id));
     set({
-      servers: get().servers.filter((server) => server.id !== serverId),
+      servers,
       view: 'home',
       activeServerId: null,
       activeChannelId: null,
@@ -274,6 +312,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
       messages: [],
     });
     chatSocket.syncSubscriptions(subscribable([], get().directs));
+  },
+
+  addMember: async (username) => {
+    const serverId = get().activeServerId;
+    if (!serverId) return;
+    const member = await api.addMember(serverId, username);
+    // Already a member: the list is right as it stands.
+    if (get().members.some((item) => item.userId === member.userId)) return;
+    set({ members: [...get().members, member] });
   },
 
   updateMember: async (userId, change) => {
@@ -368,9 +415,57 @@ function subscribable(channels: Channel[], directs: Channel[]): string[] {
     .map((channel) => channel.id);
 }
 
-// Realtime messages land here regardless of which component is mounted, for
+/**
+ * Removes a message from the view and from the cached history of its channel.
+ * Called both by the local delete and by the socket event, because a deletion
+ * on another device has to land here too.
+ */
+function forgetMessage(messageId: string): void {
+  const state = useChatStore.getState();
+  const history: Record<string, DecryptedMessage[]> = {};
+  for (const [channelId, items] of Object.entries(state.history)) {
+    history[channelId] = items.filter((message) => message.id !== messageId);
+  }
+  useChatStore.setState({
+    history,
+    messages: state.messages.filter((message) => message.id !== messageId),
+  });
+}
+
+// Realtime events land here regardless of which component is mounted, for
 // every subscribed channel - not only the one on screen.
 chatSocket.on((event) => {
+  if (event.type === 'message.deleted') {
+    forgetMessage(event.messageId);
+    return;
+  }
+
+  // Somebody joined or left a server this client is in. The member list is
+  // small and the change is rare, so it is re-read rather than patched from a
+  // payload - and the server list too, because this may be the client that was
+  // added or removed.
+  if (event.type === 'server.members.changed') {
+    void (async () => {
+      const store = useChatStore.getState();
+      await store.loadServers().catch(() => undefined);
+      const gone = !useChatStore
+        .getState()
+        .servers.some((server) => server.id === event.serverId);
+      // Removed from the server that is on screen: leave it rather than keep
+      // painting channels this account can no longer open.
+      if (gone) {
+        if (useChatStore.getState().activeServerId === event.serverId) {
+          store.forgetServer(event.serverId);
+        }
+        return;
+      }
+      if (event.serverId === useChatStore.getState().activeServerId) {
+        await store.refreshMembers();
+      }
+    })();
+    return;
+  }
+
   if (event.type !== 'message.created') return;
   const incoming = event.message;
 

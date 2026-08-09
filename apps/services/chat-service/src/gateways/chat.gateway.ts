@@ -8,9 +8,16 @@
 import { Injectable, OnModuleDestroy } from '@nestjs/common';
 import type { Server as HttpServer } from 'node:http';
 import { WebSocket, WebSocketServer } from 'ws';
+import { prisma } from '@nexora/database';
 import { EVENTS, EventBus } from '@nexora/events';
 import { PERMISSIONS } from '@nexora/permissions';
-import { RoomRegistry, authenticateHandshake, channelRoom } from '@nexora/websocket';
+import {
+  RoomRegistry,
+  authenticateHandshake,
+  channelRoom,
+  serverRoom,
+  userRoom,
+} from '@nexora/websocket';
 import { Logger } from '@nexora/logger';
 import type { ClientChatEvent, ServerChatEvent } from '@nexora/shared-types';
 import { MessagesService } from '../modules/messages/messages.service';
@@ -49,6 +56,9 @@ export class ChatGateway implements OnModuleDestroy {
       }
 
       this.state.set(socket, { userId: user.id, username: user.username, alive: true });
+      // Everything addressed at a person rather than a place - a friend
+      // request, an acceptance, being added to a server - is delivered here.
+      this.rooms.join(userRoom(user.id), socket);
       this.send(socket, { type: 'ready', userId: user.id });
       this.logger.info('WebSocket connected', { userId: user.id });
 
@@ -90,6 +100,30 @@ export class ChatGateway implements OnModuleDestroy {
       const { message } = envelope.payload;
       this.broadcast(channelRoom(message.channelId), { type: 'message.created', message });
     });
+
+    await this.events.subscribe(EVENTS.MESSAGE_DELETED, (envelope) => {
+      const { messageId, channelId } = envelope.payload;
+      this.broadcast(channelRoom(channelId), { type: 'message.deleted', messageId, channelId });
+    });
+
+    await this.events.subscribe(EVENTS.FRIEND_CHANGED, (envelope) => {
+      for (const userId of envelope.payload.userIds) {
+        this.broadcast(userRoom(userId), { type: 'friends.changed' });
+      }
+    });
+
+    // Both directions of a membership change reach the same client event: the
+    // server's watchers refresh their member list, and the person who joined or
+    // was removed refreshes their own list of servers.
+    for (const event of [EVENTS.SERVER_MEMBER_ADDED, EVENTS.SERVER_MEMBER_REMOVED] as const) {
+      await this.events.subscribe(event, (envelope) => {
+        const { serverId, userId } = envelope.payload;
+        this.deliver([serverRoom(serverId), userRoom(userId)], {
+          type: 'server.members.changed',
+          serverId,
+        });
+      });
+    }
 
     this.logger.info('Chat WebSocket gateway ready', { path: '/ws/chat' });
   }
@@ -134,6 +168,29 @@ export class ChatGateway implements OnModuleDestroy {
         this.rooms.leave(channelRoom(event.channelId), socket);
         return;
 
+      case 'server.subscribe': {
+        // Membership, not permission: anyone in the server may know when its
+        // member list changes, which is what the client re-reads.
+        const membership = await prisma.serverMember.findUnique({
+          where: { serverId_userId: { serverId: event.serverId, userId: state.userId } },
+          select: { id: true },
+        });
+        if (!membership) {
+          this.send(socket, {
+            type: 'error',
+            code: 'SERVER_FORBIDDEN',
+            message: 'Cannot subscribe to this server',
+          });
+          return;
+        }
+        this.rooms.join(serverRoom(event.serverId), socket);
+        return;
+      }
+
+      case 'server.unsubscribe':
+        this.rooms.leave(serverRoom(event.serverId), socket);
+        return;
+
       default:
         this.send(socket, { type: 'error', code: 'UNKNOWN_EVENT', message: 'Unsupported event' });
     }
@@ -141,6 +198,15 @@ export class ChatGateway implements OnModuleDestroy {
 
   private broadcast(room: string, event: ServerChatEvent): void {
     for (const socket of this.rooms.members(room)) this.send(socket, event);
+  }
+
+  /** Several rooms, one delivery each - a socket in two of them is told once. */
+  private deliver(rooms: string[], event: ServerChatEvent): void {
+    const seen = new Set<WebSocket>();
+    for (const room of rooms) {
+      for (const socket of this.rooms.members(room)) seen.add(socket);
+    }
+    for (const socket of seen) this.send(socket, event);
   }
 
   private send(socket: WebSocket, event: ServerChatEvent): void {

@@ -96,6 +96,32 @@ Closing both windows stops the dev server. Ctrl+C does the same.
 - Try to open a DM with somebody who is not a friend: the server refuses it
   (`NOT_FRIENDS`), which is the rule that keeps search from being a spam
   surface.
+- A request, an acceptance and a removal all land in the other window without a
+  reload: the server sends `friends.changed` to both sides and each client
+  re-reads its list. Remove the friend in Alice's window and watch Bob's
+  Friends screen empty itself.
+
+**Deleting a message**
+- Hover a message you wrote: a bin appears at its top right. The first click
+  arms it, the second deletes it, and moving the mouse away disarms it. It
+  disappears from the other window too, over `message.deleted`.
+- Hover somebody else's message as a plain MEMBER: no bin. Give yourself
+  *Delete anyone's messages* in Server settings → Roles & Permissions and it
+  appears — a direct message never shows it, because a DM has no moderator.
+- The row survives in Postgres with `deletedAt` set and an empty `content`:
+  the tombstone keeps history paging honest, and the ciphertext is gone.
+
+**Adding people to a server**
+- Server settings → Members → *Add a member*: type a username, and the same
+  directory search the Friends screen uses offers matching people. Anyone
+  already in the server is left out of the results.
+- Add Bob from Alice's window and his rail grows the server without a restart:
+  `server.members.changed` reaches whoever it was about as well as everyone
+  watching the server.
+- Kick him again and it vanishes from his rail. If he had that server open, it
+  closes rather than leaving channels he can no longer read on screen.
+- A MEMBER without *Manage members* gets `MISSING_PERMISSION`; the form is only
+  drawn for someone who holds it, and the server checks anyway.
 
 **Roles and permissions**
 - Server settings → Roles & Permissions, pick Bob, set **Send messages** to
@@ -219,6 +245,18 @@ absent from a non-member's listing and its history refused, that a direct
 message is refused between strangers and allowed between friends, that opening
 the same conversation twice reuses one channel, and that a message sent in it
 arrives.
+
+Phase 15 adds the social and realtime rules to the same script: an author
+deletes their own message, a stranger cannot delete somebody else's until
+`DELETE_MESSAGE` is granted, a deleted message leaves history and a second
+delete answers 404; a member is added by username, adding them twice is
+idempotent, adding without `MANAGE_MEMBER` is refused and an unknown username
+is not found; removing a friend takes the right to reopen the conversation with
+them. It then holds a second socket open and asserts the fanout itself -
+`message.deleted` in the channel, `friends.changed` at the other side of the
+friendship, `server.members.changed` at everyone watching the server, and a
+`server.subscribe` from somebody no longer in it refused with
+`SERVER_FORBIDDEN`.
 
 `node apps/services/presence-service/smoke.mjs` connects two authenticated
 sockets and asserts the handshake, `presence.sync`, online and offline fanout,

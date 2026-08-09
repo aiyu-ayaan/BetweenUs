@@ -186,6 +186,15 @@ export interface ServerMember {
   joinedAt: string;
 }
 
+/**
+ * Adds someone to a server directly, by the username they can be told. The
+ * alternative - handing out the slug and waiting - cannot be done from the
+ * members screen, which is where an administrator is already standing.
+ */
+export interface AddServerMemberRequest {
+  username: string;
+}
+
 /** Every field is optional; only what is sent is changed. */
 export interface UpdateServerMemberRequest {
   role?: ServerRole;
@@ -535,11 +544,29 @@ export interface MarkChannelReadRequest {
 export type ClientChatEvent =
   | { type: 'channel.subscribe'; channelId: string }
   | { type: 'channel.unsubscribe'; channelId: string }
+  /**
+   * Membership changes are server-wide, not channel-wide, so a socket says
+   * which servers it is watching. Membership is re-checked on every subscribe.
+   */
+  | { type: 'server.subscribe'; serverId: string }
+  | { type: 'server.unsubscribe'; serverId: string }
   | { type: 'ping' };
 
+/**
+ * Two shapes of server event: one carries what changed, the other only says
+ * that something did. A message is carried because the client has to render it
+ * without a round trip; a friendship or a member list is announced, because the
+ * list is small, the change is rare, and refetching it is one call rather than
+ * a per-recipient payload the server would have to compose twice.
+ */
 export type ServerChatEvent =
   | { type: 'ready'; userId: string }
   | { type: 'message.created'; message: Message }
+  | { type: 'message.deleted'; messageId: string; channelId: string }
+  /** Sent to both sides of a request, an acceptance or a removal. */
+  | { type: 'friends.changed' }
+  /** Sent to everyone watching the server, and to whoever joined or left it. */
+  | { type: 'server.members.changed'; serverId: string }
   | { type: 'pong' }
   | { type: 'error'; code: string; message: string };
 
