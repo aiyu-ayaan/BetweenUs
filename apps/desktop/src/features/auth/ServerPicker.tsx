@@ -1,0 +1,143 @@
+import { useState, type FormEvent } from 'react';
+import {
+  defaultServerUrl,
+  isDefaultServer,
+  normalizeServerUrl,
+  probeServer,
+  serverUrl,
+  setServerUrl,
+} from '../../services/endpoint';
+import { useAuthStore } from '../../stores/auth';
+import { GlobeIcon, XIcon } from '../../components/icons';
+
+/**
+ * Points this window at a different deployment.
+ *
+ * Nexora is meant to be self-hosted, so the address the build shipped with is a
+ * default and not a decision. The address is checked before it is stored - a
+ * typo should be a line under the field, not an app that no longer starts.
+ *
+ * Switching signs the window out: tokens, device keys and every id in them
+ * belong to the deployment that issued them, and none of it means anything on
+ * another one. The window then reloads, which is the honest way to get every
+ * store, socket and cache to let go of the old server at once.
+ */
+export function ServerPicker({ onClose }: { onClose: () => void }): JSX.Element {
+  const [address, setAddress] = useState(serverUrl);
+  const [note, setNote] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const signedIn = useAuthStore((state) => state.status) === 'authenticated';
+
+  const connect = async (raw: string): Promise<void> => {
+    setBusy(true);
+    setNote(null);
+    try {
+      const base = normalizeServerUrl(raw);
+      await probeServer(base);
+
+      // Ends the session on the server we are leaving, while we can still
+      // reach it; a no-op when nobody is signed in.
+      await useAuthStore.getState().logout();
+      setServerUrl(base === defaultServerUrl() ? null : base);
+      window.location.reload();
+    } catch (error) {
+      setNote(error instanceof Error ? error.message : 'That address did not work');
+      setBusy(false);
+    }
+  };
+
+  const submit = (event: FormEvent): void => {
+    event.preventDefault();
+    void connect(address);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4">
+      <div className="w-full max-w-md rounded-xl border border-surface-700/50 bg-surface-800 p-6 shadow-2xl">
+        <div className="mb-4 flex items-start gap-3">
+          <GlobeIcon className="mt-0.5 h-5 w-5 shrink-0 text-accent" />
+          <div className="min-w-0 flex-1">
+            <h2 className="text-lg font-semibold text-slate-50">Connect to a server</h2>
+            <p className="mt-1 text-sm text-slate-400">
+              The address of the Nexora deployment this app talks to. Everything else - chat,
+              voice, files - is behind it.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="cursor-pointer rounded p-1 text-slate-400 transition-colors duration-200 hover:bg-surface-700 hover:text-slate-100"
+          >
+            <XIcon className="h-4 w-4" />
+          </button>
+        </div>
+
+        <form onSubmit={submit} className="space-y-3" noValidate>
+          <label
+            htmlFor="server-url"
+            className="block text-xs font-semibold uppercase tracking-wide text-slate-400"
+          >
+            Server address
+          </label>
+          <input
+            id="server-url"
+            type="text"
+            autoFocus
+            spellCheck={false}
+            autoComplete="url"
+            value={address}
+            onChange={(event) => {
+              setAddress(event.target.value);
+              setNote(null);
+            }}
+            className="w-full rounded-md border border-surface-700 bg-surface-900 px-3 py-2 text-slate-100 placeholder-slate-500 transition-colors duration-200 focus:border-accent"
+            placeholder="nexora.example.com"
+          />
+          <p className="text-xs text-slate-500">
+            No http:// means https://. This one is currently{' '}
+            <span className="text-slate-300">{serverUrl()}</span>
+            {isDefaultServer() && ', the default this app was built with'}.
+          </p>
+
+          {signedIn && (
+            <p className="rounded-md bg-amber-500/10 px-3 py-2 text-sm text-amber-200">
+              Connecting somewhere else signs you out of this server.
+            </p>
+          )}
+
+          {note && (
+            <p role="alert" className="rounded-md bg-red-500/10 px-3 py-2 text-sm text-red-300">
+              {note}
+            </p>
+          )}
+
+          <button
+            type="submit"
+            disabled={busy}
+            className="w-full cursor-pointer rounded-md bg-accent px-4 py-2.5 font-medium text-white transition-colors duration-200 hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {busy ? 'Checking…' : 'Connect'}
+          </button>
+        </form>
+
+        {!isDefaultServer() && (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void connect(defaultServerUrl())}
+            className="mt-3 w-full cursor-pointer text-sm text-slate-400 transition-colors duration-200 hover:text-slate-200 disabled:opacity-60"
+          >
+            Back to {defaultServerUrl()}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** The host this window is talking to, for a line under a sign-in form. */
+export function serverLabel(): string {
+  return serverUrl().replace(/^https?:\/\//i, '');
+}

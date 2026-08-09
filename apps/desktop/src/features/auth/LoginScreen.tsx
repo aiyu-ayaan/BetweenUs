@@ -2,10 +2,12 @@ import { useEffect, useState, type FormEvent } from 'react';
 import type { OAuthProviderSummary } from '@nexora/shared-types';
 import { rememberedEmail, useAuthStore } from '../../stores/auth';
 import { api } from '../../services/api';
-import { NexoraLogoIcon } from '../../components/icons';
+import { GlobeIcon, NexoraLogoIcon } from '../../components/icons';
+import { ServerPicker, serverLabel } from './ServerPicker';
 
 export function LoginScreen(): JSX.Element {
   const [mode, setMode] = useState<'login' | 'register'>('login');
+  const [pickingServer, setPickingServer] = useState(false);
   // Signing in again on this machine should not mean typing the address again.
   const [email, setEmail] = useState(rememberedEmail);
   const [username, setUsername] = useState('');
@@ -172,7 +174,25 @@ export function LoginScreen(): JSX.Element {
         >
           {mode === 'login' ? 'Need an account? Register' : 'Already registered? Sign in'}
         </button>
+
+        {/* Which deployment this is. Nexora is meant to be self-hosted, so the
+            address is worth showing even when nobody wants to change it. */}
+        <div className="mt-6 border-t border-surface-700 pt-4">
+          <button
+            type="button"
+            onClick={() => setPickingServer(true)}
+            className="mx-auto flex cursor-pointer items-center gap-2 text-sm text-slate-400 transition-colors duration-200 hover:text-slate-200"
+          >
+            <GlobeIcon className="h-4 w-4" />
+            Connect to a self-hosted instance
+          </button>
+          <p className="mt-1.5 text-center text-xs text-slate-500">
+            Signing in to <span className="text-slate-400">{serverLabel()}</span>
+          </p>
+        </div>
       </div>
+
+      {pickingServer && <ServerPicker onClose={() => setPickingServer(false)} />}
     </div>
   );
 }
