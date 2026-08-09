@@ -167,7 +167,10 @@ services:
       CHAT_SERVICE_PORT: 3004
     volumes:
       # Uploads survive container replacement when the local driver is active.
-      - upload-data:/data/uploads
+      # UPLOAD_DATA_PATH takes either a Docker volume name (the default) or a
+      # host path - `/mnt/disk2/nexora-uploads`, `D:/nexora-uploads` - to keep
+      # the files somewhere you can see and back up.
+      - ${UPLOAD_DATA_PATH:-upload-data}:/data/uploads
     depends_on:
       migrate:
         condition: service_completed_successfully
