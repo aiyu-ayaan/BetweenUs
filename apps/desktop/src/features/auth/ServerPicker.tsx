@@ -33,8 +33,9 @@ export function ServerPicker({ onClose }: { onClose: () => void }): JSX.Element 
     setBusy(true);
     setNote(null);
     try {
-      const base = normalizeServerUrl(raw);
-      await probeServer(base);
+      // What the probe answers on, not what was typed: a redirect to another
+      // origin would strip the Authorization header off every later request.
+      const base = await probeServer(normalizeServerUrl(raw));
 
       // Ends the session on the server we are leaving, while we can still
       // reach it; a no-op when nobody is signed in.

@@ -277,8 +277,12 @@ services:
     restart: unless-stopped
     command: ["--config", "/etc/livekit.yaml"]
     environment:
-      # Overrides the key pair in the mounted config file.
-      LIVEKIT_KEYS: "${LIVEKIT_API_KEY:?LIVEKIT_API_KEY is required}: ${LIVEKIT_API_SECRET:?LIVEKIT_API_SECRET is required}"
+      # Overrides the key pair in the mounted config file. LiveKit parses this
+      # as YAML, so the secret is single-quoted: an unquoted scalar loses a
+      # trailing `#` comment, surrounding quotes and leading whitespace, and the
+      # secret call-service signs with would no longer be the one this verifies
+      # against - which surfaces as "token signature is invalid" on every join.
+      LIVEKIT_KEYS: "${LIVEKIT_API_KEY:?LIVEKIT_API_KEY is required}: '${LIVEKIT_API_SECRET:?LIVEKIT_API_SECRET is required}'"
     volumes:
       - ../livekit/livekit.yaml:/etc/livekit.yaml:ro
     ports:

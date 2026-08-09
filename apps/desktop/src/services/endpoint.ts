@@ -119,10 +119,27 @@ export function absoluteUrl(url: string): string {
  * The provider list is the probe because it is the one route that is public,
  * always present, and answers with something recognisably Nexora.
  */
-export async function probeServer(base: string): Promise<void> {
+const PROBE_PATH = '/api/v1/auth/oauth/providers';
+
+/**
+ * The base a request actually landed on, given the URL the probe ended at.
+ *
+ * `http://host` that redirects to `https://host`, or `www.host` that redirects
+ * to the apex, is a *different origin*: Chromium drops the Authorization header
+ * across an origin change, so every authenticated call arrives anonymous and
+ * the server answers "Missing bearer token". Storing where the probe ended
+ * means nothing is ever redirected again.
+ */
+export function baseFromProbeUrl(probeUrl: string, fallback: string): string {
+  if (!probeUrl.endsWith(PROBE_PATH)) return trimTrailingSlash(fallback);
+  return trimTrailingSlash(probeUrl.slice(0, -PROBE_PATH.length));
+}
+
+/** Returns the address to store, which is where the probe ended up. */
+export async function probeServer(base: string): Promise<string> {
   let response: Response;
   try {
-    response = await fetch(`${base}/api/v1/auth/oauth/providers`, {
+    response = await fetch(`${base}${PROBE_PATH}`, {
       headers: { Accept: 'application/json' },
     });
   } catch {
@@ -133,4 +150,6 @@ export async function probeServer(base: string): Promise<void> {
 
   const body: unknown = await response.json().catch(() => null);
   if (!Array.isArray(body)) throw new Error('That address is not a Nexora server');
+
+  return baseFromProbeUrl(response.url, base);
 }

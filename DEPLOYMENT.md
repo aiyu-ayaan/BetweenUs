@@ -175,9 +175,14 @@ rtc:
 - **The UDP range** is twenty ports, sized for local testing. Widen it for more
   than a handful of simultaneous publishers, and keep `ports:` in
   `docker-compose.yml` in step with it - the two must match exactly.
-- **Keys** come from the environment: compose passes `LIVEKIT_KEYS` built from
-  `LIVEKIT_API_KEY` and `LIVEKIT_API_SECRET`, which overrides the `keys:` block
-  in the file. The file's pair is never used in the container stack.
+- **Keys** come from the environment only: compose passes `LIVEKIT_KEYS`, built
+  from `LIVEKIT_API_KEY` and `LIVEKIT_API_SECRET`, and the config file carries
+  no `keys:` block of its own. After changing either value, recreate both
+  containers - `docker compose up -d livekit call-service`, because
+  `docker compose restart` reuses the old environment. A SFU still holding the
+  previous secret answers every join with
+  `could not establish signal connection: invalid token: ... token signature is
+  invalid`.
 - **The image version** is pinned to `v1.13.5` and must stay in step with the
   `livekit-client` version in `apps/desktop`. Servers older than v1.9 drop a
   field the client waits for, and every publish fails with "negotiation timed

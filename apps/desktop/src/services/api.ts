@@ -66,8 +66,30 @@ export function configureApi(source: TokenSource, refresher: TokenRefresher): vo
   refreshAccessToken = refresher;
 }
 
-async function request<T>(path: string, init: RequestInit = {}, retry = true): Promise<T> {
+let refreshing = false;
+
+/**
+ * The access token to send, minting one when this window has none.
+ *
+ * Access tokens live in memory only, so any window that has a stored session
+ * but no token yet - a reload that raced the restore, a store that was cleared
+ * while the UI stayed up - would otherwise send every request anonymously and
+ * get "Missing bearer token" back on each one. The `refreshing` flag keeps the
+ * refresh call itself (which is public) from waiting on its own result.
+ */
+async function bearer(): Promise<string | null> {
   const token = getAccessToken();
+  if (token || refreshing) return token;
+  refreshing = true;
+  try {
+    return await refreshAccessToken();
+  } finally {
+    refreshing = false;
+  }
+}
+
+async function request<T>(path: string, init: RequestInit = {}, retry = true): Promise<T> {
+  const token = await bearer();
   const response = await fetch(`${serverUrl()}${path}`, {
     ...init,
     headers: {
@@ -105,7 +127,7 @@ async function request<T>(path: string, init: RequestInit = {}, retry = true): P
  * must not send a Content-Type of its own.
  */
 async function upload<T>(path: string, form: FormData, retry = true): Promise<T> {
-  const token = getAccessToken();
+  const token = await bearer();
   const response = await fetch(`${serverUrl()}${path}`, {
     method: 'POST',
     body: form,
@@ -317,7 +339,7 @@ export const api = {
 
   /** Fetches a stored object's bytes. Attachments come back as ciphertext. */
   fetchObject: async (url: string): Promise<Uint8Array<ArrayBuffer>> => {
-    const token = getAccessToken();
+    const token = await bearer();
     const response = await fetch(absoluteUrl(url), {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     });

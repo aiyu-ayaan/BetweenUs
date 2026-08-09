@@ -54,6 +54,10 @@ services:
     container_name: nexora-dev-livekit
     restart: unless-stopped
     command: ["--config", "/etc/livekit.yaml"]
+    environment:
+      # Same pair as .env.example, and the only place keys are set - the config
+      # file carries none, so the SFU and call-service cannot drift apart.
+      LIVEKIT_KEYS: "${LIVEKIT_API_KEY:-devkey}: '${LIVEKIT_API_SECRET:-nexora-dev-livekit-secret-change-me-please}'"
     volumes:
       - ../livekit/livekit.yaml:/etc/livekit.yaml:ro
     ports:

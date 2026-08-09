@@ -1,8 +1,9 @@
 # LiveKit SFU configuration.
 #
-# Development values. The API secret here is a placeholder that only ever runs
-# on localhost - production reads keys from the environment (LIVEKIT_KEYS) and
-# must never use this file's key pair.
+# Everything except the API keys: those come from LIVEKIT_KEYS in the
+# environment, in both compose files. Keeping a `keys:` block here as well gave
+# a deployment two sources for one secret, and a stale container answering with
+# the placeholder pair looks exactly like "token signature is invalid".
 port: 7880
 
 rtc:
@@ -11,9 +12,6 @@ rtc:
   port_range_end: 50019
   # The server runs in a container while clients run on the host.
   use_external_ip: false
-
-keys:
-  devkey: nexora-dev-livekit-secret-change-me-please
 
 logging:
   level: info
