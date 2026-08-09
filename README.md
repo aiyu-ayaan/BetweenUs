@@ -8,7 +8,9 @@ Messages, attachments and call media are end-to-end encrypted: the server
 stores ciphertext and routes it, and never holds a key that opens it.
 
 `CLAUDE.md` is the target architecture. `development/` tracks what is built,
-why each decision was taken, and what is deliberately left open.
+why each decision was taken, and what is deliberately left open. `DEPLOYMENT.md`
+is the step-by-step for putting it on a server: secrets, the first
+administrator, public ingress, and why each endpoint has to be on the tunnel.
 
 ---
 
@@ -344,6 +346,9 @@ that does not go through a tunnel: WebRTC media negotiates its own UDP path to
 the SFU (`7881/tcp`, `50000-50019/udp`). Chat, files and everything else are
 complete over the tunnel on their own.
 
+`DEPLOYMENT.md` walks the whole thing end to end - what to generate, how to
+create the first administrator, and what each endpoint behind the tunnel is for.
+
 ## File storage
 
 `@nexora/storage` picks its driver from the environment:
@@ -383,6 +388,7 @@ packages/                 shared-types, database, auth, permissions, events,
                           nest-common, storage, websocket, logger, config
 infrastructure/           docker compose, nginx, cloudflare, livekit
 development/              planning, MVP, E2EE design, testing guide, TODO
+DEPLOYMENT.md             putting it on a server, end to end
 ```
 
 ## Common commands

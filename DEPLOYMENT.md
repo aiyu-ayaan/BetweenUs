@@ -1,0 +1,630 @@
+# Deploying Nexora
+
+This is the step-by-step for putting Nexora on a server: what to generate, what
+to set, how to create the first administrator, how to publish it through a
+Cloudflare Tunnel, and why each endpoint has to be on that tunnel.
+
+`README.md` describes what Nexora is. `CLAUDE.md` is the target architecture.
+This file is the operational path from a bare host to a working deployment, and
+it states the gaps a deployment still has rather than implying there are none.
+
+---
+
+## Contents
+
+1. [What a deployment is](#1-what-a-deployment-is)
+2. [Before you start](#2-before-you-start)
+3. [Step 1 - the code and the environment](#3-step-1---the-code-and-the-environment)
+4. [Step 2 - LiveKit for a real host](#4-step-2---livekit-for-a-real-host)
+5. [Step 3 - bring the stack up](#5-step-3---bring-the-stack-up)
+6. [Step 4 - create the first administrator](#6-step-4---create-the-first-administrator)
+7. [Step 5 - the admin panel](#7-step-5---the-admin-panel)
+8. [Step 6 - OAuth sign-in](#8-step-6---oauth-sign-in)
+9. [Step 7 - public ingress with Cloudflare Tunnel](#9-step-7---public-ingress-with-cloudflare-tunnel)
+10. [Which endpoints the tunnel must carry, and why](#10-which-endpoints-the-tunnel-must-carry-and-why)
+11. [What does not go through the tunnel](#11-what-does-not-go-through-the-tunnel)
+12. [Step 8 - the desktop client](#12-step-8---the-desktop-client)
+13. [File storage](#13-file-storage)
+14. [Verifying the deployment](#14-verifying-the-deployment)
+15. [Day two - backups, upgrades, logs](#15-day-two---backups-upgrades-logs)
+16. [Known gaps](#16-known-gaps)
+
+---
+
+## 1. What a deployment is
+
+One host, one public hostname, one Docker Compose project.
+
+```
+                        Internet
+                           │
+                    Cloudflare (TLS)
+                           │
+                   Cloudflare Tunnel            no inbound port is opened
+                           │
+                  ┌────────▼────────┐
+                  │  Nginx :8080    │           routing, rate limits, caps,
+                  │  api-gateway    │           WebSocket upgrade
+                  └────────┬────────┘
+       ┌──────────┬────────┼─────────┬──────────┬──────────┐
+    auth:3001  server:3003 chat:3004 presence  notification  call:3007
+                                      :3005      :3006       remote:3008
+                           │
+                 ┌─────────┴─────────┐
+            PostgreSQL:5432      Redis:6379          (no published ports)
+
+   Desktop ─── WebRTC media ───▶ LiveKit SFU :7880 / :7881 / 50000-50019 udp
+```
+
+Every service is a container built from this repository, on its own private
+Docker network. Postgres and Redis publish nothing. Nginx is the only thing on
+the host port, and with a container tunnel it does not even need that.
+
+Two things travel outside the gateway, and both are deliberate:
+
+- **WebRTC media** goes from a client straight to the LiveKit SFU. It is
+  end-to-end encrypted, so the SFU relays frames it cannot read.
+- **Remote agents dial out.** Nothing ever connects towards a controlled
+  machine, and `3389` is published nowhere in this stack.
+
+---
+
+## 2. Before you start
+
+**Host**
+
+- Linux with Docker Engine 24+ and the Compose plugin (Docker Desktop works too)
+- 2 vCPU / 4 GB RAM is enough for a small deployment; LiveKit is the part that
+  wants headroom once several people share screens
+- Disk for the Postgres volume, and for the upload volume if you stay on local
+  file storage
+
+**Accounts and names**
+
+- A domain on Cloudflare, and the hostname Nexora will answer on -
+  `nexora.example.com` throughout this document
+- A Cloudflare Tunnel: either one you already run on the host, or a new one
+  whose token you can paste into `.env`
+
+**A decision to make now: where media lands.** Signalling rides the tunnel, but
+WebRTC media does not (§11). Before you open the door to users, decide whether
+`7881/tcp` and `50000-50019/udp` are reachable on the host's public address. If
+they are not, chat, files, presence and remote *authorisation* all work while
+voice, video, screen share and remote desktop do not.
+
+**Building on the host or pulling images.** `docker compose ... up -d --build`
+builds every image on the box, which needs a few GB of RAM and several minutes.
+`.github/workflows/images.yml` builds and pushes one image per service to GHCR
+on a `v*` tag, so a deployment can pin something built once - but nothing in
+this repository deploys those images for you yet.
+
+---
+
+## 3. Step 1 - the code and the environment
+
+```bash
+git clone <your-fork> nexora
+cd nexora
+cp .env.example .env
+```
+
+Generate every secret. Never reuse the example values - the LiveKit pair in
+`infrastructure/livekit/livekit.yaml` is a published development key.
+
+```bash
+# JWT_SECRET, JWT_REFRESH_SECRET, SETTINGS_SECRET, LIVEKIT_API_SECRET,
+# POSTGRES_PASSWORD - run once per value.
+node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
+```
+
+### What must change from `.env.example`
+
+| Variable | Production value | Why it matters |
+| --- | --- | --- |
+| `POSTGRES_PASSWORD` | generated | Postgres publishes no port, but this is still the database credential every service holds |
+| `JWT_SECRET` | generated | Signs access tokens. Changing it later signs everyone out |
+| `JWT_REFRESH_SECRET` | generated | Signs refresh tokens. Must differ from `JWT_SECRET` |
+| `SETTINGS_SECRET` | generated | Seals OAuth client secrets at rest. Falls back to `JWT_SECRET` when empty; changing either makes stored client secrets unreadable and they must be re-entered |
+| `PUBLIC_API_URL` | `https://nexora.example.com` | The OAuth callback URL is built from it, and it must match what Google and GitHub have registered |
+| `OAUTH_ALLOWED_REDIRECTS` | `https://nexora.example.com/admin` | Extra origins a finished OAuth sign-in may return to. Loopback (the desktop client) is always allowed |
+| `CORS_ORIGIN` | `https://nexora.example.com` | Compose defaults it to `*`. The admin panel is same-origin, so it needs nothing; set this when browsers other than the panel will call the API |
+| `LIVEKIT_API_KEY` / `LIVEKIT_API_SECRET` | generated pair | Mints call tokens. The development pair is public knowledge |
+| `LIVEKIT_URL` | `/livekit` | What clients are told to dial. The path keeps the whole deployment on one hostname; an absolute `wss://` URL splits the SFU onto its own name |
+| `GATEWAY_PORT` | `127.0.0.1:8080` with a host tunnel | Keeps the gateway off the LAN while a host-run `cloudflared` still reaches it |
+| `CLOUDFLARE_TUNNEL_TOKEN` | token, or empty | Only for the container tunnel (`--profile public`). Leave empty when the tunnel already runs on the host |
+| `LOG_LEVEL` | `info` | `debug` is noisy and logs more request detail than a public deployment wants |
+| `STORAGE_DRIVER` and the `S3_*` block | see §13 | Empty means uploads live on a Docker volume |
+
+`NODE_ENV=production` is set by the compose file; the value in `.env` only
+affects host-run development.
+
+> **Compose reads `.env` from the compose file's directory.** Because the file
+> lives in `infrastructure/docker/`, pass the repo-root env file explicitly or
+> substitution silently comes up empty:
+>
+> ```bash
+> docker compose --env-file .env -f infrastructure/docker/docker-compose.yml <cmd>
+> ```
+>
+> Required variables are declared `${VAR:?...}`, so a missing one fails the
+> command with a named error rather than starting something half-configured.
+> Every command below uses this form.
+
+---
+
+## 4. Step 2 - LiveKit for a real host
+
+`infrastructure/livekit/livekit.yaml` is mounted into the SFU container. Two
+things in it are development-shaped:
+
+```yaml
+rtc:
+  tcp_port: 7881
+  port_range_start: 50000
+  port_range_end: 50019
+  use_external_ip: false     # ← true for any host clients reach over the internet
+```
+
+- **`use_external_ip: true`** on a public host. With `false` the SFU advertises
+  its container address, which no client outside the host can route to, and
+  every call fails at ICE.
+- **The UDP range** is twenty ports, sized for local testing. Widen it for more
+  than a handful of simultaneous publishers, and keep `ports:` in
+  `docker-compose.yml` in step with it - the two must match exactly.
+- **Keys** come from the environment: compose passes `LIVEKIT_KEYS` built from
+  `LIVEKIT_API_KEY` and `LIVEKIT_API_SECRET`, which overrides the `keys:` block
+  in the file. The file's pair is never used in the container stack.
+- **The image version** is pinned to `v1.13.5` and must stay in step with the
+  `livekit-client` version in `apps/desktop`. Servers older than v1.9 drop a
+  field the client waits for, and every publish fails with "negotiation timed
+  out".
+
+Open `7881/tcp` and the UDP range on the host firewall and on any cloud
+security group. These are the ports the tunnel cannot stand in for.
+
+---
+
+## 5. Step 3 - bring the stack up
+
+```bash
+docker compose --env-file .env -f infrastructure/docker/docker-compose.yml \
+  up -d --build
+```
+
+What happens, in order:
+
+1. **`postgres` and `redis`** start and become healthy. Neither publishes a port.
+2. **`migrate`** runs once - `prisma migrate deploy` against the database, using
+   the auth-service image because it already carries the schema and the Prisma
+   CLI. Nothing about it is auth-specific.
+3. **Every service** waits for `migrate` to complete successfully, so no service
+   ever serves traffic against an unmigrated schema.
+4. **`admin-web`** builds the panel bundle and serves it under `/admin`.
+5. **`nginx`** starts last and becomes healthy once `/health` answers.
+6. **`cloudflared`** starts only with `--profile public`, and only after Nginx is
+   *healthy* rather than merely present.
+
+Check it:
+
+```bash
+docker compose --env-file .env -f infrastructure/docker/docker-compose.yml ps
+curl -s http://localhost:8080/health
+# {"status":"ok","service":"api-gateway"}
+```
+
+Migrations on a later upgrade are the same one-shot container; see §15.
+
+---
+
+## 6. Step 4 - create the first administrator
+
+**The panel has no sign-up.** There is no route that turns a stranger into an
+administrator, so the first one is created on a machine that already has
+database access, and its generated password is printed once.
+
+`GET /api/v1/admin/status` is deliberately unauthenticated and answers one
+boolean: whether an administrator exists. That is what lets the panel tell
+somebody who cannot log in yet to run the bootstrap.
+
+### In the container stack
+
+Postgres publishes no port, so run the bootstrap inside the project network,
+reusing the `migrate` service's image and database credentials:
+
+```bash
+docker compose --env-file .env -f infrastructure/docker/docker-compose.yml \
+  run --rm -w /repo/packages/database migrate \
+  ./node_modules/.bin/tsx prisma/create-admin.ts
+```
+
+### On a host that can reach the database directly
+
+With `DATABASE_URL` in the repo-root `.env` pointing at the database (the
+development case, or a host with Postgres reachable):
+
+```bash
+pnpm admin:create
+```
+
+Both print the same block, once:
+
+```
+Admin account created.
+
+  username  nexoraadmin
+  password  <24 characters, shown once>
+
+This password is shown once and cannot be recovered.
+Sign in at the admin panel; it will ask you to choose a new one.
+```
+
+What the script does:
+
+- Creates `nexoraadmin` / `admin@nexora.local` with the `ADMIN` global role and
+  `mustChangePassword` set, so the account cannot be used until its password is
+  replaced.
+- Generates 24 characters from an unambiguous alphabet - no `l`/`1`/`O`/`0` to
+  misread off a terminal.
+- **Is safe to re-run.** If the account exists it does nothing and says so.
+
+### If the password is lost
+
+```bash
+# container stack
+docker compose --env-file .env -f infrastructure/docker/docker-compose.yml \
+  run --rm -w /repo/packages/database migrate \
+  ./node_modules/.bin/tsx prisma/create-admin.ts --reset
+
+# host
+pnpm admin:create --reset
+```
+
+`--reset` issues a new password, re-arms the change-on-login flag, clears
+`disabledAt`, and **revokes every live refresh token for that account** - so a
+reset also ends whatever sessions the old password left behind.
+
+---
+
+## 7. Step 5 - the admin panel
+
+Open `https://nexora.example.com/admin`, sign in as `nexoraadmin`, and set a
+real password when it asks. Until you do, the account can do nothing else.
+
+The panel is a static bundle in its own container, proxied at `/admin`, talking
+to the admin API on `/api/v1/admin` in the same origin. It offers:
+
+- **Users** - search the directory, promote and demote administrators, disable
+  and re-enable accounts, delete accounts.
+- **OAuth providers** - configure Google and GitHub (§8).
+- **Your own account** - password, username, display name.
+
+The guard rails are enforced in `auth-service`, not in the panel:
+
+- The last administrator cannot be removed, demoted or disabled.
+- No self-demotion and no self-deletion.
+- Disabling an account revokes its live sessions immediately.
+
+Ordinary users register through the desktop client as normal; the administrator
+account exists to run the deployment, not to be somebody's chat account.
+
+Rate limiting on this surface is tight on purpose: `/api/v1/admin` and
+`/api/v1/auth/` share the gateway's 5 r/s bucket per address, because both are
+credentialed.
+
+---
+
+## 8. Step 6 - OAuth sign-in
+
+Optional. Google and GitHub are supported, and their buttons appear in clients
+only once a provider is configured.
+
+1. In the panel, open the provider. It shows the exact **callback URL**, built
+   from `PUBLIC_API_URL`. If `PUBLIC_API_URL` is wrong, the callback is wrong
+   and the provider rejects the exchange.
+2. Register that callback with Google or GitHub, and paste the client id and
+   client secret back into the panel.
+3. The secret is sealed with `SETTINGS_SECRET` before it is stored and is never
+   returned by the API - not to the panel, not to anyone.
+
+The code exchange happens server-side, and the finished sign-in hands back a
+one-time code to a loopback redirect for the desktop client. Any other
+destination has to be listed in `OAUTH_ALLOWED_REDIRECTS`; loopback is always
+allowed, which is what makes the desktop flow work without configuration.
+
+If you later change `SETTINGS_SECRET` (or `JWT_SECRET` while `SETTINGS_SECRET`
+is empty), stored client secrets become unreadable and must be re-entered.
+
+---
+
+## 9. Step 7 - public ingress with Cloudflare Tunnel
+
+The tunnel is how Nexora is reachable without opening an inbound port.
+`cloudflared` makes an outbound connection to Cloudflare, Cloudflare terminates
+TLS, and the origin has no listening socket exposed to the internet. Nginx
+behind it speaks plain HTTP on 8080 and trusts the `X-Forwarded-*` headers the
+tunnel sets.
+
+### Either: a tunnel already running on the host
+
+The common case, and the cheaper one - one tunnel for the whole server. Add one
+ingress entry to the config you already have:
+
+```yaml
+ingress:
+  - hostname: nexora.example.com
+    service: http://localhost:8080      # GATEWAY_PORT
+  # ...your other hostnames...
+  - service: http_status:404
+```
+
+Reload it (`systemctl reload cloudflared`). Keep `GATEWAY_PORT=127.0.0.1:8080`
+so the gateway is reachable by the tunnel and by nothing else on the network.
+
+### Or: the tunnel as a container
+
+```bash
+CLOUDFLARE_TUNNEL_TOKEN=... docker compose --env-file .env \
+  -f infrastructure/docker/docker-compose.yml --profile public up -d
+```
+
+Token mode carries its ingress rules in the Cloudflare dashboard rather than in
+this repository, and the container reaches Nginx as `http://nginx:8080` on the
+internal network - so the host port does not have to be published at all.
+
+`infrastructure/cloudflare/tunnel.yml` documents both, including a
+config-file-mode variant.
+
+### Cloudflare settings that matter
+
+- **WebSockets must be enabled** for the zone. `/ws/chat`, `/ws/presence`,
+  `/ws/remote` and LiveKit's signalling are all long-lived upgrades; without it
+  realtime dies while plain REST keeps working, which is a confusing failure.
+- **Body size.** Nginx caps `/api/v1/uploads` at 32 MB per request, and an
+  attachment larger than 8 MB is uploaded in parts, so no single request
+  approaches Cloudflare's proxy limit. That is why a 100 MB attachment works on
+  a plan with a 100 MB request cap.
+- **Do not add a second TLS hop.** The tunnel is the encrypted hop; Nginx has no
+  certificate of its own in this stack.
+
+---
+
+## 10. Which endpoints the tunnel must carry, and why
+
+One hostname carries everything, and that is a design property, not a
+convenience: the desktop client is configured with a single address
+(`VITE_API_URL`), so any path missing from ingress is a feature that fails at
+runtime with no second address to fall back to.
+
+The tunnel points at the gateway, so it carries the whole path table by
+implication. It is worth knowing what those paths are, because the failure of
+any one of them looks like a bug in the app rather than a hole in ingress.
+
+| Path | Upstream | Why it has to be public | What breaks without it |
+| --- | --- | --- | --- |
+| `/api/v1/auth/` | auth-service | Register, login, refresh-token rotation | Nobody can sign in, and signed-in clients die when the access token expires |
+| `/api/v1/admin` | auth-service | Admin API, plus the unauthenticated `status` bootstrap check | The panel cannot load or tell you to bootstrap |
+| `/admin` | admin-web | The panel's static bundle | No panel |
+| `/api/v1/servers`, `/api/v1/channels` | server-service | Servers, members, roles, overrides, channels, invites | The client signs in to an empty shell |
+| `/api/v1/messages` | chat-service | History paging and sending | Reads and sends fail; the socket alone cannot backfill |
+| `/api/v1/friends`, `/api/v1/users`, `/api/v1/dm` | chat-service | User search, friendships, direct-message channels (user-service is still a scaffold) | No DMs, no friend list, no user search |
+| `/api/v1/e2ee` | chat-service | The key directory: device public keys and wrapped channel keys | A new device cannot obtain channel keys, so history stays permanently unreadable to it |
+| `/api/v1/uploads` | chat-service | Encrypted attachment upload and download, including multipart | Attachments and avatars fail; body cap here is 32 MB, wider than the rest |
+| `/api/v1/calls` | call-service | Mints the LiveKit access token | No token, no voice - the SFU refuses an unauthenticated join |
+| `/api/v1/notifications` | notification-service | Mutes, quiet hours, read markers | Unread state and per-channel mutes stop persisting |
+| `/api/v1/remote` | remote-gateway | Machine registry, grants, audit | Remote machines cannot enrol or be listed |
+| `/ws/chat` | chat-service | Realtime message fanout, upgraded | Messages appear only on reload |
+| `/ws/presence` | presence-service | Status, typing, voice rosters | Everyone looks offline; nobody appears in a voice channel |
+| `/ws/remote` | remote-gateway | The relay between a controller and an agent, permission-checked per event | Remote sessions cannot start, and enrolled agents cannot dial in |
+| `/livekit/` | livekit | The SFU's signalling handshake: an HTTPS fetch of `/rtc/validate`, then a WebSocket on `/rtc` | Voice, video, screen share and remote screens never connect - clients hang at "connecting" |
+| `/health` | nginx | Gateway liveness; the tunnel container waits on it | Nothing user-facing, but the container tunnel will not start |
+
+Three of these are worth reading twice:
+
+- **`/livekit/` is signalling only.** Proxying it is cheap precisely because no
+  media passes through it - that is why one hostname can cover voice at all.
+- **The WebSocket paths need upgrade to survive the whole chain.** Nginx sets
+  `proxy_read_timeout 3600s` so the gateway does not cut an idle socket; a proxy
+  in front that strips `Upgrade`, or a 60-second idle timeout, produces sockets
+  that reconnect every minute and a client that looks flaky.
+- **`/api/v1/e2ee` carries no plaintext keys.** Public keys and sealed blobs
+  only. It is on the tunnel because a client cannot decrypt anything without
+  it, not because it is a weaker surface.
+
+Nothing else needs to be public. Postgres, Redis and every service port are on
+private Docker networks; `remote-gateway` is deliberately kept off
+`api-network` and reaches Postgres and nothing more.
+
+---
+
+## 11. What does not go through the tunnel
+
+**WebRTC media.** Voice, video, screen share and a remote machine's screen
+negotiate their own path to the SFU on `7881/tcp` and `50000-50019/udp`. A
+Cloudflare Tunnel carries HTTP; it cannot carry that. So:
+
+- Signalling reaches the SFU through `/livekit` over the tunnel and works.
+- Media needs those ports reachable on the host's public address, **or** a TURN
+  server the clients can use.
+
+There is no TURN server in this stack. That is the real remaining gap for a
+deployment behind a NAT that blocks the SFU's UDP range - it is written down in
+`development/TODO.md` as its own phase rather than papered over.
+
+Chat, files, presence, notifications and remote *authorisation* are complete
+over the tunnel on their own; it is only the media path that has this
+requirement.
+
+**Nothing connects towards a remote machine, ever.** An agent enrols under the
+account signed in on it, keeps its credential in the OS keychain, and dials out
+to `/ws/remote`. No port is opened on the controlled machine, and `3389` is
+published nowhere in this stack.
+
+---
+
+## 12. Step 8 - the desktop client
+
+A deployment is one URL, and the client needs exactly one variable:
+
+```
+VITE_API_URL="https://nexora.example.com"
+```
+
+It is read from the repo-root `.env` at **build** time, so it is baked into a
+packaged app:
+
+```bash
+pnpm install
+pnpm build
+pnpm --filter @nexora/desktop package     # electron-builder
+```
+
+It is only a default. **Connect to a self-hosted instance** on the login screen,
+and *Change server* in Settings → My Account, point a window at any other
+deployment: the address is normalised and probed before it is stored, and
+connecting elsewhere signs the window out and reloads. A build can therefore
+ship pointed at one deployment without being locked to it, which is what lets
+you distribute a client without rebuilding per server.
+
+The admin panel reads its own `VITE_API_URL` at build time too, but it is served
+from the deployment it administers, so same-origin is all it has ever needed.
+
+---
+
+## 13. File storage
+
+`@nexora/storage` picks a driver from the environment:
+
+- **All `S3_*` empty (default).** Uploads land in `LOCAL_STORAGE_PATH`, which
+  compose maps to the `upload-data` volume at `/data/uploads`, and chat-service
+  serves them from `/api/v1/uploads`. Nothing to configure; back the volume up.
+- **`S3_ENDPOINT`, `S3_BUCKET`, `S3_ACCESS_KEY`, `S3_SECRET_KEY` all set.** The
+  S3 driver takes over. Partial configuration stays on local disk rather than
+  half-working.
+- **`STORAGE_DRIVER=local|s3`** forces one. Forcing `s3` without credentials
+  fails at boot instead of silently falling back.
+
+Files are encrypted in the renderer before upload, so the bucket holds
+ciphertext and the server cannot type what it stores - it serves everything as
+`application/octet-stream` with a download disposition. Keys are UUID-based, so
+a client filename never decides where a file lands.
+
+Size caps, all enforced server-side:
+
+| Variable | Default | Applies to |
+| --- | --- | --- |
+| `MAX_UPLOAD_BYTES` | 25 MB | One request body - a whole small file, or one part of a large one |
+| `MAX_ATTACHMENT_BYTES` | 100 MB | The assembled attachment, however many parts it took |
+| `MAX_PICTURE_BYTES` | 8 MB | An avatar or server icon |
+
+Nginx caps the upload route at 32 MB per request, which is headroom over
+`MAX_UPLOAD_BYTES` for multipart framing. Raising `MAX_UPLOAD_BYTES` past 32 MB
+does nothing until the gateway cap moves too.
+
+---
+
+## 14. Verifying the deployment
+
+Work outwards, so a failure names its own layer.
+
+```bash
+# 1. Gateway is up on the host
+curl -s http://localhost:8080/health
+
+# 2. Gateway is up through the tunnel
+curl -s https://nexora.example.com/health
+
+# 3. The admin API answers, and says an administrator exists
+curl -s https://nexora.example.com/api/v1/admin/status
+
+# 4. Nothing crashed on boot
+docker compose --env-file .env -f infrastructure/docker/docker-compose.yml \
+  logs --tail=50 auth-service chat-service call-service
+```
+
+Then, in a client pointed at the hostname:
+
+1. Register an ordinary account, and sign in.
+2. Create a server and a channel - exercises server-service and Postgres.
+3. Send a message, with a second client open - exercises chat-service, Redis
+   fanout and `/ws/chat`. If the message appears only after a reload, the
+   WebSocket path is not upgrading.
+4. Watch presence and typing - `/ws/presence`.
+5. Upload an attachment - `/api/v1/uploads` and the storage driver.
+6. Join a voice channel from two clients. Connecting but silent means
+   signalling reached the SFU and media did not: check §4 and §11.
+7. Sign in to `/admin` and load the user directory.
+
+---
+
+## 15. Day two - backups, upgrades, logs
+
+**Backups.** Two volumes hold everything that cannot be rebuilt:
+`postgres-data` and `upload-data`.
+
+```bash
+docker compose --env-file .env -f infrastructure/docker/docker-compose.yml \
+  exec postgres pg_dump -U postgres nexora > nexora-$(date +%F).sql
+```
+
+Understand what a backup restores. Messages and attachments are stored as
+ciphertext, and the keys that open them live on users' devices, sealed with the
+OS keychain. A restored database gives users their history back **only because
+their devices still hold their keys**. A user who loses every device loses that
+history, and no server-side backup changes that. This is the intended property,
+and `development/E2EE.md` states its limits plainly.
+
+**Upgrades.**
+
+```bash
+git pull
+docker compose --env-file .env -f infrastructure/docker/docker-compose.yml \
+  up -d --build
+```
+
+The `migrate` one-shot runs again before any service takes traffic, so schema
+changes apply in the right order. Take a database dump first; there is no
+automated rollback.
+
+**Logs.** Every service logs structured JSON with a request id, and the id
+survives a hop between services - the gateway emits the same shape, so gateway
+lines and service lines join in one pipeline. Passwords, tokens, keys and
+message content are never logged.
+
+```bash
+docker compose --env-file .env -f infrastructure/docker/docker-compose.yml \
+  logs -f --tail=100
+```
+
+**Rotating secrets.** `JWT_SECRET` and `JWT_REFRESH_SECRET` can be replaced;
+doing so invalidates every issued token and signs everyone out. `SETTINGS_SECRET`
+cannot be rotated without re-entering OAuth client secrets. There is no secret
+manager and no rotation tooling here - secrets are environment variables read
+from `.env`, and that is a known gap.
+
+**Scaling.** Services are stateless; Redis carries presence, fanout and
+rate-limit windows, so more than one instance of chat-service stays in step by
+design. `limit_req` at the gateway is per Nginx instance, and the Redis-backed
+limiter inside each service is the one that holds across instances.
+
+---
+
+## 16. Known gaps
+
+Stated plainly, because a deployment guide that implies completeness is worse
+than useless. All of these are tracked in `development/TODO.md`.
+
+- **No TURN server.** Media needs `7881/tcp` and `50000-50019/udp` reachable.
+  Behind a NAT that blocks them, voice, screen share and remote desktop do not
+  connect while everything else does.
+- **Secrets are `.env` files.** No Docker secrets, no external manager, no
+  rotation.
+- **Nothing deploys.** Images are built and pushed by CI on a tag; putting them
+  on a machine is manual.
+- **No TLS between Cloudflare and Nginx.** The tunnel is the encrypted hop, and
+  there is no supported way to give Nginx a certificate of its own here.
+- **`remote-agent` and `user-service` are scaffolds.** On a desktop the agent is
+  the app itself; user routes are served by chat-service.
+- **No version negotiation.** Nothing checks that a client's version matches the
+  deployment's; a client too old finds out through a failing request.
+- **Remote input injection is Windows-only.** Elsewhere a session can watch but
+  not touch.
