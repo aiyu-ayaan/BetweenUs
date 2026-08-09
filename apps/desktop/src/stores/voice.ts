@@ -149,6 +149,14 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
         adaptiveStream: true,
         dynacast: true,
         e2ee: { keyProvider, worker: new E2eeWorker() },
+        // Spelt out rather than left to the browser default: without echo
+        // cancellation, anyone on speakers sends the room's own audio back into
+        // it and everybody hears themselves a beat late.
+        audioCaptureDefaults: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
       });
 
       console.log('[voice.ts] 4. Setting E2EE key...');
@@ -314,13 +322,22 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
    * `source` is what the user picked in the picker; passing null shares the
    * primary screen, which is what a runtime without the Electron bridge gets.
    * The main process has to be told before capture starts - see electron/main.ts.
+   *
+   * Sharing system audio captures the machine's whole output mix, and that mix
+   * includes the call itself coming out of the speakers - so without asking for
+   * anything else, a share re-broadcasts everyone in the room back at them and
+   * they hear themselves. `restrictOwnAudio` is the constraint that leaves this
+   * app's own output out of the capture, which is exactly the difference wanted:
+   * the film's soundtrack travels, the voices in the call do not.
    */
   shareScreen: async (source, withAudio) => {
     const { room, status } = get();
     if (!room || status !== 'connected') return;
     try {
       await window.nexora?.selectScreenSource(source?.id ?? '', withAudio);
-      await room.localParticipant.setScreenShareEnabled(true, { audio: withAudio });
+      await room.localParticipant.setScreenShareEnabled(true, {
+        audio: withAudio ? { restrictOwnAudio: true, echoCancellation: false } : false,
+      });
       // Watch your own share, so you can see what the others are seeing.
       set({
         screenEnabled: true,
