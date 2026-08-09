@@ -167,7 +167,16 @@ in `mic-gate.ts`.
 - [x] Input and output device pickers, stored per machine rather than per
       account: the microphone that suits this room is not the one that suits
       another. A device that has been unplugged falls back to the default
-      instead of failing the join
+      instead of failing the join. The same two lists sit behind a button on
+      the call controls, because the moment somebody wants them is the moment
+      they cannot be heard
+- [x] Fixed: "Audio context needs to be set on LocalAudioTrack in order to
+      enable processors", and no microphone at all. A processor passed in the
+      capture options is applied inside `createLocalTracks`, before the room's
+      audio context reaches the freshly created track, so it always threw and
+      took the publish with it. The gate is attached after the track is
+      published now, on a context this window owns, and a failure there loses
+      the gate rather than the microphone
 - [x] Switching mid-call costs whatever it has to and no more: a threshold is a
       message to the audio thread, the three processing switches are
       `applyConstraints` on the open track, and only a new device or a new mode

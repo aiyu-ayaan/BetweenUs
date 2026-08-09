@@ -382,7 +382,9 @@ paths are the ones where the person connecting is *not* the owner.
 Settings → Voice & Video. Everything here applies to a call already running,
 so leave a second account listening in the same voice channel.
 
-1. **Pick a device.** Both lists should name real devices once the microphone
+1. **Pick a device.** The same two lists are on the call controls, behind the
+   button beside screen share - check a change made there shows up in settings
+   and vice versa. Both should name real devices once the microphone
    has been granted once (before that, the operating system hides the labels
    and they read "Unnamed device"). Switch input mid-call: the other side
    should keep hearing you, from the other microphone. Switch output and the
