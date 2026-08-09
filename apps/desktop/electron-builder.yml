@@ -7,7 +7,9 @@ files:
   - dist-electron/**
   - public/icon.png
 win:
-  target: portable
+  target:
+    - portable
+    - nsis
   icon: public/icon.png
 mac:
   target: dmg
