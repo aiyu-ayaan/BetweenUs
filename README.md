@@ -241,7 +241,7 @@ keeps the metadata; blobs never go in a column.
 ## Quick start
 
 ```bash
-cp .env.example .env            # then set the JWT secrets
+cp .env.example .env            # set JWT secrets & ensure DATABASE_URL matches POSTGRES_PASSWORD
 pnpm dev:infra                  # Postgres, Redis, LiveKit in Docker
 pnpm install
 pnpm db:generate

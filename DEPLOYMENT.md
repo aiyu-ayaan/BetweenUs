@@ -121,7 +121,8 @@ node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
 
 | Variable | Production value | Why it matters |
 | --- | --- | --- |
-| `POSTGRES_PASSWORD` | generated | Postgres publishes no port, but this is still the database credential every service holds |
+| `POSTGRES_PASSWORD` | generated | Postgres database password. If changed from `postgres`, `DATABASE_URL` password must match it |
+| `DATABASE_URL` | `postgresql://postgres:<PASSWORD>@postgres:5432/nexora?schema=public` | Must use the generated `POSTGRES_PASSWORD`. Inside Docker Compose, use `postgres:5432` container hostname |
 | `JWT_SECRET` | generated | Signs access tokens. Changing it later signs everyone out |
 | `JWT_REFRESH_SECRET` | generated | Signs refresh tokens. Must differ from `JWT_SECRET` |
 | `SETTINGS_SECRET` | generated | Seals OAuth client secrets at rest. Falls back to `JWT_SECRET` when empty; changing either makes stored client secrets unreadable and they must be re-entered |
@@ -134,6 +135,9 @@ node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
 | `CLOUDFLARE_TUNNEL_TOKEN` | token, or empty | Only for the container tunnel (`--profile public`). Leave empty when the tunnel already runs on the host |
 | `LOG_LEVEL` | `info` | `debug` is noisy and logs more request detail than a public deployment wants |
 | `STORAGE_DRIVER` and the `S3_*` block | see §13 | Empty means uploads live on a Docker volume |
+
+> [!IMPORTANT]
+> **502 Bad Gateway / Upstream Connection Failures:** If `auth-service` fails to start because database migrations failed (due to a password or hostname mismatch in `DATABASE_URL`), Nginx will return a **502 Bad Gateway** when accessing `/admin` or signing in (`/api/v1/auth/login`). Ensure `DATABASE_URL` contains the exact same password as `POSTGRES_PASSWORD`.
 
 `NODE_ENV=production` is set by the compose file; the value in `.env` only
 affects host-run development.
@@ -553,6 +557,30 @@ Then, in a client pointed at the hostname:
 6. Join a voice channel from two clients. Connecting but silent means
    signalling reached the SFU and media did not: check §4 and §11.
 7. Sign in to `/admin` and load the user directory.
+
+### Troubleshooting 502 Bad Gateway Errors
+
+If Cloudflare or Nginx returns a **502 Bad Gateway** when navigating to `https://nexora.example.com/admin/` or making requests to `/api/v1/auth/login`:
+
+1. **Check Database URL & Password Alignment**:
+   Ensure `DATABASE_URL` in `.env` contains the exact same password as `POSTGRES_PASSWORD`.
+   - **Correct Docker Compose Format**:
+     `DATABASE_URL="postgresql://postgres:<YOUR_POSTGRES_PASSWORD>@postgres:5432/nexora?schema=public"`
+   - If the passwords mismatch or `localhost` is used instead of `postgres` container hostname in `DATABASE_URL`, database migrations (`migrate` container) will fail, causing `auth-service` to not start.
+
+2. **Check Service Container Status**:
+   ```bash
+   docker compose --env-file .env -f infrastructure/docker/docker-compose.yml ps
+   ```
+   Verify `migrate` exited with `0` and `auth-service` is running (`Up`).
+
+3. **Check Service Logs**:
+   ```bash
+   docker compose --env-file .env -f infrastructure/docker/docker-compose.yml logs migrate auth-service nginx admin-web
+   ```
+
+4. **Verify Cloudflare Ingress**:
+   Ensure host `cloudflared` points to `http://127.0.0.1:8080` (or container tunnel profile is running).
 
 ---
 
