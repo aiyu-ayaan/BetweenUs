@@ -314,27 +314,38 @@ paths are the ones where the person connecting is *not* the owner.
 4. **Control.** The session starts watching, not driving. Click **Take
    control**, then move the mouse over the video, click, drag a window, type
    into something, right-click for a context menu, scroll both ways. Esc hands
-   control back rather than travelling to the machine.
-5. **Request control.** From an account granted `REMOTE_VIEW` only, the same
+   control back rather than travelling to the machine. The pointer stays
+   visible the whole time and becomes a crosshair - it must never disappear.
+5. **Where the click lands.** Do this on a machine running at 125% or 150%
+   display scaling, which is most laptops: aim at something in each corner and
+   at the middle. It has to land where the pointer is, not short of it. Then
+   check the picture is sharp enough to read a menu, in a small window as well
+   as maximised.
+6. **From a screen share.** In a voice channel, have somebody share their
+   screen and watch it. If you have remote access to a machine of theirs, a
+   **Request control** button sits on the share; it opens a real session and
+   asks for control. It must still raise the consent prompt on their side -
+   watching a share grants nothing.
+7. **Request control.** From an account granted `REMOTE_VIEW` only, the same
    button reads **Request control**: a prompt appears on the machine, and
    whoever is there gives or keeps control. Refusing leaves the session
    watching; granting lasts until the session ends or control is released, and
    never touches the stored grant.
-6. **Clipboard.** With `REMOTE_CLIPBOARD` held, copy text on one machine and
+8. **Clipboard.** With `REMOTE_CLIPBOARD` held, copy text on one machine and
    paste on the other, both directions. It is polled once a second, so give it
    a moment; it is text only.
-7. **Somebody else.** From the machine's Access dialog, give a second account
+9. **Somebody else.** From the machine's Access dialog, give a second account
    `REMOTE_VIEW` only. Connect as them: a prompt appears **on the machine**,
    and nothing is captured until it is answered. Refuse it once, and let it
    time out once (thirty seconds) - both end the session.
-8. **View-only really is.** Accept the session, then try to move the mouse over
+10. **View-only really is.** Accept the session, then try to move the mouse over
    the video. Nothing happens on the machine, and the machine's History tab
    shows `input.refused`.
-9. **Revoke while live.** With that session running, untick everything in the
+11. **Revoke while live.** With that session running, untick everything in the
    Access dialog. The controller's window should say the session ended, the red
    banner on the machine should disappear, and History should show
    `session.ended` with reason `revoked`.
-10. **Temporary access.** Set an expiry a few minutes out, confirm the machine
+12. **Temporary access.** Set an expiry a few minutes out, confirm the machine
    still appears for that account, then wait past it: the machine leaves their
    list and a session is refused with 404.
 

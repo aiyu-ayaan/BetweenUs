@@ -650,6 +650,17 @@ Machine checks, on 2026-08-09:
   event without `REMOTE_CONTROL` is refused *and* audited, and revoking a grant
   ends the session running under it.
 
+A second pass on 2026-08-09, from a human driving two windows, found four
+things and fixed them: the pointer vanished on taking control (`cursor-none` on
+the video, assuming a cursor in the capture that is not reliably there), clicks
+landed short on a scaled display (device-independent pixels handed to
+`SetCursorPos`, which wants real ones), the picture was soft whatever the agent
+published (`adaptiveStream` sizing the subscription to the window, on top of
+LiveKit's 1080p default cap), and sharing system audio echoed the call back to
+the room (Windows loopback captures the whole output mix, call included).
+Resolution now follows the display and control can be asked for straight from a
+screen share in a voice channel. `TODO.md` has the detail.
+
 Needs a human in front of it, and none of it has been driven yet:
 
 - Two machines: enrol one, connect from the other, watch the screen arrive.

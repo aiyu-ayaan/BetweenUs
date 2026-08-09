@@ -52,6 +52,40 @@ a human in front of the app, and so does most of phase 12.
       being swallowed, and the numeric casts that threw on a scroll upwards
       moved into C#
 - [x] Smoke coverage for the refusals and for the control handshake, in CI
+- [x] Fixed: taking control made the pointer disappear. The video was given
+      `cursor-none` on the assumption that the capture draws the machine's own
+      cursor into the frame, which it does not reliably - so there was nothing
+      left to aim with. It is a crosshair now, which says "this is going to the
+      other machine" without ever leaving the user without a pointer
+- [x] Fixed: clicks landed in the wrong place on a scaled display. Coordinates
+      arrive as a fraction of the screen and were multiplied by the display's
+      bounds, which are device-independent pixels; `SetCursorPos` wants real
+      ones, so at 150% scaling a click two thirds of the way across the screen
+      landed at the far edge. `screen.dipToScreenPoint` does the conversion,
+      which also keeps it right for a display that is offset as well as scaled
+- [x] Resolution follows the display instead of a preset, RustDesk-style. The
+      agent asks the main process for the primary display in real pixels and
+      publishes at that size with `contentHint: 'text'`, no simulcast, and
+      `degradationPreference: 'maintain-resolution'` - a remote desktop that is
+      sharp at a low frame rate beats a blurry one at thirty. The bitrate
+      ceiling is derived from the pixel count (4 Mbps at 1080p, clamped to
+      12 Mbps) rather than fixed, and LiveKit still backs off on its own when
+      the link cannot carry it
+- [x] The controller subscribes with `adaptiveStream` off. It sizes the
+      subscription to the video element, so a session in a window smaller than
+      the machine's screen was downscaled by the SFU and stretched back up -
+      which is what made the picture soft whatever the agent published
+- [x] The agent shares the *primary* display rather than the first screen the
+      capturer happens to list, because the primary display is the one input is
+      injected into. On a two-monitor machine those were different screens
+- [x] "Request control" on somebody's screen share in a voice channel: watching
+      a share and wanting the mouse is one thought, so it is one button rather
+      than a trip through the machine list. It opens a real session against
+      their machine - same grant, same consent prompt - and asks for control as
+      soon as the socket is up. The button only appears when this account
+      already has access to a machine of theirs. A live session is drawn over
+      the whole window now instead of inside the machine list, which is what
+      lets it be started from anywhere
 
 Left open on purpose:
 
@@ -68,7 +102,8 @@ Left open on purpose:
       that never spoke. The SFU the operator runs can see the frames
       (`E2EE.md`, limit 10)
 - [ ] The agent always shares the primary screen; no picker, and no second
-      monitor
+      monitor. Its resolution is read once when the session opens, so a display
+      that changes resolution mid-session keeps publishing at the old size
 - [ ] Sessions are relayed in one process's memory, so agent and controller
       must land on the same instance - true for the single replica compose runs,
       not for two. Redis Pub/Sub keyed by session id is the upgrade
@@ -80,8 +115,11 @@ Left open on purpose:
       Nexora window to run the agent inside, and that is what it is for
 - [ ] The controller sends key events with an empty `modifiers` list; a
       Ctrl+Alt+Del or a Windows-key chord is not delivered as a chord
-- [ ] No bandwidth or quality control - the screen is published at whatever
-      LiveKit picks
+- [ ] Quality is set once at the display's size and left to LiveKit's
+      congestion control from there. There is no manual quality picker and no
+      "balanced / sharp / smooth" choice the way RustDesk offers, and nothing
+      raises the frame rate back up once a link recovers faster than the
+      encoder notices
 
 ### Phase 18 — production ingress
 
@@ -295,6 +333,14 @@ Left open on purpose:
 - [x] Smoke coverage: byte-for-byte round trip, part ordering, ticket bound to
       its account, scratch space not downloadable, SVG refused as a picture,
       foreign avatar URL refused
+- [x] Fixed: sharing system audio put the call into an echo. Windows loopback
+      captures the machine's whole output mix, and that mix includes the voice
+      channel coming out of the speakers - so a share re-broadcast everyone in
+      the room back at themselves a beat late. The capture asks for
+      `restrictOwnAudio` now, which leaves this app's own output out of it: the
+      film's soundtrack travels, the voices in the call do not. Microphone
+      capture also spells out echo cancellation, noise suppression and gain
+      control rather than leaving them to the browser default
 
 Left open on purpose:
 
@@ -309,6 +355,12 @@ Left open on purpose:
 - [ ] Two humans exchanging a file: sent from one machine, opened on another
 - [ ] An attachment sent before someone joined a private channel is unreadable
       to them, the same way its messages are; key rotation has the same gap
+- [ ] `restrictOwnAudio` is a recent Chromium constraint and an unsupported
+      runtime ignores it silently, in which case the echo is back and
+      headphones are the only cure. Per-process loopback capture (the Windows
+      `ActivateAudioInterfaceAsync` application loopback API, which is what
+      Discord uses) is the version that cannot be ignored, and it needs a
+      native module
 
 ### Phase 12 — servers, permissions and direct messages
 
