@@ -522,12 +522,16 @@ await new Promise((resolve, reject) => {
   watcher.on('error', reject);
 });
 
-/** Waits for the first event of a type to land, or gives up. */
+/**
+ * Waits for the first event of a type to land, or gives up. A matched event is
+ * taken out of the list, so a later assertion cannot pass on an earlier
+ * event that happened to look the same.
+ */
 const awaitEvent = async (type, predicate = () => true, timeoutMs = 5000) => {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
-    const match = seen.find((event) => event.type === type && predicate(event));
-    if (match) return match;
+    const at = seen.findIndex((event) => event.type === type && predicate(event));
+    if (at >= 0) return seen.splice(at, 1)[0];
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
   return null;
@@ -593,6 +597,33 @@ const channelPin = await json(`${CHAT}/api/v1/messages/${liveEdit.id}/pin`, {
   headers: authed,
 });
 ok('the owner can pin', channelPin.pinnedAt !== null);
+
+// Granting a permission has to reach the person it was granted to: their client
+// holds a server list fetched at sign-in, and that is where its UI reads
+// permissions from.
+await json(`${SERVER}/api/v1/servers/${server.id}/members/${otherId}`, {
+  method: 'PATCH',
+  headers: authed,
+  body: JSON.stringify({ grantedPermissions: ['DELETE_MESSAGE', 'MANAGE_MESSAGE'] }),
+});
+ok(
+  'a permission change fans out to the member it is about',
+  (await awaitEvent('server.members.changed', (event) => event.serverId === server.id)) !== null,
+);
+
+const theirServersNow = await json(`${SERVER}/api/v1/servers`, { headers: other });
+ok(
+  'the granted permission is in their own server list',
+  theirServersNow
+    .find((item) => item.id === server.id)
+    ?.permissions.includes('MANAGE_MESSAGE') === true,
+);
+
+const grantedPin = await json(`${CHAT}/api/v1/messages/${liveEdit.id}/pin`, {
+  method: 'DELETE',
+  headers: other,
+});
+ok('and the grant lets them pin', grantedPin.pinnedAt === null);
 
 // --- Removing a friend -----------------------------------------------------
 

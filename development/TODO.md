@@ -47,6 +47,10 @@ most of phase 12. The carried-over items are older ones in the same state.
       `:focus { outline: none }` plus no ring at all on the rail pills
 - [x] A refused menu action reports its reason in the conversation, and Pin is
       shown disabled with the permission it needs instead of being absent
+- [x] Fixed: a granted permission never reached the member it was granted to.
+      Their client reads permissions from the server list it fetched at
+      sign-in, so a grant only took effect after a restart. `server.member.updated`
+      now fans out like the added and removed events and the client re-reads
 
 Left open on purpose:
 
@@ -94,14 +98,8 @@ Left open on purpose:
 
 Left open on purpose:
 
-- [ ] Editing a message. The composer, the envelope and `editedAt` all exist;
-      what is missing is a decision about whether an edit rewrites the
-      ciphertext in place or supersedes it, which matters for the copies other
-      clients already decrypted
 - [ ] Nothing deletes an attachment's blob when its message is deleted — the
       same sweep phase 13 left open, now with a second thing that needs it
-- [ ] A deleted message leaves no tombstone in the UI ("message deleted"); it
-      simply goes, which is a surprise in a conversation two people are reading
 - [ ] An added member gets no notification, only a server that appears; there
       is no invite to accept or decline
 - [ ] `server.members.changed` makes the client re-read the member list, so a

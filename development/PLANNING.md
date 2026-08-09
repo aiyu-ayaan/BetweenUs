@@ -109,6 +109,15 @@ the older shape.
   five seconds are so it can still be seen on the way in. It is the first
   message somebody else wrote after the marker; a channel that has never been
   read gets no line rather than one across its whole history.
+- **A permission grant has to reach the person it was granted to.** A client
+  reads what it may do from the server list it fetched when it signed in, so
+  granting somebody `MANAGE_MESSAGE` changed the database and the granting
+  administrator's screen, and nothing else: the member kept the permissions they
+  had at sign-in until they restarted, and their Pin item stayed disabled while
+  the server would have accepted the pin. `server.member.updated` now joins the
+  added and removed events, all three landing as `server.members.changed` at the
+  server's watchers and at the member the change is about, and the client
+  re-reads its server list from it.
 - **A refused action says so.** Pinning, deleting and reacting were fired and
   forgotten from the context menu, so a message the server refused to pin looked
   like a menu item that did nothing. Every menu action now reports its failure

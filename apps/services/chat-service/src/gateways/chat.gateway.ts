@@ -117,10 +117,15 @@ export class ChatGateway implements OnModuleDestroy {
       }
     });
 
-    // Both directions of a membership change reach the same client event: the
-    // server's watchers refresh their member list, and the person who joined or
-    // was removed refreshes their own list of servers.
-    for (const event of [EVENTS.SERVER_MEMBER_ADDED, EVENTS.SERVER_MEMBER_REMOVED] as const) {
+    // Every membership change reaches the same client event: the server's
+    // watchers refresh their member list, and the person who joined, was
+    // removed or had their permissions changed refreshes their own list of
+    // servers - which is where the permissions their UI reads come from.
+    for (const event of [
+      EVENTS.SERVER_MEMBER_ADDED,
+      EVENTS.SERVER_MEMBER_REMOVED,
+      EVENTS.SERVER_MEMBER_UPDATED,
+    ] as const) {
       await this.events.subscribe(event, (envelope) => {
         const { serverId, userId } = envelope.payload;
         this.deliver([serverRoom(serverId), userRoom(userId)], {

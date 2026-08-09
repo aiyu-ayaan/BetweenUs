@@ -177,6 +177,15 @@ export class ServersService {
       data,
       include: { user: true },
     });
+
+    // The member whose permissions these are is usually somebody else, on
+    // another machine, holding a server list fetched when they signed in.
+    // Without this they keep the permissions they had at that moment - a grant
+    // made here would not reach them until they restarted.
+    await this.events.publish(EVENTS.SERVER_MEMBER_UPDATED, {
+      serverId,
+      userId: targetUserId,
+    });
     return toMember(updated);
   }
 

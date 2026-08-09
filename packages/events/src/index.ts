@@ -16,6 +16,8 @@ export const EVENTS = {
   SERVER_CREATED: 'server.created',
   SERVER_MEMBER_ADDED: 'server.member.added',
   SERVER_MEMBER_REMOVED: 'server.member.removed',
+  /** A role or a permission override changed on an existing member. */
+  SERVER_MEMBER_UPDATED: 'server.member.updated',
   CHANNEL_CREATED: 'channel.created',
   CHANNEL_DELETED: 'channel.deleted',
   PRESENCE_CHANGED: 'presence.changed',
@@ -35,6 +37,7 @@ export interface EventPayloads {
   [EVENTS.SERVER_CREATED]: { serverId: string; ownerId: string };
   [EVENTS.SERVER_MEMBER_ADDED]: { serverId: string; userId: string };
   [EVENTS.SERVER_MEMBER_REMOVED]: { serverId: string; userId: string };
+  [EVENTS.SERVER_MEMBER_UPDATED]: { serverId: string; userId: string };
   [EVENTS.CHANNEL_CREATED]: { channelId: string; serverId: string };
   [EVENTS.CHANNEL_DELETED]: { channelId: string; serverId: string };
   [EVENTS.PRESENCE_CHANGED]: { user: PresenceState };

@@ -133,7 +133,9 @@ Closing both windows stops the dev server. Ctrl+C does the same.
   Clicking a pin scrolls the conversation to it and flashes it.
 - As a plain MEMBER the Pin item is greyed out and says which permission it
   wants; grant *Pin and unpin messages* in Server settings → Roles &
-  Permissions and it becomes live. In a direct message either person can pin —
+  Permissions and it becomes live in the other window within a moment - no
+  restart, because the grant is announced and the client re-reads what it may
+  do. In a direct message either person can pin —
   there are no roles in a DM.
 - Anything the server refuses - a pin, a delete, a reaction - now says so in a
   red line at the top of the conversation instead of doing nothing.
