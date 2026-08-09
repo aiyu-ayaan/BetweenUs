@@ -89,7 +89,11 @@ services:
     restart: unless-stopped
     command: tunnel --no-autoupdate run
     environment:
-      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:?CLOUDFLARE_TUNNEL_TOKEN is required}
+      # Left blank when unset: Compose interpolates every service, profile or
+      # not, so a required-check here would break plain `up` for anyone whose
+      # cloudflared runs on the host. Empty token only fails --profile public,
+      # where cloudflared itself reports it.
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:-}
     depends_on:
       nginx:
         condition: service_healthy
