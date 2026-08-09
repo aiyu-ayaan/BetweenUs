@@ -6,6 +6,7 @@
  * processing, and a gate that chatters or eats the start of a word.
  */
 import assert from 'node:assert/strict';
+import { workletSource } from './mic-gate';
 import {
   DEFAULT_VOICE_SETTINGS,
   GATE_CLOSED,
@@ -107,5 +108,12 @@ assert.ok(
     DEFAULT_VOICE_SETTINGS.gateThresholdDb > GATE_RANGE.minDb &&
     DEFAULT_VOICE_SETTINGS.gateThresholdDb < GATE_RANGE.maxDb,
 );
+
+// The worklet is assembled from these two functions' own source so the gate
+// under test above is the gate on the audio thread. Compiling it here is what
+// catches a build that renamed something out from under the splice.
+assert.doesNotThrow(() => new Function(workletSource), 'the gate worklet is not valid JavaScript');
+assert.ok(workletSource.includes('function stepGate'));
+assert.ok(workletSource.includes('function amplitudeToDb'));
 
 console.log('voice-quality self-check passed');
