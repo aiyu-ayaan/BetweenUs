@@ -1,4 +1,5 @@
 import type { PresenceStatus } from '@nexora/shared-types';
+import { absoluteUrl } from '../services/endpoint';
 
 const SIZES = {
   sm: 'h-8 w-8 text-xs',
@@ -56,7 +57,9 @@ export function Avatar({
     <div className={`relative shrink-0 ${SIZES[size]}`}>
       {avatarUrl ? (
         <img
-          src={avatarUrl}
+          // Stored pictures come back rooted at /api/v1/uploads; resolve them
+          // against the deployment, not against file:// in a packaged window.
+          src={absoluteUrl(avatarUrl)}
           alt=""
           className="h-full w-full rounded-full object-cover"
         />

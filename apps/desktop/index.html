@@ -6,21 +6,22 @@
     <link rel="icon" type="image/svg+xml" href="/icon.svg" />
     <link rel="apple-touch-icon" href="/icon.svg" />
     <!--
-      Renderer loads no remote code; CSP blocks anything that tries.
+      Renderer loads no remote code; CSP blocks anything that tries. That is the
+      part that matters: script-src stays 'self', so nothing this window fetches
+      can become code.
 
-      connect-src lists every host the client may talk to: the Vite dev server,
-      the Nginx gateway, and the LiveKit SFU. LiveKit is dialled on 127.0.0.1
-      because Chromium resolves localhost to ::1 first and the dev container
-      publishes IPv4 only - and its signal handshake starts with an HTTP fetch,
-      so the http:// origin has to be listed as well as the ws:// one.
-      A deployment replaces these with its own hosts.
+      connect-src and img-src cannot name hosts any more. The deployment is
+      chosen at runtime on the login screen, the LiveKit address arrives inside
+      a call token, and both are whatever the operator of that deployment says -
+      an allowlist compiled into the app could only ever be wrong. What the
+      window may *talk to* is therefore open; what it may *run* is not.
 
       worker-src allows blob: because LiveKit runs end-to-end encryption in a
       worker it creates itself.
     -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; media-src 'self' blob:; connect-src 'self' http://localhost:5173 ws://localhost:5173 http://localhost:8080 ws://localhost:8080 http://127.0.0.1:7880 ws://127.0.0.1:7880"
+      content="default-src 'self'; script-src 'self'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: http: https:; media-src 'self' blob:; connect-src 'self' http: https: ws: wss:"
     />
     <title>Nexora</title>
   </head>

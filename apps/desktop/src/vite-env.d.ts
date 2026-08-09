@@ -1,8 +1,12 @@
 /// <reference types="vite/client" />
 
 interface ImportMetaEnv {
+  /**
+   * The one address a client needs: REST, both WebSockets and stored files are
+   * all behind it, and the LiveKit address comes back inside a call token. It
+   * is only the default - the login screen can point this window elsewhere.
+   */
   readonly VITE_API_URL?: string;
-  readonly VITE_WS_URL?: string;
 }
 
 interface ImportMeta {

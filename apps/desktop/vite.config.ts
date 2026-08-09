@@ -15,6 +15,9 @@ const NOTIFICATION = process.env.NOTIFICATION_SERVICE_URL ?? 'http://127.0.0.1:3
 const manageElectron = process.env.NEXORA_NO_ELECTRON !== '1';
 
 export default defineConfig({
+  // One .env for the whole repo. VITE_API_URL lives there next to the service
+  // ports it has to agree with, rather than in a second file nobody remembers.
+  envDir: fileURLToPath(new URL('../../', import.meta.url)),
   plugins: [
     react(),
     electron({

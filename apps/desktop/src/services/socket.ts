@@ -5,10 +5,10 @@ import type {
   ServerPresenceEvent,
 } from '@nexora/shared-types';
 
-// Same story as the REST base URL: the dev server proxies /ws/chat upstream.
-const WS_URL =
-  import.meta.env.VITE_WS_URL ??
-  (import.meta.env.DEV ? `ws://${window.location.host}` : 'ws://localhost:8080');
+import { wsUrl } from './endpoint';
+
+// Same host as the REST base, ws scheme: both sockets are behind the gateway
+// this window is pointed at, so there is no second address to configure.
 
 type Listener = (event: ServerChatEvent) => void;
 
@@ -39,7 +39,7 @@ export class ChatSocket {
     if (!this.token) return;
     if (this.socket && this.socket.readyState <= WebSocket.OPEN) return;
 
-    const socket = new WebSocket(`${WS_URL}/ws/chat?token=${encodeURIComponent(this.token)}`);
+    const socket = new WebSocket(`${wsUrl()}/ws/chat?token=${encodeURIComponent(this.token)}`);
     this.socket = socket;
 
     socket.onopen = () => {
@@ -180,7 +180,7 @@ export class PresenceSocket {
     if (!this.token) return;
     if (this.socket && this.socket.readyState <= WebSocket.OPEN) return;
 
-    const socket = new WebSocket(`${WS_URL}/ws/presence?token=${encodeURIComponent(this.token)}`);
+    const socket = new WebSocket(`${wsUrl()}/ws/presence?token=${encodeURIComponent(this.token)}`);
     this.socket = socket;
 
     socket.onopen = () => {

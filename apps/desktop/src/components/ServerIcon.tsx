@@ -1,3 +1,5 @@
+import { absoluteUrl } from '../services/endpoint';
+
 /**
  * A server's picture, or its initials when it has none - the same fallback
  * Discord uses, and the reason a server without an icon is still recognisable
@@ -18,7 +20,7 @@ export function ServerIcon({
   if (server?.iconUrl) {
     return (
       <img
-        src={server.iconUrl}
+        src={absoluteUrl(server.iconUrl)}
         alt=""
         className={`${SIZES[size]} rounded-full object-cover`}
       />

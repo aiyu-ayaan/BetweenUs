@@ -30,10 +30,12 @@ import type {
   UserSummary,
 } from '@nexora/shared-types';
 
-// In development requests go to the Vite dev server, which proxies them to the
-// services (see vite.config.ts). A packaged build talks to the Nginx gateway.
-const API_URL =
-  import.meta.env.VITE_API_URL ?? (import.meta.env.DEV ? '' : 'http://localhost:8080');
+import { absoluteUrl, serverUrl } from './endpoint';
+
+// Every request is built against whichever deployment this window is pointed
+// at - the one from VITE_API_URL, or the one chosen on the login screen. It is
+// read per request rather than captured: switching servers reloads the window,
+// but nothing here should depend on that.
 
 export class ApiError extends Error {
   constructor(
@@ -60,7 +62,7 @@ export function configureApi(source: TokenSource, refresher: TokenRefresher): vo
 
 async function request<T>(path: string, init: RequestInit = {}, retry = true): Promise<T> {
   const token = getAccessToken();
-  const response = await fetch(`${API_URL}${path}`, {
+  const response = await fetch(`${serverUrl()}${path}`, {
     ...init,
     headers: {
       'Content-Type': 'application/json',
@@ -98,7 +100,7 @@ async function request<T>(path: string, init: RequestInit = {}, retry = true): P
  */
 async function upload<T>(path: string, form: FormData, retry = true): Promise<T> {
   const token = getAccessToken();
-  const response = await fetch(`${API_URL}${path}`, {
+  const response = await fetch(`${serverUrl()}${path}`, {
     method: 'POST',
     body: form,
     headers: token ? { Authorization: `Bearer ${token}` } : {},
@@ -124,7 +126,7 @@ async function upload<T>(path: string, form: FormData, retry = true): Promise<T>
 }
 
 /** Where the browser has to reach this deployment; `/start` is opened there. */
-export const apiBaseUrl = (): string => API_URL || window.location.origin;
+export const apiBaseUrl = (): string => serverUrl();
 
 export const api = {
   register: (email: string, username: string, password: string): Promise<AuthResponse> =>
@@ -310,7 +312,7 @@ export const api = {
   /** Fetches a stored object's bytes. Attachments come back as ciphertext. */
   fetchObject: async (url: string): Promise<Uint8Array<ArrayBuffer>> => {
     const token = getAccessToken();
-    const response = await fetch(url.startsWith('http') ? url : `${API_URL}${url}`, {
+    const response = await fetch(absoluteUrl(url), {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     });
     if (!response.ok) {
