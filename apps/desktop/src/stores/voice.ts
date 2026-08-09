@@ -176,8 +176,6 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
       if (joinCounter !== currentJoinId) return;
 
       const settings = useAudioSettings.getState().settings;
-      const micGate = new NoiseGate(settings.gateThresholdDb);
-      gate = micGate;
 
       const keyProvider = new ExternalE2EEKeyProvider();
       const room = new Room({
@@ -277,9 +275,10 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
         console.log('[voice.ts] 7. Enabling microphone...');
         await room.localParticipant.setMicrophoneEnabled(
           true,
-          micCapture(settings, micGate),
+          micCapture(settings),
           micPublish(settings),
         );
+        await attachGate(room, settings);
         console.log('[voice.ts] 7b. Microphone enabled!');
       } catch (error) {
         micEnabled = false;
@@ -353,9 +352,10 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
     try {
       await room.localParticipant.setMicrophoneEnabled(
         !micEnabled,
-        micCapture(settings, gate ?? undefined),
+        micCapture(settings),
         micPublish(settings),
       );
+      if (!micEnabled) await attachGate(room, settings);
       set({ micEnabled: !micEnabled, error: null, ...snapshot(room) });
     } catch (error) {
       set({ error: `Microphone: ${messageOf(error)}`, ...snapshot(room) });
@@ -527,6 +527,54 @@ function toTile(participant: Participant, speaking: boolean): VoiceTile {
 }
 
 /**
+ * The gate's own audio context, one per window.
+ *
+ * LiveKit will not attach a processor to a track that has no audio context, and
+ * the one it acquires for the room is not on the track yet at the moment a
+ * processor passed in the capture options would be applied - which is why the
+ * gate is attached after the track is published rather than with it. Ours is
+ * created on the first join, which is a click, so it is never blocked by
+ * autoplay policy.
+ */
+let gateContext: AudioContext | null = null;
+
+/**
+ * Puts the gate on the published microphone, takes it off, or retunes it.
+ *
+ * Never fatal: a call without a gate is the call this app had last week, and
+ * losing the microphone over a failed processor would be a far worse trade.
+ */
+async function attachGate(room: Room, settings: VoiceSettings): Promise<void> {
+  const track = room.localParticipant.getTrackPublication(Track.Source.Microphone)?.track;
+  if (!(track instanceof LocalAudioTrack)) return;
+
+  try {
+    if (settings.gateThresholdDb === null) {
+      if (gate) {
+        gate = null;
+        await track.stopProcessor();
+      }
+      return;
+    }
+
+    if (gate) {
+      gate.setThreshold(settings.gateThresholdDb);
+      return;
+    }
+
+    gateContext ??= new AudioContext();
+    await gateContext.resume().catch(() => undefined);
+    track.setAudioContext(gateContext);
+
+    gate = new NoiseGate(settings.gateThresholdDb);
+    await track.setProcessor(gate);
+  } catch (error) {
+    gate = null;
+    console.warn('[voice.ts] microphone gate not attached:', error);
+  }
+}
+
+/**
  * Voice settings changed while a call is running.
  *
  * Three different costs, so three different paths: a threshold is a message to
@@ -537,8 +585,6 @@ function toTile(participant: Participant, speaking: boolean): VoiceTile {
  * in place.
  */
 async function applyAudioSettings(next: VoiceSettings, previous: VoiceSettings): Promise<void> {
-  gate?.setThreshold(next.gateThresholdDb);
-
   const { room, status, micEnabled } = useVoiceStore.getState();
   if (!room || status !== 'connected') return;
 
@@ -551,10 +597,13 @@ async function applyAudioSettings(next: VoiceSettings, previous: VoiceSettings):
   if (!micEnabled) return;
 
   if (next.mode !== previous.mode || next.inputDeviceId !== previous.inputDeviceId) {
+    // A republished track is a new track, so the gate has to be put back on it.
+    gate = null;
     await room.localParticipant.setMicrophoneEnabled(false).catch(() => undefined);
     await room.localParticipant
-      .setMicrophoneEnabled(true, micCapture(next, gate ?? undefined), micPublish(next))
+      .setMicrophoneEnabled(true, micCapture(next), micPublish(next))
       .catch(() => undefined);
+    await attachGate(room, next);
     return;
   }
 
@@ -562,6 +611,7 @@ async function applyAudioSettings(next: VoiceSettings, previous: VoiceSettings):
   if (track instanceof LocalAudioTrack) {
     await track.applyConstraints(micProcessing(next)).catch(() => undefined);
   }
+  await attachGate(room, next);
 }
 
 useAudioSettings.subscribe((state, previous) => {
