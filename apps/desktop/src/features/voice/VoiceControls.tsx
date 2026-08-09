@@ -7,11 +7,13 @@
 import { useState, type ReactNode } from 'react';
 import { useVoiceStore } from '../../stores/voice';
 import { ScreenSharePicker } from './ScreenSharePicker';
+import { DevicePicker } from './DevicePicker';
 import {
   MicIcon,
   MicOffIcon,
   PhoneOffIcon,
   ScreenShareIcon,
+  SettingsIcon,
   VideoIcon,
   VideoOffIcon,
 } from '../../components/icons';
@@ -28,6 +30,9 @@ export function VoiceControls({ size = 'sm' }: { size?: 'sm' | 'lg' }): JSX.Elem
 
   // Starting a share asks what to share first; stopping is immediate.
   const [picking, setPicking] = useState(false);
+  // Devices can be changed before the call connects - a headset plugged in
+  // late is exactly when somebody goes looking for this.
+  const [choosingDevices, setChoosingDevices] = useState(false);
 
   const disabled = status !== 'connected';
   const icon = size === 'lg' ? 'h-5 w-5' : 'h-4 w-4';
@@ -66,6 +71,18 @@ export function VoiceControls({ size = 'sm' }: { size?: 'sm' | 'lg' }): JSX.Elem
       </ControlButton>
 
       {picking && <ScreenSharePicker onClose={() => setPicking(false)} />}
+
+      <div className="relative">
+        <ControlButton
+          active={choosingDevices}
+          pad={pad}
+          label="Microphone and speakers"
+          onClick={() => setChoosingDevices((open) => !open)}
+        >
+          <SettingsIcon className={icon} />
+        </ControlButton>
+        {choosingDevices && <DevicePicker onClose={() => setChoosingDevices(false)} />}
+      </div>
 
       <button
         type="button"

@@ -6,6 +6,7 @@ import { usePresenceStore } from '../../stores/presence';
 import { useVoiceStore } from '../../stores/voice';
 import { useAudioSettings } from '../../stores/audioSettings';
 import { monitorMic, type MicLevel } from '../../services/mic-gate';
+import { DeviceSelect, useDevices } from '../../components/DeviceSelect';
 import { DEFAULT_VOICE_SETTINGS, GATE_RANGE } from '../../services/voice-quality';
 import { api } from '../../services/api';
 import {
@@ -310,17 +311,10 @@ function VoiceSection(): JSX.Element {
   const settings = useAudioSettings((state) => state.settings);
   const update = useAudioSettings((state) => state.update);
 
-  const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
+  const [devices, refreshDevices] = useDevices();
   const [level, setLevel] = useState<MicLevel>({ db: -100, open: false });
   const [testing, setTesting] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
-
-  // Device labels are blank until the microphone has been granted once, which
-  // is why the list is read again after the meter has opened one.
-  const readDevices = (): void => {
-    void navigator.mediaDevices.enumerateDevices().then(setDevices).catch(() => undefined);
-  };
-  useEffect(readDevices, []);
 
   useEffect(() => {
     if (!testing) return;
@@ -332,7 +326,9 @@ function VoiceSection(): JSX.Element {
         if (cancelled) release();
         else {
           stop = release;
-          readDevices();
+          // Labels only exist once the microphone has been granted, and this
+          // is the grant.
+          refreshDevices();
         }
       })
       .catch((error: unknown) => {
@@ -463,44 +459,6 @@ function VoiceSection(): JSX.Element {
         />
       </dl>
     </>
-  );
-}
-
-/**
- * A device list. `null` is the system default and stays the default: a machine
- * whose chosen microphone has been unplugged should fall back rather than fail.
- */
-function DeviceSelect({
-  label,
-  kind,
-  devices,
-  value,
-  onChange,
-}: {
-  label: string;
-  kind: MediaDeviceKind;
-  devices: MediaDeviceInfo[];
-  value: string | null;
-  onChange: (deviceId: string | null) => void;
-}): JSX.Element {
-  const options = devices.filter((device) => device.kind === kind && device.deviceId !== 'default');
-
-  return (
-    <label className="block">
-      <span className="block text-xs font-bold uppercase tracking-wide text-slate-400">{label}</span>
-      <select
-        value={value ?? ''}
-        onChange={(event) => onChange(event.target.value || null)}
-        className="mt-2 w-full cursor-pointer rounded bg-surface-950 px-3 py-2 text-slate-100 focus:outline-none focus:ring-2 focus:ring-accent"
-      >
-        <option value="">System default</option>
-        {options.map((device) => (
-          <option key={device.deviceId} value={device.deviceId}>
-            {device.label || 'Unnamed device'}
-          </option>
-        ))}
-      </select>
-    </label>
   );
 }
 
