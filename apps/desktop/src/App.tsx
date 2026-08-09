@@ -25,6 +25,7 @@ import { PinnedPanel } from './features/chat/PinnedPanel';
 import { SearchPanel } from './features/chat/SearchPanel';
 import { UserSettings } from './features/settings/UserSettings';
 import { VoiceChannelView } from './features/voice/VoiceChannelView';
+import { ShareControlConsent } from './features/voice/ShareControlConsent';
 import { NexoraLogoIcon } from './components/icons';
 
 export default function App(): JSX.Element {
@@ -207,8 +208,12 @@ function Workbench(): JSX.Element {
       )}
 
       {/* Somebody asking to reach this machine has to be answered wherever the
-          window happens to be, so the prompt sits above everything. */}
+          window happens to be, so the prompt sits above everything. The same
+          goes for somebody in a call asking for the mouse on a screen being
+          shared - a machine being driven by another person is never a
+          background event. */}
       <RemoteConsent />
+      <ShareControlConsent />
 
       {settings === 'user' && <UserSettings onClose={() => setSettings('none')} />}
       {settings === 'server' && <ServerSettings onClose={() => setSettings('none')} />}

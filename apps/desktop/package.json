@@ -9,7 +9,7 @@
     "preview": "vite preview",
     "package": "pnpm build && electron-builder --config electron-builder.yml",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "check": "tsx src/services/e2ee-crypto.check.ts && tsx src/services/message-body.check.ts && tsx src/services/endpoint.check.ts"
+    "check": "tsx src/services/e2ee-crypto.check.ts && tsx src/services/message-body.check.ts && tsx src/services/endpoint.check.ts && tsx src/features/voice/stage-geometry.check.ts"
   },
   "dependencies": {
     "@nexora/permissions": "workspace:*",

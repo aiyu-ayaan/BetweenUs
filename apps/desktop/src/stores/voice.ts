@@ -22,6 +22,7 @@ import { api } from '../services/api';
 import { callKeyForChannel } from '../services/e2ee';
 import { presenceSocket } from '../services/socket';
 import { wsUrl } from '../services/endpoint';
+import { useShareControlStore } from './shareControl';
 
 if (import.meta.env.DEV) setLogLevel('debug');
 
@@ -58,6 +59,12 @@ interface VoiceState {
   micEnabled: boolean;
   cameraEnabled: boolean;
   screenEnabled: boolean;
+  /**
+   * The display being shared, or null for a window. Handing control of a share
+   * to somebody in the call needs it: a click arrives as a fraction of a screen
+   * and a window has no such fraction - it can be dragged between two of them.
+   */
+  sharedDisplayId: string | null;
   /** False when the browser/runtime refused insertable streams. */
   encrypted: boolean;
   error: string | null;
@@ -94,6 +101,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
   micEnabled: false,
   cameraEnabled: false,
   screenEnabled: false,
+  sharedDisplayId: null,
   encrypted: false,
   error: null,
 
@@ -205,6 +213,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
         .on(RoomEvent.Disconnected, () => {
           if (get().room === room) {
             presenceSocket.send({ type: 'voice.leave', channelId });
+            useShareControlStore.getState().detach();
             set({
               status: 'idle',
               channelId: null,
@@ -212,6 +221,8 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
               tiles: [],
               shares: [],
               watching: null,
+              screenEnabled: false,
+              sharedDisplayId: null,
             });
           }
         });
@@ -251,6 +262,9 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
       }
 
       presenceSocket.send({ type: 'voice.join', channelId });
+      // Pointers and "give me the mouse" ride the room's own data channel, so
+      // they exist for exactly as long as the room does.
+      useShareControlStore.getState().attach(room);
 
       console.log('[voice.ts] 8. Join complete!');
       set({
@@ -261,6 +275,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
         micEnabled,
         cameraEnabled: false,
         screenEnabled: false,
+        sharedDisplayId: null,
         ...snapshot(room),
       });
     } catch (error) {
@@ -280,6 +295,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
     joinCounter++;
     const { room, channelId } = get();
     if (channelId) presenceSocket.send({ type: 'voice.leave', channelId });
+    useShareControlStore.getState().detach();
     lastSpoke.clear();
     set({
       status: 'idle',
@@ -289,6 +305,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
       shares: [],
       watching: null,
       screenEnabled: false,
+      sharedDisplayId: null,
       error: null,
     });
     if (room) {
@@ -341,6 +358,9 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
       // Watch your own share, so you can see what the others are seeing.
       set({
         screenEnabled: true,
+        // Null for a window, and for a runtime with no source list: control of
+        // a share is refused unless a whole display is on the wire.
+        sharedDisplayId: source?.displayId ?? null,
         error: null,
         watching: room.localParticipant.identity,
         ...snapshot(room),
@@ -355,9 +375,12 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
     if (!room || status !== 'connected') return;
     try {
       await room.localParticipant.setScreenShareEnabled(false);
+      // Control cannot outlive the share it was given over.
+      useShareControlStore.getState().stop();
       const stoppedWhatWeWatched = watching === room.localParticipant.identity;
       set({
         screenEnabled: false,
+        sharedDisplayId: null,
         error: null,
         watching: stoppedWhatWeWatched ? null : watching,
         ...snapshot(room),

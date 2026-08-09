@@ -26,9 +26,11 @@ import type { Track } from 'livekit-client';
 import { useChatStore } from '../../stores/chat';
 import { usePresenceStore } from '../../stores/presence';
 import { useRemoteStore } from '../../stores/remote';
+import { useShareControlStore } from '../../stores/shareControl';
 import { useVoiceStore, type VoiceShare, type VoiceTile } from '../../stores/voice';
 import { VoiceControls } from './VoiceControls';
 import { VideoSink } from './MediaSink';
+import { ShareStage } from './ShareStage';
 import {
   ChevronLeftIcon,
   ChevronRightIcon,
@@ -250,19 +252,19 @@ function Theatre({ share, tiles }: { share: VoiceShare; tiles: Stage[] }): JSX.E
     <div className="flex min-h-0 flex-1 flex-col gap-3">
       <div className="relative min-h-0 flex-1 overflow-hidden rounded-lg bg-black">
         {share.track ? (
-          <VideoSink track={share.track} fit="contain" />
+          <ShareStage share={share} />
         ) : (
           <p className="flex h-full items-center justify-center text-sm text-slate-400">
             Waiting for {share.isLocal ? 'your' : `${share.name}'s`} screen…
           </p>
         )}
 
-        <p className="absolute left-2 top-2 rounded bg-black/70 px-2 py-1 text-xs text-slate-200">
+        <p className="pointer-events-none absolute left-2 top-2 rounded bg-black/70 px-2 py-1 text-xs text-slate-200">
           {share.isLocal ? 'Your screen' : `${share.name}'s screen`}
         </p>
 
         <div className="absolute right-2 top-2 flex gap-2">
-          {!share.isLocal && <RequestControlButton userId={share.identity} name={share.name} />}
+          {!share.isLocal && <ControlButtons share={share} />}
           {share.isLocal && (
             <button
               type="button"
@@ -296,38 +298,79 @@ function Theatre({ share, tiles }: { share: VoiceShare; tiles: Stage[] }): JSX.E
 
 /**
  * "I can see your screen, now let me drive" - the thought that follows watching
- * a share often enough to be worth a button.
+ * a share often enough to be worth a button, and the reason somebody shares a
+ * screen in the first place when they are stuck.
  *
- * A screen share is not a remote session and this does not turn one into one:
- * it opens a proper session against that person's machine, which needs a grant
- * they gave beforehand and raises the same consent prompt on their side. The
- * button is only a shortcut past the machine list, never past the permission.
+ * Two doors, and they are not the same door:
+ *
+ * - **Request control** asks the person sharing, right now, over the call. It
+ *   needs nothing set up beforehand and grants nothing afterwards: it lasts as
+ *   long as the share does, works on the screen they are already showing, and
+ *   either side ends it with one click. This is the one for helping somebody.
+ * - **Open a session** is the remote-desktop path, for a machine this account
+ *   was granted standing access to. It survives the call, reaches the whole
+ *   machine rather than the shared screen, and is audited. It only appears when
+ *   such a grant already exists.
  */
-function RequestControlButton({ userId, name }: { userId: string; name: string }): JSX.Element | null {
+function ControlButtons({ share }: { share: VoiceShare }): JSX.Element {
   const machines = useRemoteStore((state) => state.machines);
   const load = useRemoteStore((state) => state.load);
   const connectToOwner = useRemoteStore((state) => state.connectToOwner);
   const session = useRemoteStore((state) => state.session);
 
+  const asking = useShareControlStore((state) => state.asking);
+  const driving = useShareControlStore((state) => state.driving);
+  const refusal = useShareControlStore((state) => state.refusal);
+  const ask = useShareControlStore((state) => state.ask);
+  const stop = useShareControlStore((state) => state.stop);
+
   useEffect(() => {
     void load();
   }, [load]);
 
-  // Nothing to offer when this account has no access to a machine of theirs,
-  // and nothing to offer while a session is already open.
-  const machine = machines.find((candidate) => candidate.ownerId === userId);
-  if (!machine || session) return null;
+  const controlling = driving === share.identity;
+  const machine = machines.find((candidate) => candidate.ownerId === share.identity);
 
   return (
-    <button
-      type="button"
-      disabled={!machine.online}
-      title={machine.online ? `Ask ${name} for the mouse and keyboard` : `${machine.name} is offline`}
-      onClick={() => void connectToOwner(userId, true)}
-      className="cursor-pointer rounded-md bg-accent px-3 py-1 text-xs font-semibold text-white transition-colors duration-200 hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
-    >
-      Request control
-    </button>
+    <>
+      {refusal && !controlling && (
+        <span className="rounded-md bg-black/70 px-2 py-1 text-xs text-amber-300">{refusal}</span>
+      )}
+
+      <button
+        type="button"
+        disabled={asking}
+        onClick={() => (controlling ? stop() : ask({ identity: share.identity, name: share.name }))}
+        title={
+          controlling
+            ? 'Hand the mouse back (Esc)'
+            : `Ask ${share.name} for the mouse and keyboard on this screen`
+        }
+        className={`cursor-pointer rounded-md px-3 py-1 text-xs font-semibold transition-colors duration-200 disabled:cursor-not-allowed disabled:opacity-60 ${
+          controlling
+            ? 'bg-surface-600 text-slate-100 hover:bg-surface-500'
+            : 'bg-accent text-white hover:brightness-110'
+        }`}
+      >
+        {controlling ? 'Release control (Esc)' : asking ? 'Asking…' : 'Request control'}
+      </button>
+
+      {machine && !session && (
+        <button
+          type="button"
+          disabled={!machine.online}
+          title={
+            machine.online
+              ? `Open a remote session on ${machine.name}`
+              : `${machine.name} is offline`
+          }
+          onClick={() => void connectToOwner(share.identity, true)}
+          className="cursor-pointer rounded-md bg-black/70 px-3 py-1 text-xs text-slate-200 transition-colors duration-200 hover:bg-black disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          Open a session
+        </button>
+      )}
+    </>
   );
 }
 
