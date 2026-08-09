@@ -21,6 +21,7 @@ import E2eeWorker from 'livekit-client/e2ee-worker?worker';
 import { api } from '../services/api';
 import { callKeyForChannel } from '../services/e2ee';
 import { presenceSocket } from '../services/socket';
+import { wsUrl } from '../services/endpoint';
 
 if (import.meta.env.DEV) setLogLevel('debug');
 
@@ -132,7 +133,14 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
         api.callToken(channelId),
       ]);
 
-      console.log('[voice.ts] 3. Got credentials url:', credentials.url);
+      // A deployment that puts LiveKit behind its own gateway answers with a
+      // path (/livekit) rather than a host, so one address covers the whole
+      // deployment. Anything absolute is used as it stands.
+      const livekitUrl = credentials.url.startsWith('/')
+        ? `${wsUrl()}${credentials.url}`
+        : credentials.url;
+
+      console.log('[voice.ts] 3. Got credentials url:', livekitUrl);
 
       if (joinCounter !== currentJoinId) return;
 
@@ -201,7 +209,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
         });
 
       console.log('[voice.ts] 6. Connecting to LiveKit room...');
-      const connectPromise = room.connect(credentials.url, credentials.token);
+      const connectPromise = room.connect(livekitUrl, credentials.token);
       const timeoutPromise = new Promise<never>((_, reject) =>
         setTimeout(() => reject(new Error('Connection to voice server timed out')), 15_000),
       );

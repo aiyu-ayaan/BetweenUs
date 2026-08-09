@@ -483,7 +483,13 @@ export interface CallTokenRequest {
 }
 
 export interface CallTokenResponse {
-  /** LiveKit server URL the client dials directly - media never touches NestJS. */
+  /**
+   * LiveKit server the client dials directly - media never touches NestJS.
+   *
+   * Either absolute (`wss://livekit.example.com`) or a path on the gateway the
+   * client is already talking to (`/livekit`), which is what lets a whole
+   * deployment be one address. The client resolves the second form itself.
+   */
   url: string;
   token: string;
   room: string;

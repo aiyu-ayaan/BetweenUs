@@ -53,6 +53,9 @@ services:
     networks:
       - cloudflare-network
       - api-network
+      # LiveKit's signalling handshake is proxied under /livekit, so a client
+      # needs one hostname for the whole deployment. Media stays on its own path.
+      - media-network
 
   # The admin panel: static bundle behind the same gateway.
   admin-web:
@@ -204,9 +207,10 @@ services:
     environment:
       <<: *service-env
       CALL_SERVICE_PORT: 3007
-      # Clients dial LiveKit directly, so this is the public URL, not a
-      # container hostname.
-      LIVEKIT_URL: ${LIVEKIT_URL:?LIVEKIT_URL is required}
+      # Handed to clients, so never a container hostname. Defaults to the path
+      # Nginx proxies to the SFU, which keeps the deployment on one public
+      # address; set LIVEKIT_URL to an absolute wss:// URL to split it out.
+      LIVEKIT_URL: ${LIVEKIT_URL:-/livekit}
       LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:?LIVEKIT_API_KEY is required}
       LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:?LIVEKIT_API_SECRET is required}
     depends_on:

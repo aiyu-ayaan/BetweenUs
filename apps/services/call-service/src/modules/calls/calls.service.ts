@@ -34,6 +34,9 @@ export class CallsService {
 
     const apiKey = envOr('LIVEKIT_API_KEY', '');
     const apiSecret = envOr('LIVEKIT_API_SECRET', '');
+    // Absolute (ws://host:7880) or a path on the gateway (/livekit); the client
+    // resolves the second against the address it is already talking to, so a
+    // deployment behind one hostname stays one hostname.
     const url = envOr('LIVEKIT_URL', '');
     if (!apiKey || !apiSecret || !url) {
       throw new ServiceUnavailableException({
