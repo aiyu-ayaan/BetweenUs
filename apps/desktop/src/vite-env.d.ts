@@ -28,6 +28,8 @@ interface ScreenSource {
   /** data: URI - the CSP allows those for images. */
   thumbnail: string;
   appIcon: string | null;
+  /** The display the agent shares and injects input into. */
+  primary: boolean;
 }
 
 /** Exposed by electron/preload.ts through contextBridge. */
@@ -53,6 +55,7 @@ interface Window {
     secureGet: (key: string) => Promise<string | null>;
     secureSet: (key: string, value: string) => Promise<void>;
     screenSources: () => Promise<ScreenSource[]>;
+    primaryDisplay: () => Promise<{ width: number; height: number; scaleFactor: number }>;
     selectScreenSource: (id: string, audio: boolean) => Promise<void>;
     startOAuth: (startUrl: string) => Promise<string | null>;
     /** Remote desktop, agent side. Input injection is Windows-only for now. */

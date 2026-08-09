@@ -9,6 +9,7 @@ import {
   ipcMain,
   nativeImage,
   safeStorage,
+  screen,
   session,
   shell,
 } from 'electron';
@@ -273,13 +274,33 @@ ipcMain.handle('screen:sources', async () => {
     fetchWindowIcons: true,
   });
 
+  const primaryId = String(screen.getPrimaryDisplay().id);
+
   return sources.map((source) => ({
     id: source.id,
     name: source.name,
     kind: source.id.startsWith('screen:') ? 'screen' : 'window',
     thumbnail: source.thumbnail.toDataURL(),
     appIcon: source.appIcon && !source.appIcon.isEmpty() ? source.appIcon.toDataURL() : null,
+    // The agent shares the primary display and input is injected into the
+    // primary display; picking "the first screen in the list" made those two
+    // different monitors on a machine that has more than one.
+    primary: source.display_id === primaryId,
   }));
+});
+
+/**
+ * The primary display in real pixels, which is what the agent has to publish
+ * at: LiveKit caps a screen share at 1080p unless it is told the capture size,
+ * and a 1440p or scaled display then arrives soft and unreadable.
+ */
+ipcMain.handle('screen:primary', () => {
+  const display = screen.getPrimaryDisplay();
+  return {
+    width: Math.round(display.size.width * display.scaleFactor),
+    height: Math.round(display.size.height * display.scaleFactor),
+    scaleFactor: display.scaleFactor,
+  };
 });
 
 ipcMain.handle('screen:select', (_event, id: unknown, audio: unknown): void => {

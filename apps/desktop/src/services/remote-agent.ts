@@ -338,6 +338,16 @@ const media = new Map<
  *
  * The picker is bypassed on purpose: a controller asked for this machine, not
  * for a window, and there is nobody to choose in an unattended session.
+ *
+ * Resolution follows the display rather than a fixed preset, which is what
+ * makes text on the far end readable. LiveKit caps a screen share at 1080p
+ * unless it is told the capture size, so a 1440p or a scaled display arrived
+ * soft; asking for the display's real pixel size and telling the encoder to
+ * keep resolution over frame rate is the same bargain RustDesk makes - a remote
+ * desktop that is sharp at 10fps beats a blurry one at 30. The bitrate is
+ * derived from the pixel count rather than fixed, so a 4K machine is not sent
+ * through a 1080p-sized pipe, and LiveKit still drops frames on its own when
+ * the link cannot carry it.
  */
 async function startPublishing(pending: PendingSession): Promise<void> {
   const credentials = media.get(pending.sessionId);
@@ -345,8 +355,16 @@ async function startPublishing(pending: PendingSession): Promise<void> {
 
   try {
     const sources = (await window.nexora?.screenSources()) ?? [];
-    const screen = sources.find((source) => source.kind === 'screen');
+    // The primary display, because that is the one input is injected into.
+    const screens = sources.filter((source) => source.kind === 'screen');
+    const screen = screens.find((source) => source.primary) ?? screens[0];
     await window.nexora?.selectScreenSource(screen?.id ?? '', false);
+
+    const display = (await window.nexora?.primaryDisplay()) ?? {
+      width: 1920,
+      height: 1080,
+      scaleFactor: 1,
+    };
 
     const next = new Room({ adaptiveStream: false, dynacast: false });
     room = next;
@@ -358,7 +376,24 @@ async function startPublishing(pending: PendingSession): Promise<void> {
       ? `${wsUrl()}${credentials.livekitUrl}`
       : credentials.livekitUrl;
     await next.connect(url, credentials.token);
-    await next.localParticipant.setScreenShareEnabled(true, { audio: false });
+    await next.localParticipant.setScreenShareEnabled(
+      true,
+      {
+        audio: false,
+        resolution: { width: display.width, height: display.height, frameRate: 30 },
+        // 'text' tells the encoder this is a desktop, not a video: sharp edges
+        // matter more than smooth motion.
+        contentHint: 'text',
+      },
+      {
+        simulcast: false,
+        degradationPreference: 'maintain-resolution',
+        screenShareEncoding: {
+          maxFramerate: 30,
+          maxBitrate: bitrateFor(display.width, display.height),
+        },
+      },
+    );
 
     useAgentStore.setState({
       session: {
@@ -377,6 +412,19 @@ async function startPublishing(pending: PendingSession): Promise<void> {
     });
     await teardown('capture-failed');
   }
+}
+
+/**
+ * A ceiling for the encoder, scaled to the number of pixels being sent.
+ *
+ * 1080p at 30fps of mostly-static desktop sits comfortably under 4 Mbps; the
+ * rest is proportional to the area, clamped so a 4K display does not ask for a
+ * link nobody has. This is a ceiling, not a target - the encoder spends far
+ * less on a still screen and LiveKit lowers it further when the link says so.
+ */
+function bitrateFor(width: number, height: number): number {
+  const perPixel = 4_000_000 / (1920 * 1080);
+  return Math.min(12_000_000, Math.max(1_500_000, Math.round(width * height * perPixel)));
 }
 
 /**

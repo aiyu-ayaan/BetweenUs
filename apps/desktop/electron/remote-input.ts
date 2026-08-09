@@ -239,14 +239,22 @@ function write(line: string): void {
   }
 }
 
-/** Fraction of the shared screen -> a pixel on the primary display. */
+/**
+ * Fraction of the shared screen -> a physical pixel on the primary display.
+ *
+ * `bounds` is in device-independent pixels and `SetCursorPos` wants real ones,
+ * so on a display running at anything other than 100% scaling the two differ by
+ * the scale factor - which is why a click at the bottom right of a 150% screen
+ * landed two thirds of the way across it. `dipToScreenPoint` is Electron's own
+ * conversion, so this stays right for a display that is scaled *and* offset.
+ */
 function toScreenPoint(x: number, y: number): { x: number; y: number } {
   const bounds = screen.getPrimaryDisplay().bounds;
   const clamp = (value: number): number => Math.min(1, Math.max(0, value));
-  return {
-    x: Math.round(bounds.x + clamp(x) * bounds.width),
-    y: Math.round(bounds.y + clamp(y) * bounds.height),
-  };
+  return screen.dipToScreenPoint({
+    x: bounds.x + clamp(x) * bounds.width,
+    y: bounds.y + clamp(y) * bounds.height,
+  });
 }
 
 export function applyMouse(input: MouseInput): void {
