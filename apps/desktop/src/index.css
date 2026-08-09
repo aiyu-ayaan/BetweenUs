@@ -28,6 +28,16 @@
    * thin neutral ring, and text fields opt out entirely: a caret is already an
    * unmistakable focus indicator, and boxing the composer as well is noise.
    */
+  /*
+   * Chromium's own focus ring is the blue one, and it is drawn on :focus even
+   * where no ring of ours is - a server pill keeps it after a click. Turning
+   * the platform outline off everywhere and drawing our own on :focus-visible
+   * is the only way to be sure which one is on screen.
+   */
+  :focus {
+    outline: none;
+  }
+
   :focus-visible {
     @apply outline-none ring-1 ring-slate-400/50;
   }

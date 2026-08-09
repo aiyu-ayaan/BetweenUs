@@ -180,7 +180,10 @@ function RailButton({
         title={label}
         aria-label={label}
         aria-current={active ? 'true' : undefined}
-        className={`flex h-12 w-12 cursor-pointer items-center justify-center overflow-hidden transition-all duration-200 ${
+        // No focus ring here: the pill already says where you are with the
+        // marker on the left edge, and a ring around a circle reads as a stray
+        // blue square.
+        className={`flex h-12 w-12 cursor-pointer items-center justify-center overflow-hidden outline-none ring-0 focus:ring-0 focus-visible:ring-0 transition-all duration-200 ${
           active
             ? `rounded-2xl ${activeClasses}`
             : `rounded-[24px] bg-surface-800 hover:rounded-2xl hover:bg-accent hover:text-white ${idleTextClasses}`

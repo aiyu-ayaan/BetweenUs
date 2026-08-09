@@ -131,9 +131,12 @@ Closing both windows stops the dev server. Ctrl+C does the same.
 - Pin a message from the menu, then open the pin icon in the channel header: the
   right-hand column becomes the pinned list in place of the member list.
   Clicking a pin scrolls the conversation to it and flashes it.
-- As a plain MEMBER the Pin item is absent, and the server refuses it
-  (`MANAGE_MESSAGE`). In a direct message either person can pin — there are no
-  roles in a DM.
+- As a plain MEMBER the Pin item is greyed out and says which permission it
+  wants; grant *Pin and unpin messages* in Server settings → Roles &
+  Permissions and it becomes live. In a direct message either person can pin —
+  there are no roles in a DM.
+- Anything the server refuses - a pin, a delete, a reaction - now says so in a
+  red line at the top of the conversation instead of doing nothing.
 - The magnifier in the header opens search over the messages that window has
   decrypted; the footer says how many that is. It has to work this way: the
   server holds ciphertext and cannot search it.
@@ -141,11 +144,11 @@ Closing both windows stops the dev server. Ctrl+C does the same.
 **Unread counts and the new-messages line**
 - With `#general` open in Alice's window, click Bob's window so Alice's loses
   focus, and send. Alice's sidebar counts 1 and a red **New** line appears above
-  the message. Click back into Alice's window: the badge clears on focus, and
-  the line stays until the channel is opened again — it marks where you left
-  off, so it must not vanish under the pointer as you read.
-- Switch Alice to `#owners-only` and back: the line is gone, because everything
-  before it has been read.
+  the message. Click back into Alice's window: the badge clears at once and the
+  line clears about five seconds later — long enough to see where you left off,
+  and without having to leave the channel and come back.
+- Switch Alice to `#owners-only` and back: no line, because everything has been
+  read.
 - Send while Alice's window is focused and `#general` is open: no badge, no
   line, and no badge after a restart either — the read marker moved with it.
 - The badge that used to stick: a message arriving in the channel already on
@@ -153,8 +156,10 @@ Closing both windows stops the dev server. Ctrl+C does the same.
   because only opening a channel cleared a count.
 
 **Focus**
-- Click into the composer, or on a server pill: no blue box. Tab around with the
-  keyboard and a thin neutral ring follows the focus.
+- Click into the composer, or on a server pill: no blue box anywhere, including
+  Chromium's own outline on the rail pill. Tab around with the keyboard and a
+  thin neutral ring follows the focus - except on the rail, where the bar on the
+  left edge of the pill is the marker.
 
 **Adding people to a server**
 - Server settings → Members → *Add a member*: type a username, and the same

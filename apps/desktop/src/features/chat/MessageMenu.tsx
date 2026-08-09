@@ -17,6 +17,12 @@ export interface MessageMenuActions {
   onCopy?: () => void;
   onDelete?: () => void;
   pinned: boolean;
+  /**
+   * Why pinning is not on offer, when it is not. An item that is simply absent
+   * looks like a missing feature; one that says which permission it wants is
+   * something an administrator can act on.
+   */
+  pinDisabledReason?: string;
 }
 
 /**
@@ -110,7 +116,7 @@ export function MessageMenu({
           onClose();
         }} />
       )}
-      {actions.onPin && (
+      {actions.onPin ? (
         <Item
           icon={<PinIcon className="h-4 w-4" />}
           label={actions.pinned ? 'Unpin message' : 'Pin message'}
@@ -118,6 +124,14 @@ export function MessageMenu({
             actions.onPin?.();
             onClose();
           }}
+        />
+      ) : (
+        <Item
+          icon={<PinIcon className="h-4 w-4" />}
+          label="Pin message"
+          hint={actions.pinDisabledReason}
+          disabled
+          onClick={() => undefined}
         />
       )}
       {actions.onCopy && (
@@ -150,25 +164,36 @@ function Item({
   label,
   onClick,
   danger = false,
+  disabled = false,
+  hint,
 }: {
   icon: JSX.Element;
   label: string;
   onClick: () => void;
   danger?: boolean;
+  disabled?: boolean;
+  hint?: string;
 }): JSX.Element {
   return (
     <button
       type="button"
       role="menuitem"
       onClick={onClick}
-      className={`flex w-full cursor-pointer items-center gap-2 px-3 py-1.5 text-left text-sm transition-colors duration-150 ${
-        danger
-          ? 'text-danger hover:bg-danger hover:text-white'
-          : 'text-slate-200 hover:bg-surface-700 hover:text-slate-50'
+      disabled={disabled}
+      title={hint}
+      className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm transition-colors duration-150 ${
+        disabled
+          ? 'cursor-not-allowed text-slate-500'
+          : danger
+            ? 'cursor-pointer text-danger hover:bg-danger hover:text-white'
+            : 'cursor-pointer text-slate-200 hover:bg-surface-700 hover:text-slate-50'
       }`}
     >
       {icon}
-      {label}
+      <span className="min-w-0 flex-1">
+        {label}
+        {disabled && hint && <span className="block text-xs text-slate-600">{hint}</span>}
+      </span>
     </button>
   );
 }

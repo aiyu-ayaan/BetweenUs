@@ -187,6 +187,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
       setUnread(unread);
     }
 
+    // The line goes with the badge, a few seconds behind it. Discord keeps it
+    // until the channel is opened again, which leaves it sitting there long
+    // after everything below it has been read; here it marks unread messages
+    // and nothing else, so it clears itself once they are read. The delay is so
+    // it can still be seen on the way in - a line that vanishes the instant the
+    // window is focused never did its job.
+    if (get().divider[channelId]) clearDividerSoon(channelId);
+
     void api
       .markChannelRead(channelId)
       .then((entry) =>
@@ -302,6 +310,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
           )
         : undefined;
       set({ divider: { ...get().divider, [channelId]: firstUnread?.id ?? null } });
+      // Opening the channel is reading it, so the line it was just given is
+      // already on borrowed time - long enough to be seen, then gone.
+      if (firstUnread) clearDividerSoon(channelId);
       // The cache is written even when the user has already moved on - the
       // fetch was paid for, and the next visit gets it for free.
       set({ history: { ...get().history, [channelId]: items } });
@@ -528,6 +539,25 @@ export const useChatStore = create<ChatState>((set, get) => ({
  * marker only has to be roughly current - it is a "you have seen up to here",
  * not an audit trail.
  */
+/** How long the unread line stays after its messages have been read. */
+const DIVIDER_LINGER_MS = 5000;
+const dividerTimers = new Map<string, number>();
+
+function clearDividerSoon(channelId: string): void {
+  if (dividerTimers.has(channelId)) return;
+  dividerTimers.set(
+    channelId,
+    window.setTimeout(() => {
+      dividerTimers.delete(channelId);
+      const state = useChatStore.getState();
+      // Something new may have arrived and re-placed it while we waited; only
+      // clear it if this channel is still the one being read.
+      if (state.activeChannelId !== channelId || state.unread[channelId]) return;
+      useChatStore.setState({ divider: { ...state.divider, [channelId]: null } });
+    }, DIVIDER_LINGER_MS),
+  );
+}
+
 let readTimer: number | null = null;
 function markActiveReadSoon(): void {
   if (readTimer !== null) return;

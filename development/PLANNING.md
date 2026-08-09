@@ -98,18 +98,32 @@ the older shape.
   to perform. Regaining focus now marks the open channel read, and a message
   arriving in a focused, open channel moves the account's marker as well (at
   most once a second, because the marker only has to be roughly current).
-- **The unread line is placed once, from the marker as it stood on entry.** The
-  read marker moves the instant a channel is opened, so the divider is computed
-  from its previous value and then left alone while the channel stays open -
-  a line that re-placed itself as messages arrived would always sit at the
-  bottom, which is exactly where it is no use. It is the first message somebody
-  else wrote after the marker; a channel that has never been read gets no line
-  rather than one across its whole history.
+- **The unread line is placed once, from the marker as it stood on entry, and
+  clears itself five seconds after the messages under it are read.** The read
+  marker moves the instant a channel is opened, so the divider is computed from
+  its previous value and then left alone while it is being read - a line that
+  re-placed itself as messages arrived would always sit at the bottom, which is
+  exactly where it is no use. Discord leaves it until the channel is opened
+  again; here it clears once its messages have been read, because a line that
+  only goes away by leaving and coming back is a chore rather than a marker. The
+  five seconds are so it can still be seen on the way in. It is the first
+  message somebody else wrote after the marker; a channel that has never been
+  read gets no line rather than one across its whole history.
+- **A refused action says so.** Pinning, deleting and reacting were fired and
+  forgotten from the context menu, so a message the server refused to pin looked
+  like a menu item that did nothing. Every menu action now reports its failure
+  in the conversation, and Pin is shown disabled with the permission it wants
+  rather than being absent - an item that is missing looks like a feature that
+  does not exist, and an administrator cannot act on that.
 - **The focus ring stopped shouting.** A heavy accent-coloured ring with an
   offset drew a blue box around the composer while typing and around a server
   pill after a click, which reads as an error state. It is now a thin neutral
   ring for keyboard users, and text fields opt out entirely - a caret is already
-  an unmistakable focus indicator.
+  an unmistakable focus indicator. Chromium's own blue outline had to be turned
+  off explicitly as well (`:focus { outline: none }`): it survived on a server
+  pill, where nothing of ours was drawing anything. The rail pills opt out of
+  rings altogether - a ring around a circle reads as a stray blue square, and
+  the pill already marks itself with the bar on its left edge.
 
 ### The social graph in realtime (phase 15)
 

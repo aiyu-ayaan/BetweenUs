@@ -188,6 +188,19 @@ function MessageList({
   const [picker, setPicker] = useState<{ id: string; at: { x: number; y: number } } | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
   const [highlighted, setHighlighted] = useState<string | null>(null);
+  const [failure, setFailure] = useState<string | null>(null);
+
+  /**
+   * Menu actions used to be fired and forgotten, so a refused pin or delete
+   * looked like a menu that did nothing at all. Every one of them reports here.
+   */
+  const report = (work: Promise<unknown>): void => {
+    setFailure(null);
+    void work.catch((error: unknown) => {
+      setFailure(error instanceof Error ? error.message : 'That did not work');
+      window.setTimeout(() => setFailure(null), 6000);
+    });
+  };
 
   useEffect(() => {
     bottom.current?.scrollIntoView({ behavior: 'smooth' });
@@ -233,7 +246,16 @@ function MessageList({
   }
 
   return (
-    <div className="flex-1 overflow-y-auto px-4 py-4" role="log" aria-live="polite">
+    <div className="relative flex-1 overflow-y-auto px-4 py-4" role="log" aria-live="polite">
+      {failure && (
+        <p
+          role="alert"
+          className="sticky top-0 z-10 mb-2 rounded-md bg-danger/15 px-3 py-2 text-sm text-danger"
+        >
+          {failure}
+        </p>
+      )}
+
       {messages.length === 0 && <EmptyChannel channel={channel} />}
 
       <ul>
@@ -313,7 +335,7 @@ function MessageList({
                     <ReactionRow
                       message={message}
                       meId={me?.id}
-                      onToggle={(emoji) => void react(message.id, emoji)}
+                      onToggle={(emoji) => report(react(message.id, emoji))}
                       onMore={(at) => setPicker({ id: message.id, at })}
                     />
                   </>
@@ -336,21 +358,22 @@ function MessageList({
             setArmedDelete(null);
           }}
           actions={{
-            pinned: messages.find((item) => item.id === menu.id)?.pinnedAt !== null,
-            onReact: (emoji) => void react(menu.id, emoji),
+            pinned: messages.find((item) => item.id === menu.id)?.pinnedAt != null,
+            onReact: (emoji) => report(react(menu.id, emoji)),
             onMoreEmoji: (at) => setPicker({ id: menu.id, at }),
             onEdit:
               messages.find((item) => item.id === menu.id)?.author.id === me?.id
                 ? () => setEditing(menu.id)
                 : undefined,
-            onPin: canPin ? () => void togglePin(menu.id) : undefined,
+            onPin: canPin ? () => report(togglePin(menu.id)) : undefined,
+            pinDisabledReason: 'Needs the “Pin and unpin messages” permission',
             onCopy: () => {
               const text = messages.find((item) => item.id === menu.id)?.content ?? '';
               void navigator.clipboard.writeText(text);
             },
             onDelete:
               messages.find((item) => item.id === menu.id)?.author.id === me?.id || canModerate
-                ? () => void deleteMessage(menu.id)
+                ? () => report(deleteMessage(menu.id))
                 : undefined,
           }}
         />
@@ -359,7 +382,7 @@ function MessageList({
       {picker && (
         <EmojiPicker
           anchor={picker.at}
-          onPick={(emoji) => void react(picker.id, emoji)}
+          onPick={(emoji) => report(react(picker.id, emoji))}
           onClose={() => setPicker(null)}
         />
       )}

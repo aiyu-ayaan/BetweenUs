@@ -40,8 +40,13 @@ most of phase 12. The carried-over items are older ones in the same state.
       Regaining focus now marks the open channel read, and a message arriving in
       a focused open channel moves the account's marker too
 - [x] A red "New" divider above the first unread message, placed from the read
-      marker as it stood when the channel was opened and left where it is while
-      the channel stays open
+      marker as it stood when the channel was opened, and clearing itself five
+      seconds after its messages have been read rather than waiting for the
+      channel to be reopened
+- [x] Fixed: Chromium's own blue focus outline survived on a server pill;
+      `:focus { outline: none }` plus no ring at all on the rail pills
+- [x] A refused menu action reports its reason in the conversation, and Pin is
+      shown disabled with the permission it needs instead of being absent
 
 Left open on purpose:
 
@@ -56,6 +61,9 @@ Left open on purpose:
 - [ ] The pinned panel caps at 100 pins and does not page
 - [ ] The unread line does not survive a restart: the marker does, but the line
       is only placed when a channel is opened in this session
+- [ ] Pinning in a server channel is `MANAGE_MESSAGE`, so a plain MEMBER cannot
+      pin until an administrator grants it. Whether a small server wants that
+      gate at all is worth revisiting
 - [ ] No "jump to the first unread" button on the line, and no unread bar at the
       top of the channel
 - [ ] A tombstone stays forever; nothing sweeps rows whose body has been empty
