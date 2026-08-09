@@ -240,16 +240,33 @@ function write(line: string): void {
 }
 
 /**
- * Fraction of the shared screen -> a physical pixel on the primary display.
+ * The display an input event is a fraction of, or null for the primary one.
+ *
+ * A controller watching the second monitor sends a click at the middle of what
+ * it can see; mapping that onto the primary display puts it on a different
+ * screen entirely. Whoever chose the monitor sets this.
+ */
+let targetDisplayId: string | null = null;
+
+export function setInputDisplay(displayId: string | null): void {
+  targetDisplayId = displayId;
+}
+
+/**
+ * Fraction of the shared screen -> a physical pixel on that screen.
  *
  * `bounds` is in device-independent pixels and `SetCursorPos` wants real ones,
  * so on a display running at anything other than 100% scaling the two differ by
  * the scale factor - which is why a click at the bottom right of a 150% screen
  * landed two thirds of the way across it. `dipToScreenPoint` is Electron's own
- * conversion, so this stays right for a display that is scaled *and* offset.
+ * conversion, so this stays right for a display that is scaled *and* offset -
+ * and a second monitor is always offset.
  */
 function toScreenPoint(x: number, y: number): { x: number; y: number } {
-  const bounds = screen.getPrimaryDisplay().bounds;
+  const target =
+    screen.getAllDisplays().find((display) => String(display.id) === targetDisplayId) ??
+    screen.getPrimaryDisplay();
+  const bounds = target.bounds;
   const clamp = (value: number): number => Math.min(1, Math.max(0, value));
   return screen.dipToScreenPoint({
     x: bounds.x + clamp(x) * bounds.width,

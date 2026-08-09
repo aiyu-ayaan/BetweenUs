@@ -30,6 +30,9 @@ export function RemoteSessionView(): JSX.Element {
   const requestControl = useRemoteStore((state) => state.requestControl);
   const releaseControl = useRemoteStore((state) => state.releaseControl);
   const error = useRemoteStore((state) => state.error);
+  const screens = useRemoteStore((state) => state.screens);
+  const activeScreenId = useRemoteStore((state) => state.activeScreenId);
+  const selectScreen = useRemoteStore((state) => state.selectScreen);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const mayControl = can('REMOTE_CONTROL');
@@ -101,6 +104,25 @@ export function RemoteSessionView(): JSX.Element {
         )}
         {status === 'waiting' && (
           <span className="text-sm text-slate-400">Waiting for the machine…</span>
+        )}
+
+        {/* Only when there is a choice to make. One monitor needs no chooser. */}
+        {screens.length > 1 && (
+          <label className="flex items-center gap-1.5 text-xs text-slate-400">
+            <span className="sr-only">Monitor</span>
+            <select
+              value={activeScreenId ?? ''}
+              onChange={(event) => selectScreen(event.target.value)}
+              className="cursor-pointer rounded bg-surface-700 px-2 py-1 text-xs text-slate-100"
+            >
+              {screens.map((entry, index) => (
+                <option key={entry.id} value={entry.id}>
+                  {entry.label || `Monitor ${index + 1}`} · {entry.width}×{entry.height}
+                  {entry.primary ? ' (main)' : ''}
+                </option>
+              ))}
+            </select>
+          </label>
         )}
 
         {/* One button. Control that was granted up front starts straight away;

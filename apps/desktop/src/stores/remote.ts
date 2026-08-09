@@ -13,6 +13,7 @@ import type {
   ClientRemoteEvent,
   RemoteMachineSummary,
   RemotePermission,
+  RemoteScreen,
   RemoteSessionResponse,
   ServerRemoteEvent,
 } from '@nexora/shared-types';
@@ -46,6 +47,10 @@ interface RemoteState {
   controlling: boolean;
   /** Set while waiting for somebody at the machine to answer. */
   requestingControl: boolean;
+  /** The machine's displays. Empty until the agent says, and often just one. */
+  screens: RemoteScreen[];
+  /** Which of them is on the wire. The agent is the authority on this. */
+  activeScreenId: string | null;
 
   load: () => Promise<void>;
   connect: (machineId: string) => Promise<void>;
@@ -59,6 +64,8 @@ interface RemoteState {
   sendMouse: (input: Omit<Extract<ClientRemoteEvent, { type: 'input.mouse' }>, 'type'>) => void;
   sendKey: (input: Omit<Extract<ClientRemoteEvent, { type: 'input.key' }>, 'type'>) => void;
   can: (permission: RemotePermission) => boolean;
+  /** Asks the machine to send a different monitor. */
+  selectScreen: (screenId: string) => void;
   /** Takes control, asking the machine for it when it was not granted up front. */
   requestControl: () => void;
   releaseControl: () => void;
@@ -82,6 +89,8 @@ export const useRemoteStore = create<RemoteState>((set, get) => ({
   permissions: [],
   controlling: false,
   requestingControl: false,
+  screens: [],
+  activeScreenId: null,
 
   load: async () => {
     set({ loading: true, error: null });
@@ -116,6 +125,8 @@ export const useRemoteStore = create<RemoteState>((set, get) => ({
       permissions: session.permissions,
       controlling: false,
       requestingControl: false,
+      screens: [],
+      activeScreenId: null,
     });
     openSocket(session, set, get);
     await joinRoom(session, set);
@@ -164,6 +175,8 @@ export const useRemoteStore = create<RemoteState>((set, get) => ({
       permissions: [],
       controlling: false,
       requestingControl: false,
+      screens: [],
+      activeScreenId: null,
     });
   },
 
@@ -183,6 +196,13 @@ export const useRemoteStore = create<RemoteState>((set, get) => ({
   },
 
   can: (permission) => get().permissions.includes(permission),
+
+  selectScreen: (screenId) => {
+    // Not written to `activeScreenId` here: the agent answers with a fresh
+    // `screens` once the swap worked, and a label that moved before the picture
+    // did would be a lie during the second it takes.
+    send({ type: 'screen.select', screenId });
+  },
 
   /**
    * One button, two behaviours. A session already granted control just starts
@@ -249,6 +269,10 @@ function openSocket(
           controlling: event.granted,
           ...(event.granted ? {} : { error: event.reason ?? null }),
         });
+        return;
+
+      case 'screens':
+        set({ screens: event.screens, activeScreenId: event.activeId || null });
         return;
 
       case 'agent.state':

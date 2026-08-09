@@ -28,7 +28,20 @@ interface ScreenSource {
   /** data: URI - the CSP allows those for images. */
   thumbnail: string;
   appIcon: string | null;
-  /** The display the agent shares and injects input into. */
+  /** The display this shows, for a screen; null for a window. */
+  displayId: string | null;
+}
+
+/**
+ * A display on this machine, in real pixels, with the capture source that shows
+ * it. `id` is what an input event's coordinates are a fraction of.
+ */
+interface DisplayInfo {
+  id: string;
+  sourceId: string;
+  label: string;
+  width: number;
+  height: number;
   primary: boolean;
 }
 
@@ -55,7 +68,8 @@ interface Window {
     secureGet: (key: string) => Promise<string | null>;
     secureSet: (key: string, value: string) => Promise<void>;
     screenSources: () => Promise<ScreenSource[]>;
-    primaryDisplay: () => Promise<{ width: number; height: number; scaleFactor: number }>;
+    screenDisplays: () => Promise<DisplayInfo[]>;
+    remoteTarget: (displayId: string | null) => void;
     selectScreenSource: (id: string, audio: boolean) => Promise<void>;
     startOAuth: (startUrl: string) => Promise<string | null>;
     /** Remote desktop, agent side. Input injection is Windows-only for now. */

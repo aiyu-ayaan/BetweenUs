@@ -265,6 +265,20 @@ export class RemoteGateway implements OnModuleDestroy {
         return;
       }
 
+      // Which displays the machine has. No permission of its own: a session
+      // that may see the screen may know how many there are.
+      case 'screens': {
+        const controller = this.controllers.get(event.sessionId);
+        if (controller) {
+          this.send(controller, {
+            type: 'screens',
+            screens: event.screens,
+            activeId: event.activeId,
+          });
+        }
+        return;
+      }
+
       case 'clipboard.text': {
         // The machine's clipboard travelling to the controller needs the same
         // permission as the other direction.
@@ -457,6 +471,23 @@ export class RemoteGateway implements OnModuleDestroy {
           granted: false,
         });
       }
+      return;
+    }
+
+    // Choosing a monitor is a view decision, not a control one: a view-only
+    // session is entitled to look at the other screen. The agent answers with a
+    // fresh `screens`, so the controller never has to assume it worked.
+    if (event.type === 'screen.select') {
+      const agent = this.agents.get(state.machineId);
+      if (!agent) {
+        this.send(socket, { type: 'error', code: 'AGENT_OFFLINE', message: 'The machine is gone' });
+        return;
+      }
+      this.send(agent, {
+        type: 'screen.select',
+        sessionId: state.sessionId,
+        screenId: event.screenId,
+      });
       return;
     }
 

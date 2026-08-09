@@ -23,6 +23,7 @@ import {
   applyMouse,
   inputDiagnostics,
   inputSupported,
+  setInputDisplay,
   stopInputBackend,
 } from './remote-input';
 
@@ -274,33 +275,56 @@ ipcMain.handle('screen:sources', async () => {
     fetchWindowIcons: true,
   });
 
-  const primaryId = String(screen.getPrimaryDisplay().id);
-
   return sources.map((source) => ({
     id: source.id,
     name: source.name,
     kind: source.id.startsWith('screen:') ? 'screen' : 'window',
     thumbnail: source.thumbnail.toDataURL(),
     appIcon: source.appIcon && !source.appIcon.isEmpty() ? source.appIcon.toDataURL() : null,
-    // The agent shares the primary display and input is injected into the
-    // primary display; picking "the first screen in the list" made those two
-    // different monitors on a machine that has more than one.
-    primary: source.display_id === primaryId,
+    // Which display this is, for a screen; empty for a window. Handing control
+    // of a share needs it - a click is a fraction of a *display*, and there is
+    // no such fraction for a window that can be dragged between two of them.
+    displayId: source.display_id || null,
   }));
 });
 
 /**
- * The primary display in real pixels, which is what the agent has to publish
- * at: LiveKit caps a screen share at 1080p unless it is told the capture size,
- * and a 1440p or scaled display then arrives soft and unreadable.
+ * Every display, in real pixels, paired with the capture source that shows it.
+ *
+ * Two things need this. A remote session has to offer the choice - a machine
+ * with two monitors and no way to say which one is half a remote desktop - and
+ * whichever is chosen has to be published at its own size, because LiveKit caps
+ * a screen share at 1080p unless it is told the capture size and a 1440p or
+ * scaled display then arrives soft.
+ *
+ * Matching is on `display_id`, which is the only thing the capturer and the
+ * display list have in common. A source that cannot be matched is dropped
+ * rather than guessed at: sharing the wrong monitor is worse than offering one
+ * fewer.
  */
-ipcMain.handle('screen:primary', () => {
-  const display = screen.getPrimaryDisplay();
-  return {
-    width: Math.round(display.size.width * display.scaleFactor),
-    height: Math.round(display.size.height * display.scaleFactor),
-    scaleFactor: display.scaleFactor,
-  };
+ipcMain.handle('screen:displays', async () => {
+  const sources = await desktopCapturer.getSources({
+    types: ['screen'],
+    thumbnailSize: { width: 0, height: 0 },
+  });
+  const primaryId = String(screen.getPrimaryDisplay().id);
+
+  return screen
+    .getAllDisplays()
+    .map((display) => {
+      const id = String(display.id);
+      const source = sources.find((candidate) => candidate.display_id === id);
+      if (!source) return null;
+      return {
+        id,
+        sourceId: source.id,
+        label: display.label || source.name,
+        width: Math.round(display.size.width * display.scaleFactor),
+        height: Math.round(display.size.height * display.scaleFactor),
+        primary: id === primaryId,
+      };
+    })
+    .filter((entry): entry is NonNullable<typeof entry> => entry !== null);
 });
 
 ipcMain.handle('screen:select', (_event, id: unknown, audio: unknown): void => {
@@ -355,6 +379,14 @@ ipcMain.on('remote:key', (_event, input: unknown) => {
   if (payload?.action !== 'down' && payload?.action !== 'up') return;
   if (typeof payload.key !== 'string' || typeof payload.code !== 'string') return;
   applyKey(input as Parameters<typeof applyKey>[0]);
+});
+
+// Which display the fractions in an input event are fractions *of*. Set when a
+// session starts, when the controller switches monitor, and when control of a
+// screen share is handed over in a call. Without it, a second monitor was
+// watched and the first one was clicked.
+ipcMain.on('remote:target', (_event, displayId: unknown) => {
+  setInputDisplay(typeof displayId === 'string' && displayId ? displayId : null);
 });
 
 ipcMain.on('remote:stop', () => stopInputBackend());

@@ -57,12 +57,24 @@ const api = {
       kind: 'screen' | 'window';
       thumbnail: string;
       appIcon: string | null;
-      primary: boolean;
+      displayId: string | null;
     }>
   > => ipcRenderer.invoke('screen:sources'),
-  /** The primary display in real pixels, so a share can be published at its size. */
-  primaryDisplay: (): Promise<{ width: number; height: number; scaleFactor: number }> =>
-    ipcRenderer.invoke('screen:primary'),
+  /** Every display in real pixels, with the capture source that shows it. */
+  screenDisplays: (): Promise<
+    Array<{
+      id: string;
+      sourceId: string;
+      label: string;
+      width: number;
+      height: number;
+      primary: boolean;
+    }>
+  > => ipcRenderer.invoke('screen:displays'),
+  /** Which display the fractions in a later `remoteMouse` are fractions of. */
+  remoteTarget: (displayId: string | null): void => {
+    ipcRenderer.send('remote:target', displayId);
+  },
   /** Records the picked surface; the next display capture gets exactly it. */
   selectScreenSource: (id: string, audio: boolean): Promise<void> =>
     ipcRenderer.invoke('screen:select', id, audio),

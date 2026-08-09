@@ -696,6 +696,22 @@ export interface RemoteSessionResponse {
   token: string;
 }
 
+/**
+ * One of the machine's displays, as the controller picks between them.
+ *
+ * A machine with two monitors has to be asked which one, and the answer has to
+ * travel with its size: the controller maps a click to a fraction of the screen
+ * it is looking at, and only the agent knows what that screen measures.
+ */
+export interface RemoteScreen {
+  /** The platform's display id, stable for as long as the display is attached. */
+  id: string;
+  label: string;
+  width: number;
+  height: number;
+  primary: boolean;
+}
+
 export interface RemoteAuditEntry {
   id: string;
   action: string;
@@ -720,6 +736,8 @@ export type ClientRemoteEvent =
   | { type: 'control.request' }
   /** Hands control back without ending the session. */
   | { type: 'control.release' }
+  /** Switches which of the machine's displays is being shared. */
+  | { type: 'screen.select'; screenId: string }
   | { type: 'session.end' }
   | { type: 'ping' };
 
@@ -730,6 +748,8 @@ export type AgentRemoteEvent =
   | { type: 'session.refused'; sessionId: string; reason: string }
   | { type: 'session.ended'; sessionId: string }
   | { type: 'clipboard.text'; sessionId: string; text: string }
+  /** What this machine has to offer, and which one is on the wire right now. */
+  | { type: 'screens'; sessionId: string; screens: RemoteScreen[]; activeId: string }
   | { type: 'control.granted'; sessionId: string }
   | { type: 'control.denied'; sessionId: string; reason?: string }
   | { type: 'pong' };
@@ -753,6 +773,10 @@ export type ServerRemoteEvent =
   | { type: 'input.mouse'; action: 'move' | 'down' | 'up' | 'wheel'; x: number; y: number; button?: 'left' | 'right' | 'middle'; deltaY?: number }
   | { type: 'input.key'; action: 'down' | 'up'; key: string; code: string; modifiers: string[] }
   | { type: 'clipboard.set'; text: string }
+  /** To the controller: the machine's displays, and which one it is sending. */
+  | { type: 'screens'; screens: RemoteScreen[]; activeId: string }
+  /** To the agent: send that display instead. */
+  | { type: 'screen.select'; sessionId: string; screenId: string }
   /** To the agent: somebody is asking for control and the machine must answer. */
   | { type: 'control.requested'; sessionId: string; controllerName: string }
   /**

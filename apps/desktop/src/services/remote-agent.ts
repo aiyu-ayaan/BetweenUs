@@ -286,6 +286,10 @@ async function onEvent(event: ServerRemoteEvent): Promise<void> {
       await teardown(event.reason);
       return;
 
+    case 'screen.select':
+      await switchScreen(event.sessionId, event.screenId);
+      return;
+
     case 'control.requested':
       useAgentStore.setState({
         controlRequest: {
@@ -333,11 +337,18 @@ const media = new Map<
   PendingSession & { room: string; livekitUrl: string; token: string }
 >();
 
+/** The displays this machine offers, and the one currently on the wire. */
+let displays: DisplayInfo[] = [];
+let activeDisplayId: string | null = null;
+
 /**
- * Publishes the primary screen into the session's room.
+ * Publishes one of this machine's screens into the session's room.
  *
  * The picker is bypassed on purpose: a controller asked for this machine, not
- * for a window, and there is nobody to choose in an unattended session.
+ * for a window, and there is nobody to choose in an unattended session. Which
+ * *monitor* is a different question, and one the controller is the right side
+ * to answer - it is looking at the thing. The primary display starts, the list
+ * travels with the session, and `screen.select` swaps it.
  *
  * Resolution follows the display rather than a fixed preset, which is what
  * makes text on the far end readable. LiveKit caps a screen share at 1080p
@@ -354,17 +365,9 @@ async function startPublishing(pending: PendingSession): Promise<void> {
   if (!credentials) return;
 
   try {
-    const sources = (await window.nexora?.screenSources()) ?? [];
-    // The primary display, because that is the one input is injected into.
-    const screens = sources.filter((source) => source.kind === 'screen');
-    const screen = screens.find((source) => source.primary) ?? screens[0];
-    await window.nexora?.selectScreenSource(screen?.id ?? '', false);
-
-    const display = (await window.nexora?.primaryDisplay()) ?? {
-      width: 1920,
-      height: 1080,
-      scaleFactor: 1,
-    };
+    displays = (await window.nexora?.screenDisplays()) ?? [];
+    const display = displays.find((entry) => entry.primary) ?? displays[0];
+    if (!display) throw new Error('no display to share');
 
     const next = new Room({ adaptiveStream: false, dynacast: false });
     room = next;
@@ -376,24 +379,7 @@ async function startPublishing(pending: PendingSession): Promise<void> {
       ? `${wsUrl()}${credentials.livekitUrl}`
       : credentials.livekitUrl;
     await next.connect(url, credentials.token);
-    await next.localParticipant.setScreenShareEnabled(
-      true,
-      {
-        audio: false,
-        resolution: { width: display.width, height: display.height, frameRate: 30 },
-        // 'text' tells the encoder this is a desktop, not a video: sharp edges
-        // matter more than smooth motion.
-        contentHint: 'text',
-      },
-      {
-        simulcast: false,
-        degradationPreference: 'maintain-resolution',
-        screenShareEncoding: {
-          maxFramerate: 30,
-          maxBitrate: bitrateFor(display.width, display.height),
-        },
-      },
-    );
+    await publishDisplay(next, display);
 
     useAgentStore.setState({
       session: {
@@ -403,6 +389,7 @@ async function startPublishing(pending: PendingSession): Promise<void> {
       },
     });
     send({ type: 'session.accepted', sessionId: pending.sessionId });
+    sendScreens(pending.sessionId);
     startClipboardSync(pending.sessionId);
   } catch (error) {
     send({
@@ -412,6 +399,77 @@ async function startPublishing(pending: PendingSession): Promise<void> {
     });
     await teardown('capture-failed');
   }
+}
+
+/**
+ * Puts one display on the wire, and points input injection at the same one.
+ *
+ * Those two have to move together or a controller watching the second monitor
+ * clicks on the first, which is the multi-monitor version of the bug that made
+ * clicks land short on a scaled display.
+ */
+async function publishDisplay(target: Room, display: DisplayInfo): Promise<void> {
+  await window.nexora?.selectScreenSource(display.sourceId, false);
+  await target.localParticipant.setScreenShareEnabled(
+    true,
+    {
+      audio: false,
+      resolution: { width: display.width, height: display.height, frameRate: 30 },
+      // 'text' tells the encoder this is a desktop, not a video: sharp edges
+      // matter more than smooth motion.
+      contentHint: 'text',
+    },
+    {
+      simulcast: false,
+      degradationPreference: 'maintain-resolution',
+      screenShareEncoding: {
+        maxFramerate: 30,
+        maxBitrate: bitrateFor(display.width, display.height),
+      },
+    },
+  );
+  activeDisplayId = display.id;
+  window.nexora?.remoteTarget(display.id);
+}
+
+/**
+ * Switches which monitor the session is watching.
+ *
+ * The old track is unpublished first: Chromium's capture is bound to the source
+ * it was started with, so there is no way to redirect it in place. The
+ * controller finds out it worked from the `screens` that follows, never from
+ * having asked.
+ */
+async function switchScreen(sessionId: string, screenId: string): Promise<void> {
+  const current = room;
+  const display = displays.find((entry) => entry.id === screenId);
+  if (!current || !display || display.id === activeDisplayId) return;
+
+  try {
+    await current.localParticipant.setScreenShareEnabled(false);
+    await publishDisplay(current, display);
+  } catch {
+    // The old screen is gone and the new one did not start. Say what is true
+    // rather than leaving the controller looking at a stale label.
+    activeDisplayId = null;
+  }
+  sendScreens(sessionId);
+}
+
+function sendScreens(sessionId: string): void {
+  if (displays.length === 0) return;
+  send({
+    type: 'screens',
+    sessionId,
+    activeId: activeDisplayId ?? '',
+    screens: displays.map((display) => ({
+      id: display.id,
+      label: display.label,
+      width: display.width,
+      height: display.height,
+      primary: display.primary,
+    })),
+  });
 }
 
 /**
@@ -467,6 +525,8 @@ async function teardown(_reason: string): Promise<void> {
   stopClipboardSync();
   const current = room;
   room = null;
+  displays = [];
+  activeDisplayId = null;
   useAgentStore.setState({ session: null });
   window.nexora?.remoteInputStop();
   if (current) await current.disconnect().catch(() => undefined);
