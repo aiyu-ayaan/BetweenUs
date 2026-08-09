@@ -66,6 +66,11 @@ jobs:
       REDIS_URL: redis://127.0.0.1:6379
       LOCAL_STORAGE_PATH: ./storage-data
       LOCAL_STORAGE_PUBLIC_PREFIX: /api/v1/uploads
+      # remote-gateway mints LiveKit tokens for a session; nothing dials the SFU
+      # in CI, so a development key pair is all this needs.
+      LIVEKIT_URL: /livekit
+      LIVEKIT_API_KEY: devkey
+      LIVEKIT_API_SECRET: nexora-ci-livekit-secret-not-a-real-one
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -79,10 +84,10 @@ jobs:
 
       - name: Start services
         run: |
-          for service in auth-service server-service chat-service presence-service notification-service; do
+          for service in auth-service server-service chat-service presence-service notification-service remote-gateway; do
             node "apps/services/$service/dist/main.js" > "/tmp/$service.log" 2>&1 &
           done
-          for port in 3001 3003 3004 3005; do
+          for port in 3001 3003 3004 3005 3008; do
             for _ in $(seq 1 30); do
               curl -sf "127.0.0.1:$port/health" > /dev/null && break
               sleep 2
@@ -93,6 +98,7 @@ jobs:
       - run: node apps/services/chat-service/smoke.mjs
       - run: node apps/services/presence-service/smoke.mjs
       - run: node apps/services/notification-service/smoke.mjs
+      - run: node apps/services/remote-gateway/smoke.mjs
 
       - name: Service logs
         if: failure()

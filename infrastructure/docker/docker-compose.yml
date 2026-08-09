@@ -49,6 +49,7 @@ services:
       - call-service
       - presence-service
       - notification-service
+      - remote-gateway
       - admin-web
     networks:
       - cloudflare-network
@@ -56,6 +57,7 @@ services:
       # LiveKit's signalling handshake is proxied under /livekit, so a client
       # needs one hostname for the whole deployment. Media stays on its own path.
       - media-network
+      - remote-network
 
   # The admin panel: static bundle behind the same gateway.
   admin-web:
@@ -222,6 +224,29 @@ services:
       - api-network
       - data-network
 
+  # Remote desktop, kept off every network it does not need. It talks to
+  # Postgres and to LiveKit (to mint session tokens); it never reaches the chat
+  # or media services, and nothing reaches the machines - their agents dial out.
+  remote-gateway:
+    build:
+      context: ../..
+      dockerfile: apps/services/remote-gateway/Dockerfile
+    restart: unless-stopped
+    environment:
+      <<: *service-env
+      REMOTE_GATEWAY_PORT: 3008
+      LIVEKIT_URL: ${LIVEKIT_URL:-/livekit}
+      LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:?LIVEKIT_API_KEY is required}
+      LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:?LIVEKIT_API_SECRET is required}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+    networks:
+      - remote-network
+      - data-network
+
   livekit:
     # Keep in step with the livekit-client version in apps/desktop - see the
     # note in docker-compose.dev.yml.
@@ -281,6 +306,7 @@ networks:
   cloudflare-network:
   api-network:
   data-network:
-  # Reserved for phases 10-11; declared so service placement stays explicit.
   media-network:
+  # Remote desktop is deliberately not on api-network: the gateway reaches
+  # Postgres and nothing else reaches it except Nginx.
   remote-network:

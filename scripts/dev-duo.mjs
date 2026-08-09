@@ -23,6 +23,7 @@ const CHAT = process.env.CHAT_SERVICE_URL ?? 'http://127.0.0.1:3004';
 const CALL = process.env.CALL_SERVICE_URL ?? 'http://127.0.0.1:3007';
 const PRESENCE = process.env.PRESENCE_SERVICE_URL ?? 'http://127.0.0.1:3005';
 const NOTIFICATION = process.env.NOTIFICATION_SERVICE_URL ?? 'http://127.0.0.1:3006';
+const REMOTE = process.env.REMOTE_GATEWAY_URL ?? 'http://127.0.0.1:3008';
 const RENDERER = 'http://localhost:5173';
 
 // Must satisfy the password policy in @nexora/auth: 8+ chars, a letter, a digit.
@@ -252,6 +253,10 @@ async function main() {
   }
   if (!(await healthy('notification-service', NOTIFICATION))) {
     console.warn('  ! notification-service is down - unread marks and mutes will not persist');
+  }
+
+  if (!(await healthy('remote-gateway', REMOTE))) {
+    console.warn('  ! remote-gateway is down - remote machines will not appear');
   }
 
   const { server, channel, voice, secret, friendship } = await seed();
