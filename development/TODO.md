@@ -34,6 +34,14 @@ most of phase 12. The carried-over items are older ones in the same state.
 - [x] The blue focus ring is gone: a thin neutral ring for keyboard users, and
       none at all on text fields
 - [x] Smoke coverage for all of it, including the three fanouts on a live socket
+- [x] Fixed: an unread badge that never cleared. A message arriving in the
+      channel already on screen while the window was in the background was
+      counted, and only opening a channel cleared a count - so it stayed.
+      Regaining focus now marks the open channel read, and a message arriving in
+      a focused open channel moves the account's marker too
+- [x] A red "New" divider above the first unread message, placed from the read
+      marker as it stood when the channel was opened and left where it is while
+      the channel stays open
 
 Left open on purpose:
 
@@ -46,6 +54,10 @@ Left open on purpose:
 - [ ] No "who reacted" tooltip on a chip - the user ids are there, the names are
       not fetched
 - [ ] The pinned panel caps at 100 pins and does not page
+- [ ] The unread line does not survive a restart: the marker does, but the line
+      is only placed when a channel is opened in this session
+- [ ] No "jump to the first unread" button on the line, and no unread bar at the
+      top of the channel
 - [ ] A tombstone stays forever; nothing sweeps rows whose body has been empty
       for months, and nothing sweeps their attachment blobs either
 

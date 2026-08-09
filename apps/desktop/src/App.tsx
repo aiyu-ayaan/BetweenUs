@@ -55,6 +55,26 @@ export default function App(): JSX.Element {
 
   const resetPresence = usePresenceStore((state) => state.reset);
 
+  /**
+   * Coming back to the window means the channel on screen has been read.
+   *
+   * Without this a message that arrived while the window was in the background
+   * kept its badge forever: the count is cleared when a channel is opened, and
+   * the channel it arrived in was already open.
+   */
+  useEffect(() => {
+    const read = (): void => {
+      if (document.hidden) return;
+      useChatStore.getState().markActiveRead();
+    };
+    window.addEventListener('focus', read);
+    document.addEventListener('visibilitychange', read);
+    return () => {
+      window.removeEventListener('focus', read);
+      document.removeEventListener('visibilitychange', read);
+    };
+  }, []);
+
   // Clicking a notification brings the window back and opens what it was about.
   useEffect(
     () =>

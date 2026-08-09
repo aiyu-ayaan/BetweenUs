@@ -90,6 +90,21 @@ the older shape.
   and the system font already draws the characters. A dependency becomes the
   right answer when somebody wants the full set with skin tones and shortcode
   search - not before.
+- **A badge is cleared by reading, not only by arriving.** The count was cleared
+  when a channel was opened, which quietly assumed the only way to become
+  unread was to be somewhere else. A message landing in the channel already on
+  screen while the window sat in the background counted, and then nothing ever
+  cleared it - the user was already in that channel, so there was no "open" left
+  to perform. Regaining focus now marks the open channel read, and a message
+  arriving in a focused, open channel moves the account's marker as well (at
+  most once a second, because the marker only has to be roughly current).
+- **The unread line is placed once, from the marker as it stood on entry.** The
+  read marker moves the instant a channel is opened, so the divider is computed
+  from its previous value and then left alone while the channel stays open -
+  a line that re-placed itself as messages arrived would always sit at the
+  bottom, which is exactly where it is no use. It is the first message somebody
+  else wrote after the marker; a channel that has never been read gets no line
+  rather than one across its whole history.
 - **The focus ring stopped shouting.** A heavy accent-coloured ring with an
   offset drew a blue box around the composer while typing and around a server
   pill after a click, which reads as an error state. It is now a thin neutral

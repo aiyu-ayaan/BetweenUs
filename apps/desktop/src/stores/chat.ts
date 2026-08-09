@@ -46,6 +46,19 @@ interface ChatState {
   /** channelId -> unread message count, for the dot in the sidebar. */
   unread: Record<string, number>;
   /**
+   * channelId -> the read marker as this client last saw it. Kept because the
+   * divider below is "everything after this", and the marker moves the moment
+   * a channel is opened - so it has to be read before it is advanced.
+   */
+  readMarkers: Record<string, string | null>;
+  /**
+   * channelId -> the message the "new messages" line is drawn above, or null
+   * for a channel with nothing new. It is placed when the channel is opened and
+   * left alone while it stays open, the way Discord does it: a line that moved
+   * every time something arrived would be no use for finding your place.
+   */
+  divider: Record<string, string | null>;
+  /**
    * Decrypted history per channel, so reopening one paints immediately instead
    * of clearing the view and waiting for a fetch and fifty decryptions.
    *
@@ -68,6 +81,14 @@ interface ChatState {
   loadServers: () => Promise<void>;
   /** Read markers live on the account, so a badge survives a restart. */
   loadUnread: () => Promise<void>;
+  /**
+   * "I am looking at this now": clears the badge for the open channel and moves
+   * its marker on the account. Called when the window regains focus and when a
+   * message arrives in a channel that is already on screen - without it, a
+   * message that arrived while the window was in the background stayed counted
+   * even after it had been read.
+   */
+  markActiveRead: () => void;
   /** The channel on screen, wherever it lives. */
   activeChannel: () => Channel | undefined;
   showHome: () => void;
@@ -127,6 +148,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
   activeServerId: null,
   activeChannelId: null,
   unread: {},
+  readMarkers: {},
+  divider: {},
   history: {},
   loadingMessages: false,
   error: null,
@@ -145,8 +168,31 @@ export const useChatStore = create<ChatState>((set, get) => ({
   loadUnread: async () => {
     const counts = await api.unread().catch(() => []);
     const unread: Record<string, number> = {};
-    for (const entry of counts) if (entry.count > 0) unread[entry.channelId] = entry.count;
+    const readMarkers: Record<string, string | null> = {};
+    for (const entry of counts) {
+      if (entry.count > 0) unread[entry.channelId] = entry.count;
+      readMarkers[entry.channelId] = entry.lastReadAt;
+    }
+    set({ readMarkers });
     setUnread(unread);
+  },
+
+  markActiveRead: () => {
+    const channelId = get().activeChannelId;
+    if (!channelId) return;
+
+    if (get().unread[channelId]) {
+      const unread = { ...get().unread };
+      delete unread[channelId];
+      setUnread(unread);
+    }
+
+    void api
+      .markChannelRead(channelId)
+      .then((entry) =>
+        set({ readMarkers: { ...get().readMarkers, [channelId]: entry.lastReadAt } }),
+      )
+      .catch(() => undefined);
   },
 
   activeChannel: () => {
@@ -194,6 +240,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   selectChannel: async (channelId) => {
+    // Read before it is advanced: the "new messages" line is drawn from where
+    // the marker stood when the channel was opened, and marking it read below
+    // is what moves it.
+    const previousMarker = get().readMarkers[channelId] ?? null;
+
     // Opening a channel clears its unread mark here and on the account, so the
     // next window to sign in does not show a badge for something already read.
     if (get().unread[channelId]) {
@@ -201,7 +252,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
       delete unread[channelId];
       setUnread(unread);
     }
-    void api.markChannelRead(channelId).catch(() => undefined);
+    void api
+      .markChannelRead(channelId)
+      .then((entry) =>
+        set({ readMarkers: { ...get().readMarkers, [channelId]: entry.lastReadAt } }),
+      )
+      .catch(() => undefined);
 
     // A voice channel opens its own screen; there is no history to fetch and no
     // message socket to subscribe to.
@@ -232,6 +288,20 @@ export const useChatStore = create<ChatState>((set, get) => ({
     try {
       const page = await api.messages(channelId);
       const items = await Promise.all(page.items.map(decrypt));
+
+      // Where the line goes: the first message somebody else wrote after this
+      // account last read the channel. A channel with no marker at all is one
+      // that has never been opened, and starting somebody's first visit with a
+      // "new messages" banner across the whole history helps nobody.
+      const me = useAuthStore.getState().user?.id;
+      const firstUnread = previousMarker
+        ? items.find(
+            (message) =>
+              message.author.id !== me &&
+              new Date(message.createdAt).getTime() > new Date(previousMarker).getTime(),
+          )
+        : undefined;
+      set({ divider: { ...get().divider, [channelId]: firstUnread?.id ?? null } });
       // The cache is written even when the user has already moved on - the
       // fetch was paid for, and the next visit gets it for free.
       set({ history: { ...get().history, [channelId]: items } });
@@ -445,9 +515,27 @@ export const useChatStore = create<ChatState>((set, get) => ({
       error: null,
       pins: [],
       jumpTo: null,
+      readMarkers: {},
+      divider: {},
     });
   },
 }));
+
+/**
+ * Marks the open channel read, at most once a second.
+ *
+ * A busy channel would otherwise mean one write per message arriving, and the
+ * marker only has to be roughly current - it is a "you have seen up to here",
+ * not an audit trail.
+ */
+let readTimer: number | null = null;
+function markActiveReadSoon(): void {
+  if (readTimer !== null) return;
+  readTimer = window.setTimeout(() => {
+    readTimer = null;
+    useChatStore.getState().markActiveRead();
+  }, 1000);
+}
 
 /**
  * The one place unread counts are written, because two things follow every
@@ -594,6 +682,18 @@ chatSocket.on((event) => {
     if (!active || !windowIsFocused()) {
       const count = (state.unread[incoming.channelId] ?? 0) + 1;
       setUnread({ ...state.unread, [incoming.channelId]: count });
+      // First one to go unread in this channel: that is where the line goes,
+      // including for a channel that is open behind an unfocused window.
+      if (!state.divider[incoming.channelId]) {
+        useChatStore.setState({
+          divider: { ...state.divider, [incoming.channelId]: incoming.id },
+        });
+      }
+    } else {
+      // Arrived in the channel on screen, in a focused window: it has been
+      // read as soon as it is drawn, so move the marker on the account too.
+      // Otherwise the next sign-in counts it as unread.
+      markActiveReadSoon();
     }
 
     notifyMessage({

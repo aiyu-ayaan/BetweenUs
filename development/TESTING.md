@@ -138,6 +138,20 @@ Closing both windows stops the dev server. Ctrl+C does the same.
   decrypted; the footer says how many that is. It has to work this way: the
   server holds ciphertext and cannot search it.
 
+**Unread counts and the new-messages line**
+- With `#general` open in Alice's window, click Bob's window so Alice's loses
+  focus, and send. Alice's sidebar counts 1 and a red **New** line appears above
+  the message. Click back into Alice's window: the badge clears on focus, and
+  the line stays until the channel is opened again — it marks where you left
+  off, so it must not vanish under the pointer as you read.
+- Switch Alice to `#owners-only` and back: the line is gone, because everything
+  before it has been read.
+- Send while Alice's window is focused and `#general` is open: no badge, no
+  line, and no badge after a restart either — the read marker moved with it.
+- The badge that used to stick: a message arriving in the channel already on
+  screen while the window was in the background counted and never cleared,
+  because only opening a channel cleared a count.
+
 **Focus**
 - Click into the composer, or on a server pill: no blue box. Tab around with the
   keyboard and a thin neutral ring follows the focus.

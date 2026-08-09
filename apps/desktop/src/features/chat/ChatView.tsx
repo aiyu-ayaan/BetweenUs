@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
+import { Fragment, useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
 import type { Channel, MessageAttachment } from '@nexora/shared-types';
 import { useChatStore, type DecryptedMessage } from '../../stores/chat';
 import { useAuthStore } from '../../stores/auth';
@@ -181,6 +181,7 @@ function MessageList({
   const react = useChatStore((state) => state.react);
   const jumpTo = useChatStore((state) => state.jumpTo);
   const clearJump = useChatStore((state) => state.clearJump);
+  const dividerId = useChatStore((state) => state.divider[channel.id] ?? null);
 
   const [menu, setMenu] = useState<{ id: string; at: { x: number; y: number } } | null>(null);
   const [armedDelete, setArmedDelete] = useState<string | null>(null);
@@ -247,8 +248,9 @@ function MessageList({
           const deleted = message.deletedAt !== null;
 
           return (
+            <Fragment key={message.id}>
+              {dividerId === message.id && <NewMessagesDivider />}
             <li
-              key={message.id}
               id={`message-${message.id}`}
               onContextMenu={(event) => {
                 // A tombstone has nothing left to act on.
@@ -318,6 +320,7 @@ function MessageList({
                 )}
               </div>
             </li>
+            </Fragment>
           );
         })}
       </ul>
@@ -361,6 +364,23 @@ function MessageList({
         />
       )}
     </div>
+  );
+}
+
+/**
+ * Where the unread messages start. It is placed when the channel is opened and
+ * stays put while it is open, so it marks the place you left off rather than
+ * chasing the newest message down the screen. Opening the channel again, once
+ * everything has been read, is what takes it away.
+ */
+function NewMessagesDivider(): JSX.Element {
+  return (
+    <li aria-label="New messages" className="my-2 flex items-center gap-2 px-2">
+      <span aria-hidden="true" className="h-px flex-1 bg-danger" />
+      <span className="rounded-full bg-danger px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">
+        New
+      </span>
+    </li>
   );
 }
 
