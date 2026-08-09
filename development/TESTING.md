@@ -355,6 +355,28 @@ paths are the ones where the person connecting is *not* the owner.
    still appears for that account, then wait past it: the machine leaves their
    list and a session is refused with 404.
 
+## Watching something together
+
+1. **Pick the right trade.** Share with **Video and motion** and play something
+   with movement in it. It should be smooth rather than sharp: 60 fps, and the
+   encoder giving up resolution before it gives up frames. Share the same thing
+   with **Text and detail** and the opposite happens - crisper stills, visible
+   judder on a pan. Both are correct; the wrong one for the content is what
+   looks broken.
+2. **Sound.** With **Share system audio** on and the motion profile, a
+   soundtrack should arrive in stereo and stay full-band through quiet
+   passages. On the detail profile it is treated as incidental noise, which is
+   right for a shared terminal and wrong for a film.
+3. **Latency.** Put a clock with a second hand on the shared screen and look at
+   both machines: the gap should be a fraction of a second, not the second or
+   more a default jitter buffer costs. Take control of the share and it should
+   tighten further.
+4. **Native resolution.** Share a 1440p or a scaled display and read something
+   small on the far end. It must not look like a 1080p image stretched up.
+5. **What it costs.** `chrome://webrtc-internals` in the receiving window: the
+   inbound bitrate should sit in the megabits, not the hundreds of kilobits,
+   and the frame rate should hold. Nothing in the app reports this yet.
+
 ## Giving control in a call
 
 Needs two accounts in the same voice channel, and the machine sharing has to
@@ -463,7 +485,8 @@ crypto primitives, storage (including a multipart round trip and the sweep for
 abandoned uploads), logger redaction, the desktop E2EE round trip, the message
 body encoding that carries attachment manifests, the server-address parsing
 behind the login screen's server picker, the letterbox arithmetic that puts a
-named cursor and a click in the right place on a shared screen, and
+named cursor and a click in the right place on a shared screen, the screen-
+share encoder profiles and their bitrate ceilings, and
 `AuthService` against an in-memory database (register, login, refresh
 rotation, reuse detection, logout).
 
@@ -547,6 +570,9 @@ A published track logs `"encryption":1` — that is the end-to-end encrypted pat
 | Clicks land on the wrong monitor | Something changed the display after the session opened. Switch monitor and back: input follows whatever the agent is publishing |
 | **Request control** on a screen share is refused straight away | A window is being shared rather than a whole screen, the share stopped, or the machine sharing is not Windows. The refusal says which |
 | Named cursors do not appear on a share | Only people who have the share open on the stage send a pointer, and one that goes quiet for four seconds is dropped |
+| A shared film judders, or a shared document is blurry | The wrong profile in the picker. Motion keeps frames and gives up resolution; detail does the reverse |
+| A share looks soft however it is set | The link cannot carry the ceiling and congestion control has lowered it. `chrome://webrtc-internals` on the receiving side says the real bitrate; there is no readout in the app |
+| A share pins the CPU on the sending machine | No hardware H.264 encoder on that machine, so Chromium is encoding in software. Nothing detects this yet |
 | `dev:duo` windows say "Request failed" and "Signing in to localhost:8080" | An old `VITE_API_URL` in `.env` pointing at the Nginx container, which `pnpm dev:backend` does not run. Development ignores that variable now; rebuild if the window predates that |
 | Windows open on top of each other | Positions are fixed at x=40 and x=760; on a small display, drag them apart |
 | Login answers 429 | The per-address credentials limit (20/min) kicked in; wait out the window |

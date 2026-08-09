@@ -5,9 +5,11 @@ the top honest — it is what a new session reads first.
 
 ## Next up
 
-Phase 20 - giving control of a screen share inside a call, and named cursors
-on it - has landed in code and in the geometry self-check. It has no server
-side and therefore no smoke test; it needs two humans in a call.
+Phase 21 - screen share encoding, so a film is watchable and a desktop is
+sharp - has landed in code and in a self-check. Phase 20 - giving control of a
+screen share inside a call, and named cursors on it - has landed in code and in
+the geometry self-check. Neither has a server side and therefore neither has a
+smoke test; both need two humans in a call.
 
 Phases 17 and 18 have landed in code, in the smoke script and in CI; none of
 the remote-desktop client side has been driven by a human, and no tunnel has
@@ -128,6 +130,56 @@ Left open on purpose:
       "balanced / sharp / smooth" choice the way RustDesk offers, and nothing
       raises the frame rate back up once a link recovers faster than the
       encoder notices
+
+### Phase 21 — a screen share worth watching
+
+LiveKit's default screen share is 1080p15, about 3 Mbps, simulcast on, VP8, and
+whatever jitter buffer the browser felt like. Sensible for showing somebody a
+spreadsheet over a bad line; unwatchable as a film and barely usable as a
+desktop. Every number below is the thing that was wrong, and all of them live
+in `apps/desktop/src/services/share-quality.ts` with the reasoning.
+
+- [x] The picker asks what is on the screen rather than guessing. **Text and
+      detail** keeps resolution and gives up frames; **video and motion** does
+      the reverse at 60 fps. Neither is "better quality" - they are opposite
+      trades, and picking the wrong one is what "the quality is bad" usually
+      turns out to be
+- [x] Bitrate scales with pixels instead of being one low number: 6 Mbps at
+      1080p for detail, 14 for motion, clamped at both ends. A ceiling, not a
+      target - a still desktop spends a fraction of it and congestion control
+      lowers it the moment the link says so
+- [x] Simulcast off. It divides the budget three ways so a weak viewer can be
+      sent a small stream, and then lets the SFU hand somebody the bottom layer
+- [x] H.264, because it is the one codec with a hardware encoder on every
+      Windows machine and therefore the one that can do 1080p60 without melting
+      a CPU. VP9 and AV1 look better per bit and are encoded in software, which
+      costs exactly the latency this is buying
+- [x] `setPlayoutDelay`: near zero for anything being driven, two frames for
+      anything being watched. The default jitter buffer is where a third of a
+      second of latency lives, and taking control of a share re-tunes it
+- [x] Capture asked for at the display's real pixel size, so a 1440p or scaled
+      screen is not captured at 1080p and stretched back up
+- [x] A shared soundtrack keeps both channels, full-band stereo Opus, and none
+      of the speech processing - gain control pumps, noise suppression eats
+      reverb tails, and DTX cuts the quiet passages of a film out altogether
+- [x] The remote desktop publishes through the same profile ('detail'), so
+      there is one set of numbers rather than two
+- [x] `share-quality.check.ts` covers the bitrate arithmetic and both profiles,
+      in CI
+
+Left open on purpose:
+
+- [ ] No manual override. There is no "use 20 Mbps" box and no way to force a
+      codec, so a LAN cannot be told it is a LAN. Parsec's whole trick is
+      knowing that; this only ever infers it from congestion control
+- [ ] Motion is capped from 1440p up, so a 4K film is not sharper than a 1440p
+      one. The cap is about links, not screens
+- [ ] Nothing measures the result. There is no bitrate, frame rate or round
+      trip anywhere in the UI, so "it looks bad" cannot be told apart from "the
+      link is bad" without opening `chrome://webrtc-internals`
+- [ ] If a machine has no hardware H.264 encoder the fallback is software
+      H.264, which is worse per bit than the VP8 it replaced. Nothing detects
+      this or switches back
 
 ### Phase 20 — giving control in a call
 

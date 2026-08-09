@@ -636,6 +636,31 @@ Run live on 2026-08-08, on top of everything verified in phase 9 below:
 Still unverified: CI itself has not run yet (the workflow lands with this
 phase), and the human-in-front-of-it items below.
 
+### Phase 21 — screen share encoding
+
+The defaults were the problem, and they were the problem in five places at
+once. `apps/desktop/src/services/share-quality.ts` is now the only file with an
+opinion about any of it, and both the voice screen share and the remote-desktop
+agent publish through it.
+
+| Was | Is | Why |
+| --- | --- | --- |
+| 1080p15 | The display's real size, 30 or 60 fps | Fifteen frames is a slideshow; capture scaled after the fact is soft for no saving |
+| ~3 Mbps fixed | 6 Mbps at 1080p detail, 14 motion, scaled by area | A ceiling costs nothing on a link that cannot reach it, and was the whole reason for the smear |
+| Simulcast on | Off | It splits the budget three ways and lets the SFU pick the bottom layer |
+| VP8 | H.264 | The only codec with a hardware encoder on every Windows machine, so 1080p60 does not melt a CPU |
+| Browser jitter buffer | `setPlayoutDelay`, 0 driving / 0.08 watching | A third of a second of latency lives there |
+
+The picker asks what is on the screen rather than offering a quality slider,
+because a film and a document want opposite things from the encoder: one keeps
+frames and gives up resolution, the other the reverse. There is no setting that
+is better for both, so the honest control is "what is this", not "how good".
+
+What this is not is Parsec. Parsec knows it is on a LAN and spends fifty
+megabits accordingly; this only ever infers the link from congestion control,
+has no manual override, and reports nothing about what it achieved. `TODO.md`
+phase 21 lists that.
+
 ### Phase 20 — giving control in a call
 
 Reaching a machine and helping somebody in a call are two different problems,
