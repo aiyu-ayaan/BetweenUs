@@ -356,6 +356,14 @@ complete over the tunnel on their own.
 - `STORAGE_DRIVER=local|s3` forces one. Forcing `s3` without credentials fails
   at boot instead of silently falling back.
 
+In Docker the local driver writes to `/data/uploads` inside chat-service, and
+`UPLOAD_DATA_PATH` decides where that is on the host: a bare name is a Docker
+volume (`upload-data`, the default), a path is a bind mount.
+
+```bash
+UPLOAD_DATA_PATH=/mnt/disk2/nexora-uploads   # or D:/nexora-uploads on Windows
+```
+
 Keys are UUID-based, so a client filename never decides where a file lands.
 Anything over 8 MB uploads in parts, with the session carried by the client as
 a sealed ticket rather than held as state in a service.
