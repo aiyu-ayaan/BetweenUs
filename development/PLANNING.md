@@ -636,6 +636,44 @@ Run live on 2026-08-08, on top of everything verified in phase 9 below:
 Still unverified: CI itself has not run yet (the workflow lands with this
 phase), and the human-in-front-of-it items below.
 
+### Phase 20 — giving control in a call
+
+Reaching a machine and helping somebody in a call are two different problems,
+and the second was being made to use the machinery for the first. Enrolling a
+machine and writing a grant down beforehand is right for "I administer that
+box"; it is absurd for "you can see my screen, you drive it".
+
+So a screen share in a voice channel now carries its own control, and it does
+not touch remote-gateway at all:
+
+```text
+Watcher                         Sharer
+   │  ask / input                  │
+   ├──────── LiveKit data ────────►│  prompt, then window.nexora.remoteMouse
+   │◄─────── grant / revoke ───────┤
+```
+
+The only authority is the person sharing clicking yes, which is the right one:
+it is their machine, they are sitting at it, and they can see what is being
+done with it. Every event is re-checked against the identity control was given
+to - LiveKit's, from a token call-service signed - against the share still
+being live, and against it being a whole display rather than a window.
+
+It ends when the share does, the room does, that person leaves, either side
+presses the button, or the driver presses Escape.
+
+The other half is cursors. Several people watch a share and any of them may be
+pointing at something, so each sends where their pointer is over the picture
+and everyone draws everyone else's with a name on it. One driver, any number of
+pointers. Both are fractions of the *picture* rather than of the element it is
+drawn in, because a desktop is letterboxed and not cropped -
+`stage-geometry.check.ts` is that arithmetic, in CI.
+
+This is deliberately a second, weaker mechanism beside remote sessions rather
+than a widening of the first. It has no server in the path, so it has no audit
+trail; a remote session has one and keeps it. `TODO.md` phase 20 lists what
+that costs.
+
 ### Phase 17 and 18 verification
 
 Machine checks, on 2026-08-09:

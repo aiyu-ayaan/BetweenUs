@@ -5,6 +5,10 @@ the top honest — it is what a new session reads first.
 
 ## Next up
 
+Phase 20 - giving control of a screen share inside a call, and named cursors
+on it - has landed in code and in the geometry self-check. It has no server
+side and therefore no smoke test; it needs two humans in a call.
+
 Phases 17 and 18 have landed in code, in the smoke script and in CI; none of
 the remote-desktop client side has been driven by a human, and no tunnel has
 been stood up. Phase 16 landed before them and is in the same state, as is the
@@ -78,14 +82,18 @@ a human in front of the app, and so does most of phase 12.
 - [x] The agent shares the *primary* display rather than the first screen the
       capturer happens to list, because the primary display is the one input is
       injected into. On a two-monitor machine those were different screens
-- [x] "Request control" on somebody's screen share in a voice channel: watching
-      a share and wanting the mouse is one thought, so it is one button rather
-      than a trip through the machine list. It opens a real session against
-      their machine - same grant, same consent prompt - and asks for control as
-      soon as the socket is up. The button only appears when this account
-      already has access to a machine of theirs. A live session is drawn over
-      the whole window now instead of inside the machine list, which is what
-      lets it be started from anywhere
+- [x] "Open a session" on somebody's screen share in a voice channel, for a
+      machine this account already has standing access to: a shortcut past the
+      machine list, never past the grant or the consent prompt. A live session
+      is drawn over the whole window now instead of inside the machine list,
+      which is what lets it be started from anywhere
+- [x] The controller picks which monitor. The agent sends `screens` when a
+      session opens and after every swap; the controller answers with
+      `screen.select` and the gateway relays both. No permission of its own - a
+      session allowed to see the screen may know how many there are, and a
+      view-only session is entitled to look at the second one. `remote:target`
+      moves input to the same display in the same breath as the capture starts,
+      or a controller watching the second monitor clicks on the first
 
 Left open on purpose:
 
@@ -101,9 +109,9 @@ Left open on purpose:
       there is no channel key to reuse and no key exchange between two machines
       that never spoke. The SFU the operator runs can see the frames
       (`E2EE.md`, limit 10)
-- [ ] The agent always shares the primary screen; no picker, and no second
-      monitor. Its resolution is read once when the session opens, so a display
-      that changes resolution mid-session keeps publishing at the old size
+- [ ] The display list is read once when the session opens, so a monitor
+      plugged in - or one that changes resolution - part way through a session
+      is not noticed until the next one
 - [ ] Sessions are relayed in one process's memory, so agent and controller
       must land on the same instance - true for the single replica compose runs,
       not for two. Redis Pub/Sub keyed by session id is the upgrade
@@ -120,6 +128,56 @@ Left open on purpose:
       "balanced / sharp / smooth" choice the way RustDesk offers, and nothing
       raises the frame rate back up once a link recovers faster than the
       encoder notices
+
+### Phase 20 — giving control in a call
+
+Helping somebody in a call is not the same problem as reaching a machine, and
+was being made to use the machinery for the other one. Enrolling a machine and
+writing down a grant beforehand is right for "I administer that box"; it is
+absurd for "you can see my screen, you drive". Teams calls the second one
+giving control, and this is that.
+
+- [x] The whole exchange rides the voice room's own data channel between the
+      two clients. No gateway, no enrolment, no stored grant. The only
+      authority is the person sharing clicking yes - which is the right one:
+      it is their machine, they are sitting at it, and they can see what is
+      being done with it
+- [x] Checked on every event rather than once at the grant: the sender is the
+      identity control was given to (LiveKit's, from a token call-service
+      signed, so it cannot be claimed), a screen is still being shared, and
+      that share is a whole display. Control of a *window* is refused outright
+      - a window can be dragged between monitors, so there is no fraction of a
+      screen to map a click onto
+- [x] It ends when the share does, when the room does, when that person leaves,
+      when either side presses the button, and when the driver presses Escape.
+      Escape never travels, for the same reason it does not in a remote session
+- [x] A prompt the sharer has to answer and a banner that stays up for as long
+      as somebody else is driving, both above the whole app - a machine being
+      driven by another person is not a background event
+- [x] Named cursors, Teams-style: everybody watching a share sends where their
+      pointer is over the picture and sees everyone else's with a name on it.
+      Only one person can drive; anybody can point, which is most of what
+      pointing at a screen share is for
+- [x] Cursors and clicks are fractions of the *picture*, not of the element it
+      is drawn in. A desktop is letterboxed rather than cropped, so those are
+      two different rectangles whenever the aspect ratios differ, and the black
+      bars are not part of anybody's screen. `stage-geometry.check.ts` is the
+      arithmetic, in CI
+
+Left open on purpose:
+
+- [ ] Windows only, like every other input injection here
+- [ ] No audit trail. A remote session writes every refusal to the machine's
+      history; this writes nothing anywhere, because there is no server in the
+      path at all. The banner and the prompt are the whole record
+- [ ] One input target for the whole process, so a machine that is in a remote
+      session *and* handing control out in a call points both at whichever was
+      set last. Per-session targets are the fix if that combination ever
+      matters
+- [ ] A pointer is sent to everyone in the room, watching or not, and dropped
+      by clients that are not looking at a share. Fine at call sizes
+- [ ] No modifier chords, the same gap the remote path has: keys travel one at
+      a time and a Ctrl+Alt+Del is not delivered as a chord
 
 ### Phase 18 — production ingress
 

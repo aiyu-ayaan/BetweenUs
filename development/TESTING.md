@@ -321,34 +321,72 @@ paths are the ones where the person connecting is *not* the owner.
    at the middle. It has to land where the pointer is, not short of it. Then
    check the picture is sharp enough to read a menu, in a small window as well
    as maximised.
-6. **From a screen share.** In a voice channel, have somebody share their
-   screen and watch it. If you have remote access to a machine of theirs, a
-   **Request control** button sits on the share; it opens a real session and
+6. **Two monitors.** On a machine with more than one, a dropdown appears in the
+   session header. Switch to the second monitor: the picture changes within a
+   second or two, the label follows the picture rather than the click, and a
+   click now lands on *that* monitor. Switch back. A view-only session gets the
+   dropdown too - looking at the other screen is looking.
+7. **From a screen share.** In a voice channel, have somebody share their
+   screen and watch it. If you have remote access to a machine of theirs, an
+   **Open a session** button sits on the share; it opens a real session and
    asks for control. It must still raise the consent prompt on their side -
    watching a share grants nothing.
-7. **Request control.** From an account granted `REMOTE_VIEW` only, the same
+
+8. **Request control.** From an account granted `REMOTE_VIEW` only, the same
    button reads **Request control**: a prompt appears on the machine, and
    whoever is there gives or keeps control. Refusing leaves the session
    watching; granting lasts until the session ends or control is released, and
    never touches the stored grant.
-8. **Clipboard.** With `REMOTE_CLIPBOARD` held, copy text on one machine and
+9. **Clipboard.** With `REMOTE_CLIPBOARD` held, copy text on one machine and
    paste on the other, both directions. It is polled once a second, so give it
    a moment; it is text only.
-9. **Somebody else.** From the machine's Access dialog, give a second account
+10. **Somebody else.** From the machine's Access dialog, give a second account
    `REMOTE_VIEW` only. Connect as them: a prompt appears **on the machine**,
    and nothing is captured until it is answered. Refuse it once, and let it
    time out once (thirty seconds) - both end the session.
-10. **View-only really is.** Accept the session, then try to move the mouse over
+11. **View-only really is.** Accept the session, then try to move the mouse over
    the video. Nothing happens on the machine, and the machine's History tab
    shows `input.refused`.
-11. **Revoke while live.** With that session running, untick everything in the
+12. **Revoke while live.** With that session running, untick everything in the
    Access dialog. The controller's window should say the session ended, the red
    banner on the machine should disappear, and History should show
    `session.ended` with reason `revoked`.
-12. **Temporary access.** Set an expiry a few minutes out, confirm the machine
+13. **Temporary access.** Set an expiry a few minutes out, confirm the machine
    still appears for that account, then wait past it: the machine leaves their
    list and a session is refused with 404.
 
+## Giving control in a call
+
+Needs two accounts in the same voice channel, and the machine sharing has to
+be Windows. Nothing here needs an enrolled machine or a grant - that is the
+point of it.
+
+1. **Share a whole screen.** From the voice channel, share a *screen* (not an
+   application) and have the other person watch it.
+2. **Point at things.** Move the pointer over the share in the watcher's
+   window: a labelled cursor with their name appears on the sharer's copy of
+   it, and on anybody else's. Move it off the picture and the cursor goes.
+   With three people in the call, all three cursors are distinguishable.
+   Aim at a corner of something and check the cursor is over the same thing on
+   the other screen - if the two machines have different aspect ratios, this is
+   where a mistake in the letterbox arithmetic shows.
+3. **Ask.** The watcher clicks **Request control**. A prompt appears on the
+   sharer's window wherever they are in the app. Refuse it once: the watcher's
+   button says why and nothing happens.
+4. **Drive.** Ask again and allow it. The watcher's pointer now moves the
+   sharer's mouse, clicks land, typing arrives. A red banner sits at the top of
+   the sharer's window for the whole time.
+5. **Every way out.** Each of these must end it, and the banner must go:
+   Escape in the watcher's window; **Release control** in the watcher's window;
+   **Take back** on the sharer's banner; the sharer clicking **Stop sharing**;
+   the watcher leaving the call; the sharer leaving the call.
+6. **A window is not a screen.** Share an application window instead and ask
+   for control: it is refused, with a reason. There is no fraction of a screen
+   to map a click onto when the thing being shared can be dragged between
+   monitors.
+7. **It grants nothing afterwards.** Once the share stops, the watcher has no
+   access to that machine at all - check the **Remote machines** list from
+   their account and it is not there.
 ## Backend smoke tests
 
 The scripts need Postgres, Redis and the services running, and both exit
@@ -424,8 +462,10 @@ answering 404 rather than 403, and an anonymous caller refused.
 crypto primitives, storage (including a multipart round trip and the sweep for
 abandoned uploads), logger redaction, the desktop E2EE round trip, the message
 body encoding that carries attachment manifests, the server-address parsing
-behind the login screen's server picker, and `AuthService` against an in-memory
-database (register, login, refresh rotation, reuse detection, logout).
+behind the login screen's server picker, the letterbox arithmetic that puts a
+named cursor and a click in the right place on a shared screen, and
+`AuthService` against an in-memory database (register, login, refresh
+rotation, reuse detection, logout).
 
 `.github/workflows/ci.yml` runs those on every pull request, then a second job
 that starts Postgres and Redis, applies migrations, boots auth-, server-,
@@ -504,6 +544,9 @@ A published track logs `"encryption":1` — that is the end-to-end encrypted pat
 | Nothing happens on the remote machine when you move the mouse | Control is a mode: click **Take control** first. If that is already on, Settings → Remote Access on the machine shows what the input helper reported |
 | Mouse moves but nothing is clicked on the remote machine | Injection is Windows-only; on macOS and Linux a session is view-only by design |
 | Clipboard does not cross | `REMOTE_CLIPBOARD` has to be granted, and it is polled once a second - it is not instant |
+| Clicks land on the wrong monitor | Something changed the display after the session opened. Switch monitor and back: input follows whatever the agent is publishing |
+| **Request control** on a screen share is refused straight away | A window is being shared rather than a whole screen, the share stopped, or the machine sharing is not Windows. The refusal says which |
+| Named cursors do not appear on a share | Only people who have the share open on the stage send a pointer, and one that goes quiet for four seconds is dropped |
 | `dev:duo` windows say "Request failed" and "Signing in to localhost:8080" | An old `VITE_API_URL` in `.env` pointing at the Nginx container, which `pnpm dev:backend` does not run. Development ignores that variable now; rebuild if the window predates that |
 | Windows open on top of each other | Positions are fixed at x=40 and x=760; on a small display, drag them apart |
 | Login answers 429 | The per-address credentials limit (20/min) kicked in; wait out the window |
