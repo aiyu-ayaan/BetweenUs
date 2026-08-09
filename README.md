@@ -235,7 +235,8 @@ keeps the metadata; blobs never go in a column.
 
 - Node.js 20+
 - pnpm 9
-- Docker Desktop - only for Postgres, Redis and LiveKit in development
+- Docker - Postgres, Redis and LiveKit in development; the whole stack in a
+  deployment (see `DEPLOYMENT.md`)
 
 ## Quick start
 
@@ -288,9 +289,22 @@ a single variable to set:
 VITE_API_URL="https://nexora.example.com"
 ```
 
-Leave it empty for `pnpm dev` - the Vite dev server proxies to the services
-itself, and its own origin is then the gateway. It is read from the repo-root
-`.env`.
+Which URL that is:
+
+| Where the backend runs | Point the desktop app at |
+| --- | --- |
+| `pnpm dev:backend` on this machine | nothing - `pnpm dev` proxies to the services itself |
+| Docker compose on this machine | `http://localhost:8080` (the built-in default) |
+| Docker compose on another machine on the LAN | `http://<its-ip>:8080` |
+| Behind a Cloudflare Tunnel | `https://nexora.example.com` |
+
+The port is `GATEWAY_PORT`, never a service port: `3001`, `3004` and the rest
+are internal to the Docker network and are not what a client talks to.
+
+`VITE_API_URL` is read from the repo-root `.env` and baked in at build time, so
+it only affects a packaged build. `pnpm dev` ignores it deliberately - the Vite
+dev server proxies to the services itself, and its own origin is then the
+gateway.
 
 It is only the default. **Connect to a self-hosted instance** on the login
 screen (and *Change server* in Settings → My Account) points the window at any
