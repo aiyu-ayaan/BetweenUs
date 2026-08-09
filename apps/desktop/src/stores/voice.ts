@@ -16,6 +16,7 @@ import {
   type LocalParticipant,
   type Participant,
   type RemoteParticipant,
+  type RemoteTrack,
 } from 'livekit-client';
 import E2eeWorker from 'livekit-client/e2ee-worker?worker';
 import { api } from '../services/api';
@@ -23,6 +24,12 @@ import { callKeyForChannel } from '../services/e2ee';
 import { presenceSocket } from '../services/socket';
 import { wsUrl } from '../services/endpoint';
 import { useShareControlStore } from './shareControl';
+import {
+  PLAYOUT_DELAY,
+  shareOptions,
+  type ShareIntent,
+  type ShareSize,
+} from '../services/share-quality';
 
 if (import.meta.env.DEV) setLogLevel('debug');
 
@@ -73,7 +80,11 @@ interface VoiceState {
   leave: () => Promise<void>;
   toggleMic: () => Promise<void>;
   toggleCamera: () => Promise<void>;
-  shareScreen: (source: ScreenSource | null, withAudio: boolean) => Promise<void>;
+  shareScreen: (
+    source: ScreenSource | null,
+    withAudio: boolean,
+    intent: ShareIntent,
+  ) => Promise<void>;
   stopScreenShare: () => Promise<void>;
   watch: (identity: string | null) => void;
 }
@@ -199,7 +210,10 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
       room
         .on(RoomEvent.ParticipantConnected, refresh)
         .on(RoomEvent.ParticipantDisconnected, refresh)
-        .on(RoomEvent.TrackSubscribed, refresh)
+        .on(RoomEvent.TrackSubscribed, (track: RemoteTrack) => {
+          tuneLatency(track);
+          refresh();
+        })
         .on(RoomEvent.TrackUnsubscribed, refresh)
         .on(RoomEvent.TrackMuted, refresh)
         .on(RoomEvent.TrackUnmuted, refresh)
@@ -346,15 +360,23 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
    * they hear themselves. `restrictOwnAudio` is the constraint that leaves this
    * app's own output out of the capture, which is exactly the difference wanted:
    * the film's soundtrack travels, the voices in the call do not.
+   *
+   * Everything about how it is *encoded* lives in `share-quality.ts`, including
+   * why the defaults were never going to be watchable.
    */
-  shareScreen: async (source, withAudio) => {
+  shareScreen: async (source, withAudio, intent) => {
     const { room, status } = get();
     if (!room || status !== 'connected') return;
     try {
       await window.nexora?.selectScreenSource(source?.id ?? '', withAudio);
-      await room.localParticipant.setScreenShareEnabled(true, {
-        audio: withAudio ? { restrictOwnAudio: true, echoCancellation: false } : false,
+      const options = shareOptions(intent, await captureSize(source), {
+        // A soundtrack only when the share is one: the processing that makes
+        // speech clear is the processing that ruins music, and a shared
+        // terminal's beeps are not worth stereo Opus.
+        music: intent === 'motion',
       });
+      if (!withAudio) options.capture.audio = false;
+      await room.localParticipant.setScreenShareEnabled(true, options.capture, options.publish);
       // Watch your own share, so you can see what the others are seeing.
       set({
         screenEnabled: true,
@@ -392,6 +414,46 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
 
   watch: (identity) => set({ watching: identity }),
 }));
+
+/**
+ * The real pixel size of what is about to be captured.
+ *
+ * A screen is exactly its display. A window is whatever size it happens to be,
+ * which nothing here can ask for, so it gets the biggest display as a ceiling -
+ * a capture is never scaled *up* to meet one, so an over-estimate costs
+ * nothing while an under-estimate is a permanently soft picture.
+ */
+async function captureSize(source: ScreenSource | null): Promise<ShareSize> {
+  const fallback = { width: 1920, height: 1080 };
+  const displays = (await window.nexora?.screenDisplays()) ?? [];
+  if (displays.length === 0) return fallback;
+
+  const exact = source?.displayId
+    ? displays.find((display) => display.id === source.displayId)
+    : undefined;
+  if (exact) return { width: exact.width, height: exact.height };
+
+  return displays.reduce(
+    (biggest, display) =>
+      display.width * display.height > biggest.width * biggest.height
+        ? { width: display.width, height: display.height }
+        : biggest,
+    fallback,
+  );
+}
+
+/**
+ * Asks the receiver to stop hoarding frames.
+ *
+ * A jitter buffer left to itself is a third of a second of latency, most of it
+ * spent guarding against network conditions this link does not have. Whoever is
+ * driving gets none of it; whoever is watching gets a couple of frames, which
+ * absorbs ordinary jitter without anybody noticing.
+ */
+function tuneLatency(track: RemoteTrack): void {
+  const driving = useShareControlStore.getState().driving !== null;
+  track.setPlayoutDelay(driving ? PLAYOUT_DELAY.driving : PLAYOUT_DELAY.watching);
+}
 
 function snapshot(room: Room): { tiles: VoiceTile[]; shares: VoiceShare[] } {
   const speaking = new Set(room.activeSpeakers.map((participant) => participant.identity));
@@ -439,6 +501,22 @@ function toTile(participant: Participant, speaking: boolean): VoiceTile {
     lastSpokeAt: lastSpoke.get(participant.identity) ?? 0,
   };
 }
+
+// Taking control of a share changes what its latency should be: a pointer that
+// arrives two frames late is unusable, where two frames of cushion on something
+// you are only watching is invisible.
+useShareControlStore.subscribe((state, previous) => {
+  if (state.driving === previous.driving) return;
+  const room = useVoiceStore.getState().room;
+  if (!room) return;
+  for (const participant of room.remoteParticipants.values()) {
+    for (const publication of participant.trackPublications.values()) {
+      if (publication.track && !publication.track.isLocal) {
+        tuneLatency(publication.track as RemoteTrack);
+      }
+    }
+  }
+});
 
 if (import.meta.hot) {
   import.meta.hot.dispose(() => {

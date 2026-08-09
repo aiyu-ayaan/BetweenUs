@@ -9,6 +9,7 @@
  */
 import { useEffect, useState } from 'react';
 import { useVoiceStore } from '../../stores/voice';
+import type { ShareIntent } from '../../services/share-quality';
 import { ScreenShareIcon } from '../../components/icons';
 
 export function ScreenSharePicker({ onClose }: { onClose: () => void }): JSX.Element {
@@ -22,6 +23,10 @@ export function ScreenSharePicker({ onClose }: { onClose: () => void }): JSX.Ele
   // offer honest.
   const audioSupported = window.nexora?.platform === 'win32';
   const [withAudio, setWithAudio] = useState(audioSupported);
+  // What is on the screen, not how good it should be. The two want opposite
+  // things from the encoder and neither is the better one - see
+  // `services/share-quality.ts`.
+  const [intent, setIntent] = useState<ShareIntent>('detail');
 
   useEffect(() => {
     const bridge = window.nexora;
@@ -52,7 +57,7 @@ export function ScreenSharePicker({ onClose }: { onClose: () => void }): JSX.Ele
 
   const start = (): void => {
     onClose();
-    void shareScreen(chosen, withAudio && audioSupported);
+    void shareScreen(chosen, withAudio && audioSupported, intent);
   };
 
   return (
@@ -124,7 +129,25 @@ export function ScreenSharePicker({ onClose }: { onClose: () => void }): JSX.Ele
           </ul>
         </div>
 
-        <footer className="flex items-center gap-3 border-t border-black/30 px-5 py-4">
+        {/* Asked rather than guessed: a film wants frames kept and resolution
+            given up, a document wants exactly the reverse, and getting it wrong
+            is what "the quality is bad" usually turns out to be. */}
+        <div className="flex gap-2 border-t border-black/30 px-5 pt-4">
+          <IntentCard
+            active={intent === 'detail'}
+            onClick={() => setIntent('detail')}
+            title="Text and detail"
+            hint="A desktop, a document, code. Stays sharp; 30 fps."
+          />
+          <IntentCard
+            active={intent === 'motion'}
+            onClick={() => setIntent('motion')}
+            title="Video and motion"
+            hint="A film or a game. Smooth at 60 fps, full-quality sound."
+          />
+        </div>
+
+        <footer className="flex items-center gap-3 px-5 py-4">
           <label
             className={`flex items-center gap-2 text-sm ${
               audioSupported ? 'text-slate-300' : 'text-slate-500'
@@ -159,6 +182,32 @@ export function ScreenSharePicker({ onClose }: { onClose: () => void }): JSX.Ele
         </footer>
       </div>
     </div>
+  );
+}
+
+function IntentCard({
+  active,
+  onClick,
+  title,
+  hint,
+}: {
+  active: boolean;
+  onClick: () => void;
+  title: string;
+  hint: string;
+}): JSX.Element {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={`flex-1 cursor-pointer rounded-lg border-2 px-3 py-2 text-left transition-colors duration-200 ${
+        active ? 'border-accent bg-accent/10' : 'border-surface-700 hover:border-surface-600'
+      }`}
+    >
+      <span className="block text-sm font-medium text-slate-100">{title}</span>
+      <span className="block text-xs text-slate-400">{hint}</span>
+    </button>
   );
 }
 

@@ -18,6 +18,7 @@ import type { AgentRemoteEvent, RemotePermission, ServerRemoteEvent } from '@nex
 import { api } from './api';
 import { wsUrl } from './endpoint';
 import { secureGet, secureSet } from './e2ee';
+import { shareOptions } from './share-quality';
 
 const TOKEN_KEY = 'remote.agentToken';
 const MACHINE_KEY = 'remote.machineId';
@@ -410,24 +411,11 @@ async function startPublishing(pending: PendingSession): Promise<void> {
  */
 async function publishDisplay(target: Room, display: DisplayInfo): Promise<void> {
   await window.nexora?.selectScreenSource(display.sourceId, false);
-  await target.localParticipant.setScreenShareEnabled(
-    true,
-    {
-      audio: false,
-      resolution: { width: display.width, height: display.height, frameRate: 30 },
-      // 'text' tells the encoder this is a desktop, not a video: sharp edges
-      // matter more than smooth motion.
-      contentHint: 'text',
-    },
-    {
-      simulcast: false,
-      degradationPreference: 'maintain-resolution',
-      screenShareEncoding: {
-        maxFramerate: 30,
-        maxBitrate: bitrateFor(display.width, display.height),
-      },
-    },
-  );
+  // The same encoder settings a screen share in a call uses - a remote desktop
+  // is the 'detail' case of the same problem, and there is no reason for two
+  // sets of numbers. `share-quality.ts` says why they are what they are.
+  const options = shareOptions('detail', { width: display.width, height: display.height }, false);
+  await target.localParticipant.setScreenShareEnabled(true, options.capture, options.publish);
   activeDisplayId = display.id;
   window.nexora?.remoteTarget(display.id);
 }
@@ -470,19 +458,6 @@ function sendScreens(sessionId: string): void {
       primary: display.primary,
     })),
   });
-}
-
-/**
- * A ceiling for the encoder, scaled to the number of pixels being sent.
- *
- * 1080p at 30fps of mostly-static desktop sits comfortably under 4 Mbps; the
- * rest is proportional to the area, clamped so a 4K display does not ask for a
- * link nobody has. This is a ceiling, not a target - the encoder spends far
- * less on a still screen and LiveKit lowers it further when the link says so.
- */
-function bitrateFor(width: number, height: number): number {
-  const perPixel = 4_000_000 / (1920 * 1080);
-  return Math.min(12_000_000, Math.max(1_500_000, Math.round(width * height * perPixel)));
 }
 
 /**

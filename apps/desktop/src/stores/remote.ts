@@ -19,6 +19,7 @@ import type {
 } from '@nexora/shared-types';
 import { api } from '../services/api';
 import { wsUrl } from '../services/endpoint';
+import { PLAYOUT_DELAY } from '../services/share-quality';
 import { useAuthStore } from './auth';
 
 /** Mouse moves are sampled: a session does not need 500 events a second. */
@@ -325,6 +326,10 @@ async function joinRoom(session: RemoteSessionResponse, set: Setter): Promise<vo
 
   next.on(RoomEvent.TrackSubscribed, (track: RemoteTrack) => {
     if (track.kind !== Track.Kind.Video) return;
+    // No jitter buffer worth the name: this is a desktop somebody is driving,
+    // and the default third of a second between moving the mouse and seeing it
+    // move is the difference between usable and not.
+    track.setPlayoutDelay(PLAYOUT_DELAY.driving);
     set({ track: track.mediaStreamTrack, status: 'live' });
     startClipboardSync();
   });
