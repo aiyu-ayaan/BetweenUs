@@ -1,13 +1,29 @@
-import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { prisma, resolveChannelAccess, type ChannelAccess } from '@nexora/database';
 import { EVENTS, EventBus } from '@nexora/events';
 import { PERMISSIONS, type Permission } from '@nexora/permissions';
-import type { Message, Paginated } from '@nexora/shared-types';
+import type { Message, MessageReactionSummary, Paginated } from '@nexora/shared-types';
 
 const PAGE_SIZE = 50;
 // Content is an encrypted envelope, so the limit covers base64 expansion of a
 // 4000-character message plus the JSON wrapper.
 const MAX_CONTENT_LENGTH = 8000;
+/**
+ * An emoji is a handful of code points - a base, a skin tone, a zero-width
+ * joiner, a variation selector. The cap is on the string, not on how many
+ * characters a human would count, and it exists so the column cannot be used as
+ * free storage.
+ */
+const MAX_EMOJI_LENGTH = 32;
+/** How many distinct people's reactions one message may carry. */
+const MAX_REACTIONS_PER_MESSAGE = 200;
+
+/** Everything a `Message` is built from, in one place so every path agrees. */
+const MESSAGE_INCLUDE = {
+  author: true,
+  deletedBy: true,
+  reactions: { select: { userId: true, emoji: true } },
+} as const;
 
 @Injectable()
 export class MessagesService {
@@ -16,6 +32,10 @@ export class MessagesService {
   /**
    * Newest-first page of a channel's history. `before` is a message id; the
    * cursor is opaque to the client.
+   *
+   * Deleted messages are included as tombstones - the body is already empty in
+   * the database, and a conversation that silently closes over a removed
+   * message is harder to follow than one that says something was here.
    */
   async history(userId: string, channelId: string, before?: string): Promise<Paginated<Message>> {
     await this.requireChannelAccess(userId, channelId, PERMISSIONS.VIEW_CHANNEL);
@@ -27,10 +47,9 @@ export class MessagesService {
     const rows = await prisma.message.findMany({
       where: {
         channelId,
-        deletedAt: null,
         ...(cursor ? { createdAt: { lt: cursor.createdAt } } : {}),
       },
-      include: { author: true },
+      include: MESSAGE_INCLUDE,
       orderBy: { createdAt: 'desc' },
       take: PAGE_SIZE,
     });
@@ -41,6 +60,19 @@ export class MessagesService {
       items,
       nextCursor: rows.length === PAGE_SIZE && oldest ? oldest.id : null,
     };
+  }
+
+  /** Pinned messages of one channel, most recently pinned first. */
+  async pins(userId: string, channelId: string): Promise<Message[]> {
+    await this.requireChannelAccess(userId, channelId, PERMISSIONS.VIEW_CHANNEL);
+
+    const rows = await prisma.message.findMany({
+      where: { channelId, pinnedAt: { not: null }, deletedAt: null },
+      include: MESSAGE_INCLUDE,
+      orderBy: { pinnedAt: 'desc' },
+      take: 100,
+    });
+    return rows.map(toMessage);
   }
 
   async send(userId: string, channelId: string, content: string): Promise<Message> {
@@ -56,7 +88,7 @@ export class MessagesService {
 
     const row = await prisma.message.create({
       data: { channelId, authorId: userId, content: trimmed },
-      include: { author: true },
+      include: MESSAGE_INCLUDE,
     });
 
     const message = toMessage(row);
@@ -67,49 +99,174 @@ export class MessagesService {
   }
 
   /**
+   * Rewrites the body. The author only - a moderator may remove a message but
+   * never put different words in somebody's mouth - and `editedAt` is stamped
+   * so every client can say so.
+   *
+   * The new body replaces the old ciphertext, so an edit is not recoverable
+   * from the database. There is no edit history and this build does not pretend
+   * to keep one.
+   */
+  async edit(userId: string, messageId: string, content: string): Promise<Message> {
+    const existing = await this.require(messageId);
+    await this.requireChannelAccess(userId, existing.channelId, PERMISSIONS.SEND_MESSAGE);
+
+    if (existing.authorId !== userId) {
+      throw new ForbiddenException({
+        code: 'NOT_MESSAGE_AUTHOR',
+        message: 'Only the author can edit a message',
+      });
+    }
+
+    const trimmed = content.trim();
+    if (trimmed.length === 0 || trimmed.length > MAX_CONTENT_LENGTH) {
+      throw new BadRequestException({
+        code: 'INVALID_MESSAGE',
+        message: `Message must be 1-${MAX_CONTENT_LENGTH} characters`,
+      });
+    }
+
+    const row = await prisma.message.update({
+      where: { id: existing.id },
+      data: { content: trimmed, editedAt: new Date() },
+      include: MESSAGE_INCLUDE,
+    });
+
+    const message = toMessage(row);
+    await this.events.publish(EVENTS.MESSAGE_UPDATED, { message });
+    return message;
+  }
+
+  /**
    * Deletes a message. The author may always delete their own; anyone else
    * needs `DELETE_MESSAGE` in that channel, which is what a moderator holds.
    *
-   * It is a soft delete: `deletedAt` is set and the body is emptied, so the row
-   * still anchors the `before` cursor of a page that was already handed out and
-   * the ciphertext stops existing at the same moment. Attachment blobs are not
-   * swept yet - development/TODO.md carries that, and it is a storage job, not
-   * a message one.
+   * It is a soft delete: `deletedAt` and, when somebody else did it,
+   * `deletedById` are set and the body is emptied. The row stays so the
+   * conversation can show a tombstone and so a page cursor handed out a moment
+   * ago still points somewhere; the ciphertext does not. Attachment blobs are
+   * not swept yet - development/TODO.md carries that, and it is a storage job.
    */
   async remove(userId: string, messageId: string): Promise<void> {
-    const row = await prisma.message.findFirst({
-      where: { id: messageId, deletedAt: null },
-      select: { id: true, channelId: true, authorId: true },
-    });
-    // A message in a channel the caller cannot see must answer the same way as
-    // one that never existed.
-    if (!row) {
-      throw new NotFoundException({ code: 'MESSAGE_NOT_FOUND', message: 'Message not found' });
-    }
+    const existing = await this.require(messageId);
 
     const access = await this.requireChannelAccess(
       userId,
-      row.channelId,
+      existing.channelId,
       PERMISSIONS.VIEW_CHANNEL,
     );
-    if (
-      row.authorId !== userId &&
-      !access.permissions.includes(PERMISSIONS.DELETE_MESSAGE)
-    ) {
+    const mine = existing.authorId === userId;
+    if (!mine && !access.permissions.includes(PERMISSIONS.DELETE_MESSAGE)) {
       throw new ForbiddenException({
         code: 'MISSING_PERMISSION',
         message: 'You can only delete your own messages here',
       });
     }
 
-    await prisma.message.update({
-      where: { id: row.id },
-      data: { deletedAt: new Date(), content: '' },
+    const row = await prisma.message.update({
+      where: { id: existing.id },
+      data: {
+        deletedAt: new Date(),
+        // Null when the author took their own message back: a client only
+        // names the person when it was somebody else.
+        deletedById: mine ? null : userId,
+        content: '',
+        // A deleted message cannot stay pinned, and its reactions go with it.
+        pinnedAt: null,
+        pinnedById: null,
+        reactions: { deleteMany: {} },
+      },
+      include: MESSAGE_INCLUDE,
     });
+
     await this.events.publish(EVENTS.MESSAGE_DELETED, {
       messageId: row.id,
       channelId: row.channelId,
+      message: toMessage(row),
     });
+  }
+
+  /**
+   * Pins or unpins. In a server channel this is `MANAGE_MESSAGE`, because a pin
+   * is a claim on everybody's channel header; in a direct message there is no
+   * role to hold, so either participant may pin.
+   */
+  async setPinned(userId: string, messageId: string, pinned: boolean): Promise<Message> {
+    const existing = await this.require(messageId);
+    const access = await this.requireChannelAccess(
+      userId,
+      existing.channelId,
+      PERMISSIONS.VIEW_CHANNEL,
+    );
+
+    if (access.serverId !== null && !access.permissions.includes(PERMISSIONS.MANAGE_MESSAGE)) {
+      throw new ForbiddenException({
+        code: 'MISSING_PERMISSION',
+        message: `Missing permission ${PERMISSIONS.MANAGE_MESSAGE}`,
+      });
+    }
+
+    const row = await prisma.message.update({
+      where: { id: existing.id },
+      data: pinned
+        ? { pinnedAt: new Date(), pinnedById: userId }
+        : { pinnedAt: null, pinnedById: null },
+      include: MESSAGE_INCLUDE,
+    });
+
+    const message = toMessage(row);
+    await this.events.publish(EVENTS.MESSAGE_UPDATED, { message });
+    return message;
+  }
+
+  /**
+   * Adds or removes the caller's reaction. Reacting twice with the same emoji
+   * takes it back, which is what every client that has one does.
+   *
+   * The emoji is stored in the clear - see development/E2EE.md. It is the one
+   * part of a message the server can read, and it is documented rather than
+   * hidden.
+   */
+  async react(userId: string, messageId: string, emoji: string): Promise<Message> {
+    const existing = await this.require(messageId);
+    // Reacting is speaking in the channel, so it takes the same permission.
+    await this.requireChannelAccess(userId, existing.channelId, PERMISSIONS.SEND_MESSAGE);
+
+    const symbol = emoji.trim();
+    if (symbol.length === 0 || symbol.length > MAX_EMOJI_LENGTH || /\s/.test(symbol)) {
+      throw new BadRequestException({
+        code: 'INVALID_EMOJI',
+        message: 'That is not an emoji',
+      });
+    }
+
+    const already = await prisma.messageReaction.findUnique({
+      where: { messageId_userId_emoji: { messageId: existing.id, userId, emoji: symbol } },
+      select: { id: true },
+    });
+
+    if (already) {
+      await prisma.messageReaction.delete({ where: { id: already.id } });
+    } else {
+      const total = await prisma.messageReaction.count({ where: { messageId: existing.id } });
+      if (total >= MAX_REACTIONS_PER_MESSAGE) {
+        throw new BadRequestException({
+          code: 'TOO_MANY_REACTIONS',
+          message: 'That message has all the reactions it can hold',
+        });
+      }
+      await prisma.messageReaction.create({
+        data: { messageId: existing.id, userId, emoji: symbol },
+      });
+    }
+
+    const row = await prisma.message.findUniqueOrThrow({
+      where: { id: existing.id },
+      include: MESSAGE_INCLUDE,
+    });
+    const message = toMessage(row);
+    await this.events.publish(EVENTS.MESSAGE_UPDATED, { message });
+    return message;
   }
 
   /**
@@ -136,6 +293,25 @@ export class MessagesService {
     }
     return access;
   }
+
+  /**
+   * A live message, by id. A deleted one is gone as far as every write path is
+   * concerned - it cannot be edited, pinned, reacted to or deleted again - and
+   * a message in a channel the caller cannot see answers the same 404 as one
+   * that never existed, because the access check has not run yet at this point.
+   */
+  private async require(
+    messageId: string,
+  ): Promise<{ id: string; channelId: string; authorId: string }> {
+    const row = await prisma.message.findFirst({
+      where: { id: messageId, deletedAt: null },
+      select: { id: true, channelId: true, authorId: true },
+    });
+    if (!row) {
+      throw new NotFoundException({ code: 'MESSAGE_NOT_FOUND', message: 'Message not found' });
+    }
+    return row;
+  }
 }
 
 interface MessageRow {
@@ -144,12 +320,21 @@ interface MessageRow {
   content: string;
   createdAt: Date;
   editedAt: Date | null;
+  deletedAt: Date | null;
+  pinnedAt: Date | null;
   author: {
     id: string;
     username: string;
     displayName: string;
     avatarUrl: string | null;
   };
+  deletedBy?: {
+    id: string;
+    username: string;
+    displayName: string;
+    avatarUrl: string | null;
+  } | null;
+  reactions?: Array<{ userId: string; emoji: string }>;
 }
 
 export function toMessage(row: MessageRow): Message {
@@ -165,5 +350,27 @@ export function toMessage(row: MessageRow): Message {
     },
     createdAt: row.createdAt.toISOString(),
     editedAt: row.editedAt ? row.editedAt.toISOString() : null,
+    deletedAt: row.deletedAt ? row.deletedAt.toISOString() : null,
+    deletedBy: row.deletedBy
+      ? {
+          id: row.deletedBy.id,
+          username: row.deletedBy.username,
+          displayName: row.deletedBy.displayName,
+          avatarUrl: row.deletedBy.avatarUrl,
+        }
+      : null,
+    pinnedAt: row.pinnedAt ? row.pinnedAt.toISOString() : null,
+    reactions: summarise(row.reactions ?? []),
   };
+}
+
+/** Groups the rows by emoji, keeping the order they were first used in. */
+function summarise(rows: Array<{ userId: string; emoji: string }>): MessageReactionSummary[] {
+  const groups = new Map<string, MessageReactionSummary>();
+  for (const row of rows) {
+    const group = groups.get(row.emoji) ?? { emoji: row.emoji, userIds: [] };
+    group.userIds.push(row.userId);
+    groups.set(row.emoji, group);
+  }
+  return [...groups.values()];
 }

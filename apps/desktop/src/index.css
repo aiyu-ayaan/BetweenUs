@@ -19,9 +19,25 @@
     line-height: 1.6;
   }
 
-  /* Visible focus for keyboard users on every interactive element. */
+  /*
+   * Focus for keyboard users, and only for them.
+   *
+   * The accent ring with an offset drew a heavy blue box around whatever was
+   * clicked - the composer while typing in it, a server pill after a click -
+   * which reads as an error state rather than as focus. What replaces it is a
+   * thin neutral ring, and text fields opt out entirely: a caret is already an
+   * unmistakable focus indicator, and boxing the composer as well is noise.
+   */
   :focus-visible {
-    @apply outline-none ring-2 ring-accent ring-offset-2 ring-offset-surface-900;
+    @apply outline-none ring-1 ring-slate-400/50;
+  }
+
+  input:focus,
+  input:focus-visible,
+  textarea:focus,
+  textarea:focus-visible,
+  [contenteditable]:focus-visible {
+    @apply outline-none ring-0;
   }
 
   ::-webkit-scrollbar {

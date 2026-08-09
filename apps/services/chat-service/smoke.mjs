@@ -340,16 +340,77 @@ const dmHistory = await json(`${CHAT}/api/v1/messages?channelId=${direct.channel
 });
 ok('direct message delivered', dmHistory.items.some((item) => item.id === dmMessage.id));
 
-// --- Deleting messages -----------------------------------------------------
+// --- Editing, deleting, pinning and reacting -------------------------------
+
+const edited = await json(`${CHAT}/api/v1/messages/${dmMessage.id}`, {
+  method: 'PATCH',
+  headers: authed,
+  body: JSON.stringify({ content: 'hello over DM, corrected' }),
+});
+ok(
+  'author edits their own message',
+  edited.content === 'hello over DM, corrected' && edited.editedAt !== null,
+);
+
+const editRefused = await fetch(`${CHAT}/api/v1/messages/${dmMessage.id}`, {
+  method: 'PATCH',
+  headers: { ...other, 'Content-Type': 'application/json' },
+  body: JSON.stringify({ content: 'words in your mouth' }),
+});
+ok('only the author may edit', editRefused.status === 403);
+
+// Either participant may pin in a direct message - there is no role to hold.
+const pinned = await json(`${CHAT}/api/v1/messages/${dmMessage.id}/pin`, {
+  method: 'PUT',
+  headers: other,
+});
+ok('pinned in a direct message', pinned.pinnedAt !== null);
+
+const pinList = await json(`${CHAT}/api/v1/messages/pins?channelId=${direct.channelId}`, {
+  headers: authed,
+});
+ok('pin list', pinList.some((item) => item.id === dmMessage.id));
+
+const unpinned = await json(`${CHAT}/api/v1/messages/${dmMessage.id}/pin`, {
+  method: 'DELETE',
+  headers: authed,
+});
+ok('unpinned', unpinned.pinnedAt === null);
+
+const reacted = await json(`${CHAT}/api/v1/messages/${dmMessage.id}/reactions`, {
+  method: 'POST',
+  headers: other,
+  body: JSON.stringify({ emoji: '👍' }),
+});
+ok(
+  'reaction added',
+  reacted.reactions.some((entry) => entry.emoji === '👍' && entry.userIds.includes(otherId)),
+);
+
+const unreacted = await json(`${CHAT}/api/v1/messages/${dmMessage.id}/reactions`, {
+  method: 'POST',
+  headers: other,
+  body: JSON.stringify({ emoji: '👍' }),
+});
+ok('reacting again takes it back', unreacted.reactions.length === 0);
+
+const badEmoji = await fetch(`${CHAT}/api/v1/messages/${dmMessage.id}/reactions`, {
+  method: 'POST',
+  headers: { ...other, 'Content-Type': 'application/json' },
+  body: JSON.stringify({ emoji: 'not an emoji' }),
+});
+ok('a sentence is not an emoji', badEmoji.status === 400);
 
 await fetch(`${CHAT}/api/v1/messages/${dmMessage.id}`, { method: 'DELETE', headers: authed });
 const afterDelete = await json(`${CHAT}/api/v1/messages?channelId=${direct.channelId}`, {
   headers: other,
 });
+const tombstone = afterDelete.items.find((item) => item.id === dmMessage.id);
 ok(
-  'author deletes their own message',
-  !afterDelete.items.some((item) => item.id === dmMessage.id),
+  'a deleted message leaves a tombstone',
+  tombstone !== undefined && tombstone.deletedAt !== null && tombstone.content === '',
 );
+ok('the author deleting is not attributed', tombstone?.deletedBy === null);
 
 // Someone else's message, without the permission: refused.
 const doomed = await json(`${CHAT}/api/v1/messages`, {
@@ -377,7 +438,11 @@ ok('DELETE_MESSAGE lets a moderator delete it', moderatorDelete.status === 204);
 const afterModeration = await json(`${CHAT}/api/v1/messages?channelId=${channel.id}`, {
   headers: authed,
 });
-ok('deleted message leaves history', !afterModeration.items.some((item) => item.id === doomed.id));
+const moderated = afterModeration.items.find((item) => item.id === doomed.id);
+ok(
+  'a moderator deletion names who did it',
+  moderated?.deletedAt !== null && moderated?.deletedBy?.id === otherId,
+);
 
 // Deleting it twice is a 404, not a second deletion.
 const secondDelete = await fetch(`${CHAT}/api/v1/messages/${doomed.id}`, {
@@ -475,9 +540,59 @@ const doomedLive = await json(`${CHAT}/api/v1/messages`, {
 });
 await fetch(`${CHAT}/api/v1/messages/${doomedLive.id}`, { method: 'DELETE', headers: authed });
 ok(
-  'message.deleted fans out to the channel',
-  (await awaitEvent('message.deleted', (event) => event.messageId === doomedLive.id)) !== null,
+  'a deletion fans out as the tombstone',
+  (await awaitEvent(
+    'message.updated',
+    (event) => event.message.id === doomedLive.id && event.message.deletedAt !== null,
+  )) !== null,
 );
+
+// An edit, a pin and a reaction share the same event.
+const liveEdit = await json(`${CHAT}/api/v1/messages`, {
+  method: 'POST',
+  headers: authed,
+  body: JSON.stringify({ channelId: channel.id, content: 'first draft' }),
+});
+await json(`${CHAT}/api/v1/messages/${liveEdit.id}`, {
+  method: 'PATCH',
+  headers: authed,
+  body: JSON.stringify({ content: 'second draft' }),
+});
+ok(
+  'an edit fans out to the channel',
+  (await awaitEvent(
+    'message.updated',
+    (event) => event.message.id === liveEdit.id && event.message.editedAt !== null,
+  )) !== null,
+);
+
+await json(`${CHAT}/api/v1/messages/${liveEdit.id}/reactions`, {
+  method: 'POST',
+  headers: authed,
+  body: JSON.stringify({ emoji: '🎉' }),
+});
+ok(
+  'a reaction fans out to the channel',
+  (await awaitEvent(
+    'message.updated',
+    (event) =>
+      event.message.id === liveEdit.id &&
+      event.message.reactions.some((entry) => entry.emoji === '🎉'),
+  )) !== null,
+);
+
+// Pinning in a server channel is MANAGE_MESSAGE, which a plain member lacks.
+const pinRefused = await fetch(`${CHAT}/api/v1/messages/${liveEdit.id}/pin`, {
+  method: 'PUT',
+  headers: other,
+});
+ok('pinning a channel message needs MANAGE_MESSAGE', pinRefused.status === 403);
+
+const channelPin = await json(`${CHAT}/api/v1/messages/${liveEdit.id}/pin`, {
+  method: 'PUT',
+  headers: authed,
+});
+ok('the owner can pin', channelPin.pinnedAt !== null);
 
 // --- Removing a friend -----------------------------------------------------
 

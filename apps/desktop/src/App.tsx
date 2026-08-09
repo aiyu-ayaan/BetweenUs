@@ -16,6 +16,8 @@ import { HomeSidebar } from './features/home/HomeSidebar';
 import { FriendsView } from './features/home/FriendsView';
 import { MemberList } from './features/members/MemberList';
 import { ChatView } from './features/chat/ChatView';
+import { PinnedPanel } from './features/chat/PinnedPanel';
+import { SearchPanel } from './features/chat/SearchPanel';
 import { UserSettings } from './features/settings/UserSettings';
 import { VoiceChannelView } from './features/voice/VoiceChannelView';
 import { NexoraLogoIcon } from './components/icons';
@@ -113,6 +115,8 @@ function Workbench(): JSX.Element {
   const activeChannelId = useChatStore((state) => state.activeChannelId);
   const channel = useChatStore((state) => state.activeChannel());
 
+  const rightPanel = useChatStore((state) => state.rightPanel);
+
   const [settings, setSettings] = useState<'none' | 'user' | 'server'>('none');
   const [showingFriends, setShowingFriends] = useState(true);
   const [showMembers, setShowMembers] = useState(true);
@@ -147,7 +151,12 @@ function Workbench(): JSX.Element {
       ) : (
         <>
           <ChatView onToggleMembers={() => setShowMembers((value) => !value)} />
-          {view === 'server' && showMembers && <MemberList />}
+          {/* One right-hand column, whatever is in it: pins and search are the
+              same kind of list about this channel as the member list, and two
+              of them open at once would leave nothing to read. */}
+          {rightPanel === 'pins' && <PinnedPanel />}
+          {rightPanel === 'search' && <SearchPanel />}
+          {rightPanel === 'members' && view === 'server' && showMembers && <MemberList />}
         </>
       )}
 

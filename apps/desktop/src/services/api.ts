@@ -247,6 +247,29 @@ export const api = {
   deleteMessage: (messageId: string): Promise<void> =>
     request(`/api/v1/messages/${messageId}`, { method: 'DELETE' }),
 
+  /** The author only. `content` is the replacement envelope, already sealed. */
+  editMessage: (messageId: string, content: string): Promise<Message> =>
+    request(`/api/v1/messages/${messageId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ content }),
+    }),
+
+  pins: (channelId: string): Promise<Message[]> =>
+    request(`/api/v1/messages/pins?channelId=${encodeURIComponent(channelId)}`),
+
+  pinMessage: (messageId: string): Promise<Message> =>
+    request(`/api/v1/messages/${messageId}/pin`, { method: 'PUT' }),
+
+  unpinMessage: (messageId: string): Promise<Message> =>
+    request(`/api/v1/messages/${messageId}/pin`, { method: 'DELETE' }),
+
+  /** Reacting with an emoji you already chose takes it back. */
+  reactToMessage: (messageId: string, emoji: string): Promise<Message> =>
+    request(`/api/v1/messages/${messageId}/reactions`, {
+      method: 'POST',
+      body: JSON.stringify({ emoji }),
+    }),
+
   // --- Uploads ---
   //
   // Pictures go up as they are; attachments go up already encrypted, which is

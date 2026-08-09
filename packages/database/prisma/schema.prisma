@@ -62,7 +62,10 @@ model User {
   channelSeats  ChannelMember[]
   friendshipsA  Friendship[]    @relation("FriendshipA")
   friendshipsB  Friendship[]    @relation("FriendshipB")
-  messages      Message[]
+  messages        Message[]
+  deletedMessages Message[]         @relation("MessageDeletedBy")
+  pinnedMessages  Message[]         @relation("MessagePinnedBy")
+  reactions       MessageReaction[]
   deviceKey     DeviceKey?
   identities    UserIdentity[]
   notifications NotificationSetting?
@@ -300,11 +303,43 @@ model Message {
   createdAt DateTime  @default(now())
   editedAt  DateTime?
   deletedAt DateTime?
+  /// Who deleted it, when that was not the author - a client shows "deleted by
+  /// NAME" rather than pretending the author took it back.
+  deletedById String?
+  pinnedAt    DateTime?
+  pinnedById  String?
 
-  channel Channel @relation(fields: [channelId], references: [id], onDelete: Cascade)
-  author  User    @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  channel   Channel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  author    User    @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  deletedBy User?   @relation("MessageDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull)
+  pinnedBy  User?   @relation("MessagePinnedBy", fields: [pinnedById], references: [id], onDelete: SetNull)
+  reactions MessageReaction[]
 
   // History paging reads newest-first within a channel.
   @@index([channelId, createdAt])
+  // The pinned panel lists one channel's pins, newest pin first.
+  @@index([channelId, pinnedAt])
   @@map("messages")
+}
+
+/// One person's one emoji on one message.
+///
+/// The emoji is stored in the clear, unlike everything else about a message.
+/// That is a deliberate, documented leak (see development/E2EE.md): the server
+/// has to group and count reactions for people who hold no channel key at the
+/// moment they ask, and an encrypted-per-recipient reaction would cost a key
+/// exchange per thumbs-up.
+model MessageReaction {
+  id        String   @id @default(uuid())
+  messageId String
+  userId    String
+  emoji     String
+  createdAt DateTime @default(now())
+
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, userId, emoji])
+  @@index([messageId])
+  @@map("message_reactions")
 }

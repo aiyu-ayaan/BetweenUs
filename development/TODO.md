@@ -5,9 +5,49 @@ the top honest — it is what a new session reads first.
 
 ## Next up
 
-Phase 15 has landed in code and in the smoke script. Phases 13 and 14 landed
-earlier; what is left of them needs a human in front of the app, and so does
+Phases 15 and 15b have landed in code and in the smoke script; the client side
+of 15b has not been driven by a human yet. Phases 13 and 14 landed earlier; what is left of them needs a human in front of the app, and so does
 most of phase 12. The carried-over items are older ones in the same state.
+
+### Phase 15b — what you can do to a message
+
+- [x] A deleted message leaves a tombstone in the conversation: *Message
+      deleted*, or *Message deleted by NAME* when a moderator removed somebody
+      else's. `deletedById` stored, body still emptied
+- [x] Edit your own message (`PATCH /api/v1/messages/:id`), with an *(edited)*
+      marker; the author only, never a moderator
+- [x] Right-click menu on a message - react, edit, pin, copy, delete - replacing
+      the hover bin, with the two-click arming kept for delete
+- [x] Pins: `PUT`/`DELETE /api/v1/messages/:id/pin`, `GET /api/v1/messages/pins`,
+      a `MANAGE_MESSAGE` permission for server channels and no permission at all
+      inside a direct message
+- [x] Pinned panel in the right-hand column; clicking a pin scrolls the
+      conversation to that message and flashes it
+- [x] Search panel in the same column, over the history this window has
+      decrypted, with a footer saying how far that reached
+- [x] Reactions: `POST /api/v1/messages/:id/reactions` toggling one emoji,
+      chips under the message with counts, yours highlighted
+- [x] An emoji picker used by both the composer and a message, from a curated
+      set in the repo rather than a dependency
+- [x] One `message.updated` event for every after-the-fact change, carrying the
+      whole message
+- [x] The blue focus ring is gone: a thin neutral ring for keyboard users, and
+      none at all on text fields
+- [x] Smoke coverage for all of it, including the three fanouts on a live socket
+
+Left open on purpose:
+
+- [ ] No edit history, and no way to see what a message said before - the
+      envelope is replaced, so the old text is gone from the database too
+- [ ] Reactions are plaintext (`E2EE.md` limit 9); an encrypted reaction needs a
+      key exchange per thumbs-up
+- [ ] Search only reaches what this window decrypted, and does not page further
+      back on its own; the footer says so rather than hiding it
+- [ ] No "who reacted" tooltip on a chip - the user ids are there, the names are
+      not fetched
+- [ ] The pinned panel caps at 100 pins and does not page
+- [ ] A tombstone stays forever; nothing sweeps rows whose body has been empty
+      for months, and nothing sweeps their attachment blobs either
 
 ### Phase 15 — the social graph in realtime
 

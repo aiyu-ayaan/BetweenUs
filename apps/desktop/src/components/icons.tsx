@@ -292,6 +292,35 @@ export const PlayIcon = (props: IconProps): JSX.Element => (
   </Base>
 );
 
+export const PinIcon = (props: IconProps): JSX.Element => (
+  <Base {...props}>
+    <line x1="12" y1="17" x2="12" y2="22" />
+    <path d="M9 2h6l-1 5 3 3v2H7v-2l3-3-1-5z" />
+  </Base>
+);
+
+export const PencilIcon = (props: IconProps): JSX.Element => (
+  <Base {...props}>
+    <path d="M17 3a2.8 2.8 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z" />
+  </Base>
+);
+
+export const SmileIcon = (props: IconProps): JSX.Element => (
+  <Base {...props}>
+    <circle cx="12" cy="12" r="10" />
+    <path d="M8 14s1.5 2 4 2 4-2 4-2" />
+    <line x1="9" y1="9" x2="9.01" y2="9" />
+    <line x1="15" y1="9" x2="15.01" y2="9" />
+  </Base>
+);
+
+export const CopyIcon = (props: IconProps): JSX.Element => (
+  <Base {...props}>
+    <rect x="9" y="9" width="13" height="13" rx="2" />
+    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+  </Base>
+);
+
 export const NexoraLogoIcon = (props: SVGProps<SVGSVGElement>): JSX.Element => (
   <svg
     viewBox="0 0 1024 1024"

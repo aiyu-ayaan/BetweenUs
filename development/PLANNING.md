@@ -23,6 +23,7 @@ we get there in stages and what each stage delivers.
 | 13 | Media | Encrypted attachments of any type, client-side compression, multipart upload, avatars and server icons | In progress |
 | 14 | Notifications | notification-service, system tray, start with the system, mutes and quiet hours | Done |
 | 15 | Social graph and realtime | Message deletion, adding people to a server, friend and membership events over `/ws/chat` | In progress |
+| 15b | Message actions | Tombstones, editing, pins, reactions, emoji, in-client search, right-click menu | In progress |
 | 16 | Remote desktop | remote-gateway, remote-agent, remote permissions, audit log | Planned |
 | 17 | Production ingress | Cloudflare Tunnel, TLS, secret management, deploy pipeline | Planned |
 
@@ -31,6 +32,69 @@ adds a service, so both were cheaper to land before tests were written against
 the older shape.
 
 ## Architecture decisions made so far
+
+### What you can do to a message (phase 15b)
+
+- **A deleted message leaves a tombstone, and it says who did it.** The first
+  cut simply removed the row from the view, which reads as if the conversation
+  never had it - and it hides the difference between an author taking their own
+  words back and a moderator taking somebody's words down. Those are different
+  events and a thread read afterwards should not make them look the same, so
+  `deletedById` is stored when it was not the author, and the client draws
+  either *Message deleted* or *Message deleted by NAME*. The body is still
+  emptied: the tombstone is a fact about the conversation, not a copy of what
+  was said.
+- **One client event for every after-the-fact change.** An edit, a deletion, a
+  pin and a reaction all reach the client as `message.updated` carrying the
+  whole message, and the client replaces its copy. The alternative - an event
+  per verb, each patching a different field - is four chances to disagree about
+  what a message currently is. `message.deleted` as a distinct client event is
+  gone; a tombstone arriving with `deletedAt` set says the same thing and
+  needs no second code path.
+- **Editing is the author's alone.** A moderator may remove a message but never
+  rewrite it: putting different words in somebody's mouth is not moderation. The
+  new envelope replaces the old one, so there is no edit history - documented in
+  `E2EE.md` rather than quietly true.
+- **The hover bin became a right-click menu.** A control that only appears on
+  hover has to be discovered by accident and covers the message it belongs to,
+  and there is no room in a corner for react / edit / pin / copy / delete. A
+  context menu is where people already look for "do something to this", and it
+  keeps the two-click arming for the destructive item.
+- **Pinning is `MANAGE_MESSAGE` in a server channel and free in a direct
+  message.** A pin is a claim on everyone's channel header, so it is a moderator
+  act - but a DM has no roles to hold, and inventing one so two people can
+  bookmark a message would be silly. The permission is new because reusing
+  `DELETE_MESSAGE` would have made the settings screen lie about what the
+  toggle does.
+- **A reaction is stored in the clear, and that is written down.** It is the
+  one part of a message the server can read. Encrypting it means sealing a
+  thumbs-up per recipient - a key exchange per reaction - and the server would
+  still have to count them for clients that have not fetched the channel key.
+  The leak is narrow (how somebody felt about text the server cannot read) and
+  `E2EE.md` says so plainly.
+- **Reactions travel as user ids, not as a count and a "mine" flag.** The same
+  object is broadcast to everybody, so a flag computed for whoever caused the
+  change is wrong for every other recipient. The client counts the list and
+  looks for itself in it.
+- **Search runs in the client.** `messages.content` is ciphertext; a server-side
+  search would mean handing the server the channel key, which is the whole thing
+  the design refuses. So the panel searches the history this window has already
+  decrypted and says how many messages that was, rather than implying it covered
+  the channel.
+- **Pins and search share the member list's column.** They are the same kind of
+  thing - a list about this channel - and opening two at once would leave
+  nothing to read. Clicking a pin or a result scrolls the conversation to that
+  message and flashes it; a pin is a bookmark into the channel, not a copy of it.
+- **The emoji set is a file, not a dependency.** Every emoji library ships a
+  sprite sheet and a search index; this needs a picker and six quick reactions,
+  and the system font already draws the characters. A dependency becomes the
+  right answer when somebody wants the full set with skin tones and shortcode
+  search - not before.
+- **The focus ring stopped shouting.** A heavy accent-coloured ring with an
+  offset drew a blue box around the composer while typing and around a server
+  pill after a click, which reads as an error state. It is now a thin neutral
+  ring for keyboard users, and text fields opt out entirely - a caret is already
+  an unmistakable focus indicator.
 
 ### The social graph in realtime (phase 15)
 
@@ -413,6 +477,28 @@ Run live on 2026-08-08, on top of everything verified in phase 9 below:
 
 Still unverified: CI itself has not run yet (the workflow lands with this
 phase), and the human-in-front-of-it items below.
+
+### Phase 15b verification
+
+Run live against the development stack on 2026-08-09:
+
+- `20260809170000_message_actions` applied to a running Postgres: `deletedById`,
+  `pinnedAt`, `pinnedById` on `messages`, and the `message_reactions` table.
+- `pnpm typecheck` and `pnpm build` pass across all 28 workspace tasks.
+- `apps/services/chat-service/smoke.mjs` passes with the new section: an author
+  edits their own message and `editedAt` is stamped, a second account is refused
+  with 403, either participant of a direct message may pin and the pin list
+  shows it, unpinning clears it, a reaction is added and the same call takes it
+  back, a sentence is refused as an emoji, a deleted message comes back as a
+  tombstone with an empty body, an author's own deletion is unattributed while a
+  moderator's names them, and pinning in a server channel is refused without
+  `MANAGE_MESSAGE`.
+- The fanout is asserted on a live second socket: a deletion, an edit and a
+  reaction each arrive as `message.updated` carrying the changed message.
+
+Not yet exercised by a human: the whole client side - the right-click menu, the
+inline editor, the emoji picker in the composer and on a message, the pinned and
+search panels, and jumping from either to a message in the conversation.
 
 ### Phase 15 verification
 

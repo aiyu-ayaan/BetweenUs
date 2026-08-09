@@ -55,6 +55,15 @@ interface ChatState {
   history: Record<string, DecryptedMessage[]>;
   loadingMessages: boolean;
   error: string | null;
+  /** What the right-hand column shows, if anything. */
+  rightPanel: 'members' | 'pins' | 'search' | 'none';
+  /** Pinned messages of the open channel, newest pin first. */
+  pins: DecryptedMessage[];
+  /**
+   * A message the pinned list or the search results asked to be shown. The
+   * message list watches it, scrolls there and highlights it, then clears it.
+   */
+  jumpTo: string | null;
 
   loadServers: () => Promise<void>;
   /** Read markers live on the account, so a badge survives a restart. */
@@ -77,8 +86,21 @@ interface ChatState {
   sendMessage: (content: string, attachments?: MessageAttachment[]) => Promise<void>;
   /** Own message always; anyone else's with DELETE_MESSAGE in that server. */
   deleteMessage: (messageId: string) => Promise<void>;
+  /** Rewrites the body of your own message, re-encrypted for the channel. */
+  editMessage: (messageId: string, content: string) => Promise<void>;
+  /** Pins or unpins, whichever the message is not already. */
+  togglePin: (messageId: string) => Promise<void>;
+  /** Adds the emoji, or takes it back when it is already yours. */
+  react: (messageId: string, emoji: string) => Promise<void>;
+  loadPins: () => Promise<void>;
+  showPanel: (panel: ChatState['rightPanel']) => void;
+  /** Opens the message in the list, wherever the request came from. */
+  jumpToMessage: (messageId: string) => void;
+  clearJump: () => void;
   /** True when this account may delete a message it did not write. */
   canModerateMessages: () => boolean;
+  /** True when this account may pin in the open channel. */
+  canPin: () => boolean;
   /** Re-reads the member list of the server on screen. */
   refreshMembers: () => Promise<void>;
   /** Renames a server, sets its icon, or clears it - whatever the change holds. */
@@ -108,6 +130,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
   history: {},
   loadingMessages: false,
   error: null,
+  rightPanel: 'members',
+  pins: [],
+  jumpTo: null,
 
   loadServers: async () => {
     const servers = await api.servers();
@@ -193,8 +218,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
       messages: cached ?? [],
       loadingMessages: cached === undefined,
       error: null,
+      // Pins belong to a channel, so they go with it; the panel reloads them.
+      pins: [],
+      jumpTo: null,
     });
     chatSocket.subscribe(channelId);
+    if (get().rightPanel === 'pins') void get().loadPins();
 
     // Members who joined after this channel was keyed need the key wrapped for
     // them; opening the channel is the natural moment to do it.
@@ -202,9 +231,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
     try {
       const page = await api.messages(channelId);
-      const items = await Promise.all(
-        page.items.map(async (message) => toDecrypted(message, await decryptForChannel(channelId, message.content))),
-      );
+      const items = await Promise.all(page.items.map(decrypt));
       // The cache is written even when the user has already moved on - the
       // fetch was paid for, and the next visit gets it for free.
       set({ history: { ...get().history, [channelId]: items } });
@@ -252,19 +279,71 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   /**
-   * The message is dropped from the view here as well as when the socket
-   * event arrives, so the click feels immediate; the event is what tells
-   * every other client, and re-removing something already gone is a no-op.
+   * Deleting leaves a tombstone rather than a hole, so nothing is removed from
+   * the view here: the `message.updated` event carries the deleted message back
+   * with `deletedAt` set, and every client - including this one - draws the
+   * same "message deleted" line from it.
    */
   deleteMessage: async (messageId) => {
     await api.deleteMessage(messageId);
-    forgetMessage(messageId);
   },
+
+  editMessage: async (messageId, content) => {
+    const channelId = get().activeChannelId;
+    if (!channelId) return;
+    // Re-encrypted under the same channel key: the server only ever sees the
+    // replacement envelope, exactly as it saw the original.
+    const existing = get().messages.find((message) => message.id === messageId);
+    const envelope = await encryptForChannel(
+      channelId,
+      encodeBody({ text: content, attachments: existing?.attachments ?? [] }),
+    );
+    await api.editMessage(messageId, envelope);
+  },
+
+  togglePin: async (messageId) => {
+    const message =
+      get().messages.find((item) => item.id === messageId) ??
+      get().pins.find((item) => item.id === messageId);
+    await (message?.pinnedAt ? api.unpinMessage(messageId) : api.pinMessage(messageId));
+    await get().loadPins();
+  },
+
+  react: async (messageId, emoji) => {
+    await api.reactToMessage(messageId, emoji);
+  },
+
+  loadPins: async () => {
+    const channelId = get().activeChannelId;
+    if (!channelId) {
+      set({ pins: [] });
+      return;
+    }
+    const rows = await api.pins(channelId).catch(() => []);
+    const pins = await Promise.all(rows.map((message) => decrypt(message)));
+    if (get().activeChannelId === channelId) set({ pins });
+  },
+
+  showPanel: (panel) => {
+    set({ rightPanel: panel });
+    if (panel === 'pins') void get().loadPins();
+  },
+
+  jumpToMessage: (messageId) => set({ jumpTo: messageId }),
+  clearJump: () => set({ jumpTo: null }),
 
   canModerateMessages: () => {
     const { servers, activeServerId } = get();
     const server = servers.find((item) => item.id === activeServerId);
     return server?.permissions.includes(PERMISSIONS.DELETE_MESSAGE) ?? false;
+  },
+
+  /** A direct message has no roles, so both participants may pin in one. */
+  canPin: () => {
+    const { servers, activeServerId, view } = get();
+    if (view === 'home') return true;
+    const server = servers.find((item) => item.id === activeServerId);
+    return server?.permissions.includes(PERMISSIONS.MANAGE_MESSAGE) ?? false;
   },
 
   refreshMembers: async () => {
@@ -364,6 +443,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
       activeChannelId: null,
       history: {},
       error: null,
+      pins: [],
+      jumpTo: null,
     });
   },
 }));
@@ -375,6 +456,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
 function setUnread(unread: Record<string, number>): void {
   useChatStore.setState({ unread });
   publishUnreadCount(Object.values(unread).reduce((total, count) => total + count, 0));
+}
+
+/**
+ * Decrypts one message for display. A deleted message has no body to open -
+ * the server emptied it - so it goes straight through as a tombstone.
+ */
+async function decrypt(message: Message): Promise<DecryptedMessage> {
+  if (message.deletedAt) return { ...message, content: '', attachments: [] };
+  return toDecrypted(message, await decryptForChannel(message.channelId, message.content));
 }
 
 /** Splits a decrypted body into the text and the files it carried. */
@@ -416,27 +506,37 @@ function subscribable(channels: Channel[], directs: Channel[]): string[] {
 }
 
 /**
- * Removes a message from the view and from the cached history of its channel.
- * Called both by the local delete and by the socket event, because a deletion
- * on another device has to land here too.
+ * Replaces a message wherever this client is holding it - the open list, the
+ * cached history of its channel, and the pinned panel. An edit, a deletion, a
+ * pin and a reaction all arrive as the same replacement.
  */
-function forgetMessage(messageId: string): void {
+function replaceMessage(message: DecryptedMessage): void {
   const state = useChatStore.getState();
-  const history: Record<string, DecryptedMessage[]> = {};
-  for (const [channelId, items] of Object.entries(state.history)) {
-    history[channelId] = items.filter((message) => message.id !== messageId);
-  }
+  const swap = (items: DecryptedMessage[]): DecryptedMessage[] =>
+    items.map((item) => (item.id === message.id ? message : item));
+
+  const cached = state.history[message.channelId];
   useChatStore.setState({
-    history,
-    messages: state.messages.filter((message) => message.id !== messageId),
+    ...(cached ? { history: { ...state.history, [message.channelId]: swap(cached) } } : {}),
+    messages: swap(state.messages),
+    // A message that stopped being pinned - or was deleted - leaves the panel;
+    // a newly pinned one is picked up by the reload below.
+    pins:
+      message.pinnedAt === null
+        ? state.pins.filter((item) => item.id !== message.id)
+        : swap(state.pins),
   });
+
+  const newlyPinned =
+    message.pinnedAt !== null && !state.pins.some((item) => item.id === message.id);
+  if (newlyPinned && state.rightPanel === 'pins') void useChatStore.getState().loadPins();
 }
 
 // Realtime events land here regardless of which component is mounted, for
 // every subscribed channel - not only the one on screen.
 chatSocket.on((event) => {
-  if (event.type === 'message.deleted') {
-    forgetMessage(event.messageId);
+  if (event.type === 'message.updated') {
+    void decrypt(event.message).then(replaceMessage);
     return;
   }
 

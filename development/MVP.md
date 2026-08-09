@@ -42,8 +42,8 @@ when the MVP shipped.
 - User service (profiles, avatars, friends); message-attachment linking
 - ~~OAuth logins~~ (shipped in phase 11: Google and GitHub, configured from the
   admin panel), email verification, password reset
-- Replies, reactions, message editing (~~direct messages~~ shipped in phase 12,
-  ~~message deletion~~ in phase 15)
+- Replies (~~direct messages~~ shipped in phase 12; ~~message deletion~~,
+  ~~editing~~, ~~reactions~~, pins and in-client search in phase 15)
 - Full RBAC permission matrix (MVP has coarse roles: OWNER / MEMBER)
 - Cloudflare Tunnel production ingress, CI/CD pipeline, Kubernetes
 

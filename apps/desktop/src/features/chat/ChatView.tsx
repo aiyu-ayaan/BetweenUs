@@ -5,6 +5,8 @@ import { useAuthStore } from '../../stores/auth';
 import { usePresenceStore } from '../../stores/presence';
 import { Avatar } from '../../components/Avatar';
 import { AttachmentList } from './Attachments';
+import { EmojiPicker } from './EmojiPicker';
+import { MessageMenu } from './MessageMenu';
 import { formatBytes, uploadAttachment } from '../../services/attachments';
 import { OVERFLOW_CHARS, overflowFile } from '../../services/message-body';
 import { isChannelMuted, onPreferencesChanged, setChannelMuted } from '../../services/notifications';
@@ -17,7 +19,10 @@ import {
   LockIcon,
   MessageIcon,
   PaperclipIcon,
+  PinIcon,
+  SearchIcon,
   SendIcon,
+  SmileIcon,
   TrashIcon,
   UsersIcon,
   XIcon,
@@ -46,6 +51,39 @@ function MuteButton({ channelId }: { channelId: string }): JSX.Element {
       }`}
     >
       {muted ? <BellOffIcon className="h-5 w-5" /> : <BellIcon className="h-5 w-5" />}
+    </button>
+  );
+}
+
+/**
+ * A header toggle for one of the right-hand panels. Clicking the panel that is
+ * already open goes back to the member list, which is where the column started.
+ */
+function PanelButton({
+  panel,
+  label,
+  icon,
+}: {
+  panel: 'pins' | 'search';
+  label: string;
+  icon: JSX.Element;
+}): JSX.Element {
+  const current = useChatStore((state) => state.rightPanel);
+  const showPanel = useChatStore((state) => state.showPanel);
+  const open = current === panel;
+
+  return (
+    <button
+      type="button"
+      onClick={() => showPanel(open ? 'members' : panel)}
+      aria-pressed={open}
+      aria-label={label}
+      title={label}
+      className={`cursor-pointer rounded p-1.5 transition-colors duration-200 hover:bg-surface-700 hover:text-slate-50 ${
+        open ? 'bg-surface-700 text-slate-50' : 'text-slate-300'
+      }`}
+    >
+      {icon}
     </button>
   );
 }
@@ -87,6 +125,12 @@ export function ChatView({ onToggleMembers }: { onToggleMembers?: () => void }):
         )}
 
         <div className="ml-auto flex items-center gap-0.5">
+          <PanelButton
+            panel="pins"
+            label="Pinned messages"
+            icon={<PinIcon className="h-5 w-5" />}
+          />
+          <PanelButton panel="search" label="Search" icon={<SearchIcon className="h-5 w-5" />} />
           <MuteButton channelId={channel.id} />
 
           {onToggleMembers && !isDirect && (
@@ -131,10 +175,34 @@ function MessageList({
   // Own messages anywhere; anyone else's only with the moderator permission,
   // which no direct message ever carries.
   const canModerate = useChatStore((state) => state.canModerateMessages());
+  const canPin = useChatStore((state) => state.canPin());
+  const deleteMessage = useChatStore((state) => state.deleteMessage);
+  const togglePin = useChatStore((state) => state.togglePin);
+  const react = useChatStore((state) => state.react);
+  const jumpTo = useChatStore((state) => state.jumpTo);
+  const clearJump = useChatStore((state) => state.clearJump);
+
+  const [menu, setMenu] = useState<{ id: string; at: { x: number; y: number } } | null>(null);
+  const [armedDelete, setArmedDelete] = useState<string | null>(null);
+  const [picker, setPicker] = useState<{ id: string; at: { x: number; y: number } } | null>(null);
+  const [editing, setEditing] = useState<string | null>(null);
+  const [highlighted, setHighlighted] = useState<string | null>(null);
 
   useEffect(() => {
     bottom.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages.length]);
+
+  // A pin or a search result asked for a message: scroll to it and flash it, so
+  // it is findable in a wall of text that otherwise looks the same.
+  useEffect(() => {
+    if (!jumpTo) return;
+    const row = document.getElementById(`message-${jumpTo}`);
+    row?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    setHighlighted(jumpTo);
+    clearJump();
+    const timer = window.setTimeout(() => setHighlighted(null), 2000);
+    return () => window.clearTimeout(timer);
+  }, [jumpTo, clearJump]);
 
   if (loading) {
     // Skeleton rows keep the layout from jumping when history arrives.
@@ -176,12 +244,26 @@ function MessageList({
             new Date(message.createdAt).getTime() - new Date(previous.createdAt).getTime() <
               5 * 60 * 1000;
 
+          const deleted = message.deletedAt !== null;
+
           return (
             <li
               key={message.id}
-              className={`group relative rounded px-2 hover:bg-surface-950/25 ${
-                grouped ? 'py-0.5 pl-[60px]' : 'mt-4 flex gap-3 py-0.5'
-              }`}
+              id={`message-${message.id}`}
+              onContextMenu={(event) => {
+                // A tombstone has nothing left to act on.
+                if (deleted) return;
+                event.preventDefault();
+                setArmedDelete(null);
+                setMenu({ id: message.id, at: { x: event.clientX, y: event.clientY } });
+              }}
+              className={`relative rounded px-2 transition-colors duration-500 ${
+                highlighted === message.id
+                  ? 'bg-accent/20'
+                  : message.pinnedAt
+                    ? 'bg-amber-400/5 hover:bg-surface-950/25'
+                    : 'hover:bg-surface-950/25'
+              } ${grouped ? 'py-0.5 pl-[60px]' : 'mt-4 flex gap-3 py-0.5'}`}
             >
               {!grouped && (
                 <Avatar
@@ -190,7 +272,7 @@ function MessageList({
                   ringColour="border-surface-900"
                 />
               )}
-              <div className="min-w-0">
+              <div className="min-w-0 flex-1">
                 {!grouped && (
                   <p className="flex items-baseline gap-2">
                     <span className="font-medium text-slate-50">
@@ -199,68 +281,214 @@ function MessageList({
                     <time dateTime={message.createdAt} className="text-xs text-slate-500">
                       {formatTime(message.createdAt)}
                     </time>
+                    {message.pinnedAt && (
+                      <span className="flex items-center gap-1 text-xs text-amber-400/80">
+                        <PinIcon className="h-3 w-3" />
+                        Pinned
+                      </span>
+                    )}
                   </p>
                 )}
-                {/* A message that is only files has no text line at all. */}
-                {message.content.length > 0 && (
-                  <p className="whitespace-pre-wrap break-words leading-relaxed text-slate-200">
-                    {message.content}
-                  </p>
-                )}
-                <AttachmentList channelId={channel.id} attachments={message.attachments} />
-              </div>
 
-              {(message.author.id === me?.id || canModerate) && (
-                <DeleteMessageButton messageId={message.id} />
-              )}
+                {deleted ? (
+                  <Tombstone message={message} />
+                ) : editing === message.id ? (
+                  <MessageEditor message={message} onDone={() => setEditing(null)} />
+                ) : (
+                  <>
+                    {/* A message that is only files has no text line at all. */}
+                    {message.content.length > 0 && (
+                      <p className="whitespace-pre-wrap break-words leading-relaxed text-slate-200">
+                        {message.content}
+                        {message.editedAt && (
+                          <span className="ml-1.5 align-baseline text-xs text-slate-500">
+                            (edited)
+                          </span>
+                        )}
+                      </p>
+                    )}
+                    <AttachmentList channelId={channel.id} attachments={message.attachments} />
+                    <ReactionRow
+                      message={message}
+                      meId={me?.id}
+                      onToggle={(emoji) => void react(message.id, emoji)}
+                      onMore={(at) => setPicker({ id: message.id, at })}
+                    />
+                  </>
+                )}
+              </div>
             </li>
           );
         })}
       </ul>
       <div ref={bottom} />
+
+      {menu && (
+        <MessageMenu
+          at={menu.at}
+          armedDelete={armedDelete === menu.id}
+          onArmDelete={() => setArmedDelete(menu.id)}
+          onClose={() => {
+            setMenu(null);
+            setArmedDelete(null);
+          }}
+          actions={{
+            pinned: messages.find((item) => item.id === menu.id)?.pinnedAt !== null,
+            onReact: (emoji) => void react(menu.id, emoji),
+            onMoreEmoji: (at) => setPicker({ id: menu.id, at }),
+            onEdit:
+              messages.find((item) => item.id === menu.id)?.author.id === me?.id
+                ? () => setEditing(menu.id)
+                : undefined,
+            onPin: canPin ? () => void togglePin(menu.id) : undefined,
+            onCopy: () => {
+              const text = messages.find((item) => item.id === menu.id)?.content ?? '';
+              void navigator.clipboard.writeText(text);
+            },
+            onDelete:
+              messages.find((item) => item.id === menu.id)?.author.id === me?.id || canModerate
+                ? () => void deleteMessage(menu.id)
+                : undefined,
+          }}
+        />
+      )}
+
+      {picker && (
+        <EmojiPicker
+          anchor={picker.at}
+          onPick={(emoji) => void react(picker.id, emoji)}
+          onClose={() => setPicker(null)}
+        />
+      )}
     </div>
   );
 }
 
 /**
- * Hover action on a message. Deleting takes two clicks rather than a modal:
- * the first arms it, the second does it, and moving the mouse away disarms it.
- * A dialog for a one-line message is more ceremony than the act deserves, and
- * the undo is a re-send.
+ * What is left where a message was. The conversation keeps its shape, and who
+ * removed it is not hidden: a moderator taking somebody's message down is a
+ * different event from an author taking their own back, and reading the thread
+ * afterwards should not make them look the same.
  */
-function DeleteMessageButton({ messageId }: { messageId: string }): JSX.Element {
-  const deleteMessage = useChatStore((state) => state.deleteMessage);
-  const [armed, setArmed] = useState(false);
+function Tombstone({ message }: { message: DecryptedMessage }): JSX.Element {
+  const by = message.deletedBy;
+  return (
+    <p className="flex items-center gap-1.5 text-sm italic text-slate-500">
+      <TrashIcon className="h-3.5 w-3.5" />
+      {by ? `Message deleted by ${by.displayName || by.username}` : 'Message deleted'}
+    </p>
+  );
+}
+
+/**
+ * Editing in place. The text is re-encrypted and sent as a replacement, and the
+ * attachments ride along untouched - an edit changes the words, not the files.
+ */
+function MessageEditor({
+  message,
+  onDone,
+}: {
+  message: DecryptedMessage;
+  onDone: () => void;
+}): JSX.Element {
+  const editMessage = useChatStore((state) => state.editMessage);
+  const [draft, setDraft] = useState(message.content);
+  const [saving, setSaving] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
 
+  const save = async (): Promise<void> => {
+    const trimmed = draft.trim();
+    if (trimmed.length === 0 || trimmed === message.content) {
+      onDone();
+      return;
+    }
+    setSaving(true);
+    setFailure(null);
+    try {
+      await editMessage(message.id, trimmed);
+      onDone();
+    } catch (error) {
+      setFailure(error instanceof Error ? error.message : 'That edit was refused');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
-    <span
-      onMouseLeave={() => setArmed(false)}
-      className="absolute right-3 top-0 hidden -translate-y-1/2 items-center gap-2 rounded bg-surface-800 px-1 py-0.5 shadow group-hover:flex"
-    >
-      {failure && <span className="px-1 text-xs text-danger">{failure}</span>}
-      <button
-        type="button"
-        onClick={() => {
-          if (!armed) {
-            setArmed(true);
-            return;
+    <div className="py-1">
+      <textarea
+        autoFocus
+        rows={Math.min(8, draft.split('\n').length)}
+        value={draft}
+        disabled={saving}
+        onChange={(event) => setDraft(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' && !event.shiftKey) {
+            event.preventDefault();
+            void save();
           }
-          setFailure(null);
-          void deleteMessage(messageId).catch((error: unknown) => {
-            setArmed(false);
-            setFailure(error instanceof Error ? error.message : 'That could not be deleted');
-          });
+          if (event.key === 'Escape') onDone();
         }}
-        aria-label={armed ? 'Confirm deleting this message' : 'Delete this message'}
-        title={armed ? 'Click again to delete' : 'Delete message'}
-        className={`cursor-pointer rounded p-1.5 transition-colors duration-200 ${
-          armed ? 'bg-danger text-white' : 'text-slate-400 hover:text-danger'
-        }`}
-      >
-        <TrashIcon className="h-4 w-4" />
-      </button>
-    </span>
+        aria-label="Edit message"
+        className="w-full resize-none rounded bg-surface-600 px-3 py-2 text-slate-100 focus:outline-none"
+      />
+      <p className="mt-1 text-xs text-slate-500">
+        Enter to save · Escape to cancel
+        {failure && <span className="ml-2 text-danger">{failure}</span>}
+      </p>
+    </div>
+  );
+}
+
+/** The chips under a message: one per emoji, yours highlighted. */
+function ReactionRow({
+  message,
+  meId,
+  onToggle,
+  onMore,
+}: {
+  message: DecryptedMessage;
+  meId: string | undefined;
+  onToggle: (emoji: string) => void;
+  onMore: (at: { x: number; y: number }) => void;
+}): JSX.Element | null {
+  if (message.reactions.length === 0) return null;
+
+  return (
+    <ul className="mt-1 flex flex-wrap items-center gap-1">
+      {message.reactions.map((reaction) => {
+        const mine = meId !== undefined && reaction.userIds.includes(meId);
+        return (
+          <li key={reaction.emoji}>
+            <button
+              type="button"
+              onClick={() => onToggle(reaction.emoji)}
+              aria-pressed={mine}
+              aria-label={`${reaction.emoji} ${reaction.userIds.length}`}
+              className={`flex cursor-pointer items-center gap-1 rounded-full border px-2 py-0.5 text-sm transition-colors duration-150 ${
+                mine
+                  ? 'border-accent bg-accent/20 text-slate-100'
+                  : 'border-transparent bg-surface-800 text-slate-300 hover:border-surface-600'
+              }`}
+            >
+              <span>{reaction.emoji}</span>
+              <span className="text-xs">{reaction.userIds.length}</span>
+            </button>
+          </li>
+        );
+      })}
+      <li>
+        <button
+          type="button"
+          onClick={(event) => onMore({ x: event.clientX, y: event.clientY })}
+          aria-label="Add a reaction"
+          title="Add a reaction"
+          className="cursor-pointer rounded-full bg-surface-800 p-1 text-slate-400 transition-colors duration-150 hover:text-slate-100"
+        >
+          <SmileIcon className="h-4 w-4" />
+        </button>
+      </li>
+    </ul>
   );
 }
 
@@ -317,7 +545,9 @@ function MessageComposer({ channel }: { channel: Channel }): JSX.Element {
   const [uploading, setUploading] = useState<{ name: string; percent: number } | null>(null);
   const [dropping, setDropping] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
+  const [emoji, setEmoji] = useState<{ x: number; y: number } | null>(null);
   const picker = useRef<HTMLInputElement>(null);
+  const box = useRef<HTMLTextAreaElement>(null);
 
   const placeholder =
     channel.type === 'DM' ? `Message @${channel.name}` : `Message #${channel.name}`;
@@ -463,11 +693,23 @@ function MessageComposer({ channel }: { channel: Channel }): JSX.Element {
             <PaperclipIcon className="h-5 w-5" />
           </button>
 
+          <button
+            type="button"
+            onClick={(event) => setEmoji({ x: event.clientX, y: event.clientY })}
+            disabled={sending}
+            aria-label="Insert an emoji"
+            title="Emoji"
+            className="cursor-pointer rounded-md p-1 text-slate-300 transition-colors duration-200 hover:text-accent disabled:cursor-not-allowed disabled:text-slate-600"
+          >
+            <SmileIcon className="h-5 w-5" />
+          </button>
+
           <label htmlFor="composer" className="sr-only">
             {placeholder}
           </label>
           <textarea
             id="composer"
+            ref={box}
             rows={1}
             value={content}
             onChange={(event) => {
@@ -501,6 +743,23 @@ function MessageComposer({ channel }: { channel: Channel }): JSX.Element {
         <p className="mt-1.5 text-xs text-slate-400">
           That is longer than {OVERFLOW_CHARS} characters — it will be sent as a text file.
         </p>
+      )}
+
+      {emoji && (
+        <EmojiPicker
+          anchor={emoji}
+          onClose={() => setEmoji(null)}
+          onPick={(symbol) => {
+            // Inserted where the caret was, not appended: people reach for the
+            // picker mid-sentence as often as at the end.
+            const caret = box.current?.selectionStart ?? content.length;
+            setContent(`${content.slice(0, caret)}${symbol}${content.slice(caret)}`);
+            window.setTimeout(() => {
+              box.current?.focus();
+              box.current?.setSelectionRange(caret + symbol.length, caret + symbol.length);
+            }, 0);
+          }}
+        />
       )}
     </form>
   );

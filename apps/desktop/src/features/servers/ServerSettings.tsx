@@ -387,6 +387,7 @@ const PERMISSION_LABELS: Record<string, string> = {
   VIEW_CHANNEL: 'View channels',
   SEND_MESSAGE: 'Send messages',
   DELETE_MESSAGE: 'Delete anyone’s messages',
+  MANAGE_MESSAGE: 'Pin and unpin messages',
   MANAGE_CHANNEL: 'Create and manage channels',
   MANAGE_MEMBER: 'Manage members',
   MANAGE_ROLE: 'Assign roles',

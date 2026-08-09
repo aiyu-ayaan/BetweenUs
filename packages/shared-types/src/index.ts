@@ -308,11 +308,45 @@ export interface Message {
   author: MessageAuthor;
   createdAt: string;
   editedAt: string | null;
+  /**
+   * Set once the message is deleted. The row survives as a tombstone with an
+   * empty body, so a conversation reads as "this was here and is gone" instead
+   * of silently re-flowing around a hole.
+   */
+  deletedAt: string | null;
+  /** Whoever deleted it, when that was not the author. */
+  deletedBy: MessageAuthor | null;
+  pinnedAt: string | null;
+  /** One entry per distinct emoji. */
+  reactions: MessageReactionSummary[];
+}
+
+/**
+ * One emoji on one message, grouped across the people who chose it.
+ *
+ * It carries the user ids rather than a count and a "mine" flag, because the
+ * same object is broadcast to everyone: a flag computed for whoever caused the
+ * change would be wrong for every other recipient. The client counts the list
+ * and looks for itself in it.
+ */
+export interface MessageReactionSummary {
+  emoji: string;
+  userIds: string[];
 }
 
 export interface CreateMessageRequest {
   channelId: string;
   content: string;
+}
+
+/** Replaces the body; the author only, and it stamps `editedAt`. */
+export interface UpdateMessageRequest {
+  content: string;
+}
+
+/** Emoji as a literal character (or a short sequence), never a shortcode. */
+export interface ReactToMessageRequest {
+  emoji: string;
 }
 
 /**
@@ -562,7 +596,13 @@ export type ClientChatEvent =
 export type ServerChatEvent =
   | { type: 'ready'; userId: string }
   | { type: 'message.created'; message: Message }
-  | { type: 'message.deleted'; messageId: string; channelId: string }
+  /**
+   * An edit, a deletion, a pin and a reaction are all "this message is not what
+   * you last saw", so they share one event carrying the whole message. A
+   * deletion is not a separate event any more: the tombstone arrives here with
+   * `deletedAt` set, which is exactly what the client has to render.
+   */
+  | { type: 'message.updated'; message: Message }
   /** Sent to both sides of a request, an acceptance or a removal. */
   | { type: 'friends.changed' }
   /** Sent to everyone watching the server, and to whoever joined or left it. */

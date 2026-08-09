@@ -1,5 +1,9 @@
 import { IsOptional, IsString, IsUUID, Length } from 'class-validator';
-import type { CreateMessageRequest } from '@nexora/shared-types';
+import type {
+  CreateMessageRequest,
+  ReactToMessageRequest,
+  UpdateMessageRequest,
+} from '@nexora/shared-types';
 
 export class CreateMessageDto implements CreateMessageRequest {
   @IsUUID()
@@ -15,6 +19,23 @@ export class CreateMessageDto implements CreateMessageRequest {
   content!: string;
 }
 
+export class UpdateMessageDto implements UpdateMessageRequest {
+  /** The replacement envelope, same shape and same ceiling as the original. */
+  @IsString()
+  @Length(1, 32000)
+  content!: string;
+}
+
+export class ReactToMessageDto implements ReactToMessageRequest {
+  /**
+   * The emoji itself. The service checks it further - no whitespace, and short
+   * enough to be one symbol rather than a paragraph.
+   */
+  @IsString()
+  @Length(1, 32)
+  emoji!: string;
+}
+
 export class MessageQueryDto {
   @IsUUID()
   channelId!: string;
@@ -23,4 +44,9 @@ export class MessageQueryDto {
   @IsOptional()
   @IsUUID()
   before?: string;
+}
+
+export class PinQueryDto {
+  @IsUUID()
+  channelId!: string;
 }

@@ -101,10 +101,15 @@ export class ChatGateway implements OnModuleDestroy {
       this.broadcast(channelRoom(message.channelId), { type: 'message.created', message });
     });
 
-    await this.events.subscribe(EVENTS.MESSAGE_DELETED, (envelope) => {
-      const { messageId, channelId } = envelope.payload;
-      this.broadcast(channelRoom(channelId), { type: 'message.deleted', messageId, channelId });
-    });
+    // An edit, a pin, a reaction and a deletion all reach the client as the
+    // same event carrying the whole message - a deleted one is a tombstone with
+    // `deletedAt` set, which is what the client has to draw.
+    for (const event of [EVENTS.MESSAGE_UPDATED, EVENTS.MESSAGE_DELETED] as const) {
+      await this.events.subscribe(event, (envelope) => {
+        const { message } = envelope.payload;
+        this.broadcast(channelRoom(message.channelId), { type: 'message.updated', message });
+      });
+    }
 
     await this.events.subscribe(EVENTS.FRIEND_CHANGED, (envelope) => {
       for (const userId of envelope.payload.userIds) {

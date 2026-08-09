@@ -162,6 +162,21 @@ runtime cannot do insertable streams.
 8. **Nothing deletes an attachment's blob.** Deleting a message drops the
    manifest that names it; the ciphertext stays in storage until something
    sweeps it.
+9. **Reactions are plaintext.** The emoji, and who chose it, are ordinary
+   columns the server reads. Encrypting them would mean sealing a thumbs-up for
+   every recipient - a key exchange per reaction - and the server would still
+   have to count them for a client that has not fetched the channel key yet. So
+   this is a deliberate leak, and a narrow one: a reaction says how somebody
+   felt about a message whose text the server still cannot read. Anyone who
+   would rather not publish that should not use a reaction.
+10. **An edit destroys what it replaces.** The new envelope overwrites the old
+    one, so there is no edit history and no way to recover the previous text -
+    which is what most people expect from "edit", and what the alternative
+    (keeping every version server-side) would quietly break.
+11. **Search happens in the client**, over the history that window has already
+    decrypted. The server cannot search ciphertext, and giving it the means to
+    would be the end of the design; the panel says how far its search reached
+    rather than pretending to cover the whole channel.
 
 ## Not covered
 

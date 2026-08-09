@@ -42,7 +42,8 @@ export interface EventPayloads {
   [EVENTS.PRESENCE_VOICE]: { voice: VoiceState };
   [EVENTS.MESSAGE_CREATED]: { message: Message };
   [EVENTS.MESSAGE_UPDATED]: { message: Message };
-  [EVENTS.MESSAGE_DELETED]: { messageId: string; channelId: string };
+  /** Carries the tombstone, because a deleted message still renders as one. */
+  [EVENTS.MESSAGE_DELETED]: { messageId: string; channelId: string; message: Message };
   /**
    * Both sides of the friendship, because either of them may be connected to a
    * different instance and both screens have to change.

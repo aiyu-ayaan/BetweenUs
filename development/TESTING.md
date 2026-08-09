@@ -101,15 +101,46 @@ Closing both windows stops the dev server. Ctrl+C does the same.
   re-reads its list. Remove the friend in Alice's window and watch Bob's
   Friends screen empty itself.
 
-**Deleting a message**
-- Hover a message you wrote: a bin appears at its top right. The first click
-  arms it, the second deletes it, and moving the mouse away disarms it. It
-  disappears from the other window too, over `message.deleted`.
-- Hover somebody else's message as a plain MEMBER: no bin. Give yourself
+**The message menu**
+- Right-click any message: react with one of six emoji or open the full picker,
+  edit (your own), pin, copy the text, delete. There is no hover bin any more.
+- Delete takes two clicks — the first arms the item, the second does it.
+- Delete your own message: both windows show *Message deleted* where it was.
+  Delete somebody else's as a moderator and theirs reads *Message deleted by
+  NAME*. The row survives in Postgres with `deletedAt` set and an empty
+  `content`, so the tombstone costs no ciphertext.
+- A plain MEMBER gets no Delete on somebody else's message; give yourself
   *Delete anyone's messages* in Server settings → Roles & Permissions and it
-  appears — a direct message never shows it, because a DM has no moderator.
-- The row survives in Postgres with `deletedAt` set and an empty `content`:
-  the tombstone keeps history paging honest, and the ciphertext is gone.
+  appears.
+
+**Editing**
+- Edit one of your own: the message turns into a box, Enter saves, Escape
+  cancels. It shows *(edited)* afterwards, in both windows.
+- The other window cannot edit yours — there is no Edit item on somebody else's
+  message, and the server refuses it anyway (`NOT_MESSAGE_AUTHOR`).
+
+**Reactions and emoji**
+- React from the menu, or from the smiley beside an existing chip. The chip
+  counts up in both windows; clicking your own chip takes the reaction back.
+- The smiley in the composer inserts an emoji where the caret is, not at the
+  end.
+- Reactions are the one thing the server can read — see limit 9 in `E2EE.md`,
+  and the `message_reactions` rows in `pnpm db:studio`.
+
+**Pins and search**
+- Pin a message from the menu, then open the pin icon in the channel header: the
+  right-hand column becomes the pinned list in place of the member list.
+  Clicking a pin scrolls the conversation to it and flashes it.
+- As a plain MEMBER the Pin item is absent, and the server refuses it
+  (`MANAGE_MESSAGE`). In a direct message either person can pin — there are no
+  roles in a DM.
+- The magnifier in the header opens search over the messages that window has
+  decrypted; the footer says how many that is. It has to work this way: the
+  server holds ciphertext and cannot search it.
+
+**Focus**
+- Click into the composer, or on a server pill: no blue box. Tab around with the
+  keyboard and a thin neutral ring follows the focus.
 
 **Adding people to a server**
 - Server settings → Members → *Add a member*: type a username, and the same
@@ -257,6 +288,15 @@ them. It then holds a second socket open and asserts the fanout itself -
 friendship, `server.members.changed` at everyone watching the server, and a
 `server.subscribe` from somebody no longer in it refused with
 `SERVER_FORBIDDEN`.
+
+Phase 15b adds the message actions: an author edits their own message and
+`editedAt` is stamped while a second account is refused, pinning works in a
+direct message for either participant and needs `MANAGE_MESSAGE` in a server
+channel, the pin list shows it and unpinning clears it, a reaction toggles on
+and off through one endpoint and a sentence is refused as an emoji, and a
+deletion returns a tombstone - unattributed for the author, naming the moderator
+otherwise. The same second socket asserts that a deletion, an edit and a
+reaction each arrive as `message.updated` carrying the changed message.
 
 `node apps/services/presence-service/smoke.mjs` connects two authenticated
 sockets and asserts the handshake, `presence.sync`, online and offline fanout,
