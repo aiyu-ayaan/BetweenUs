@@ -248,6 +248,29 @@ Closing both windows stops the dev server. Ctrl+C does the same.
   generates a new device key and old messages show the "no key on this device"
   placeholder — that is the design, not a bug (see `E2EE.md`, limit 1).
 
+## Pointing the client at another server
+
+The address in the build is a default, not a decision, so this is worth driving
+by hand once.
+
+1. **The address is on screen.** The login screen says which deployment it is
+   signing in to, under "Connect to a self-hosted instance". In `pnpm dev` that
+   is `localhost:5173` - the Vite dev server proxies to the services, so its own
+   origin is the gateway.
+2. **A wrong address fails politely.** Open the dialog, type `nope.example.com`,
+   Connect. It should say it could not reach that address, and the window should
+   still be where it was. Type a host that answers but is not Nexora (any web
+   site) - "That address is not a Nexora server".
+3. **A right one switches.** With the container stack up, type `localhost:8080`.
+   The window signs out, reloads, and signs in against Nginx instead of the Vite
+   proxy. Voice then goes through `/livekit` rather than straight at 7880, which
+   is the path a real deployment takes.
+4. **Back again.** The dialog offers the build's own address when the window is
+   somewhere else; it is also reachable from Settings → My Account → Server.
+5. **Only one variable.** `VITE_API_URL` in the repo-root `.env`, empty for
+   development. There is no `VITE_WS_URL` any more - if something asks for one,
+   it is out of date.
+
 ## Notifications, the tray and auto-start
 
 Most of this needs a packaged build (`pnpm --filter @nexora/desktop build`
@@ -339,9 +362,9 @@ answering 404 rather than 403, and an anonymous caller refused.
 `pnpm check` runs the package self-checks with no infrastructure at all: the
 crypto primitives, storage (including a multipart round trip and the sweep for
 abandoned uploads), logger redaction, the desktop E2EE round trip, the message
-body encoding that carries attachment manifests, and `AuthService` against an
-in-memory database (register, login, refresh rotation, reuse detection,
-logout).
+body encoding that carries attachment manifests, the server-address parsing
+behind the login screen's server picker, and `AuthService` against an in-memory
+database (register, login, refresh rotation, reuse detection, logout).
 
 `.github/workflows/ci.yml` runs those on every pull request, then a second job
 that starts Postgres and Redis, applies migrations, boots auth-, server-,
@@ -405,6 +428,7 @@ A published track logs `"encryption":1` — that is the end-to-end encrypted pat
 | --- | --- |
 | `call-service is down` warning | `pnpm dev` not running it, or `LIVEKIT_*` unset in `.env` |
 | Join fails with "Failed to fetch" | `LIVEKIT_URL` points at `localhost`; use `127.0.0.1`, because Chromium tries `::1` first and the container publishes IPv4 only |
+| Join fails against a deployment behind Nginx | `LIVEKIT_URL` should be `/livekit` there, not a host - the client resolves it against the address it is already on |
 | Voice connects, no audio or video | LiveKit UDP ports 50000-50019 not published; check `docker compose -f infrastructure/docker/docker-compose.dev.yml ps` |
 | No online dots or typing indicators | presence-service is down; `curl 127.0.0.1:3005/health` |
 | "microphone did not start (negotiation timed out)", and the mic/camera/screen buttons then fail too | The LiveKit container is older than `livekit-client` expects, so it never acknowledges a publisher offer. `docker compose -f infrastructure/docker/docker-compose.dev.yml up -d livekit` to pull the pinned v1.13.5 |

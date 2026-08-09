@@ -24,14 +24,62 @@ we get there in stages and what each stage delivers.
 | 14 | Notifications | notification-service, system tray, start with the system, mutes and quiet hours | Done |
 | 15 | Social graph and realtime | Message deletion, adding people to a server, friend and membership events over `/ws/chat` | In progress |
 | 15b | Message actions | Tombstones, editing, pins, reactions, emoji, in-client search, right-click menu | In progress |
-| 16 | Remote desktop | remote-gateway, remote-agent, remote permissions, audit log | Planned |
-| 17 | Production ingress | Cloudflare Tunnel, TLS, secret management, deploy pipeline | Planned |
+| 16 | One address, any server | A single URL for a whole deployment, resolved at runtime, changeable from the login screen | In progress |
+| 17 | Remote desktop | remote-gateway, remote-agent, remote permissions, audit log | Planned |
+| 18 | Production ingress | Cloudflare Tunnel, TLS, secret management, deploy pipeline | Planned |
 
 Hardening moved to phase 10: encryption changes the message format and presence
 adds a service, so both were cheaper to land before tests were written against
 the older shape.
 
 ## Architecture decisions made so far
+
+### One address, any server (phase 16)
+
+Nexora is meant to be self-hosted, and until this phase the client could not act
+like it. Two build-time variables (`VITE_API_URL`, `VITE_WS_URL`) fixed the
+deployment at compile time, the renderer's CSP named every host it was allowed
+to reach, and voice was told an absolute LiveKit URL - so "run your own Nexora"
+meant rebuilding the app.
+
+**One base address, read at runtime.** Everything now goes through
+`apps/desktop/src/services/endpoint.ts`, which holds one URL and derives the
+rest of it: the WebSocket base is the same host with a `ws` scheme, and the
+`/api/v1/uploads/...` URLs the server hands back for avatars and server icons
+are resolved against it (they resolved against `file://` in a packaged window
+before, which is a bug this fixes on the way past). Nothing else in the client
+knows a host. The address is read per request rather than captured at import.
+
+**`VITE_API_URL` is the only variable left, and it is only a default.** Unset
+means "the Vite dev server proxies for me", which is what `pnpm dev` does; Vite
+now reads the repo-root `.env`, so that variable sits next to the ports it has
+to agree with. `VITE_WS_URL` is gone - it was always the first URL with a
+different scheme.
+
+**The login screen can point the window anywhere.** "Connect to a self-hosted
+instance", the same affordance AFFiNE offers, opens a dialog that normalises
+what was typed (a bare hostname means `https`, a trailing slash goes, a path is
+kept for a deployment behind someone's existing proxy) and probes it against
+the public provider route before storing it. A typo is a line under the field,
+not an app that will not start. The same dialog is on My Account, so the server
+is changeable at any time and not only before the first sign-in. Connecting
+elsewhere signs the window out first - tokens, device keys and the ids inside
+them belong to the deployment that issued them - and then reloads, which is the
+honest way to make every store, socket and cache let go at once.
+
+**LiveKit signalling moved behind the gateway.** Nginx proxies `/livekit` to
+the SFU, and `LIVEKIT_URL` may now be that path instead of a host; the client
+resolves a path form against the address it is already talking to. That is what
+makes the promise true for voice as well: one hostname, one certificate, one
+Cloudflare Tunnel. Media is unchanged and still does not pass through Nginx -
+WebRTC negotiates its own UDP path to the SFU on 7881 and the 50000+ range, and
+no reverse proxy can stand in for that.
+
+**The CSP stopped naming hosts.** `script-src` stays `'self'` - nothing the
+window fetches can become code, which is the part that matters in Electron -
+but `connect-src` and `img-src` are open to `http:`/`https:`/`ws:`/`wss:`. An
+allowlist compiled into the app cannot know an operator's hostname, and one
+that has to be right for every future deployment is one that will be wrong.
 
 ### What you can do to a message (phase 15b)
 
@@ -515,6 +563,28 @@ Run live on 2026-08-08, on top of everything verified in phase 9 below:
 
 Still unverified: CI itself has not run yet (the workflow lands with this
 phase), and the human-in-front-of-it items below.
+
+### Phase 16 verification
+
+Machine checks, on 2026-08-09:
+
+- `pnpm --filter @nexora/desktop typecheck` and `build` pass; the renderer no
+  longer references `VITE_WS_URL` anywhere.
+- `pnpm --filter @nexora/desktop check` gained `endpoint.check.ts`, which
+  asserts the address parsing behind the picker: a bare hostname becomes
+  `https`, trailing slashes and query strings go, a path is kept, `ftp://` and
+  an empty string are refused, and `toWebSocketUrl` changes the scheme without
+  touching a host that has "http" in its name.
+
+Needs a human in front of it:
+
+- Type a wrong address into the picker and read the message under the field;
+  type a right one and watch the window come back on the other deployment.
+- Sign in against a deployment reached through Nginx (not the Vite proxy) and
+  join a voice channel, so `/livekit` is exercised rather than the absolute
+  `ws://127.0.0.1:7880` development takes.
+- A packaged build against a remote address: avatars and server icons, which
+  were the things resolving against `file://` before this phase.
 
 ### Phase 15b verification
 

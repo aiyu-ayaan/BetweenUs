@@ -271,6 +271,30 @@ pnpm dev:admin       the admin panel on 5174
 pnpm admin:create    bootstrap the first administrator (password printed once)
 ```
 
+### One address, and how to change it
+
+A deployment is **one URL**. REST, `/ws/chat`, `/ws/presence`, uploaded files
+and LiveKit's signalling handshake are all behind the same gateway, so there is
+a single variable to set:
+
+```
+VITE_API_URL="https://nexora.example.com"
+```
+
+Leave it empty for `pnpm dev` - the Vite dev server proxies to the services
+itself, and its own origin is then the gateway. It is read from the repo-root
+`.env`.
+
+It is only the default. **Connect to a self-hosted instance** on the login
+screen (and *Change server* in Settings → My Account) points the window at any
+other deployment: the address is checked before it is stored, and connecting
+elsewhere signs the window out and reloads. So a build can ship pointed at one
+deployment without being locked to it.
+
+WebRTC media is the one exception, and it is inherent rather than a shortcut:
+the SFU negotiates its own path on `7881/tcp` and `50000-50019/udp`. One
+hostname carries signalling, not media.
+
 ## File storage
 
 `@nexora/storage` picks its driver from the environment:

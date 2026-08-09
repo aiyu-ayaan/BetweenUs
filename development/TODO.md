@@ -5,9 +5,47 @@ the top honest — it is what a new session reads first.
 
 ## Next up
 
-Phases 15 and 15b have landed in code and in the smoke script; the client side
-of 15b has not been driven by a human yet. Phases 13 and 14 landed earlier; what is left of them needs a human in front of the app, and so does
-most of phase 12. The carried-over items are older ones in the same state.
+Phase 16 has landed in code and in the desktop self-checks; the picker and the
+`/livekit` route have not been driven by a human yet. Phases 15 and 15b landed
+before it, and the client side of 15b is in the same state. Phases 13 and 14
+landed earlier; what is left of them needs a human in front of the app, and so
+does most of phase 12. The carried-over items are older ones in the same state.
+
+### Phase 16 — one address, any server
+
+- [x] One base address for a whole deployment, read at runtime from
+      `services/endpoint.ts`: REST, `/ws/chat`, `/ws/presence` and the stored
+      files all hang off it, and nothing else in the client knows a host
+- [x] `VITE_API_URL` is the only variable left and is only a default;
+      `VITE_WS_URL` is gone (it was that URL with a different scheme), and Vite
+      reads the repo-root `.env` so it sits beside the ports it agrees with
+- [x] "Connect to a self-hosted instance" on the login screen, AFFiNE-style: an
+      address is normalised (bare hostname means https, trailing slash goes, a
+      path is kept) and probed before it is stored, so a typo is a line under
+      the field
+- [x] The same dialog on My Account, so the server is changeable at any time;
+      switching signs the window out and reloads
+- [x] Avatars and server icons resolved against the deployment instead of
+      `file://`, which is what they did in a packaged window before
+- [x] Nginx proxies `/livekit` to the SFU and `LIVEKIT_URL` may be that path, so
+      voice needs no second hostname; the client resolves a path form itself
+- [x] The renderer's CSP stopped naming hosts: `script-src` stays `'self'`,
+      `connect-src` and `img-src` are open, because an allowlist compiled into
+      the app cannot know an operator's hostname
+- [x] `endpoint.check.ts` covers the address parsing, in `pnpm check`
+
+Left open on purpose:
+
+- [ ] WebRTC media still needs its own ports (7881/tcp, 50000+/udp): one
+      hostname covers signalling, not media. A TURN server behind 443 is what
+      would close that, and it is a phase of its own
+- [ ] No list of recent servers - one address is remembered, not a history
+- [ ] The admin panel still reads its own `VITE_API_URL` at build time; it is
+      served from the deployment it administers, so it has never needed more
+- [ ] Nothing checks that the deployment's version matches the client's; a
+      client too old for a server finds out through a failing request
+- [ ] E2EE device keys are stored per user id, not per (server, user id), so
+      two deployments that hand out the same id would share a key entry
 
 ### Phase 15b — what you can do to a message
 
@@ -402,13 +440,13 @@ Follow-ups this phase deliberately left open:
 - [x] Desktop notifications for messages and voice joins, with unread counts,
       taskbar flash and click-to-open
 
-### Phase 16 — remote desktop
+### Phase 17 — remote desktop
 - [ ] `remote-agent`: device identity, outbound WebSocket, screen capture, input
 - [ ] `remote-gateway`: session relay, authorization, audit log
 - [ ] Remote permission model (`REMOTE_VIEW`, `REMOTE_CONTROL`, …) with expiry
 - [ ] Desktop remote client view
 
-### Phase 17 — production
+### Phase 18 — production
 - [ ] Cloudflare Tunnel config + `cloudflared` container wired to Nginx
 - [ ] Secret management, no secrets in compose files
 - [ ] Docker image build + push pipeline, health-checked deploys
