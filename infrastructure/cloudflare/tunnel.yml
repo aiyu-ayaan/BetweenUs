@@ -1,1 +1,73 @@
+# Cloudflare Tunnel ingress for Nexora.
+#
+# Nexora is one public hostname. Everything a client needs - REST, /ws/chat,
+# /ws/presence, /ws/remote, uploaded files and LiveKit's signalling handshake -
+# is behind the Nginx gateway on 8080, so this file has one real rule in it.
+#
+# There are two ways to run the tunnel, and Nexora works with either.
+#
+# ---------------------------------------------------------------------------
+# 1. A tunnel you already run on the host (the common case)
+# ---------------------------------------------------------------------------
+#
+# If cloudflared is already a service on this machine - one tunnel for the whole
+# server, with other things behind it - do not start the container. Add Nexora's
+# hostname to the ingress list you already have; it is one entry:
+#
+#   ingress:
+#     - hostname: nexora.example.com
+#       service: http://localhost:8080
+#     # ...your other hostnames...
+#     - service: http_status:404
+#
+# Then reload it (`systemctl reload cloudflared`, or restart the service). The
+# compose file publishes the gateway on the host as ${GATEWAY_PORT:-8080}, which
+# is what `http://localhost:8080` above reaches. Nothing else has to change, and
+# no other container is published.
+#
+# ---------------------------------------------------------------------------
+# 2. The tunnel as a container, alongside the stack
+# ---------------------------------------------------------------------------
+#
+#   CLOUDFLARE_TUNNEL_TOKEN=... docker compose \
+#     -f infrastructure/docker/docker-compose.yml --profile public up -d
+#
+# Token mode carries its own ingress rules (they live in the Cloudflare
+# dashboard, not here) and the container reaches Nginx as `http://nginx:8080` on
+# the internal network - so with a container tunnel the host port does not have
+# to be published at all.
+#
+# To run the container in config-file mode instead, mount this file at
+# /etc/cloudflared/config.yml with a credentials file beside it and drop the
+# TUNNEL_TOKEN. The service name below is the container, not localhost.
+#
+# ---------------------------------------------------------------------------
+# What does NOT go through the tunnel
+# ---------------------------------------------------------------------------
+#
+# Voice, video, screen share and remote-desktop *media*. WebRTC negotiates its
+# own UDP path to the SFU on 7881/tcp and 50000-50019/udp, and a Cloudflare
+# Tunnel carries HTTP, not that. Signalling reaches the SFU through /livekit and
+# works over the tunnel; the media path needs either those ports reachable, or a
+# TURN server the clients can use. Chat, files and everything else are complete
+# over the tunnel on their own.
+
 tunnel: nexora
+credentials-file: /etc/cloudflared/nexora.json
+
+# Cloudflare terminates TLS. Nginx behind it speaks plain HTTP on 8080 and
+# trusts the X-Forwarded-* headers cloudflared sets.
+ingress:
+  - hostname: nexora.example.com
+    # `nginx` inside the compose network; `localhost` for a host-run tunnel.
+    service: http://nginx:8080
+    originRequest:
+      # Long-lived sockets: /ws/chat, /ws/presence, /ws/remote and LiveKit's
+      # signalling all stay open far longer than a request does.
+      connectTimeout: 30s
+      noTLSVerify: false
+      # Uploads stream through; buffering a 100 MB attachment helps nobody.
+      disableChunkedEncoding: false
+
+  # Everything that is not Nexora's hostname is not Nexora's problem.
+  - service: http_status:404
