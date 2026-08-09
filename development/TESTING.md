@@ -267,9 +267,10 @@ by hand once.
    is the path a real deployment takes.
 4. **Back again.** The dialog offers the build's own address when the window is
    somewhere else; it is also reachable from Settings → My Account → Server.
-5. **Only one variable.** `VITE_API_URL` in the repo-root `.env`, empty for
-   development. There is no `VITE_WS_URL` any more - if something asks for one,
-   it is out of date.
+5. **Only one variable.** `VITE_API_URL` in the repo-root `.env`, and it only
+   affects a packaged build - `pnpm dev` always uses its own origin, because
+   the dev server is the gateway. There is no `VITE_WS_URL` any more; if
+   something asks for one, it is out of date.
 
 ## Notifications, the tray and auto-start
 
@@ -481,6 +482,7 @@ A published track logs `"encryption":1` — that is the end-to-end encrypted pat
 | "This machine is no longer enrolled" | Its row was deleted, or it was re-enrolled elsewhere, so the stored token no longer matches. Turn the switch off and on to enrol again |
 | Remote session connects but the screen never arrives | The agent could not capture - check the machine's own console. LiveKit must also be reachable from *both* ends, not only the controller |
 | Mouse moves but nothing is clicked on the remote machine | Injection is Windows-only; on macOS and Linux a session is view-only by design |
+| `dev:duo` windows say "Request failed" and "Signing in to localhost:8080" | An old `VITE_API_URL` in `.env` pointing at the Nginx container, which `pnpm dev:backend` does not run. Development ignores that variable now; rebuild if the window predates that |
 | Windows open on top of each other | Positions are fixed at x=40 and x=760; on a small display, drag them apart |
 | Login answers 429 | The per-address credentials limit (20/min) kicked in; wait out the window |
 | Signed out of every window at once | A refresh token was replayed, which revokes the whole family. Usually two clients sharing one token — check for a stale profile directory |
