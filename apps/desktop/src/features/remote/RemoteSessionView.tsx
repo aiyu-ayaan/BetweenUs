@@ -146,7 +146,12 @@ export function RemoteSessionView(): JSX.Element {
             ref={videoRef}
             muted
             playsInline
-            className={`max-h-full max-w-full ${controlling ? 'cursor-none' : ''}`}
+            // Never `cursor-none`. Hiding the local pointer assumed the capture
+            // draws the machine's own cursor into the frame, and it does not
+            // reliably - so taking control made the pointer vanish entirely and
+            // left nothing to aim with. A crosshair says "this is going to the
+            // other machine" without ever leaving the user without a pointer.
+            className={`max-h-full max-w-full ${controlling ? 'cursor-crosshair' : ''}`}
             onMouseMove={(event) => sendMouse({ action: 'move', ...pointFrom(event) })}
             onMouseDown={(event) =>
               sendMouse({ action: 'down', button: buttonOf(event.button), ...pointFrom(event) })
