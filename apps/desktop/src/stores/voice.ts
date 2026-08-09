@@ -9,6 +9,7 @@
 import { create } from 'zustand';
 import {
   ExternalE2EEKeyProvider,
+  LocalAudioTrack,
   Room,
   RoomEvent,
   Track,
@@ -24,6 +25,9 @@ import { callKeyForChannel } from '../services/e2ee';
 import { presenceSocket } from '../services/socket';
 import { wsUrl } from '../services/endpoint';
 import { useShareControlStore } from './shareControl';
+import { useAudioSettings } from './audioSettings';
+import { NoiseGate } from '../services/mic-gate';
+import { micCapture, micProcessing, micPublish, type VoiceSettings } from '../services/voice-quality';
 import {
   PLAYOUT_DELAY,
   shareOptions,
@@ -96,6 +100,14 @@ interface VoiceState {
  */
 const lastSpoke = new Map<string, number>();
 
+/**
+ * The gate the microphone is published through, for as long as one call lasts.
+ * Kept outside the store because it is a piece of audio plumbing rather than
+ * rendered state: the sensitivity slider talks to it directly, which is what
+ * lets a threshold change take effect without republishing the track.
+ */
+let gate: NoiseGate | null = null;
+
 function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : 'unknown error';
 }
@@ -163,19 +175,20 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
 
       if (joinCounter !== currentJoinId) return;
 
+      const settings = useAudioSettings.getState().settings;
+      const micGate = new NoiseGate(settings.gateThresholdDb);
+      gate = micGate;
+
       const keyProvider = new ExternalE2EEKeyProvider();
       const room = new Room({
         adaptiveStream: true,
         dynacast: true,
         e2ee: { keyProvider, worker: new E2eeWorker() },
-        // Spelt out rather than left to the browser default: without echo
-        // cancellation, anyone on speakers sends the room's own audio back into
-        // it and everybody hears themselves a beat late.
-        audioCaptureDefaults: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-        },
+        // Everything about how the microphone is captured and encoded lives in
+        // `voice-quality.ts`, including why the defaults were not it. Passed at
+        // every publish rather than as a room default, so a screen share's
+        // soundtrack keeps its own answer.
+        ...(settings.outputDeviceId ? { audioOutput: { deviceId: settings.outputDeviceId } } : {}),
       });
 
       console.log('[voice.ts] 4. Setting E2EE key...');
@@ -228,6 +241,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
           if (get().room === room) {
             presenceSocket.send({ type: 'voice.leave', channelId });
             useShareControlStore.getState().detach();
+            gate = null;
             set({
               status: 'idle',
               channelId: null,
@@ -261,7 +275,11 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
       let micProblem: string | null = null;
       try {
         console.log('[voice.ts] 7. Enabling microphone...');
-        await room.localParticipant.setMicrophoneEnabled(true);
+        await room.localParticipant.setMicrophoneEnabled(
+          true,
+          micCapture(settings, micGate),
+          micPublish(settings),
+        );
         console.log('[voice.ts] 7b. Microphone enabled!');
       } catch (error) {
         micEnabled = false;
@@ -310,6 +328,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
     const { room, channelId } = get();
     if (channelId) presenceSocket.send({ type: 'voice.leave', channelId });
     useShareControlStore.getState().detach();
+    gate = null;
     lastSpoke.clear();
     set({
       status: 'idle',
@@ -330,8 +349,13 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
   toggleMic: async () => {
     const { room, micEnabled, status } = get();
     if (!room || status !== 'connected') return;
+    const settings = useAudioSettings.getState().settings;
     try {
-      await room.localParticipant.setMicrophoneEnabled(!micEnabled);
+      await room.localParticipant.setMicrophoneEnabled(
+        !micEnabled,
+        micCapture(settings, gate ?? undefined),
+        micPublish(settings),
+      );
       set({ micEnabled: !micEnabled, error: null, ...snapshot(room) });
     } catch (error) {
       set({ error: `Microphone: ${messageOf(error)}`, ...snapshot(room) });
@@ -501,6 +525,49 @@ function toTile(participant: Participant, speaking: boolean): VoiceTile {
     lastSpokeAt: lastSpoke.get(participant.identity) ?? 0,
   };
 }
+
+/**
+ * Voice settings changed while a call is running.
+ *
+ * Three different costs, so three different paths: a threshold is a message to
+ * the gate on the audio thread, the three processing switches are a constraint
+ * applied to the track that is already open, and a different device or a
+ * different mode is the only one that needs the track republished - the bitrate
+ * and channel count are fixed when it is published, and nothing can change them
+ * in place.
+ */
+async function applyAudioSettings(next: VoiceSettings, previous: VoiceSettings): Promise<void> {
+  gate?.setThreshold(next.gateThresholdDb);
+
+  const { room, status, micEnabled } = useVoiceStore.getState();
+  if (!room || status !== 'connected') return;
+
+  if (next.outputDeviceId !== previous.outputDeviceId) {
+    await room
+      .switchActiveDevice('audiooutput', next.outputDeviceId ?? 'default')
+      .catch(() => undefined);
+  }
+
+  if (!micEnabled) return;
+
+  if (next.mode !== previous.mode || next.inputDeviceId !== previous.inputDeviceId) {
+    await room.localParticipant.setMicrophoneEnabled(false).catch(() => undefined);
+    await room.localParticipant
+      .setMicrophoneEnabled(true, micCapture(next, gate ?? undefined), micPublish(next))
+      .catch(() => undefined);
+    return;
+  }
+
+  const track = room.localParticipant.getTrackPublication(Track.Source.Microphone)?.track;
+  if (track instanceof LocalAudioTrack) {
+    await track.applyConstraints(micProcessing(next)).catch(() => undefined);
+  }
+}
+
+useAudioSettings.subscribe((state, previous) => {
+  if (state.settings === previous.settings) return;
+  void applyAudioSettings(state.settings, previous.settings);
+});
 
 // Taking control of a share changes what its latency should be: a pointer that
 // arrives two frames late is unusable, where two frames of cushion on something
