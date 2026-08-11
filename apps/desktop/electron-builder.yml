@@ -1,5 +1,6 @@
 appId: com.nexora.desktop
 productName: Nexora
+electronVersion: 31.3.1
 directories:
   output: release
 files:

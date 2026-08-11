@@ -13,7 +13,12 @@
     "resolveJsonModule": true,
     "isolatedModules": true,
     "noEmit": true,
-    "types": ["vite/client", "node"]
+    "types": ["vite/client", "node"],
+    "baseUrl": ".",
+    "paths": {
+      "@nexora/shared-types": ["../../packages/shared-types/src/index.ts"],
+      "@nexora/permissions": ["../../packages/permissions/src/index.ts"]
+    }
   },
   "include": ["src", "electron", "vite.config.ts"]
 }

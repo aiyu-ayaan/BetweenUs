@@ -40,6 +40,9 @@ export default defineConfig({
       // The shared packages build to CommonJS for the Node services. Rollup
       // cannot see named exports through that, so the renderer is pointed at
       // the TypeScript source instead - which it can also tree-shake.
+      '@nexora/shared-types': fileURLToPath(
+        new URL('../../packages/shared-types/src/index.ts', import.meta.url),
+      ),
       '@nexora/permissions': fileURLToPath(
         new URL('../../packages/permissions/src/index.ts', import.meta.url),
       ),

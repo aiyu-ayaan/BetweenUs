@@ -16,7 +16,20 @@
     "declarationMap": true,
     "sourceMap": true,
     "experimentalDecorators": true,
-    "emitDecoratorMetadata": true
+    "emitDecoratorMetadata": true,
+    "baseUrl": ".",
+    "paths": {
+      "@nexora/shared-types": ["./packages/shared-types/src/index.ts"],
+      "@nexora/permissions": ["./packages/permissions/src/index.ts"],
+      "@nexora/auth": ["./packages/auth/src/index.ts"],
+      "@nexora/config": ["./packages/config/src/index.ts"],
+      "@nexora/database": ["./packages/database/src/index.ts"],
+      "@nexora/events": ["./packages/events/src/index.ts"],
+      "@nexora/logger": ["./packages/logger/src/index.ts"],
+      "@nexora/nest-common": ["./packages/nest-common/src/index.ts"],
+      "@nexora/storage": ["./packages/storage/src/index.ts"],
+      "@nexora/websocket": ["./packages/websocket/src/index.ts"]
+    }
   },
   "exclude": ["node_modules", "dist"]
 }
