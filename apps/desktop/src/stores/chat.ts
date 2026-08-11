@@ -17,6 +17,7 @@ import {
   UNDECRYPTABLE,
   decryptForChannel,
   encryptForChannel,
+  keyChannel,
   syncChannelKeys,
 } from '../services/e2ee';
 import { decodeBody, encodeBody } from '../services/message-body';
@@ -341,6 +342,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
     if (!serverId) return;
     const channel = await api.createChannel({ serverId, name, type, isPrivate, memberIds });
     set({ channels: [...get().channels, channel] });
+    // Mint its key now, while we know we are a member: an unkeyed channel puts
+    // the cost on whoever opens it next, and that used to fail for anyone but
+    // the creator. A voice channel needs one too - the media key is this key.
+    void keyChannel(channel.id).catch(() => undefined);
     // A voice channel is joined, not read, so selection stays where it was.
     if (channel.type === 'TEXT') await get().selectChannel(channel.id);
   },

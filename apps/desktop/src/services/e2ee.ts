@@ -6,7 +6,7 @@
  * who may publish them, and never holds anything that opens a message.
  */
 import type { EncryptedEnvelope } from '@nexora/shared-types';
-import { api } from './api';
+import { ApiError, api } from './api';
 import {
   decryptBytes,
   decryptMessage,
@@ -51,7 +51,14 @@ export function initIdentity(userId: string): Promise<IdentityKeyPair> {
   if (identityReady && identityUserId === userId) return identityReady;
 
   identityUserId = userId;
-  identityReady = loadIdentity(userId);
+  // A failure here - the network was down, the token had not been minted yet -
+  // must not be remembered. Keeping the rejected promise left the device
+  // unregistered for the whole session, and every channel it tried to key
+  // afterwards ended in "No channel key on this device yet".
+  identityReady = loadIdentity(userId).catch((error: unknown) => {
+    if (identityUserId === userId) identityReady = null;
+    throw error;
+  });
   return identityReady;
 }
 
@@ -163,6 +170,14 @@ async function keyForEpoch(channelId: string, epoch: number): Promise<string> {
 }
 
 /**
+ * Keys a channel that was just created, so it is usable by whoever opens it
+ * first rather than by whoever happens to type in it first.
+ */
+export async function keyChannel(channelId: string): Promise<void> {
+  await ensureChannelKey(channelId);
+}
+
+/**
  * Resolves the channel's key, creating and distributing one if the channel has
  * never been keyed. Concurrent callers share one round-trip.
  */
@@ -220,13 +235,34 @@ async function loadChannelKey(channelId: string): Promise<ChannelKeyState> {
   return state;
 }
 
+/**
+ * Mints the first key for a channel nobody has keyed yet.
+ *
+ * Any member who may send a message may do this - waiting for an admin to open
+ * the channel is not a rule the server has, and pretending otherwise is what
+ * made an empty channel unusable until its owner typed into it first.
+ */
 async function createChannelKey(channelId: string, epoch: number): Promise<void> {
+  const self = await currentIdentity();
   const key = generateChannelKey();
   const devices = await api.channelDevices(channelId);
+
+  // Our own row may not be in the directory yet on a device that signed in a
+  // moment ago. Minting a key we cannot open (or, with an empty directory,
+  // publishing nothing at all) leaves the channel unkeyed and the sender told
+  // there is no key - so we always seal one for ourselves.
+  const recipients = devices.some((device) => device.userId === identityUserId)
+    ? devices
+    : [...devices, { userId: identityUserId ?? '', publicKey: self.publicKey }];
+
   try {
-    await shareKey(channelId, epoch, key, devices);
-  } catch {
-    // Lost the race with another member; loadChannelKey re-reads either way.
+    await shareKey(channelId, epoch, key, recipients);
+  } catch (error) {
+    // Another member keyed it first: harmless, loadChannelKey re-reads and
+    // finds theirs. Anything else is a real failure and must not be mistaken
+    // for "this device has no key".
+    const raced = error instanceof ApiError && error.code === 'EPOCH_OUT_OF_ORDER';
+    if (!raced) throw error;
   }
 }
 
@@ -254,9 +290,10 @@ async function shareKey(
   await api.publishChannelKeys({ channelId, epoch, entries });
 }
 
-/** Waits for sign-in key setup instead of racing it. */
+/** Waits for sign-in key setup instead of racing it, and retries a failed one. */
 async function currentIdentity(): Promise<IdentityKeyPair> {
   if (identityReady) return identityReady;
+  if (identityUserId) return initIdentity(identityUserId);
   if (identity) return identity;
   throw new MissingChannelKeyError();
 }
