@@ -66,30 +66,32 @@ export function configureApi(source: TokenSource, refresher: TokenRefresher): vo
   refreshAccessToken = refresher;
 }
 
-let refreshing = false;
+let minting: Promise<string | null> | null = null;
 
 /**
  * The access token to send, minting one when this window has none.
  *
  * Access tokens live in memory only, so any window that has a stored session
  * but no token yet - a reload that raced the restore, a store that was cleared
- * while the UI stayed up - would otherwise send every request anonymously and
- * get "Missing bearer token" back on each one. The `refreshing` flag keeps the
- * refresh call itself (which is public) from waiting on its own result.
+ * while the UI stayed up - has to mint one before its first call. Callers that
+ * arrive while that is happening *wait for it*: sending their request anonymously
+ * instead is what produced a screen full of "Missing bearer token", because the
+ * pair of calls behind one screen (friends + conversations, say) go out
+ * together and only the first of them was ever waiting for the token.
+ *
+ * The refresh call itself must not come through here - it is public, and would
+ * be waiting on its own result. `publicRequest` is the door it uses.
  */
 async function bearer(): Promise<string | null> {
   const token = getAccessToken();
-  if (token || refreshing) return token;
-  refreshing = true;
-  try {
-    return await refreshAccessToken();
-  } finally {
-    refreshing = false;
-  }
+  if (token) return token;
+  minting ??= refreshAccessToken().finally(() => {
+    minting = null;
+  });
+  return minting;
 }
 
-async function request<T>(path: string, init: RequestInit = {}, retry = true): Promise<T> {
-  const token = await bearer();
+async function send<T>(path: string, init: RequestInit, token: string | null): Promise<T> {
   const response = await fetch(`${serverUrl()}${path}`, {
     ...init,
     headers: {
@@ -98,12 +100,6 @@ async function request<T>(path: string, init: RequestInit = {}, retry = true): P
       ...init.headers,
     },
   });
-
-  // One transparent retry after refreshing an expired access token.
-  if (response.status === 401 && retry) {
-    const refreshed = await refreshAccessToken();
-    if (refreshed) return request<T>(path, init, false);
-  }
 
   if (response.status === 204) return undefined as T;
 
@@ -119,6 +115,23 @@ async function request<T>(path: string, init: RequestInit = {}, retry = true): P
   }
 
   return payload as T;
+}
+
+async function request<T>(path: string, init: RequestInit = {}, retry = true): Promise<T> {
+  try {
+    return await send<T>(path, init, await bearer());
+  } catch (error) {
+    // One transparent retry after refreshing an expired access token.
+    if (!(error instanceof ApiError) || error.status !== 401 || !retry) throw error;
+    const refreshed = await refreshAccessToken();
+    if (!refreshed) throw error;
+    return request<T>(path, init, false);
+  }
+}
+
+/** Registration, sign-in and token refresh: no session, so no token to wait on. */
+function publicRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
+  return send<T>(path, init, null);
 }
 
 /**
@@ -158,25 +171,25 @@ export const apiBaseUrl = (): string => serverUrl();
 
 export const api = {
   register: (email: string, username: string, password: string): Promise<AuthResponse> =>
-    request('/api/v1/auth/register', {
+    publicRequest('/api/v1/auth/register', {
       method: 'POST',
       body: JSON.stringify({ email, username, password }),
     }),
 
   login: (email: string, password: string): Promise<AuthResponse> =>
-    request('/api/v1/auth/login', {
+    publicRequest('/api/v1/auth/login', {
       method: 'POST',
       body: JSON.stringify({ email, password }),
     }),
 
   refresh: (refreshToken: string): Promise<AuthTokens> =>
-    request('/api/v1/auth/refresh', {
+    publicRequest('/api/v1/auth/refresh', {
       method: 'POST',
       body: JSON.stringify({ refreshToken }),
     }),
 
   logout: (refreshToken: string): Promise<void> =>
-    request('/api/v1/auth/logout', {
+    publicRequest('/api/v1/auth/logout', {
       method: 'POST',
       body: JSON.stringify({ refreshToken }),
     }),
@@ -194,11 +207,15 @@ export const api = {
     }),
 
   /** Providers the operator enabled in the admin panel, for the login screen. */
-  oauthProviders: (): Promise<OAuthProviderSummary[]> => request('/api/v1/auth/oauth/providers'),
+  oauthProviders: (): Promise<OAuthProviderSummary[]> =>
+    publicRequest('/api/v1/auth/oauth/providers'),
 
   /** Trades the one-time code the browser flow handed back for a session. */
   oauthExchange: (code: string): Promise<AuthResponse> =>
-    request('/api/v1/auth/oauth/exchange', { method: 'POST', body: JSON.stringify({ code }) }),
+    publicRequest('/api/v1/auth/oauth/exchange', {
+      method: 'POST',
+      body: JSON.stringify({ code }),
+    }),
 
   servers: (): Promise<ServerWithRole[]> => request('/api/v1/servers'),
 

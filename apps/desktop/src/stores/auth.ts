@@ -164,7 +164,15 @@ function refreshSession(): Promise<string | null> {
 
   refreshInFlight = (async () => {
     const stored = localStorage.getItem(STORAGE_KEY);
-    if (!stored) return null;
+    if (!stored) {
+      // Nothing left to refresh with. A window that still believes it is signed
+      // in would keep sending tokenless requests and show "Missing bearer token"
+      // under every screen, so end the session and let the login form take over.
+      if (useAuthStore.getState().status !== 'idle') {
+        useAuthStore.setState({ user: null, accessToken: null, status: 'idle' });
+      }
+      return null;
+    }
     try {
       const tokens = await api.refresh(stored);
       localStorage.setItem(STORAGE_KEY, tokens.refreshToken);
