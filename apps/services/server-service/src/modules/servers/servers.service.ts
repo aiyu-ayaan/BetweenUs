@@ -63,7 +63,14 @@ export class ServersService {
         slug,
         ownerId: userId,
         members: { create: { userId, role: 'OWNER' } },
-        channels: { create: { name: 'general', type: 'TEXT' } },
+        // A server with nowhere to talk is a dead end, so it opens with one of
+        // each: #general to type in and General to call in.
+        channels: {
+          create: [
+            { name: 'general', type: 'TEXT' },
+            { name: 'General', type: 'VOICE' },
+          ],
+        },
       },
     });
 
