@@ -1,0 +1,23 @@
+# The build context is the repo root for every service image, so anything not
+# needed inside one is pure upload cost - node_modules alone is hundreds of
+# megabytes that each Dockerfile installs again from the lockfile anyway.
+node_modules
+**/node_modules
+dist
+**/dist
+dist-electron
+release
+build
+coverage
+.turbo
+**/.turbo
+.pnpm-store
+.git
+.github
+.codegraph
+storage-data
+
+# Secrets never belong in an image layer; compose injects them at run time.
+.env
+.env.*
+!.env.example
