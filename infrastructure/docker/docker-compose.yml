@@ -236,6 +236,10 @@ services:
       # Nginx proxies to the SFU, which keeps the deployment on one public
       # address; set LIVEKIT_URL to an absolute wss:// URL to split it out.
       LIVEKIT_URL: ${LIVEKIT_URL:-/livekit}
+      # How this service reaches the SFU itself, which it does once at startup
+      # to check that the SFU accepts the tokens it signs. Media never comes
+      # near it.
+      LIVEKIT_INTERNAL_URL: ${LIVEKIT_INTERNAL_URL:-http://livekit:7880}
       LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:?LIVEKIT_API_KEY is required}
       LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:?LIVEKIT_API_SECRET is required}
     depends_on:
@@ -246,6 +250,7 @@ services:
     networks:
       - api-network
       - data-network
+      - media-network
 
   # Remote desktop, kept off every network it does not need. It talks to
   # Postgres and to LiveKit (to mint session tokens); it never reaches the chat
