@@ -16,20 +16,15 @@
     "declarationMap": true,
     "sourceMap": true,
     "experimentalDecorators": true,
-    "emitDecoratorMetadata": true,
-    "baseUrl": ".",
-    "paths": {
-      "@nexora/shared-types": ["./packages/shared-types/src/index.ts"],
-      "@nexora/permissions": ["./packages/permissions/src/index.ts"],
-      "@nexora/auth": ["./packages/auth/src/index.ts"],
-      "@nexora/config": ["./packages/config/src/index.ts"],
-      "@nexora/database": ["./packages/database/src/index.ts"],
-      "@nexora/events": ["./packages/events/src/index.ts"],
-      "@nexora/logger": ["./packages/logger/src/index.ts"],
-      "@nexora/nest-common": ["./packages/nest-common/src/index.ts"],
-      "@nexora/storage": ["./packages/storage/src/index.ts"],
-      "@nexora/websocket": ["./packages/websocket/src/index.ts"]
-    }
+    "emitDecoratorMetadata": true
+    // No `paths` here. Every package builds with `rootDir: src` and resolves
+    // its siblings through the workspace links, i.e. through their built
+    // declarations. Mapping the names at the source instead pulls another
+    // package's src/ into the program, and tsc refuses it:
+    //   TS6059: File 'packages/shared-types/src/index.ts' is not under rootDir
+    // which fails every service image build. The renderer is the exception and
+    // carries its own mapping - see apps/desktop/tsconfig.json, which emits
+    // nothing and needs the source because Vite bundles it.
   },
   "exclude": ["node_modules", "dist"]
 }
