@@ -651,17 +651,37 @@ it. `docker port` will say `0.0.0.0:7880` and
 `Test-NetConnection <host LAN IP> -Port 7880` will still be `False`. Pointing
 `NEXORA_LIVEKIT_NODE_IP` at an address in that state makes things worse rather
 than better: the candidate is unreachable from the second machine *and* from
-this one, so a call that used to work locally starts timing out too. Either
-switch WSL to mirrored networking:
+this one, so a call that used to work locally starts timing out too.
+
+Running the stack under Docker Desktop avoids all of this — it publishes onto
+the Windows host itself. Otherwise WSL needs two changes, and *both* of them,
+because either alone still leaves the port refusing connections.
 
 ```ini
-; %USERPROFILE%\.wslconfig, then `wsl --shutdown`
+; 1. %USERPROFILE%\.wslconfig, then `wsl --shutdown`
 [wsl2]
 networkingMode=mirrored
 ```
 
-or run the stack under Docker Desktop, which publishes onto the Windows host
-itself. Verify with `Test-NetConnection`, *then* set the variable.
+Mirrored networking gives the WSL VM the host's own interfaces — `ip -4 -o addr
+show` inside WSL will list the LAN address rather than a `172.x` one. It does
+not open anything: inbound traffic to that VM is filtered by the Hyper-V
+firewall, which blocks by default. In an **elevated** PowerShell:
+
+```powershell
+# 2. Let the LAN reach the SFU inside WSL
+$vm = '{40E0AC32-46A5-438A-A0B2-2B479E8F2E90}'   # Get-NetFirewallHyperVVMCreator
+New-NetFirewallHyperVRule -Name "Nexora-LiveKit-Signal-In" `
+  -DisplayName "Nexora dev SFU signalling (TCP 7880-7881)" `
+  -Direction Inbound -VMCreatorId $vm -Protocol TCP -LocalPorts 7880-7881 -Action Allow
+New-NetFirewallHyperVRule -Name "Nexora-LiveKit-Media-In" `
+  -DisplayName "Nexora dev SFU media (UDP 50000-50019)" `
+  -Direction Inbound -VMCreatorId $vm -Protocol UDP -LocalPorts 50000-50019 -Action Allow
+```
+
+`Test-NetConnection <host LAN IP> -Port 7880` has to answer `True` before
+`NEXORA_LIVEKIT_NODE_IP` is worth setting. The dev server itself is an ordinary
+Windows process, so its port is ordinary Windows Firewall, not this.
 
 None of this applies to a real deployment: it is behind the gateway, over TLS,
 on one hostname.
