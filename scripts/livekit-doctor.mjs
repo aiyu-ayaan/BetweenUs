@@ -22,8 +22,35 @@ import { readFileSync, existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 const ENV_PATH = resolve(process.cwd(), '.env');
-const COMPOSE_FILE = 'infrastructure/docker/docker-compose.yml';
 const target = (process.argv[2] ?? 'http://127.0.0.1:7880').replace(/\/+$/, '');
+
+/**
+ * The two stacks that can be running an SFU, and what has to be recreated in
+ * each. `pnpm dev` runs the services on the host, so only the container holds a
+ * stale secret there; in the full stack the two services that sign tokens are
+ * containers as well and keep the environment they were created with too.
+ *
+ * Development is tried first: it is the stack whose SFU is published on
+ * 127.0.0.1, which is where this script looks unless told otherwise.
+ */
+const STACKS = [
+  {
+    file: 'infrastructure/docker/docker-compose.dev.yml',
+    recreate: ['livekit'],
+  },
+  {
+    file: 'infrastructure/docker/docker-compose.yml',
+    recreate: ['livekit', 'call-service', 'remote-gateway'],
+  },
+];
+
+/** The command that makes the SFU read the current `.env`. */
+function recreateCommand({ file, recreate }) {
+  return [
+    `  docker compose --env-file .env -f ${file} \\`,
+    `    up -d --force-recreate ${recreate.join(' ')}`,
+  ].join('\n');
+}
 
 /** Minimal `.env` reader: `KEY=value`, optional surrounding quotes, `#` comments. */
 function readEnvFile(path) {
@@ -72,17 +99,27 @@ function mintToken(apiKey, apiSecret) {
   return `${header}.${payload}.${signature}`;
 }
 
-/** What the *running* SFU container was started with, if docker is reachable. */
+/**
+ * What the *running* SFU container was started with, and which stack it belongs
+ * to - the recreate command is worthless if it names the other compose file.
+ *
+ * Returns null when docker cannot be asked at all, which is not a diagnosis:
+ * the /rtc/validate probe below is, and it needs nothing but the port.
+ */
 function containerKeys() {
-  try {
-    return execFileSync(
-      'docker',
-      ['compose', '--env-file', '.env', '-f', COMPOSE_FILE, 'exec', '-T', 'livekit', 'printenv', 'LIVEKIT_KEYS'],
-      { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] },
-    ).trim();
-  } catch {
-    return null;
+  for (const stack of STACKS) {
+    try {
+      const keys = execFileSync(
+        'docker',
+        ['compose', '--env-file', '.env', '-f', stack.file, 'exec', '-T', 'livekit', 'printenv', 'LIVEKIT_KEYS'],
+        { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] },
+      ).trim();
+      if (keys) return { stack, keys };
+    } catch {
+      // Not this stack: not running, or docker is not on this PATH at all.
+    }
   }
+  return null;
 }
 
 async function main() {
@@ -102,19 +139,21 @@ async function main() {
   // The container's own view. A mismatch here is the whole diagnosis: the SFU
   // keeps the environment it was created with, so editing .env and restarting
   // changes nothing until it is recreated.
-  const keys = containerKeys();
-  if (keys) {
-    const match = /^\s*([^:]+)\s*:\s*(.*?)\s*$/.exec(keys);
+  const found = containerKeys();
+  if (found) {
+    const match = /^\s*([^:]+)\s*:\s*(.*?)\s*$/.exec(found.keys);
     const containerSecret = match ? match[2].replace(/^'(.*)'$/, '$1').replace(/^"(.*)"$/, '$1') : '';
     const containerKey = match ? match[1].trim() : '';
     console.log(`key name (SFU) ${containerKey}`);
     console.log(`secret (SFU)   ${containerSecret ? fingerprint(containerSecret) : '<unparsable>'}`);
+    console.log(`stack          ${found.stack.file}`);
     if (containerSecret && containerSecret !== apiSecret) {
       console.log('');
-      console.log('The running SFU holds a different secret from .env.');
-      console.log('Fix: docker compose --env-file .env -f ' + COMPOSE_FILE);
-      console.log('       up -d --force-recreate livekit call-service remote-gateway');
+      console.log('The running SFU holds a different secret from .env. Recreate it:');
+      console.log(recreateCommand(found.stack));
     }
+  } else {
+    console.log('stack          <docker not reachable from here - guessing below>');
   }
 
   let response;
@@ -141,9 +180,17 @@ async function main() {
 
   console.log(`REJECTED (HTTP ${response.status}): ${body.slice(0, 200)}`);
   console.log('');
-  console.log('The SFU and .env disagree. Recreate both sides so they read the same value:');
-  console.log(`  docker compose --env-file .env -f ${COMPOSE_FILE} \\`);
-  console.log('    up -d --force-recreate livekit call-service remote-gateway');
+  console.log('The SFU and .env disagree. Recreate the SFU so it reads the current value:');
+  if (found) {
+    console.log(recreateCommand(found.stack));
+  } else {
+    // Which stack is running could not be established, and naming the wrong
+    // compose file here starts a second stack rather than fixing the first.
+    for (const stack of STACKS) {
+      console.log(`\n${stack === STACKS[0] ? '`pnpm dev`' : 'the full stack'}:`);
+      console.log(recreateCommand(stack));
+    }
+  }
   process.exit(1);
 }
 
