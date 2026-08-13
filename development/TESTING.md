@@ -42,7 +42,8 @@ What the script does:
 3. Starts the Vite dev server **once**.
 4. Launches two Electron processes with `NEXORA_PROFILE=duo-a` / `duo-b`, so
    each window gets its own user-data directory — its own session, its own
-   `localStorage`, and its own E2EE device key. Sharing a profile would defeat
+   `localStorage`, and its own copy of that account's E2EE key. Sharing a
+   profile would defeat
    the point of the test.
 
 Closing both windows stops the dev server. Ctrl+C does the same.
@@ -245,8 +246,15 @@ Closing both windows stops the dev server. Ctrl+C does the same.
 - The first window to open the channel mints the channel key and seals it for
   every member. The second unwraps it.
 - Delete the profile directory (`%TEMP%\nexora-duo-b`) and reopen: Bob's window
-  generates a new device key and old messages show the "no key on this device"
-  placeholder — that is the design, not a bug (see `E2EE.md`, limit 1).
+  has no key of its own, so it restores the account's sealed identity and the
+  history opens again. Sign in with the password and it happens without a
+  prompt; resume from a stored session and the "Unlock your messages" dialog
+  asks for it (see `E2EE.md`, "Identity backup").
+- Dismiss that dialog with **Not now** and old messages show the lock
+  placeholder until it is answered — nothing mints a replacement key behind
+  your back, because that would orphan the history for good.
+- Set a recovery passphrase in Settings → My Account → Encryption key, then
+  wipe the profile again: the same dialog asks for the passphrase instead.
 
 ## Pointing the client at another server
 
@@ -598,6 +606,7 @@ A published track logs `"encryption":1` — that is the end-to-end encrypted pat
 | "microphone did not start (negotiation timed out)", and the mic/camera/screen buttons then fail too | The LiveKit container is older than `livekit-client` expects, so it never acknowledges a publisher offer. `docker compose -f infrastructure/docker/docker-compose.dev.yml up -d livekit` to pull the pinned v1.13.5 |
 | Voice churns: join, leave, join again | Editing desktop source while connected. A hot reload disconnects the room on purpose; rejoin after the reload |
 | Messages show the lock placeholder | This device has no key for that epoch — a member holding it must open the channel once to re-wrap |
+| Every message shows the lock placeholder after a reinstall | The account identity was not restored: answer the "Unlock your messages" dialog, or sign in with the password rather than resuming a stored session |
 | Provider buttons missing on the login screen | Nobody enabled a provider in the admin panel, or its client id/secret is incomplete |
 | OAuth ends on a browser error page | `PUBLIC_API_URL` does not match the callback URL registered with Google or GitHub |
 | Admin panel says no administrator exists | `pnpm admin:create` has not been run against this database |

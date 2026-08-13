@@ -14,12 +14,23 @@ metadata. The server still knows who wrote to which channel and when, how big
 each message was, and who is in a voice channel. Encrypting metadata is a different
 project; see "Not covered" below.
 
+One boundary moved when identity backup arrived, and it is worth stating plainly
+rather than burying in "Recovery": the backup is sealed with a key derived from
+the account password, and the account password is something a *live* server sees
+at sign-in — it is what the login endpoint checks. So a **stolen database still
+opens nothing** (passwords are stored as bcrypt hashes, and the backup is
+ciphertext), but a **malicious or compromised running server** could capture a
+password as it is used and open that user's backup from then on. Anyone whose
+threat model includes the running deployment should set a recovery passphrase in
+settings instead; it is never sent anywhere in any form.
+
 ## Pieces
 
 | Piece | Where it lives | Who can read it |
 | --- | --- | --- |
-| Device identity key (ECDH P-256) | private half on the device, sealed by the OS keychain | that device |
-| Device public key | `device_keys` table | everyone in the server |
+| Account identity key (ECDH P-256) | private half on each signed-in machine, sealed by the OS keychain | that machine |
+| Identity public key | `device_keys` table | everyone in the server |
+| Sealed identity backup | `identity_backups` table | whoever knows the account password or recovery passphrase |
 | Channel key (AES-256-GCM) | in memory on member devices | channel members |
 | Wrapped channel key | `channel_keys` table | only the recipient it was sealed for |
 | Message body | `messages.content` | channel members |
@@ -32,7 +43,13 @@ project; see "Not covered" below.
 ```
 sign-in
    |
-   +-- load identity key from the OS keychain (generate one on first run)
+   +-- identity key in this machine's keychain?
+   |      yes -> use it
+   |      no  -> GET /api/v1/e2ee/backup
+   |               backup exists, secret to hand -> open it, keep it
+   |               backup exists, no secret      -> ask (never mint a new one)
+   |               no backup                     -> generate, PUT /api/v1/e2ee/backup
+   |
    +-- publish the public half            POST /api/v1/e2ee/devices
    |
 open a channel
@@ -67,6 +84,47 @@ output is a curve point, not uniform key material.
 The salt is fixed and the `info` string domain-separates this use of the pair's
 shared secret (`nexora/e2ee/v1/channel-key-wrap`). That is safe here because the
 pair is static and every wrap uses its own IV.
+
+### Identity backup
+
+The identity key used to exist in exactly one place: the keychain of the machine
+that generated it. That made "clear the app data" and "lose every message you
+have ever been sent" the same action, and a second machine a second identity
+that no existing `channel_keys` row was sealed for.
+
+So the key is sealed once and stored where the account can reach it:
+
+```
+PBKDF2-SHA256(secret, salt, 600 000)  ->  AES-256-GCM key
+AES-256-GCM(key, iv, JSON of the ECDH key pair)  ->  identity_backups.ciphertext
+```
+
+The `secret` is the account password — so signing in anywhere restores the key
+with no extra step, because the password is already in hand at that moment — or
+a recovery passphrase the user sets in settings, which is the only option for an
+account that signs in with a provider and has no password at all. Which one a
+backup expects is in `identity_backups.kind`, so a client knows what to ask for
+before asking.
+
+Rules the client follows, each of them one-way-destructive if broken:
+
+- **A failed fetch never becomes a new identity.** Only a definite "this account
+  has no backup" starts a fresh key. Treating a network error as "no backup"
+  would replace the published public key, and every channel key already sealed
+  for the old one would stop opening — permanently, because nothing re-seals
+  history.
+- **No secret means ask, not guess.** A launch from a stored refresh token has
+  no password to hand, so the app prompts (and takes "not now" for an answer)
+  rather than minting a key that reads as working until every message shows the
+  lock placeholder.
+- **A password change re-seals the backup.** Otherwise the next machine gets a
+  blob keyed to a password nobody has any more.
+
+What this does not do is give one account two *different* identities: every
+machine ends up holding the same key pair. That keeps the wrapping model
+untouched — one public key per user, one wrap per member — at the cost of the
+property real multi-device designs have, where losing one device does not mean
+handing over the whole account. See "Known limits".
 
 ### Wire format
 
@@ -128,6 +186,9 @@ decide who may publish it:
   so a member cannot overwrite a channel's key with one of their own.
 - Existing entries are never overwritten.
 - Recipients must be members of the channel's server.
+- An identity backup is readable and writable only by its owner, and only in
+  the shape the DTO allows — including a PBKDF2 iteration floor, the one number
+  in the blob that decides what stealing the table is worth.
 
 ## Voice channels
 
@@ -138,9 +199,15 @@ runtime cannot do insertable streams.
 
 ## Known limits
 
-1. **One device per user.** A second device generates a new identity and cannot
-   read history sealed for the first. Multi-device needs a per-device key list
-   and wrapping per device.
+1. **One identity per user, copied to each machine.** Signing in elsewhere
+   restores the same key pair rather than enrolling a second device, so the
+   directory stays one public key per user and a sender wraps once per member.
+   The costs are the ones that model has: there is no per-device revocation (a
+   machine that had the account had the account key), the account password is
+   as strong as the backup is, and a device cannot be un-enrolled without
+   rotating the identity and re-sealing every channel key — which nothing does
+   yet. Per-device identities with a wrap per device is the upgrade, and it is
+   a bigger one than it looks: every `channel_keys` row becomes per device.
 2. **No key rotation on member removal.** The epoch mechanism exists and the
    server enforces its ordering, but nothing mints epoch 2 yet, so a removed
    member who kept the key can still read future messages they can fetch.
@@ -189,6 +256,45 @@ runtime cannot do insertable streams.
     through the gateway without the gateway learning it, which is a phase of its
     own. Until then: a remote session trusts the deployment's SFU, and that is
     worth knowing before pointing one at a machine you care about.
+
+## Porting this to a web or Android client
+
+Nothing here is Electron-shaped. Every algorithm is one a browser's WebCrypto
+and Android's `javax.crypto` / Tink both have, and every blob crosses the wire
+as base64 in JSON, so a second client is an implementation of this page rather
+than a change to the server.
+
+| Step | Primitive | Parameters |
+| --- | --- | --- |
+| Identity | ECDH P-256, exported as JWK JSON | `{ publicKey, privateKey }`, both JWK strings |
+| Backup key | PBKDF2-HMAC-SHA256 | 600 000 iterations, 16-byte random salt, 256-bit output |
+| Backup seal | AES-256-GCM | 12-byte random IV, plaintext is the JSON above |
+| Channel-key wrap | ECDH → HKDF-SHA256 → AES-256-GCM | 32 zero bytes of salt, `info` = `nexora/e2ee/v1/channel-key-wrap` |
+| Message / file seal | AES-256-GCM | 12-byte random IV, key is the channel key for that epoch |
+
+The server contract is six routes, all of them couriers:
+
+```
+POST /api/v1/e2ee/devices        publish this account's public key
+GET  /api/v1/e2ee/devices?channelId=   member public keys for a channel
+GET  /api/v1/e2ee/keys/:channelId      wrapped keys addressed to the caller
+POST /api/v1/e2ee/keys                 publish wrapped keys for others
+GET  /api/v1/e2ee/backup               the caller's sealed identity, or null
+PUT  /api/v1/e2ee/backup               replace it
+```
+
+Two things a new client must get right, because the server cannot check either:
+the sign-in rules under "Identity backup" above (a failed fetch is not "no
+backup"), and the NUL-prefixed `nexora-body:1` marker for messages that carry
+attachments. Everything else is shape the DTOs already enforce.
+
+Private-key storage is the one platform-specific part: the Electron client
+seals it with `safeStorage` (the OS keychain). The equivalents are the Android
+Keystore, and — for a web client, which has no keychain — IndexedDB holding a
+non-extractable `CryptoKey`, with the understanding that anything with script
+access to the origin has the key. A web client that would rather not persist it
+at all can hold the identity in memory and re-open the backup on each load,
+which is exactly what the backup makes possible.
 
 ## Not covered
 

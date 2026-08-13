@@ -679,7 +679,15 @@ Phase 12 opened these, and left them open on purpose:
 Follow-ups this phase deliberately left open:
 
 - [ ] Rotate the channel key (epoch + 1) when a member is removed
-- [ ] Multi-device support: key list per user instead of one device key
+- [x] Account portability: the identity key is sealed with PBKDF2 over the
+      account password (or a recovery passphrase) and stored in
+      `identity_backups`, so a reinstall or a second machine restores the same
+      key instead of minting one that cannot read anything
+- [ ] Multi-device proper: a key list per user, one wrap per device, so a
+      device can be revoked without rotating the account identity. What exists
+      today copies one identity to every machine
+- [ ] Let a user rotate their identity (and re-seal current channel keys for
+      the new one) after a device is lost
 - [ ] Identity verification UI (safety numbers) so a lying server is detectable
 - [ ] Encrypt attachments with the channel key too
 - [x] Screen-share source picker instead of always taking the primary screen:
