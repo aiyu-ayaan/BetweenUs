@@ -72,7 +72,15 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   loginWithProvider: async (provider) => {
     const bridge = window.nexora;
     if (!bridge) {
-      set({ error: 'Provider sign-in needs the desktop app' });
+      // In a tab the page itself is the redirect target: leave for the provider
+      // and come back with `?code=`, which `restore` trades for a session. The
+      // desktop app cannot do this - it has no origin to be sent back to, which
+      // is what its loopback server stands in for.
+      set({ status: 'loading', error: null });
+      const back = `${window.location.origin}${window.location.pathname}`;
+      window.location.assign(
+        `${apiBaseUrl()}/api/v1/auth/oauth/${provider}/start?redirect=${encodeURIComponent(back)}`,
+      );
       return;
     }
 
@@ -108,6 +116,23 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   /** Silent sign-in on launch using the stored refresh token. */
   restore: async () => {
+    // A provider sign-in that went through the browser comes back here, as a
+    // one-time code on the URL. Taken off the address bar either way: a code is
+    // single use, and leaving a spent one in the history is noise at best.
+    const returned = new URLSearchParams(window.location.search).get('code');
+    if (returned) {
+      window.history.replaceState(null, '', window.location.pathname);
+      set({ status: 'loading', error: null });
+      try {
+        const result = await api.oauthExchange(returned);
+        applySession(set, result.accessToken, result.refreshToken, result.user);
+        return;
+      } catch (error) {
+        set({ status: 'idle', error: messageOf(error) });
+        return;
+      }
+    }
+
     if (!localStorage.getItem(STORAGE_KEY)) return;
 
     set({ status: 'loading' });

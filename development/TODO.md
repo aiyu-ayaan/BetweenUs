@@ -5,6 +5,13 @@ the top honest — it is what a new session reads first.
 
 ## Next up
 
+Phase 23 - the web client - has landed in code: `apps/web` builds, typechecks
+and mounts the same UI the Electron renderer does, with the remote-desktop
+section gated behind the preload bridge. Nothing about it has been driven by a
+human, and the image has not been built - there was no Docker daemon on the
+machine it was written on. What it needs first is a browser in front of it: a
+call, a screen share, and asking a desktop client for control of one.
+
 Phase 22 - the microphone: devices, noise suppression, an input-sensitivity
 gate and two encoding modes - has landed in code and in a self-check. It has no
 server side, so there is no smoke test; it needs two humans in a call, and one
@@ -19,6 +26,37 @@ the remote-desktop client side has been driven by a human, and no tunnel has
 been stood up. Phase 16 landed before them and is in the same state, as is the
 client side of 15b. Phases 13 and 14 landed earlier; what is left of them needs
 a human in front of the app, and so does most of phase 12.
+
+### Phase 23 — the web client
+
+- [x] `apps/web`: a Vite bundle that mounts `apps/desktop/src/App` rather than
+      copying it, with its own entry point, Tailwind content globs, dev-server
+      proxy table, Nginx config and `pnpm dev:web` on 5175
+- [x] `services/platform.ts`: one question - is the Electron preload bridge
+      there - and the answer decides what a browser tab is offered
+- [x] No remote-desktop section on the web: no machine list, no agent enrolment,
+      no Remote Access settings. Requesting control of somebody's screen share
+      inside a call is untouched and works from a browser
+- [x] The bundle talks to the origin it was served from; `VITE_API_URL` is now
+      only the fallback for a packaged renderer loading from `file://`
+- [x] Its own image target and compose service, served at `/` by the gateway
+      alongside `/admin`
+- [ ] Build the image and run the container stack - not done, no Docker daemon
+      on the machine this was written on
+- [ ] A human in a browser: log in, send a message, join a voice channel, share
+      a screen (Chromium asks which one), ask a desktop client for control of
+      its share and drive it
+- [ ] Decide whether the shared UI moves to `packages/ui`. Worth a rename only
+      if a third client appears; today it would change nothing else
+- [x] Provider sign-in in a browser: the page redirects to the provider and
+      comes back with the one-time code, using the `redirect` parameter the
+      auth service already checks against `OAUTH_ALLOWED_REDIRECTS`
+- [x] Notifications in a tab: the Notifications API, permission asked at the
+      first notification worth raising, and the unread count in the title -
+      a tab has no tray and no dock
+- [ ] Web Push, so a *closed* tab is still reachable. The above only works
+      while the app is open; it needs a service worker and a push subscription
+      stored per device in `notification-service`
 
 ### Phase 17 — remote desktop
 

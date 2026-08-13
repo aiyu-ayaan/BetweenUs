@@ -27,12 +27,64 @@ we get there in stages and what each stage delivers.
 | 16 | One address, any server | A single URL for a whole deployment, resolved at runtime, changeable from the login screen | In progress |
 | 17 | Remote desktop | remote-gateway, the agent inside the desktop app, per-machine permissions, audit log | In progress |
 | 18 | Production ingress | Cloudflare Tunnel (host or container), gateway healthcheck, image pipeline | In progress |
+| 23 | Web client | `apps/web`: the same UI in a browser at the root of the gateway, without the remote-desktop section | In progress |
 
 Hardening moved to phase 10: encryption changes the message format and presence
 adds a service, so both were cheaper to land before tests were written against
 the older shape.
 
 ## Architecture decisions made so far
+
+### The web client (phase 23)
+
+- **One UI, two runtimes — not two codebases.** `apps/web` is a Vite bundle
+  whose entry point mounts `apps/desktop/src/App`. There is no copy of the chat
+  view, the voice panel or the settings screens: a change lands in the Electron
+  app and in the browser at the same commit, which is the only arrangement that
+  stays true after six months. The desktop tree keeps the shared UI because it
+  was there first; moving it to `packages/ui` would be a rename with no other
+  effect, and is worth doing only if a third client appears.
+- **What a browser does not get is decided at runtime, not by a build flag.**
+  The app asks whether the Electron preload bridge is there
+  (`services/platform.ts`). That is the honest question: every part the web
+  client omits is omitted *because* it needs the bridge — screen capture by
+  source, synthetic mouse and keyboard input, the OS keychain. A `VITE_IS_WEB`
+  flag would encode the same fact one step further from the reason, and would
+  be wrong the first time somebody built the web bundle for Electron.
+- **The remote-desktop section is absent from the web client.** No machine
+  list, no agent, no Remote Access settings. A browser tab cannot be enrolled
+  as a machine — nothing in it can move the host's mouse — so offering the
+  section would be offering a door that opens onto nothing.
+- **Asking for control of a screen share inside a call still works in the
+  browser.** It is the opposite direction: the controller only publishes input
+  events over the LiveKit data channel, and the machine being driven is the one
+  that needs the bridge to apply them. A web client can therefore drive a
+  desktop machine's shared screen, and a web client sharing its own screen
+  refuses control with "control is not supported on that machine", which was
+  already the answer for macOS and Linux.
+- **Served at the root of the gateway, as its own container.** `/` is the app,
+  `/admin` is the panel, `/api` and `/ws` are the services. Nginx matches the
+  longest prefix, so the new root location cannot shadow any of them. The image
+  is another target in the shared Dockerfile and another service in compose:
+  built, deployed and rolled back on its own, like everything else here.
+- **Provider sign-in redirects the page; it does not open a loopback server.**
+  The desktop client starts a temporary server on `127.0.0.1` because a
+  packaged renderer has no origin a provider can return to. A tab has one, and
+  the auth service already accepted a `redirect` parameter checked against
+  `OAUTH_ALLOWED_REDIRECTS` - the admin panel's flow. So the browser leaves for
+  the provider and comes back with the same one-time code the desktop client
+  gets, which `restore` trades for a session before anything renders. A
+  deployment has to list its own origin in `OAUTH_ALLOWED_REDIRECTS`;
+  `localhost` is allowed already, so development needs nothing.
+- **Notifications in a tab use the Notifications API.** Permission is asked at
+  the first notification worth raising rather than at sign-in, because a prompt
+  on the way in is the one people refuse; the unread count goes in the title,
+  which is the only badge a tab owns. This covers an open tab only - a closed
+  one needs a service worker and Web Push, which is in the backlog.
+- **The bundle talks to the origin it was served from.** A page delivered over
+  http(s) was delivered *by* a gateway, so that is the deployment — for the dev
+  server's proxy as much as for the real Nginx. `VITE_API_URL` is now only what
+  a packaged renderer falls back to, because `file://` has no origin to read.
 
 ### Remote desktop (phase 17)
 
@@ -618,6 +670,12 @@ the desktop renderer on 5173, which then collides with `pnpm dev:duo` - that
 starts its own Vite, because it drives two Electron profiles against it.
 
 Desktop app: `pnpm --filter @nexora/desktop dev`.
+
+Web client: `pnpm dev:web`, on <http://localhost:5175>. Its dev server proxies
+the same routes the desktop one does, minus `/api/v1/remote` and `/ws/remote` -
+the browser build has no remote-desktop section to call them from. In a
+container deployment it is served at `/` by the gateway, so the whole
+deployment is one address: the app at the root, the panel at `/admin`.
 
 Two signed-in windows for testing chat, voice and presence: `pnpm dev:duo`
 alongside `pnpm dev:backend` — see `TESTING.md`.

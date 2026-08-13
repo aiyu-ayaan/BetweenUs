@@ -121,7 +121,7 @@ export function notifyMessage(message: MessageNotification): void {
 
   // Whether the window is really focused is the main process's answer, not
   // this one's - so `active` is passed along rather than resolved here.
-  window.nexora?.notify(
+  raise(
     `${message.author} in #${message.channelName}`,
     message.text ?? 'Sent an encrypted message',
     message.channelId,
@@ -132,15 +132,64 @@ export function notifyMessage(message: MessageNotification): void {
 /** Someone joined a voice channel this user is not in - the "call" case. */
 export function notifyVoiceJoin(channelId: string, channelName: string, who: string): void {
   if (silenced(channelId)) return;
-  window.nexora?.notify(`${who} joined ${channelName}`, 'Voice channel', channelId);
+  raise(`${who} joined ${channelName}`, 'Voice channel', channelId);
+}
+
+/** Handlers waiting on a click, in the web client. Electron keeps its own. */
+const clickHandlers = new Set<(channelId: string) => void>();
+
+/**
+ * One notification, however this runtime raises one.
+ *
+ * Electron's main process owns it: only that side knows whether the window is
+ * really focused, and only that side can flash a taskbar entry. A browser tab
+ * has the Notifications API and nothing else - so it has to answer the focus
+ * question itself, which it can, because a visible tab showing the channel the
+ * message arrived in is exactly the case not worth interrupting.
+ */
+function raise(title: string, body: string, channelId?: string, active = false): void {
+  const bridge = window.nexora;
+  if (bridge) {
+    bridge.notify(title, body, channelId, active);
+    return;
+  }
+
+  if (typeof Notification === 'undefined') return;
+  if (active && document.visibilityState === 'visible') return;
+
+  // Asked for at the first notification worth raising rather than at sign-in:
+  // a permission prompt on the way into the app is the one people refuse.
+  if (Notification.permission === 'default') {
+    void Notification.requestPermission();
+    return;
+  }
+  if (Notification.permission !== 'granted') return;
+
+  // `tag` collapses a run of messages in one channel into a single toast,
+  // which is what the main process does with its own notifications.
+  const note = new Notification(title, { body, tag: channelId });
+  note.onclick = () => {
+    window.focus();
+    if (channelId) for (const handler of clickHandlers) handler(channelId);
+    note.close();
+  };
 }
 
 /** Runs `handler` when the user clicks a notification. */
 export function onNotificationActivate(handler: (channelId: string) => void): () => void {
-  return window.nexora?.onNotificationActivate(handler) ?? ((): void => undefined);
+  const unsubscribe = window.nexora?.onNotificationActivate(handler);
+  if (unsubscribe) return unsubscribe;
+  clickHandlers.add(handler);
+  return () => clickHandlers.delete(handler);
 }
 
 /** Total unread, for the tray tooltip and the dock badge. */
 export function publishUnreadCount(count: number): void {
-  window.nexora?.setUnreadCount(count);
+  const bridge = window.nexora;
+  if (bridge) {
+    bridge.setUnreadCount(count);
+    return;
+  }
+  // A tab has no tray and no dock; the title is the only badge it owns.
+  document.title = count > 0 ? `(${count}) Nexora` : 'Nexora';
 }

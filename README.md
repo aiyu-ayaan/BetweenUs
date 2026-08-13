@@ -266,7 +266,7 @@ pnpm prod:up                      # starts the full production container stack
 
 Default ports: gateway `8080`, auth `3001`, server `3003`, chat `3004`,
 presence `3005`, notification `3006`, call `3007`, LiveKit `7880`, renderer
-`5173`, admin panel `5174`.
+`5173`, admin panel `5174`, web client `5175`.
 
 ## Production app builds & packaging
 
@@ -291,9 +291,30 @@ default, with both switches in Settings → Notifications.
 ```
 pnpm dev:desktop     one client against a running backend
 pnpm dev:duo         two windows, two profiles, two encryption identities
+pnpm dev:web         the browser client on 5175
 pnpm dev:admin       the admin panel on 5174
 pnpm admin:create    bootstrap the first administrator (password printed once)
 ```
+
+## Web client
+
+The same app in a browser: `apps/web` is a bundle that mounts the UI out of
+`apps/desktop/src` rather than copying it, so chat, calls, screen share and
+settings are the same code in both clients. It is served at the root of the
+gateway, which makes a deployment one address for everything - the app at `/`,
+the admin panel at `/admin`, the services under `/api`.
+
+What a tab does not get is the **remote-desktop section**: no machine list, no
+agent, no Remote Access settings. Screen capture by source, synthetic mouse and
+keyboard input and the OS keychain all live behind the Electron preload bridge,
+and a browser has none of it - so the app looks for that bridge and offers the
+section only where it can work.
+
+Requesting control of somebody's **screen share inside a call** does work from
+a browser: the controller only sends input events over the data channel, and it
+is the machine being driven that needs the bridge. Sharing your screen from a
+tab and handing control the other way is refused, which was already the answer
+on macOS and Linux.
 
 ### One address, and how to change it
 
@@ -410,6 +431,7 @@ a sealed ticket rather than held as state in a service.
 ```
 apps/
   desktop/                Electron + React + Tailwind + Zustand client
+  web/                    The same UI in a browser, served at / (no remote desktop)
   admin/                  Admin panel (React, served under /admin)
   services/
     api-gateway/          Nginx configuration

@@ -566,6 +566,49 @@ Worth walking through:
 Lost the password: `pnpm admin:create --reset` issues a new one and revokes the
 sessions the old one left behind.
 
+## The web client
+
+```bash
+pnpm dev:backend         # leave running
+pnpm dev:web             # http://localhost:5175
+```
+
+The browser is a *third* client, so it pairs with `pnpm dev:duo` rather than
+replacing it: sign in as Bob in the tab and drive Alice from the Electron
+window. It runs the same UI, so everything in "What to try" above applies; what
+is worth checking is only where the two runtimes differ.
+
+- **No remote-desktop section.** No "Remote machines" in the home sidebar, and
+  no "Remote Access" in Settings. The desktop app still has both, and the tab
+  never enrols itself as a machine — nothing appears in another client's
+  machine list because a browser was left open.
+- **Screen share works, without the source picker.** The dialog still asks
+  detail-or-motion, then Chromium asks which screen or window; the grid says
+  "Your browser will ask" instead of listing sources. System audio is offered
+  by the browser's own chooser, not by the checkbox, which stays disabled.
+- **Asking for control of a share works from the tab.** Share a screen from the
+  Electron window, then "Request control" in the browser: the desktop side
+  prompts, and after it grants, the mouse and keyboard in the tab drive that
+  machine. The reverse is refused on purpose — share from the tab and the
+  desktop client is told "control is not supported on that machine", because
+  nothing in a browser can move the host's mouse.
+- **Notifications.** The first message that arrives while the tab is in the
+  background asks for permission and raises nothing; allow it and the next one
+  appears, and clicking it focuses the tab on that channel. The unread count
+  shows up in the tab title, which is the only badge a tab has.
+- **Provider sign-in.** With Google or GitHub configured in the admin panel,
+  the button leaves the page for the provider and comes back signed in - no
+  loopback server, unlike the desktop app. On a deployment this needs the
+  origin in `OAUTH_ALLOWED_REDIRECTS`; `localhost:5175` is allowed already, so
+  development needs nothing. A refused redirect answers `BAD_REDIRECT`.
+- **It talks to the origin it was served from.** No `VITE_API_URL` is involved:
+  the dev server proxies to the services, and a deployed bundle reaches the
+  gateway that served it. The login screen's server picker still points it
+  elsewhere, subject to that deployment's CORS.
+
+Behind the gateway the app is at `/` and the panel at `/admin`, so a container
+deployment is one address for everything — see below.
+
 ## Testing the container stack
 
 ```bash

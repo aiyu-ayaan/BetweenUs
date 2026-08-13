@@ -130,8 +130,8 @@ node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
 | `JWT_REFRESH_SECRET` | generated | Signs refresh tokens. Must differ from `JWT_SECRET` |
 | `SETTINGS_SECRET` | generated | Seals OAuth client secrets at rest. Falls back to `JWT_SECRET` when empty; changing either makes stored client secrets unreadable and they must be re-entered |
 | `PUBLIC_API_URL` | `https://nexora.example.com` | The OAuth callback URL is built from it, and it must match what Google and GitHub have registered |
-| `OAUTH_ALLOWED_REDIRECTS` | `https://nexora.example.com/admin` | Extra origins a finished OAuth sign-in may return to. Loopback (the desktop client) is always allowed |
-| `CORS_ORIGIN` | `https://nexora.example.com` | Compose defaults it to `*`. The admin panel is same-origin, so it needs nothing; set this when browsers other than the panel will call the API |
+| `OAUTH_ALLOWED_REDIRECTS` | `https://nexora.example.com` | Extra origins a finished OAuth sign-in may return to. Loopback (the desktop client) is always allowed; **the web client needs the deployment's own origin here**, or provider sign-in in a browser is refused with `BAD_REDIRECT` |
+| `CORS_ORIGIN` | `https://nexora.example.com` | Compose defaults it to `*`. The web client and the admin panel are both same-origin, so neither needs it; set this when browsers on *other* origins will call the API |
 | `LIVEKIT_API_KEY` / `LIVEKIT_API_SECRET` | generated pair | Mints call tokens. The development pair is public knowledge |
 | `LIVEKIT_URL` | `/livekit` | What clients are told to dial. The path keeps the whole deployment on one hostname; an absolute `wss://` URL splits the SFU onto its own name |
 | `GATEWAY_PORT` | `127.0.0.1:8080` with a host tunnel | Keeps the gateway off the LAN while a host-run `cloudflared` still reaches it |
@@ -218,7 +218,8 @@ What happens, in order:
    CLI. Nothing about it is auth-specific.
 3. **Every service** waits for `migrate` to complete successfully, so no service
    ever serves traffic against an unmigrated schema.
-4. **`admin-web`** builds the panel bundle and serves it under `/admin`.
+4. **`web`** and **`admin-web`** each serve a static bundle: the app itself at
+   `/`, and the panel under `/admin`.
 5. **`nginx`** starts last and becomes healthy once `/health` answers.
 6. **`cloudflared`** starts only with `--profile public`, and only after Nginx is
    *healthy* rather than merely present.
@@ -423,6 +424,7 @@ any one of them looks like a bug in the app rather than a hole in ingress.
 | `/api/v1/auth/` | auth-service | Register, login, refresh-token rotation | Nobody can sign in, and signed-in clients die when the access token expires |
 | `/api/v1/admin` | auth-service | Admin API, plus the unauthenticated `status` bootstrap check | The panel cannot load or tell you to bootstrap |
 | `/admin` | admin-web | The panel's static bundle | No panel |
+| `/` | web | The web client's static bundle - everything not claimed by a route above is one of its pages | No browser client; the desktop app is unaffected |
 | `/api/v1/servers`, `/api/v1/channels` | server-service | Servers, members, roles, overrides, channels, invites | The client signs in to an empty shell |
 | `/api/v1/messages` | chat-service | History paging and sending | Reads and sends fail; the socket alone cannot backfill |
 | `/api/v1/friends`, `/api/v1/users`, `/api/v1/dm` | chat-service | User search, friendships, direct-message channels (user-service is still a scaffold) | No DMs, no friend list, no user search |
@@ -504,8 +506,11 @@ connecting elsewhere signs the window out and reloads. A build can therefore
 ship pointed at one deployment without being locked to it, which is what lets
 you distribute a client without rebuilding per server.
 
-The admin panel reads its own `VITE_API_URL` at build time too, but it is served
-from the deployment it administers, so same-origin is all it has ever needed.
+`VITE_API_URL` is only what a *packaged* client falls back to: a renderer
+loading from `file://` has no origin to read. Anything served over http(s) -
+the web client, the admin panel, either dev server - was served by a gateway
+and talks to that origin, so neither of the browser bundles needs the variable
+set at all.
 
 ---
 
@@ -706,8 +711,9 @@ cleared by `docker builder prune`.
 Things that make a rebuild slow again:
 
 - **Editing a `package.json` or the lockfile** re-runs the install. Expected.
-- **A large build context.** `.dockerignore` keeps `node_modules`, `apps/desktop`,
-  `.git` and the docs out. Anything big you add at the repo root should go in it
+- **A large build context.** `.dockerignore` keeps `node_modules`, most of
+  `apps/desktop` - its UI source is re-included, because the web client mounts
+  it - `.git` and the docs out. Anything big you add at the repo root should go in it
   too, or it is uploaded to the daemon on every single build.
 - **`docker builder prune` / a Docker Desktop reset**, which discards the cache
   mounts and the layer cache alike. The first build after that is a cold one.
