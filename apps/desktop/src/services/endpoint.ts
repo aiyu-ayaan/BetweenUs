@@ -55,16 +55,18 @@ export function toWebSocketUrl(base: string): string {
 /**
  * Where this build points when nobody has chosen otherwise.
  *
- * In development the Vite dev server *is* the gateway: it proxies /api and /ws
- * straight to the services (see vite.config.ts), so its own origin is the
- * answer and `VITE_API_URL` is deliberately ignored. That variable is the
- * default a *packaged* build ships with, and honouring it under `pnpm dev`
- * only ever pointed the app at an Nginx container that development does not
- * run. Pointing a dev window at a real deployment is what the login screen's
- * server picker is for.
+ * Anything loaded over http(s) was served *by* a gateway, so that origin is the
+ * answer: under `pnpm dev` the Vite dev server proxies /api and /ws straight to
+ * the services (see vite.config.ts), and the web client in `apps/web` is a
+ * static bundle behind the real Nginx. Both would be wrong to send elsewhere.
+ *
+ * Only a packaged renderer, which loads from `file://`, has no origin to go on -
+ * and `VITE_API_URL` is the default it ships with. Pointing any window at a
+ * different deployment is what the login screen's server picker is for.
  */
 export function defaultServerUrl(): string {
-  if (import.meta.env?.DEV && typeof window !== 'undefined') return window.location.origin;
+  const origin = typeof window === 'undefined' ? '' : window.location.origin;
+  if (/^https?:/i.test(origin)) return origin;
   const configured = import.meta.env?.VITE_API_URL?.trim();
   if (configured) return trimTrailingSlash(configured);
   return 'http://localhost:8080';

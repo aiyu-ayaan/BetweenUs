@@ -9,11 +9,16 @@
  */
 import { useEffect, useState } from 'react';
 import { useVoiceStore } from '../../stores/voice';
+import { isDesktopRuntime } from '../../services/platform';
 import type { ShareIntent } from '../../services/share-quality';
 import { ScreenShareIcon } from '../../components/icons';
 
 export function ScreenSharePicker({ onClose }: { onClose: () => void }): JSX.Element {
   const shareScreen = useVoiceStore((state) => state.shareScreen);
+
+  // A browser has no source list to show: Chromium puts its own chooser up when
+  // capture starts, so this dialog is only here to ask what is being shared.
+  const native = isDesktopRuntime();
 
   const [sources, setSources] = useState<ScreenSource[] | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
@@ -75,14 +80,16 @@ export function ScreenSharePicker({ onClose }: { onClose: () => void }): JSX.Ele
         <header className="flex items-center gap-3 border-b border-black/30 px-5 py-4">
           <ScreenShareIcon className="h-5 w-5 text-slate-400" />
           <h2 className="font-semibold text-slate-100">Screen share</h2>
-          <div className="ml-auto flex gap-1 rounded-md bg-surface-900 p-1">
-            <TabButton active={tab === 'screen'} onClick={() => setTab('screen')}>
-              Screens
-            </TabButton>
-            <TabButton active={tab === 'window'} onClick={() => setTab('window')}>
-              Applications
-            </TabButton>
-          </div>
+          {native && (
+            <div className="ml-auto flex gap-1 rounded-md bg-surface-900 p-1">
+              <TabButton active={tab === 'screen'} onClick={() => setTab('screen')}>
+                Screens
+              </TabButton>
+              <TabButton active={tab === 'window'} onClick={() => setTab('window')}>
+                Applications
+              </TabButton>
+            </div>
+          )}
         </header>
 
         <div className="min-h-0 flex-1 overflow-y-auto p-4">
@@ -96,7 +103,11 @@ export function ScreenSharePicker({ onClose }: { onClose: () => void }): JSX.Ele
 
           {sources !== null && shown.length === 0 && (
             <p className="py-10 text-center text-slate-500">
-              {tab === 'screen' ? 'No screens found.' : 'No open windows to share.'}
+              {!native
+                ? 'Your browser will ask which screen or window to share.'
+                : tab === 'screen'
+                  ? 'No screens found.'
+                  : 'No open windows to share.'}
             </p>
           )}
 

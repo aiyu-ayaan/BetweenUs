@@ -1,6 +1,7 @@
 import { useChatStore } from '../../stores/chat';
 import { useFriendsStore } from '../../stores/friends';
 import { usePresenceStore } from '../../stores/presence';
+import { isDesktopRuntime } from '../../services/platform';
 import { UserPanel } from '../settings/UserPanel';
 import { Avatar } from '../../components/Avatar';
 import { MonitorIcon, UsersIcon, XIcon } from '../../components/icons';
@@ -62,20 +63,27 @@ export function HomeSidebar({
         </button>
 
         {/* Machines sit beside people on purpose: reaching your desktop is the
-            same kind of thing as opening a conversation with someone. */}
-        <button
-          type="button"
-          onClick={onShowRemote}
-          aria-current={showingRemote ? 'page' : undefined}
-          className={`mt-0.5 flex w-full cursor-pointer items-center gap-3 rounded px-2 py-2 text-left transition-colors duration-200 ${
-            showingRemote
-              ? 'bg-surface-700 text-slate-50'
-              : 'text-slate-400 hover:bg-surface-700/60 hover:text-slate-200'
-          }`}
-        >
-          <MonitorIcon className="h-5 w-5 shrink-0" />
-          <span className="flex-1 font-medium">Remote machines</span>
-        </button>
+            same kind of thing as opening a conversation with someone.
+
+            Not in a browser tab, though: remote desktop is a desktop-app
+            section end to end - the agent that offers a machine is the Electron
+            main process - so the web client does not advertise a door it cannot
+            open. See services/platform.ts. */}
+        {isDesktopRuntime() && (
+          <button
+            type="button"
+            onClick={onShowRemote}
+            aria-current={showingRemote ? 'page' : undefined}
+            className={`mt-0.5 flex w-full cursor-pointer items-center gap-3 rounded px-2 py-2 text-left transition-colors duration-200 ${
+              showingRemote
+                ? 'bg-surface-700 text-slate-50'
+                : 'text-slate-400 hover:bg-surface-700/60 hover:text-slate-200'
+            }`}
+          >
+            <MonitorIcon className="h-5 w-5 shrink-0" />
+            <span className="flex-1 font-medium">Remote machines</span>
+          </button>
+        )}
 
         <p className="px-2 pb-1 pt-5 text-xs font-bold uppercase tracking-wide text-slate-400">
           Direct messages

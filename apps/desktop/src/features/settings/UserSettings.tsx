@@ -18,6 +18,7 @@ import { serverUrl } from '../../services/endpoint';
 import { backupIdentity, rewrapBackupForPassword } from '../../services/e2ee';
 import { useIdentityStore } from '../../stores/identity';
 import { useAgentStore } from '../../services/remote-agent';
+import { isDesktopRuntime } from '../../services/platform';
 import { ServerPicker } from '../auth/ServerPicker';
 import { Avatar } from '../../components/Avatar';
 import { PicturePicker } from '../../components/PicturePicker';
@@ -33,11 +34,15 @@ import {
 
 type Section = 'account' | 'voice' | 'notifications' | 'remote' | 'appearance';
 
+// Remote Access is about *this machine* offering itself, which a browser tab
+// cannot do - so the web client has no such section. See services/platform.ts.
 const SECTIONS: Array<{ id: Section; label: string; icon: typeof UserIcon }> = [
   { id: 'account', label: 'My Account', icon: UserIcon },
   { id: 'voice', label: 'Voice & Video', icon: MicIcon },
   { id: 'notifications', label: 'Notifications', icon: BellIcon },
-  { id: 'remote', label: 'Remote Access', icon: MonitorIcon },
+  ...(isDesktopRuntime()
+    ? [{ id: 'remote' as const, label: 'Remote Access', icon: MonitorIcon }]
+    : []),
   { id: 'appearance', label: 'Appearance', icon: PaletteIcon },
 ];
 

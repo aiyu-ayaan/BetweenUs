@@ -5,7 +5,23 @@
  * exercised here: everything else in endpoint.ts is localStorage and fetch.
  */
 import assert from 'node:assert/strict';
-import { baseFromProbeUrl, normalizeServerUrl, toWebSocketUrl } from './endpoint';
+import { baseFromProbeUrl, defaultServerUrl, normalizeServerUrl, toWebSocketUrl } from './endpoint';
+
+// Served over http(s) - a dev server, or the web client behind Nginx - means the
+// origin is the gateway. A packaged renderer loads from file:// and falls back
+// to what the build shipped with.
+const asWindow = (href: string): void => {
+  (globalThis as { window?: unknown }).window = { location: { origin: new URL(href).origin } };
+};
+asWindow('https://nexora.example.com/');
+assert.equal(defaultServerUrl(), 'https://nexora.example.com');
+asWindow('http://localhost:5173/');
+assert.equal(defaultServerUrl(), 'http://localhost:5173');
+(globalThis as { window?: unknown }).window = { location: { origin: 'null' } };
+assert.equal(defaultServerUrl(), 'http://localhost:8080');
+delete (globalThis as { window?: unknown }).window;
+assert.equal(defaultServerUrl(), 'http://localhost:8080');
+
 
 // What a person types, and what it has to become.
 assert.equal(normalizeServerUrl('nexora.example.com'), 'https://nexora.example.com');

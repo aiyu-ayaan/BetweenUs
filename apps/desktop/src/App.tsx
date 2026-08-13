@@ -9,6 +9,7 @@ import {
   resetNotificationPreferences,
 } from './services/notifications';
 import { stopAgent, useAgentStore } from './services/remote-agent';
+import { isDesktopRuntime } from './services/platform';
 import { useRemoteStore } from './stores/remote';
 import { LoginScreen } from './features/auth/LoginScreen';
 import { IdentityUnlock } from './features/auth/IdentityUnlock';
@@ -97,9 +98,10 @@ export default function App(): JSX.Element {
       void loadDirects();
       void loadFriends();
       // The agent only offers this machine while somebody is signed in on it:
-      // enrolment belongs to an account, and so does the audit trail.
+      // enrolment belongs to an account, and so does the audit trail. A browser
+      // tab is not a machine anyone can be given control of, so it never enrols.
       const userId = useAuthStore.getState().user?.id;
-      if (userId) void useAgentStore.getState().restore(userId);
+      if (userId && isDesktopRuntime()) void useAgentStore.getState().restore(userId);
       // Preferences before unread: the badge is harmless either way, but a
       // notification raised in the half-second between them would ignore a mute.
       void loadNotificationPreferences().then(() => loadUnread());
