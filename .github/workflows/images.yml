@@ -56,15 +56,19 @@ jobs:
 
       - uses: docker/build-push-action@v6
         with:
-          # Every service Dockerfile builds from the repo root: it needs the
-          # workspace, the lockfile and packages/, not just its own directory.
+          # One Dockerfile builds every image from the repo root: it needs the
+          # workspace, the lockfile and packages/, not just one directory.
           context: .
-          file: apps/services/${{ matrix.service }}/Dockerfile
+          file: infrastructure/docker/Dockerfile
+          target: ${{ matrix.service }}
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha,scope=${{ matrix.service }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.service }}
+          # One scope for every image, not one per service: they share the
+          # install and compile stages, so a per-service scope would cache the
+          # same layers seven times and hit none of them.
+          cache-from: type=gha,scope=nexora
+          cache-to: type=gha,mode=max,scope=nexora
 
   # The admin panel is a static bundle, built the same way and deployed beside
   # the services behind the same gateway.
@@ -92,7 +96,10 @@ jobs:
       - uses: docker/build-push-action@v6
         with:
           context: .
-          file: apps/admin/Dockerfile
+          file: infrastructure/docker/Dockerfile
+          target: admin-web
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=nexora
+          cache-to: type=gha,mode=max,scope=nexora

@@ -28,6 +28,7 @@ it states the gaps a deployment still has rather than implying there are none.
 14. [Verifying the deployment](#14-verifying-the-deployment)
 15. [Day two - backups, upgrades, logs](#15-day-two---backups-upgrades-logs)
 16. [Known gaps](#16-known-gaps)
+17. [How the images are built, and why rebuilds are quick](#17-how-the-images-are-built-and-why-rebuilds-are-quick)
 
 ---
 
@@ -93,7 +94,9 @@ they are not, chat, files, presence and remote *authorisation* all work while
 voice, video, screen share and remote desktop do not.
 
 **Building on the host or pulling images.** `docker compose ... up -d --build`
-builds every image on the box, which needs a few GB of RAM and several minutes.
+builds every image on the box, which needs a few GB of RAM. All nine images come
+from one multi-stage `infrastructure/docker/Dockerfile` - see §17 for what that
+buys and how to keep rebuilds short.
 `.github/workflows/images.yml` builds and pushes one image per service to GHCR
 on a `v*` tag, so a deployment can pin something built once - but nothing in
 this repository deploys those images for you yet.
@@ -668,3 +671,49 @@ than useless. All of these are tracked in `development/TODO.md`.
   deployment's; a client too old finds out through a failing request.
 - **Remote input injection is Windows-only.** Elsewhere a session can watch but
   not touch.
+
+---
+
+## 17. How the images are built, and why rebuilds are quick
+
+Every image - the seven Node services, the `migrate` one-shot that reuses the
+auth-service image, and the static admin panel - is a target in a single
+`infrastructure/docker/Dockerfile`:
+
+```bash
+docker build -f infrastructure/docker/Dockerfile --target chat-service .
+```
+
+The build context is always the repo root, because a service needs the
+workspace, the lockfile and `packages/`, not just its own directory.
+
+The file is one Dockerfile rather than nine because the stages are shared:
+
+- **`deps`** copies only `package.json` files, the lockfile and the Prisma
+  schema, then runs `pnpm install`. Editing TypeScript does not invalidate it,
+  so the slowest step in the build usually does not run at all.
+- **`build`** copies the source and runs `pnpm build` once for the whole
+  workspace. Nine per-service builds each recompiled the same shared packages.
+- The seven service images are the same runtime stage with a different working
+  directory, so the large `COPY --from=build` produces one layer that all of
+  them reference instead of nine near-identical ones.
+
+Two BuildKit cache mounts carry state between builds: the pnpm store, so a
+lockfile change re-links rather than re-downloads, and the Turborepo cache, so
+only the packages you actually touched recompile. They are per-machine and are
+cleared by `docker builder prune`.
+
+Things that make a rebuild slow again:
+
+- **Editing a `package.json` or the lockfile** re-runs the install. Expected.
+- **A large build context.** `.dockerignore` keeps `node_modules`, `apps/desktop`,
+  `.git` and the docs out. Anything big you add at the repo root should go in it
+  too, or it is uploaded to the daemon on every single build.
+- **`docker builder prune` / a Docker Desktop reset**, which discards the cache
+  mounts and the layer cache alike. The first build after that is a cold one.
+
+The `# syntax=docker/dockerfile:1.7-labs` line at the top of the Dockerfile is
+required: it pulls the BuildKit frontend providing `COPY --parents`, which is
+what lets the dependency stage take the workspace manifests without the source
+behind them. BuildKit fetches it once and caches it, but the first build on a
+machine with no network access to Docker Hub will fail on that line.

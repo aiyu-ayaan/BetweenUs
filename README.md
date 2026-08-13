@@ -141,8 +141,10 @@ Two paths deliberately skip this stack:
 
 ### Services
 
-Each service is its own package with its own `package.json`, `Dockerfile` and
-`GET /health`, and can be deployed on its own.
+Each service is its own package with its own `package.json` and `GET /health`,
+and can be deployed on its own. The images are all built from one multi-stage
+`infrastructure/docker/Dockerfile`, one target per service, so the workspace is
+installed and compiled once rather than once per image.
 
 | Service | Port | Owns |
 | --- | --- | --- |
