@@ -641,9 +641,27 @@ NEXORA_LIVEKIT_BIND=0.0.0.0          # so the TCP fallback candidate is reachabl
 
 then `pnpm dev:infra` — the SFU keeps the flags it was started with, so it has
 to be recreated. `docker logs nexora-dev-livekit` shows the advertised `nodeIP`
-on its first line. UDP 50000-50019 is published on every interface already;
-that is the path media actually takes, and Windows Firewall has to allow it
-inbound along with the dev server's port.
+on its first line. Windows Firewall has to allow UDP 50000-50019 inbound along
+with the dev server's port.
+
+**Check the address is reachable before setting it.** Under WSL2's default NAT
+networking — docker running *inside* WSL rather than Docker Desktop — a
+published port is bound on the WSL VM and Windows forwards only `localhost` to
+it. `docker port` will say `0.0.0.0:7880` and
+`Test-NetConnection <host LAN IP> -Port 7880` will still be `False`. Pointing
+`NEXORA_LIVEKIT_NODE_IP` at an address in that state makes things worse rather
+than better: the candidate is unreachable from the second machine *and* from
+this one, so a call that used to work locally starts timing out too. Either
+switch WSL to mirrored networking:
+
+```ini
+; %USERPROFILE%\.wslconfig, then `wsl --shutdown`
+[wsl2]
+networkingMode=mirrored
+```
+
+or run the stack under Docker Desktop, which publishes onto the Windows host
+itself. Verify with `Test-NetConnection`, *then* set the variable.
 
 None of this applies to a real deployment: it is behind the gateway, over TLS,
 on one hostname.
@@ -692,7 +710,8 @@ A published track logs `"encryption":1` — that is the end-to-end encrypted pat
 | `required variable LIVEKIT_API_KEY is missing a value` from `docker compose` | Same cause seen from the other side: the compose file was read without the root `.env`. It is deliberately not defaulted - a default is what silently drifts from the secret the SFU was created with |
 | Everything answers "Request failed", including sign-in | No services are up. `pnpm dev` tears down all ten persistent tasks when any one of them exits non-zero, so a single port clash reads as a dead backend. `curl 127.0.0.1:3001/health` first, and check the last lines of the `pnpm dev` output for which task failed |
 | From another machine: `Cannot read properties of undefined (reading 'generateKey')`, or no mic/camera/screen at all | The origin is plain http and is not localhost, so the browser withholds `crypto.subtle` and `navigator.mediaDevices`. Use `pnpm dev:web:lan`, which serves the same app over TLS, and accept the self-signed certificate once |
-| From another machine: everything works except the call connects and then has no media | The SFU is still advertising `127.0.0.1`. Set `NEXORA_LIVEKIT_NODE_IP` to this host's LAN address and recreate it with `pnpm dev:infra` |
+| From another machine: everything works except the call connects and then has no media | The SFU is still advertising `127.0.0.1`. Set `NEXORA_LIVEKIT_NODE_IP` to this host's LAN address and recreate it with `pnpm dev:infra` — but confirm that address answers on 7880 first, see the section above |
+| Calls stopped working *locally* after setting `NEXORA_LIVEKIT_NODE_IP` | That address is not reachable, so now nobody can reach the SFU rather than just the second machine. Under WSL2 NAT the host's LAN IP never answers a port published inside WSL. Unset it, `pnpm dev:infra`, and `docker logs nexora-dev-livekit` should say `"nodeIP":"127.0.0.1"` again |
 | No online dots or typing indicators | presence-service is down; `curl 127.0.0.1:3005/health` |
 | "microphone did not start (negotiation timed out)", and the mic/camera/screen buttons then fail too | The LiveKit container is older than `livekit-client` expects, so it never acknowledges a publisher offer. `docker compose -f infrastructure/docker/docker-compose.dev.yml up -d livekit` to pull the pinned v1.13.5 |
 | Voice churns: join, leave, join again | Editing desktop source while connected. A hot reload disconnects the room on purpose; rejoin after the reload |
