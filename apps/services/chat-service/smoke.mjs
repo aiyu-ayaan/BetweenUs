@@ -138,6 +138,45 @@ const devices = await json(`${CHAT}/api/v1/e2ee/devices?channelId=${channel.id}`
 });
 ok('device directory', devices.some((device) => device.userId === me.id));
 
+// Identity backup: absent for a fresh account, stored and returned once
+// uploaded, and refused when the KDF is weaker than the floor.
+const noBackup = await json(`${CHAT}/api/v1/e2ee/backup`, { headers: authed });
+ok('no backup yet', noBackup.backup === null);
+
+const backup = {
+  v: 1,
+  kind: 'password',
+  kdf: 'PBKDF2-SHA256',
+  iterations: 600000,
+  salt: 'c21va2Utc2FsdC0xNmJ5dGVz',
+  iv: 'c21va2UtaXY=',
+  ct: 'c21va2Utc2VhbGVkLWlkZW50aXR5',
+  publicKey: devicePublicKey,
+};
+await json(`${CHAT}/api/v1/e2ee/backup`, {
+  method: 'PUT',
+  headers: authed,
+  body: JSON.stringify(backup),
+});
+
+const storedBackup = await json(`${CHAT}/api/v1/e2ee/backup`, { headers: authed });
+ok(
+  'backup round-trip',
+  storedBackup.backup?.ct === backup.ct && storedBackup.backup?.kind === 'password',
+);
+
+let weakKdfRejected = false;
+try {
+  await json(`${CHAT}/api/v1/e2ee/backup`, {
+    method: 'PUT',
+    headers: authed,
+    body: JSON.stringify({ ...backup, iterations: 1000 }),
+  });
+} catch {
+  weakKdfRejected = true;
+}
+ok('weak KDF refused', weakKdfRejected);
+
 const empty = await json(`${CHAT}/api/v1/e2ee/keys/${channel.id}`, { headers: authed });
 ok('unkeyed channel', empty.epoch === 0 && empty.keys.length === 0);
 
