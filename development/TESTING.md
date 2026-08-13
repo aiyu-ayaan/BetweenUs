@@ -533,7 +533,8 @@ behind the login screen's server picker, the letterbox arithmetic that puts a
 named cursor and a click in the right place on a shared screen, the screen-
 share encoder profiles and their bitrate ceilings, the microphone profiles and
 the noise gate (including compiling the worklet that gate's own source is
-spliced into), and
+spliced into), the addresses call-service will try when asking the SFU whether
+it accepts this deployment's signing key, and
 `AuthService` against an in-memory database (register, login, refresh
 rotation, reuse detection, logout).
 
@@ -644,7 +645,9 @@ A published track logs `"encryption":1` — that is the end-to-end encrypted pat
 | Join fails with "Failed to fetch" | `LIVEKIT_URL` points at `localhost`; use `127.0.0.1`, because Chromium tries `::1` first and the container publishes IPv4 only |
 | Join fails against a deployment behind Nginx | `LIVEKIT_URL` should be `/livekit` there, not a host - the client resolves it against the address it is already on |
 | Voice connects, no audio or video | LiveKit UDP ports 50000-50019 not published; check `docker compose --env-file .env -f infrastructure/docker/docker-compose.dev.yml ps` |
-| `could not establish signal connection: invalid token: <jwt>, error: token signature is invalid` | The SFU holds a different `LIVEKIT_API_SECRET` from the service that signed the token - usually a container started before `.env` was passed or changed, since a container keeps the environment it was created with. Run `pnpm livekit:doctor`, then `pnpm dev:infra` (or, in production, `--force-recreate livekit call-service remote-gateway`). call-service now refuses to mint a token it knows the SFU will reject and answers `LIVEKIT_KEY_MISMATCH` instead |
+| `could not establish signal connection: invalid token: <jwt>, error: token signature is invalid` | The SFU holds a different `LIVEKIT_API_SECRET` from the service that signed the token - usually a container started before `.env` was passed or changed, since a container keeps the environment it was created with. Run `pnpm livekit:doctor`: it names the compose file the SFU is actually running under and prints the recreate command for it. call-service refuses to mint a token it knows the SFU will reject and answers `LIVEKIT_KEY_MISMATCH` instead |
+| call-service logs `Could not reach LiveKit to verify the signing key` under `pnpm dev` | Fixed. The check only tried `livekit:7880`, which is a Docker-network name and does not resolve on a host, so development never learned the secret had drifted and joins went ahead into a token the SFU rejected. It now tries the published `127.0.0.1:7880` as well. If the warning persists, nothing is listening on 7880: `pnpm dev:infra` |
+| `pnpm livekit:doctor` prints `<docker not reachable from here>` | The docker CLI is not on this shell's PATH - a Windows host whose engine lives inside WSL, typically. The verdict below it still holds; it comes from asking the SFU over 7880, not from docker. Run the printed recreate command wherever docker *is* reachable |
 | No online dots or typing indicators | presence-service is down; `curl 127.0.0.1:3005/health` |
 | "microphone did not start (negotiation timed out)", and the mic/camera/screen buttons then fail too | The LiveKit container is older than `livekit-client` expects, so it never acknowledges a publisher offer. `docker compose -f infrastructure/docker/docker-compose.dev.yml up -d livekit` to pull the pinned v1.13.5 |
 | Voice churns: join, leave, join again | Editing desktop source while connected. A hot reload disconnects the room on purpose; rejoin after the reload |

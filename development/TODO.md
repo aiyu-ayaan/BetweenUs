@@ -767,6 +767,19 @@ Follow-ups this phase deliberately left open:
       opens a theatre layout - screen large, faces on a strip underneath
 - [x] Grid pages at nine tiles with pager arrows, and recent speakers are pulled
       to the front so an active speaker is on page one. Speaking is amber
+- [x] Fixed: no one could join a call under `pnpm dev`, and the guard written to
+      explain exactly that was the thing that stayed silent. call-service asks
+      the SFU whether it accepts a token this deployment signs, and it only ever
+      asked `http://livekit:7880` - a name that resolves inside the compose
+      network and nowhere else. With the services on the host that check failed
+      to connect every time, which is *not* the same answer as "rejected", so
+      the status stayed `unknown`, tokens were minted, and the SFU threw them
+      out at the point of connection. Development is where a container most
+      often outlives the `.env` value it was created with, so it was the one
+      mode that needed the guard and the one mode that never had it. Both
+      addresses are tried now, whichever answers wins, and `livekit-doctor`
+      names the compose file the SFU is really running under instead of always
+      quoting the production one
 
 ### Phase 10 — hardening
 - [x] Move `livekit/livekit-server` to v1.13.5 in both compose files. v1.7
