@@ -182,7 +182,11 @@ rtc:
   `docker compose restart` reuses the old environment. A SFU still holding the
   previous secret answers every join with
   `could not establish signal connection: invalid token: ... token signature is
-  invalid`.
+  invalid`. Run `pnpm livekit:doctor` on the host to see which side holds which
+  secret - it prints fingerprints, never the values, and names the fix. From
+  the same release, call-service refuses to hand out a token the SFU is known
+  to reject and answers `LIVEKIT_KEY_MISMATCH` instead, so the client shows a
+  sentence rather than the raw JWT.
 - **The image version** is pinned to `v1.13.5` and must stay in step with the
   `livekit-client` version in `apps/desktop`. Servers older than v1.9 drop a
   field the client waits for, and every publish fails with "negotiation timed

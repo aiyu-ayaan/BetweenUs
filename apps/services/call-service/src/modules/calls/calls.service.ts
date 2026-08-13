@@ -16,6 +16,7 @@ import { envOr } from '@nexora/config';
 import { resolveChannelAccess } from '@nexora/database';
 import { PERMISSIONS } from '@nexora/permissions';
 import type { CallTokenResponse } from '@nexora/shared-types';
+import { livekitKeyStatusForJoin } from '../../livekit-check';
 
 const TOKEN_TTL = '2h';
 
@@ -42,6 +43,17 @@ export class CallsService {
       throw new ServiceUnavailableException({
         code: 'LIVEKIT_NOT_CONFIGURED',
         message: 'Calls are not configured on this deployment',
+      });
+    }
+
+    // Handing out a token the SFU is known to reject buys nothing: the client
+    // gets "invalid token: <400 characters of JWT>" and the operator gets no
+    // clue. Say what is wrong while there is still a place to say it.
+    if ((await livekitKeyStatusForJoin()) === 'rejected') {
+      throw new ServiceUnavailableException({
+        code: 'LIVEKIT_KEY_MISMATCH',
+        message:
+          'The voice server rejects this deployment signing key. Recreate the LiveKit container so it picks up LIVEKIT_API_SECRET (see call-service logs).',
       });
     }
 

@@ -599,11 +599,19 @@ that has to be right for every future deployment is one that will be wrong.
 
 ```bash
 cp .env.example .env
-docker compose -f infrastructure/docker/docker-compose.dev.yml up -d
+pnpm dev:infra   # compose, with --env-file .env - see below
 pnpm install
 pnpm db:generate && pnpm db:migrate
 pnpm dev:backend
 ```
+
+Compose reads `.env` from the directory holding the compose file, which is
+`infrastructure/docker/` - not the repo root. `pnpm dev:infra` passes
+`--env-file .env` for that reason; running compose by hand without it leaves
+every `${VAR}` empty. The LiveKit keys are declared required (`${VAR:?}`) so
+that mistake fails the command instead of starting a SFU with a placeholder
+secret, which is what "token signature is invalid" on every voice join means.
+`pnpm livekit:doctor` says which side holds which secret.
 
 `pnpm dev:backend` runs the services and nothing else. `pnpm dev` also starts
 the desktop renderer on 5173, which then collides with `pnpm dev:duo` - that
