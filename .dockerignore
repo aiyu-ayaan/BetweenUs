@@ -16,6 +16,19 @@ coverage
 .github
 .codegraph
 storage-data
+.vscode
+
+# No image builds the desktop client, and its assets are the largest thing in
+# the tree - several hundred megabytes of context uploaded for nothing.
+apps/desktop
+
+# Claude Code keeps full worktree copies under here; they would be uploaded as
+# part of the context and rebuilt into every image.
+.claude
+
+# Documentation is not part of any image.
+development
+*.md
 
 # Secrets never belong in an image layer; compose injects them at run time.
 .env
