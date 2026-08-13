@@ -1,5 +1,11 @@
 {
   "$schema": "https://turbo.build/schema.json",
+  // `pnpm dev` runs every service, the desktop renderer, the web client and the
+  // admin panel at once, and each is a persistent task. Turbo refuses to start
+  // when it has fewer slots than persistent tasks, so this has to stay ahead of
+  // the number of packages with a `dev` script - it was ten the day the web
+  // client landed, which is exactly the default.
+  "concurrency": "20",
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
