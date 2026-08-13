@@ -66,6 +66,13 @@ RUN --mount=type=cache,id=nexora-turbo,target=/repo/.turbo \
 FROM base AS service
 ENV NODE_ENV=production
 COPY --from=build /repo /repo
+# Where chat-service's upload volume mounts (LOCAL_STORAGE_PATH). It has to
+# exist in the image, owned by the user the service runs as: Docker seeds an
+# empty named volume from the image path including its ownership, but a
+# mountpoint it has to invent for itself arrives root-owned - and then every
+# attachment fails with EACCES while everything else about the service works,
+# which is a confusing way to find out that file sharing is off.
+RUN mkdir -p /data/uploads && chown node:node /data/uploads
 USER node
 EXPOSE 3000
 CMD ["node", "dist/main.js"]

@@ -194,6 +194,11 @@ services:
       # UPLOAD_DATA_PATH takes either a Docker volume name (the default) or a
       # host path - `/mnt/disk2/nexora-uploads`, `D:/nexora-uploads` - to keep
       # the files somewhere you can see and back up.
+      #
+      # The service runs as uid 1000, and the image ships /data/uploads owned by
+      # it so an empty named volume inherits that. A *host* path is never seeded
+      # from the image: chown it to 1000:1000 first, or every attachment fails
+      # with EACCES while the rest of the service works perfectly.
       - ${UPLOAD_DATA_PATH:-upload-data}:/data/uploads
     depends_on:
       migrate:

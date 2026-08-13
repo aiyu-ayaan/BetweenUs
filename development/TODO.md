@@ -562,6 +562,15 @@ Left open on purpose:
       capture also spells out echo cancellation, noise suppression and gain
       control rather than leaving them to the browser default
 
+- [x] Fixed: attachments worked in development and failed in the container
+      stack. The services run as uid 1000 and the upload volume mounts at
+      `/data/uploads`, a path no image stage created - so Docker invented the
+      mountpoint itself, root-owned, and every write returned `EACCES` while
+      the rest of chat-service behaved normally. The runtime stage creates it
+      owned by `node`, which an empty named volume inherits on first use. A
+      host path in `UPLOAD_DATA_PATH` is never seeded from an image and still
+      has to be chowned once; the compose file says so where it is set
+
 Left open on purpose:
 
 - [ ] Nothing deletes an attachment's blob when its message is deleted; the
