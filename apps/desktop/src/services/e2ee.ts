@@ -5,7 +5,12 @@
  * The server is a courier here. It stores public keys and sealed blobs, decides
  * who may publish them, and never holds anything that opens a message.
  */
-import type { BackupSecretKind, EncryptedEnvelope, IdentityBackup } from '@nexora/shared-types';
+import type {
+  BackupSecretKind,
+  ChannelKeyEntry,
+  EncryptedEnvelope,
+  IdentityBackup,
+} from '@nexora/shared-types';
 import { ApiError, api } from './api';
 import { setIdentityStatus } from '../stores/identity';
 import {
@@ -68,6 +73,13 @@ let identityUserId: string | null = null;
 let identityReady: Promise<IdentityKeyPair> | null = null;
 const channels = new Map<string, ChannelKeyState>();
 const inFlight = new Map<string, Promise<ChannelKeyState>>();
+/**
+ * Channels this session has already tried to re-key for itself. Without it, a
+ * device that cannot open its own wrapped keys - a corrupt identity, a public
+ * key in the directory that is not ours - would mint a fresh epoch every time
+ * the channel is opened and drag the whole channel along with it.
+ */
+const rekeyed = new Set<string>();
 
 /**
  * Loads this device's identity key and publishes the public half. Called once
@@ -212,6 +224,7 @@ export function resetE2ee(): void {
   identityReady = null;
   channels.clear();
   inFlight.clear();
+  rekeyed.clear();
   setIdentityStatus({ status: 'absent' });
 }
 
@@ -327,28 +340,22 @@ function ensureChannelKey(channelId: string): Promise<ChannelKeyState> {
 async function loadChannelKey(channelId: string): Promise<ChannelKeyState> {
   const self = await currentIdentity();
   let response = await api.channelKeys(channelId);
+  let keys = await openKeys(response.keys, self);
 
-  if (response.epoch === 0) {
-    // Nobody has keyed this channel yet - do it, then re-read rather than
-    // trusting our own write: another member may have won the race.
-    await createChannelKey(channelId, 1);
+  // We hold nothing for the current epoch. Either nobody has keyed the channel
+  // yet, or - the case that used to leave a member stuck on "no channel key on
+  // this device yet" - it was keyed before we joined, and every holder who
+  // could re-wrap it for us is offline. Waiting on them is not a fix, so mint
+  // the next epoch and wrap it for everybody, which is exactly what the server
+  // lets any member with SEND_MESSAGE do. Earlier epochs are untouched, so the
+  // history from before we were a member stays closed to us.
+  if (!keys.has(response.epoch) && !rekeyed.has(channelId)) {
+    rekeyed.add(channelId);
+    await createChannelKey(channelId, response.epoch + 1);
+    // Re-read rather than trusting our own write: another member may have won
+    // the race, and then theirs is the epoch that counts.
     response = await api.channelKeys(channelId);
-  }
-
-  const keys = new Map<number, string>();
-  for (const entry of response.keys) {
-    try {
-      keys.set(
-        entry.epoch,
-        await unwrapChannelKey(
-          { wrappedKey: entry.wrappedKey, iv: entry.iv },
-          self.privateKey,
-          entry.senderPublicKey,
-        ),
-      );
-    } catch {
-      // A key sealed for a previous identity of ours; skip it, keep the rest.
-    }
+    keys = await openKeys(response.keys, self);
   }
 
   const state: ChannelKeyState = { epoch: response.epoch, keys };
@@ -366,8 +373,32 @@ async function loadChannelKey(channelId: string): Promise<ChannelKeyState> {
   return state;
 }
 
+/** Opens every entry sealed for us, keyed by epoch. */
+async function openKeys(
+  entries: Array<ChannelKeyEntry & { epoch: number }>,
+  self: IdentityKeyPair,
+): Promise<Map<number, string>> {
+  const keys = new Map<number, string>();
+  for (const entry of entries) {
+    try {
+      keys.set(
+        entry.epoch,
+        await unwrapChannelKey(
+          { wrappedKey: entry.wrappedKey, iv: entry.iv },
+          self.privateKey,
+          entry.senderPublicKey,
+        ),
+      );
+    } catch {
+      // A key sealed for a previous identity of ours; skip it, keep the rest.
+    }
+  }
+  return keys;
+}
+
 /**
- * Mints the first key for a channel nobody has keyed yet.
+ * Mints an epoch for a channel this device holds no key for - a channel nobody
+ * has keyed, or one that was keyed before we were a member.
  *
  * Any member who may send a message may do this - waiting for an admin to open
  * the channel is not a rule the server has, and pretending otherwise is what
@@ -390,9 +421,12 @@ async function createChannelKey(channelId: string, epoch: number): Promise<void>
     await shareKey(channelId, epoch, key, recipients);
   } catch (error) {
     // Another member keyed it first: harmless, loadChannelKey re-reads and
-    // finds theirs. Anything else is a real failure and must not be mistaken
-    // for "this device has no key".
-    const raced = error instanceof ApiError && error.code === 'EPOCH_OUT_OF_ORDER';
+    // finds theirs. Which of the two codes comes back depends on whether they
+    // landed on the epoch we wanted or ran past it. Anything else is a real
+    // failure and must not be mistaken for "this device has no key".
+    const raced =
+      error instanceof ApiError &&
+      (error.code === 'EPOCH_OUT_OF_ORDER' || error.code === 'EPOCH_NOT_HELD');
     if (!raced) throw error;
   }
 }

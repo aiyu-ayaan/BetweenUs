@@ -129,6 +129,12 @@ export class E2eeService {
    * Two rules keep a member from hijacking a channel's key: a new epoch must be
    * exactly the next one, and adding to an existing epoch requires already
    * holding that epoch's key. Existing entries are never overwritten.
+   *
+   * Minting the next epoch deliberately needs no key of its own: a member who
+   * joined after the channel was keyed holds nothing, and if only a holder
+   * could move the channel forward they would be locked out until one came
+   * online. Nothing is given away by it - a member can read what is sent from
+   * now on either way, and every earlier epoch stays sealed to whoever held it.
    */
   async publishKeys(
     userId: string,
