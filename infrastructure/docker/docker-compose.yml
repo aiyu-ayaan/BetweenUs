@@ -72,7 +72,8 @@ services:
   admin-web:
     build:
       context: ../..
-      dockerfile: apps/admin/Dockerfile
+      dockerfile: infrastructure/docker/Dockerfile
+      target: admin-web
     restart: unless-stopped
     networks:
       - api-network
@@ -108,7 +109,8 @@ services:
   migrate:
     build:
       context: ../..
-      dockerfile: apps/services/auth-service/Dockerfile
+      dockerfile: infrastructure/docker/Dockerfile
+      target: auth-service
     restart: "no"
     # Prisma verifies it can write to its engine directory; the image's `node`
     # user cannot. Nothing else runs as root.
@@ -126,7 +128,8 @@ services:
   auth-service:
     build:
       context: ../..
-      dockerfile: apps/services/auth-service/Dockerfile
+      dockerfile: infrastructure/docker/Dockerfile
+      target: auth-service
     restart: unless-stopped
     environment:
       <<: *service-env
@@ -145,7 +148,8 @@ services:
   server-service:
     build:
       context: ../..
-      dockerfile: apps/services/server-service/Dockerfile
+      dockerfile: infrastructure/docker/Dockerfile
+      target: server-service
     restart: unless-stopped
     environment:
       <<: *service-env
@@ -164,7 +168,8 @@ services:
   chat-service:
     build:
       context: ../..
-      dockerfile: apps/services/chat-service/Dockerfile
+      dockerfile: infrastructure/docker/Dockerfile
+      target: chat-service
     restart: unless-stopped
     environment:
       <<: *service-env
@@ -189,7 +194,8 @@ services:
   notification-service:
     build:
       context: ../..
-      dockerfile: apps/services/notification-service/Dockerfile
+      dockerfile: infrastructure/docker/Dockerfile
+      target: notification-service
     restart: unless-stopped
     environment:
       <<: *service-env
@@ -208,7 +214,8 @@ services:
   presence-service:
     build:
       context: ../..
-      dockerfile: apps/services/presence-service/Dockerfile
+      dockerfile: infrastructure/docker/Dockerfile
+      target: presence-service
     restart: unless-stopped
     environment:
       <<: *service-env
@@ -227,7 +234,8 @@ services:
   call-service:
     build:
       context: ../..
-      dockerfile: apps/services/call-service/Dockerfile
+      dockerfile: infrastructure/docker/Dockerfile
+      target: call-service
     restart: unless-stopped
     environment:
       <<: *service-env
@@ -258,7 +266,8 @@ services:
   remote-gateway:
     build:
       context: ../..
-      dockerfile: apps/services/remote-gateway/Dockerfile
+      dockerfile: infrastructure/docker/Dockerfile
+      target: remote-gateway
     restart: unless-stopped
     environment:
       <<: *service-env
