@@ -15,6 +15,8 @@ import {
   updateNotificationPreferences,
 } from '../../services/notifications';
 import { serverUrl } from '../../services/endpoint';
+import { backupIdentity, rewrapBackupForPassword } from '../../services/e2ee';
+import { useIdentityStore } from '../../stores/identity';
 import { useAgentStore } from '../../services/remote-agent';
 import { ServerPicker } from '../auth/ServerPicker';
 import { Avatar } from '../../components/Avatar';
@@ -159,6 +161,9 @@ function AccountSection(): JSX.Element {
     setPasswordNote(null);
     try {
       await api.changePassword(currentPassword, newPassword);
+      // The identity backup is sealed with the old password; leave it that way
+      // and the next machine this account signs in on cannot open it.
+      await rewrapBackupForPassword(newPassword);
       setCurrentPassword('');
       setNewPassword('');
       setPasswordNote('Password changed. Your other sessions were signed out.');
@@ -282,6 +287,8 @@ function AccountSection(): JSX.Element {
         {passwordNote && <p className="text-sm text-slate-300">{passwordNote}</p>}
       </div>
 
+      <EncryptionSection />
+
       <h2 className="mt-8 text-base font-semibold text-slate-50">Server</h2>
       <p className="mt-1 text-sm text-slate-400">
         The deployment this app talks to. Changing it signs you out of this one.
@@ -300,6 +307,73 @@ function AccountSection(): JSX.Element {
       </div>
 
       {pickingServer && <ServerPicker onClose={() => setPickingServer(false)} />}
+    </>
+  );
+}
+
+/**
+ * The account's encryption key and whether it could survive this machine.
+ *
+ * Signing in with a password backs the key up on its own, so most people never
+ * come here. A passphrase is for the accounts that cannot do that - a provider
+ * sign-in has no password to derive from - and for anyone who would rather not
+ * have one secret do both jobs.
+ */
+function EncryptionSection(): JSX.Element {
+  const identity = useIdentityStore((state) => state.identity);
+  const [passphrase, setPassphrase] = useState('');
+  const [note, setNote] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  const save = async (): Promise<void> => {
+    setSaving(true);
+    setNote(null);
+    try {
+      await backupIdentity({ value: passphrase, kind: 'passphrase' });
+      setPassphrase('');
+      setNote('Saved. Signing in on another machine will ask for this passphrase.');
+    } catch (error) {
+      setNote(error instanceof Error ? error.message : 'That could not be saved');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <>
+      <h2 className="mt-8 text-base font-semibold text-slate-50">Encryption key</h2>
+      <p className="mt-1 text-sm text-slate-400">
+        Messages are encrypted with a key this account owns. A sealed copy lives on the server so
+        the account works on any machine you sign in on - the server cannot open it.
+      </p>
+      <p className="mt-2 text-sm text-slate-300">
+        {identity.status === 'ready' && identity.backedUp
+          ? 'This account key is backed up. Signing in elsewhere restores it.'
+          : identity.status === 'ready'
+            ? 'No backup yet. Set a recovery passphrase, or sign in with your password once, or this machine is the only place your history can be read.'
+            : 'Waiting for the account key.'}
+      </p>
+      <div className="mt-3 space-y-4">
+        <TextField
+          label="Recovery passphrase"
+          value={passphrase}
+          onChange={setPassphrase}
+          type="password"
+        />
+        <button
+          type="button"
+          disabled={saving || passphrase.length < 8 || identity.status !== 'ready'}
+          onClick={() => void save()}
+          className="cursor-pointer rounded bg-accent px-5 py-2 text-sm font-medium text-white transition-colors duration-200 hover:bg-accent-hover disabled:opacity-50"
+        >
+          {saving ? 'Saving…' : 'Set recovery passphrase'}
+        </button>
+        <p className="text-xs text-slate-500">
+          Replaces password-based recovery for this account. Nobody - including this deployment -
+          can recover your history if you forget it.
+        </p>
+        {note && <p className="text-sm text-slate-300">{note}</p>}
+      </div>
     </>
   );
 }

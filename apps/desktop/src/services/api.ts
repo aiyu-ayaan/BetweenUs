@@ -12,12 +12,14 @@ import type {
   DeviceKey,
   DirectChannel,
   Friend,
+  IdentityBackupResponse,
   Message,
   NotificationPreferences,
   OAuthProviderSummary,
   Paginated,
   PublicUser,
   PublishChannelKeysRequest,
+  PutIdentityBackupRequest,
   RemoteAuditEntry,
   RemoteGrantSummary,
   RemoteMachineSummary,
@@ -391,6 +393,12 @@ export const api = {
 
   registerDeviceKey: (publicKey: string): Promise<DeviceKey> =>
     request('/api/v1/e2ee/devices', { method: 'POST', body: JSON.stringify({ publicKey }) }),
+
+  /** This account's sealed identity key, for a machine that holds none. */
+  identityBackup: (): Promise<IdentityBackupResponse> => request('/api/v1/e2ee/backup'),
+
+  putIdentityBackup: (body: PutIdentityBackupRequest): Promise<{ ok: true }> =>
+    request('/api/v1/e2ee/backup', { method: 'PUT', body: JSON.stringify(body) }),
 
   channelDevices: (channelId: string): Promise<DeviceKey[]> =>
     request(`/api/v1/e2ee/devices?channelId=${encodeURIComponent(channelId)}`),

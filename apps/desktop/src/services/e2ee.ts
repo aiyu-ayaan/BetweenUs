@@ -5,8 +5,9 @@
  * The server is a courier here. It stores public keys and sealed blobs, decides
  * who may publish them, and never holds anything that opens a message.
  */
-import type { EncryptedEnvelope } from '@nexora/shared-types';
+import type { BackupSecretKind, EncryptedEnvelope, IdentityBackup } from '@nexora/shared-types';
 import { ApiError, api } from './api';
+import { setIdentityStatus } from '../stores/identity';
 import {
   decryptBytes,
   decryptMessage,
@@ -14,7 +15,9 @@ import {
   encryptMessage,
   generateChannelKey,
   generateIdentity,
+  openIdentity,
   parseEnvelope,
+  sealIdentity,
   unwrapChannelKey,
   wrapChannelKey,
   type IdentityKeyPair,
@@ -28,6 +31,29 @@ export class MissingChannelKeyError extends Error {
     super('No channel key on this device yet');
     this.name = 'MissingChannelKeyError';
   }
+}
+
+/**
+ * This machine holds no identity and the account's backup needs a secret it was
+ * not given. Thrown rather than papered over with a fresh identity: a new
+ * identity cannot open a single channel key already sealed for the old one, so
+ * generating one here is how history gets lost.
+ */
+export class IdentityLockedError extends Error {
+  constructor(readonly kind: BackupSecretKind) {
+    super(
+      kind === 'password'
+        ? 'Enter your account password to restore this account encryption key'
+        : 'Enter your recovery passphrase to restore this account encryption key',
+    );
+    this.name = 'IdentityLockedError';
+  }
+}
+
+/** What opens the backup. Held only for the moment a sign-in needs it. */
+export interface BackupSecret {
+  value: string;
+  kind: BackupSecretKind;
 }
 
 interface ChannelKeyState {
@@ -44,10 +70,15 @@ const channels = new Map<string, ChannelKeyState>();
 const inFlight = new Map<string, Promise<ChannelKeyState>>();
 
 /**
- * Loads (or creates) this device's identity key and publishes the public half.
- * Called once per sign-in.
+ * Loads this device's identity key and publishes the public half. Called once
+ * per sign-in, with the password when there is one to hand.
+ *
+ * Three ways it can go: the key is already on this machine; it is not, but the
+ * account has a backup and `secret` opens it; or the account has no backup yet
+ * and one is minted. The fourth case - backup present, no secret - is a
+ * question for the user, and comes back as `IdentityLockedError`.
  */
-export function initIdentity(userId: string): Promise<IdentityKeyPair> {
+export function initIdentity(userId: string, secret?: BackupSecret): Promise<IdentityKeyPair> {
   if (identityReady && identityUserId === userId) return identityReady;
 
   identityUserId = userId;
@@ -55,24 +86,123 @@ export function initIdentity(userId: string): Promise<IdentityKeyPair> {
   // must not be remembered. Keeping the rejected promise left the device
   // unregistered for the whole session, and every channel it tried to key
   // afterwards ended in "No channel key on this device yet".
-  identityReady = loadIdentity(userId).catch((error: unknown) => {
+  identityReady = loadIdentity(userId, secret).catch((error: unknown) => {
     if (identityUserId === userId) identityReady = null;
     throw error;
   });
   return identityReady;
 }
 
-async function loadIdentity(userId: string): Promise<IdentityKeyPair> {
+async function loadIdentity(userId: string, secret?: BackupSecret): Promise<IdentityKeyPair> {
   const storageKey = `identity:${userId}`;
   const stored = await secureGet(storageKey);
 
-  const pair = stored ? (JSON.parse(stored) as IdentityKeyPair) : await generateIdentity();
-  if (!stored) await secureSet(storageKey, JSON.stringify(pair));
+  if (stored) {
+    const pair = JSON.parse(stored) as IdentityKeyPair;
+    await adopt(pair);
+    // A machine that already worked may still have no backup - it predates
+    // this, or nobody could supply a secret at the time. Fix it quietly when a
+    // secret is at hand rather than waiting for the next reinstall to notice.
+    void ensureBackup(pair, secret);
+    return pair;
+  }
 
+  // A failed fetch must not fall through to "mint a new identity": that would
+  // replace the account's published key, and every channel key sealed for the
+  // old one would stop opening for good. Only a definite "no backup exists" is
+  // allowed to start a new identity.
+  const { backup } = await api.identityBackup();
+
+  if (backup) {
+    if (!secret || secret.kind !== backup.kind) {
+      setIdentityStatus({ status: 'locked', kind: backup.kind });
+      throw new IdentityLockedError(backup.kind);
+    }
+    const pair = await openBackup(backup, secret);
+    await secureSet(storageKey, JSON.stringify(pair));
+    await adopt(pair, true);
+    return pair;
+  }
+
+  const pair = await generateIdentity();
+  await secureSet(storageKey, JSON.stringify(pair));
+  await adopt(pair);
+  await ensureBackup(pair, secret);
+  return pair;
+}
+
+/** Wrong secret is the expected failure, and deserves to say so. */
+async function openBackup(backup: IdentityBackup, secret: BackupSecret): Promise<IdentityKeyPair> {
+  try {
+    return await openIdentity(backup, secret.value);
+  } catch {
+    setIdentityStatus({ status: 'locked', kind: backup.kind });
+    throw new IdentityLockedError(backup.kind);
+  }
+}
+
+/** Publishes the public half and marks this machine ready. */
+async function adopt(pair: IdentityKeyPair, backedUp = false): Promise<void> {
   identity = pair;
   // Idempotent: re-publishing keeps the directory correct if the row was lost.
   await api.registerDeviceKey(pair.publicKey);
-  return pair;
+  setIdentityStatus({ status: 'ready', backedUp });
+}
+
+/**
+ * Uploads a backup when the account has none for this identity and a secret is
+ * available to seal it with. Never throws into a sign-in: an account without a
+ * backup still works, it is only unrecoverable, and the settings panel says so.
+ */
+async function ensureBackup(pair: IdentityKeyPair, secret?: BackupSecret): Promise<void> {
+  try {
+    const { backup } = await api.identityBackup();
+    if (backup?.publicKey === pair.publicKey) {
+      setIdentityStatus({ status: 'ready', backedUp: true });
+      return;
+    }
+    if (!secret) {
+      setIdentityStatus({ status: 'ready', backedUp: false });
+      return;
+    }
+    await api.putIdentityBackup(await sealIdentity(pair, secret.value, secret.kind));
+    setIdentityStatus({ status: 'ready', backedUp: true });
+  } catch {
+    // Offline, or the server is older than this client. Nothing is lost that
+    // was not already missing.
+  }
+}
+
+/**
+ * Restores the identity from the account backup with a secret the user has just
+ * typed. The sign-in that hit `IdentityLockedError` continues from here.
+ */
+export async function restoreIdentity(secret: BackupSecret): Promise<void> {
+  const userId = identityUserId;
+  if (!userId) throw new Error('Nobody is signed in');
+  identityReady = null;
+  await initIdentity(userId, secret);
+}
+
+/**
+ * Seals the current identity under a secret the user chose, for an account that
+ * has no password to derive from - a provider sign-in - or for anyone who would
+ * rather not tie the two together.
+ */
+export async function backupIdentity(secret: BackupSecret): Promise<void> {
+  const pair = await currentIdentity();
+  await api.putIdentityBackup(await sealIdentity(pair, secret.value, secret.kind));
+  setIdentityStatus({ status: 'ready', backedUp: true });
+}
+
+/**
+ * Re-seals the backup after a password change. Skipped silently when the backup
+ * is keyed to a passphrase instead, which a password change does not touch.
+ */
+export async function rewrapBackupForPassword(newPassword: string): Promise<void> {
+  const { backup } = await api.identityBackup();
+  if (backup?.kind !== 'password') return;
+  await backupIdentity({ value: newPassword, kind: 'password' });
 }
 
 export function resetE2ee(): void {
@@ -82,6 +212,7 @@ export function resetE2ee(): void {
   identityReady = null;
   channels.clear();
   inFlight.clear();
+  setIdentityStatus({ status: 'absent' });
 }
 
 export async function encryptForChannel(channelId: string, plaintext: string): Promise<string> {

@@ -5,7 +5,9 @@ import {
   encryptMessage,
   generateChannelKey,
   generateIdentity,
+  openIdentity,
   parseEnvelope,
+  sealIdentity,
   unwrapChannelKey,
   wrapChannelKey,
 } from './e2ee-crypto';
@@ -51,6 +53,21 @@ async function main(): Promise<void> {
   // Plaintext rows from before E2EE stay renderable instead of throwing.
   assert.equal(parseEnvelope('hello world'), null);
   assert.equal(parseEnvelope('{"v":2,"epoch":1,"iv":"a","ct":"b"}'), null);
+
+  // Identity backup: the same key comes back on another machine, and only with
+  // the right secret. This is what stops "reinstall" meaning "lose everything".
+  const backup = await sealIdentity(alice, 'correct horse battery staple', 'password');
+  assert.equal(backup.publicKey, alice.publicKey, 'the public half is not a secret');
+  assert.ok(!backup.ct.includes(alice.privateKey), 'the private half must be sealed');
+
+  const restored = await openIdentity({ ...backup }, 'correct horse battery staple');
+  assert.equal(restored.privateKey, alice.privateKey);
+
+  // A restored identity opens keys sealed for the original - the whole point.
+  assert.equal(await unwrapChannelKey(forSelf, restored.privateKey, alice.publicKey), channelKey);
+
+  await assert.rejects(() => openIdentity({ ...backup }, 'correct horse battery stapl'));
+  await assert.rejects(() => openIdentity({ ...backup, ct: flipLastChar(backup.ct) }, 'correct horse battery staple'));
 
   console.log('desktop e2ee-crypto check ok');
 }

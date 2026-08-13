@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import type { PublicUser } from '@nexora/shared-types';
 import { ApiError, api, apiBaseUrl, configureApi } from '../services/api';
 import { chatSocket, presenceSocket } from '../services/socket';
-import { initIdentity, resetE2ee } from '../services/e2ee';
+import { initIdentity, resetE2ee, type BackupSecret } from '../services/e2ee';
 
 /** Both realtime sockets carry the same access token and reconnect together. */
 function connectSockets(accessToken: string): void {
@@ -56,7 +56,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     try {
       const result = await api.login(email, password);
       localStorage.setItem(EMAIL_KEY, email);
-      applySession(set, result.accessToken, result.refreshToken, result.user);
+      applySession(set, result.accessToken, result.refreshToken, result.user, {
+        value: password,
+        kind: 'password',
+      });
     } catch (error) {
       set({ status: 'idle', error: messageOf(error) });
     }
@@ -94,7 +97,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     try {
       const result = await api.register(email, username, password);
       localStorage.setItem(EMAIL_KEY, email);
-      applySession(set, result.accessToken, result.refreshToken, result.user);
+      applySession(set, result.accessToken, result.refreshToken, result.user, {
+        value: password,
+        kind: 'password',
+      });
     } catch (error) {
       set({ status: 'idle', error: messageOf(error) });
     }
@@ -138,13 +144,19 @@ function applySession(
   accessToken: string,
   refreshToken: string,
   user: PublicUser,
+  secret?: BackupSecret,
 ): void {
   localStorage.setItem(STORAGE_KEY, refreshToken);
   set({ user, accessToken, status: 'authenticated', error: null });
   connectSockets(accessToken);
   // Device key setup runs alongside the first server load; everything that
   // needs key material awaits the same promise, so the order does not matter.
-  void initIdentity(user.id).catch(() => undefined);
+  //
+  // The password goes with it and no further: it is what unseals this account's
+  // identity backup on a machine that holds no key yet, which is what makes the
+  // account work anywhere rather than only where it was created. It is never
+  // stored, and the server never receives anything derived from it.
+  void initIdentity(user.id, secret).catch(() => undefined);
 }
 
 function messageOf(error: unknown): string {

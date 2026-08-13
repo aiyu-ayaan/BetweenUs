@@ -11,6 +11,7 @@ import {
 import { stopAgent, useAgentStore } from './services/remote-agent';
 import { useRemoteStore } from './stores/remote';
 import { LoginScreen } from './features/auth/LoginScreen';
+import { IdentityUnlock } from './features/auth/IdentityUnlock';
 import { ServerRail } from './features/servers/ServerRail';
 import { ServerSettings } from './features/servers/ServerSettings';
 import { ChannelSidebar } from './features/channels/ChannelSidebar';
@@ -212,6 +213,7 @@ function Workbench(): JSX.Element {
           goes for somebody in a call asking for the mouse on a screen being
           shared - a machine being driven by another person is never a
           background event. */}
+      <IdentityUnlock />
       <RemoteConsent />
       <ShareControlConsent />
 

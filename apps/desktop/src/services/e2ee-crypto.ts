@@ -8,7 +8,7 @@
  *   - distribution: ECDH(sender, recipient) -> HKDF-SHA256 -> AES-GCM wrap
  *   - messages and call media: AES-256-GCM under the channel key
  */
-import type { EncryptedEnvelope } from '@nexora/shared-types';
+import type { BackupSecretKind, IdentityBackup, EncryptedEnvelope } from '@nexora/shared-types';
 
 const subtle = globalThis.crypto.subtle;
 const encoder = new TextEncoder();
@@ -18,6 +18,14 @@ const IDENTITY_ALGORITHM = { name: 'ECDH', namedCurve: 'P-256' } as const;
 const WRAP_INFO = 'nexora/e2ee/v1/channel-key-wrap';
 const IV_BYTES = 12;
 const CHANNEL_KEY_BYTES = 32;
+const BACKUP_SALT_BYTES = 16;
+/**
+ * PBKDF2 rounds for the identity backup. OWASP's 2023 floor for
+ * PBKDF2-HMAC-SHA256 is 600k, and this runs once per sign-in on a machine that
+ * has no identity yet - roughly a quarter-second, paid once, against a table
+ * whose theft is the whole reason the blob is sealed.
+ */
+const BACKUP_ITERATIONS = 600_000;
 
 export interface IdentityKeyPair {
   /** JWK JSON. Published to the server. */
@@ -38,6 +46,78 @@ export async function generateIdentity(): Promise<IdentityKeyPair> {
     subtle.exportKey('jwk', pair.privateKey),
   ]);
   return { publicKey: JSON.stringify(publicKey), privateKey: JSON.stringify(privateKey) };
+}
+
+/**
+ * Seals the identity key pair so the server can hold it without being able to
+ * open it. This is what makes an account portable: the same identity comes
+ * back on any machine that can supply the secret, so channel keys already
+ * sealed for it keep opening.
+ *
+ * The secret is stretched with PBKDF2 rather than used directly, because it is
+ * a human-chosen string and the resulting blob is stored somewhere a thief can
+ * reach offline.
+ */
+export async function sealIdentity(
+  pair: IdentityKeyPair,
+  secret: string,
+  kind: BackupSecretKind,
+): Promise<Omit<IdentityBackup, 'updatedAt'>> {
+  const salt = randomBytes(BACKUP_SALT_BYTES);
+  const key = await deriveBackupKey(secret, salt, BACKUP_ITERATIONS);
+  const iv = randomIv();
+  const sealed = await subtle.encrypt(
+    { name: 'AES-GCM', iv },
+    key,
+    encoder.encode(JSON.stringify(pair)),
+  );
+
+  return {
+    v: 1,
+    kind,
+    kdf: 'PBKDF2-SHA256',
+    iterations: BACKUP_ITERATIONS,
+    salt: toBase64(salt),
+    iv: toBase64(iv),
+    ct: toBase64(new Uint8Array(sealed)),
+    publicKey: pair.publicKey,
+  };
+}
+
+/** Throws if the secret is wrong - AES-GCM's tag is the only check needed. */
+export async function openIdentity(
+  backup: IdentityBackup,
+  secret: string,
+): Promise<IdentityKeyPair> {
+  const key = await deriveBackupKey(secret, fromBase64(backup.salt), backup.iterations);
+  const opened = await subtle.decrypt(
+    { name: 'AES-GCM', iv: fromBase64(backup.iv) },
+    key,
+    fromBase64(backup.ct),
+  );
+
+  const pair = JSON.parse(decoder.decode(opened)) as IdentityKeyPair;
+  if (typeof pair.publicKey !== 'string' || typeof pair.privateKey !== 'string') {
+    throw new Error('Backup did not contain an identity key pair');
+  }
+  return pair;
+}
+
+async function deriveBackupKey(
+  secret: string,
+  salt: Uint8Array<ArrayBuffer>,
+  iterations: number,
+): Promise<CryptoKey> {
+  const material = await subtle.importKey('raw', encoder.encode(secret), 'PBKDF2', false, [
+    'deriveKey',
+  ]);
+  return subtle.deriveKey(
+    { name: 'PBKDF2', hash: 'SHA-256', salt, iterations },
+    material,
+    { name: 'AES-GCM', length: 256 },
+    false,
+    ['encrypt', 'decrypt'],
+  );
 }
 
 export function generateChannelKey(): string {
@@ -181,9 +261,13 @@ function importContentKey(channelKey: string): Promise<CryptoKey> {
 // The typed arrays below are built on an explicit ArrayBuffer: WebCrypto's
 // BufferSource excludes SharedArrayBuffer-backed views.
 function randomIv() {
-  const iv = new Uint8Array(new ArrayBuffer(IV_BYTES));
-  globalThis.crypto.getRandomValues(iv);
-  return iv;
+  return randomBytes(IV_BYTES);
+}
+
+function randomBytes(length: number) {
+  const bytes = new Uint8Array(new ArrayBuffer(length));
+  globalThis.crypto.getRandomValues(bytes);
+  return bytes;
 }
 
 export function toBase64(bytes: Uint8Array): string {
