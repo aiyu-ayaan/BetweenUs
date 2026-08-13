@@ -213,9 +213,14 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
       }
 
       const refresh = (): void => {
-        if (get().room === room) {
-          set(snapshot(room));
-        }
+        if (get().room !== room) return;
+        const next = snapshot(room);
+        // A share that ends takes the stage with it. Leaving `watching` pointed
+        // at somebody who has stopped sharing is a black rectangle with their
+        // name on it and no way out of it but leaving the call.
+        const watched = get().watching;
+        const stillSharing = next.shares.some((share) => share.identity === watched);
+        set(watched === null || stillSharing ? next : { ...next, watching: null });
       };
 
       room
@@ -401,6 +406,21 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
       });
       if (!withAudio) options.capture.audio = false;
       await room.localParticipant.setScreenShareEnabled(true, options.capture, options.publish);
+
+      // The browser's own "Stop sharing" bar, and the Windows capture ending
+      // for any other reason, never touch the button in this app - so the
+      // publication stayed up with a dead track behind it and everyone else
+      // kept staring at the last frame. Ending the capture has to mean the same
+      // thing however it was ended.
+      const published = room.localParticipant.getTrackPublication(Track.Source.ScreenShare)?.track;
+      published?.mediaStreamTrack.addEventListener(
+        'ended',
+        () => {
+          void get().stopScreenShare();
+        },
+        { once: true },
+      );
+
       // Watch your own share, so you can see what the others are seeing.
       set({
         screenEnabled: true,

@@ -672,6 +672,8 @@ A published track logs `"encryption":1` — that is the end-to-end encrypted pat
 | Clipboard does not cross | `REMOTE_CLIPBOARD` has to be granted, and it is polled once a second - it is not instant |
 | Clicks land on the wrong monitor | Something changed the display after the session opened. Switch monitor and back: input follows whatever the agent is publishing |
 | **Request control** on a screen share is refused straight away | A window is being shared rather than a whole screen, the share stopped, or the machine sharing is not Windows. The refusal says which |
+| A share that was stopped is still on everyone else's stage, frozen or black | Fixed. Chrome's own "Stop sharing" bar never went through this app, so the track died and the publication stayed. The capture's `ended` now stops the share the same way the button does, and a viewer leaves the stage on its own when whoever they are watching stops |
+| No audio option in Chrome's share dialog | It only appears when the capture asked for audio, which a browser share now always does. The tab/system choice belongs to that dialog - this app's own "Share system audio" checkbox is desktop-only, where it is the thing doing the capturing |
 | Named cursors do not appear on a share | Only people who have the share open on the stage send a pointer, and one that goes quiet for four seconds is dropped |
 | A shared film judders, or a shared document is blurry | The wrong profile in the picker. Motion keeps frames and gives up resolution; detail does the reverse |
 | A share looks soft however it is set | The link cannot carry the ceiling and congestion control has lowered it. `chrome://webrtc-internals` on the receiving side says the real bitrate; there is no readout in the app |

@@ -254,6 +254,20 @@ in `apps/desktop/src/services/share-quality.ts` with the reasoning.
       the reverse at 60 fps. Neither is "better quality" - they are opposite
       trades, and picking the wrong one is what "the quality is bad" usually
       turns out to be
+- [x] Fixed: stopping a share from the browser's own "Stop sharing" bar left
+      everyone else on a black stage with the sharer's name on it, and no way
+      off it but leaving the call. Nothing was listening for the capture ending
+      anywhere except this app's own button, so the publication stayed up with a
+      dead track behind it. The published track's `ended` now runs the same stop
+      the button does, and the stage additionally drops `watching` whenever the
+      person being watched stops sharing - two independent cures, because the
+      second one holds for a sharer that crashed rather than stopped
+- [x] Fixed: in a browser the "Share system audio" checkbox was ours, disabled,
+      and a lie - only the surface picker can offer a tab's audio or the
+      system's, and it only offers either when the capture asked for audio in
+      the first place. A browser share now always asks, so that choice appears
+      where the surface is chosen, and the checkbox is desktop-only where this
+      app really is the one doing the capturing
 - [x] Bitrate scales with pixels instead of being one low number: 6 Mbps at
       1080p for detail, 14 for motion, clamped at both ends. A ceiling, not a
       target - a still desktop spends a fraction of it and congestion control
