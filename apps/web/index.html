@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en" class="h-full">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+    <link rel="apple-touch-icon" href="/icon.svg" />
+    <!--
+      Same rule as the desktop renderer: script-src stays 'self', so nothing
+      this page fetches can become code.
+
+      connect-src is narrower than the desktop app's, and can be: a browser tab
+      is served *by* the deployment it talks to, so 'self' covers the API, both
+      WebSockets and the LiveKit signalling behind the same gateway. Pointing
+      the page at a different deployment through the server picker is the one
+      thing that needs more, hence the open http/ws entries - a browser would
+      refuse the cross-origin fetch anyway unless that deployment allows it.
+
+      worker-src allows blob: because LiveKit runs end-to-end encryption in a
+      worker it creates itself.
+    -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: http: https:; media-src 'self' blob:; connect-src 'self' http: https: ws: wss:"
+    />
+    <title>Nexora</title>
+  </head>
+  <body class="h-full">
+    <div id="root" class="h-full"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
