@@ -54,7 +54,7 @@ COPY apps/services ./apps/services
 # Electron install, and turbo has nothing there to try to build.
 COPY apps/desktop/src ./apps/desktop/src
 COPY apps/desktop/public ./apps/desktop/public
-COPY apps/desktop/tailwind.config.js ./apps/desktop/tailwind.config.js
+COPY apps/desktop/tailwind.theme.mjs ./apps/desktop/tailwind.theme.mjs
 # Turbo skips any package whose inputs are unchanged since the last build.
 RUN --mount=type=cache,id=nexora-turbo,target=/repo/.turbo \
     pnpm build

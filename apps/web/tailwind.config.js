@@ -1,4 +1,4 @@
-import desktop from '../desktop/tailwind.config.js';
+import { theme } from '../desktop/tailwind.theme.mjs';
 
 /**
  * The desktop theme, unchanged - the two clients are meant to look identical.
@@ -8,6 +8,7 @@ import desktop from '../desktop/tailwind.config.js';
  * @type {import('tailwindcss').Config}
  */
 export default {
-  ...desktop,
   content: ['./index.html', './src/**/*.{ts,tsx}', '../desktop/src/**/*.{ts,tsx}'],
+  theme,
+  plugins: [],
 };

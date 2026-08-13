@@ -27,7 +27,7 @@ storage-data
 apps/desktop
 !apps/desktop/src
 !apps/desktop/public
-!apps/desktop/tailwind.config.js
+!apps/desktop/tailwind.theme.mjs
 
 # Claude Code keeps full worktree copies under here; they would be uploaded as
 # part of the context and rebuilt into every image.
