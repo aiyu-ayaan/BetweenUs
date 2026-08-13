@@ -650,6 +650,9 @@ A published track logs `"encryption":1` — that is the end-to-end encrypted pat
 | Voice churns: join, leave, join again | Editing desktop source while connected. A hot reload disconnects the room on purpose; rejoin after the reload |
 | Messages show the lock placeholder | This device has no key for that epoch — a member holding it must open the channel once to re-wrap |
 | Every message shows the lock placeholder after a reinstall | The account identity was not restored: answer the "Unlock your messages" dialog, or sign in with the password rather than resuming a stored session |
+| The web client is not on `8080`, or something else answers there | `8080` only serves the app when the *container* stack is up; `pnpm dev:web` is `5175`. It is also a popular port - `{"error":"Cannot GET /"}` or any non-Nexora reply means another project owns it. `docker ps` will say which; set `GATEWAY_PORT` in `.env` to something free and `pnpm prod:up` again |
+| Signed out on every start, without touching anything | The client used to delete its refresh token whenever the refresh call failed, including "backend not reachable" - fixed; it now keeps the token and the login screen says the server could not be reached. If it still happens, the token really is being rejected: check auth-service logs for `Refresh tokens revoked` |
+| "Refresh token was already used; all sessions have been signed out" | A spent token was replayed outside the grace window (`REFRESH_REPLAY_GRACE_MS`, 30s). Two clients sharing one token, or a token that leaked. Signing in again is the only cure - that is the point of the check |
 | Provider buttons missing on the login screen | Nobody enabled a provider in the admin panel, or its client id/secret is incomplete |
 | OAuth ends on a browser error page | `PUBLIC_API_URL` does not match the callback URL registered with Google or GitHub |
 | Admin panel says no administrator exists | `pnpm admin:create` has not been run against this database |

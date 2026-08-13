@@ -15,6 +15,9 @@ x-service-env: &service-env
   REDIS_URL: redis://redis:6379
   JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
   JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?JWT_REFRESH_SECRET is required}
+  # Grace for a refresh interrupted between the server rotating and the client
+  # storing the result; see .env.example.
+  REFRESH_REPLAY_GRACE_MS: ${REFRESH_REPLAY_GRACE_MS:-30000}
   # Seals OAuth client secrets at rest; falls back to JWT_SECRET when unset.
   SETTINGS_SECRET: ${SETTINGS_SECRET:-}
   # Where a browser reaches this deployment - the OAuth callback is built from it.

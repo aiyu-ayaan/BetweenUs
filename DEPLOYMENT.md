@@ -129,6 +129,7 @@ node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
 | `JWT_SECRET` | generated | Signs access tokens. Changing it later signs everyone out |
 | `JWT_REFRESH_SECRET` | generated | Signs refresh tokens. Must differ from `JWT_SECRET` |
 | `SETTINGS_SECRET` | generated | Seals OAuth client secrets at rest. Falls back to `JWT_SECRET` when empty; changing either makes stored client secrets unreadable and they must be re-entered |
+| `REFRESH_REPLAY_GRACE_MS` | `30000` | How long a just-rotated refresh token still answers with the pair that rotation produced, so a refresh interrupted by a reload or a dropped connection is not read as a stolen token and does not sign every device out. A replay inside the window creates no new session. `0` disables it and restores strict single-use |
 | `PUBLIC_API_URL` | `https://nexora.example.com` | The OAuth callback URL is built from it, and it must match what Google and GitHub have registered |
 | `OAUTH_ALLOWED_REDIRECTS` | `https://nexora.example.com` | Extra origins a finished OAuth sign-in may return to. Loopback (the desktop client) is always allowed; **the web client needs the deployment's own origin here**, or provider sign-in in a browser is refused with `BAD_REDIRECT` |
 | `CORS_ORIGIN` | `https://nexora.example.com` | Compose defaults it to `*`. The web client and the admin panel are both same-origin, so neither needs it; set this when browsers on *other* origins will call the API |
