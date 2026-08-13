@@ -60,7 +60,22 @@ services:
     image: livekit/livekit-server:v1.13.5
     container_name: nexora-dev-livekit
     restart: unless-stopped
-    command: ["--config", "/etc/livekit.yaml"]
+    # The address the SFU puts in its ICE candidates. Left alone it advertises
+    # the address it sees on itself - a bridge address like 172.24.0.4 - and
+    # clients in development are not on that network: Docker Desktop and WSL2
+    # do not route the host to it. Signalling still succeeds, because that goes
+    # through the published port, so a join gets all the way to negotiating
+    # media and then sits there until it times out.
+    #
+    # Everything below is published on the host, so 127.0.0.1 is the address
+    # that actually works here. NEXORA_LIVEKIT_NODE_IP overrides it for the one
+    # case that needs another answer: joining this dev SFU from a second machine
+    # on the LAN, which wants this host's address instead.
+    command:
+      - "--config"
+      - "/etc/livekit.yaml"
+      - "--node-ip"
+      - "${NEXORA_LIVEKIT_NODE_IP:-127.0.0.1}"
     environment:
       # The only place keys are set - the config file carries none. Required,
       # not defaulted: a default is what silently drifts from `.env`.

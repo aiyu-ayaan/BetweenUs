@@ -789,6 +789,14 @@ Follow-ups this phase deliberately left open:
       addresses are tried now, whichever answers wins, and `livekit-doctor`
       names the compose file the SFU is really running under instead of always
       quoting the production one
+- [x] Fixed, and behind the same symptom: the dev SFU advertised its own bridge
+      address in its ICE candidates. Signalling goes through the published port
+      and worked, so a join got a token, opened the socket, started an RTC
+      session - and then waited for media on `172.24.0.4`, which Docker Desktop
+      and WSL2 do not route the host to. The client's own 15s race was the only
+      thing that ever spoke up, as "Connection to voice server timed out". The
+      dev compose file passes `--node-ip 127.0.0.1`, overridable with
+      `NEXORA_LIVEKIT_NODE_IP` for a second machine on the LAN
 
 ### Phase 10 — hardening
 - [x] Move `livekit/livekit-server` to v1.13.5 in both compose files. v1.7
