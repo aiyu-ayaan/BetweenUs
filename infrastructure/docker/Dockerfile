@@ -26,12 +26,14 @@ WORKDIR /repo
 # ---------------------------------------------------------------------------
 FROM base AS deps
 COPY pnpm-workspace.yaml package.json pnpm-lock.yaml ./
-COPY --parents packages/*/package.json apps/admin/package.json apps/services/*/package.json ./
+COPY --parents packages/*/package.json apps/admin/package.json apps/web/package.json apps/services/*/package.json ./
 # @nexora/database runs `prisma generate` on postinstall, which needs the schema.
 COPY packages/database/prisma ./packages/database/prisma
 # The store survives between builds, so a lockfile change re-links rather than
-# re-downloads. apps/desktop is deliberately absent: no image builds it, and its
-# Electron binary would dominate the install.
+# re-downloads. apps/desktop's *manifest* is deliberately absent - its Electron
+# binary would dominate the install, and nothing here packages the desktop app.
+# Its source still arrives in the build stage below, because the web client
+# mounts it.
 RUN --mount=type=cache,id=nexora-pnpm-store,target=/pnpm/store \
     pnpm config set store-dir /pnpm/store && \
     pnpm install --frozen-lockfile
@@ -44,7 +46,15 @@ FROM deps AS build
 COPY turbo.json tsconfig.base.json ./
 COPY packages ./packages
 COPY apps/admin ./apps/admin
+COPY apps/web ./apps/web
 COPY apps/services ./apps/services
+# The web client is a browser entry point around the UI in apps/desktop/src, so
+# that source has to be here - but only that source. Without the manifest the
+# workspace does not treat apps/desktop as a package, which is the point: no
+# Electron install, and turbo has nothing there to try to build.
+COPY apps/desktop/src ./apps/desktop/src
+COPY apps/desktop/public ./apps/desktop/public
+COPY apps/desktop/tailwind.config.js ./apps/desktop/tailwind.config.js
 # Turbo skips any package whose inputs are unchanged since the last build.
 RUN --mount=type=cache,id=nexora-turbo,target=/repo/.turbo \
     pnpm build
@@ -85,4 +95,10 @@ WORKDIR /repo/apps/services/remote-gateway
 FROM nginx:1.27-alpine AS admin-web
 COPY --from=build /repo/apps/admin/dist /usr/share/nginx/html/admin
 COPY apps/admin/nginx.conf /etc/nginx/conf.d/default.conf
+EXPOSE 80
+
+# The web client, same arrangement, served at the root of the gateway.
+FROM nginx:1.27-alpine AS web
+COPY --from=build /repo/apps/web/dist /usr/share/nginx/html
+COPY apps/web/nginx.conf /etc/nginx/conf.d/default.conf
 EXPOSE 80

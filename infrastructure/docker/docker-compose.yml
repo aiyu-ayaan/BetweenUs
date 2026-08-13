@@ -60,6 +60,7 @@ services:
       - notification-service
       - remote-gateway
       - admin-web
+      - web
     networks:
       - cloudflare-network
       - api-network
@@ -67,6 +68,17 @@ services:
       # needs one hostname for the whole deployment. Media stays on its own path.
       - media-network
       - remote-network
+
+  # The web client: static bundle behind the same gateway, served at its root.
+  # No API of its own - it calls the same services the desktop app does.
+  web:
+    build:
+      context: ../..
+      dockerfile: infrastructure/docker/Dockerfile
+      target: web
+    restart: unless-stopped
+    networks:
+      - api-network
 
   # The admin panel: static bundle behind the same gateway.
   admin-web:
