@@ -12,9 +12,13 @@ import { ForbiddenException, Injectable } from '@nestjs/common';
 import { channelAudience, prisma } from '@nexora/database';
 import { PERMISSIONS } from '@nexora/permissions';
 import type {
+  BackupSecretKind,
   ChannelKeysResponse,
   DeviceKey,
+  IdentityBackup,
+  IdentityBackupResponse,
   PublishChannelKeysRequest,
+  PutIdentityBackupRequest,
 } from '@nexora/shared-types';
 import { MessagesService } from '../messages/messages.service';
 
@@ -30,6 +34,52 @@ export class E2eeService {
       create: { userId, publicKey },
     });
     return { userId: row.userId, publicKey: row.publicKey };
+  }
+
+  /**
+   * The caller's sealed identity key, or null if they never uploaded one.
+   *
+   * Handing this to whoever holds a session for the account is the point: it is
+   * what turns "this machine" into "this account", and it is ciphertext under a
+   * key derived from a secret that never reaches the server, so a session alone
+   * does not open it.
+   */
+  async identityBackup(userId: string): Promise<IdentityBackupResponse> {
+    const row = await prisma.identityBackup.findUnique({ where: { userId } });
+    if (!row) return { backup: null };
+
+    return {
+      backup: {
+        v: 1,
+        kind: row.kind as BackupSecretKind,
+        kdf: row.kdf as IdentityBackup['kdf'],
+        iterations: row.iterations,
+        salt: row.salt,
+        iv: row.iv,
+        ct: row.ciphertext,
+        publicKey: row.publicKey,
+        updatedAt: row.updatedAt.toISOString(),
+      },
+    };
+  }
+
+  /**
+   * Replaces the caller's backup. Overwriting is the normal case - a changed
+   * password re-seals the same identity under a new key - so there is no
+   * "already exists" rule to enforce here, and no way for the server to tell a
+   * good blob from a bad one anyway.
+   */
+  async putIdentityBackup(userId: string, dto: PutIdentityBackupRequest): Promise<void> {
+    const data = {
+      kind: dto.kind,
+      kdf: dto.kdf,
+      iterations: dto.iterations,
+      salt: dto.salt,
+      iv: dto.iv,
+      ciphertext: dto.ct,
+      publicKey: dto.publicKey,
+    };
+    await prisma.identityBackup.upsert({ where: { userId }, update: data, create: { userId, ...data } });
   }
 
   /** Public keys of every channel member that has registered a device. */

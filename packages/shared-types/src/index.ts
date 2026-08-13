@@ -476,6 +476,50 @@ export interface ChannelKeysResponse {
   missingRecipients: DeviceKey[];
 }
 
+/**
+ * What secret opens an identity backup.
+ *
+ * `password` is the account password, so signing in on a new device restores
+ * the identity with no extra step. `passphrase` is a separate secret the user
+ * set themselves - the only option for an account that signs in with a
+ * provider and has no password to derive from.
+ */
+export type BackupSecretKind = 'password' | 'passphrase';
+
+/**
+ * The device identity key, sealed with a key derived from a secret the server
+ * never receives. Restoring it on a second machine is what makes the account
+ * (and its history) portable instead of tied to one installation.
+ */
+export interface IdentityBackup {
+  /** Format version of the sealed blob. */
+  v: 1;
+  kind: BackupSecretKind;
+  /** Only `PBKDF2-SHA256` today; named so a stronger KDF can be added later. */
+  kdf: 'PBKDF2-SHA256';
+  iterations: number;
+  /** Base64 KDF salt (16 bytes). */
+  salt: string;
+  /** Base64 AES-GCM nonce (12 bytes). */
+  iv: string;
+  /** Base64 AES-GCM ciphertext of the identity key pair, with tag. */
+  ct: string;
+  /**
+   * The identity's public half, in the clear. It is public by definition, and
+   * having it lets a client tell "this backup is for the key the directory
+   * already knows" from "this backup is stale" before asking for a secret.
+   */
+  publicKey: string;
+  updatedAt?: string;
+}
+
+export type PutIdentityBackupRequest = Omit<IdentityBackup, 'updatedAt'>;
+
+export interface IdentityBackupResponse {
+  /** `null` when this account has never uploaded one. */
+  backup: IdentityBackup | null;
+}
+
 // --- Calls ---
 
 export interface CallTokenRequest {

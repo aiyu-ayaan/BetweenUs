@@ -67,6 +67,7 @@ model User {
   pinnedMessages  Message[]         @relation("MessagePinnedBy")
   reactions       MessageReaction[]
   deviceKey     DeviceKey?
+  identityBackup IdentityBackup?
   identities    UserIdentity[]
   notifications NotificationSetting?
   channelReads  ChannelRead[]
@@ -150,9 +151,9 @@ model OAuthProvider {
 }
 
 /// Public half of a user's end-to-end encryption identity key (ECDH P-256, JWK).
-/// The private half never leaves the device; the server publishes this only so
-/// members can wrap channel keys for each other. One device per user for now -
-/// multi-device is tracked in development/TODO.md.
+/// The private half never leaves the device in the clear; the server publishes
+/// this only so members can wrap channel keys for each other. The same identity
+/// is restored on every machine the account signs in on - see IdentityBackup.
 model DeviceKey {
   userId    String   @id
   publicKey String
@@ -162,6 +163,32 @@ model DeviceKey {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("device_keys")
+}
+
+/// The identity private key, sealed on the client with a key derived from a
+/// secret the server never receives (PBKDF2 over the account password, or over
+/// a passphrase the user set). Without it, wiping an installation - or signing
+/// in on a second machine - meant a new identity and a history nobody could
+/// open. The server stores the blob and hands it back to its owner; it holds
+/// nothing that opens it.
+model IdentityBackup {
+  userId     String   @id
+  version    Int      @default(1)
+  /// "password" or "passphrase": what the client must ask the user for.
+  kind       String
+  kdf        String
+  iterations Int
+  salt       String
+  iv         String
+  ciphertext String
+  /// Public half of the sealed pair, so a client can recognise a stale backup.
+  publicKey  String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("identity_backups")
 }
 
 /// A channel's symmetric content key, wrapped once per recipient. The server
