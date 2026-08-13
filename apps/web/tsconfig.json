@@ -22,5 +22,5 @@
   },
   // The UI itself lives in the desktop tree; this app is its browser entry
   // point. `electron/` is deliberately absent - nothing here builds it.
-  "include": ["src", "vite.config.ts", "../desktop/src"]
+  "include": ["src", "vite.config.ts", "lan-sfu.ts", "lan-ice.ts", "lan-sfu.check.ts", "../desktop/src"]
 }
