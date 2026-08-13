@@ -28,6 +28,27 @@ const logger = createLogger('auth-service', envOr('LOG_LEVEL', 'info') as LogLev
 /** Days a refresh token stays valid; mirrors JWT_REFRESH_TTL for the DB row. */
 const REFRESH_DAYS = Number(envOr('JWT_REFRESH_TTL', '30d').replace(/\D/g, '')) || 30;
 
+/**
+ * How long a token that has just been rotated still answers with the pair that
+ * rotation produced, instead of being read as theft.
+ *
+ * Rotation is not atomic across the network: the server can revoke a token,
+ * mint its successor, and have the response lost - a reload mid-refresh, a
+ * window closed, a dropped connection, two tabs asking at once. The client then
+ * presents the only token it still has, which is the one already spent, and
+ * without this window that is indistinguishable from a stolen token: every
+ * session on every device is revoked and the person is signed out for good.
+ * Read live rather than captured, so a test can turn it off.
+ *
+ * Inside the window the reply is the *same* pair, not a new one. A replay
+ * therefore creates nothing: an attacker holding the stolen token learns
+ * nothing it did not already have, and the theft detection outside the window
+ * is untouched.
+ */
+function replayGraceMs(): number {
+  return Number(envOr('REFRESH_REPLAY_GRACE_MS', '30000')) || 0;
+}
+
 @Injectable()
 export class AuthService {
   constructor(
@@ -113,10 +134,25 @@ export class AuthService {
 
     const stored = await this.db.refreshToken.findUnique({ where: { id: payload.jti } });
 
-    // Reuse detection: a token this account already spent (or a forgery carrying
-    // a real jti) means the token leaked. The holder is unknown, so every live
-    // token for the account dies and both parties have to log in again.
-    if (stored && (stored.revokedAt !== null || stored.tokenHash !== hashToken(refreshToken))) {
+    // A forgery carrying a real jti is theft with no innocent explanation, so it
+    // is fatal whatever else is true of the row.
+    if (stored && stored.tokenHash !== hashToken(refreshToken)) {
+      await this.revokeFamily(stored.userId, 'forgery');
+      throw new UnauthorizedException({
+        code: 'REFRESH_TOKEN_REUSED',
+        message: 'Refresh token was already used; all sessions have been signed out',
+      });
+    }
+
+    // Reuse detection: a token this account already spent means the token
+    // leaked. The holder is unknown, so every live token for the account dies
+    // and both parties have to log in again - unless this is the rotation that
+    // just happened and whose answer never arrived, which is what the grace
+    // window above exists for.
+    if (stored && stored.revokedAt !== null) {
+      const replayed = this.rotated.get(stored.id);
+      if (replayed && Date.now() - replayed.at < replayGraceMs()) return replayed.tokens;
+
       await this.revokeFamily(stored.userId, 'reuse');
       throw new UnauthorizedException({
         code: 'REFRESH_TOKEN_REUSED',
@@ -144,7 +180,28 @@ export class AuthService {
       data: { revokedAt: new Date() },
     });
 
-    return this.issueTokens(user);
+    const tokens = await this.issueTokens(user);
+    this.remember(stored.id, tokens);
+    return tokens;
+  }
+
+  /**
+   * What the token with this id was rotated into, for as long as a client that
+   * missed the answer might ask again.
+   *
+   * ponytail: per process, so a replay that lands on a *different*
+   * auth-service instance is still read as theft and signs the account out.
+   * Move this to Redis - which the service does not otherwise need - if more
+   * than one instance ever runs behind the gateway.
+   */
+  private readonly rotated = new Map<string, { tokens: AuthTokens; at: number }>();
+
+  private remember(jti: string, tokens: AuthTokens): void {
+    const cutoff = Date.now() - replayGraceMs();
+    for (const [id, entry] of this.rotated) {
+      if (entry.at < cutoff) this.rotated.delete(id);
+    }
+    this.rotated.set(jti, { tokens, at: Date.now() });
   }
 
   async logout(refreshToken: string): Promise<void> {

@@ -169,6 +169,20 @@ async function main(): Promise<void> {
   assert.notEqual(rotated.refreshToken, loggedIn.refreshToken);
   assert.ok(db.tokens.find((t) => t.tokenHash !== rotated.refreshToken && t.revokedAt !== null));
 
+  // A client that missed the answer asks again with the token it still has. In
+  // the grace window that is the interrupted rotation, not a theft: the same
+  // pair comes back, no second session is created, and nothing is revoked.
+  process.env.REFRESH_REPLAY_GRACE_MS = '30000';
+  const replayed = await auth.refresh(loggedIn.refreshToken);
+  assert.equal(replayed.refreshToken, rotated.refreshToken, 'a replay in the window is idempotent');
+  assert.ok(
+    db.tokens.some((t) => t.revokedAt === null),
+    'a replay in the window revokes nothing',
+  );
+
+  // Outside it, the same replay is what it looks like: a leaked token.
+  process.env.REFRESH_REPLAY_GRACE_MS = '0';
+
   // Reuse detection: replaying a spent token kills every live session.
   await rejects(auth.refresh(loggedIn.refreshToken), 'REFRESH_TOKEN_REUSED');
   assert.ok(

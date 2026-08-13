@@ -216,9 +216,22 @@ function refreshSession(): Promise<string | null> {
       useAuthStore.setState({ accessToken: tokens.accessToken });
       connectSockets(tokens.accessToken);
       return tokens.accessToken;
-    } catch {
-      localStorage.removeItem(STORAGE_KEY);
-      useAuthStore.setState({ user: null, accessToken: null, status: 'idle' });
+    } catch (error) {
+      // Only the server *rejecting* the token ends the session. A network
+      // failure, a gateway 502 or a service still starting says nothing about
+      // whether this session is still good - and throwing the token away there
+      // signed people out permanently the first time the app opened before the
+      // backend did, which on a desktop that starts with the system is most
+      // times. The token is kept, the login screen says why, and the next
+      // start signs back in on its own.
+      const rejected = error instanceof ApiError && error.status === 401;
+      if (rejected) localStorage.removeItem(STORAGE_KEY);
+      useAuthStore.setState({
+        user: null,
+        accessToken: null,
+        status: 'idle',
+        error: rejected ? null : messageOf(error),
+      });
       return null;
     }
   })().finally(() => {
