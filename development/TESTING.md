@@ -612,19 +612,27 @@ deployment is one address for everything — see below.
 
 ## From a second machine on the network
 
-`pnpm dev:web:lan` is `pnpm dev:web` bound to every interface instead of
-loopback; `pnpm dev:admin:lan` does the same for the panel. Vite prints the
-address it picked. Nothing else has to be exposed: every REST route and both
-WebSockets are proxied by that one dev server, so the other machine reaches
-auth-, server-, chat-, presence-, notification- and call-service through the
-single origin it loaded the app from. The services themselves stay on
-loopback, as does Postgres and Redis.
+```
+pnpm dev:web:lan     # https://<this host>:5175, printed by Vite on startup
+```
 
-Two things do not travel through that proxy, and both need saying.
+That is `pnpm dev:web` bound to every interface **and served over TLS**, which
+is not a nicety. Browsers withhold the secure-context APIs — `crypto.subtle`,
+`navigator.mediaDevices` — from any plain-http origin that is not localhost,
+and this app is end-to-end encrypted, so the first thing it does on
+`http://192.168.x.x:5175` is `Cannot read properties of undefined (reading
+'generateKey')`. Not a degraded call: no usable app at all. The certificate is
+self-signed, so each machine clicks through one browser warning, once.
+`pnpm dev:web` is unchanged — http, loopback only.
 
-**Media does not.** WebRTC negotiates its own path to the SFU, so the SFU has
-to advertise an address the *other* machine can reach — not the `127.0.0.1`
-that is right for a browser on this one. In `.env`:
+Nothing else has to be exposed. Every REST route and both WebSockets are
+proxied by that one dev server, so the other machine reaches auth-, server-,
+chat-, presence-, notification- and call-service through the single origin it
+loaded the app from. The services stay on loopback, as do Postgres and Redis.
+
+**Media is the exception**, because WebRTC does not go through that proxy. The
+SFU has to advertise an address the *other* machine can reach, not the
+`127.0.0.1` that is right for a browser on this one. In `.env`:
 
 ```
 NEXORA_LIVEKIT_NODE_IP=192.168.x.x   # this host, as the other machine sees it
@@ -637,14 +645,8 @@ on its first line. UDP 50000-50019 is published on every interface already;
 that is the path media actually takes, and Windows Firewall has to allow it
 inbound along with the dev server's port.
 
-**Microphone, camera and screen share do not work over plain http off
-localhost.** That is a browser rule, not a Nexora one: `getUserMedia` and
-`getDisplayMedia` need a secure context, and `http://192.168.x.x:5175` is not
-one, so `navigator.mediaDevices` is simply absent there. Text, presence,
-uploads and sign-in are all fine. For calls, allow-list the origin in
-`chrome://flags/#unsafely-treat-insecure-origin-as-secure` on the *other*
-machine and restart it — which is a testing measure and nothing more. A real
-deployment gets this for free: it is behind the gateway, over TLS.
+None of this applies to a real deployment: it is behind the gateway, over TLS,
+on one hostname.
 
 ## Testing the container stack
 
@@ -689,7 +691,7 @@ A published track logs `"encryption":1` — that is the end-to-end encrypted pat
 | `couldn't find env file: .../infrastructure/docker/.env` | `--env-file .env` is resolved against the shell's working directory, not against the compose file, and the only `.env` is at the repo root. Run `pnpm dev:infra`, which works from anywhere, or `cd` to the repo root first |
 | `required variable LIVEKIT_API_KEY is missing a value` from `docker compose` | Same cause seen from the other side: the compose file was read without the root `.env`. It is deliberately not defaulted - a default is what silently drifts from the secret the SFU was created with |
 | Everything answers "Request failed", including sign-in | No services are up. `pnpm dev` tears down all ten persistent tasks when any one of them exits non-zero, so a single port clash reads as a dead backend. `curl 127.0.0.1:3001/health` first, and check the last lines of the `pnpm dev` output for which task failed |
-| From another machine: the app loads, sign-in works, but there is no mic/camera/screen button behaviour | `navigator.mediaDevices` does not exist on a plain-http origin that is not localhost. See "From a second machine on the network" |
+| From another machine: `Cannot read properties of undefined (reading 'generateKey')`, or no mic/camera/screen at all | The origin is plain http and is not localhost, so the browser withholds `crypto.subtle` and `navigator.mediaDevices`. Use `pnpm dev:web:lan`, which serves the same app over TLS, and accept the self-signed certificate once |
 | From another machine: everything works except the call connects and then has no media | The SFU is still advertising `127.0.0.1`. Set `NEXORA_LIVEKIT_NODE_IP` to this host's LAN address and recreate it with `pnpm dev:infra` |
 | No online dots or typing indicators | presence-service is down; `curl 127.0.0.1:3005/health` |
 | "microphone did not start (negotiation timed out)", and the mic/camera/screen buttons then fail too | The LiveKit container is older than `livekit-client` expects, so it never acknowledges a publisher offer. `docker compose -f infrastructure/docker/docker-compose.dev.yml up -d livekit` to pull the pinned v1.13.5 |
