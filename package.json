@@ -12,6 +12,8 @@
     "dev:infra:down": "docker compose --env-file .env -f infrastructure/docker/docker-compose.dev.yml down",
     "dev:desktop": "pnpm --filter @nexora/desktop dev",
     "dev:web": "pnpm --filter @nexora/web dev",
+    "dev:web:lan": "pnpm --filter @nexora/web dev --host",
+    "dev:admin:lan": "pnpm --filter @nexora/admin dev --host",
     "dev:admin": "pnpm --filter @nexora/admin dev",
     "dev:duo": "node scripts/dev-duo.mjs",
     "desktop:package": "pnpm --filter @nexora/desktop package",

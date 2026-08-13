@@ -83,10 +83,17 @@ services:
     volumes:
       - ../livekit/livekit.yaml:/etc/livekit.yaml:ro
     ports:
-      - "127.0.0.1:7880:7880"
-      - "127.0.0.1:7881:7881"
+      # Loopback by default: signalling is reached through the dev server's
+      # /livekit proxy, which runs on this host, so nothing outside needs these.
+      # Testing from a second machine is the exception - its browser negotiates
+      # media with the SFU directly, and the TCP candidate has to be reachable
+      # for a network that blocks the UDP range. Set NEXORA_LIVEKIT_BIND=0.0.0.0
+      # alongside NEXORA_LIVEKIT_NODE_IP for that.
+      - "${NEXORA_LIVEKIT_BIND:-127.0.0.1}:7880:7880"
+      - "${NEXORA_LIVEKIT_BIND:-127.0.0.1}:7881:7881"
       # ICE/UDP media. Kept to 20 ports: enough for small test calls and fast to
-      # publish on Docker Desktop.
+      # publish on Docker Desktop. Published on every interface already - this is
+      # the path media actually takes.
       - "50000-50019:50000-50019/udp"
 
 volumes:
