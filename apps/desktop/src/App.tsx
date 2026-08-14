@@ -29,8 +29,23 @@ import { UserSettings } from './features/settings/UserSettings';
 import { VoiceChannelView } from './features/voice/VoiceChannelView';
 import { ShareControlConsent } from './features/voice/ShareControlConsent';
 import { NexoraLogoIcon } from './components/icons';
+import { ErrorBoundary } from './components/ErrorBoundary';
 
+/**
+ * Both clients mount this: the Electron renderer and the browser bundle in
+ * `apps/web`. The boundary is here rather than in either entry point so neither
+ * can be the one that forgot it - a render that throws anywhere below this is a
+ * message on screen, not an empty window.
+ */
 export default function App(): JSX.Element {
+  return (
+    <ErrorBoundary>
+      <Session />
+    </ErrorBoundary>
+  );
+}
+
+function Session(): JSX.Element {
   const status = useAuthStore((state) => state.status);
   const restore = useAuthStore((state) => state.restore);
   const loadServers = useChatStore((state) => state.loadServers);
