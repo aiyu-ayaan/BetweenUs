@@ -67,9 +67,6 @@ services:
     networks:
       - cloudflare-network
       - api-network
-      # LiveKit's signalling handshake is proxied under /livekit, so a client
-      # needs one hostname for the whole deployment. Media stays on its own path.
-      - media-network
       - remote-network
 
   # The web client: static bundle behind the same gateway, served at its root.
@@ -260,20 +257,19 @@ services:
     environment:
       <<: *service-env
       CALL_SERVICE_PORT: 3007
-      # Handed to clients, so never a container hostname. Defaults to the path
-      # Nginx proxies to the SFU, which keeps the deployment on one public
-      # address; set LIVEKIT_URL to an absolute wss:// URL to split it out.
-      LIVEKIT_URL: ${LIVEKIT_URL:-/livekit}
-      # How this service reaches the SFU itself, which it does once at startup
-      # to check that the SFU accepts the tokens it signs. Media never comes
-      # near it.
-      LIVEKIT_INTERNAL_URL: ${LIVEKIT_INTERNAL_URL:-http://livekit:7880}
-      LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:?LIVEKIT_API_KEY is required}
-      LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:?LIVEKIT_API_SECRET is required}
-      # Relays for clients that are not on the SFU's own network, minted per
-      # call. Optional: a deployment whose clients are all local needs none, and
-      # unset means the client uses its own defaults. The key never leaves this
-      # service - only the short-lived credentials it mints are handed out.
+      # There is no media-server address here, and there must never be one:
+      # call-service introduces two clients over /ws/call and they carry the
+      # media between themselves. See section 4 of claude.md.
+      #
+      # Where a peer learns its own public address. Not a relay, needs no port
+      # opened, and one request per call is all the traffic; point it at your
+      # own coturn if you would rather not talk to these.
+      STUN_URLS: ${STUN_URLS:-stun:stun.l.google.com:19302,stun:stun.cloudflare.com:3478}
+      # A relay, for the pairs of networks that cannot form a direct path at all
+      # - symmetric NAT on both sides, mobile carrier-grade NAT. Optional and
+      # unset by default, so this deployment relays nothing unless you say so;
+      # the cost of leaving it off is that those particular calls fail. The key
+      # never leaves this service - only the short-lived credentials it mints.
       CLOUDFLARE_TURN_KEY_ID: ${CLOUDFLARE_TURN_KEY_ID:-}
       CLOUDFLARE_TURN_KEY_API_TOKEN: ${CLOUDFLARE_TURN_KEY_API_TOKEN:-}
       CLOUDFLARE_TURN_TTL_SECONDS: ${CLOUDFLARE_TURN_TTL_SECONDS:-86400}
@@ -285,11 +281,10 @@ services:
     networks:
       - api-network
       - data-network
-      - media-network
 
   # Remote desktop, kept off every network it does not need. It talks to
-  # Postgres and to LiveKit (to mint session tokens); it never reaches the chat
-  # or media services, and nothing reaches the machines - their agents dial out.
+  # Postgres and to nothing else; it never reaches the chat services, and
+  # nothing reaches the machines - their agents dial out.
   remote-gateway:
     build:
       context: ../..
@@ -299,9 +294,13 @@ services:
     environment:
       <<: *service-env
       REMOTE_GATEWAY_PORT: 3008
-      LIVEKIT_URL: ${LIVEKIT_URL:-/livekit}
-      LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:?LIVEKIT_API_KEY is required}
-      LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:?LIVEKIT_API_SECRET is required}
+      # The same answer call-service gives, for the same reason: the agent and
+      # the controller have to find each other, and nothing here knows or needs
+      # to know where either of them is.
+      STUN_URLS: ${STUN_URLS:-stun:stun.l.google.com:19302,stun:stun.cloudflare.com:3478}
+      CLOUDFLARE_TURN_KEY_ID: ${CLOUDFLARE_TURN_KEY_ID:-}
+      CLOUDFLARE_TURN_KEY_API_TOKEN: ${CLOUDFLARE_TURN_KEY_API_TOKEN:-}
+      CLOUDFLARE_TURN_TTL_SECONDS: ${CLOUDFLARE_TURN_TTL_SECONDS:-86400}
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -311,47 +310,18 @@ services:
       - remote-network
       - data-network
 
-  livekit:
-    # Keep in step with the livekit-client version in apps/desktop - see the
-    # note in docker-compose.dev.yml.
-    image: livekit/livekit-server:v1.13.5
-    restart: unless-stopped
-    # The address the SFU puts in its ICE candidates, which is the address every
-    # client will try to send media to. Left alone it advertises the address it
-    # sees on itself - a Docker bridge address like 172.29.0.2 - and no client is
-    # on that network. Signalling still succeeds, because that goes through the
-    # gateway, so a join negotiates all the way to media and then sits there
-    # until the client gives up with "Connection to voice server timed out".
-    #
-    # Required rather than defaulted, for the same reason as the keys below:
-    # there is no answer that is right for every deployment, and a wrong one is
-    # invisible until somebody tries to talk. It is the address clients reach
-    # this host on - a LAN address for a machine on a network, the public
-    # address for a server that has one. Note that media does NOT go through a
-    # Cloudflare tunnel: WebRTC needs 7881/tcp and the UDP range published below
-    # reachable at whatever this says.
-    command:
-      - "--config"
-      - "/etc/livekit.yaml"
-      - "--node-ip"
-      - "${LIVEKIT_NODE_IP:?LIVEKIT_NODE_IP is required - the address clients reach this host on, e.g. 192.168.1.115. Without it the SFU advertises its Docker bridge address and every call times out}"
-    environment:
-      # Overrides the key pair in the mounted config file. LiveKit parses this
-      # as YAML, so the secret is single-quoted: an unquoted scalar loses a
-      # trailing `#` comment, surrounding quotes and leading whitespace, and the
-      # secret call-service signs with would no longer be the one this verifies
-      # against - which surfaces as "token signature is invalid" on every join.
-      LIVEKIT_KEYS: "${LIVEKIT_API_KEY:?LIVEKIT_API_KEY is required}: '${LIVEKIT_API_SECRET:?LIVEKIT_API_SECRET is required}'"
-    volumes:
-      - ../livekit/livekit.yaml:/etc/livekit.yaml:ro
-    ports:
-      # Media ingress is its own path: WebRTC never goes through Nginx.
-      - "7880:7880"
-      - "7881:7881"
-      # Must match rtc.port_range_* in ../livekit/livekit.yaml.
-      - "50000-50019:50000-50019/udp"
-    networks:
-      - media-network
+  # There was a `livekit` service here, and it is worth knowing what went with
+  # it. It published 7880, 7881 and a UDP range, because WebRTC media cannot go
+  # through Nginx or a Cloudflare Tunnel. It needed LIVEKIT_NODE_IP - the
+  # address clients reach this host on - because otherwise it advertised its
+  # Docker bridge address and every call negotiated all the way to media and
+  # then timed out. That setting had no right answer for every deployment and a
+  # wrong one was invisible until somebody tried to talk.
+  #
+  # Media now goes directly between the clients. No container carries it, no
+  # port is published for it, and nothing in this file states an address that
+  # only the server can reach. Adding a media service back is how all three of
+  # those come back together.
 
   postgres:
     image: postgres:16-alpine
@@ -392,7 +362,8 @@ networks:
   cloudflare-network:
   api-network:
   data-network:
-  media-network:
+  # There is no media-network: no container carries media.
+  #
   # Remote desktop is deliberately not on api-network: the gateway reaches
   # Postgres and nothing else reaches it except Nginx.
   remote-network:

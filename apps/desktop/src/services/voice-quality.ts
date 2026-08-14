@@ -114,7 +114,7 @@ export const DEFAULT_VOICE_SETTINGS: VoiceSettings = {
  */
 export const GATE_RANGE = { minDb: -80, maxDb: -20 } as const;
 
-/** Opus bitrate ceilings. LiveKit's `AudioPresets` are exactly these numbers. */
+/** Opus bitrate ceilings, in bits per second. */
 const BITRATE = {
   // Discord's voice channel. Transparent for speech; anything more is spent on
   // reproducing a room nobody wants reproduced.

@@ -11,13 +11,17 @@
       can become code.
 
       connect-src and img-src cannot name hosts any more. The deployment is
-      chosen at runtime on the login screen, the LiveKit address arrives inside
-      a call token, and both are whatever the operator of that deployment says -
-      an allowlist compiled into the app could only ever be wrong. What the
-      window may *talk to* is therefore open; what it may *run* is not.
+      chosen at runtime on the login screen and is whatever the operator of that
+      deployment says - an allowlist compiled into the app could only ever be
+      wrong. What the window may *talk to* is therefore open; what it may *run*
+      is not.
 
-      worker-src allows blob: because LiveKit runs end-to-end encryption in a
-      worker it creates itself.
+      None of this governs media. A peer connection is not a fetch and CSP has
+      no say over it, which is as well: the addresses it reaches are the other
+      participants', discovered at the time and nameable in advance by nobody.
+
+      worker-src allows blob: for the microphone gate, which is an AudioWorklet
+      compiled from a string - see services/mic-gate.ts.
     -->
     <meta
       http-equiv="Content-Security-Policy"

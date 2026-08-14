@@ -7,13 +7,12 @@
     "dev": "vite",
     "build": "tsc -p tsconfig.json --noEmit && vite build",
     "preview": "vite preview",
-    "check": "tsx lan-sfu.check.ts",
+    "check": "echo \"the web client has no self-check of its own; it mounts the desktop UI, which does\"",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
     "@nexora/permissions": "workspace:*",
     "@nexora/shared-types": "workspace:*",
-    "livekit-client": "^2.7.2",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "zustand": "^4.5.4"

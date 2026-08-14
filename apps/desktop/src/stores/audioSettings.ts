@@ -4,7 +4,7 @@
  * this headset are all properties of where you are sitting, so they belong in
  * local storage rather than on the server the way notification preferences do.
  *
- * Nothing here knows about LiveKit. The voice store watches this and applies
+ * Nothing here knows about peer connections. The voice store watches this and applies
  * what changed to the live room - which keeps the dependency pointing one way
  * and lets settings be changed before ever joining a call.
  */

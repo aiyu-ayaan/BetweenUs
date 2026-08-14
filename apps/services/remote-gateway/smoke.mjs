@@ -4,8 +4,8 @@
 // machine exists, a viewer must not be able to type, and a revoked grant must
 // end a session that is already running.
 //
-// Needs Postgres, auth-service and remote-gateway. LiveKit does not have to be
-// up: a session hands back a token, and nobody dials it here.
+// Needs Postgres, auth-service and remote-gateway, and nothing else: a session
+// hands back ICE servers, and no media is set up here.
 
 import { WebSocket } from 'ws';
 
@@ -211,7 +211,13 @@ const session = await json(`${REMOTE}/api/v1/remote/sessions`, {
 });
 ok('session opened', typeof session.sessionId === 'string');
 ok('session carries the frozen permissions', session.permissions.join() === 'REMOTE_VIEW');
-ok('room is per session', session.room === `remote.${session.sessionId}`);
+ok('session is told how to find the agent', Array.isArray(session.iceServers));
+// STUN needs no configuration, so an answer with nothing in it would mean a
+// controller that can never describe itself and therefore never connect.
+ok('and there is always at least STUN', session.iceServers.length > 0);
+// The screen goes peer to peer. A media-server address in this reply would be
+// the whole of the old design coming back.
+ok('and no media server is named', session.room === undefined && session.token === undefined);
 
 const controller = await open(
   `${REMOTE_WS}/ws/remote?sessionId=${session.sessionId}&token=${encodeURIComponent(viewer.accessToken)}`,
@@ -219,7 +225,7 @@ const controller = await open(
 await waitFor(controller, 'ready');
 const started = await waitFor(agent, 'session.start');
 ok('agent was asked', started.sessionId === session.sessionId);
-ok('agent got its own publisher token', typeof started.token === 'string');
+ok('agent was told how to reach the controller', Array.isArray(started.iceServers));
 
 // Somebody else's session id is not a way in, even with a valid account.
 let borrowed = false;

@@ -1,10 +1,10 @@
 /**
  * Which deployment this client talks to.
  *
- * One address is all a client needs. REST, `/ws/chat`, `/ws/presence` and the
- * stored files are all behind the same gateway, and the LiveKit address arrives
- * inside the call token rather than being configured here - so a deployment is
- * one URL, not a list of them.
+ * One address is all a client needs. REST, `/ws/chat`, `/ws/presence`,
+ * `/ws/call`, `/ws/remote` and the stored files are all behind the same
+ * gateway, and media does not have an address at all - it goes directly to the
+ * other participants. So a deployment is one URL, not a list of them.
  *
  * That address comes from `VITE_API_URL` at build time, and the login screen
  * can point this window at a different one at any time (the choice is kept in

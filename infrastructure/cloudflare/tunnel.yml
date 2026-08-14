@@ -1,8 +1,8 @@
 # Cloudflare Tunnel ingress for Nexora.
 #
 # Nexora is one public hostname. Everything a client needs - REST, /ws/chat,
-# /ws/presence, /ws/remote, uploaded files and LiveKit's signalling handshake -
-# is behind the Nginx gateway on 8080, so this file has one real rule in it.
+# /ws/presence, /ws/call, /ws/remote and uploaded files - is behind the Nginx
+# gateway on 8080, so this file has one real rule in it.
 #
 # There are two ways to run the tunnel, and Nexora works with either.
 #
@@ -45,12 +45,29 @@
 # What does NOT go through the tunnel
 # ---------------------------------------------------------------------------
 #
-# Voice, video, screen share and remote-desktop *media*. WebRTC negotiates its
-# own UDP path to the SFU on 7881/tcp and 50000-50019/udp, and a Cloudflare
-# Tunnel carries HTTP, not that. Signalling reaches the SFU through /livekit and
-# works over the tunnel; the media path needs either those ports reachable, or a
-# TURN server the clients can use. Chat, files and everything else are complete
-# over the tunnel on their own.
+# Voice, video, screen share and remote-desktop *media*, and this is the point
+# the whole design turns on rather than a caveat.
+#
+# A Cloudflare Tunnel carries HTTP and WebSocket. WebRTC media is UDP, and no
+# tunnel carries that. The old design ran an SFU, so media had to get past the
+# tunnel somehow: a routable address for the SFU to advertise, published TCP and
+# UDP ports, and finally a TURN relay. Every one of those was a thing to get
+# wrong, and getting it wrong looked like a call that connected and then went
+# silent.
+#
+# Media is now peer to peer, so it never comes near this tunnel. What crosses
+# here is signalling - the roster, and the offers, answers and ICE candidates
+# two clients exchange - which is a WebSocket, which is exactly what a tunnel is
+# good at. Nothing else has to reach this host at all:
+#
+#   * No port is published for media, in this file or in docker-compose.yml.
+#   * No service advertises an address, so there is none to be wrong.
+#   * Peers find each other with STUN, which they dial out to themselves.
+#   * The pairs of networks that cannot manage a direct path need a TURN relay,
+#     which is optional, off by default, and reached outbound by both ends - so
+#     even that opens no port here.
+#
+# This file having one rule in it is the result, not a simplification of it.
 
 tunnel: nexora
 credentials-file: /etc/cloudflared/nexora.json
@@ -62,8 +79,8 @@ ingress:
     # `nginx` inside the compose network; `localhost` for a host-run tunnel.
     service: http://nginx:8080
     originRequest:
-      # Long-lived sockets: /ws/chat, /ws/presence, /ws/remote and LiveKit's
-      # signalling all stay open far longer than a request does.
+      # Long-lived sockets: /ws/chat, /ws/presence, /ws/call and /ws/remote all
+      # stay open far longer than a request does.
       connectTimeout: 30s
       noTLSVerify: false
       # Uploads stream through; buffering a 100 MB attachment helps nobody.

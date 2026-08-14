@@ -7,11 +7,7 @@
 #   pnpm dev:infra:down
 #
 # The `--env-file .env` matters: compose reads `.env` from *this* directory, not
-# from the repo root, so without it every `${VAR}` below comes up empty. The
-# LiveKit keys are declared required for that reason - a default would let the
-# SFU start with a placeholder secret while host-run call-service signs with the
-# real one from `.env`, and every join would fail with "token signature is
-# invalid".
+# from the repo root, so without it every `${VAR}` below comes up empty.
 
 name: nexora-dev
 
@@ -50,51 +46,11 @@ services:
       timeout: 3s
       retries: 20
 
-  # Voice/video/screen-share SFU. Media goes desktop -> LiveKit directly and is
-  # end-to-end encrypted, so the server relays frames it cannot decrypt.
-  livekit:
-    # Must stay in step with the livekit-client version in apps/desktop: the
-    # client tags every publisher offer with an id and waits for the answer to
-    # echo it. Servers older than v1.9 drop the field, so every publish (mic,
-    # camera, screen share) fails with "negotiation timed out".
-    image: livekit/livekit-server:v1.13.5
-    container_name: nexora-dev-livekit
-    restart: unless-stopped
-    # The address the SFU puts in its ICE candidates. Left alone it advertises
-    # the address it sees on itself - a bridge address like 172.24.0.4 - and
-    # clients in development are not on that network: Docker Desktop and WSL2
-    # do not route the host to it. Signalling still succeeds, because that goes
-    # through the published port, so a join gets all the way to negotiating
-    # media and then sits there until it times out.
-    #
-    # Everything below is published on the host, so 127.0.0.1 is the address
-    # that actually works here. NEXORA_LIVEKIT_NODE_IP overrides it for the one
-    # case that needs another answer: joining this dev SFU from a second machine
-    # on the LAN, which wants this host's address instead.
-    command:
-      - "--config"
-      - "/etc/livekit.yaml"
-      - "--node-ip"
-      - "${NEXORA_LIVEKIT_NODE_IP:-127.0.0.1}"
-    environment:
-      # The only place keys are set - the config file carries none. Required,
-      # not defaulted: a default is what silently drifts from `.env`.
-      LIVEKIT_KEYS: "${LIVEKIT_API_KEY:?LIVEKIT_API_KEY is required - run via pnpm dev:infra so .env is passed}: '${LIVEKIT_API_SECRET:?LIVEKIT_API_SECRET is required - run via pnpm dev:infra so .env is passed}'"
-    volumes:
-      - ../livekit/livekit.yaml:/etc/livekit.yaml:ro
-    ports:
-      # Loopback by default: signalling is reached through the dev server's
-      # /livekit proxy, which runs on this host, so nothing outside needs these.
-      # Testing from a second machine is the exception - its browser negotiates
-      # media with the SFU directly, and the TCP candidate has to be reachable
-      # for a network that blocks the UDP range. Set NEXORA_LIVEKIT_BIND=0.0.0.0
-      # alongside NEXORA_LIVEKIT_NODE_IP for that.
-      - "${NEXORA_LIVEKIT_BIND:-127.0.0.1}:7880:7880"
-      - "${NEXORA_LIVEKIT_BIND:-127.0.0.1}:7881:7881"
-      # ICE/UDP media. Kept to 20 ports: enough for small test calls and fast to
-      # publish on Docker Desktop. Published on every interface already - this is
-      # the path media actually takes.
-      - "50000-50019:50000-50019/udp"
+  # There is no media container here any more. There used to be an SFU, and it
+  # needed a node IP, two published TCP ports and a published UDP range, none of
+  # which a developer could get right on the first try - see the note in
+  # docker-compose.yml. Calls in development now go directly between the two
+  # clients, so `pnpm dev:infra` is Postgres and Redis and nothing else.
 
 volumes:
   postgres-data:

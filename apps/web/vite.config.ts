@@ -2,7 +2,6 @@ import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import basicSsl from '@vitejs/plugin-basic-ssl';
-import { lanSfu } from './lan-sfu';
 
 const AUTH = process.env.AUTH_SERVICE_URL ?? 'http://127.0.0.1:3001';
 const SERVER = process.env.SERVER_SERVICE_URL ?? 'http://127.0.0.1:3003';
@@ -22,9 +21,10 @@ const NOTIFICATION = process.env.NOTIFICATION_SERVICE_URL ?? 'http://127.0.0.1:3
  * usable app at all. A self-signed certificate clears that bar for the price of
  * one click through the browser's warning, once per machine.
  *
- * It also carries the SFU: `lan-sfu.ts` points LiveKit's ICE candidates at this
- * host's LAN address and relays its media port there, because signalling is the
- * only part of a call this proxy table can stand in for.
+ * There used to be a `lan-sfu` plugin here, rewriting an SFU's ICE candidates
+ * to this host's LAN address and relaying its media port, because a proxy table
+ * can stand in for signalling and not for media. It is gone: media never comes
+ * near this server now, so serving the app is the whole of the job.
  */
 export default defineConfig(({ mode }) => {
   const lan = mode === 'lan';
@@ -32,7 +32,7 @@ export default defineConfig(({ mode }) => {
   return {
     // One .env for the whole repo, same as the desktop app.
     envDir: fileURLToPath(new URL('../../', import.meta.url)),
-    plugins: [react(), ...(lan ? [basicSsl(), lanSfu()] : [])],
+    plugins: [react(), ...(lan ? [basicSsl()] : [])],
     // Served at the root of the gateway - `https://nexora.example.com/` is the
     // app, `/admin` is the panel - so asset URLs are domain-rooted.
     base: '/',

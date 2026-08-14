@@ -22,7 +22,6 @@
     "prod:build": "pnpm build",
     "prod:up": "docker compose --env-file .env -f infrastructure/docker/docker-compose.yml up -d --build",
     "prod:down": "docker compose --env-file .env -f infrastructure/docker/docker-compose.yml down",
-    "livekit:doctor": "node scripts/livekit-doctor.mjs",
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
     "check": "turbo run check",

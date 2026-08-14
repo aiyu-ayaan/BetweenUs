@@ -10,14 +10,18 @@
       this page fetches can become code.
 
       connect-src is narrower than the desktop app's, and can be: a browser tab
-      is served *by* the deployment it talks to, so 'self' covers the API, both
-      WebSockets and the LiveKit signalling behind the same gateway. Pointing
-      the page at a different deployment through the server picker is the one
-      thing that needs more, hence the open http/ws entries - a browser would
-      refuse the cross-origin fetch anyway unless that deployment allows it.
+      is served *by* the deployment it talks to, so 'self' covers the API and
+      every WebSocket behind the same gateway. Pointing the page at a different
+      deployment through the server picker is the one thing that needs more,
+      hence the open http/ws entries - a browser would refuse the cross-origin
+      fetch anyway unless that deployment allows it.
 
-      worker-src allows blob: because LiveKit runs end-to-end encryption in a
-      worker it creates itself.
+      None of this governs media. A peer connection is not a fetch and CSP has
+      no say over it, which is as well: the addresses it reaches are the other
+      participants', discovered at the time and nameable in advance by nobody.
+
+      worker-src allows blob: for the microphone gate, which is an AudioWorklet
+      compiled from a string - see services/mic-gate.ts.
     -->
     <meta
       http-equiv="Content-Security-Policy"

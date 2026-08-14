@@ -277,9 +277,11 @@ export async function decryptFileForChannel(
 }
 
 /**
- * Key material for LiveKit's external key provider. A call reuses the channel
- * key, so joining a call needs no second key exchange and the SFU forwards
- * frames it cannot decode.
+ * The channel key, for the one thing a call still needs it for: signing this
+ * client's DTLS fingerprint so the signalling server cannot substitute one of
+ * its own and stand in the middle of a peer connection. The media itself is
+ * encrypted by DTLS-SRTP between the two peers, with no server in between to
+ * keep it from - see `mesh.ts`.
  */
 export async function callKeyForChannel(channelId: string): Promise<string> {
   const state = await ensureChannelKey(channelId);

@@ -66,11 +66,6 @@ jobs:
       REDIS_URL: redis://127.0.0.1:6379
       LOCAL_STORAGE_PATH: ./storage-data
       LOCAL_STORAGE_PUBLIC_PREFIX: /api/v1/uploads
-      # remote-gateway mints LiveKit tokens for a session; nothing dials the SFU
-      # in CI, so a development key pair is all this needs.
-      LIVEKIT_URL: /livekit
-      LIVEKIT_API_KEY: devkey
-      LIVEKIT_API_SECRET: nexora-ci-livekit-secret-not-a-real-one
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4

@@ -2,9 +2,10 @@
 
 interface ImportMetaEnv {
   /**
-   * The one address a client needs: REST, both WebSockets and stored files are
-   * all behind it, and the LiveKit address comes back inside a call token. It
-   * is only the default - the login screen can point this window elsewhere.
+   * The one address a client needs, and now the only one: REST, every
+   * WebSocket and stored files are all behind it, and media goes directly
+   * between clients rather than to a second address. It is only the default -
+   * the login screen can point this window elsewhere.
    */
   readonly VITE_API_URL?: string;
 }
@@ -95,7 +96,3 @@ interface Window {
   };
 }
 
-declare module 'livekit-client/e2ee-worker?worker' {
-  const WorkerFactory: new () => Worker;
-  export default WorkerFactory;
-}

@@ -129,8 +129,10 @@ export interface MicLevel {
 }
 
 /**
- * A LiveKit audio processor: it sits between the captured microphone and what
- * gets published, so what the gate closes never reaches the room.
+ * The gate as an audio processor: it sits between the captured microphone and
+ * the track that is actually sent, so what the gate closes never reaches
+ * anybody. The voice store puts `processedTrack` on the senders rather than the
+ * raw capture, which is the whole point of it.
  */
 export class NoiseGate implements AudioProcessor {
   readonly name = 'nexora-noise-gate';

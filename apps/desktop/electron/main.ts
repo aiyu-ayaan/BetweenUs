@@ -293,9 +293,8 @@ ipcMain.handle('screen:sources', async () => {
  *
  * Two things need this. A remote session has to offer the choice - a machine
  * with two monitors and no way to say which one is half a remote desktop - and
- * whichever is chosen has to be published at its own size, because LiveKit caps
- * a screen share at 1080p unless it is told the capture size and a 1440p or
- * scaled display then arrives soft.
+ * whichever is chosen has to be captured at its own size, because a capture
+ * left to its default is 1080p and a 1440p or scaled display then arrives soft.
  *
  * Matching is on `display_id`, which is the only thing the capturer and the
  * display list have in common. A source that cannot be matched is dropped
