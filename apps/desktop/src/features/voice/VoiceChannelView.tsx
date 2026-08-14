@@ -416,14 +416,10 @@ function Theatre({ share, tiles }: { share: VoiceShare; tiles: Stage[] }): JSX.E
           </div>
         </div>
 
-        {/* Fullscreen Main Content Area (Side Gallery or Center Stage) */}
+        {/* Fullscreen Main Content Area (Side Gallery and Center Stage) */}
         <div className="relative flex min-h-0 flex-1 flex-row items-center justify-center overflow-hidden bg-black w-full h-full">
           {layout === 'side-left' && showParticipants && (
-            <div
-              className={`z-20 h-full p-4 flex flex-col justify-center transition-all duration-300 ease-out ${
-                showControls ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-6'
-              }`}
-            >
+            <div className="z-20 h-full p-4 flex flex-col justify-center">
               <SideGallery tiles={tiles} isFullscreen />
             </div>
           )}
@@ -439,26 +435,16 @@ function Theatre({ share, tiles }: { share: VoiceShare; tiles: Stage[] }): JSX.E
           </div>
 
           {layout === 'side-right' && showParticipants && (
-            <div
-              className={`z-20 h-full p-4 flex flex-col justify-center transition-all duration-300 ease-out ${
-                showControls ? 'opacity-100 translate-x-0' : 'opacity-0 translate-x-6'
-              }`}
-            >
+            <div className="z-20 h-full p-4 flex flex-col justify-center">
               <SideGallery tiles={tiles} isFullscreen />
             </div>
           )}
         </div>
 
-        {/* Fullscreen Bottom Overlay: Floating Voice Controls & optional Bottom filmstrip (Auto-Hiding) */}
-        <div
-          className={`absolute left-0 right-0 bottom-0 z-30 flex flex-col items-center gap-3 bg-gradient-to-t from-black/95 via-black/60 to-transparent px-6 pb-5 pt-8 transition-all duration-300 ease-out ${
-            showControls
-              ? 'opacity-100 translate-y-0 pointer-events-auto'
-              : 'opacity-0 translate-y-6 pointer-events-none'
-          }`}
-        >
+        {/* Fullscreen Bottom Overlay: Floating Voice Controls (Auto-Hiding) & optional Bottom filmstrip */}
+        <div className="absolute left-0 right-0 bottom-0 z-30 flex flex-col items-center gap-3 bg-gradient-to-t from-black/95 via-black/60 to-transparent px-6 pb-5 pt-8 pointer-events-none">
           {layout === 'bottom' && showParticipants && (
-            <ul className="flex shrink-0 justify-center gap-2.5 overflow-x-auto max-w-full pb-1">
+            <ul className="flex shrink-0 justify-center gap-2.5 overflow-x-auto max-w-full pb-1 pointer-events-auto">
               {tiles.map((tile) => (
                 <li key={tile.key} className="w-36 shrink-0">
                   <StageTile tile={tile} />
@@ -466,7 +452,13 @@ function Theatre({ share, tiles }: { share: VoiceShare; tiles: Stage[] }): JSX.E
               ))}
             </ul>
           )}
-          <div className="flex items-center justify-center rounded-2xl border border-white/10 bg-black/70 px-4 py-2 backdrop-blur-md shadow-2xl">
+          <div
+            className={`flex items-center justify-center rounded-2xl border border-white/10 bg-black/70 px-4 py-2 backdrop-blur-md shadow-2xl transition-all duration-300 ease-out ${
+              showControls
+                ? 'opacity-100 translate-y-0 pointer-events-auto'
+                : 'opacity-0 translate-y-6 pointer-events-none'
+            }`}
+          >
             <VoiceControls size="sm" />
           </div>
         </div>
