@@ -207,6 +207,10 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
           refresh();
         },
         onData: (peer, payload) => useShareControlStore.getState().receive(peer, payload),
+        onProblem: (message) => {
+          if (useVoiceStore.getState().channelId !== channelId) return;
+          useVoiceStore.setState({ error: message });
+        },
         onFatal: (message) => {
           if (get().channelId !== channelId) return;
           set({ error: message });
@@ -252,8 +256,8 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
         cameraEnabled: false,
         screenEnabled: false,
         sharedDisplayId: null,
-        ...snapshot(),
       });
+      refresh();
     } catch (error) {
       if (joinCounter !== currentJoinId) return;
       teardown();
@@ -292,13 +296,16 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
     try {
       if (micEnabled) {
         await closeMicrophone();
-        set({ micEnabled: false, error: null, ...snapshot() });
+        set({ micEnabled: false, error: null });
+      refresh();
         return;
       }
       await openMicrophone(useAudioSettings.getState().settings);
-      set({ micEnabled: true, error: null, ...snapshot() });
+      set({ micEnabled: true, error: null });
+      refresh();
     } catch (error) {
-      set({ error: `Microphone: ${messageOf(error)}`, ...snapshot() });
+      set({ error: `Microphone: ${messageOf(error)}` });
+      refresh();
     }
   },
 
@@ -310,7 +317,8 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
       if (cameraEnabled) {
         stopLocal('camera');
         await mesh.setTrack('camera', null);
-        set({ cameraEnabled: false, error: null, ...snapshot() });
+        set({ cameraEnabled: false, error: null });
+      refresh();
         return;
       }
 
@@ -318,9 +326,11 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
       const track = stream.getVideoTracks()[0] ?? null;
       localTracks.camera = track;
       await mesh.setTrack('camera', track);
-      set({ cameraEnabled: Boolean(track), error: null, ...snapshot() });
+      set({ cameraEnabled: Boolean(track), error: null });
+      refresh();
     } catch (error) {
-      set({ error: `Camera: ${messageOf(error)}`, ...snapshot() });
+      set({ error: `Camera: ${messageOf(error)}` });
+      refresh();
     }
   },
 
@@ -388,10 +398,11 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
         sharedDisplayId: source?.displayId ?? null,
         error: null,
         watching: LOCAL,
-        ...snapshot(),
       });
+      refresh();
     } catch (error) {
-      set({ error: `Screen share: ${messageOf(error)}`, ...snapshot() });
+      set({ error: `Screen share: ${messageOf(error)}` });
+      refresh();
     }
   },
 
@@ -413,10 +424,11 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
         sharedDisplayId: null,
         error: null,
         watching: watching === LOCAL ? null : watching,
-        ...snapshot(),
       });
+      refresh();
     } catch (error) {
-      set({ error: `Screen share: ${messageOf(error)}`, ...snapshot() });
+      set({ error: `Screen share: ${messageOf(error)}` });
+      refresh();
     }
   },
 

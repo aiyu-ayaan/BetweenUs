@@ -57,6 +57,7 @@ import type {
   CallPeer,
   CallSignal,
   ClientCallEvent,
+  IceCandidatePayload,
   IceServer,
   ServerCallEvent,
 } from '@nexora/shared-types';
@@ -95,6 +96,16 @@ export interface MeshEvents {
   onSpeaking: (speaking: Set<string>) => void;
   /** A message on a peer's data channel. */
   onData: (peer: CallPeer, payload: unknown) => void;
+  /**
+   * One peer is in trouble, but the call is not over.
+   *
+   * This exists because the first version of this file logged every negotiation
+   * failure to the console and nowhere else, so a call where nothing connected
+   * looked exactly like a call that was working - two tiles, no media, no
+   * message. A failure the person in the call cannot see is a failure nobody
+   * can report.
+   */
+  onProblem: (message: string) => void;
   /** The call cannot continue - the socket died, or the server refused. */
   onFatal: (message: string) => void;
 }
@@ -204,6 +215,18 @@ class PeerLink {
   private readonly polite: boolean;
   private micEncoding: MicEncoding | null = null;
   private closed = false;
+  /**
+   * Candidates that arrived before there was a remote description to attach
+   * them to.
+   *
+   * This is not an edge case, it is the normal path: both peers offer at once,
+   * so each one's candidates start arriving while the other is still resolving
+   * the glare. `addIceCandidate` rejects with `InvalidStateError` until
+   * `setRemoteDescription` has run, and a candidate dropped there is dropped
+   * for good - which is a connection that negotiates fine and then never
+   * carries a packet.
+   */
+  private readonly pendingCandidates: IceCandidatePayload[] = [];
 
   constructor(
     readonly peer: CallPeer,
@@ -215,6 +238,8 @@ class PeerLink {
       onTrack: (slot: Slot, track: MediaStreamTrack | null) => void;
       onData: (payload: unknown) => void;
       onFailed: () => void;
+      /** Something went wrong that the person in the call should be told about. */
+      onProblem: (message: string) => void;
     },
   ) {
     // Whoever has the larger peer id yields. Both sides compute this from the
@@ -297,6 +322,21 @@ class PeerLink {
     };
   }
 
+  /**
+   * Applies everything that arrived too early. Called immediately after a
+   * remote description lands, which is the first moment these are legal.
+   */
+  private async flushCandidates(): Promise<void> {
+    const queued = this.pendingCandidates.splice(0);
+    for (const candidate of queued) {
+      try {
+        await this.pc.addIceCandidate(candidate);
+      } catch (error) {
+        console.warn('[mesh] queued ICE candidate rejected', error);
+      }
+    }
+  }
+
   private slotOf(transceiver: RTCRtpTransceiver): Slot | null {
     for (const [slot, candidate] of this.transceivers) {
       if (candidate === transceiver) return slot;
@@ -324,28 +364,49 @@ class PeerLink {
     if (this.closed) return;
     try {
       this.makingOffer = true;
-      await this.pc.setLocalDescription(await this.localDescription('offer'));
+      await this.setLocalDescription('offer');
       await this.sendDescription();
     } catch (error) {
-      console.warn('[mesh] could not offer to', this.peer.peerId, error);
+      this.fail('could not offer', error);
     } finally {
       this.makingOffer = false;
     }
   }
 
   /**
-   * Builds the local description and patches the Opus line into it, because
-   * `stereo` and `usedtx` are only settable there.
+   * Sets the local description, with the Opus options patched in when they will
+   * be accepted.
+   *
+   * The patch is a preference, not a requirement: `stereo` and `usedtx` are
+   * only settable in the SDP, and Chromium has grown steadily stricter about
+   * accepting an SDP it did not write. So the munged one is tried first and the
+   * untouched one is the fallback - a mono call is a call, and a rejected
+   * description is silence.
    */
-  private async localDescription(
-    type: 'offer' | 'answer',
-  ): Promise<RTCSessionDescriptionInit> {
+  private async setLocalDescription(type: 'offer' | 'answer'): Promise<void> {
     const description =
       type === 'offer' ? await this.pc.createOffer() : await this.pc.createAnswer();
+
     if (this.micEncoding && description.sdp) {
-      description.sdp = patchOpus(description.sdp, this.micEncoding);
+      try {
+        await this.pc.setLocalDescription({
+          type: description.type,
+          sdp: patchOpus(description.sdp, this.micEncoding),
+        });
+        return;
+      } catch (error) {
+        console.warn('[mesh] Opus options refused, continuing without them', error);
+      }
     }
-    return description;
+
+    await this.pc.setLocalDescription(description);
+  }
+
+  /** One place for "this peer is not going to work, and here is why". */
+  private fail(what: string, error: unknown): void {
+    const reason = error instanceof Error ? error.message : String(error);
+    console.error(`[mesh] ${what} (${this.peer.username}/${this.peer.peerId}):`, error);
+    this.events.onProblem(`${this.peer.username}: ${what} - ${reason}`);
   }
 
   private async sendDescription(): Promise<void> {
@@ -356,7 +417,7 @@ class PeerLink {
     if (!fingerprint) {
       // Nothing to sign means nothing the far end can verify. Sending it anyway
       // would be handing them a connection they have to trust blindly.
-      console.warn('[mesh] no DTLS fingerprint in the local description; not signalling');
+      this.fail('no DTLS fingerprint to sign, so nothing was sent', new Error('no fingerprint'));
       return;
     }
 
@@ -373,6 +434,13 @@ class PeerLink {
 
     try {
       if (signal.kind === 'ice') {
+        // Held rather than applied when there is nothing to apply them to yet.
+        // See `pendingCandidates`: dropping these is a call that connects and
+        // then stays silent.
+        if (!this.pc.remoteDescription) {
+          this.pendingCandidates.push(signal.candidate);
+          return;
+        }
         try {
           await this.pc.addIceCandidate(signal.candidate);
         } catch (error) {
@@ -390,6 +458,13 @@ class PeerLink {
           '[mesh] refusing a peer whose DTLS fingerprint is not signed with the channel key',
           this.peer.peerId,
         );
+        // Said out loud rather than left as a tile that never carries anything.
+        // The honest cause is almost always the two devices holding different
+        // channel-key epochs, not an attack - but the connection is refused
+        // either way, because the two cases look identical from here.
+        this.events.onProblem(
+          `${this.peer.username}: refused - their media key does not match this channel's`,
+        );
         this.events.onFailed();
         return;
       }
@@ -402,13 +477,14 @@ class PeerLink {
       if (this.ignoreOffer) return;
 
       await this.pc.setRemoteDescription({ type: signal.kind, sdp: signal.sdp });
+      await this.flushCandidates();
 
       if (signal.kind === 'offer') {
-        await this.pc.setLocalDescription(await this.localDescription('answer'));
+        await this.setLocalDescription('answer');
         await this.sendDescription();
       }
     } catch (error) {
-      console.warn('[mesh] could not accept a signal from', this.peer.peerId, error);
+      this.fail(`could not accept an ${signal.kind}`, error);
     }
   }
 
@@ -649,6 +725,7 @@ export class Mesh {
           for (const slot of SLOTS) this.options.onTrack(peer.peerId, slot, null);
           this.announcePeers();
         },
+        onProblem: (message) => this.options.onProblem(message),
       },
     );
 
