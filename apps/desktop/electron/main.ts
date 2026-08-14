@@ -55,10 +55,26 @@ const windowLabel = process.env.NEXORA_WINDOW_LABEL;
 // DWM for what it actually composited, overlays included, and it keeps
 // producing frames for a window that is behind another one instead of
 // returning the last one it saw.
+//
+// The feature is named differently depending on the Chromium underneath, and an
+// unknown feature name is ignored in silence - which is exactly what happened
+// here the first time: the `AllowWgc*` names are the ones Chromium 127 and
+// later use, this app is on Electron 31 (Chromium 126), and the switch did
+// nothing at all. Both generations of the name are passed, because being
+// ignored is the failure mode either way and the wrong one costs nothing.
 if (process.platform === 'win32') {
   app.commandLine.appendSwitch(
     'enable-features',
-    'AllowWgcDesktopCapturer,AllowWgcScreenCapturer,AllowWgcWindowCapturer',
+    [
+      // Chromium 126 and earlier.
+      'WebRtcAllowWgcDesktopCapturer',
+      'WebRtcAllowWgcScreenCapturer',
+      'WebRtcAllowWgcWindowCapturer',
+      // Chromium 127 and later, after the flag was renamed and split.
+      'AllowWgcDesktopCapturer',
+      'AllowWgcScreenCapturer',
+      'AllowWgcWindowCapturer',
+    ].join(','),
   );
 }
 
