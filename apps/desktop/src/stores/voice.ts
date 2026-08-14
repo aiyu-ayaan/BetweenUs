@@ -18,6 +18,7 @@ import { api } from '../services/api';
 import { callKeyForChannel } from '../services/e2ee';
 import { Mesh, SLOTS, type Slot } from '../services/mesh';
 import { presenceSocket } from '../services/socket';
+import { isDesktopRuntime } from '../services/platform';
 import { useAuthStore } from './auth';
 import { useChatStore } from './chat';
 import { useShareControlStore } from './shareControl';
@@ -784,6 +785,35 @@ useShareControlStore.subscribe((state, previous) => {
   if (state.driving === previous.driving) return;
   mesh?.setDriving(state.driving !== null);
 });
+
+/**
+ * In a browser, closing the tab or reloading it ends the call outright - the
+ * peer connections go with the page, and there is no undo. So the web client
+ * asks the browser to confirm first, and only while a call is up.
+ *
+ * Desktop is not in this: an Electron window that closes has a tray icon and a
+ * main process behind it, and the prompt would be a nuisance rather than a
+ * rescue. `isDesktopRuntime` is the same runtime split the rest of the client
+ * uses - see services/platform.ts.
+ *
+ * The browser writes the wording. All a page may do is ask for the prompt;
+ * anything it puts in `returnValue` is ignored by every current browser.
+ */
+function warnBeforeUnload(event: BeforeUnloadEvent): void {
+  event.preventDefault();
+  event.returnValue = '';
+}
+
+if (typeof window !== 'undefined' && !isDesktopRuntime()) {
+  useVoiceStore.subscribe((state, previous) => {
+    const inCall = state.status !== 'idle';
+    if (inCall === (previous.status !== 'idle')) return;
+    // Registered only for the length of the call: an unconditional handler
+    // makes every reload of the app a confirmation dialog.
+    if (inCall) window.addEventListener('beforeunload', warnBeforeUnload);
+    else window.removeEventListener('beforeunload', warnBeforeUnload);
+  });
+}
 
 if (import.meta.hot) {
   import.meta.hot.dispose(() => {
