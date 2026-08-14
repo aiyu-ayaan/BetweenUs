@@ -15,7 +15,7 @@ it states the gaps a deployment still has rather than implying there are none.
 1. [What a deployment is](#1-what-a-deployment-is)
 2. [Before you start](#2-before-you-start)
 3. [Step 1 - the code and the environment](#3-step-1---the-code-and-the-environment)
-4. [Step 2 - LiveKit for a real host](#4-step-2---livekit-for-a-real-host)
+4. [Step 2 - decide whether you need a TURN relay](#4-step-2---decide-whether-you-need-a-turn-relay)
 5. [Step 3 - bring the stack up](#5-step-3---bring-the-stack-up)
 6. [Step 4 - create the first administrator](#6-step-4---create-the-first-administrator)
 7. [Step 5 - the admin panel](#7-step-5---the-admin-panel)
@@ -54,7 +54,7 @@ One host, one public hostname, one Docker Compose project.
                  ┌─────────┴─────────┐
             PostgreSQL:5432      Redis:6379          (no published ports)
 
-   Desktop ─── WebRTC media ───▶ LiveKit SFU :7880 / :7881 / 50000-50019 udp
+   Desktop A ◀────── WebRTC media, direct, no server ──────▶ Desktop B
 ```
 
 Every service is a container built from this repository, on its own private
@@ -63,8 +63,9 @@ the host port, and with a container tunnel it does not even need that.
 
 Two things travel outside the gateway, and both are deliberate:
 
-- **WebRTC media** goes from a client straight to the LiveKit SFU. It is
-  end-to-end encrypted, so the SFU relays frames it cannot read.
+- **WebRTC media** goes from one client straight to another. There is no media
+  server in this stack, nothing on the host carries a frame, and no port is
+  published for it. What the gateway carries is the signalling that sets it up.
 - **Remote agents dial out.** Nothing ever connects towards a controlled
   machine, and `3389` is published nowhere in this stack.
 
@@ -75,8 +76,9 @@ Two things travel outside the gateway, and both are deliberate:
 **Host**
 
 - Linux with Docker Engine 24+ and the Compose plugin (Docker Desktop works too)
-- 2 vCPU / 4 GB RAM is enough for a small deployment; LiveKit is the part that
-  wants headroom once several people share screens
+- 2 vCPU / 4 GB RAM is enough for a small deployment, and stays enough as calls
+  get busier: media does not touch the host, so a screen share costs the server
+  nothing at all. It costs the *participants* - see §4.
 - Disk for the Postgres volume, and for the upload volume if you stay on local
   file storage
 
@@ -87,11 +89,11 @@ Two things travel outside the gateway, and both are deliberate:
 - A Cloudflare Tunnel: either one you already run on the host, or a new one
   whose token you can paste into `.env`
 
-**A decision to make now: where media lands.** Signalling rides the tunnel, but
-WebRTC media does not (§11). Before you open the door to users, decide whether
-`7881/tcp` and `50000-50019/udp` are reachable on the host's public address. If
-they are not, chat, files, presence and remote *authorisation* all work while
-voice, video, screen share and remote desktop do not.
+**A decision to make now: whether to configure a TURN relay.** Nothing has to
+be reachable on the host for media - it never goes there. But two clients still
+have to find a path to each other, and a minority of network pairs cannot
+without a relay. §4 is that decision, and it is the only media question this
+deployment has.
 
 **Building on the host or pulling images.** `docker compose ... up -d --build`
 builds every image on the box, which needs a few GB of RAM. All nine images come
@@ -111,12 +113,11 @@ cd nexora
 cp .env.example .env
 ```
 
-Generate every secret. Never reuse the example values - the LiveKit pair in
-`infrastructure/livekit/livekit.yaml` is a published development key.
+Generate every secret. Never reuse the example values.
 
 ```bash
-# JWT_SECRET, JWT_REFRESH_SECRET, SETTINGS_SECRET, LIVEKIT_API_SECRET,
-# POSTGRES_PASSWORD - run once per value.
+# JWT_SECRET, JWT_REFRESH_SECRET, SETTINGS_SECRET, POSTGRES_PASSWORD -
+# run once per value.
 node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
 ```
 
@@ -133,10 +134,8 @@ node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
 | `PUBLIC_API_URL` | `https://nexora.example.com` | The OAuth callback URL is built from it, and it must match what Google and GitHub have registered |
 | `OAUTH_ALLOWED_REDIRECTS` | `https://nexora.example.com` | Extra origins a finished OAuth sign-in may return to. Loopback (the desktop client) is always allowed; **the web client needs the deployment's own origin here**, or provider sign-in in a browser is refused with `BAD_REDIRECT` |
 | `CORS_ORIGIN` | `https://nexora.example.com` | Compose defaults it to `*`. The web client and the admin panel are both same-origin, so neither needs it; set this when browsers on *other* origins will call the API |
-| `LIVEKIT_API_KEY` / `LIVEKIT_API_SECRET` | generated pair | Mints call tokens. The development pair is public knowledge |
-| `LIVEKIT_URL` | `/livekit` | What clients are told to dial. The path keeps the whole deployment on one hostname; an absolute `wss://` URL splits the SFU onto its own name. **Never a loopback address here** - `ws://127.0.0.1:7880` tells every client to look for the SFU inside itself, which works in a browser on the server and fails everywhere else; call-service refuses it with `LIVEKIT_UNREACHABLE_URL` rather than handing it out |
-| `LIVEKIT_NODE_IP` | the address clients reach this host on | **Required; the stack refuses to start without it.** What the SFU puts in its ICE candidates, so it is where every client sends media. Unset, it advertises its Docker bridge address and every call negotiates to an address nobody can reach - signalling succeeds through the gateway, then the client gives up with "Connection to voice server timed out". `7881/tcp` and `50000-50019/udp` must be reachable at whatever this says; a Cloudflare tunnel does not carry them, because it is an HTTP tunnel and this is WebRTC |
-| `CLOUDFLARE_TURN_KEY_ID` / `CLOUDFLARE_TURN_KEY_API_TOKEN` | a TURN key, for any deployment used from outside its own network | Relays media for clients that cannot reach `LIVEKIT_NODE_IP` - which is everyone, once the SFU is behind a home router. Cloudflare dashboard → Realtime → TURN. call-service mints a short-lived credential per call and hands only that to the client; the key stays in the service. Leave empty for a LAN-only deployment. **This is the only thing that makes calls work over a Cloudflare tunnel**, because the tunnel carries HTTP and WebRTC media is not HTTP |
+| `STUN_URLS` | the default is fine | Where a peer asks what its own public address looks like, so it can offer one. Not a relay: no media passes through it and no port is opened for it. Defaults to two public servers from different operators, because this is the one step of ICE with no fallback. Point it at your own coturn if you would rather not talk to them |
+| `CLOUDFLARE_TURN_KEY_ID` / `CLOUDFLARE_TURN_KEY_API_TOKEN` | empty, unless §4 says otherwise | A relay, for the pairs of networks that cannot form a direct path at all. Optional and off by default, so this deployment relays nothing unless you say so. Cloudflare dashboard → Realtime → TURN; call-service mints a short-lived credential per call and hands only that to a client, never the key |
 | `GATEWAY_PORT` | `127.0.0.1:8080` with a host tunnel | Keeps the gateway off the LAN while a host-run `cloudflared` still reaches it |
 | `CLOUDFLARE_TUNNEL_TOKEN` | token, or empty | Only for the container tunnel (`--profile public`). Leave empty when the tunnel already runs on the host |
 | `LOG_LEVEL` | `info` | `debug` is noisy and logs more request detail than a public deployment wants |
@@ -162,46 +161,65 @@ affects host-run development.
 
 ---
 
-## 4. Step 2 - LiveKit for a real host
+## 4. Step 2 - decide whether you need a TURN relay
 
-`infrastructure/livekit/livekit.yaml` is mounted into the SFU container. Two
-things in it are development-shaped:
+This is the only media decision a deployment has, and it is smaller than it
+used to be. There is no SFU to configure, no node address to get right, and no
+port to open: media goes directly between the participants, so the host is not
+in the path.
 
-```yaml
-rtc:
-  tcp_port: 7881
-  port_range_start: 50000
-  port_range_end: 50019
-  use_external_ip: false     # ← true for any host clients reach over the internet
+What two clients still need is a way to find each other.
+
+**STUN, which you already have.** A machine behind NAT cannot describe itself -
+it does not know what its public address looks like from outside - so it asks a
+STUN server and offers the answer. No media passes through it, nothing has to be
+opened for it, and one request per call is the whole of the traffic. defaults to two public servers and needs nothing from you. Point it at your own
+coturn if you would rather not talk to them.
+
+**TURN, which is optional and off.** Once both ends have described themselves,
+most pairs of networks find a direct path. Some cannot:
+
+| Both peers | Direct path |
+| --- | --- |
+| On the same LAN | Yes, immediately |
+| On ordinary home or office NAT | Yes, once STUN has told them their addresses |
+| One or both on symmetric NAT | No |
+| One or both on mobile carrier-grade NAT | Usually not |
+
+For those, a TURN server is a machine both ends reach *outbound* which forwards
+between them. It opens no port on your host either - but it is a third party
+carrying the media, and it costs bandwidth, so it is unconfigured by default.
+Leave it that way and those particular calls fail rather than being quietly
+relayed.
+
+If you want them to work, create a key at **Cloudflare dashboard → Realtime →
+TURN** and set:
+
+```bash
+CLOUDFLARE_TURN_KEY_ID="..."
+CLOUDFLARE_TURN_KEY_API_TOKEN="..."
 ```
 
-- **`use_external_ip: true`** on a public host. With `false` the SFU advertises
-  its container address, which no client outside the host can route to, and
-  every call fails at ICE.
-- **The UDP range** is twenty ports, sized for local testing. Widen it for more
-  than a handful of simultaneous publishers, and keep `ports:` in
-  `docker-compose.yml` in step with it - the two must match exactly.
-- **Keys** come from the environment only: compose passes `LIVEKIT_KEYS`, built
-  from `LIVEKIT_API_KEY` and `LIVEKIT_API_SECRET`, and the config file carries
-  no `keys:` block of its own. After changing either value, recreate both
-  containers - `docker compose up -d livekit call-service`, because
-  `docker compose restart` reuses the old environment. A SFU still holding the
-  previous secret answers every join with
-  `could not establish signal connection: invalid token: ... token signature is
-  invalid`. Run `pnpm livekit:doctor` on the host to see which side holds which
-  secret - it prints fingerprints, never the values, and names the fix. From
-  the same release, call-service refuses to hand out a token the SFU is known
-  to reject and answers `LIVEKIT_KEY_MISMATCH` instead, so the client shows a
-  sentence rather than the raw JWT.
-- **The image version** is pinned to `v1.13.5` and must stay in step with the
-  `livekit-client` version in `apps/desktop`. Servers older than v1.9 drop a
-  field the client waits for, and every publish fails with "negotiation timed
-  out".
+call-service mints a short-lived credential per call and hands only that to a
+client; the key never leaves the server. Nothing about privacy changes: media
+is DTLS-SRTP between the two peers, so a relay forwards packets it has no key
+for.
 
-Open `7881/tcp` and the UDP range on the host firewall and on any cloud
-security group. These are the ports the tunnel cannot stand in for.
+**How to tell whether you need it.** You do not have to guess in advance -
+signalling and everything else work regardless. If a call connects for people
+on the same network and fails between two particular networks, that is this,
+and it is one environment variable and a `docker compose up -d call-service`
+away.
+
+> There used to be a long section here about `LIVEKIT_NODE_IP`,
+> `use_external_ip`, rotating keys between the SFU and call-service, keeping the
+> server image in step with the client, and opening `7881/tcp` plus a UDP range
+> on the host firewall and the cloud security group. All of it is gone with the
+> SFU. If you are upgrading a deployment that had those ports open, you can
+> close them.
 
 ---
+
 
 ## 5. Step 3 - bring the stack up
 
@@ -400,7 +418,7 @@ config-file-mode variant.
 ### Cloudflare settings that matter
 
 - **WebSockets must be enabled** for the zone. `/ws/chat`, `/ws/presence`,
-  `/ws/remote` and LiveKit's signalling are all long-lived upgrades; without it
+  `/ws/remote`, `/ws/call` and `/ws/chat` are all long-lived upgrades; without it
   realtime dies while plain REST keeps working, which is a confusing failure.
 - **Body size.** Nginx caps `/api/v1/uploads` at 32 MB per request, and an
   attachment larger than 8 MB is uploaded in parts, so no single request
@@ -433,19 +451,20 @@ any one of them looks like a bug in the app rather than a hole in ingress.
 | `/api/v1/friends`, `/api/v1/users`, `/api/v1/dm` | chat-service | User search, friendships, direct-message channels (user-service is still a scaffold) | No DMs, no friend list, no user search |
 | `/api/v1/e2ee` | chat-service | The key directory: device public keys and wrapped channel keys | A new device cannot obtain channel keys, so history stays permanently unreadable to it |
 | `/api/v1/uploads` | chat-service | Encrypted attachment upload and download, including multipart | Attachments and avatars fail; body cap here is 32 MB, wider than the rest |
-| `/api/v1/calls` | call-service | Mints the LiveKit access token | No token, no voice - the SFU refuses an unauthenticated join |
+| `/api/v1/calls` | call-service | Hands out ICE servers for a call, after checking the caller may start one | Clients cannot learn how to reach each other, so no call connects |
 | `/api/v1/notifications` | notification-service | Mutes, quiet hours, read markers | Unread state and per-channel mutes stop persisting |
 | `/api/v1/remote` | remote-gateway | Machine registry, grants, audit | Remote machines cannot enrol or be listed |
 | `/ws/chat` | chat-service | Realtime message fanout, upgraded | Messages appear only on reload |
 | `/ws/presence` | presence-service | Status, typing, voice rosters | Everyone looks offline; nobody appears in a voice channel |
 | `/ws/remote` | remote-gateway | The relay between a controller and an agent, permission-checked per event | Remote sessions cannot start, and enrolled agents cannot dial in |
-| `/livekit/` | livekit | The SFU's signalling handshake: an HTTPS fetch of `/rtc/validate`, then a WebSocket on `/rtc` | Voice, video, screen share and remote screens never connect - clients hang at "connecting" |
+| `/ws/call` | call-service | Call signalling: the roster of who is in a call, and the offers, answers and ICE candidates between two peers | Voice, video and screen share never connect - clients hang at "connecting" |
 | `/health` | nginx | Gateway liveness; the tunnel container waits on it | Nothing user-facing, but the container tunnel will not start |
 
 Three of these are worth reading twice:
 
-- **`/livekit/` is signalling only.** Proxying it is cheap precisely because no
-  media passes through it - that is why one hostname can cover voice at all.
+- **`/ws/call` is signalling only.** Proxying it is cheap precisely because no
+  media passes through it - that is why one hostname covers voice at all, and
+  why a tunnel that carries no UDP is nonetheless enough.
 - **The WebSocket paths need upgrade to survive the whole chain.** Nginx sets
   `proxy_read_timeout 3600s` so the gateway does not cut an idle socket; a proxy
   in front that strips `Upgrade`, or a 60-second idle timeout, produces sockets
@@ -462,21 +481,32 @@ private Docker networks; `remote-gateway` is deliberately kept off
 
 ## 11. What does not go through the tunnel
 
-**WebRTC media.** Voice, video, screen share and a remote machine's screen
-negotiate their own path to the SFU on `7881/tcp` and `50000-50019/udp`. A
-Cloudflare Tunnel carries HTTP; it cannot carry that. So:
+**WebRTC media**, and this is now a statement about the design rather than a
+gap in it.
 
-- Signalling reaches the SFU through `/livekit` over the tunnel and works.
-- Media needs those ports reachable on the host's public address, **or** a TURN
-  server the clients can use.
+A Cloudflare Tunnel carries HTTP and WebSocket. WebRTC media is UDP, and no
+tunnel carries that. The old architecture ran an SFU, so media had to get past
+the tunnel somehow, and this section used to list the ways: publish `7881/tcp`
+and a UDP range on the host's public address, advertise an address the SFU
+could be reached at, or force everything through a relay. Each was a thing to
+get wrong, and getting it wrong looked the same from the outside - a call that
+connected and then went quiet.
 
-There is no TURN server in this stack. That is the real remaining gap for a
-deployment behind a NAT that blocks the SFU's UDP range - it is written down in
-`development/TODO.md` as its own phase rather than papered over.
+Media is peer to peer now, so it never approaches the tunnel:
 
-Chat, files, presence, notifications and remote *authorisation* are complete
-over the tunnel on their own; it is only the media path that has this
-requirement.
+- **Signalling** - the roster, offers, answers and ICE candidates - crosses the
+  tunnel on `/ws/call` and `/ws/remote`, exactly as chat does on `/ws/chat`.
+- **Media** goes directly from one client to the other. It does not reach this
+  host, so nothing here needs to be reachable for it.
+
+What replaces the old requirement is smaller and belongs to the clients, not to
+you: two peers have to find a path to each other. STUN handles most pairs and
+needs nothing from your host; the rest need a TURN relay, which both peers also
+reach outbound. See §4 - it is one optional environment variable, and it opens
+no port here either.
+
+Chat, files, presence, notifications and remote authorisation were always
+complete over the tunnel on their own. Now so are calls.
 
 **Nothing connects towards a remote machine, ever.** An agent enrols under the
 account signed in on it, keeps its credential in the OS keychain, and dials out
@@ -577,8 +607,10 @@ Then, in a client pointed at the hostname:
    WebSocket path is not upgrading.
 4. Watch presence and typing - `/ws/presence`.
 5. Upload an attachment - `/api/v1/uploads` and the storage driver.
-6. Join a voice channel from two clients. Connecting but silent means
-   signalling reached the SFU and media did not: check §4 and §11.
+6. Join a voice channel from two clients, ideally on **different networks** -
+   two clients on one LAN prove the least interesting case. Connecting but
+   silent means signalling worked and the two peers could not find a path to
+   each other: that is the TURN question in §4.
 7. Sign in to `/admin` and load the user directory.
 
 ### Troubleshooting 502 Bad Gateway Errors
@@ -664,9 +696,21 @@ limiter inside each service is the one that holds across instances.
 Stated plainly, because a deployment guide that implies completeness is worse
 than useless. All of these are tracked in `development/TODO.md`.
 
-- **No TURN server.** Media needs `7881/tcp` and `50000-50019/udp` reachable.
-  Behind a NAT that blocks them, voice, screen share and remote desktop do not
-  connect while everything else does.
+- **No TURN server is configured by default**, and some networks need one.
+  Media is peer to peer, so nothing has to be reachable on this host - but two
+  peers behind symmetric or carrier-grade NAT cannot form a direct path at all,
+  and for them voice, screen share and remote desktop do not connect while
+  everything else does. §4 is one environment variable away from fixing it; it
+  is off by default because a relay is a third party in the media path and that
+  is the operator's call, not this repository's.
+- **A remote-desktop session's fingerprints are unverified.** The screen is
+  end-to-end encrypted between the two machines, but unlike a call there is no
+  shared key to bind the DTLS fingerprint with, so a malicious `remote-gateway`
+  could stand in the middle. See "Known limits" in `development/E2EE.md`.
+- **Calls are a full mesh**, so each participant uploads one copy of their media
+  per other participant. Comfortable to about five on video and eight on voice;
+  past that a call degrades for everyone at once, and `call-service` refuses a
+  ninth peer rather than letting it.
 - **Secrets are `.env` files.** No Docker secrets, no external manager, no
   rotation.
 - **Nothing deploys.** Images are built and pushed by CI on a tag; putting them

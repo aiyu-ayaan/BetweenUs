@@ -7,7 +7,7 @@ key was exchanged between two separate devices.
 ## `pnpm dev:duo`
 
 ```bash
-pnpm dev:infra          # Postgres, Redis, LiveKit
+pnpm dev:infra          # Postgres and Redis
 pnpm db:migrate         # first run only
 pnpm dev:backend        # backend services only (leave running)
 pnpm dev:duo            # in a second terminal
@@ -271,8 +271,8 @@ by hand once.
    site) - "That address is not a Nexora server".
 3. **A right one switches.** With the container stack up, type `localhost:8080`.
    The window signs out, reloads, and signs in against Nginx instead of the Vite
-   proxy. Voice then goes through `/livekit` rather than straight at 7880, which
-   is the path a real deployment takes.
+   proxy - including `/ws/call`, which is the path a real deployment takes. The
+   media does not change: it was never going through either of them.
 4. **Back again.** The dialog offers the build's own address when the window is
    somewhere else; it is also reachable from Settings → My Account → Server.
 5. **Only one variable.** `VITE_API_URL` in the repo-root `.env`, and it only
@@ -533,8 +533,9 @@ behind the login screen's server picker, the letterbox arithmetic that puts a
 named cursor and a click in the right place on a shared screen, the screen-
 share encoder profiles and their bitrate ceilings, the microphone profiles and
 the noise gate (including compiling the worklet that gate's own source is
-spliced into), the addresses call-service will try when asking the SFU whether
-it accepts this deployment's signing key, and
+spliced into), the ICE configuration a client is handed (STUN is never absent,
+and an unconfigured deployment relays nothing), the DTLS fingerprint signature
+that stops the signalling server standing in the middle of a call, and
 `AuthService` against an in-memory database (register, login, refresh
 rotation, reuse detection, logout).
 
@@ -630,43 +631,21 @@ proxied by that one dev server, so the other machine reaches auth-, server-,
 chat-, presence-, notification- and call-service through the single origin it
 loaded the app from. The services stay on loopback, as do Postgres and Redis.
 
-**Media is the exception**, because WebRTC does not go through that proxy — and
-that is where a call from the other machine used to die with "Connection to
-voice server timed out", which is the client's own 15s race giving up. The dev
-SFU advertises `127.0.0.1` in its ICE candidates, so the other machine dialled
-itself.
+**Media needs nothing from that proxy**, and this is where a call from the
+other machine used to die with "Connection to voice server timed out". The dev
+SFU advertised `127.0.0.1` in its ICE candidates, so the second machine dialled
+itself; the fix was a TCP relay in the dev server plus a candidate rewrite in
+the page, and a long explanation of why a port published inside a WSL VM is not
+reachable from the LAN.
 
-That is handled now, by the same command, in two halves that live in
-`apps/web/lan-sfu.ts` and `apps/web/lan-ice.ts`:
+All of that is gone. Calls are peer to peer, so the two machines negotiate
+directly with each other and the dev server is not in the media path at all -
+it never had any business being there. The dev server proxies signalling, which
+is what a proxy can actually stand in for.
 
-- the dev server relays the SFU's ICE-TCP port on `tcp/7882`, from every
-  address this host has on the network;
-- the page rewrites the SFU's loopback TCP candidate to the address it was
-  loaded from, and that port.
-
-Both are `--mode lan` only. Nothing is reconfigured and nothing has to be put
-back: the SFU keeps advertising `127.0.0.1`, which stays right for a browser on
-this host, and a page loaded from loopback rewrites nothing. The startup banner
-says which addresses the relay took:
-
-```
-➜  Voice:   SFU media relayed on tcp/7882 from 192.168.1.105
-```
-
-The relay is an ordinary Windows process, so it costs one ordinary Windows
-Firewall prompt, exactly like the dev server's own port. **That is the point.**
-A port published inside a WSL VM is bound on the VM: `docker port` says
-`0.0.0.0:7880`, `Test-NetConnection 127.0.0.1 -Port 7880` says `True`, and
-`Test-NetConnection <host LAN IP> -Port 7880` says `False` — and opening it for
-real needs mirrored networking *and* a Hyper-V firewall rule
-(`New-NetFirewallHyperVRule`), because either alone still refuses connections.
-None of that is needed now.
-
-Media therefore rides the TCP candidate rather than the UDP range, which costs
-a test call a few milliseconds. `NEXORA_LIVEKIT_NODE_IP` and
-`NEXORA_LIVEKIT_BIND` still exist for a host that would rather publish the SFU
-itself; the rewrite only touches loopback, so setting them takes precedence by
-doing nothing.
+Two browsers on one LAN will find each other on host candidates alone. Two
+machines on *different* networks need STUN, which the clients reach themselves
+and which needs nothing opened here either.
 
 None of this applies to a real deployment: it is behind the gateway, over TLS,
 on one hostname.
@@ -685,15 +664,15 @@ bind the same host ports.
 
 Renderer output from both windows is mirrored into the terminal that ran
 `pnpm dev:duo`, prefixed with `[renderer Alice]` / `[renderer Bob]`. In
-development that includes LiveKit's own debug log, so a failed publish shows
-its negotiation and ICE steps rather than one summary line.
+development a failing call logs there too: `mesh.ts` warns with the peer id when
+an offer, an answer or a fingerprint check fails, so a call that half-works
+names which connection is the broken one.
 
 Server-side state is worth checking directly when something looks wrong:
 
 ```bash
 docker exec nexora-dev-redis redis-cli zrange presence:online 0 -1
 docker exec nexora-dev-redis redis-cli keys 'presence:voice:*'
-docker logs nexora-dev-livekit --since 5m | grep mediaTrack
 ```
 
 A published track logs `"encryption":1` — that is the end-to-end encrypted path.
@@ -702,35 +681,18 @@ A published track logs `"encryption":1` — that is the end-to-end encrypted pat
 
 | Symptom | Cause |
 | --- | --- |
-| `call-service is down` warning | `pnpm dev` not running it, or `LIVEKIT_*` unset in `.env` |
-| Join fails with "Failed to fetch" | `LIVEKIT_URL` points at `localhost`; use `127.0.0.1` if it has to be a host at all, because Chromium tries `::1` first and the container publishes IPv4 only. On anything but a single-machine `pnpm dev`, prefer `/livekit` - see the two rows below |
-| Join fails against a deployment behind Nginx | `LIVEKIT_URL` should be `/livekit` there, not a host - the client resolves it against the address it is already on |
-| The container stack: calls work in a browser **on the server** and fail from every other device with "could not establish signal connection: Failed to fetch" and `ERR_CONNECTION_REFUSED` on `127.0.0.1:7880` | `LIVEKIT_URL` is a loopback address, so every client is being told to look for the SFU inside itself - which is why the machine running the stack is the one place it works. Set `LIVEKIT_URL=/livekit` and recreate call-service and remote-gateway. Both now refuse this rather than handing it out: the reply is `LIVEKIT_UNREACHABLE_URL` with the fix in it, and a client on the server itself still gets the loopback answer, because for that client it is right |
-| `LIVEKIT_UNREACHABLE_URL` even though `.env` says `/livekit` | A container keeps the environment it was created with. `docker compose --env-file .env -f infrastructure/docker/docker-compose.yml up -d --force-recreate call-service remote-gateway` |
-| "could not establish signal connection: Encountered websocket error during connection establishment", with `LIVEKIT_URL=/livekit` and every container up | Fixed. The gateway was not stripping the `/livekit` prefix, so LiveKit saw `/` and answered its root handler with `200 OK` instead of upgrading. Every target in `nginx.conf` is a variable, and that changes proxy_pass: a URI written after a variable *replaces* the request URI rather than stripping a prefix, and no URI after a variable passes the **original** URI, ignoring any `rewrite` above it. The block is a regex location building the upstream URI from a named capture, with `$is_args$args` for the token. The gateway's own log is the fastest tell - a working socket logs `status:101`, this logged `status:200` in a millisecond |
-| The container stack: signalling connects, then "Connection to voice server timed out" | The SFU is advertising an address the client cannot reach. `docker logs nexora-livekit-1 \| grep nodeIP` - a `172.x` answer is its Docker bridge address, which is nobody's network. Set `LIVEKIT_NODE_IP` to the address clients reach the host on and recreate the container; the prod compose file requires it now, for the same reason the keys are required. Only the dev compose used to pass `--node-ip`, which is why this survived into a deployment |
-| Calls work on the LAN but not from another network | The tunnel carries HTTP, so signalling arrives from anywhere; media needs `7881/tcp` and `50000-50019/udp` reachable at `LIVEKIT_NODE_IP`, which from outside a home router they are not. Set `CLOUDFLARE_TURN_KEY_ID` and `CLOUDFLARE_TURN_KEY_API_TOKEN` (dashboard → Realtime → TURN) and recreate call-service: it mints a relay credential per call and the client uses it when there is no direct path. Opens no ports. A LAN call is unchanged - a direct path still wins the ICE race whenever there is one |
+| Calls work on the LAN but not from another network | The two peers cannot form a direct path - symmetric or carrier-grade NAT on one or both ends. Signalling is fine either way, which is why everything else works. Set `CLOUDFLARE_TURN_KEY_ID` and `CLOUDFLARE_TURN_KEY_API_TOKEN` (dashboard → Realtime → TURN) and recreate call-service: it mints a relay credential per call and a client uses it only when there is no direct path. Opens no ports at either end. A LAN call is unchanged - a direct path still wins the ICE race whenever there is one |
 | Calls still time out from outside after setting the TURN key | `docker logs nexora-call-service-1 \| grep -i turn`. "Minted Cloudflare TURN credentials" means the key works and the problem is elsewhere; "Could not mint" carries Cloudflare's own answer, usually a wrong key id or a revoked token. A join's `POST /api/v1/calls/token` response should carry a non-empty `iceServers`; if it is empty the service has no key configured, which a container keeps from when it was created |
-| Is the gateway's `/livekit` proxy actually working? | Compare it with the SFU directly, using a deliberately bad token: `curl -o /dev/null -w "%{http_code}\n" "http://HOST:7880/rtc/v1?access_token=x"` and the same against `http://HOST:8080/livekit/rtc/v1?access_token=x`. Both must answer `401`. A `200` from the gateway means the prefix is not being stripped and LiveKit is answering its root |
-| Voice connects, no audio or video | LiveKit UDP ports 50000-50019 not published; check `docker compose --env-file .env -f infrastructure/docker/docker-compose.dev.yml ps` |
-| "Connection to voice server timed out" after the token came back fine | The SFU was advertising its own bridge address (`172.x.x.x`) in its ICE candidates, and Docker Desktop/WSL2 does not route the host to that network - so signalling succeeded through the published port and media had nowhere to go. The dev compose file passes `--node-ip 127.0.0.1` now. `docker logs nexora-dev-livekit` shows the advertised `nodeIP` on the first line; joining this dev SFU from another machine needs `NEXORA_LIVEKIT_NODE_IP` set to this host's LAN address instead |
-| `could not establish signal connection: invalid token: <jwt>, error: token signature is invalid` | The SFU holds a different `LIVEKIT_API_SECRET` from the service that signed the token - usually a container started before `.env` was passed or changed, since a container keeps the environment it was created with. Run `pnpm livekit:doctor`: it names the compose file the SFU is actually running under and prints the recreate command for it. call-service refuses to mint a token it knows the SFU will reject and answers `LIVEKIT_KEY_MISMATCH` instead |
-| call-service logs `Could not reach LiveKit to verify the signing key` under `pnpm dev` | Fixed. The check only tried `livekit:7880`, which is a Docker-network name and does not resolve on a host, so development never learned the secret had drifted and joins went ahead into a token the SFU rejected. It now tries the published `127.0.0.1:7880` as well. If the warning persists, nothing is listening on 7880: `pnpm dev:infra` |
-| `pnpm livekit:doctor` prints `<docker not reachable from here>` | The docker CLI is not on this shell's PATH - a Windows host whose engine lives inside WSL, typically. The verdict below it still holds; it comes from asking the SFU over 7880, not from docker. Run the printed recreate command wherever docker *is* reachable |
 | Attachments fail only in the container stack, with `EACCES` in the chat-service log | The upload volume mounts at `/data/uploads` and the service runs as uid 1000, but Docker creates a mountpoint it invents itself as root - so nothing could be written. The image now ships that directory owned by `node`, which an *empty* named volume inherits. A volume that already has files in it, or a host path in `UPLOAD_DATA_PATH`, is never seeded from the image: `chown -R 1000:1000` it once |
 | `couldn't find env file: .../infrastructure/docker/.env` | `--env-file .env` is resolved against the shell's working directory, not against the compose file, and the only `.env` is at the repo root. Run `pnpm dev:infra`, which works from anywhere, or `cd` to the repo root first |
-| `required variable LIVEKIT_API_KEY is missing a value` from `docker compose` | Same cause seen from the other side: the compose file was read without the root `.env`. It is deliberately not defaulted - a default is what silently drifts from the secret the SFU was created with |
 | `Can't reach database server at localhost:5432`, while `Test-NetConnection 127.0.0.1 -Port 5432` says `True` | `localhost` resolves to `::1` first and the container publishes IPv4 only. Whether `::1` answers depends on a relay outside this repo: WSL's NAT networking provided one, mirrored networking does not, so switching modes breaks this without touching anything in the stack. Use `127.0.0.1` in `DATABASE_URL` and `REDIS_URL` - `.env.example` does |
 | Everything answers "Request failed", including sign-in | No services are up. `pnpm dev` tears down all ten persistent tasks when any one of them exits non-zero, so a single port clash reads as a dead backend. `curl 127.0.0.1:3001/health` first, and check the last lines of the `pnpm dev` output for which task failed |
 | From another machine: `Cannot read properties of undefined (reading 'generateKey')`, or no mic/camera/screen at all | The origin is plain http and is not localhost, so the browser withholds `crypto.subtle` and `navigator.mediaDevices`. Use `pnpm dev:web:lan`, which serves the same app over TLS, and accept the self-signed certificate once |
-| From another machine: "Connection to voice server timed out", while chat and sign-in work | Fixed. Signalling reaches the SFU through the dev server's `/livekit` proxy, but media does not go through a proxy, and the candidates said `127.0.0.1` — so the second machine negotiated with itself until the client's 15s race gave up. `pnpm dev:web:lan` now relays the SFU's TCP port and rewrites those candidates to the address the page was loaded from. If it still times out, check the `➜  Voice:` line at startup: it lists the addresses the relay took |
 | `no media relay on <address>:7882 (EADDRINUSE)` at startup | Something else on this host holds 7882 — a second `dev:web:lan`, usually. Calls from *that* address will time out; the others are unaffected |
 | The web client goes blank — an empty dark page, no error, nothing to click | Fixed. React unmounts its entire tree when a render throws, so one bad value cost the whole window and said nothing about why. The value was the machine list: it had come back as `null`, and **Join stream** renders the buttons that search it (see the next row). There is an error boundary below `App` now, so the next such bug is a "Nexora hit a bug and stopped" screen carrying the message, with the component stack in the console |
 | `/api/v1/remote/machines` answers with `index.html` in the web client | Fixed on both sides. `/api/v1/remote` is deliberately absent from the web dev server's proxy table — the web client has no remote-desktop section — and Vite answers an unproxied route with the app's own HTML. A 200 carrying HTML used to be swallowed into `null` and returned as whatever type the caller asked for; a successful reply that is not JSON is now an `INVALID_RESPONSE` error naming the path. A browser tab also no longer asks: **Open a session** on somebody's share is the remote-desktop path, and that is the one thing a tab does not get. **Request control** is unaffected — it rides the call's own data channel |
-| Calls stopped working *locally* after setting `NEXORA_LIVEKIT_NODE_IP` | That address is not reachable, so now nobody can reach the SFU rather than just the second machine. Under WSL2 the host's LAN IP does not answer a port published inside WSL. Unset it, `pnpm dev:infra`, and `docker logs nexora-dev-livekit` should say `"nodeIP":"127.0.0.1"` again — the LAN case does not need it |
 | `pnpm prod:up` or `docker build` fails with a screen of `TS2307: Cannot find module 'zustand'` in `apps/desktop/src` | Fixed. The image deliberately copies `apps/desktop/src` without its manifest — nothing there should install Electron — but that also meant no `node_modules` for the directory, and the web client compiles that source. The build stage links it to `apps/web/node_modules`, which declares the same set because it is the same UI |
 | No online dots or typing indicators | presence-service is down; `curl 127.0.0.1:3005/health` |
-| "microphone did not start (negotiation timed out)", and the mic/camera/screen buttons then fail too | The LiveKit container is older than `livekit-client` expects, so it never acknowledges a publisher offer. `docker compose -f infrastructure/docker/docker-compose.dev.yml up -d livekit` to pull the pinned v1.13.5 |
 | Voice churns: join, leave, join again | Editing desktop source while connected. A hot reload disconnects the room on purpose; rejoin after the reload |
 | Messages show the lock placeholder | This device has no key for that epoch — a member holding it must open the channel once to re-wrap |
 | Every message shows the lock placeholder after a reinstall | The account identity was not restored: answer the "Unlock your messages" dialog, or sign in with the password rather than resuming a stored session |
@@ -742,7 +704,7 @@ A published track logs `"encryption":1` — that is the end-to-end encrypted pat
 | Admin panel says no administrator exists | `pnpm admin:create` has not been run against this database |
 | Remote machine shows offline with the switch on | The agent socket needs the gateway: `curl 127.0.0.1:3008/health`, and check `/ws/remote` is proxied if you are going through Nginx |
 | "This machine is no longer enrolled" | Its row was deleted, or it was re-enrolled elsewhere, so the stored token no longer matches. Turn the switch off and on to enrol again |
-| Remote session connects but the screen never arrives | The agent could not capture - check the machine's own console. LiveKit must also be reachable from *both* ends, not only the controller |
+| Remote session connects but the screen never arrives | The agent could not capture, or the two machines could not form a path. Check the machine`s own console first; then the same TURN question a call has, since the screen travels the same way |
 | Nothing happens on the remote machine when you move the mouse | Control is a mode: click **Take control** first. If that is already on, Settings → Remote Access on the machine shows what the input helper reported |
 | Mouse moves but nothing is clicked on the remote machine | Injection is Windows-only; on macOS and Linux a session is view-only by design |
 | Clipboard does not cross | `REMOTE_CLIPBOARD` has to be granted, and it is polled once a second - it is not instant |

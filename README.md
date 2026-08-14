@@ -22,7 +22,7 @@ administrator, public ingress, and why each endpoint has to be on the tunnel.
 | Servers | Servers, roles, per-member permission overrides, invites by slug, server settings |
 | Channels | Public and private text channels, private channels as an allowlist, direct messages between friends |
 | Messages | End-to-end encrypted, realtime over WebSocket, history paging, attachments of any type |
-| Voice and video | LiveKit voice channels, camera, screen share with a source picker, end-to-end encrypted media |
+| Voice and video | Peer-to-peer voice channels, camera, screen share with a source picker, end-to-end encrypted media, no media server |
 | Presence | Online / idle / do not disturb / invisible, typing indicators, voice rosters |
 | Notifications | Desktop notifications, system tray, start with the system, per-channel mute, quiet hours, persisted unread |
 | Remote desktop | Not built - `remote-gateway` and `remote-agent` are scaffolds |
@@ -64,13 +64,26 @@ internal routing, application logic, realtime media, and remote access.
       │   :5432    │            │   :6379   │  rate limits, sessions
       └────────────┘            └───────────┘
 
-  Desktop ──── WebRTC (E2EE media) ───▶ LiveKit SFU :7880   ◀── tokens from
-                                                                call-service :3007
+  Desktop A ──── /ws/call ──▶ call-service :3007 ◀── /ws/call ──── Desktop B
+                              (roster, SDP, ICE relay)
+      │                                                                │
+      └──────────── WebRTC, direct: voice / video / screen ────────────┘
 ```
 
-Media never passes through a NestJS process. `call-service` decides who may
-join a room and mints a LiveKit token; the client dials the SFU directly and
-encrypts its own tracks with the channel key.
+There is no media server. `call-service` decides who may join a call and
+introduces the participants to each other; everyone then holds one
+`RTCPeerConnection` per other participant and the media goes straight between
+the two machines.
+
+That is also what makes the deployment simple. A Cloudflare Tunnel carries HTTP
+and WebSocket and not UDP, so anything with a media server in it has to smuggle
+media past the tunnel - a routable address to advertise, published ports, a
+forced relay. None of that exists here: no port is opened for media, and no
+service ever tells a client where to connect.
+
+The cost is the mesh: each participant uploads one copy per other participant,
+which is comfortable to about five on video and eight on voice alone. Bigger
+calls want an SFU, and that would be a deliberate decision rather than a drift.
 
 ### How a request actually flows
 
@@ -134,8 +147,8 @@ memory, so reopening a conversation paints immediately and refreshes behind it.
 
 Two paths deliberately skip this stack:
 
-- **Media** goes `desktop → LiveKit SFU` over WebRTC. `call-service` only mints
-  the token that says which room the user may join.
+- **Media** goes `desktop → desktop` over WebRTC. `call-service` only relays the
+  offers, answers and ICE candidates the two clients use to find each other.
 - **Attachments** are sealed in the renderer and uploaded as bytes; the server
   stores an object it cannot type and hands back a key.
 
@@ -154,7 +167,7 @@ installed and compiled once rather than once per image.
 | `chat-service` | 3004 | Messages, `/ws/chat` fanout, uploads, the E2EE key directory, friends and DMs |
 | `presence-service` | 3005 | `/ws/presence`, online status, typing, voice rosters, all Redis-backed |
 | `notification-service` | 3006 | Notification preferences, per-channel mutes, quiet hours, read markers |
-| `call-service` | 3007 | LiveKit room permissions and access tokens |
+| `call-service` | 3007 | Call permissions, the peer roster, and `/ws/call` signalling. Never media |
 | `remote-gateway` | 3008 | Remote machines, per-machine permissions, session relay on `/ws/remote`, audit log |
 | `remote-agent` | — | Scaffold, for a headless machine. On a desktop the agent is the app itself |
 
@@ -187,8 +200,10 @@ Cross-cutting code only - no service's business logic lives here.
 - **`/ws/remote`** - the relay between a remote session's controller and the
   agent on the machine, with every input event checked against the permissions
   frozen on the session.
-- **WebRTC to LiveKit** - voice, video, screen share and a remote machine's
-  screen. Never over WebSocket.
+- **`/ws/call`** - the roster of who is in a channel's call, and the offers,
+  answers and ICE candidates two clients exchange to find each other.
+- **WebRTC, client to client** - voice, video, screen share and a remote
+  machine's screen. Never over WebSocket, and never through a server.
 
 ### Data
 
@@ -237,14 +252,14 @@ keeps the metadata; blobs never go in a column.
 
 - Node.js 20+
 - pnpm 9
-- Docker - Postgres, Redis and LiveKit in development; the whole stack in a
+- Docker - Postgres and Redis in development; the whole stack in a
   deployment (see `DEPLOYMENT.md`)
 
 ## Quick start
 
 ```bash
 cp .env.example .env            # set JWT secrets & ensure DATABASE_URL matches POSTGRES_PASSWORD
-pnpm dev:infra                  # Postgres, Redis, LiveKit in Docker
+pnpm dev:infra                  # Postgres and Redis in Docker
 pnpm install
 pnpm db:generate
 pnpm db:migrate                 # creates the schema
@@ -265,8 +280,9 @@ pnpm prod:up                      # starts the full production container stack
 ```
 
 Default ports: gateway `8080`, auth `3001`, server `3003`, chat `3004`,
-presence `3005`, notification `3006`, call `3007`, LiveKit `7880`, renderer
-`5173`, admin panel `5174`, web client `5175`.
+presence `3005`, notification `3006`, call `3007`, renderer `5173`, admin panel
+`5174`, web client `5175`. Nothing listens for media: it goes directly between
+clients, on ports negotiated per call.
 
 ## Production app builds & packaging
 
@@ -318,9 +334,9 @@ on macOS and Linux.
 
 ### One address, and how to change it
 
-A deployment is **one URL**. REST, `/ws/chat`, `/ws/presence`, uploaded files
-and LiveKit's signalling handshake are all behind the same gateway, so there is
-a single variable to set:
+A deployment is **one URL**. REST, `/ws/chat`, `/ws/presence`, `/ws/call`,
+`/ws/remote` and uploaded files are all behind the same gateway, so there is a
+single variable to set:
 
 ```
 VITE_API_URL="https://nexora.example.com"
@@ -349,9 +365,11 @@ other deployment: the address is checked before it is stored, and connecting
 elsewhere signs the window out and reloads. So a build can ship pointed at one
 deployment without being locked to it.
 
-WebRTC media is the one exception, and it is inherent rather than a shortcut:
-the SFU negotiates its own path on `7881/tcp` and `50000-50019/udp`. One
-hostname carries signalling, not media.
+There is no exception to it. Media used to be one - an SFU negotiated its own
+path on `7881/tcp` and a UDP range, so the deployment was one hostname plus a
+set of ports. Peers now reach each other directly, so the hostname really is
+the whole address: one URL carries everything a client asks the backend for,
+and media asks the backend for nothing.
 
 ## Remote desktop
 
@@ -366,7 +384,9 @@ given, optionally until a date. `REMOTE_VIEW`, `REMOTE_CONTROL` and
 `REMOTE_CLIPBOARD` are implemented; `REMOTE_FILE_TRANSFER` and `REMOTE_AUDIO`
 exist in the vocabulary and do nothing yet.
 
-The screen travels over the same SFU voice channels use. The gateway relays
+The screen travels directly between the two machines, the same way a call does:
+the gateway relays the offer and answer that set the connection up, and then
+carries no pixels. It relays
 input and refuses anything the session was not granted, so a view-only session
 cannot type however the client is built - and refusals are audited alongside
 the sessions themselves, which a machine's owner can read.
@@ -392,10 +412,11 @@ and reload it - no extra container. To let Nexora bring its own tunnel instead:
 CLOUDFLARE_TUNNEL_TOKEN=... docker compose   -f infrastructure/docker/docker-compose.yml --profile public up -d
 ```
 
-`infrastructure/cloudflare/tunnel.yml` documents both, including the one thing
-that does not go through a tunnel: WebRTC media negotiates its own UDP path to
-the SFU (`7881/tcp`, `50000-50019/udp`). Chat, files and everything else are
-complete over the tunnel on their own.
+`infrastructure/cloudflare/tunnel.yml` documents both, and why the tunnel is
+now enough on its own. It carries HTTP and WebSocket, which is all signalling
+is; media is UDP, which no tunnel carries, and does not need to - it goes
+straight between the clients. Nothing else has to reach the host, so no port is
+opened for media anywhere in this repo.
 
 `DEPLOYMENT.md` walks the whole thing end to end - what to generate, how to
 create the first administrator, and what each endpoint behind the tunnel is for.
@@ -440,13 +461,13 @@ apps/
     chat-service/         Messages, /ws/chat, uploads, E2EE directory
     presence-service/     /ws/presence, status, typing, voice rosters
     notification-service/ Preferences, mutes, quiet hours, read markers
-    call-service/         LiveKit tokens and room permissions
+    call-service/         call permissions and /ws/call signalling
     remote-gateway/       Remote machines, permissions, session relay, audit
     remote-agent/         Scaffold - for a headless machine with no app on it
     user-service/         Scaffold
 packages/                 shared-types, database, auth, permissions, events,
                           nest-common, storage, websocket, logger, config
-infrastructure/           docker compose, nginx, cloudflare, livekit
+infrastructure/           docker compose, nginx, cloudflare
 development/              planning, MVP, E2EE design, testing guide, TODO
 DEPLOYMENT.md             putting it on a server, end to end
 ```
