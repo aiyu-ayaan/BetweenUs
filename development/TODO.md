@@ -62,6 +62,18 @@ a human in front of the app, and so does most of phase 12.
       the repo is configured and nothing has to be put back - which is the
       point, since the alternative was mirrored networking plus a Hyper-V
       firewall rule
+- [x] The container stack from a second device. A call joined from a phone on
+      the network died with "could not establish signal connection: Failed to
+      fetch" and `ERR_CONNECTION_REFUSED` on `127.0.0.1:7880`: the deployment's
+      `LIVEKIT_URL` was still the host-development `ws://127.0.0.1:7880`, so
+      every client was told to look for the SFU inside itself. A browser on the
+      server does exactly that and connects, which is what let it pass testing.
+      call-service and remote-gateway now compare the address with the caller's
+      own `Host` header and answer `LIVEKIT_UNREACHABLE_URL` with the fix in it
+      rather than handing out something undialable; the comparison is one pure
+      function in `@nexora/config` with a self-check, because both services had
+      the same trap and only one had been reported. A container keeps the
+      environment it was created with, so the error says to recreate the service
 - [x] Watching a share from a browser. **Join stream** blanked the window - an
       empty dark page with nothing on it. The buttons over a watched share
       search the remote machine list; the web client's dev server does not proxy

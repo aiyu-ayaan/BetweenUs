@@ -134,7 +134,7 @@ node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
 | `OAUTH_ALLOWED_REDIRECTS` | `https://nexora.example.com` | Extra origins a finished OAuth sign-in may return to. Loopback (the desktop client) is always allowed; **the web client needs the deployment's own origin here**, or provider sign-in in a browser is refused with `BAD_REDIRECT` |
 | `CORS_ORIGIN` | `https://nexora.example.com` | Compose defaults it to `*`. The web client and the admin panel are both same-origin, so neither needs it; set this when browsers on *other* origins will call the API |
 | `LIVEKIT_API_KEY` / `LIVEKIT_API_SECRET` | generated pair | Mints call tokens. The development pair is public knowledge |
-| `LIVEKIT_URL` | `/livekit` | What clients are told to dial. The path keeps the whole deployment on one hostname; an absolute `wss://` URL splits the SFU onto its own name |
+| `LIVEKIT_URL` | `/livekit` | What clients are told to dial. The path keeps the whole deployment on one hostname; an absolute `wss://` URL splits the SFU onto its own name. **Never a loopback address here** - `ws://127.0.0.1:7880` tells every client to look for the SFU inside itself, which works in a browser on the server and fails everywhere else; call-service refuses it with `LIVEKIT_UNREACHABLE_URL` rather than handing it out |
 | `GATEWAY_PORT` | `127.0.0.1:8080` with a host tunnel | Keeps the gateway off the LAN while a host-run `cloudflared` still reaches it |
 | `CLOUDFLARE_TUNNEL_TOKEN` | token, or empty | Only for the container tunnel (`--profile public`). Leave empty when the tunnel already runs on the host |
 | `LOG_LEVEL` | `info` | `debug` is noisy and logs more request detail than a public deployment wants |
