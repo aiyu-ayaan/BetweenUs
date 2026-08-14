@@ -35,7 +35,9 @@ import {
   ChevronLeftIcon,
   ChevronRightIcon,
   LockIcon,
+  MaximizeIcon,
   MicOffIcon,
+  MinimizeIcon,
   ScreenShareIcon,
   SpeakerIcon,
 } from '../../components/icons';
@@ -248,6 +250,97 @@ function ShareBanners({
 function Theatre({ share, tiles }: { share: VoiceShare; tiles: Stage[] }): JSX.Element {
   const watch = useVoiceStore((state) => state.watch);
   const stopScreenShare = useVoiceStore((state) => state.stopScreenShare);
+  const [fullscreen, setFullscreen] = useState(false);
+
+  useEffect(() => {
+    const handleKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape' && fullscreen) {
+        setFullscreen(false);
+      } else if (
+        (e.key === 'f' || e.key === 'F') &&
+        !['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement)?.tagName)
+      ) {
+        setFullscreen((prev) => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [fullscreen]);
+
+  const toggleFullscreen = (): void => {
+    setFullscreen((prev) => !prev);
+  };
+
+  if (fullscreen) {
+    return (
+      <div className="fixed inset-0 z-50 flex flex-col bg-black">
+        {/* Fullscreen top header overlay */}
+        <div className="absolute left-0 right-0 top-0 z-20 flex items-center justify-between bg-gradient-to-b from-black/80 via-black/40 to-transparent p-4">
+          <p className="rounded bg-black/60 px-3 py-1.5 text-sm font-medium text-slate-200 backdrop-blur">
+            {share.isLocal ? 'Your screen' : `${share.name}'s screen`}
+          </p>
+
+          <div className="flex items-center gap-2">
+            {!share.isLocal && <ControlButtons share={share} />}
+            {share.isLocal && (
+              <button
+                type="button"
+                onClick={() => void stopScreenShare()}
+                className="cursor-pointer rounded-md bg-red-500/90 px-3 py-1.5 text-xs font-semibold text-white backdrop-blur transition-colors duration-200 hover:bg-red-500"
+              >
+                Stop sharing
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={toggleFullscreen}
+              aria-label="Exit full screen"
+              title="Exit full screen (Esc or F)"
+              className="flex cursor-pointer items-center gap-1.5 rounded-md bg-white/10 px-3 py-1.5 text-xs font-semibold text-white backdrop-blur transition-colors duration-200 hover:bg-white/20"
+            >
+              <MinimizeIcon className="h-4 w-4" />
+              Exit full screen
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setFullscreen(false);
+                watch(null);
+              }}
+              className="cursor-pointer rounded-md bg-black/60 px-3 py-1.5 text-xs text-slate-200 backdrop-blur transition-colors duration-200 hover:bg-black/80"
+            >
+              Back to grid
+            </button>
+          </div>
+        </div>
+
+        {/* Fullscreen Video Area */}
+        <div className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden bg-black">
+          {share.track ? (
+            <ShareStage share={share} />
+          ) : (
+            <p className="flex h-full items-center justify-center text-sm text-slate-400">
+              Waiting for {share.isLocal ? 'your' : `${share.name}'s`} screen…
+            </p>
+          )}
+        </div>
+
+        {/* Fullscreen Bottom Overlay with visible participants & quick controls */}
+        <div className="z-20 flex shrink-0 flex-col gap-2.5 bg-gradient-to-t from-black/90 via-black/60 to-transparent px-6 pb-4 pt-6">
+          <ul className="flex shrink-0 justify-center gap-3 overflow-x-auto">
+            {tiles.map((tile) => (
+              <li key={tile.key} className="w-36 shrink-0">
+                <StageTile tile={tile} />
+              </li>
+            ))}
+          </ul>
+          <div className="flex justify-center">
+            <VoiceControls size="sm" />
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
@@ -275,6 +368,16 @@ function Theatre({ share, tiles }: { share: VoiceShare; tiles: Stage[] }): JSX.E
               Stop sharing
             </button>
           )}
+          <button
+            type="button"
+            onClick={toggleFullscreen}
+            aria-label="Full screen"
+            title="Full screen (F)"
+            className="flex cursor-pointer items-center gap-1 rounded-md bg-black/70 px-3 py-1 text-xs text-slate-200 transition-colors duration-200 hover:bg-black"
+          >
+            <MaximizeIcon className="h-3.5 w-3.5" />
+            Full screen
+          </button>
           <button
             type="button"
             onClick={() => watch(null)}

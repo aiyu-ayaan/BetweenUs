@@ -733,12 +733,11 @@ class PeerLink {
     }
   }
 
-  /** Audio levels this peer is producing right now, 0..1. */
+  /** Audio levels this peer is producing on their microphone right now, 0..1. */
   audioLevel(): number {
     let loudest = 0;
-    for (const slot of ['mic', 'screenAudio'] as const) {
-      const receiver = this.transceivers.get(slot)?.receiver;
-      if (!receiver?.getSynchronizationSources) continue;
+    const receiver = this.transceivers.get('mic')?.receiver;
+    if (receiver?.getSynchronizationSources) {
       for (const source of receiver.getSynchronizationSources()) {
         loudest = Math.max(loudest, source.audioLevel ?? 0);
       }

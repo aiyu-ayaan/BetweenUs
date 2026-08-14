@@ -495,7 +495,7 @@ function snapshot(): { tiles: VoiceTile[]; shares: VoiceShare[] } {
     userId: self?.id ?? LOCAL,
     name: self?.displayName || self?.username || 'You',
     isLocal: true,
-    speaking: speaking.has(LOCAL),
+    speaking: Boolean(state.micEnabled && speaking.has(LOCAL)),
     micEnabled: state.micEnabled,
     videoTrack: localTracks.camera ?? null,
     // Never played back locally: hearing your own microphone is a howl.
@@ -509,15 +509,16 @@ function snapshot(): { tiles: VoiceTile[]; shares: VoiceShare[] } {
     ...peers.map((peer) => {
       const slots = remoteTracks.get(peer.peerId) ?? {};
       const media = remoteMediaStates.get(peer.peerId);
+      const micEnabled = media?.mic ?? Boolean(slots.mic);
       return {
         identity: peer.peerId,
         userId: peer.userId,
         name: peer.username,
         isLocal: false,
-        speaking: speaking.has(peer.peerId),
+        speaking: Boolean(micEnabled && speaking.has(peer.peerId)),
         // Track mute means packets are not arriving right now; it does not
         // reliably mean the participant pressed their microphone button.
-        micEnabled: media?.mic ?? Boolean(slots.mic),
+        micEnabled,
         videoTrack: slots.camera ?? null,
         audioTrack: slots.mic ?? null,
         screenAudioTrack: slots.screenAudio ?? null,

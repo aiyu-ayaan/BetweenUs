@@ -15,6 +15,7 @@ export function VoicePanel({ channelName }: { channelName: string | null }): JSX
   const status = useVoiceStore((state) => state.status);
   const encrypted = useVoiceStore((state) => state.encrypted);
   const tiles = useVoiceStore((state) => state.tiles);
+  const watching = useVoiceStore((state) => state.watching);
   const error = useVoiceStore((state) => state.error);
 
   if (status === 'idle') return null;
@@ -52,8 +53,10 @@ export function VoicePanel({ channelName }: { channelName: string | null }): JSX
             </span>
             {!tile.micEnabled && <MicOffIcon className="ml-auto h-3.5 w-3.5 text-red-400" />}
             {tile.audioTrack && <AudioSink track={tile.audioTrack} />}
-            {/* A shared screen can bring its own sound - a film's, usually. */}
-            {tile.screenAudioTrack && <AudioSink track={tile.screenAudioTrack} />}
+            {/* A shared screen brings sound only to viewers watching it */}
+            {tile.screenAudioTrack && watching === tile.identity && (
+              <AudioSink track={tile.screenAudioTrack} />
+            )}
           </li>
         ))}
       </ul>
