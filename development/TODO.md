@@ -32,6 +32,38 @@ tab carrying one is closed. It is also unverified in front of a human, and its
 two cases are cheap to try - `pnpm dev:duo` plus a browser tab signed in as one
 of the same accounts.
 
+Phase 26 is the client's own look, and it is only paint and layout: no store,
+no service and no protocol changed. It matters because the client was Discord's
+palette and Discord's layout, hex for hex, which left Nexora with no way to
+look like anything. Read the phase-26 section of `PLANNING.md` for the shape,
+and "The workbench" in `TESTING.md` for what to click.
+
+### Phase 26 — the workbench
+
+- [x] `tailwind.theme.mjs`: Nexora's own ramp - cool near-black ink, iris accent
+      `#7c5cff`, a `ground` darker than every panel, and `gg sans` gone from the
+      font stack
+- [x] `.panel` in `index.css`: one definition of a region, so rail, sidebar,
+      main surface and right-hand panel cannot drift apart
+- [x] `TopBar`: one bar across the window, the command field in the middle of
+      it, and each layout toggle on the side it controls
+- [x] `QuickSwitcher`: Ctrl+K over servers, the open server's channels and every
+      conversation - the app's only global shortcut
+- [x] The rail off the panel grid and onto the ground, with an accent bar at the
+      left edge instead of Discord's morphing pill
+- [x] Sidebar and right-hand panel hide from the top bar; the right-hand toggle
+      is only rendered where a right-hand panel exists
+- [x] `animate-pop` / `animate-fade`: one entrance for every dialog, menu and
+      picker, and `active:` press feedback on buttons
+- [x] Focus rings off text fields - the field's own edge and the caret say it
+- [x] Sign-in, user settings and server settings on the same panels-on-ground
+      layout as the workbench
+- [ ] **Unverified in front of a human.** `pnpm typecheck` and `pnpm build` are
+      green, which proves nothing about whether it looks right. See "The
+      workbench" in `TESTING.md`.
+- [ ] Light theme. The ramp is defined once now, which is what would make one
+      possible; nothing else about it has been designed.
+
 ### Phase 25 — the call follows the account
 
 - [x] `CallAudio`: every remote audio track mounted once at the root of the

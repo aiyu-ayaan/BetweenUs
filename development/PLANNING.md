@@ -30,12 +30,62 @@ we get there in stages and what each stage delivers.
 | 23 | Web client | `apps/web`: the same UI in a browser at the root of the gateway, without the remote-desktop section | In progress |
 | 24 | Peer-to-peer media | LiveKit removed; `/ws/call` signalling, a WebRTC mesh for calls, a direct peer connection for remote desktop | In progress |
 | 25 | The call follows the account | Call survives navigating anywhere in the client, one call per account across devices, a browser prompt before a tab with a live call closes | In progress |
+| 26 | The workbench | The client stops being a copy of Discord: own palette, floating panels on a ground, a command bar with Ctrl+K, one entrance for everything that opens | In progress |
 
 Hardening moved to phase 10: encryption changes the message format and presence
 adds a service, so both were cheaper to land before tests were written against
 the older shape.
 
 ## Architecture decisions made so far
+
+### The workbench (phase 26)
+
+The client was Discord's, and not by resemblance: the palette was Discord's hex
+values (`#313338`, `#5865f2`), the font stack asked for `gg sans` first, the
+rail drew Discord's blob pill, and the layout was Discord's four flush columns.
+That was a reasonable way to get a working client quickly and a bad thing to
+keep, because it left Nexora with no way to look like anything.
+
+What replaces it is closer to how an editor lays itself out than to how a chat
+app does:
+
+- **Panels on a ground, not columns in a wall.** Every region - rail, sidebar,
+  main surface, right-hand panel - is a rounded card with a hairline edge, and
+  the gutter between two of them is the window's ground showing through.
+  `.panel` in `index.css` is the single definition of that shape, so a new
+  region cannot end up drawn slightly differently.
+
+  The layout consequence is the reason it is worth doing: a panel can be hidden
+  without leaving a seam, because there was never a seam. The sidebar and the
+  right-hand panel toggle from the top bar, and the right-hand toggle is only
+  rendered where a right-hand panel exists at all.
+
+- **One bar across the top, with the command field in the middle of it.** A
+  chat app usually hangs search and navigation off whichever column had room.
+  A single bar gives the panels below one frame to sit in and puts the command
+  field where somebody looks for it. Idle, the field says where you are, which
+  is the other question a column header used to answer.
+
+- **Ctrl+K goes anywhere.** Servers, the open server's channels, and every
+  conversation, in one filtered list. Pointing at a sidebar is fine with four
+  channels and useless with forty, and this is the same move an editor makes
+  with its file switcher. It is deliberately the app's only global shortcut:
+  everything else is reachable from it.
+
+- **One palette, one entrance.** A cool near-black ink ramp with an iris accent
+  at `#7c5cff`, defined once in `tailwind.theme.mjs` and positional by name, so
+  a component never has to know which grey it is standing on. Everything that
+  opens on top of the workbench - dialogs, menus, pickers - shares
+  `animate-pop`: a 140ms rise from four pixels below at 98% scale. Focus rings
+  around text fields are gone; a field says it has focus with its own edge, and
+  the caret was always the real indicator.
+
+  `prefers-reduced-motion` already collapses every duration in the client to
+  0.01ms, so all of it degrades to appearing instantly.
+
+Both clients get this at once: `apps/web` imports the same theme and mounts the
+same components, which is what "the two clients are meant to look identical"
+has meant since phase 23.
 
 ### The call follows the account (phase 25)
 

@@ -392,6 +392,33 @@ outliving the screen it was started on.
    without a word. The Electron window is deliberately not in this — it has a
    tray behind it.
 
+## The workbench
+
+Phase 26 is layout and paint only — nothing here changes what the client does,
+so what is being checked is that nothing *moved* wrongly. One client is enough.
+
+1. **The gutters.** Every region is a rounded card and the window's ground shows
+   between them. What to look for is a panel whose corner is square or whose
+   content runs under its own edge — a list that scrolls its rows past the
+   rounded corner is the usual one.
+2. **Hiding a column.** The toggle beside the mark hides the sidebar; the one at
+   the far right hides the member list, pins or search. Neither should leave a
+   gap where the panel was: the remaining panels take the space. The right-hand
+   toggle is absent in a voice channel, on the Friends screen and on the machine
+   list, because those have no right-hand panel.
+3. **Ctrl+K.** Opens over anything, filters as you type, arrow keys and Enter
+   move without touching the mouse, Escape closes. It lists servers, the open
+   server's channels and every conversation. Opening a channel from it should
+   land in exactly the same place clicking it in the sidebar does.
+4. **The command field when idle.** It says where you are — `Server / channel`,
+   or the conversation's name — and it keeps up when you switch.
+5. **Reduced motion.** Turn on "Show animations in Windows" → off (Settings →
+   Accessibility → Visual effects). Dialogs and menus should appear instantly
+   rather than rising into place. Nothing should become unreachable.
+6. **Sign-in and settings.** Sign out: the login card is the same panel shape on
+   the same ground. Open user settings and server settings: both are the
+   two-panel layout, not a full-bleed page.
+
 ## Watching something together
 
 1. **Pick the right trade.** Share with **Video and motion** and play something
