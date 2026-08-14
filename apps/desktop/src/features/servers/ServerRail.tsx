@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useChatStore } from '../../stores/chat';
-import { CompassIcon, NexoraLogoIcon, PlusIcon } from '../../components/icons';
+import { CompassIcon, MessageIcon, PlusIcon } from '../../components/icons';
 import { ServerIcon } from '../../components/ServerIcon';
 
 /**
@@ -43,13 +43,16 @@ export function ServerRail(): JSX.Element {
       aria-label="Servers"
       className="flex w-14 shrink-0 flex-col items-center gap-1 overflow-y-auto overflow-x-hidden py-0.5"
     >
+      {/* Not the Nexora mark: that is in the top bar, and a second copy of it
+          one row below reads as branding rather than as the button it is. A
+          rail tile has to say where it goes. */}
       <RailButton
         label="Direct messages"
         active={view === 'home'}
         onClick={showHome}
         activeClasses="bg-accent/20 text-accent"
       >
-        <NexoraLogoIcon className="h-6 w-6" />
+        <MessageIcon className="h-[22px] w-[22px]" />
       </RailButton>
 
       <hr className="my-1 w-6 border-t border-edge" />
