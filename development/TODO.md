@@ -62,6 +62,18 @@ a human in front of the app, and so does most of phase 12.
       the repo is configured and nothing has to be put back - which is the
       point, since the alternative was mirrored networking plus a Hyper-V
       firewall rule
+- [x] Watching a share from a browser. **Join stream** blanked the window - an
+      empty dark page with nothing on it. The buttons over a watched share
+      search the remote machine list; the web client's dev server does not proxy
+      `/api/v1/remote` on purpose, and Vite answers an unproxied route with the
+      app's own `index.html`. The API client turned that 200 into `null` and
+      returned it as the array the caller had asked for, so the first render
+      that searched it threw - and a render that throws unmounts React's whole
+      tree, which is the blank page, with the cause three layers from anything
+      visible. Fixed in three places, one commit each: a successful reply that
+      is not JSON is an error naming the path, a browser tab does not ask for a
+      machine list it will never show, and an error boundary below `App` turns
+      the next such bug into a message instead of an empty window
 - [ ] A human in a browser: log in, send a message, join a voice channel, share
       a screen (Chromium asks which one), ask a desktop client for control of
       its share and drive it
