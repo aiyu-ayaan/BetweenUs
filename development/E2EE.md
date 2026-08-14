@@ -5,9 +5,10 @@ that buys, and — just as important — what it does not.
 
 ## Threat model
 
-Protected against: a reader of the database, of a backup, of Redis, of the
-Nginx logs, or of the LiveKit SFU's memory. None of them holds a key that opens
-a message or a media frame.
+Protected against: a reader of the database, of a backup, of Redis, or of the
+Nginx logs. None of them holds a key that opens a message, and none of them is
+in the media path at all - call media goes directly between the two clients, so
+there is no server copy of it to read.
 
 Not protected against: a compromised client (the keys live there), and
 metadata. The server still knows who wrote to which channel and when, how big
@@ -35,7 +36,8 @@ settings instead; it is never sent anywhere in any form.
 | Wrapped channel key | `channel_keys` table | only the recipient it was sealed for |
 | Message body | `messages.content` | channel members |
 | Attachment bytes | object storage | channel members |
-| Voice/video media | LiveKit frames | people in the voice channel |
+| Voice/video media | DTLS-SRTP, directly between the two peers | the two people on that connection |
+| DTLS fingerprint signature | in the offer/answer, HMAC'd with the channel key | verifiable by channel members only |
 | Avatars and server icons | object storage | **anyone with the URL** |
 
 ## Flow
@@ -71,8 +73,9 @@ send a message                     read a message
    POST ciphertext envelope            no key for that epoch -> placeholder text
 
 join a voice channel
-   channel key -> LiveKit ExternalE2EEKeyProvider
-   the SFU forwards frames it cannot decode
+   channel key -> HMAC over this peer's DTLS fingerprint
+   the far peer verifies it, then media flows directly
+   no server is in the media path to forward anything
 ```
 
 ### Key wrapping
@@ -192,10 +195,24 @@ decide who may publish it:
 
 ## Voice channels
 
-A voice channel reuses its channel's key, so joining needs no second exchange: whoever
-can read the channel can join its voice room. LiveKit encrypts frames in a worker via
-`ExternalE2EEKeyProvider`, and the join is aborted rather than downgraded if the
-runtime cannot do insertable streams.
+Call media goes directly from one participant to another over DTLS-SRTP. There
+is no server in the path, so "end to end" is not a layer added on top of the
+transport - it *is* the transport, and nothing between the two machines ever
+holds a decodable frame.
+
+What that alone would not stop is the signalling server. `call-service` relays
+the offers and answers, and an offer contains the DTLS fingerprint the far side
+will trust; a malicious one could substitute its own fingerprint for each side
+and sit in the middle of a connection both ends believe is direct.
+
+So the channel key is still used, for one small thing: each peer sends
+`HMAC-SHA256(channel key, its own DTLS fingerprint)` alongside the offer or
+answer, and the receiver recomputes it before accepting. `call-service` has
+never held a channel key, so it cannot forge the signature for a fingerprint of
+its own, and a substituted one is rejected before any media flows.
+
+This replaces the insertable-streams encryption the SFU design needed. The
+guarantee is the same one; there is simply no longer a hop to keep frames from.
 
 ## Known limits
 
@@ -245,17 +262,22 @@ runtime cannot do insertable streams.
     would be the end of the design; the panel says how far its search reached
     rather than pretending to cover the whole channel.
 
-12. **A remote-desktop session is not end-to-end encrypted.** Voice channels
-    are, because a channel key already exists and every participant holds it. A
-    remote session has neither: the two machines have never exchanged a key, and
-    the room is created for one session between one agent and one controller.
-    So the screen is encrypted in transit (DTLS-SRTP to the SFU and out again)
-    but the SFU can decrypt it - and the SFU is a container the operator runs,
-    which is a different trust boundary from "the server cannot read your
-    messages". Closing it means a key agreed between agent and controller
-    through the gateway without the gateway learning it, which is a phase of its
-    own. Until then: a remote session trusts the deployment's SFU, and that is
-    worth knowing before pointing one at a machine you care about.
+12. **A remote-desktop session is encrypted end to end, but its fingerprints are
+    unverified.** The screen goes directly from the agent to the controller over
+    DTLS-SRTP, so no server holds a decodable frame - that much is the same
+    guarantee a call has, and it is better than the SFU design, where the
+    operator's own container could decrypt the screen.
+
+    What a remote session does *not* have is the fingerprint signature a call
+    has. A call binds its fingerprints with the channel key, which the server
+    has never seen; the two machines in a remote session share no such secret,
+    so `remote-gateway` relays their fingerprints unverified and a malicious
+    gateway could substitute its own. Closing that means a key agreed between
+    agent and controller without the gateway learning it - a short-authentication
+    -string comparison, or enrolment pinning the agent's key - and it is a phase
+    of its own. Until then: a remote session trusts the deployment's gateway not
+    to actively attack it, which is worth knowing before pointing one at a
+    machine you care about.
 
 ## Porting this to a web or Android client
 

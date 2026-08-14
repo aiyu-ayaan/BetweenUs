@@ -28,12 +28,74 @@ we get there in stages and what each stage delivers.
 | 17 | Remote desktop | remote-gateway, the agent inside the desktop app, per-machine permissions, audit log | In progress |
 | 18 | Production ingress | Cloudflare Tunnel (host or container), gateway healthcheck, image pipeline | In progress |
 | 23 | Web client | `apps/web`: the same UI in a browser at the root of the gateway, without the remote-desktop section | In progress |
+| 24 | Peer-to-peer media | LiveKit removed; `/ws/call` signalling, a WebRTC mesh for calls, a direct peer connection for remote desktop | In progress |
 
 Hardening moved to phase 10: encryption changes the message format and presence
 adds a service, so both were cheaper to land before tests were written against
 the older shape.
 
 ## Architecture decisions made so far
+
+### Peer-to-peer media (phase 24)
+
+Phase 8 put voice on LiveKit, and phases 16-18 spent most of their length
+fighting the consequence: an SFU is a server that carries UDP, and the public
+ingress for this project is a Cloudflare Tunnel, which carries HTTP and
+WebSocket and nothing else. Every fix was a way of smuggling media past the
+tunnel - `LIVEKIT_NODE_IP` so the SFU advertised a routable address, a second
+public port, then TURN so the media could be relayed after all. The last four
+commits before this phase are all that one problem.
+
+Phase 24 removes the SFU instead. Media goes directly between the two clients,
+which is the one arrangement that never needed the tunnel in the first place.
+
+- **The tunnel carries signalling, and signalling is a WebSocket.** That is the
+  thing Cloudflare Tunnel is actually good at, and it is the same shape as
+  `/ws/chat` and `/ws/presence`, which have worked through the tunnel from the
+  day it was set up. There is no longer any traffic in this system that the
+  tunnel is a bad fit for.
+
+- **No service advertises an address.** The whole `LIVEKIT_URL` /
+  `LIVEKIT_NODE_IP` family is gone, along with the class of bug where the
+  advertised address is right for a client on the server and wrong for every
+  other client - which the operator cannot reproduce, because their own test
+  always passes. Peers exchange ICE candidates and settle it themselves.
+
+- **`call-service` becomes a switchboard.** It authenticates, checks
+  `START_CALL`, keeps the roster of who is in a channel's call, and relays
+  offers, answers and ICE candidates between two peers. It has no media path,
+  no room state worth persisting, and nothing to recreate a container for.
+
+- **Full mesh, with an honest ceiling.** Each participant holds one
+  `RTCPeerConnection` per other participant and uploads one copy of its media
+  per peer. That is comfortable to about five on video and about eight on voice
+  alone, and it is not a bug: it is the trade for having no server in the path.
+  Anything larger wants an SFU back, and that will be a decision made on
+  purpose rather than by drift.
+
+- **End-to-end encryption gets simpler, not weaker.** LiveKit needed insertable
+  streams and a worker to encrypt frames, because the SFU was a hop that must
+  not be able to read them. With no hop, DTLS-SRTP between the two peers *is*
+  end to end. What that alone would not stop is the signalling server swapping
+  a DTLS fingerprint to put itself in the middle, so each peer signs its
+  fingerprint with the channel key - which `call-service` has never held - and
+  the other side refuses a connection whose fingerprint is not signed. The
+  guarantee is the one E2EE.md already claimed; the machinery behind it is a
+  few lines instead of a worker.
+
+- **STUN is required; TURN is optional and off.** STUN is not a relay and needs
+  no open port - a peer asks a public server what its own public address looks
+  like. TURN is a relay and stays unconfigured by default, so a deployment
+  relays nothing unless its operator decides to. The cost of leaving it off is
+  that peers behind symmetric or carrier-grade NAT cannot connect at all; the
+  Cloudflare TURN minting from phase 18 is kept for whoever wants to pay it.
+
+- **Remote desktop rides the socket it already has.** `/ws/remote` already
+  relays session state and input between the controller and the agent, so the
+  offer/answer/ICE exchange is three more event types on a wire that exists,
+  not a second signalling service. The screen then goes directly between the
+  two machines, and `remote-gateway` stops minting tokens for a media server
+  that is no longer there.
 
 ### The web client (phase 23)
 

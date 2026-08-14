@@ -5,6 +5,83 @@ the top honest — it is what a new session reads first.
 
 ## Next up
 
+Phase 24 - peer-to-peer media - is what is being built now, and it replaces
+LiveKit rather than sitting beside it. Everything under "Phase 24" below is the
+work; nothing in it is done until the box is ticked. Read the phase-24 section
+of `PLANNING.md` first: it says why an SFU and a Cloudflare Tunnel were never
+going to fit together, and the last four commits before this phase are all that
+one argument.
+
+The two things that will not be true until a human sits in front of it: a call
+between two machines on *different* networks, and a remote-desktop session
+through the tunnel. Both are exactly the cases the old design failed, so
+neither is proven by anything that passes locally.
+
+### Phase 24 — peer-to-peer media
+
+Signalling:
+
+- [ ] `call-service`: a `/ws/call` gateway - authenticated handshake, a peer id
+      per socket (not per user: one account can have two windows), `START_CALL`
+      checked on join, the roster sent to whoever joins, `peer.joined` and
+      `peer.left` to everyone else, and verbatim relay of a signal addressed to
+      one peer
+- [ ] `call-service`: the call-token endpoint returns ICE servers and nothing
+      else - no URL, no room, no token, because there is no server to dial
+- [ ] `shared-types`: the `/ws/call` client and server event unions; delete
+      `CallTokenResponse.url`/`token`/`room`
+- [ ] Nginx: a `/ws/call` location, WebSocket upgrade headers, no buffering
+- [ ] Vite dev proxy: `/ws/call` alongside the other sockets, so `pnpm dev`
+      matches the deployment
+
+The mesh:
+
+- [ ] `services/mesh.ts`: one `RTCPeerConnection` per peer, perfect negotiation
+      with politeness decided by comparing peer ids, and a `nexora.share` data
+      channel per peer
+- [ ] Senders for microphone, camera, screen and screen audio, added and
+      replaced in place so toggling a device does not renegotiate the world
+- [ ] Speaking detection from `getStats` audio levels - LiveKit's active-speaker
+      event was doing this, and nothing else was
+- [ ] DTLS fingerprint signed with the channel key and verified on the far side,
+      so the signalling server cannot put itself in the middle
+- [ ] `stores/voice.ts` rewritten on the mesh, keeping tiles, shares, the
+      watched share, the mic gate and both quality modules
+
+Everything that touched a LiveKit type:
+
+- [ ] `stores/shareControl.ts` on the data channel instead of `DataReceived`
+- [ ] `MediaSink`, `ShareStage`, `VoiceChannelView` take `MediaStreamTrack`
+- [ ] `share-quality.ts` and `voice-quality.ts` produce capture constraints and
+      `RTCRtpSender` parameters instead of LiveKit publish options
+- [ ] Playout delay: `playoutDelayHint` on the receiver, which is what LiveKit's
+      `setPlayoutDelay` was setting
+
+Remote desktop:
+
+- [ ] `rtc.offer` / `rtc.answer` / `rtc.ice` on the remote wire types, relayed
+      by `remote-gateway` between the two sides of one session
+- [ ] `remote-agent.ts` publishes the screen over a peer connection
+- [ ] `stores/remote.ts` receives it; `remote-gateway` stops minting tokens
+
+Removal:
+
+- [ ] `livekit-client`, `livekit-server-sdk`, `livekit-check.ts`,
+      `scripts/livekit-doctor.mjs`, `infrastructure/livekit/`
+- [ ] The `livekit` container, its compose entries, its tunnel ingress and the
+      `/livekit` Nginx location
+- [ ] `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`,
+      `LIVEKIT_NODE_IP`, and the LiveKit rules in `packages/config`'s check
+- [ ] The e2ee worker declaration and the insertable-streams plumbing
+
+Proof:
+
+- [ ] A mesh self-check: politeness, glare, and a peer leaving mid-negotiation
+- [ ] `pnpm typecheck` and `pnpm build` clean across the workspace
+- [ ] Two humans, two networks, one call: voice, camera, screen share, and
+      asking for control of that share
+- [ ] A remote-desktop session through the tunnel
+
 Phase 23 - the web client - has landed in code: `apps/web` builds, typechecks
 and mounts the same UI the Electron renderer does, with the remote-desktop
 section gated behind the preload bridge. The image builds now too, and

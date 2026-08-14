@@ -17,7 +17,7 @@ Core capabilities:
 - Voice calls
 - Video calls
 - Screen sharing
-- Live streaming
+- Live streaming (deferred - see "Live streaming" in section 4)
 - Presence / online status
 - Notifications
 - Roles and permissions
@@ -45,15 +45,14 @@ Architecture must support Web and Android clients later without major backend ch
 - Tailwind CSS
 - Zustand
 - WebSocket
-- WebRTC
-- LiveKit SDK
+- WebRTC (`RTCPeerConnection`, no media SDK)
 
 Desktop responsibilities:
 
 - Chat UI
 - Voice/video UI
 - Screen sharing
-- Live streaming
+- Peer connections: it is the client that carries media
 - Notifications
 - System integration
 - Remote desktop client
@@ -195,55 +194,88 @@ Responsibilities:
 
 Responsibilities:
 
-- LiveKit room management
-- LiveKit access tokens
-- Call permissions
-- Participant permissions
+- Call signalling (`/ws/call`)
+- Who may join which call
+- The roster of peers in a call
+- Relaying offers, answers and ICE candidates between two peers
+- ICE server configuration (STUN, and TURN when configured)
 - Call lifecycle
 - Voice/video session metadata
 
-LiveKit handles actual media transport.
+Call Service never sees media. It is a switchboard: it introduces two clients to
+each other and then has nothing further to do with the call.
 
-Do NOT implement custom SFU.
+Do NOT implement an SFU. Do NOT run one.
 
 ---
 
-# 4. LiveKit Architecture
+# 4. Peer-to-Peer Media Architecture
 
-Use LiveKit as SFU.
+Media is peer to peer. There is no media server.
 
-LiveKit handles:
-
-- Voice
-- Video
-- Screen sharing
-- Live streaming
-- Media routing
-- Participant media
+Every participant holds one `RTCPeerConnection` per other participant - a full
+mesh - and voice, video and screen share travel directly between the two
+machines over DTLS-SRTP.
 
 Architecture:
 
-Desktop
-    |
-    | WebRTC
-    v
-LiveKit SFU
-    |
-    +-- Voice
-    +-- Video
-    +-- Screen Share
-    +-- Streaming
+Desktop A                          Desktop B
+    |                                  |
+    |  1. signalling (WebSocket)       |
+    +-----> Call Service /ws/call <----+
+    |                                  |
+    |  2. media (WebRTC, direct)       |
+    +<--------------------------------->
+           voice / video / screen share
 
 Call Service handles:
 
 - Authentication
-- Room creation
-- Room permissions
-- Token generation
-- User permissions
-- Call state
+- Permission to join a call
+- The peer roster
+- Relaying SDP and ICE between peers
+- Handing out ICE servers
 
-Media must NOT pass through NestJS API services.
+Call Service does NOT handle:
+
+- Media of any kind
+- Encoding, transcoding, mixing or recording
+- Anything that would make it a hop in the media path
+
+## What a mesh costs
+
+Each participant uploads one copy of its media per other participant. Uplink
+grows linearly with the call, so the mesh is right for small calls and wrong for
+large ones:
+
+| Participants | Video | Voice only |
+| --- | --- | --- |
+| 2-5 | Comfortable | Comfortable |
+| 6-8 | Degrades; expect to drop video | Comfortable |
+| 9+ | Not supported | Marginal |
+
+This is the accepted ceiling, not an oversight. A call that needs to be bigger
+than this needs an SFU, and adding one is a deliberate future decision - not
+something to smuggle back in.
+
+## NAT traversal
+
+- **STUN is required.** A peer needs to learn its own public address before it
+  can offer one. It is not a relay: nothing but the address discovery goes
+  through it, and no port has to be opened for it.
+- **TURN is optional and off by default.** Some pairs of networks - symmetric
+  NAT, mobile carrier-grade NAT - cannot form a direct path at all. TURN is the
+  relay that fixes those, and configuring one is the operator's choice. With
+  none configured, those calls fail rather than being relayed, which is the
+  intended default.
+- **No port forwarding, ever.** Both peers dial out. Nothing listens for an
+  inbound connection.
+
+## Live streaming
+
+One-to-many streaming is out of scope while media is peer to peer: a broadcast
+to 50 viewers is 50 uplinks from the streamer. It comes back when, and only
+when, there is a media server to carry it.
 
 ---
 
@@ -259,18 +291,27 @@ Components:
 
 Architecture:
 
-Desktop App
-    |
-    | TLS / WebSocket
-    v
-Remote Gateway
-    |
-    | Secure Relay
-    v
-Remote Agent
-    |
-    v
-Target Machine
+Desktop App                               Remote Agent
+    |                                          |
+    |  1. session + input (TLS / WebSocket)    |
+    +--------> Remote Gateway <----------------+
+    |          (relays signalling and input,   |
+    |           enforces permissions, audits)  |
+    |                                          |
+    |  2. screen (WebRTC, direct)              |
+    +<---------------------------------------->+
+                                               |
+                                               v
+                                       Target Machine
+
+Remote Gateway relays control: the session handshake, the offer/answer/ICE that
+set up the peer connection, mouse and keyboard events, clipboard, and the audit
+trail. It does not carry the screen.
+
+The screen is peer to peer, for the same reason a call is: it is the only shape
+that survives a Cloudflare Tunnel without opening a port. Both the agent and
+the controller dial out to the gateway over WebSocket, and the picture then
+goes directly between them.
 
 Remote Agent runs on machine being controlled.
 
@@ -338,24 +379,75 @@ Internet
 Cloudflare
     |
     v
-Cloudflare Tunnel
+Cloudflare Tunnel          (HTTP + WebSocket only)
     |
     v
 Nginx / Traefik
     |
     +-- API Services
-    +-- WebSocket
+    +-- WebSocket  (/ws/chat, /ws/presence, /ws/call, /ws/remote)
     +-- Remote Gateway
-    +-- LiveKit
 
 `cloudflared` can run as Docker container.
+
+## The tunnel carries signalling, never media
+
+This is the rule the whole media design is built around.
+
+A Cloudflare Tunnel carries HTTP and WebSocket. It does NOT carry UDP, and
+WebRTC media is UDP. Any design that puts a media server behind the tunnel has
+to smuggle media around it - a second public address, an open UDP port, a
+forced relay - and every one of those is a thing that breaks.
+
+Peer-to-peer media does not have this problem, because media never goes near
+the tunnel:
+
+```text
+Signalling:  Client ---> Cloudflare ---> Tunnel ---> Nginx ---> call-service
+                         (WebSocket, works exactly as chat does)
+
+Media:       Client <=========================================> Client
+                         (WebRTC, direct, never touches Cloudflare)
+```
+
+Consequences, all of them good:
+
+- No UDP port is opened anywhere.
+- No service advertises an address only it can reach. There is no
+  advertised-address setting, and there must never be one. This is the single
+  most expensive class of bug the old design had: an address that is correct on
+  the server and wrong for every client, which survives every test the operator
+  can run locally.
+- The deployment is one hostname. Signalling is a WebSocket path on the same
+  gateway everything else uses.
+- A client on any network reaches signalling if it can reach the site at all.
+
+## Reaching the other peer
+
+The tunnel gets both clients *talking*. It does not get their media across;
+that is ICE's job.
+
+| Case | What carries the media |
+| --- | --- |
+| Same LAN | Direct, host candidates |
+| Different networks, ordinary NAT | Direct, STUN-discovered addresses |
+| Symmetric or carrier-grade NAT | TURN relay, when one is configured |
+
+STUN needs no tunnel and no port: the client dials out to a public STUN server
+itself.
+
+TURN is optional and unconfigured by default. When a deployment wants the last
+category of network to work, Cloudflare's own TURN service is the natural fit -
+it is outbound-only from both peers, so it opens no ports either, and
+`call-service` mints short-lived credentials for it per call. It is a relay, so
+it is off unless an operator turns it on.
 
 Cloudflare Tunnel and internal API Gateway have different responsibilities.
 
 Cloudflare Tunnel:
 
 - Secure outbound tunnel
-- Public ingress
+- Public ingress for HTTP and WebSocket
 - No port forwarding
 - No direct public server exposure
 
@@ -386,9 +478,10 @@ Expected services:
 - `call-service`
 - `remote-gateway`
 - `remote-agent`
-- `livekit`
 - `postgres`
 - `redis`
+
+There is no media container. Adding one is how the tunnel problem comes back.
 
 Use Docker Compose for development.
 
@@ -571,11 +664,8 @@ project/
 │   ├── nginx/
 │   │   └── nginx.conf
 │   │
-│   ├── cloudflare/
-│   │   └── tunnel.yml
-│   │
-│   └── livekit/
-│       └── livekit.yaml
+│   └── cloudflare/
+│       └── tunnel.yml
 │
 ├── database/
 │   ├── migrations/
@@ -692,12 +782,17 @@ WebSocket:
 ```text
 /ws/chat
 /ws/presence
+/ws/call
 /ws/remote
 ```
 
-LiveKit uses WebRTC.
+`/ws/call` and `/ws/remote` carry signalling: offers, answers, ICE candidates,
+and the roster of who is in the call.
 
-Do not send voice/video media through WebSocket.
+Media uses WebRTC, directly between peers.
+
+Do not send voice/video media through WebSocket. A WebSocket goes through the
+gateway and the tunnel, which is exactly what media must not do.
 
 ---
 
@@ -1003,22 +1098,23 @@ inside gateway.
 
 ---
 
-# 28. LiveKit Rules
+# 28. Media Rules
 
-LiveKit is responsible for media.
+The clients are responsible for media.
 
-NestJS is responsible for application logic.
+NestJS is responsible for application logic and for introducing peers.
 
 Correct:
 
 ```text
-Desktop
+Desktop A                                    Desktop B
+   |                                             |
+   +---- WebSocket ----> Call Service <----------+
+   |                     (SDP + ICE relay,
+   |                      roster, permissions)
    |
-   +---- API ----> Call Service
-   |                  |
-   |                  +---- LiveKit token
-   |
-   +---- WebRTC ----> LiveKit SFU
+   +<------------- WebRTC, direct -------------->+
+                   voice / video / screen
 ```
 
 Incorrect:
@@ -1027,13 +1123,23 @@ Incorrect:
 Desktop
    |
    v
-NestJS
+NestJS  (or Nginx, or the Cloudflare Tunnel)
    |
    v
 Voice/Video
 ```
 
-Never proxy media through NestJS.
+Rules:
+
+- Never proxy media through NestJS.
+- Never proxy media through Nginx or the tunnel.
+- Never run a media server.
+- Never require an inbound port for media.
+- Never hand a client an address that only the server can reach. Peers exchange
+  ICE candidates and work it out themselves; nothing in the backend needs to
+  know or state where a client is.
+- Signalling is small, text, and reliable - it belongs on a WebSocket. Media is
+  large, continuous, and loss-tolerant - it belongs on WebRTC. Do not mix them.
 
 ---
 
@@ -1077,9 +1183,10 @@ Example:
 cloudflare-network
 api-network
 data-network
-media-network
 remote-network
 ```
+
+There is no media network: no container carries media.
 
 Only required services should communicate with each network.
 
@@ -1119,13 +1226,17 @@ DATABASE_URL
 REDIS_URL
 JWT_SECRET
 JWT_REFRESH_SECRET
-LIVEKIT_API_KEY
-LIVEKIT_API_SECRET
+STUN_URLS
 S3_ENDPOINT
 S3_ACCESS_KEY
 S3_SECRET_KEY
 CLOUDFLARE_TUNNEL_TOKEN
+CLOUDFLARE_TURN_KEY_ID
+CLOUDFLARE_TURN_KEY_API_TOKEN
 ```
+
+There is deliberately no media-server URL, key or secret. A client is never
+told where to find a media server, because there is not one.
 
 Secrets must never be committed.
 
@@ -1268,14 +1379,17 @@ Redis
 PostgreSQL
 → Persistent data
 
-LiveKit
-→ Voice / Video / Screen Share / Streaming
+Call Service
+→ Call signalling and permissions. Never media.
+
+WebRTC peer connections (in the clients)
+→ Voice / Video / Screen Share
 
 Remote Gateway
-→ Remote session relay
+→ Remote session signalling, input relay, permissions, audit. Never the screen.
 
 Remote Agent
-→ Machine control
+→ Machine control and screen capture
 
 Electron
 → Desktop client
@@ -1330,33 +1444,44 @@ Do not merge these responsibilities without strong reason.
 
               MEDIA ARCHITECTURE
 
-Desktop
-    │
-    │ WebRTC
-    ▼
-┌─────────────────┐
-│   LiveKit SFU   │
-└─────────────────┘
-    │
-    ├── Voice
-    ├── Video
-    ├── Screen Share
-    └── Streaming
+  Everything above this line is signalling and goes through the
+  tunnel. Nothing below it does.
+  ─────────────────────────────────────────────────────────────
+
+┌──────────┐                                   ┌──────────┐
+│ Desktop  │                                   │ Desktop  │
+│    A     │                                   │    B     │
+└────┬─────┘                                   └─────┬────┘
+     │                                               │
+     │  /ws/call  ──►  Cloudflare ──► Nginx ──►  call-service
+     │                 (SDP, ICE candidates, roster)  │
+     │                                               │
+     │◄───────────── WebRTC, direct ────────────────►│
+     │        ┌── Voice                              │
+     │        ├── Video                              │
+     │        └── Screen Share                       │
+
+  ICE finds the path:
+     same LAN          → host candidates
+     across the net    → STUN-discovered addresses
+     hostile NAT       → TURN relay, only if one is configured
 
 
             REMOTE ACCESS ARCHITECTURE
 
-Desktop
-    │
-    ▼
-Remote Gateway
-    │
-    │ Secure Relay
-    ▼
-Remote Agent
-    │
-    ▼
-Target Machine
+┌──────────┐                                 ┌──────────────┐
+│ Desktop  │                                 │ Remote Agent │
+│(watcher) │                                 │  (target)    │
+└────┬─────┘                                 └───────┬──────┘
+     │                                               │
+     │  /ws/remote ──► Cloudflare ──► Remote Gateway │
+     │      session, permissions, audit,             │
+     │      SDP + ICE, mouse, keyboard, clipboard    │
+     │                                               │
+     │◄──────── WebRTC, direct: the screen ─────────►│
+                                                     │
+                                                     ▼
+                                             Target Machine
 ```
 
 # 38. Core Rule
@@ -1371,9 +1496,12 @@ Use Electron for desktop.
 
 Use NestJS for backend services.
 
-Use LiveKit for all realtime media.
+Use peer-to-peer WebRTC for all realtime media. Run no media server.
 
-Use Cloudflare Tunnel for public ingress.
+Backend services signal; they never carry media.
+
+Use Cloudflare Tunnel for public ingress - it carries signalling only, which is
+why no port is ever opened and no service ever advertises its own address.
 
 Use Nginx/Traefik as internal gateway.
 

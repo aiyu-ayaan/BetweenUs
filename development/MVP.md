@@ -29,7 +29,8 @@ when the MVP shipped.
 
 ## Out of scope for MVP (shipped in phase 8)
 
-- Voice / video / screen share (LiveKit, `call-service`)
+- Voice / video / screen share (`call-service` signalling and a WebRTC mesh;
+  originally LiveKit, replaced in phase 24)
 - End-to-end encryption of messages and call media
 
 ## Out of scope for MVP (still ahead)
