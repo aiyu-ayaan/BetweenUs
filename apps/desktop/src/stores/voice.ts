@@ -389,9 +389,9 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
 
       const stream = await navigator.mediaDevices.getDisplayMedia({
         video: {
-          width: { ideal: options.capture.video.width },
-          height: { ideal: options.capture.video.height },
-          frameRate: { ideal: options.capture.video.frameRate },
+          width: { ideal: options.capture.video.width, max: Math.max(3840, options.capture.video.width) },
+          height: { ideal: options.capture.video.height, max: Math.max(2160, options.capture.video.height) },
+          frameRate: { ideal: options.capture.video.frameRate, max: 60 },
         },
         audio: options.capture.audio === false ? false : options.capture.audio,
       } as DisplayMediaStreamOptions);
@@ -400,7 +400,18 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
       const audio = stream.getAudioTracks()[0] ?? null;
       // The encoder is told what it is looking at: a text profile keeps edges
       // sharp and drops frames, a motion one does the opposite.
-      if (video) video.contentHint = options.capture.contentHint;
+      if (video) {
+        video.contentHint = options.capture.contentHint;
+        const settings = video.getSettings();
+        if (settings.width && settings.height) {
+          const realOptions = shareOptions(
+            intent,
+            { width: settings.width, height: settings.height },
+            { music: intent === 'motion' },
+          );
+          options.publish = realOptions.publish;
+        }
+      }
 
       localTracks.screen = video;
       localTracks.screenAudio = audio;
@@ -660,7 +671,13 @@ function teardown(): void {
  * nothing while an under-estimate is a permanently soft picture.
  */
 async function captureSize(source: ScreenSource | null): Promise<ShareSize> {
-  const fallback = { width: 1920, height: 1080 };
+  const screenWidth = typeof window !== 'undefined' && window.screen ? window.screen.width : 1920;
+  const screenHeight = typeof window !== 'undefined' && window.screen ? window.screen.height : 1080;
+  const dpr = typeof window !== 'undefined' && window.devicePixelRatio ? window.devicePixelRatio : 1;
+  const fallback = {
+    width: Math.max(1920, Math.round(screenWidth * dpr)),
+    height: Math.max(1080, Math.round(screenHeight * dpr)),
+  };
   const displays = (await window.nexora?.screenDisplays()) ?? [];
   if (displays.length === 0) return fallback;
 

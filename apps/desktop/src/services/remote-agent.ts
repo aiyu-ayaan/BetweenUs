@@ -427,9 +427,9 @@ async function publishDisplay(target: ScreenLink, display: DisplayInfo): Promise
 
   const stream = await navigator.mediaDevices.getDisplayMedia({
     video: {
-      width: { ideal: options.capture.video.width },
-      height: { ideal: options.capture.video.height },
-      frameRate: { ideal: options.capture.video.frameRate },
+      width: { ideal: options.capture.video.width, max: Math.max(3840, options.capture.video.width) },
+      height: { ideal: options.capture.video.height, max: Math.max(2160, options.capture.video.height) },
+      frameRate: { ideal: options.capture.video.frameRate, max: 60 },
     },
     audio: false,
   });

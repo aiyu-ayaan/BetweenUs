@@ -22,7 +22,12 @@
  * the gateway learning it; see "Known limits" in development/E2EE.md.
  */
 import type { IceServer, RemoteSignal } from '@nexora/shared-types';
-import { PLAYOUT_DELAY, type SharePublish } from './share-quality';
+import {
+  PLAYOUT_DELAY,
+  patchVideoBandwidth,
+  sortPreferredVideoCodecs,
+  type SharePublish,
+} from './share-quality';
 
 export interface ScreenLinkOptions {
   iceServers: IceServer[];
@@ -103,6 +108,8 @@ export class ScreenLink {
     };
   }
 
+  private publish: SharePublish | null = null;
+
   /**
    * Puts a display on the wire, or swaps the one already there.
    *
@@ -112,6 +119,7 @@ export class ScreenLink {
    */
   async setDisplay(track: MediaStreamTrack | null, publish?: SharePublish): Promise<void> {
     if (!this.sender) return;
+    this.publish = publish ?? null;
     await this.sender.replaceTrack(track).catch(() => undefined);
     if (!track || !publish) return;
 
@@ -136,19 +144,13 @@ export class ScreenLink {
     this.preferCodec(publish.videoCodec);
   }
 
-  /** Hardware H.264 where it exists, which is what makes 1080p60 affordable. */
+  /** Hardware H.264 where it exists, which is what makes 1080p60/4K affordable. */
   private preferCodec(codec: SharePublish['videoCodec']): void {
     if (!this.transceiver?.setCodecPreferences) return;
     try {
       const supported = RTCRtpSender.getCapabilities('video')?.codecs ?? [];
-      const wanted = supported.filter((entry) =>
-        entry.mimeType.toLowerCase().endsWith(`/${codec.toLowerCase()}`),
-      );
-      if (wanted.length === 0) return;
-      this.transceiver.setCodecPreferences([
-        ...wanted,
-        ...supported.filter((entry) => !wanted.includes(entry)),
-      ]);
+      const sorted = sortPreferredVideoCodecs(supported, codec);
+      this.transceiver.setCodecPreferences(sorted);
     } catch {
       // An optimisation; the session works without it.
     }
@@ -157,9 +159,14 @@ export class ScreenLink {
   private async offer(): Promise<void> {
     if (this.closed) return;
     try {
-      await this.pc.setLocalDescription(await this.pc.createOffer());
-      const sdp = this.pc.localDescription?.sdp;
-      if (sdp) this.options.send({ kind: 'offer', sdp });
+      const offer = await this.pc.createOffer();
+      let sdp = offer.sdp;
+      if (sdp && this.publish) {
+        sdp = patchVideoBandwidth(sdp, this.publish);
+      }
+      await this.pc.setLocalDescription({ type: 'offer', sdp: sdp ?? offer.sdp });
+      const localSdp = this.pc.localDescription?.sdp;
+      if (localSdp) this.options.send({ kind: 'offer', sdp: localSdp });
     } catch (error) {
       console.warn('[remote-peer] could not offer the screen', error);
     }
@@ -177,9 +184,14 @@ export class ScreenLink {
       await this.pc.setRemoteDescription({ type: signal.kind, sdp: signal.sdp });
 
       if (signal.kind === 'offer') {
-        await this.pc.setLocalDescription(await this.pc.createAnswer());
-        const sdp = this.pc.localDescription?.sdp;
-        if (sdp) this.options.send({ kind: 'answer', sdp });
+        const answer = await this.pc.createAnswer();
+        let sdp = answer.sdp;
+        if (sdp && this.publish) {
+          sdp = patchVideoBandwidth(sdp, this.publish);
+        }
+        await this.pc.setLocalDescription({ type: 'answer', sdp: sdp ?? answer.sdp });
+        const localSdp = this.pc.localDescription?.sdp;
+        if (localSdp) this.options.send({ kind: 'answer', sdp: localSdp });
       }
     } catch (error) {
       console.warn('[remote-peer] could not accept a signal', error);

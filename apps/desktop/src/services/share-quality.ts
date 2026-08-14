@@ -92,28 +92,25 @@ interface Profile {
 }
 
 const PROFILES: Record<ShareIntent, Profile> = {
-  // A desktop, a document, an IDE. Sharp edges and readable text matter; a
-  // dropped frame does not.
+  // A desktop, a document, an IDE. Sharp edges and readable text matter; resolution
+  // is strictly preserved at high frame rates and generous P2P bitrate.
   detail: {
-    frameRate: 30,
+    frameRate: 60,
     contentHint: 'text',
     degradation: 'maintain-resolution',
-    referenceBitrate: 6_000_000,
-    minBitrate: 2_000_000,
-    maxBitrate: 14_000_000,
+    referenceBitrate: 20_000_000,
+    minBitrate: 8_000_000,
+    maxBitrate: 50_000_000,
   },
-  // A film, a game, anything that moves. Frames are the whole point, and the
-  // encoder should drop resolution before it drops them.
+  // A film, a game, anything that moves. Pristine smoothness at 60 fps with
+  // uncompressed-feel high bitrate across direct P2P connections.
   motion: {
     frameRate: 60,
     contentHint: 'motion',
     degradation: 'maintain-framerate',
-    // H.264 needs more than the old 14 Mbps ceiling to keep a 1080p60 film
-    // clean. A direct mesh can spend it, and congestion control still backs
-    // off immediately when the link cannot.
-    referenceBitrate: 24_000_000,
-    minBitrate: 8_000_000,
-    maxBitrate: 48_000_000,
+    referenceBitrate: 35_000_000,
+    minBitrate: 15_000_000,
+    maxBitrate: 80_000_000,
   },
 };
 
@@ -195,6 +192,100 @@ export function shareOptions(
           : false,
     },
   };
+}
+
+/**
+ * Patches SDP with explicit video bandwidth limits (`b=AS`, `b=TIAS`) and
+ * codec bitrate hints (`x-google-min-bitrate`, `x-google-start-bitrate`,
+ * `x-google-max-bitrate`).
+ *
+ * WebRTC's default Bandwidth Estimation (BWE) starts sending video at ~300 kbps
+ * and ramps up painfully slowly over many seconds. In a direct P2P connection,
+ * these SDP attributes signal high initial and maximum bitrate capabilities
+ * immediately, eliminating blurry start-up artifacts and unlocking full quality.
+ */
+export function patchVideoBandwidth(sdp: string, publish?: SharePublish | null): string {
+  const bitrate = publish?.maxBitrate ?? 50_000_000;
+  const maxKbps = Math.round(bitrate / 1000);
+  const minKbps = Math.max(1000, Math.round(maxKbps * 0.25));
+  const startKbps = Math.max(minKbps, Math.round(maxKbps * 0.6));
+  const tiasBps = bitrate;
+
+  const sections = sdp.split(/(?=m=)/g);
+  const patched = sections.map((section) => {
+    if (!section.startsWith('m=video')) return section;
+
+    let mediaSection = section;
+
+    // 1. Ensure b=AS and b=TIAS bandwidth attributes are set for the video m-line
+    mediaSection = mediaSection.replace(/b=AS:\d+\r?\n/gi, '');
+    mediaSection = mediaSection.replace(/b=TIAS:\d+\r?\n/gi, '');
+
+    // Insert b= lines after c= line or directly after m= line
+    const bLines = `b=AS:${maxKbps}\r\nb=TIAS:${tiasBps}\r\n`;
+    if (/c=IN[^\r\n]+\r?\n/i.test(mediaSection)) {
+      mediaSection = mediaSection.replace(/(c=IN[^\r\n]+\r?\n)/i, `$1${bLines}`);
+    } else {
+      mediaSection = mediaSection.replace(/(m=video[^\r\n]+\r?\n)/i, `$1${bLines}`);
+    }
+
+    // 2. Patch fmtp lines for all video payload types to include google bitrate hints
+    const rtpmapRegex = /^a=rtpmap:(\d+)\s+(\S+)\/90000/gim;
+    let match: RegExpExecArray | null;
+    const pts: string[] = [];
+    while ((match = rtpmapRegex.exec(mediaSection)) !== null) {
+      if (match[1]) pts.push(match[1]);
+    }
+
+    for (const pt of pts) {
+      const fmtpRegex = new RegExp(`^a=fmtp:${pt}\\s+(.+)$`, 'm');
+      const hints = `x-google-min-bitrate=${minKbps};x-google-max-bitrate=${maxKbps};x-google-start-bitrate=${startKbps}`;
+      if (fmtpRegex.test(mediaSection)) {
+        mediaSection = mediaSection.replace(
+          fmtpRegex,
+          (_m, existing: string) => `a=fmtp:${pt} ${existing};${hints}`,
+        );
+      } else {
+        mediaSection = mediaSection.replace(
+          new RegExp(`(a=rtpmap:${pt}[^\\r\\n]+\\r?\\n)`, 'i'),
+          `$1a=fmtp:${pt} ${hints}\r\n`,
+        );
+      }
+    }
+
+    return mediaSection;
+  });
+
+  return patched.join('');
+}
+
+/**
+ * Sorts video codecs to prefer H.264 High Profile (profile-level-id 6400..)
+ * with packetization-mode=1, which provides superior image sharpness and CABAC
+ * compression efficiency over baseline profile.
+ */
+export function sortPreferredVideoCodecs(
+  codecs: RTCRtpCodecCapability[],
+  preferred: SharePublish['videoCodec'],
+): RTCRtpCodecCapability[] {
+  const target = preferred.toLowerCase();
+  const matched = codecs.filter((c) => c.mimeType.toLowerCase().endsWith(`/${target}`));
+  const others = codecs.filter((c) => !c.mimeType.toLowerCase().endsWith(`/${target}`));
+
+  // If H.264, prioritize High Profile (6400..) over Baseline (4200.. / 42e0..)
+  if (target === 'h264') {
+    matched.sort((a, b) => {
+      const aFmtp = (a.sdpFmtpLine ?? '').toLowerCase();
+      const bFmtp = (b.sdpFmtpLine ?? '').toLowerCase();
+      const aHigh = aFmtp.includes('profile-level-id=6400') ? 2 : 0;
+      const bHigh = bFmtp.includes('profile-level-id=6400') ? 2 : 0;
+      const aPacket = aFmtp.includes('packetization-mode=1') ? 1 : 0;
+      const bPacket = bFmtp.includes('packetization-mode=1') ? 1 : 0;
+      return bHigh + bPacket - (aHigh + aPacket);
+    });
+  }
+
+  return [...matched, ...others];
 }
 
 /**

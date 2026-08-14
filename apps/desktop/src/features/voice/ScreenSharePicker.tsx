@@ -153,13 +153,13 @@ export function ScreenSharePicker({ onClose }: { onClose: () => void }): JSX.Ele
             active={intent === 'detail'}
             onClick={() => setIntent('detail')}
             title="Text and detail"
-            hint="A desktop, a document, code. Stays sharp; 30 fps."
+            hint="A desktop, a document, code. Stays razor-sharp; 60 fps high bitrate."
           />
           <IntentCard
             active={intent === 'motion'}
             onClick={() => setIntent('motion')}
             title="Video and motion"
-            hint="A film or a game. Smooth at 60 fps, full-quality sound."
+            hint="A film or a game. Ultra-smooth at 60 fps, full-quality sound."
           />
         </div>
 

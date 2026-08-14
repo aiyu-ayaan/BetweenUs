@@ -66,7 +66,12 @@ import type {
   ServerCallEvent,
 } from '@nexora/shared-types';
 import { wsUrl } from './endpoint';
-import { PLAYOUT_DELAY, type SharePublish } from './share-quality';
+import {
+  PLAYOUT_DELAY,
+  patchVideoBandwidth,
+  sortPreferredVideoCodecs,
+  type SharePublish,
+} from './share-quality';
 import type { MicEncoding } from './voice-quality';
 
 /** What a slot carries. The order is the transceiver order and is load-bearing. */
@@ -223,6 +228,7 @@ class PeerLink {
   private ignoreOffer = false;
   private readonly polite: boolean;
   private micEncoding: MicEncoding | null = null;
+  private sharePublish: SharePublish | null = null;
   private closed = false;
   /**
    * What this client wants to be sending, held for the answering side: it has
@@ -281,10 +287,25 @@ class PeerLink {
     // call where no media was ever received.
     if (!this.polite) {
       for (const slot of SLOTS) {
-        const transceiver = this.pc.addTransceiver(SLOT_KIND[slot], { direction: 'sendrecv' });
+        const encodings: RTCRtpEncodingParameters[] =
+          slot === 'screen'
+            ? [
+                {
+                  maxBitrate: 50_000_000,
+                  maxFramerate: 60,
+                  priority: 'high',
+                  networkPriority: 'high',
+                },
+              ]
+            : [];
+        const transceiver = this.pc.addTransceiver(SLOT_KIND[slot], {
+          direction: 'sendrecv',
+          sendEncodings: encodings.length > 0 ? encodings : undefined,
+        });
         this.transceivers.set(slot, transceiver);
         this.senders.set(slot, transceiver.sender);
       }
+      this.preferShareCodec('H264');
     }
 
     // Negotiated on both sides with a fixed id, so neither has to wait for the
@@ -423,9 +444,24 @@ class PeerLink {
       this.senders.set(slot, transceiver.sender);
     }
 
-    if (this.shareCodec) this.preferShareCodec(this.shareCodec);
+    this.preferShareCodec(this.shareCodec ?? 'H264');
     for (const [slot, track] of this.wanted) await this.setTrack(slot, track);
     if (this.micEncoding) await this.tune('mic', { maxBitrate: this.micEncoding.maxBitrate });
+    if (this.sharePublish) {
+      await this.tune(
+        'screen',
+        {
+          maxBitrate: this.sharePublish.maxBitrate,
+          maxFramerate: this.sharePublish.maxFramerate,
+          scaleResolutionDownBy: this.sharePublish.scaleResolutionDownBy,
+          priority: this.sharePublish.priority,
+        },
+        this.sharePublish.degradationPreference,
+      );
+      if (this.sharePublish.audio) {
+        await this.tune('screenAudio', { maxBitrate: this.sharePublish.audio.maxBitrate });
+      }
+    }
   }
 
   /**
@@ -458,28 +494,34 @@ class PeerLink {
   }
 
   /**
-   * Sets the local description, with the Opus options patched in when they will
-   * be accepted.
+   * Sets the local description, with the Opus and Video bandwidth options patched in
+   * when they will be accepted.
    *
-   * The patch is a preference, not a requirement: `stereo` and `usedtx` are
-   * only settable in the SDP, and Chromium has grown steadily stricter about
-   * accepting an SDP it did not write. So the munged one is tried first and the
-   * untouched one is the fallback - a mono call is a call, and a rejected
-   * description is silence.
+   * The patch is a preference, not a requirement: `stereo`, `usedtx` and video
+   * bandwidth hints are settable in the SDP. So the munged one is tried first
+   * and the untouched one is the fallback.
    */
   private async setLocalDescription(type: 'offer' | 'answer'): Promise<void> {
     const description =
       type === 'offer' ? await this.pc.createOffer() : await this.pc.createAnswer();
 
-    if (this.micEncoding && description.sdp) {
-      try {
-        await this.pc.setLocalDescription({
-          type: description.type,
-          sdp: patchOpus(description.sdp, this.micEncoding),
-        });
-        return;
-      } catch (error) {
-        console.warn('[mesh] Opus options refused, continuing without them', error);
+    if (description.sdp) {
+      let patched = description.sdp;
+      if (this.micEncoding) {
+        patched = patchOpus(patched, this.micEncoding);
+      }
+      patched = patchVideoBandwidth(patched, this.sharePublish);
+
+      if (patched !== description.sdp) {
+        try {
+          await this.pc.setLocalDescription({
+            type: description.type,
+            sdp: patched,
+          });
+          return;
+        } catch (error) {
+          console.warn('[mesh] Patched SDP options refused, continuing without them', error);
+        }
       }
     }
 
@@ -632,9 +674,14 @@ class PeerLink {
     this.micEncoding = encoding;
   }
 
+  /** Remembered so every future offer and answer carries the screen bitrate options. */
+  setSharePublish(publish: SharePublish | null): void {
+    this.sharePublish = publish;
+  }
+
   /**
-   * Asks for H.264 on the screen slot, where hardware encoding is what makes
-   * 1080p60 possible. Ignored where the codec is unavailable.
+   * Asks for High Profile H.264 on the screen slot, where hardware encoding is what makes
+   * 1080p60/4K60 possible with pristine clarity. Ignored where the codec is unavailable.
    */
   preferShareCodec(codec: SharePublish['videoCodec']): void {
     this.shareCodec = codec;
@@ -643,12 +690,8 @@ class PeerLink {
 
     try {
       const supported = RTCRtpSender.getCapabilities('video')?.codecs ?? [];
-      const wanted = supported.filter((entry) =>
-        entry.mimeType.toLowerCase().endsWith(`/${codec.toLowerCase()}`),
-      );
-      if (wanted.length === 0) return;
-      const rest = supported.filter((entry) => !wanted.includes(entry));
-      transceiver.setCodecPreferences([...wanted, ...rest]);
+      const sorted = sortPreferredVideoCodecs(supported, codec);
+      transceiver.setCodecPreferences(sorted);
     } catch {
       // Codec preferences are an optimisation; the call works without them.
     }
@@ -868,7 +911,10 @@ export class Mesh {
     );
 
     if (this.micEncoding) link.setMicEncoding(this.micEncoding);
-    if (this.sharePublish) link.preferShareCodec(this.sharePublish.videoCodec);
+    if (this.sharePublish) {
+      link.setSharePublish(this.sharePublish);
+      link.preferShareCodec(this.sharePublish.videoCodec);
+    }
     this.links.set(peer.peerId, link);
 
     // Whatever this client is already sending goes onto the new connection
@@ -898,6 +944,7 @@ export class Mesh {
       await link.tune('mic', { maxBitrate: this.micEncoding.maxBitrate });
     }
     if (this.sharePublish) {
+      link.setSharePublish(this.sharePublish);
       await link.tune(
         'screen',
         {
@@ -924,8 +971,11 @@ export class Mesh {
 
   async setSharePublish(publish: SharePublish | null): Promise<void> {
     this.sharePublish = publish;
+    for (const link of this.links.values()) {
+      link.setSharePublish(publish);
+      if (publish) link.preferShareCodec(publish.videoCodec);
+    }
     if (!publish) return;
-    for (const link of this.links.values()) link.preferShareCodec(publish.videoCodec);
     await Promise.all([...this.links.values()].map((link) => this.applyTuning(link)));
   }
 
