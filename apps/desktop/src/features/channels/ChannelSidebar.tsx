@@ -36,9 +36,6 @@ export function ChannelSidebar({
   const textChannels = channels.filter((channel) => channel.type === 'TEXT');
   const voiceChannels = channels.filter((channel) => channel.type === 'VOICE');
 
-  const voiceChannelId = useVoiceStore((state) => state.channelId);
-  const connectedChannel = channels.find((channel) => channel.id === voiceChannelId);
-
   return (
     <aside className="flex w-60 shrink-0 flex-col bg-surface-800">
       <ServerHeader
@@ -105,7 +102,7 @@ export function ChannelSidebar({
         </div>
       </nav>
 
-      <VoicePanel channelName={connectedChannel?.name ?? null} />
+      <VoicePanel />
       <UserPanel onOpenSettings={onOpenUserSettings} />
 
       {creating && (

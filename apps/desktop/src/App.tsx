@@ -27,6 +27,7 @@ import { PinnedPanel } from './features/chat/PinnedPanel';
 import { SearchPanel } from './features/chat/SearchPanel';
 import { UserSettings } from './features/settings/UserSettings';
 import { VoiceChannelView } from './features/voice/VoiceChannelView';
+import { CallAudio } from './features/voice/CallAudio';
 import { ShareControlConsent } from './features/voice/ShareControlConsent';
 import { NexoraLogoIcon } from './components/icons';
 import { ErrorBoundary } from './components/ErrorBoundary';
@@ -230,6 +231,10 @@ function Workbench(): JSX.Element {
           goes for somebody in a call asking for the mouse on a screen being
           shared - a machine being driven by another person is never a
           background event. */}
+      {/* The call's ears, at the root and outside every column: a sidebar swap
+          or a screen change must never be able to unmount them. */}
+      <CallAudio />
+
       <IdentityUnlock />
       <RemoteConsent />
       <ShareControlConsent />

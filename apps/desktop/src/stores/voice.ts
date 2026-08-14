@@ -19,6 +19,7 @@ import { callKeyForChannel } from '../services/e2ee';
 import { Mesh, SLOTS, type Slot } from '../services/mesh';
 import { presenceSocket } from '../services/socket';
 import { useAuthStore } from './auth';
+import { useChatStore } from './chat';
 import { useShareControlStore } from './shareControl';
 import { useAudioSettings } from './audioSettings';
 import { NoiseGate } from '../services/mic-gate';
@@ -66,6 +67,16 @@ export interface VoiceShare {
 interface VoiceState {
   status: 'idle' | 'connecting' | 'connected';
   channelId: string | null;
+  /**
+   * Where the call is, remembered rather than looked up.
+   *
+   * The call outlives the screen it was started from: switching servers throws
+   * away `chat.channels`, so by the time the dock renders there is nothing left
+   * to find the name in. Recording both at join is what lets the dock say where
+   * you are and take you back to it.
+   */
+  channelName: string | null;
+  callServerId: string | null;
   tiles: VoiceTile[];
   shares: VoiceShare[];
   /** Identity whose shared screen fills the stage, or null for the grid. */
@@ -88,7 +99,13 @@ interface VoiceState {
   error: string | null;
 
   join: (channelId: string) => Promise<void>;
-  leave: () => Promise<void>;
+  /**
+   * `reason` is what ended the call when it was not the user: the mesh dying,
+   * or this account joining the same call from another device. It survives the
+   * hang-up so the client can say why the call went away, where clearing it
+   * unconditionally left the message on screen for a few milliseconds.
+   */
+  leave: (reason?: string) => Promise<void>;
   toggleMic: () => Promise<void>;
   toggleCamera: () => Promise<void>;
   shareScreen: (
@@ -98,6 +115,8 @@ interface VoiceState {
   ) => Promise<void>;
   stopScreenShare: () => Promise<void>;
   watch: (identity: string | null) => void;
+  /** Opens the channel the call is in, from wherever the client has wandered. */
+  openCallChannel: () => Promise<void>;
 }
 
 /**
@@ -146,6 +165,8 @@ let joinCounter = 0;
 export const useVoiceStore = create<VoiceState>((set, get) => ({
   status: 'idle',
   channelId: null,
+  channelName: null,
+  callServerId: null,
   tiles: [],
   shares: [],
   watching: null,
@@ -165,9 +186,13 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
     if (previousChannelId) presenceSocket.send({ type: 'voice.leave', channelId: previousChannelId });
     teardown();
 
+    const channel = useChatStore.getState().channels.find((item) => item.id === channelId);
+
     set({
       status: 'connecting',
       channelId,
+      channelName: channel?.name ?? null,
+      callServerId: channel?.serverId ?? useChatStore.getState().activeServerId,
       error: null,
       tiles: [],
       shares: [],
@@ -232,8 +257,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
         },
         onFatal: (message) => {
           if (get().channelId !== channelId) return;
-          set({ error: message });
-          void get().leave();
+          void get().leave(message);
         },
       });
 
@@ -284,12 +308,14 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
       set({
         status: 'idle',
         channelId: null,
+        channelName: null,
+        callServerId: null,
         error: error instanceof Error ? error.message : 'Could not join the voice channel',
       });
     }
   },
 
-  leave: async () => {
+  leave: async (reason) => {
     joinCounter++;
     const { channelId } = get();
     if (channelId) presenceSocket.send({ type: 'voice.leave', channelId });
@@ -298,6 +324,8 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
     set({
       status: 'idle',
       channelId: null,
+      channelName: null,
+      callServerId: null,
       tiles: [],
       shares: [],
       watching: null,
@@ -305,7 +333,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
       cameraEnabled: false,
       screenEnabled: false,
       sharedDisplayId: null,
-      error: null,
+      error: reason ?? null,
     });
   },
 
@@ -470,6 +498,23 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
   },
 
   watch: (identity) => set({ watching: identity }),
+
+  openCallChannel: async () => {
+    const { channelId, callServerId } = get();
+    if (!channelId) return;
+
+    const chat = useChatStore.getState();
+    // The channel list is per server, so getting back to a call started on
+    // another one means loading that server first - which is also what puts the
+    // voice channel back in `channels`, where `selectChannel` looks for it.
+    // `view` is in the condition because the home screen covers the server one:
+    // being on the right server is not enough if the client is looking at a
+    // direct message.
+    if (callServerId && (chat.activeServerId !== callServerId || chat.view !== 'server')) {
+      await chat.selectServer(callServerId);
+    }
+    await useChatStore.getState().selectChannel(channelId);
+  },
 }));
 
 /** Re-derives the rendered view from the mesh. Cheap; called on every event. */

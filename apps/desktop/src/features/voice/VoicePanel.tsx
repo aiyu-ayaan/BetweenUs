@@ -1,22 +1,29 @@
 import { useVoiceStore } from '../../stores/voice';
 import { VoiceControls } from './VoiceControls';
-import { AudioSink } from './MediaSink';
 import { LockIcon, MicOffIcon } from '../../components/icons';
 
 /**
- * Sits at the bottom of the sidebar while connected to a voice channel.
+ * Sits at the bottom of whichever sidebar is on screen while connected to a
+ * voice channel - the server one and the home one both mount it, so leaving the
+ * server the call is in does not hide the call.
  *
  * Deliberately compact: who is here, whether the call is encrypted, and the
  * controls. Cameras and shared screens belong to `VoiceChannelView`, which has
- * the room for them. The audio sinks stay here because the panel is mounted for
- * as long as the call lasts - the channel screen is not.
+ * the room for them. The audio is `CallAudio`, mounted once at the root: it has
+ * to keep playing while this panel is being unmounted and mounted again by a
+ * sidebar swap.
+ *
+ * The channel name comes from the store rather than from the caller, because
+ * the caller does not always know it: `chat.channels` holds the *current*
+ * server's channels, and a call outlives switching away from it.
  */
-export function VoicePanel({ channelName }: { channelName: string | null }): JSX.Element | null {
+export function VoicePanel(): JSX.Element | null {
   const status = useVoiceStore((state) => state.status);
   const encrypted = useVoiceStore((state) => state.encrypted);
   const tiles = useVoiceStore((state) => state.tiles);
-  const watching = useVoiceStore((state) => state.watching);
+  const channelName = useVoiceStore((state) => state.channelName);
   const error = useVoiceStore((state) => state.error);
+  const openCallChannel = useVoiceStore((state) => state.openCallChannel);
 
   if (status === 'idle') return null;
 
@@ -27,7 +34,16 @@ export function VoicePanel({ channelName }: { channelName: string | null }): JSX
         <span className="font-medium text-emerald-400">
           {status === 'connecting' ? 'Connecting…' : 'Voice connected'}
         </span>
-        {channelName && <span className="truncate text-slate-400">/ {channelName}</span>}
+        {channelName && (
+          <button
+            type="button"
+            onClick={() => void openCallChannel()}
+            title="Back to the call"
+            className="cursor-pointer truncate text-slate-400 underline-offset-2 transition-colors duration-200 hover:text-slate-200 hover:underline"
+          >
+            / {channelName}
+          </button>
+        )}
       </p>
 
       {error && (
@@ -52,11 +68,6 @@ export function VoicePanel({ channelName }: { channelName: string | null }): JSX
               {tile.isLocal && ' (you)'}
             </span>
             {!tile.micEnabled && <MicOffIcon className="ml-auto h-3.5 w-3.5 text-red-400" />}
-            {tile.audioTrack && <AudioSink track={tile.audioTrack} />}
-            {/* A shared screen brings sound only to viewers watching it */}
-            {tile.screenAudioTrack && watching === tile.identity && (
-              <AudioSink track={tile.screenAudioTrack} />
-            )}
           </li>
         ))}
       </ul>

@@ -3,6 +3,7 @@ import { useFriendsStore } from '../../stores/friends';
 import { usePresenceStore } from '../../stores/presence';
 import { isDesktopRuntime } from '../../services/platform';
 import { UserPanel } from '../settings/UserPanel';
+import { VoicePanel } from '../voice/VoicePanel';
 import { Avatar } from '../../components/Avatar';
 import { MonitorIcon, UsersIcon, XIcon } from '../../components/icons';
 
@@ -134,6 +135,9 @@ export function HomeSidebar({
         </div>
       </nav>
 
+      {/* A call started in a server keeps running while you read a direct
+          message, so its controls have to be reachable from here too. */}
+      <VoicePanel />
       <UserPanel onOpenSettings={onOpenUserSettings} />
     </aside>
   );
