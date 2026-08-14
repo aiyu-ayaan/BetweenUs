@@ -7,10 +7,11 @@ the top honest — it is what a new session reads first.
 
 Phase 23 - the web client - has landed in code: `apps/web` builds, typechecks
 and mounts the same UI the Electron renderer does, with the remote-desktop
-section gated behind the preload bridge. Nothing about it has been driven by a
-human, and the image has not been built - there was no Docker daemon on the
-machine it was written on. What it needs first is a browser in front of it: a
-call, a screen share, and asking a desktop client for control of one.
+section gated behind the preload bridge. The image builds now too, and
+`pnpm dev:web:lan` serves it to a second machine with calls that connect. What
+it still needs is a browser in front of it and a human behind that: a call with
+two people in it, a screen share, and asking a desktop client for control of
+one. The container stack has still never been run end to end.
 
 Phase 22 - the microphone: devices, noise suppression, an input-sensitivity
 gate and two encoding modes - has landed in code and in a self-check. It has no
@@ -41,8 +42,26 @@ a human in front of the app, and so does most of phase 12.
       only the fallback for a packaged renderer loading from `file://`
 - [x] Its own image target and compose service, served at `/` by the gateway
       alongside `/admin`
-- [ ] Build the image and run the container stack - not done, no Docker daemon
-      on the machine this was written on
+- [x] Build the image. It had never been built, and it did not work: the build
+      stage copies `apps/desktop/src` without a manifest on purpose - nothing
+      there should install Electron - so the directory had no `node_modules`,
+      and the web client compiles that source. Every bare import in it failed
+      `TS2307` before anything real was reached. The stage links it to
+      `apps/web/node_modules`, which declares the same set because it is the
+      same UI. `web` was also missing from the images workflow, next to
+      `admin-web`, which is how it reached a tag unbuilt
+- [ ] Run the container stack end to end - the ten images build now, nothing
+      has been driven through the gateway
+- [x] A call from a second machine on the LAN. Signalling reaches the SFU
+      through the dev server's `/livekit` proxy, but media does not go through
+      a proxy and the candidates said `127.0.0.1`, so the other machine
+      negotiated with itself until the client's 15s race called it "Connection
+      to voice server timed out". `pnpm dev:web:lan` relays the SFU's ICE-TCP
+      port from every address this host answers on, and the page rewrites those
+      loopback candidates to the address it was loaded from. Nothing outside
+      the repo is configured and nothing has to be put back - which is the
+      point, since the alternative was mirrored networking plus a Hyper-V
+      firewall rule
 - [ ] A human in a browser: log in, send a message, join a voice channel, share
       a screen (Chromium asks which one), ask a desktop client for control of
       its share and drive it

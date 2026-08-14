@@ -70,13 +70,23 @@ jobs:
           cache-from: type=gha,scope=nexora
           cache-to: type=gha,mode=max,scope=nexora
 
-  # The admin panel is a static bundle, built the same way and deployed beside
-  # the services behind the same gateway.
-  admin:
+  # The two browser bundles: static files behind the same gateway as the
+  # services, so they are built the same way and pushed alongside them. `web`
+  # was missing here while the compose file built it, which is how it reached a
+  # tag with a build that had never run.
+  static:
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
+
+    strategy:
+      fail-fast: false
+      matrix:
+        image:
+          - admin-web
+          - web
+
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
@@ -88,7 +98,7 @@ jobs:
       - id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ github.repository }}/admin-web
+          images: ${{ env.REGISTRY }}/${{ github.repository }}/${{ matrix.image }}
           tags: |
             type=ref,event=tag
             type=sha,format=long
@@ -97,7 +107,7 @@ jobs:
         with:
           context: .
           file: infrastructure/docker/Dockerfile
-          target: admin-web
+          target: ${{ matrix.image }}
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}

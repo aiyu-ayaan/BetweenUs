@@ -55,6 +55,12 @@ COPY apps/services ./apps/services
 COPY apps/desktop/src ./apps/desktop/src
 COPY apps/desktop/public ./apps/desktop/public
 COPY apps/desktop/tailwind.theme.mjs ./apps/desktop/tailwind.theme.mjs
+# Having no manifest has a price: nothing installed anything for this directory,
+# so `react`, `zustand` and `livekit-client` resolve to nothing from inside it
+# and the web build stops on a screen of TS2307 before it reaches anything real.
+# It compiles as part of @nexora/web, which declares that exact set - the same
+# set, because it is the same UI - so lending it those is both correct and free.
+RUN ln -s ../web/node_modules apps/desktop/node_modules
 # Turbo skips any package whose inputs are unchanged since the last build.
 RUN --mount=type=cache,id=nexora-turbo,target=/repo/.turbo \
     pnpm build

@@ -630,58 +630,43 @@ proxied by that one dev server, so the other machine reaches auth-, server-,
 chat-, presence-, notification- and call-service through the single origin it
 loaded the app from. The services stay on loopback, as do Postgres and Redis.
 
-**Media is the exception**, because WebRTC does not go through that proxy. The
-SFU has to advertise an address the *other* machine can reach, not the
-`127.0.0.1` that is right for a browser on this one. In `.env`:
+**Media is the exception**, because WebRTC does not go through that proxy — and
+that is where a call from the other machine used to die with "Connection to
+voice server timed out", which is the client's own 15s race giving up. The dev
+SFU advertises `127.0.0.1` in its ICE candidates, so the other machine dialled
+itself.
+
+That is handled now, by the same command, in two halves that live in
+`apps/web/lan-sfu.ts` and `apps/web/lan-ice.ts`:
+
+- the dev server relays the SFU's ICE-TCP port on `tcp/7882`, from every
+  address this host has on the network;
+- the page rewrites the SFU's loopback TCP candidate to the address it was
+  loaded from, and that port.
+
+Both are `--mode lan` only. Nothing is reconfigured and nothing has to be put
+back: the SFU keeps advertising `127.0.0.1`, which stays right for a browser on
+this host, and a page loaded from loopback rewrites nothing. The startup banner
+says which addresses the relay took:
 
 ```
-NEXORA_LIVEKIT_NODE_IP=192.168.x.x   # this host, as the other machine sees it
-NEXORA_LIVEKIT_BIND=0.0.0.0          # so the TCP fallback candidate is reachable too
+➜  Voice:   SFU media relayed on tcp/7882 from 192.168.1.105
 ```
 
-then `pnpm dev:infra` — the SFU keeps the flags it was started with, so it has
-to be recreated. `docker logs nexora-dev-livekit` shows the advertised `nodeIP`
-on its first line. Windows Firewall has to allow UDP 50000-50019 inbound along
-with the dev server's port.
+The relay is an ordinary Windows process, so it costs one ordinary Windows
+Firewall prompt, exactly like the dev server's own port. **That is the point.**
+A port published inside a WSL VM is bound on the VM: `docker port` says
+`0.0.0.0:7880`, `Test-NetConnection 127.0.0.1 -Port 7880` says `True`, and
+`Test-NetConnection <host LAN IP> -Port 7880` says `False` — and opening it for
+real needs mirrored networking *and* a Hyper-V firewall rule
+(`New-NetFirewallHyperVRule`), because either alone still refuses connections.
+None of that is needed now.
 
-**Check the address is reachable before setting it.** Under WSL2's default NAT
-networking — docker running *inside* WSL rather than Docker Desktop — a
-published port is bound on the WSL VM and Windows forwards only `localhost` to
-it. `docker port` will say `0.0.0.0:7880` and
-`Test-NetConnection <host LAN IP> -Port 7880` will still be `False`. Pointing
-`NEXORA_LIVEKIT_NODE_IP` at an address in that state makes things worse rather
-than better: the candidate is unreachable from the second machine *and* from
-this one, so a call that used to work locally starts timing out too.
-
-Running the stack under Docker Desktop avoids all of this — it publishes onto
-the Windows host itself. Otherwise WSL needs two changes, and *both* of them,
-because either alone still leaves the port refusing connections.
-
-```ini
-; 1. %USERPROFILE%\.wslconfig, then `wsl --shutdown`
-[wsl2]
-networkingMode=mirrored
-```
-
-Mirrored networking gives the WSL VM the host's own interfaces — `ip -4 -o addr
-show` inside WSL will list the LAN address rather than a `172.x` one. It does
-not open anything: inbound traffic to that VM is filtered by the Hyper-V
-firewall, which blocks by default. In an **elevated** PowerShell:
-
-```powershell
-# 2. Let the LAN reach the SFU inside WSL
-$vm = '{40E0AC32-46A5-438A-A0B2-2B479E8F2E90}'   # Get-NetFirewallHyperVVMCreator
-New-NetFirewallHyperVRule -Name "Nexora-LiveKit-Signal-In" `
-  -DisplayName "Nexora dev SFU signalling (TCP 7880-7881)" `
-  -Direction Inbound -VMCreatorId $vm -Protocol TCP -LocalPorts 7880-7881 -Action Allow
-New-NetFirewallHyperVRule -Name "Nexora-LiveKit-Media-In" `
-  -DisplayName "Nexora dev SFU media (UDP 50000-50019)" `
-  -Direction Inbound -VMCreatorId $vm -Protocol UDP -LocalPorts 50000-50019 -Action Allow
-```
-
-`Test-NetConnection <host LAN IP> -Port 7880` has to answer `True` before
-`NEXORA_LIVEKIT_NODE_IP` is worth setting. The dev server itself is an ordinary
-Windows process, so its port is ordinary Windows Firewall, not this.
+Media therefore rides the TCP candidate rather than the UDP range, which costs
+a test call a few milliseconds. `NEXORA_LIVEKIT_NODE_IP` and
+`NEXORA_LIVEKIT_BIND` still exist for a host that would rather publish the SFU
+itself; the rewrite only touches loopback, so setting them takes precedence by
+doing nothing.
 
 None of this applies to a real deployment: it is behind the gateway, over TLS,
 on one hostname.
@@ -731,8 +716,10 @@ A published track logs `"encryption":1` — that is the end-to-end encrypted pat
 | `Can't reach database server at localhost:5432`, while `Test-NetConnection 127.0.0.1 -Port 5432` says `True` | `localhost` resolves to `::1` first and the container publishes IPv4 only. Whether `::1` answers depends on a relay outside this repo: WSL's NAT networking provided one, mirrored networking does not, so switching modes breaks this without touching anything in the stack. Use `127.0.0.1` in `DATABASE_URL` and `REDIS_URL` - `.env.example` does |
 | Everything answers "Request failed", including sign-in | No services are up. `pnpm dev` tears down all ten persistent tasks when any one of them exits non-zero, so a single port clash reads as a dead backend. `curl 127.0.0.1:3001/health` first, and check the last lines of the `pnpm dev` output for which task failed |
 | From another machine: `Cannot read properties of undefined (reading 'generateKey')`, or no mic/camera/screen at all | The origin is plain http and is not localhost, so the browser withholds `crypto.subtle` and `navigator.mediaDevices`. Use `pnpm dev:web:lan`, which serves the same app over TLS, and accept the self-signed certificate once |
-| From another machine: everything works except the call connects and then has no media | The SFU is still advertising `127.0.0.1`. Set `NEXORA_LIVEKIT_NODE_IP` to this host's LAN address and recreate it with `pnpm dev:infra` — but confirm that address answers on 7880 first, see the section above |
-| Calls stopped working *locally* after setting `NEXORA_LIVEKIT_NODE_IP` | That address is not reachable, so now nobody can reach the SFU rather than just the second machine. Under WSL2 NAT the host's LAN IP never answers a port published inside WSL. Unset it, `pnpm dev:infra`, and `docker logs nexora-dev-livekit` should say `"nodeIP":"127.0.0.1"` again |
+| From another machine: "Connection to voice server timed out", while chat and sign-in work | Fixed. Signalling reaches the SFU through the dev server's `/livekit` proxy, but media does not go through a proxy, and the candidates said `127.0.0.1` — so the second machine negotiated with itself until the client's 15s race gave up. `pnpm dev:web:lan` now relays the SFU's TCP port and rewrites those candidates to the address the page was loaded from. If it still times out, check the `➜  Voice:` line at startup: it lists the addresses the relay took |
+| `no media relay on <address>:7882 (EADDRINUSE)` at startup | Something else on this host holds 7882 — a second `dev:web:lan`, usually. Calls from *that* address will time out; the others are unaffected |
+| Calls stopped working *locally* after setting `NEXORA_LIVEKIT_NODE_IP` | That address is not reachable, so now nobody can reach the SFU rather than just the second machine. Under WSL2 the host's LAN IP does not answer a port published inside WSL. Unset it, `pnpm dev:infra`, and `docker logs nexora-dev-livekit` should say `"nodeIP":"127.0.0.1"` again — the LAN case does not need it |
+| `pnpm prod:up` or `docker build` fails with a screen of `TS2307: Cannot find module 'zustand'` in `apps/desktop/src` | Fixed. The image deliberately copies `apps/desktop/src` without its manifest — nothing there should install Electron — but that also meant no `node_modules` for the directory, and the web client compiles that source. The build stage links it to `apps/web/node_modules`, which declares the same set because it is the same UI |
 | No online dots or typing indicators | presence-service is down; `curl 127.0.0.1:3005/health` |
 | "microphone did not start (negotiation timed out)", and the mic/camera/screen buttons then fail too | The LiveKit container is older than `livekit-client` expects, so it never acknowledges a publisher offer. `docker compose -f infrastructure/docker/docker-compose.dev.yml up -d livekit` to pull the pinned v1.13.5 |
 | Voice churns: join, leave, join again | Editing desktop source while connected. A hot reload disconnects the room on purpose; rejoin after the reload |
