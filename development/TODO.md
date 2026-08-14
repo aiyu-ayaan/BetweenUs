@@ -62,6 +62,16 @@ a human in front of the app, and so does most of phase 12.
       the repo is configured and nothing has to be put back - which is the
       point, since the alternative was mirrored networking plus a Hyper-V
       firewall rule
+- [x] Calls through the gateway at all. With `LIVEKIT_URL=/livekit` and every
+      container healthy, a join still died with "Encountered websocket error
+      during connection establishment": the `/livekit` block was not stripping
+      its prefix, so LiveKit saw `/` and answered its root handler `200 OK`
+      rather than upgrading. Every target in `nginx.conf` is a variable so the
+      gateway starts before its services do, and that changes proxy_pass in both
+      directions - a URI after a variable replaces the request URI outright, and
+      no URI after a variable passes the original one, ignoring `rewrite`. A
+      regex location building the upstream URI from a named capture is the form
+      that works, and it needs `$is_args$args` or the access token is dropped
 - [x] The container stack from a second device. A call joined from a phone on
       the network died with "could not establish signal connection: Failed to
       fetch" and `ERR_CONNECTION_REFUSED` on `127.0.0.1:7880`: the deployment's
