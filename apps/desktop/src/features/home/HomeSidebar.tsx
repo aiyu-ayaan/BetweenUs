@@ -42,7 +42,7 @@ export function HomeSidebar({
         </h2>
       </header>
 
-      <nav aria-label="Direct messages" className="flex-1 overflow-y-auto px-2 py-2">
+      <nav aria-label="Direct messages" className="min-h-0 flex-1 overflow-y-auto px-2 py-2">
         <button
           type="button"
           onClick={onShowFriends}

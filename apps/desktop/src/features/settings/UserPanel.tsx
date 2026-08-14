@@ -114,7 +114,7 @@ export function UserPanel({ onOpenSettings }: { onOpenSettings: () => void }): J
         disabled={voiceStatus !== 'connected'}
         aria-label={micEnabled ? 'Mute microphone' : 'Unmute microphone'}
         title={voiceStatus === 'connected' ? 'Microphone' : 'Join a voice channel first'}
-        className="cursor-pointer rounded p-2 text-slate-300 transition-colors duration-200 hover:bg-white/[0.06] disabled:cursor-not-allowed disabled:opacity-40"
+        className="shrink-0 cursor-pointer rounded-md p-2 text-slate-300 transition-colors duration-150 hover:bg-white/[0.06] disabled:cursor-not-allowed disabled:opacity-40"
       >
         {micEnabled ? <MicIcon className="h-5 w-5" /> : <MicOffIcon className="h-5 w-5 text-danger" />}
       </button>
@@ -124,7 +124,7 @@ export function UserPanel({ onOpenSettings }: { onOpenSettings: () => void }): J
         onClick={onOpenSettings}
         aria-label="User settings"
         title="User settings"
-        className="cursor-pointer rounded p-2 text-slate-300 transition-colors duration-200 hover:bg-white/[0.06]"
+        className="shrink-0 cursor-pointer rounded-md p-2 text-slate-300 transition-colors duration-150 hover:bg-white/[0.06]"
       >
         <SettingsIcon className="h-5 w-5" />
       </button>

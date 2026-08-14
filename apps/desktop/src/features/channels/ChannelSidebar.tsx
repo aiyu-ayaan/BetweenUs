@@ -48,7 +48,7 @@ export function ChannelSidebar({
         }}
       />
 
-      <nav aria-label="Channels" className="flex-1 overflow-y-auto px-2 pb-2">
+      <nav aria-label="Channels" className="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
         <SectionHeading
           label="Text channels"
           onAdd={canManageChannels ? () => setCreating('TEXT') : undefined}
