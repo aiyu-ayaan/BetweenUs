@@ -3,6 +3,7 @@ import {
   Controller,
   Delete,
   Get,
+  Headers,
   HttpCode,
   Param,
   ParseUUIDPipe,
@@ -100,8 +101,11 @@ export class RemoteController {
   start(
     @CurrentUser() user: AuthenticatedUser,
     @Body() dto: StartRemoteSessionDto,
+    // The address this client reached the deployment on, so the reply can refuse
+    // to send it to a media server it cannot dial. Nginx forwards the original.
+    @Headers('host') host?: string,
   ): Promise<RemoteSessionResponse> {
-    return this.remote.startSession(user, dto.machineId);
+    return this.remote.startSession(user, dto.machineId, host);
   }
 
   /**

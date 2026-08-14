@@ -12,7 +12,7 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { AccessToken } from 'livekit-server-sdk';
-import { envOr } from '@nexora/config';
+import { envOr, unreachableFromCaller } from '@nexora/config';
 import { resolveChannelAccess } from '@nexora/database';
 import { PERMISSIONS } from '@nexora/permissions';
 import type { CallTokenResponse } from '@nexora/shared-types';
@@ -27,9 +27,15 @@ export class CallsService {
     return `channel.${channelId}`;
   }
 
+  /**
+   * `requestHost` is the caller's own `Host` header - the address it reached this
+   * deployment on, which Nginx forwards. It is here only to catch an SFU address
+   * that client could never dial; see the `LIVEKIT_UNREACHABLE_URL` check below.
+   */
   async token(
     user: { id: string; username: string },
     channelId: string,
+    requestHost?: string,
   ): Promise<CallTokenResponse> {
     await this.requireChannelAccess(user.id, channelId);
 
@@ -43,6 +49,24 @@ export class CallsService {
       throw new ServiceUnavailableException({
         code: 'LIVEKIT_NOT_CONFIGURED',
         message: 'Calls are not configured on this deployment',
+      });
+    }
+
+    // Nor does handing out an address the client cannot dial. A loopback
+    // `LIVEKIT_URL` tells every client to look for the SFU on its own machine:
+    // right for `pnpm dev`, and right for a browser on the server, which is
+    // exactly why it survives testing - the operator connects a call locally and
+    // the first phone on the network gets `ERR_CONNECTION_REFUSED` behind
+    // "could not establish signal connection: Failed to fetch". Note that a
+    // container keeps the environment it was created with, so a `.env` corrected
+    // after the fact changes nothing until call-service is recreated.
+    if (unreachableFromCaller(url, requestHost)) {
+      throw new ServiceUnavailableException({
+        code: 'LIVEKIT_UNREACHABLE_URL',
+        message:
+          `This deployment advertises the voice server at ${url}, which only a client on the ` +
+          'server itself can reach. Set LIVEKIT_URL=/livekit - the gateway proxies it, so the ' +
+          'address follows whoever is calling - and recreate call-service.',
       });
     }
 
