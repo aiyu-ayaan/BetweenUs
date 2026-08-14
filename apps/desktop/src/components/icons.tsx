@@ -383,3 +383,11 @@ export const LayoutBottomIcon = (props: IconProps): JSX.Element => (
     <path d="M3 15h18" />
   </Base>
 );
+
+export const PipIcon = (props: IconProps): JSX.Element => (
+  <Base {...props}>
+    <rect x="2" y="4" width="20" height="16" rx="2" />
+    <rect x="12" y="10" width="8" height="8" rx="1" fill="currentColor" fillOpacity="0.2" />
+  </Base>
+);
+

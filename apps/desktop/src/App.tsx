@@ -31,6 +31,8 @@ import { CallAudio } from './features/voice/CallAudio';
 import { ShareControlConsent } from './features/voice/ShareControlConsent';
 import { TopBar } from './features/shell/TopBar';
 import { QuickSwitcher } from './features/shell/QuickSwitcher';
+import { PipOverlayView } from './features/voice/PipOverlayView';
+import { useVoiceStore } from './stores/voice';
 import { NexoraLogoIcon } from './components/icons';
 import { ErrorBoundary } from './components/ErrorBoundary';
 
@@ -41,6 +43,16 @@ import { ErrorBoundary } from './components/ErrorBoundary';
  * message on screen, not an empty window.
  */
 export default function App(): JSX.Element {
+  const isPip = typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('pip');
+
+  if (isPip) {
+    return (
+      <ErrorBoundary>
+        <PipOverlayView />
+      </ErrorBoundary>
+    );
+  }
+
   return (
     <ErrorBoundary>
       <Session />
@@ -109,6 +121,27 @@ function Session(): JSX.Element {
       ),
     [],
   );
+
+  // Auto-PiP on minimize when connected to a voice channel
+  useEffect(() => {
+    if (!window.nexora?.onWindowMinimize) return;
+
+    const unsubMinimize = window.nexora.onWindowMinimize(() => {
+      const voice = useVoiceStore.getState();
+      if (voice.status === 'connected') {
+        void window.nexora?.openPip();
+      }
+    });
+
+    const unsubRestore = window.nexora.onWindowRestore?.(() => {
+      void window.nexora?.closePip();
+    });
+
+    return () => {
+      unsubMinimize();
+      unsubRestore?.();
+    };
+  }, []);
 
   useEffect(() => {
     if (status === 'authenticated') {

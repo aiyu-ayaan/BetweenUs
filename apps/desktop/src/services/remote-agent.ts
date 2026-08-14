@@ -412,6 +412,23 @@ async function startPublishing(pending: PendingSession): Promise<void> {
 }
 
 /**
+ * Ends the running capture, if there is one.
+ *
+ * Two things hang off it. The capture keeps the OS "being shared" indicator up
+ * until it is stopped, which on a machine nobody is sitting at is the one
+ * visible sign left that anything is happening. And a running capture holds
+ * the desktop in composed flip, without which a video on the target machine is
+ * handed straight to its display and reaches the controller as a black
+ * rectangle - so exactly one release has to follow every capture that started.
+ */
+function stopCapture(): void {
+  if (!captured) return;
+  captured.stop();
+  captured = null;
+  void window.nexora?.releaseScreenCapture();
+}
+
+/**
  * Puts one display on the wire, and points input injection at the same one.
  *
  * Those two have to move together or a controller watching the second monitor
@@ -438,7 +455,7 @@ async function publishDisplay(target: ScreenLink, display: DisplayInfo): Promise
   if (!track) throw new Error('the capture handed back no video');
   track.contentHint = options.capture.contentHint;
 
-  captured?.stop();
+  stopCapture();
   captured = track;
   await target.setDisplay(track, options.publish);
 
@@ -527,10 +544,7 @@ async function teardown(_reason: string): Promise<void> {
   stopClipboardSync();
   link?.close();
   link = null;
-  // The capture keeps the OS "being shared" indicator up until it is stopped,
-  // which on a machine nobody is sitting at is the one visible sign left.
-  captured?.stop();
-  captured = null;
+  stopCapture();
   displays = [];
   activeDisplayId = null;
   useAgentStore.setState({ session: null });

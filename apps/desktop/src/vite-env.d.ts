@@ -72,6 +72,8 @@ interface Window {
     screenDisplays: () => Promise<DisplayInfo[]>;
     remoteTarget: (displayId: string | null) => void;
     selectScreenSource: (id: string, audio: boolean) => Promise<void>;
+    /** One call per capture that started, when its track stops. */
+    releaseScreenCapture: () => Promise<void>;
     startOAuth: (startUrl: string) => Promise<string | null>;
     /** Remote desktop, agent side. Input injection is Windows-only for now. */
     remoteInputSupported: () => Promise<boolean>;
@@ -93,6 +95,12 @@ interface Window {
     remoteInputStop: () => void;
     machineName: () => Promise<string>;
     devLogin: () => Promise<DevLogin | null>;
+    openPip: () => Promise<void>;
+    closePip: () => Promise<void>;
+    isPipOpen: () => Promise<boolean>;
+    focusMain: () => Promise<void>;
+    onWindowMinimize?: (handler: () => void) => () => void;
+    onWindowRestore?: (handler: () => void) => () => void;
   };
 }
 

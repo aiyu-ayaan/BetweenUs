@@ -2,6 +2,7 @@
   "name": "@nexora/desktop",
   "private": true,
   "version": "0.1.0",
+  "type": "module",
   "description": "Nexora desktop client - chat, voice, screen share and remote desktop.",
   "author": "aiyu-ayaan <ayaan35200@gmail.com>",
   "main": "dist-electron/main.js",

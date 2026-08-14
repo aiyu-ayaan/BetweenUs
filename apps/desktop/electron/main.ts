@@ -49,12 +49,15 @@ const windowLabel = process.env.NEXORA_WINDOW_LABEL;
 // The default Windows capturer is DXGI desktop duplication, which reads the
 // desktop plane only. A browser playing a video hands its frames to a hardware
 // overlay plane instead, so duplication captures a black rectangle where the
-// video is while the page around it comes through fine - and the rectangle
-// appears and disappears as the source window gains and loses focus, because
-// that is when the overlay is turned on and off. Windows Graphics Capture asks
-// DWM for what it actually composited, overlays included, and it keeps
-// producing frames for a window that is behind another one instead of
+// video is while the page around it comes through fine. Windows Graphics
+// Capture reads what DWM composited rather than the desktop plane, and it
+// keeps producing frames for a window that is behind another one instead of
 // returning the last one it saw.
+//
+// It does not close the black rectangle on its own, and the earlier note here
+// claiming otherwise was wrong: nothing that reads DWM's output can see a
+// plane DWM was never asked to blend. `pinDesktopComposition` further down is
+// the half that keeps DWM blending at all.
 //
 // The feature is named differently depending on the Chromium underneath, and an
 // unknown feature name is ignored in silence - which is exactly what happened
@@ -87,9 +90,13 @@ if (process.platform === 'win32') {
 app.commandLine.appendSwitch('disable-backgrounding-occluded-windows');
 app.commandLine.appendSwitch('disable-renderer-backgrounding');
 app.commandLine.appendSwitch('disable-background-timer-throttling');
+app.commandLine.appendSwitch('disable-features', 'CalculateNativeWinOcclusion');
 
 /** The window a notification click brings back. */
 let mainWindow: BrowserWindow | null = null;
+
+/** Floating Picture-in-Picture window for incoming video and quick call controls. */
+let pipWindow: BrowserWindow | null = null;
 
 /** Set on `before-quit`, so closing the window can mean "hide" until then. */
 let quitting = false;
@@ -187,7 +194,9 @@ function createWindow(hidden = false): BrowserWindow {
     backgroundColor: '#06070a',
     show: false,
     webPreferences: {
-      preload: path.join(dirname, 'preload.js'),
+      preload: fs.existsSync(path.join(dirname, 'preload.mjs'))
+        ? path.join(dirname, 'preload.mjs')
+        : path.join(dirname, 'preload.js'),
       // Renderer gets no Node privileges; everything privileged goes over IPC.
       contextIsolation: true,
       nodeIntegration: false,
@@ -206,10 +215,23 @@ function createWindow(hidden = false): BrowserWindow {
   window.once('ready-to-show', () => {
     if (!hidden) window.show();
   });
-  window.on('focus', () => window.flashFrame(false));
+  window.on('focus', () => {
+    window.flashFrame(false);
+    window.webContents.send('window:restore');
+  });
+  window.on('minimize', () => {
+    window.webContents.send('window:minimize');
+  });
+  window.on('restore', () => {
+    window.webContents.send('window:restore');
+  });
   mainWindow = window;
   window.on('closed', () => {
     if (mainWindow === window) mainWindow = null;
+    // Nothing is left to say a capture ended, and a stray pin is still a
+    // window - `window-all-closed` would never fire and the app would never
+    // end on a machine with no tray.
+    releaseDesktopComposition(true);
   });
 
   // Closing the window puts Nexora in the tray instead of ending it, so the
@@ -250,6 +272,87 @@ function createWindow(hidden = false): BrowserWindow {
 
   return window;
 }
+
+function createPipWindow(): BrowserWindow {
+  if (pipWindow && !pipWindow.isDestroyed()) {
+    pipWindow.show();
+    pipWindow.focus();
+    return pipWindow;
+  }
+
+  const primaryDisplay = screen.getPrimaryDisplay();
+  const workArea = primaryDisplay.workArea;
+  const pipWidth = 360;
+  const pipHeight = 220;
+  const x = Math.round(workArea.x + workArea.width - pipWidth - 20);
+  const y = Math.round(workArea.y + workArea.height - pipHeight - 20);
+
+  const window = new BrowserWindow({
+    width: pipWidth,
+    height: pipHeight,
+    minWidth: 260,
+    minHeight: 160,
+    maxWidth: 640,
+    maxHeight: 400,
+    x,
+    y,
+    frame: false,
+    transparent: false,
+    backgroundColor: '#06070a',
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    hasShadow: true,
+    resizable: true,
+    webPreferences: {
+      preload: fs.existsSync(path.join(dirname, 'preload.mjs'))
+        ? path.join(dirname, 'preload.mjs')
+        : path.join(dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+      webviewTag: false,
+      backgroundThrottling: false,
+    },
+  });
+
+  window.setAlwaysOnTop(true, 'floating');
+
+  window.on('closed', () => {
+    if (pipWindow === window) pipWindow = null;
+  });
+
+  if (rendererDevUrl) {
+    void window.loadURL(`${rendererDevUrl}?pip=1`);
+  } else {
+    void window.loadFile(path.join(dirname, '../dist/index.html'), { query: { pip: '1' } });
+  }
+
+  pipWindow = window;
+  return window;
+}
+
+ipcMain.handle('pip:open', (): void => {
+  createPipWindow();
+});
+
+ipcMain.handle('pip:close', (): void => {
+  if (pipWindow && !pipWindow.isDestroyed()) {
+    pipWindow.close();
+    pipWindow = null;
+  }
+});
+
+ipcMain.handle('pip:is-open', (): boolean => {
+  return Boolean(pipWindow && !pipWindow.isDestroyed());
+});
+
+ipcMain.handle('pip:focus-main', (): void => {
+  showMainWindow();
+  if (pipWindow && !pipWindow.isDestroyed()) {
+    pipWindow.close();
+    pipWindow = null;
+  }
+});
 
 function numberFromEnv(name: string): number | undefined {
   const raw = process.env[name];
@@ -382,6 +485,95 @@ ipcMain.handle('screen:displays', async () => {
 ipcMain.handle('screen:select', (_event, id: unknown, audio: unknown): void => {
   pendingShare = typeof id === 'string' ? { id, audio: audio === true } : null;
 });
+
+// --- Keeping the desktop composited while a capture runs ---------------------
+//
+// Windows sends a window's frames straight to the display and skips DWM when
+// there is nothing that has to be blended on top of it - independent flip -
+// and the same call puts a playing video on its own hardware overlay plane.
+// Every screen-capture API reads what DWM composited, so a plane DWM was never
+// asked to blend arrives as a black rectangle while the rest of the desktop,
+// still composited, carries on moving.
+//
+// That is the whole bug: share a screen, maximise this app so it covers the
+// monitor, then work in a browser in front of it, and the video the far end is
+// watching goes black while the page around it stays live. Leave this app as a
+// floating window over the browser instead and there is something to blend, so
+// the identical capture is fine. `wgc_capture_session.cc` says the same thing
+// in the log - `ProcessFrame failed, using existing frame: -2147467259` is DWM
+// having no new frame to hand over, once per poll.
+//
+// One window that must be blended is enough to stop it. One pixel, one alpha
+// step above nothing - fully transparent is optimised away and does not count
+// - held above everything on every display, and only for as long as a capture
+// is running: composed flip costs the whole machine a copy per frame, and that
+// is not a bill to leave running for an idle chat client.
+//
+// Same trick, and the same reason, as ForceComposedFlip.
+
+/** One-pixel windows that keep DWM blending; empty when nothing is captured. */
+let compositionPins: BrowserWindow[] = [];
+let compositionTimer: ReturnType<typeof setInterval> | null = null;
+/** A call and a remote session can capture at once; the last one out clears. */
+let liveCaptures = 0;
+
+function pinDesktopComposition(): void {
+  liveCaptures += 1;
+  if (process.platform !== 'win32' || compositionPins.length > 0) return;
+
+  compositionPins = screen.getAllDisplays().map((display) => {
+    const pin = new BrowserWindow({
+      x: display.bounds.x,
+      y: display.bounds.y,
+      width: display.bounds.width,
+      height: display.bounds.height,
+      show: false,
+      frame: false,
+      transparent: true,
+      // Never takes focus, never appears in the taskbar or in Alt-Tab, and
+      // never eats a click: it has to be there without being in the way.
+      focusable: false,
+      skipTaskbar: true,
+      hasShadow: false,
+      resizable: false,
+      movable: false,
+      minimizable: false,
+      maximizable: false,
+      type: 'toolbar',
+    });
+    pin.setIgnoreMouseEvents(true, { forward: true });
+    // Not 1/255: Electron multiplies by 255 and truncates on the way to
+    // SetLayeredWindowAttributes, so anything below 2/255 lands on zero, and a
+    // window at zero alpha is one DWM is free to skip - which is the single
+    // thing this window exists to prevent.
+    pin.setOpacity(2 / 255);
+    pin.setAlwaysOnTop(true, 'screen-saver');
+    pin.showInactive();
+    return pin;
+  });
+
+  // A window running under Fullscreen Optimizations sits in a higher band than
+  // a plain topmost one and will climb back over this, so being on top once is
+  // not the same as staying there.
+  compositionTimer = setInterval(() => {
+    for (const pin of compositionPins) if (!pin.isDestroyed()) pin.moveTop();
+  }, 500);
+}
+
+/** `all` is for shutdown, where the count no longer has anything to protect. */
+function releaseDesktopComposition(all = false): void {
+  liveCaptures = all ? 0 : Math.max(0, liveCaptures - 1);
+  if (liveCaptures > 0) return;
+
+  if (compositionTimer) {
+    clearInterval(compositionTimer);
+    compositionTimer = null;
+  }
+  for (const pin of compositionPins) if (!pin.isDestroyed()) pin.destroy();
+  compositionPins = [];
+}
+
+ipcMain.handle('screen:release', (): void => releaseDesktopComposition());
 
 // --- Remote desktop, agent side ---------------------------------------------
 //
@@ -692,6 +884,11 @@ void app.whenReady().then(() => {
         sources.find((candidate) => candidate.id.startsWith('screen:'));
       if (!source) return callback({});
 
+      // Held until the renderer says the capture is over, which is what stops
+      // the shared video going black the moment nothing overlaps the window
+      // it is playing in.
+      pinDesktopComposition();
+
       // Loopback system audio is a Windows-only capability in Electron, and
       // handing back a track the page never asked for fails the request.
       const withAudio =
@@ -715,6 +912,11 @@ void app.whenReady().then(() => {
 app.on('before-quit', () => {
   quitting = true;
   stopInputBackend();
+  releaseDesktopComposition(true);
+  if (pipWindow && !pipWindow.isDestroyed()) {
+    pipWindow.destroy();
+    pipWindow = null;
+  }
 });
 
 // The tray keeps the app alive with no window on screen, which is the point of

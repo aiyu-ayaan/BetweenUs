@@ -40,6 +40,7 @@ import {
   MaximizeIcon,
   MicOffIcon,
   MinimizeIcon,
+  PipIcon,
   ScreenShareIcon,
   SpeakerIcon,
   UsersIcon,
@@ -393,6 +394,18 @@ function Theatre({ share, tiles }: { share: VoiceShare; tiles: Stage[] }): JSX.E
               <UsersIcon className="h-3.5 w-3.5" />
               <span>{tiles.length}</span>
             </button>
+            {isDesktopRuntime() && (
+              <button
+                type="button"
+                onClick={() => void window.nexora?.openPip()}
+                aria-label="Picture-in-Picture"
+                title="Picture-in-Picture / Pop out mini player"
+                className="flex cursor-pointer items-center gap-1.5 rounded-md border border-white/10 bg-black/60 px-3 py-1.5 text-xs font-medium text-slate-200 backdrop-blur-md shadow-md transition-all duration-200 hover:bg-white/10 active:scale-95"
+              >
+                <PipIcon className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Mini player</span>
+              </button>
+            )}
             <button
               type="button"
               onClick={toggleFullscreen}
@@ -575,6 +588,18 @@ function Theatre({ share, tiles }: { share: VoiceShare; tiles: Stage[] }): JSX.E
                 {layout === 'side-left' ? 'Left' : layout === 'side-right' ? 'Right' : 'Bottom'}
               </span>
             </button>
+            {isDesktopRuntime() && (
+              <button
+                type="button"
+                onClick={() => void window.nexora?.openPip()}
+                aria-label="Picture-in-Picture"
+                title="Picture-in-Picture / Pop out mini player"
+                className="flex cursor-pointer items-center gap-1 rounded-md bg-black/70 px-2.5 py-1 text-xs text-slate-200 transition-colors duration-200 hover:bg-black"
+              >
+                <PipIcon className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">PiP</span>
+              </button>
+            )}
             <button
               type="button"
               onClick={toggleFullscreen}

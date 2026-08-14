@@ -322,6 +322,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
     if (channelId) presenceSocket.send({ type: 'voice.leave', channelId });
     useShareControlStore.getState().detach();
     teardown();
+    void window.nexora?.closePip();
     set({
       status: 'idle',
       channelId: null,
@@ -691,8 +692,13 @@ async function attachGate(
 }
 
 function stopLocal(slot: Slot): void {
-  localTracks[slot]?.stop();
+  const track = localTracks[slot];
   localTracks[slot] = null;
+  track?.stop();
+  // Every path out of a share comes through here - the button, the OS bar, and
+  // leaving the call - so this is the one place that can tell the main process
+  // the desktop no longer has to be held in composed flip for it.
+  if (slot === 'screen' && track) void window.nexora?.releaseScreenCapture();
 }
 
 /** Ends the call's machinery without touching rendered state. */

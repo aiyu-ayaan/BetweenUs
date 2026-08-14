@@ -79,6 +79,15 @@ const api = {
   selectScreenSource: (id: string, audio: boolean): Promise<void> =>
     ipcRenderer.invoke('screen:select', id, audio),
   /**
+   * Says one display capture has stopped, once per capture that started.
+   *
+   * A live capture holds the desktop in composed flip so a video being shared
+   * is blended rather than sent straight to the display, where no capture can
+   * see it. Nothing in the main process can tell when a track was stopped, so
+   * this is the only thing that ever lets that go.
+   */
+  releaseScreenCapture: (): Promise<void> => ipcRenderer.invoke('screen:release'),
+  /**
    * Opens `startUrl` in the user's browser and resolves with the one-time code
    * the finished sign-in redirects back to a temporary loopback server.
    */
@@ -124,8 +133,25 @@ const api = {
   /** Development only: credentials for an auto-signed-in test window. */
   devLogin: (): Promise<{ email: string; password: string; label: string } | null> =>
     ipcRenderer.invoke('dev:login'),
+
+  /** Picture-in-Picture floating overlay window controls */
+  openPip: (): Promise<void> => ipcRenderer.invoke('pip:open'),
+  closePip: (): Promise<void> => ipcRenderer.invoke('pip:close'),
+  isPipOpen: (): Promise<boolean> => ipcRenderer.invoke('pip:is-open'),
+  focusMain: (): Promise<void> => ipcRenderer.invoke('pip:focus-main'),
+  onWindowMinimize: (handler: () => void): (() => void) => {
+    const listener = (): void => handler();
+    ipcRenderer.on('window:minimize', listener);
+    return () => ipcRenderer.removeListener('window:minimize', listener);
+  },
+  onWindowRestore: (handler: () => void): (() => void) => {
+    const listener = (): void => handler();
+    ipcRenderer.on('window:restore', listener);
+    return () => ipcRenderer.removeListener('window:restore', listener);
+  },
 };
 
 contextBridge.exposeInMainWorld('nexora', api);
 
 export type NexoraBridge = typeof api;
+
