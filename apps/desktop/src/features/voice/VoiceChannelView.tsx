@@ -20,7 +20,7 @@
  * most recently is pulled to the front so an active speaker is on page one -
  * the same bargain Teams makes. Speaking is marked in amber.
  */
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Channel } from '@nexora/shared-types';
 import { useChatStore } from '../../stores/chat';
 import { usePresenceStore } from '../../stores/presence';
@@ -40,6 +40,7 @@ import {
   MinimizeIcon,
   ScreenShareIcon,
   SpeakerIcon,
+  UsersIcon,
 } from '../../components/icons';
 
 /** Tiles per page. Nine keeps every face big enough to read on a laptop. */
@@ -251,6 +252,38 @@ function Theatre({ share, tiles }: { share: VoiceShare; tiles: Stage[] }): JSX.E
   const watch = useVoiceStore((state) => state.watch);
   const stopScreenShare = useVoiceStore((state) => state.stopScreenShare);
   const [fullscreen, setFullscreen] = useState(false);
+  const [showControls, setShowControls] = useState(true);
+  const [showParticipants, setShowParticipants] = useState(true);
+  const hideTimerRef = useRef<number | null>(null);
+
+  const resetHideTimer = useCallback(() => {
+    setShowControls(true);
+    if (hideTimerRef.current !== null) {
+      window.clearTimeout(hideTimerRef.current);
+    }
+    if (fullscreen) {
+      hideTimerRef.current = window.setTimeout(() => {
+        setShowControls(false);
+      }, 2500);
+    }
+  }, [fullscreen]);
+
+  useEffect(() => {
+    if (fullscreen) {
+      resetHideTimer();
+    } else {
+      setShowControls(true);
+      if (hideTimerRef.current !== null) {
+        window.clearTimeout(hideTimerRef.current);
+        hideTimerRef.current = null;
+      }
+    }
+    return () => {
+      if (hideTimerRef.current !== null) {
+        window.clearTimeout(hideTimerRef.current);
+      }
+    };
+  }, [fullscreen, resetHideTimer]);
 
   useEffect(() => {
     const handleKey = (e: KeyboardEvent): void => {
@@ -262,10 +295,11 @@ function Theatre({ share, tiles }: { share: VoiceShare; tiles: Stage[] }): JSX.E
       ) {
         setFullscreen((prev) => !prev);
       }
+      resetHideTimer();
     };
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
-  }, [fullscreen]);
+  }, [fullscreen, resetHideTimer]);
 
   const toggleFullscreen = (): void => {
     setFullscreen((prev) => !prev);
@@ -273,30 +307,64 @@ function Theatre({ share, tiles }: { share: VoiceShare; tiles: Stage[] }): JSX.E
 
   if (fullscreen) {
     return (
-      <div className="fixed inset-0 z-50 flex flex-col bg-black">
-        {/* Fullscreen top header overlay */}
-        <div className="absolute left-0 right-0 top-0 z-20 flex items-center justify-between bg-gradient-to-b from-black/80 via-black/40 to-transparent p-4">
-          <p className="rounded bg-black/60 px-3 py-1.5 text-sm font-medium text-slate-200 backdrop-blur">
-            {share.isLocal ? 'Your screen' : `${share.name}'s screen`}
-          </p>
+      <div
+        onMouseMove={resetHideTimer}
+        onTouchStart={resetHideTimer}
+        className={`fixed inset-0 z-50 flex flex-col bg-black select-none ${
+          !showControls ? 'cursor-none' : ''
+        }`}
+      >
+        {/* Fullscreen top header overlay (Auto-hiding) */}
+        <div
+          className={`absolute left-0 right-0 top-0 z-30 flex items-center justify-between bg-gradient-to-b from-black/90 via-black/50 to-transparent p-4 transition-all duration-300 ease-out ${
+            showControls
+              ? 'opacity-100 translate-y-0 pointer-events-auto'
+              : 'opacity-0 -translate-y-6 pointer-events-none'
+          }`}
+        >
+          {/* Live badge & Stream name */}
+          <div className="flex items-center gap-2 rounded-full border border-white/10 bg-black/60 px-3.5 py-1.5 backdrop-blur-md shadow-lg">
+            <span className="relative flex h-2 w-2">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-75"></span>
+              <span className="relative inline-flex h-2 w-2 rounded-full bg-red-500"></span>
+            </span>
+            <span className="text-xs font-semibold text-slate-100 tracking-wide">
+              {share.isLocal ? 'Your screen' : `${share.name}'s screen`}
+            </span>
+          </div>
 
+          {/* Action buttons */}
           <div className="flex items-center gap-2">
             {!share.isLocal && <ControlButtons share={share} />}
             {share.isLocal && (
               <button
                 type="button"
                 onClick={() => void stopScreenShare()}
-                className="cursor-pointer rounded-md bg-red-500/90 px-3 py-1.5 text-xs font-semibold text-white backdrop-blur transition-colors duration-200 hover:bg-red-500"
+                className="cursor-pointer rounded-md bg-red-500/90 px-3.5 py-1.5 text-xs font-semibold text-white shadow-md backdrop-blur transition-all duration-200 hover:bg-red-500 hover:shadow-red-500/20 active:scale-95"
               >
                 Stop sharing
               </button>
             )}
             <button
               type="button"
+              onClick={() => setShowParticipants((prev) => !prev)}
+              aria-label={showParticipants ? 'Hide participants' : 'Show participants'}
+              title={showParticipants ? 'Hide participants' : 'Show participants'}
+              className={`flex cursor-pointer items-center gap-1.5 rounded-md border border-white/10 px-3 py-1.5 text-xs font-medium backdrop-blur-md shadow-md transition-all duration-200 active:scale-95 ${
+                showParticipants
+                  ? 'bg-white/15 text-white'
+                  : 'bg-black/60 text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <UsersIcon className="h-3.5 w-3.5" />
+              <span>{tiles.length}</span>
+            </button>
+            <button
+              type="button"
               onClick={toggleFullscreen}
               aria-label="Exit full screen"
               title="Exit full screen (Esc or F)"
-              className="flex cursor-pointer items-center gap-1.5 rounded-md bg-white/10 px-3 py-1.5 text-xs font-semibold text-white backdrop-blur transition-colors duration-200 hover:bg-white/20"
+              className="flex cursor-pointer items-center gap-1.5 rounded-md border border-white/10 bg-white/10 px-3.5 py-1.5 text-xs font-semibold text-white backdrop-blur-md shadow-md transition-all duration-200 hover:bg-white/20 active:scale-95"
             >
               <MinimizeIcon className="h-4 w-4" />
               Exit full screen
@@ -307,14 +375,14 @@ function Theatre({ share, tiles }: { share: VoiceShare; tiles: Stage[] }): JSX.E
                 setFullscreen(false);
                 watch(null);
               }}
-              className="cursor-pointer rounded-md bg-black/60 px-3 py-1.5 text-xs text-slate-200 backdrop-blur transition-colors duration-200 hover:bg-black/80"
+              className="cursor-pointer rounded-md border border-white/10 bg-black/60 px-3.5 py-1.5 text-xs font-medium text-slate-200 backdrop-blur-md shadow-md transition-all duration-200 hover:bg-white/10 active:scale-95"
             >
               Back to grid
             </button>
           </div>
         </div>
 
-        {/* Fullscreen Video Area */}
+        {/* Fullscreen Video Stage Area */}
         <div className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden bg-black">
           {share.track ? (
             <ShareStage share={share} />
@@ -325,16 +393,24 @@ function Theatre({ share, tiles }: { share: VoiceShare; tiles: Stage[] }): JSX.E
           )}
         </div>
 
-        {/* Fullscreen Bottom Overlay with visible participants & quick controls */}
-        <div className="z-20 flex shrink-0 flex-col gap-2.5 bg-gradient-to-t from-black/90 via-black/60 to-transparent px-6 pb-4 pt-6">
-          <ul className="flex shrink-0 justify-center gap-3 overflow-x-auto">
-            {tiles.map((tile) => (
-              <li key={tile.key} className="w-36 shrink-0">
-                <StageTile tile={tile} />
-              </li>
-            ))}
-          </ul>
-          <div className="flex justify-center">
+        {/* Fullscreen Bottom Overlay: Floating Participant Dock & Voice Controls (Auto-Hiding) */}
+        <div
+          className={`absolute left-0 right-0 bottom-0 z-30 flex flex-col items-center gap-3 bg-gradient-to-t from-black/95 via-black/60 to-transparent px-6 pb-5 pt-8 transition-all duration-300 ease-out ${
+            showControls
+              ? 'opacity-100 translate-y-0 pointer-events-auto'
+              : 'opacity-0 translate-y-6 pointer-events-none'
+          }`}
+        >
+          {showParticipants && (
+            <ul className="flex shrink-0 justify-center gap-2.5 overflow-x-auto max-w-full pb-1">
+              {tiles.map((tile) => (
+                <li key={tile.key} className="w-36 shrink-0">
+                  <StageTile tile={tile} />
+                </li>
+              ))}
+            </ul>
+          )}
+          <div className="flex items-center justify-center rounded-2xl border border-white/10 bg-black/70 px-4 py-2 backdrop-blur-md shadow-2xl">
             <VoiceControls size="sm" />
           </div>
         </div>
@@ -460,10 +536,12 @@ function ControlButtons({ share }: { share: VoiceShare }): JSX.Element {
             ? 'Hand the mouse back (Esc)'
             : `Ask ${share.name} for the mouse and keyboard on this screen`
         }
-        className={`cursor-pointer rounded-md px-3 py-1 text-xs font-semibold transition-colors duration-200 disabled:cursor-not-allowed disabled:opacity-60 ${
+        className={`cursor-pointer rounded-md px-3.5 py-1.5 text-xs font-semibold shadow-md backdrop-blur transition-all duration-200 active:scale-95 disabled:cursor-not-allowed disabled:opacity-60 ${
           controlling
-            ? 'bg-surface-600 text-slate-100 hover:bg-surface-500'
-            : 'bg-accent text-white hover:brightness-110'
+            ? 'bg-amber-600/90 text-white hover:bg-amber-600 hover:shadow-amber-500/20'
+            : asking
+              ? 'bg-accent/70 text-white animate-pulse'
+              : 'bg-accent text-white hover:brightness-110 hover:shadow-accent/20'
         }`}
       >
         {controlling ? 'Release control (Esc)' : asking ? 'Asking…' : 'Request control'}
