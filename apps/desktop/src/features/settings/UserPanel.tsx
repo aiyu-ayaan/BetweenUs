@@ -52,7 +52,7 @@ export function UserPanel({ onOpenSettings }: { onOpenSettings: () => void }): J
         <div
           role="menu"
           aria-label="Set status"
-          className="absolute bottom-full left-2 z-40 mb-2 w-60 overflow-hidden rounded-lg bg-surface-950 py-2 shadow-pop"
+          className="absolute bottom-full left-2 z-40 mb-2 w-60 animate-pop overflow-hidden rounded-xl border border-edge bg-surface-950 py-1.5 shadow-pop"
         >
           {STATUS_CHOICES.map((choice) => (
             <button

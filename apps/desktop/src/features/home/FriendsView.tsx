@@ -213,7 +213,7 @@ function AddFriend(): JSX.Element {
           type="button"
           disabled={query.trim().length === 0}
           onClick={() => void send(query.trim())}
-          className="cursor-pointer rounded bg-accent px-4 py-1.5 text-sm font-medium text-white transition-colors duration-200 hover:bg-accent-hover disabled:opacity-40"
+          className="cursor-pointer rounded bg-accent px-4 py-1.5 text-sm font-medium text-white transition-colors duration-200 hover:bg-accent-hover active:scale-[0.98] disabled:opacity-40"
         >
           Send request
         </button>

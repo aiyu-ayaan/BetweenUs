@@ -139,11 +139,11 @@ function DangerButton(): JSX.Element {
           role="dialog"
           aria-modal="true"
           aria-label={label}
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4"
+          className="fixed inset-0 z-50 flex animate-fade items-center justify-center bg-black/60 px-4"
           onClick={() => setConfirming(false)}
         >
           <div
-            className="w-full max-w-md overflow-hidden rounded-lg bg-surface-800"
+            className="w-full max-w-md animate-pop overflow-hidden rounded-xl border border-edge bg-surface-900 shadow-pop"
             onClick={(event) => event.stopPropagation()}
           >
             <div className="p-6">
@@ -233,7 +233,7 @@ function Overview(): JSX.Element {
           type="button"
           onClick={() => void save()}
           disabled={name.trim().length < 2 || name.trim() === server?.name}
-          className="mt-4 cursor-pointer rounded bg-accent px-5 py-2 text-sm font-medium text-white transition-colors duration-200 hover:bg-accent-hover disabled:opacity-50"
+          className="mt-4 cursor-pointer rounded bg-accent px-5 py-2 text-sm font-medium text-white transition-colors duration-200 hover:bg-accent-hover active:scale-[0.98] disabled:opacity-50"
         >
           Save changes
         </button>
@@ -609,7 +609,7 @@ function AddMember(): JSX.Element {
           type="button"
           disabled={busy || query.trim().length < 2}
           onClick={() => void add(query.trim())}
-          className="cursor-pointer rounded bg-accent px-4 py-2 text-sm font-medium text-white transition-colors duration-200 hover:bg-accent-hover disabled:opacity-40"
+          className="cursor-pointer rounded bg-accent px-4 py-2 text-sm font-medium text-white transition-colors duration-200 hover:bg-accent-hover active:scale-[0.98] disabled:opacity-40"
         >
           Add
         </button>

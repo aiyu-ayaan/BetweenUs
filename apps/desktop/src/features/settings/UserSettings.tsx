@@ -260,7 +260,7 @@ function AccountSection(): JSX.Element {
           type="button"
           disabled={savingProfile}
           onClick={() => void saveProfile()}
-          className="cursor-pointer rounded bg-accent px-5 py-2 text-sm font-medium text-white transition-colors duration-200 hover:bg-accent-hover disabled:opacity-60"
+          className="cursor-pointer rounded bg-accent px-5 py-2 text-sm font-medium text-white transition-colors duration-200 hover:bg-accent-hover active:scale-[0.98] disabled:opacity-60"
         >
           {savingProfile ? 'Saving…' : 'Save changes'}
         </button>
@@ -285,7 +285,7 @@ function AccountSection(): JSX.Element {
           type="button"
           disabled={currentPassword.length === 0 || newPassword.length === 0}
           onClick={() => void savePassword()}
-          className="cursor-pointer rounded bg-accent px-5 py-2 text-sm font-medium text-white transition-colors duration-200 hover:bg-accent-hover disabled:opacity-50"
+          className="cursor-pointer rounded bg-accent px-5 py-2 text-sm font-medium text-white transition-colors duration-200 hover:bg-accent-hover active:scale-[0.98] disabled:opacity-50"
         >
           Change password
         </button>
@@ -369,7 +369,7 @@ function EncryptionSection(): JSX.Element {
           type="button"
           disabled={saving || passphrase.length < 8 || identity.status !== 'ready'}
           onClick={() => void save()}
-          className="cursor-pointer rounded bg-accent px-5 py-2 text-sm font-medium text-white transition-colors duration-200 hover:bg-accent-hover disabled:opacity-50"
+          className="cursor-pointer rounded bg-accent px-5 py-2 text-sm font-medium text-white transition-colors duration-200 hover:bg-accent-hover active:scale-[0.98] disabled:opacity-50"
         >
           {saving ? 'Saving…' : 'Set recovery passphrase'}
         </button>

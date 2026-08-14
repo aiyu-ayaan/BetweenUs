@@ -110,7 +110,7 @@ export function RemoteView(): JSX.Element {
                 type="button"
                 disabled={!machine.online}
                 onClick={() => void connect(machine.id)}
-                className="cursor-pointer rounded bg-accent px-4 py-1.5 text-sm font-medium text-white transition-colors duration-200 hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-40"
+                className="cursor-pointer rounded bg-accent px-4 py-1.5 text-sm font-medium text-white transition-colors duration-200 hover:bg-accent-hover active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40"
               >
                 Connect
               </button>
@@ -195,8 +195,8 @@ function AccessDialog({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4">
-      <div className="flex max-h-[80vh] w-full max-w-2xl flex-col rounded-xl border border-surface-700/50 bg-surface-800 shadow-pop">
+    <div className="fixed inset-0 z-50 flex animate-fade items-center justify-center bg-black/60 px-4">
+      <div className="flex max-h-[80vh] w-full max-w-2xl animate-pop flex-col rounded-xl border border-edge bg-surface-900 shadow-pop">
         <header className="flex items-center gap-3 border-b border-edge px-5 py-4">
           <ShieldIcon className="h-5 w-5 text-accent" />
           <div className="min-w-0 flex-1">

@@ -364,7 +364,7 @@ function PreviewOverlay({
     >
       <div
         onClick={(event) => event.stopPropagation()}
-        className="flex max-h-full w-full max-w-4xl flex-col overflow-hidden rounded-lg bg-surface-900"
+        className="flex max-h-full w-full max-w-4xl animate-pop flex-col overflow-hidden rounded-xl border border-edge bg-surface-900 shadow-pop"
       >
         <header className="flex h-12 shrink-0 items-center gap-3 border-b border-edge px-4">
           <p className="truncate text-sm font-medium text-slate-100">{attachment.name}</p>

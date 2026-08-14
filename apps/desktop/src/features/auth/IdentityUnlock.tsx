@@ -40,9 +40,9 @@ export function IdentityUnlock(): JSX.Element | null {
   };
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/80 px-4">
+    <div className="fixed inset-0 z-[70] flex animate-fade items-center justify-center bg-black/70 px-4">
       <form
-        className="w-full max-w-md rounded-xl border border-surface-700/50 bg-surface-800 p-6 shadow-pop"
+        className="w-full max-w-md animate-pop rounded-xl border border-edge bg-surface-900 p-6 shadow-pop"
         onSubmit={(event) => {
           event.preventDefault();
           void submit();
@@ -76,7 +76,7 @@ export function IdentityUnlock(): JSX.Element | null {
           <button
             type="submit"
             disabled={busy || secret.length === 0}
-            className="flex-1 cursor-pointer rounded-md bg-accent px-4 py-2.5 font-medium text-white transition-colors duration-200 hover:bg-accent-hover disabled:opacity-50"
+            className="flex-1 cursor-pointer rounded-md bg-accent px-4 py-2.5 font-medium text-white transition-colors duration-200 hover:bg-accent-hover active:scale-[0.98] disabled:opacity-50"
           >
             {busy ? 'Unlocking…' : 'Unlock'}
           </button>

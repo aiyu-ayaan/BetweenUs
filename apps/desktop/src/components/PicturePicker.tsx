@@ -89,7 +89,7 @@ export function PicturePicker({
             type="button"
             onClick={() => picker.current?.click()}
             disabled={busy}
-            className="cursor-pointer rounded bg-accent px-3 py-1.5 text-sm text-white transition-colors duration-200 hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60"
+            className="cursor-pointer rounded bg-accent px-3 py-1.5 text-sm text-white transition-colors duration-200 hover:bg-accent-hover active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
           >
             {busy ? 'Uploading…' : `Upload ${label}`}
           </button>

@@ -54,8 +54,8 @@ export function ServerPicker({ onClose }: { onClose: () => void }): JSX.Element 
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4">
-      <div className="w-full max-w-md rounded-xl border border-surface-700/50 bg-surface-800 p-6 shadow-pop">
+    <div className="fixed inset-0 z-50 flex animate-fade items-center justify-center bg-black/60 px-4">
+      <div className="w-full max-w-md animate-pop rounded-xl border border-edge bg-surface-900 p-6 shadow-pop">
         <div className="mb-4 flex items-start gap-3">
           <GlobeIcon className="mt-0.5 h-5 w-5 shrink-0 text-accent" />
           <div className="min-w-0 flex-1">
@@ -117,7 +117,7 @@ export function ServerPicker({ onClose }: { onClose: () => void }): JSX.Element 
           <button
             type="submit"
             disabled={busy}
-            className="w-full cursor-pointer rounded-md bg-accent px-4 py-2.5 font-medium text-white transition-colors duration-200 hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60"
+            className="w-full cursor-pointer rounded-md bg-accent px-4 py-2.5 font-medium text-white transition-colors duration-200 hover:bg-accent-hover active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
           >
             {busy ? 'Checking…' : 'Connect'}
           </button>

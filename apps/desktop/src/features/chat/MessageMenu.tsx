@@ -77,9 +77,9 @@ export function MessageMenu({
       role="menu"
       aria-label="Message actions"
       style={{ left, top, width }}
-      className="fixed z-50 overflow-hidden rounded-lg border border-black/40 bg-surface-800 py-1 shadow-xl"
+      className="fixed z-50 animate-pop overflow-hidden rounded-xl border border-edge bg-surface-900 py-1 shadow-pop"
     >
-      <div className="flex items-center gap-1 border-b border-surface-700/60 px-2 pb-2 pt-1">
+      <div className="flex items-center gap-1 border-b border-edge px-2 pb-2 pt-1">
         {QUICK_REACTIONS.map((emoji) => (
           <button
             key={emoji}

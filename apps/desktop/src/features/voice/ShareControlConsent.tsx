@@ -20,8 +20,8 @@ export function ShareControlConsent(): JSX.Element | null {
 
   if (asking) {
     return (
-      <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/80 px-4">
-        <div className="w-full max-w-md rounded-xl border border-surface-700/50 bg-surface-800 p-6 shadow-pop">
+      <div className="fixed inset-0 z-[70] flex animate-fade items-center justify-center bg-black/70 px-4">
+        <div className="w-full max-w-md animate-pop rounded-xl border border-edge bg-surface-900 p-6 shadow-pop">
           <div className="flex items-start gap-3">
             <MonitorIcon className="mt-0.5 h-6 w-6 shrink-0 text-accent" />
             <div>
@@ -50,7 +50,7 @@ export function ShareControlConsent(): JSX.Element | null {
             <button
               type="button"
               onClick={() => answer(asking.identity, true)}
-              className="flex-1 cursor-pointer rounded-md bg-accent px-4 py-2.5 font-medium text-white transition-colors duration-200 hover:bg-accent-hover"
+              className="flex-1 cursor-pointer rounded-md bg-accent px-4 py-2.5 font-medium text-white transition-colors duration-200 hover:bg-accent-hover active:scale-[0.98]"
             >
               Give control
             </button>

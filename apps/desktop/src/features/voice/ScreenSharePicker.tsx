@@ -75,12 +75,12 @@ export function ScreenSharePicker({ onClose }: { onClose: () => void }): JSX.Ele
       role="dialog"
       aria-modal="true"
       aria-label="Choose what to share"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-6"
+      className="fixed inset-0 z-50 flex animate-fade items-center justify-center bg-black/60 p-6"
       onClick={onClose}
     >
       <div
         onClick={(event) => event.stopPropagation()}
-        className="flex max-h-full w-full max-w-3xl flex-col rounded-xl bg-surface-800 shadow-pop"
+        className="flex max-h-full w-full max-w-3xl animate-pop flex-col rounded-xl border border-edge bg-surface-900 shadow-pop"
       >
         <header className="flex items-center gap-3 border-b border-edge px-5 py-4">
           <ScreenShareIcon className="h-5 w-5 text-slate-400" />

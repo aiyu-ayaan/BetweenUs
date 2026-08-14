@@ -57,7 +57,7 @@ export function EmojiPicker({
       role="dialog"
       aria-label="Pick an emoji"
       style={{ left, top, width, height }}
-      className="fixed z-50 flex flex-col overflow-hidden rounded-lg border border-black/40 bg-surface-800 shadow-xl"
+      className="fixed z-50 flex animate-pop flex-col overflow-hidden rounded-xl border border-edge bg-surface-900 shadow-pop"
     >
       <div className="shrink-0 p-2">
         <input

@@ -61,11 +61,11 @@ export function CreateChannelDialog({
       role="dialog"
       aria-modal="true"
       aria-label={type === 'VOICE' ? 'Create voice channel' : 'Create text channel'}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4"
+      className="fixed inset-0 z-50 flex animate-fade items-center justify-center bg-black/60 px-4"
       onClick={onClose}
     >
       <div
-        className="flex max-h-[85vh] w-full max-w-md flex-col overflow-hidden rounded-lg bg-surface-800"
+        className="flex max-h-[85vh] w-full max-w-md animate-pop flex-col overflow-hidden rounded-xl border border-edge bg-surface-900 shadow-pop"
         onClick={(event) => event.stopPropagation()}
       >
         <div className="overflow-y-auto p-6">
@@ -196,7 +196,7 @@ export function CreateChannelDialog({
             type="button"
             disabled={busy || name.trim().length === 0}
             onClick={() => void submit()}
-            className="cursor-pointer rounded bg-accent px-6 py-2 text-sm font-medium text-white transition-colors duration-200 hover:bg-accent-hover disabled:opacity-50"
+            className="cursor-pointer rounded bg-accent px-6 py-2 text-sm font-medium text-white transition-colors duration-200 hover:bg-accent-hover active:scale-[0.98] disabled:opacity-50"
           >
             {busy ? 'Creating…' : 'Create channel'}
           </button>

@@ -162,7 +162,7 @@ function ServerHeader({
       {open && (
         <div
           role="menu"
-          className="absolute inset-x-2 top-full z-30 mt-1 overflow-hidden rounded-md bg-surface-950 py-2 shadow-pop"
+          className="absolute inset-x-2 top-full z-30 mt-1 animate-pop overflow-hidden rounded-xl border border-edge bg-surface-950 py-1.5 shadow-pop"
         >
           <button
             type="button"

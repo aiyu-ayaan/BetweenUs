@@ -134,7 +134,7 @@ export function RemoteSessionView(): JSX.Element {
           className={`ml-auto cursor-pointer rounded px-3 py-1.5 text-sm font-medium transition-colors duration-200 disabled:cursor-not-allowed disabled:opacity-50 ${
             controlling
               ? 'bg-surface-600 text-slate-100 hover:bg-surface-500'
-              : 'bg-accent text-white hover:bg-accent-hover'
+              : 'bg-accent text-white hover:bg-accent-hover active:scale-[0.98]'
           }`}
         >
           {controlling
