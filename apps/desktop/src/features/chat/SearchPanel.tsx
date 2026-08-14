@@ -33,8 +33,8 @@ export function SearchPanel(): JSX.Element {
   }, [query, searchable]);
 
   return (
-    <aside className="flex w-60 shrink-0 flex-col bg-surface-850">
-      <header className="flex h-12 shrink-0 items-center gap-2 border-b border-black/20 px-3">
+    <aside className="panel flex w-60 shrink-0 flex-col bg-surface-850">
+      <header className="flex h-12 shrink-0 items-center gap-2 border-b border-edge px-3">
         <SearchIcon className="h-4 w-4 text-slate-400" />
         <h2 className="flex-1 text-sm font-semibold text-slate-100">Search</h2>
         <button
@@ -94,7 +94,7 @@ export function SearchPanel(): JSX.Element {
         </ul>
       </div>
 
-      <p className="shrink-0 border-t border-black/20 px-3 py-2 text-xs text-slate-500">
+      <p className="shrink-0 border-t border-edge px-3 py-2 text-xs text-slate-500">
         Searches the {searchable.length} messages this window has decrypted. Messages are encrypted,
         so the server cannot search them.
       </p>

@@ -96,8 +96,8 @@ export function VoiceChannelView({ channel }: { channel: Channel }): JSX.Element
   const watched = connected ? (shares.find((share) => share.identity === watching) ?? null) : null;
 
   return (
-    <section className="flex min-w-0 flex-1 flex-col bg-gradient-to-b from-[#1e1b4b] via-surface-950 to-surface-950">
-      <header className="flex h-12 shrink-0 items-center gap-2 border-b border-black/30 px-4">
+    <section className="panel flex min-w-0 flex-1 flex-col bg-surface-950">
+      <header className="flex h-12 shrink-0 items-center gap-2 border-b border-edge px-4">
         <SpeakerIcon className="h-5 w-5 text-slate-500" />
         <h1 className="truncate font-semibold text-slate-100">{channel.name}</h1>
         {stage.length > 0 && <span className="text-sm text-slate-400">- {stage.length} in voice</span>}
@@ -144,7 +144,7 @@ export function VoiceChannelView({ channel }: { channel: Channel }): JSX.Element
       </div>
 
       {connected && (
-        <footer className="flex shrink-0 justify-center border-t border-black/30 bg-black/30 px-4 py-3">
+        <footer className="flex shrink-0 justify-center border-t border-edge bg-black/30 px-4 py-3">
           <VoiceControls size="lg" />
         </footer>
       )}
@@ -476,7 +476,7 @@ function Theatre({ share, tiles }: { share: VoiceShare; tiles: Stage[] }): JSX.E
             </ul>
           )}
           <div
-            className={`flex items-center justify-center rounded-2xl border border-white/10 bg-black/70 px-4 py-2 backdrop-blur-md shadow-2xl transition-all duration-300 ease-out ${
+            className={`flex items-center justify-center rounded-2xl border border-white/10 bg-black/70 px-4 py-2 backdrop-blur-md shadow-pop transition-all duration-300 ease-out ${
               showControls
                 ? 'opacity-100 translate-y-0 pointer-events-auto'
                 : 'opacity-0 translate-y-6 pointer-events-none'
@@ -629,7 +629,7 @@ function SideGallery({
     <div
       className={`flex flex-col gap-2 overflow-hidden max-h-full shrink-0 ${
         isFullscreen
-          ? 'w-64 sm:w-72 md:w-80 rounded-2xl border border-white/10 bg-black/70 p-2.5 backdrop-blur-md shadow-2xl'
+          ? 'w-64 sm:w-72 md:w-80 rounded-2xl border border-white/10 bg-black/70 p-2.5 backdrop-blur-md shadow-pop'
           : 'w-56 sm:w-64 md:w-72 rounded-lg border border-white/10 bg-surface-900/80 p-2 backdrop-blur-sm'
       }`}
     >

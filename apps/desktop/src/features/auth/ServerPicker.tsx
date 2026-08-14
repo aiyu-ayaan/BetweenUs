@@ -55,7 +55,7 @@ export function ServerPicker({ onClose }: { onClose: () => void }): JSX.Element 
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4">
-      <div className="w-full max-w-md rounded-xl border border-surface-700/50 bg-surface-800 p-6 shadow-2xl">
+      <div className="w-full max-w-md rounded-xl border border-surface-700/50 bg-surface-800 p-6 shadow-pop">
         <div className="mb-4 flex items-start gap-3">
           <GlobeIcon className="mt-0.5 h-5 w-5 shrink-0 text-accent" />
           <div className="min-w-0 flex-1">

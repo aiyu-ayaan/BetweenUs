@@ -29,6 +29,8 @@ import { UserSettings } from './features/settings/UserSettings';
 import { VoiceChannelView } from './features/voice/VoiceChannelView';
 import { CallAudio } from './features/voice/CallAudio';
 import { ShareControlConsent } from './features/voice/ShareControlConsent';
+import { TopBar } from './features/shell/TopBar';
+import { QuickSwitcher } from './features/shell/QuickSwitcher';
 import { NexoraLogoIcon } from './components/icons';
 import { ErrorBoundary } from './components/ErrorBoundary';
 
@@ -142,11 +144,11 @@ function Session(): JSX.Element {
 
   if (booting) {
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-3 bg-surface-950" aria-busy="true">
-        <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-600 via-indigo-700 to-slate-900 p-3 shadow-xl shadow-purple-500/20 ring-1 ring-white/20 animate-pulse">
-          <NexoraLogoIcon className="h-full w-full text-white" />
+      <div className="flex h-full flex-col items-center justify-center gap-4 bg-ground" aria-busy="true">
+        <div className="flex h-14 w-14 animate-pulse items-center justify-center rounded-2xl border border-edge bg-accent/15 p-3">
+          <NexoraLogoIcon className="h-full w-full text-accent" />
         </div>
-        <p className="animate-pulse text-lg font-semibold tracking-wide text-slate-200">Nexora</p>
+        <p className="animate-pulse text-sm font-medium tracking-[0.2em] text-slate-500">NEXORA</p>
       </div>
     );
   }
@@ -157,9 +159,14 @@ function Session(): JSX.Element {
 }
 
 /**
- * The three-or-four column layout: rail, sidebar, the thing you are looking at,
- * and - inside a server - the member list. Settings take the whole window on
- * top of all of it.
+ * The workbench: a top bar over a row of floating panels - rail, sidebar, the
+ * thing you are looking at, and a right-hand panel when one is open. Settings
+ * take the whole window on top of all of it.
+ *
+ * The panels are separate cards on a dark ground rather than columns butted up
+ * against each other, and the gutter between them is the ground showing
+ * through. That is the shape the layout is built around: every region can be
+ * hidden without leaving a seam behind, because there was never a seam.
  */
 function Workbench(): JSX.Element {
   const view = useChatStore((state) => state.view);
@@ -172,6 +179,8 @@ function Workbench(): JSX.Element {
   const [settings, setSettings] = useState<'none' | 'user' | 'server'>('none');
   const [homeScreen, setHomeScreen] = useState<'friends' | 'remote' | null>('friends');
   const [showMembers, setShowMembers] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [switcher, setSwitcher] = useState(false);
 
   // Opening a conversation is what leaves the friends screen; nothing else has
   // to know about that flag.
@@ -179,42 +188,74 @@ function Workbench(): JSX.Element {
     if (activeChannelId) setHomeScreen(null);
   }, [activeChannelId]);
 
+  // Ctrl+K anywhere. It is deliberately the one global shortcut in the app:
+  // everything else you can reach from it.
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent): void => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault();
+        setSwitcher((open) => !open);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
+  const panelOpen = rightPanel !== 'none' && !(rightPanel === 'members' && !showMembers);
+
   return (
-    <div className="flex h-full overflow-hidden">
-      <ServerRail />
+    <div className="flex h-full flex-col overflow-hidden">
+      <TopBar
+        onOpenSwitcher={() => setSwitcher(true)}
+        sidebarOpen={sidebarOpen}
+        onToggleSidebar={() => setSidebarOpen((open) => !open)}
+        panelOpen={panelOpen}
+        onTogglePanel={() => {
+          if (rightPanel === 'none') useChatStore.getState().showPanel('members');
+          else if (rightPanel === 'members') setShowMembers((open) => !open);
+          else useChatStore.getState().showPanel('none');
+        }}
+      />
 
-      {view === 'home' ? (
-        <HomeSidebar
-          showingFriends={homeScreen === 'friends'}
-          onShowFriends={() => setHomeScreen('friends')}
-          showingRemote={homeScreen === 'remote'}
-          onShowRemote={() => setHomeScreen('remote')}
-          onOpenUserSettings={() => setSettings('user')}
-        />
-      ) : (
-        <ChannelSidebar
-          onOpenUserSettings={() => setSettings('user')}
-          onOpenServerSettings={() => setSettings('server')}
-        />
-      )}
+      <div className="flex min-h-0 flex-1 gap-1.5 px-1.5 pb-1.5">
+        <ServerRail />
 
-      {view === 'home' && homeScreen === 'remote' ? (
-        <RemoteView />
-      ) : view === 'home' && homeScreen === 'friends' ? (
-        <FriendsView />
-      ) : channel?.type === 'VOICE' ? (
-        <VoiceChannelView channel={channel} />
-      ) : (
-        <>
-          <ChatView onToggleMembers={() => setShowMembers((value) => !value)} />
-          {/* One right-hand column, whatever is in it: pins and search are the
-              same kind of list about this channel as the member list, and two
-              of them open at once would leave nothing to read. */}
-          {rightPanel === 'pins' && <PinnedPanel />}
-          {rightPanel === 'search' && <SearchPanel />}
-          {rightPanel === 'members' && view === 'server' && showMembers && <MemberList />}
-        </>
-      )}
+        {sidebarOpen &&
+          (view === 'home' ? (
+            <HomeSidebar
+              showingFriends={homeScreen === 'friends'}
+              onShowFriends={() => setHomeScreen('friends')}
+              showingRemote={homeScreen === 'remote'}
+              onShowRemote={() => setHomeScreen('remote')}
+              onOpenUserSettings={() => setSettings('user')}
+            />
+          ) : (
+            <ChannelSidebar
+              onOpenUserSettings={() => setSettings('user')}
+              onOpenServerSettings={() => setSettings('server')}
+            />
+          ))}
+
+        {view === 'home' && homeScreen === 'remote' ? (
+          <RemoteView />
+        ) : view === 'home' && homeScreen === 'friends' ? (
+          <FriendsView />
+        ) : channel?.type === 'VOICE' ? (
+          <VoiceChannelView channel={channel} />
+        ) : (
+          <>
+            <ChatView onToggleMembers={() => setShowMembers((value) => !value)} />
+            {/* One right-hand column, whatever is in it: pins and search are the
+                same kind of list about this channel as the member list, and two
+                of them open at once would leave nothing to read. */}
+            {rightPanel === 'pins' && <PinnedPanel />}
+            {rightPanel === 'search' && <SearchPanel />}
+            {rightPanel === 'members' && view === 'server' && showMembers && <MemberList />}
+          </>
+        )}
+      </div>
+
+      {switcher && <QuickSwitcher onClose={() => setSwitcher(false)} />}
 
       {/* A remote session covers the window wherever it was started from - the
           machine list, or the "Request control" button on somebody's screen

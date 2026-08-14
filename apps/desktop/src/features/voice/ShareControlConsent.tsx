@@ -21,7 +21,7 @@ export function ShareControlConsent(): JSX.Element | null {
   if (asking) {
     return (
       <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/80 px-4">
-        <div className="w-full max-w-md rounded-xl border border-surface-700/50 bg-surface-800 p-6 shadow-2xl">
+        <div className="w-full max-w-md rounded-xl border border-surface-700/50 bg-surface-800 p-6 shadow-pop">
           <div className="flex items-start gap-3">
             <MonitorIcon className="mt-0.5 h-6 w-6 shrink-0 text-accent" />
             <div>

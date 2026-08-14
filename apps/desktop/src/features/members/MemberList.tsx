@@ -22,7 +22,7 @@ export function MemberList(): JSX.Element {
   return (
     <aside
       aria-label="Members"
-      className="hidden w-60 shrink-0 flex-col overflow-y-auto bg-surface-800 px-2 py-4 lg:flex"
+      className="panel hidden w-60 shrink-0 flex-col overflow-y-auto bg-surface-800 px-2 py-4 lg:flex"
     >
       <Group label={`Admins — ${staff.length}`} members={staff} statusOf={statusOf} />
       <Group label={`Online — ${rest.length}`} members={rest} statusOf={statusOf} />
@@ -53,7 +53,7 @@ function Group({
         {members.map((member) => (
           <li key={member.userId}>
             <div
-              className={`flex items-center gap-3 rounded px-2 py-1.5 transition-colors duration-200 hover:bg-surface-700/60 ${
+              className={`flex items-center gap-3 rounded px-2 py-1.5 transition-colors duration-200 hover:bg-white/[0.05] ${
                 muted ? 'opacity-40' : ''
               }`}
             >

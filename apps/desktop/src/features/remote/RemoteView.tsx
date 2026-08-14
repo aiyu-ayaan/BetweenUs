@@ -39,8 +39,8 @@ export function RemoteView(): JSX.Element {
   // started from a screen share in a voice channel too, and that has no machine
   // list to take over.
   return (
-    <div className="flex min-w-0 flex-1 flex-col bg-surface-700">
-      <header className="flex h-12 shrink-0 items-center gap-2 border-b border-black/20 px-4">
+    <div className="panel flex min-w-0 flex-1 flex-col bg-surface-900">
+      <header className="flex h-12 shrink-0 items-center gap-2 border-b border-edge px-4">
         <MonitorIcon className="h-5 w-5 text-slate-400" />
         <h1 className="font-semibold text-slate-100">Remote machines</h1>
         <button
@@ -196,8 +196,8 @@ function AccessDialog({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4">
-      <div className="flex max-h-[80vh] w-full max-w-2xl flex-col rounded-xl border border-surface-700/50 bg-surface-800 shadow-2xl">
-        <header className="flex items-center gap-3 border-b border-black/20 px-5 py-4">
+      <div className="flex max-h-[80vh] w-full max-w-2xl flex-col rounded-xl border border-surface-700/50 bg-surface-800 shadow-pop">
+        <header className="flex items-center gap-3 border-b border-edge px-5 py-4">
           <ShieldIcon className="h-5 w-5 text-accent" />
           <div className="min-w-0 flex-1">
             <h2 className="truncate text-lg font-semibold text-slate-50">{machine.name}</h2>
@@ -215,7 +215,7 @@ function AccessDialog({
           </button>
         </header>
 
-        <nav className="flex gap-1 border-b border-black/20 px-5 py-2">
+        <nav className="flex gap-1 border-b border-edge px-5 py-2">
           {(['people', 'audit'] as const).map((entry) => (
             <button
               key={entry}

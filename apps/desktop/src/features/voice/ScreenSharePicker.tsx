@@ -80,9 +80,9 @@ export function ScreenSharePicker({ onClose }: { onClose: () => void }): JSX.Ele
     >
       <div
         onClick={(event) => event.stopPropagation()}
-        className="flex max-h-full w-full max-w-3xl flex-col rounded-xl bg-surface-800 shadow-2xl"
+        className="flex max-h-full w-full max-w-3xl flex-col rounded-xl bg-surface-800 shadow-pop"
       >
-        <header className="flex items-center gap-3 border-b border-black/30 px-5 py-4">
+        <header className="flex items-center gap-3 border-b border-edge px-5 py-4">
           <ScreenShareIcon className="h-5 w-5 text-slate-400" />
           <h2 className="font-semibold text-slate-100">Screen share</h2>
           {native && (
@@ -148,7 +148,7 @@ export function ScreenSharePicker({ onClose }: { onClose: () => void }): JSX.Ele
         {/* Asked rather than guessed: a film wants frames kept and resolution
             given up, a document wants exactly the reverse, and getting it wrong
             is what "the quality is bad" usually turns out to be. */}
-        <div className="flex gap-2 border-t border-black/30 px-5 pt-4">
+        <div className="flex gap-2 border-t border-edge px-5 pt-4">
           <IntentCard
             active={intent === 'detail'}
             onClick={() => setIntent('detail')}

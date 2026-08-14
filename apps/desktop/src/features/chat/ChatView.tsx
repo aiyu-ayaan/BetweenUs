@@ -94,7 +94,7 @@ export function ChatView({ onToggleMembers }: { onToggleMembers?: () => void }):
 
   if (!channel) {
     return (
-      <section className="flex flex-1 items-center justify-center bg-surface-900">
+      <section className="panel flex flex-1 items-center justify-center bg-surface-900">
         <div className="text-center">
           <UsersIcon className="mx-auto h-10 w-10 text-slate-600" />
           <p className="mt-3 text-slate-400">Pick a channel to start talking.</p>
@@ -106,8 +106,8 @@ export function ChatView({ onToggleMembers }: { onToggleMembers?: () => void }):
   const isDirect = channel.type === 'DM';
 
   return (
-    <section className="flex min-w-0 flex-1 flex-col bg-surface-900">
-      <header className="flex h-12 shrink-0 items-center gap-2 border-b border-black/20 px-4 shadow-sm">
+    <section className="panel flex min-w-0 flex-1 flex-col bg-surface-900">
+      <header className="flex h-12 shrink-0 items-center gap-2 border-b border-edge px-4 shadow-sm">
         {isDirect ? (
           <Avatar name={channel.name} size="sm" ringColour="border-surface-900" />
         ) : channel.isPrivate ? (
@@ -686,7 +686,7 @@ function MessageComposer({ channel }: { channel: Channel }): JSX.Element {
         }`}
       >
         {files.length > 0 && (
-          <ul className="flex flex-wrap gap-2 border-b border-black/20 px-4 py-2.5">
+          <ul className="flex flex-wrap gap-2 border-b border-edge px-4 py-2.5">
             {files.map((file, index) => (
               <li
                 key={`${file.name}-${index}`}

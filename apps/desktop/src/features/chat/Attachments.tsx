@@ -132,7 +132,7 @@ function ImageAttachment({
       type="button"
       onClick={onOpen}
       title={`${attachment.name} - ${formatBytes(attachment.size)}`}
-      className="block cursor-pointer overflow-hidden rounded-lg border border-black/20 bg-surface-850"
+      className="block cursor-pointer overflow-hidden rounded-lg border border-edge bg-surface-850"
       style={box ? { width: box.width, height: box.height } : undefined}
     >
       {url ? (
@@ -182,7 +182,7 @@ function MediaAttachment({
   }
 
   return (
-    <div className="overflow-hidden rounded-lg border border-black/20 bg-surface-850">
+    <div className="overflow-hidden rounded-lg border border-edge bg-surface-850">
       {url ? (
         isVideo ? (
           <video
@@ -200,7 +200,7 @@ function MediaAttachment({
           Decrypting {attachment.name}…
         </p>
       )}
-      <div className="flex items-center gap-2 border-t border-black/20 px-3 py-1.5">
+      <div className="flex items-center gap-2 border-t border-edge px-3 py-1.5">
         <span className="truncate text-xs text-slate-400">
           {attachment.name} · {formatBytes(attachment.size)}
         </span>
@@ -249,11 +249,11 @@ function TextAttachment({
   const truncated = (text?.length ?? 0) > INLINE_TEXT_CHARS;
 
   return (
-    <div className="overflow-hidden rounded-lg border border-black/20 bg-surface-850">
+    <div className="overflow-hidden rounded-lg border border-edge bg-surface-850">
       <pre className="max-h-56 overflow-hidden whitespace-pre-wrap break-words px-3 py-2 font-mono text-sm text-slate-200">
         {text ?? 'Decrypting…'}
       </pre>
-      <div className="flex items-center gap-2 border-t border-black/20 px-3 py-1.5">
+      <div className="flex items-center gap-2 border-t border-edge px-3 py-1.5">
         <span className="truncate text-xs text-slate-400">
           {attachment.overflow ? 'Message too long, sent as a file' : attachment.name} ·{' '}
           {formatBytes(attachment.size)}
@@ -288,7 +288,7 @@ function FileCard({
   const [failure, setFailure] = useState<string | null>(null);
 
   return (
-    <div className="flex items-center gap-3 rounded-lg border border-black/20 bg-surface-850 px-3 py-2.5">
+    <div className="flex items-center gap-3 rounded-lg border border-edge bg-surface-850 px-3 py-2.5">
       {onPlay ? (
         <PlayIcon className="h-8 w-8 shrink-0 text-accent" />
       ) : (
@@ -366,7 +366,7 @@ function PreviewOverlay({
         onClick={(event) => event.stopPropagation()}
         className="flex max-h-full w-full max-w-4xl flex-col overflow-hidden rounded-lg bg-surface-900"
       >
-        <header className="flex h-12 shrink-0 items-center gap-3 border-b border-black/20 px-4">
+        <header className="flex h-12 shrink-0 items-center gap-3 border-b border-edge px-4">
           <p className="truncate text-sm font-medium text-slate-100">{attachment.name}</p>
           <span className="text-xs text-slate-400">{formatBytes(attachment.size)}</span>
           <div className="ml-auto flex gap-1">

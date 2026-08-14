@@ -42,7 +42,7 @@ export function IdentityUnlock(): JSX.Element | null {
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/80 px-4">
       <form
-        className="w-full max-w-md rounded-xl border border-surface-700/50 bg-surface-800 p-6 shadow-2xl"
+        className="w-full max-w-md rounded-xl border border-surface-700/50 bg-surface-800 p-6 shadow-pop"
         onSubmit={(event) => {
           event.preventDefault();
           void submit();

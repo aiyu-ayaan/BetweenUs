@@ -37,7 +37,7 @@ export function ChannelSidebar({
   const voiceChannels = channels.filter((channel) => channel.type === 'VOICE');
 
   return (
-    <aside className="flex w-60 shrink-0 flex-col bg-surface-800">
+    <aside className="panel flex w-60 shrink-0 flex-col bg-surface-800">
       <ServerHeader
         name={server?.name ?? 'No server'}
         open={menuOpen}
@@ -64,8 +64,8 @@ export function ChannelSidebar({
               aria-current={channel.id === activeChannelId ? 'page' : undefined}
               className={`group flex w-full cursor-pointer items-center gap-1.5 rounded px-2 py-1.5 text-left text-[15px] transition-colors duration-200 ${
                 channel.id === activeChannelId
-                  ? 'bg-surface-700 text-slate-50'
-                  : 'text-slate-400 hover:bg-surface-700/60 hover:text-slate-200'
+                  ? 'row-active'
+                  : 'row-idle'
               }`}
             >
               <ChannelGlyph channel={channel} />
@@ -149,7 +149,7 @@ function ServerHeader({
         onClick={onToggle}
         aria-haspopup="menu"
         aria-expanded={open}
-        className="flex h-12 w-full cursor-pointer items-center gap-2 border-b border-black/20 px-4 text-left transition-colors duration-200 hover:bg-surface-700/50"
+        className="flex h-12 w-full cursor-pointer items-center gap-2 border-b border-edge px-4 text-left transition-colors duration-200 hover:bg-white/[0.05]"
       >
         <h2 className="min-w-0 flex-1 truncate font-semibold text-slate-50">{name}</h2>
         {open ? (
@@ -162,7 +162,7 @@ function ServerHeader({
       {open && (
         <div
           role="menu"
-          className="absolute inset-x-2 top-full z-30 mt-1 overflow-hidden rounded-md bg-surface-950 py-2 shadow-2xl"
+          className="absolute inset-x-2 top-full z-30 mt-1 overflow-hidden rounded-md bg-surface-950 py-2 shadow-pop"
         >
           <button
             type="button"
@@ -246,8 +246,8 @@ function VoiceChannelRow({ channel }: { channel: Channel }): JSX.Element {
         aria-current={viewing ? 'page' : undefined}
         className={`flex w-full cursor-pointer items-center gap-1.5 rounded px-2 py-1.5 text-left text-[15px] transition-colors duration-200 ${
           here || connectingHere || viewing
-            ? 'bg-surface-700 text-slate-50'
-            : 'text-slate-400 hover:bg-surface-700/60 hover:text-slate-200'
+            ? 'row-active'
+            : 'row-idle'
         }`}
       >
         <ChannelGlyph channel={channel} />

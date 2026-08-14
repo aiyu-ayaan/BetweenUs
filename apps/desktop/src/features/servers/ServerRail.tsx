@@ -4,9 +4,14 @@ import { CompassIcon, NexoraLogoIcon, PlusIcon } from '../../components/icons';
 import { ServerIcon } from '../../components/ServerIcon';
 
 /**
- * The left rail: direct messages at the top, then one pill per server. The
- * active pill grows a marker on the left edge, which is how Discord shows where
- * you are without spending any horizontal space on it.
+ * The left rail: direct messages at the top, then one tile per server, and the
+ * two ways to get another one at the bottom.
+ *
+ * It is the one region that is not a panel - it sits directly on the ground, so
+ * the workbench reads as panels arranged beside a column of controls rather
+ * than as one more grey stripe. Where you are is a short bar against the left
+ * edge, the way an editor marks its active activity-bar item: it costs no
+ * horizontal space and it does not turn the tile into a different shape.
  */
 export function ServerRail(): JSX.Element {
   const { servers, view, activeServerId, selectServer, showHome, createServer, joinServer } =
@@ -36,18 +41,18 @@ export function ServerRail(): JSX.Element {
   return (
     <nav
       aria-label="Servers"
-      className="flex w-[72px] shrink-0 flex-col items-center gap-2 overflow-y-auto bg-surface-950 py-3"
+      className="flex w-14 shrink-0 flex-col items-center gap-1 overflow-y-auto overflow-x-hidden py-0.5"
     >
       <RailButton
         label="Direct messages"
         active={view === 'home'}
         onClick={showHome}
-        activeClasses="bg-accent text-white"
+        activeClasses="bg-accent/20 text-accent"
       >
-        <NexoraLogoIcon className="h-7 w-7" />
+        <NexoraLogoIcon className="h-6 w-6" />
       </RailButton>
 
-      <hr className="w-8 border-t-2 border-surface-800" />
+      <hr className="my-1 w-6 border-t border-edge" />
 
       {servers.map((server) => (
         <RailButton
@@ -65,8 +70,8 @@ export function ServerRail(): JSX.Element {
         label="Create a server"
         active={false}
         onClick={() => setDialog('create')}
-        idleTextClasses="text-status-online"
-        activeClasses="bg-status-online text-white"
+        idleTextClasses="text-slate-500"
+        activeClasses="bg-white/[0.07] text-slate-100"
       >
         <PlusIcon className="h-6 w-6" />
       </RailButton>
@@ -75,8 +80,8 @@ export function ServerRail(): JSX.Element {
         label="Join a server"
         active={false}
         onClick={() => setDialog('join')}
-        idleTextClasses="text-status-online"
-        activeClasses="bg-status-online text-white"
+        idleTextClasses="text-slate-500"
+        activeClasses="bg-white/[0.07] text-slate-100"
       >
         <CompassIcon className="h-6 w-6" />
       </RailButton>
@@ -86,14 +91,14 @@ export function ServerRail(): JSX.Element {
           role="dialog"
           aria-modal="true"
           aria-label={dialog === 'create' ? 'Create a server' : 'Join a server'}
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4"
+          className="fixed inset-0 z-50 flex animate-fade items-center justify-center bg-black/60 px-4"
           onClick={() => setDialog('none')}
         >
           <div
-            className="w-full max-w-md rounded-lg bg-surface-800 p-6 text-left"
+            className="w-full max-w-md animate-pop overflow-hidden rounded-xl border border-edge bg-surface-900 p-6 text-left shadow-pop"
             onClick={(event) => event.stopPropagation()}
           >
-            <h2 className="text-2xl font-bold text-slate-50">
+            <h2 className="text-xl font-semibold text-slate-50">
               {dialog === 'create' ? 'Create a server' : 'Join a server'}
             </h2>
             <p className="mt-2 text-sm text-slate-400">
@@ -117,7 +122,7 @@ export function ServerRail(): JSX.Element {
                 if (event.key === 'Enter') void submit();
                 if (event.key === 'Escape') setDialog('none');
               }}
-              className="mt-2 w-full rounded bg-surface-950 px-3 py-2.5 text-slate-100 outline-none ring-0 focus:ring-2 focus:ring-accent"
+              className="mt-2 w-full rounded-lg border border-edge bg-surface-950 px-3 py-2.5 text-slate-100 outline-none ring-0 transition-colors focus:border-accent/60"
               placeholder={dialog === 'create' ? "Ayaan's server" : 'nexora-team'}
             />
 
@@ -127,7 +132,7 @@ export function ServerRail(): JSX.Element {
               </p>
             )}
 
-            <div className="-mx-6 -mb-6 mt-6 flex justify-end gap-3 rounded-b-lg bg-surface-850 px-6 py-4">
+            <div className="-mx-6 -mb-6 mt-6 flex justify-end gap-3 border-t border-edge bg-black/20 px-6 py-4">
               <button
                 type="button"
                 onClick={() => setDialog('none')}
@@ -139,7 +144,7 @@ export function ServerRail(): JSX.Element {
                 type="button"
                 disabled={busy}
                 onClick={() => void submit()}
-                className="cursor-pointer rounded bg-accent px-6 py-2 text-sm font-medium text-white transition-colors duration-200 hover:bg-accent-hover disabled:opacity-60"
+                className="cursor-pointer rounded-lg bg-accent px-6 py-2 text-sm font-medium text-white transition-colors duration-150 hover:bg-accent-hover active:scale-[0.98] disabled:opacity-60"
               >
                 {busy ? 'Working…' : dialog === 'create' ? 'Create' : 'Join'}
               </button>
@@ -168,10 +173,14 @@ function RailButton({
 }): JSX.Element {
   return (
     <div className="group relative flex w-full justify-center">
+      {/* The marker is the only thing that moves, and it grows out of the edge
+          rather than sliding in from nowhere: a hover shows a stub of it, so
+          the active state and the "you could be here" state are visibly the
+          same object at two lengths. */}
       <span
         aria-hidden="true"
-        className={`absolute left-0 top-1/2 w-1 -translate-y-1/2 rounded-r bg-white transition-all duration-200 ${
-          active ? 'h-10' : 'h-2 opacity-0 group-hover:opacity-100'
+        className={`absolute -left-0.5 top-1/2 w-[3px] -translate-y-1/2 rounded-full bg-accent transition-[height,opacity] duration-200 ease-out ${
+          active ? 'h-5 opacity-100' : 'h-2 opacity-0 group-hover:opacity-60'
         }`}
       />
       <button
@@ -180,13 +189,12 @@ function RailButton({
         title={label}
         aria-label={label}
         aria-current={active ? 'true' : undefined}
-        // No focus ring here: the pill already says where you are with the
-        // marker on the left edge, and a ring around a circle reads as a stray
-        // blue square.
-        className={`flex h-12 w-12 cursor-pointer items-center justify-center overflow-hidden outline-none ring-0 focus:ring-0 focus-visible:ring-0 transition-all duration-200 ${
+        // No focus ring here: the marker on the left edge already says where
+        // you are, and a second ring around a 40px tile is all noise.
+        className={`flex h-10 w-10 cursor-pointer items-center justify-center overflow-hidden rounded-lg outline-none ring-0 transition-colors duration-150 focus:ring-0 focus-visible:ring-0 active:scale-[0.96] ${
           active
-            ? `rounded-2xl ${activeClasses}`
-            : `rounded-[24px] bg-surface-800 hover:rounded-2xl hover:bg-accent hover:text-white ${idleTextClasses}`
+            ? activeClasses
+            : `hover:bg-white/[0.07] hover:text-slate-100 ${idleTextClasses}`
         }`}
       >
         {children}

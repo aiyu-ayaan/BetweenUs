@@ -28,7 +28,7 @@ export function VoicePanel(): JSX.Element | null {
   if (status === 'idle') return null;
 
   return (
-    <section aria-label="Voice connection" className="border-t border-black/30 bg-surface-900 p-2">
+    <section aria-label="Voice connection" className="border-t border-edge bg-surface-900 p-2">
       <p className="flex items-center gap-1.5 px-1 pb-2 text-xs">
         {encrypted && <LockIcon className="h-3.5 w-3.5 text-emerald-400" />}
         <span className="font-medium text-emerald-400">

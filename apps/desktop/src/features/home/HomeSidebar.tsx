@@ -35,11 +35,11 @@ export function HomeSidebar({
   );
 
   return (
-    <aside className="flex w-60 shrink-0 flex-col bg-surface-800">
-      <header className="flex h-12 items-center border-b border-black/20 px-3">
-        <p className="w-full truncate rounded bg-surface-950 px-2 py-1 text-sm text-slate-400">
-          Find or start a conversation
-        </p>
+    <aside className="panel flex w-60 shrink-0 flex-col bg-surface-800">
+      <header className="flex h-11 shrink-0 items-center border-b border-edge px-3">
+        <h2 className="text-xs font-semibold uppercase tracking-[0.08em] text-slate-400">
+          Messages
+        </h2>
       </header>
 
       <nav aria-label="Direct messages" className="flex-1 overflow-y-auto px-2 py-2">
@@ -49,8 +49,8 @@ export function HomeSidebar({
           aria-current={showingFriends ? 'page' : undefined}
           className={`flex w-full cursor-pointer items-center gap-3 rounded px-2 py-2 text-left transition-colors duration-200 ${
             showingFriends
-              ? 'bg-surface-700 text-slate-50'
-              : 'text-slate-400 hover:bg-surface-700/60 hover:text-slate-200'
+              ? 'row-active'
+              : 'row-idle'
           }`}
         >
           <UsersIcon className="h-5 w-5 shrink-0" />
@@ -77,8 +77,8 @@ export function HomeSidebar({
             aria-current={showingRemote ? 'page' : undefined}
             className={`mt-0.5 flex w-full cursor-pointer items-center gap-3 rounded px-2 py-2 text-left transition-colors duration-200 ${
               showingRemote
-                ? 'bg-surface-700 text-slate-50'
-                : 'text-slate-400 hover:bg-surface-700/60 hover:text-slate-200'
+                ? 'row-active'
+                : 'row-idle'
             }`}
           >
             <MonitorIcon className="h-5 w-5 shrink-0" />
@@ -107,8 +107,8 @@ export function HomeSidebar({
                 aria-current={active ? 'page' : undefined}
                 className={`group flex w-full cursor-pointer items-center gap-3 rounded px-2 py-1.5 text-left transition-colors duration-200 ${
                   active
-                    ? 'bg-surface-700 text-slate-50'
-                    : 'text-slate-400 hover:bg-surface-700/60 hover:text-slate-200'
+                    ? 'row-active'
+                    : 'row-idle'
                 }`}
               >
                 <Avatar

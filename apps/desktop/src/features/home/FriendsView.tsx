@@ -32,8 +32,8 @@ export function FriendsView(): JSX.Element {
   const shown = tab === 'online' ? online : tab === 'all' ? accepted : pending;
 
   return (
-    <section className="flex min-w-0 flex-1 flex-col bg-surface-900">
-      <header className="flex h-12 shrink-0 items-center gap-4 border-b border-black/20 px-4">
+    <section className="panel flex min-w-0 flex-1 flex-col bg-surface-900">
+      <header className="flex h-12 shrink-0 items-center gap-4 border-b border-edge px-4">
         <span className="flex items-center gap-2 font-semibold text-slate-50">
           <UsersIcon className="h-5 w-5 text-slate-400" />
           Friends
@@ -50,8 +50,8 @@ export function FriendsView(): JSX.Element {
               onClick={() => setTab(entry.id)}
               className={`cursor-pointer rounded px-2.5 py-1 text-sm transition-colors duration-200 ${
                 tab === entry.id
-                  ? 'bg-surface-700 text-slate-50'
-                  : 'text-slate-300 hover:bg-surface-700/60'
+                  ? 'row-active'
+                  : 'text-slate-300 hover:bg-white/[0.05]'
               }`}
             >
               {entry.label}

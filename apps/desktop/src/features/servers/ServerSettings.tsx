@@ -77,7 +77,7 @@ export function ServerSettings({ onClose }: { onClose: () => void }): JSX.Elemen
               className={`mt-0.5 flex w-full cursor-pointer items-center gap-2 rounded px-2.5 py-1.5 text-left text-[15px] transition-colors duration-200 ${
                 section === entry.id
                   ? 'bg-surface-700 text-slate-50'
-                  : 'text-slate-300 hover:bg-surface-700/60'
+                  : 'text-slate-300 hover:bg-white/[0.05]'
               }`}
             >
               <entry.icon className="h-4 w-4 shrink-0" />
@@ -318,7 +318,7 @@ function Roles(): JSX.Element {
                 className={`flex w-full cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-left transition-colors duration-200 ${
                   member.userId === selected.userId
                     ? 'bg-surface-700 text-slate-50'
-                    : 'text-slate-300 hover:bg-surface-700/60'
+                    : 'text-slate-300 hover:bg-white/[0.05]'
                 }`}
               >
                 <Avatar

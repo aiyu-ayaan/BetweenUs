@@ -14,9 +14,24 @@
   }
 
   body {
-    @apply bg-surface-900 text-slate-100 antialiased;
+    /*
+     * The ground, not a panel: the workbench draws its own surfaces on top of
+     * this and lets it show through the gutters between them.
+     */
+    @apply bg-ground text-slate-100 antialiased;
     font-size: 16px;
     line-height: 1.6;
+  }
+
+  /*
+   * Tracking is size-specific. Headings are set tighter as they grow, because
+   * letters read as drifting apart at display sizes, and small uppercase
+   * labels are opened up, because they read as crowded at any size.
+   */
+  h1,
+  h2,
+  h3 {
+    letter-spacing: -0.015em;
   }
 
   /*
@@ -50,14 +65,60 @@
     @apply outline-none ring-0;
   }
 
+  /*
+   * A thin thumb that only shows itself on the way past. A 10px bar with a
+   * permanent fill is a second border down the side of every panel.
+   */
   ::-webkit-scrollbar {
-    width: 10px;
+    width: 8px;
+    height: 8px;
   }
   ::-webkit-scrollbar-thumb {
-    @apply rounded-full bg-surface-700;
+    @apply rounded-full bg-white/[0.06];
   }
-  ::-webkit-scrollbar-track {
+  *:hover::-webkit-scrollbar-thumb {
+    @apply bg-white/[0.12];
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-white/20;
+  }
+  ::-webkit-scrollbar-track,
+  ::-webkit-scrollbar-corner {
     background: transparent;
+  }
+}
+
+@layer components {
+  /**
+   * One region of the workbench. Every column on screen is one of these, which
+   * is what makes the layout read as panels on a ground rather than as stripes
+   * of grey - and it means a new region cannot be drawn slightly differently by
+   * accident.
+   */
+  .panel {
+    @apply min-h-0 overflow-hidden rounded-panel border border-edge shadow-panel;
+  }
+
+  /**
+   * The only interactive fill in the app that is not a button colour: rows in
+   * the sidebar, list items, and anything else that is "the thing you are
+   * looking at".
+   */
+  .row-active {
+    @apply bg-white/[0.07] text-slate-50;
+  }
+
+  .row-idle {
+    @apply text-slate-400 hover:bg-white/[0.04] hover:text-slate-200;
+  }
+
+  /** The Electron title bar is ours, so it has to say which parts drag. */
+  .drag-region {
+    -webkit-app-region: drag;
+  }
+
+  .no-drag {
+    -webkit-app-region: no-drag;
   }
 }
 

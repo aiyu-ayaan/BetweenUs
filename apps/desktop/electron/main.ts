@@ -182,7 +182,9 @@ function createWindow(hidden = false): BrowserWindow {
     x: numberFromEnv('NEXORA_WINDOW_X'),
     y: numberFromEnv('NEXORA_WINDOW_Y'),
     title: windowLabel ? `Nexora - ${windowLabel}` : 'Nexora',
-    backgroundColor: '#0B1120',
+    // The workbench ground, so the frame Windows paints before the renderer
+    // does is the colour the app is about to be rather than a flash of navy.
+    backgroundColor: '#06070a',
     show: false,
     webPreferences: {
       preload: path.join(dirname, 'preload.js'),
