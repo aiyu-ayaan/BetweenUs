@@ -11,7 +11,7 @@
  * - Cloudflare's shape. It has answered `iceServers` as a bare object and as a
  *   list, and `urls` is a string or a list of them per the WebRTC dictionary.
  *
- * Run with: pnpm --filter @nexora/call-service check
+ * Run with: pnpm --filter @nexora/config check
  */
 import assert from 'node:assert/strict';
 import { iceServers, parseIceServers, resetTurnCache, stunServers } from './ice';
@@ -144,7 +144,7 @@ async function main(): Promise<void> {
   nothingUsableIsAnEmptyList();
   await unconfiguredAsksNobodyAndStillWorks();
   await aFailedMintIsNotAFailedCall();
-  console.log('ice.check.ts: ok');
+  console.log('ice self-check passed');
 }
 
 void main();

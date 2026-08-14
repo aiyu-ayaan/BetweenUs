@@ -24,17 +24,33 @@
  * When one is wanted, Cloudflare's own TURN service is the natural fit for a
  * deployment already behind a Cloudflare Tunnel - both peers reach it outbound,
  * so it opens no ports either. The credentials are short-lived and minted here;
- * the key that mints them never leaves this service.
+ * the key that mints them stays on the server and is never sent to a client.
  *
  * Privacy is unchanged by any of it. A relay forwards DTLS-SRTP it has no key
  * for, so a relayed call is as unreadable to Cloudflare as a direct one is to
  * everybody else.
+ *
+ * This lives in `config` rather than in a service because two services need the
+ * same answer - `call-service` for a call, `remote-gateway` for a remote
+ * session - and two implementations of "where can these peers meet" is how they
+ * come to disagree. It logs through a callback rather than importing the
+ * logger, so this package keeps its one dependency.
  */
-import { env, envNumber, envOr } from '@nexora/config';
-import type { IceServer } from '@nexora/shared-types';
-import { createLogger, type LogLevel } from '@nexora/logger';
+import { env, envNumber, envOr } from './index';
 
-const logger = createLogger('call-service', envOr('LOG_LEVEL', 'info') as LogLevel);
+/**
+ * One entry of a WebRTC `RTCConfiguration.iceServers`.
+ *
+ * Structurally the same as `IceServer` in `@nexora/shared-types`, and declared
+ * here rather than imported so this package keeps its single dependency. The
+ * two are checked against each other where they meet, at each service's
+ * boundary.
+ */
+export interface IceServerConfig {
+  urls: string[];
+  username?: string;
+  credential?: string;
+}
 
 const API = 'https://rtc.live.cloudflare.com/v1/turn/keys';
 
@@ -60,12 +76,12 @@ const DEFAULT_TTL_SECONDS = 86_400;
 const CACHE_HEADROOM_SECONDS = 300;
 
 interface Cached {
-  servers: IceServer[];
+  servers: IceServerConfig[];
   expiresAt: number;
 }
 
 let cached: Cached | null = null;
-let inFlight: Promise<IceServer[]> | null = null;
+let inFlight: Promise<IceServerConfig[]> | null = null;
 
 function ttlSeconds(): number {
   return envNumber('CLOUDFLARE_TURN_TTL_SECONDS', DEFAULT_TTL_SECONDS);
@@ -77,7 +93,7 @@ function ttlSeconds(): number {
  *
  * Exported for the self-check; there is no other reason for it to be public.
  */
-export function stunServers(): IceServer[] {
+export function stunServers(): IceServerConfig[] {
   const urls = envOr('STUN_URLS', DEFAULT_STUN)
     .split(',')
     .map((url) => url.trim())
@@ -95,14 +111,14 @@ export function stunServers(): IceServer[] {
  *
  * Exported for the self-check; there is no other reason for it to be public.
  */
-export function parseIceServers(payload: unknown): IceServer[] {
+export function parseIceServers(payload: unknown): IceServerConfig[] {
   const body = payload as { iceServers?: unknown } | null;
   const raw = body?.iceServers;
   if (!raw) return [];
 
   const entries = Array.isArray(raw) ? raw : [raw];
 
-  return entries.flatMap((entry): IceServer[] => {
+  return entries.flatMap((entry): IceServerConfig[] => {
     const server = entry as { urls?: unknown; username?: unknown; credential?: unknown };
     // `urls` is a string or a list of them, per the WebRTC dictionary.
     const urls = (
@@ -120,7 +136,7 @@ export function parseIceServers(payload: unknown): IceServer[] {
   });
 }
 
-async function mint(keyId: string, apiToken: string): Promise<IceServer[]> {
+async function mint(keyId: string, apiToken: string): Promise<IceServerConfig[]> {
   const response = await fetch(
     `${API}/${encodeURIComponent(keyId)}/credentials/generate-ice-servers`,
     {
@@ -147,8 +163,25 @@ async function mint(keyId: string, apiToken: string): Promise<IceServer[]> {
   return servers;
 }
 
+/**
+ * Where a failed mint is reported. Set once at startup by whichever service is
+ * using this; unset, a failure is silent, which is only right in a test.
+ */
+type Reporter = (message: string, error: unknown) => void;
+
+let report: Reporter = () => undefined;
+
+/**
+ * Tells this module how to log. Called by each service at startup, so a
+ * deployment whose TURN key has been revoked says so in that service's own log
+ * rather than nowhere.
+ */
+export function onIceProblem(reporter: Reporter): void {
+  report = reporter;
+}
+
 /** Relays for one call, or an empty list when this deployment configures none. */
-async function turnServers(): Promise<IceServer[]> {
+async function turnServers(): Promise<IceServerConfig[]> {
   const keyId = env('CLOUDFLARE_TURN_KEY_ID');
   const apiToken = env('CLOUDFLARE_TURN_KEY_API_TOKEN');
   if (!keyId || !apiToken) return [];
@@ -163,15 +196,11 @@ async function turnServers(): Promise<IceServer[]> {
         servers,
         expiresAt: now + Math.max(0, ttlSeconds() - CACHE_HEADROOM_SECONDS) * 1000,
       };
-      logger.info('Minted Cloudflare TURN credentials', { servers: servers.length });
       return servers;
     })
     .catch((error: unknown) => {
-      logger.error(
-        'Could not mint TURN credentials; calls between two hostile NATs will fail',
-        error,
-      );
-      return [] as IceServer[];
+      report('Could not mint TURN credentials; calls between two hostile NATs will fail', error);
+      return [] as IceServerConfig[];
     })
     .finally(() => {
       inFlight = null;
@@ -187,7 +216,7 @@ async function turnServers(): Promise<IceServer[]> {
  * networks, so a relay that cannot be minted must not also take down the calls
  * that were never going to need one.
  */
-export async function iceServers(): Promise<IceServer[]> {
+export async function iceServers(): Promise<IceServerConfig[]> {
   return [...stunServers(), ...(await turnServers())];
 }
 

@@ -101,11 +101,12 @@ export class RemoteController {
   start(
     @CurrentUser() user: AuthenticatedUser,
     @Body() dto: StartRemoteSessionDto,
-    // The address this client reached the deployment on, so the reply can refuse
-    // to send it to a media server it cannot dial. Nginx forwards the original.
-    @Headers('host') host?: string,
   ): Promise<RemoteSessionResponse> {
-    return this.remote.startSession(user, dto.machineId, host);
+    // No `Host` header is read here any more. It existed so the reply could
+    // refuse to name a media server this caller could not dial; the reply names
+    // no server at all now, so there is nothing about where they are that could
+    // make it wrong.
+    return this.remote.startSession(user, dto.machineId);
   }
 
   /**

@@ -294,6 +294,15 @@ export class RemoteGateway implements OnModuleDestroy {
         return;
       }
 
+      // The agent's half of setting up the peer connection, on its way to that
+      // session's controller. Forwarded without being read: an SDP this gateway
+      // rewrote would be an SDP it could put itself in the middle of.
+      case 'rtc.signal': {
+        const controller = this.controllers.get(event.sessionId);
+        if (controller) this.send(controller, { type: 'rtc.signal', data: event.data });
+        return;
+      }
+
       case 'pong':
         return;
 
@@ -360,15 +369,16 @@ export class RemoteGateway implements OnModuleDestroy {
     this.send(socket, { type: 'ready', role: 'controller', sessionId });
 
     // Only now does the machine hear about it: the agent is asked to consent
-    // and to start publishing, with its own credentials for the same room.
-    const media = await this.remote.agentSessionToken(sessionId, session.machineId);
+    // and, if it does, to offer its screen to the controller directly. It is
+    // given ICE servers rather than an address, because nothing here knows or
+    // needs to know where either end is.
     this.send(agent, {
       type: 'session.start',
       sessionId,
       controllerId: user.id,
       controllerName: user.username,
       permissions,
-      ...media,
+      iceServers: await this.remote.agentIceServers(),
     });
 
     this.logger.info('Remote session opened', {
@@ -488,6 +498,19 @@ export class RemoteGateway implements OnModuleDestroy {
         sessionId: state.sessionId,
         screenId: event.screenId,
       });
+      return;
+    }
+
+    // The controller's half of setting up the peer connection, on its way to
+    // the agent. No permission of its own: answering an offer is how a session
+    // that may view the screen comes to see it, and REMOTE_VIEW was checked
+    // before the session existed. Forwarded without being read, for the same
+    // reason the other direction is.
+    if (event.type === 'rtc.signal') {
+      const agent = this.agents.get(state.machineId);
+      if (agent) {
+        this.send(agent, { type: 'rtc.signal', sessionId: state.sessionId, data: event.data });
+      }
       return;
     }
 

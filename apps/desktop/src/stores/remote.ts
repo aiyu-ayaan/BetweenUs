@@ -8,7 +8,6 @@
  * cannot do, and the server should not trust that it did not.
  */
 import { create } from 'zustand';
-import { Room, RoomEvent, Track, type RemoteTrack } from 'livekit-client';
 import type {
   ClientRemoteEvent,
   RemoteMachineSummary,
@@ -19,7 +18,7 @@ import type {
 } from '@nexora/shared-types';
 import { api } from '../services/api';
 import { wsUrl } from '../services/endpoint';
-import { PLAYOUT_DELAY } from '../services/share-quality';
+import { ScreenLink } from '../services/remote-peer';
 import { useAuthStore } from './auth';
 
 /** Mouse moves are sampled: a session does not need 500 events a second. */
@@ -74,7 +73,8 @@ interface RemoteState {
 }
 
 let socket: WebSocket | null = null;
-let room: Room | null = null;
+/** The connection the agent's screen arrives over. */
+let link: ScreenLink | null = null;
 let lastMoveAt = 0;
 /** Set when the session was opened by "Request control"; fired once it is up. */
 let requestControlOnOpen = false;
@@ -130,7 +130,7 @@ export const useRemoteStore = create<RemoteState>((set, get) => ({
       activeScreenId: null,
     });
     openSocket(session, set, get);
-    await joinRoom(session, set);
+    openLink(session, set);
   },
 
   connectToOwner: async (userId, alsoRequestControl = false) => {
@@ -161,9 +161,8 @@ export const useRemoteStore = create<RemoteState>((set, get) => ({
     socket?.close();
     socket = null;
 
-    const current = room;
-    room = null;
-    if (current) await current.disconnect().catch(() => undefined);
+    link?.close();
+    link = null;
 
     // The socket closing already tells the gateway, but a window that is being
     // torn down may not get the close out; the HTTP call is the belt.
@@ -294,6 +293,12 @@ function openSocket(
         window.nexora?.clipboardWrite(event.text);
         return;
 
+      // The agent's offer, and its ICE candidates. Relayed by the gateway,
+      // which reads none of it.
+      case 'rtc.signal':
+        void link?.accept(event.data);
+        return;
+
       case 'error':
         set({ error: event.message });
         return;
@@ -312,45 +317,27 @@ function openSocket(
 }
 
 /**
- * Subscribes to the agent's screen. Nothing is published from this side.
+ * Waits for the agent's screen. Nothing is sent from this side.
  *
- * `adaptiveStream` is off on purpose, unlike a voice call: it sizes the
- * subscription to the video element, so a remote desktop in a window smaller
- * than the machine's screen was downscaled and then stretched back up, which is
- * what made the picture soft no matter what the agent published. A desktop
- * arrives at the size it was captured and the element does the fitting.
+ * There is no subscription to size and nothing between the two machines to
+ * resize anything: the desktop arrives at the size it was captured and the
+ * element does the fitting. That was not true of the SFU build, where the
+ * stream was sized to the video element and a remote desktop in a small window
+ * came back soft no matter what the agent sent.
+ *
+ * The agent offers, so this end has nothing to do until a signal arrives - it
+ * only has to exist first, or the offer would land with nowhere to go.
  */
-async function joinRoom(session: RemoteSessionResponse, set: Setter): Promise<void> {
-  const next = new Room({ adaptiveStream: false, dynacast: false });
-  room = next;
-
-  next.on(RoomEvent.TrackSubscribed, (track: RemoteTrack) => {
-    if (track.kind !== Track.Kind.Video) return;
-    // No jitter buffer worth the name: this is a desktop somebody is driving,
-    // and the default third of a second between moving the mouse and seeing it
-    // move is the difference between usable and not.
-    track.setPlayoutDelay(PLAYOUT_DELAY.driving);
-    set({ track: track.mediaStreamTrack, status: 'live' });
-    startClipboardSync();
+function openLink(session: RemoteSessionResponse, set: Setter): void {
+  link = new ScreenLink(false, {
+    iceServers: session.iceServers,
+    send: (data) => send({ type: 'rtc.signal', data }),
+    onTrack: (track) => {
+      set(track ? { track, status: 'live' } : { track: null });
+      if (track) startClipboardSync();
+    },
+    onFailed: (reason) => set({ status: 'ended', endedReason: reason, track: null }),
   });
-  next.on(RoomEvent.TrackUnsubscribed, () => set({ track: null }));
-  next.on(RoomEvent.Disconnected, () => {
-    if (room === next) room = null;
-    set({ track: null });
-  });
-
-  const url = session.livekitUrl.startsWith('/')
-    ? `${wsUrl()}${session.livekitUrl}`
-    : session.livekitUrl;
-
-  try {
-    await next.connect(url, session.token);
-  } catch (error) {
-    set({
-      status: 'ended',
-      endedReason: error instanceof Error ? error.message : 'Could not reach the media server',
-    });
-  }
 }
 
 /**

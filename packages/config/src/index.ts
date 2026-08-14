@@ -129,3 +129,12 @@ export function baseConfig(portVar: string, defaultPort: number): BaseServiceCon
     redisUrl: envOr('REDIS_URL', 'redis://localhost:6379'),
   };
 }
+
+export {
+  iceServers,
+  onIceProblem,
+  parseIceServers,
+  resetTurnCache,
+  stunServers,
+  type IceServerConfig,
+} from './ice';

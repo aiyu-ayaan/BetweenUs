@@ -7,7 +7,7 @@
     "build": "nest build",
     "dev": "nest start --watch",
     "start": "node dist/main.js",
-    "check": "tsx src/ice.check.ts",
+    "check": "echo \"call-service has no self-check of its own; the ICE rules live in @nexora/config\"",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {

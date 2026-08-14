@@ -3,8 +3,9 @@
  * session lifecycle and the audit trail.
  *
  * The service decides *who may do what to which machine*. It never sees a
- * frame: the agent publishes its screen into a LiveKit room of its own and the
- * controller subscribes, exactly the way a voice channel works.
+ * frame: the screen goes directly from the agent to the controller over a peer
+ * connection, exactly the way a call does, and the gateway's part is relaying
+ * the offer and answer that set it up.
  */
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import {
@@ -15,8 +16,7 @@ import {
   NotFoundException,
   ServiceUnavailableException,
 } from '@nestjs/common';
-import { AccessToken } from 'livekit-server-sdk';
-import { envOr, unreachableFromCaller } from '@nexora/config';
+import { iceServers } from '@nexora/config';
 import {
   asRemotePermissions,
   prisma,
@@ -27,14 +27,12 @@ import {
 import { PERMISSIONS, type RemotePermission } from '@nexora/permissions';
 import type {
   EnrolMachineResponse,
+  IceServer,
   RemoteAuditEntry,
   RemoteGrantSummary,
   RemoteMachineSummary,
   RemoteSessionResponse,
 } from '@nexora/shared-types';
-
-/** Long enough for a working session; the socket is what actually holds it open. */
-const TOKEN_TTL = '4h';
 
 /** An agent that has not been heard from for this long is treated as offline. */
 export const AGENT_STALE_MS = 90_000;
@@ -281,8 +279,6 @@ export class RemoteService {
   async startSession(
     user: { id: string; username: string },
     machineId: string,
-    /** The caller's own `Host` header - see `livekitUrl`. */
-    requestHost?: string,
   ): Promise<RemoteSessionResponse> {
     const access = await this.requireAccess(user.id, machineId);
     if (!access.permissions.includes(PERMISSIONS.REMOTE_VIEW)) {
@@ -322,33 +318,24 @@ export class RemoteService {
       detail: { permissions: access.permissions },
     });
 
-    const room = roomName(session.id);
     return {
       sessionId: session.id,
       machineId,
       machineName: machine.name,
       permissions: access.permissions,
-      room,
-      livekitUrl: livekitUrl(requestHost),
-      token: await this.mediaToken(room, user.id, user.username, false),
+      iceServers: await iceServers(),
     };
   }
 
   /**
-   * The agent's own credentials for the same room. It publishes and does not
-   * subscribe: a machine being viewed has no reason to receive anyone's camera.
+   * How the agent should try to reach the controller.
+   *
+   * The same list the controller got, and for the same reason it is a list
+   * rather than an address: neither end is told where the other is. They
+   * exchange candidates and ICE settles it.
    */
-  async agentSessionToken(sessionId: string, machineId: string): Promise<{
-    room: string;
-    livekitUrl: string;
-    token: string;
-  }> {
-    const room = roomName(sessionId);
-    return {
-      room,
-      livekitUrl: livekitUrl(),
-      token: await this.mediaToken(room, `agent-${machineId}`, 'agent', true),
-    };
+  async agentIceServers(): Promise<IceServer[]> {
+    return iceServers();
   }
 
   async endSession(sessionId: string, reason: string): Promise<void> {
@@ -483,33 +470,6 @@ export class RemoteService {
     return found;
   }
 
-  private mediaToken(
-    room: string,
-    identity: string,
-    name: string,
-    publisher: boolean,
-  ): Promise<string> {
-    const apiKey = envOr('LIVEKIT_API_KEY', '');
-    const apiSecret = envOr('LIVEKIT_API_SECRET', '');
-    if (!apiKey || !apiSecret) {
-      throw new ServiceUnavailableException({
-        code: 'LIVEKIT_NOT_CONFIGURED',
-        message: 'Remote sessions are not configured on this deployment',
-      });
-    }
-
-    const grant = new AccessToken(apiKey, apiSecret, { identity, name, ttl: TOKEN_TTL });
-    grant.addGrant({
-      room,
-      roomJoin: true,
-      // The agent publishes its screen and nothing else; the controller watches
-      // and publishes nothing. Neither needs the other's capability.
-      canPublish: publisher,
-      canSubscribe: !publisher,
-      canPublishData: false,
-    });
-    return grant.toJwt();
-  }
 }
 
 const REMOTE_ALL: RemotePermission[] = [
@@ -521,36 +481,11 @@ const REMOTE_ALL: RemotePermission[] = [
   PERMISSIONS.REMOTE_ADMIN,
 ];
 
-/** One room per session, never per machine: a new session is a new room. */
-export const roomName = (sessionId: string): string => `remote.${sessionId}`;
-
-/**
- * `requestHost` is the caller's own `Host` header, and it is optional because
- * the agent asks for its credentials over the socket rather than over HTTP - so
- * there is nothing to compare on that path and nothing is refused there.
- */
-function livekitUrl(requestHost?: string): string {
-  const url = envOr('LIVEKIT_URL', '');
-  if (!url) {
-    throw new ServiceUnavailableException({
-      code: 'LIVEKIT_NOT_CONFIGURED',
-      message: 'Remote sessions are not configured on this deployment',
-    });
-  }
-  // A loopback address means "this machine", so handing one to a client that is
-  // not on this machine sends it to look for the SFU inside itself. It works on
-  // the server, which is what lets it reach a deployment unnoticed.
-  if (unreachableFromCaller(url, requestHost)) {
-    throw new ServiceUnavailableException({
-      code: 'LIVEKIT_UNREACHABLE_URL',
-      message:
-        `This deployment advertises the media server at ${url}, which only a client on the ` +
-        'server itself can reach. Set LIVEKIT_URL=/livekit - the gateway proxies it, so the ' +
-        'address follows whoever is calling - and recreate the services.',
-    });
-  }
-  return url;
-}
+// There was a `roomName` and a `livekitUrl` here, and the second one threw
+// `LIVEKIT_UNREACHABLE_URL` when a deployment advertised a media server address
+// only the server itself could reach. Both are gone with the media server: no
+// client is told where to connect any more, so there is no address that can be
+// wrong for it.
 
 function hashToken(token: string): string {
   return createHash('sha256').update(token).digest('hex');

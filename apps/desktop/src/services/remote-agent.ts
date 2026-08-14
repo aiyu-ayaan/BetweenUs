@@ -3,7 +3,7 @@
  *
  * It is part of the desktop app rather than a service of its own, because the
  * app is already on the machine and already has everything an agent needs -
- * screen capture, a LiveKit publisher, and an OS keychain to keep a credential
+ * screen capture, a WebRTC stack, and an OS keychain to keep a credential
  * in. `apps/services/remote-agent` stays reserved for a headless server that
  * has no Nexora window to run inside.
  *
@@ -13,11 +13,16 @@
  * The one decision this side makes is whether to accept the session at all.
  */
 import { create } from 'zustand';
-import { Room, RoomEvent } from 'livekit-client';
-import type { AgentRemoteEvent, RemotePermission, ServerRemoteEvent } from '@nexora/shared-types';
+import type {
+  AgentRemoteEvent,
+  IceServer,
+  RemotePermission,
+  ServerRemoteEvent,
+} from '@nexora/shared-types';
 import { api } from './api';
 import { wsUrl } from './endpoint';
 import { secureGet, secureSet } from './e2ee';
+import { ScreenLink } from './remote-peer';
 import { shareOptions } from './share-quality';
 
 const TOKEN_KEY = 'remote.agentToken';
@@ -73,7 +78,10 @@ interface AgentState {
 }
 
 let socket: WebSocket | null = null;
-let room: Room | null = null;
+/** The connection carrying this machine's screen to whoever is watching it. */
+let link: ScreenLink | null = null;
+/** The capture behind it, so switching monitors can stop the old one. */
+let captured: MediaStreamTrack | null = null;
 let reconnectTimer: number | null = null;
 let reconnectAttempt = 0;
 let consentTimer: number | null = null;
@@ -254,13 +262,11 @@ function scheduleReconnect(token: string): void {
 async function onEvent(event: ServerRemoteEvent): Promise<void> {
   switch (event.type) {
     case 'session.start': {
-      const pending: PendingSession & { room: string; livekitUrl: string; token: string } = {
+      const pending: PendingSession & { iceServers: IceServer[] } = {
         sessionId: event.sessionId,
         controllerName: event.controllerName,
         permissions: event.permissions,
-        room: event.room,
-        livekitUrl: event.livekitUrl,
-        token: event.token,
+        iceServers: event.iceServers,
       };
       media.set(event.sessionId, pending);
 
@@ -327,16 +333,19 @@ async function onEvent(event: ServerRemoteEvent): Promise<void> {
       window.nexora?.clipboardWrite(event.text);
       return;
 
+    // The controller's answer, and its ICE candidates. Relayed by the gateway,
+    // which reads none of it.
+    case 'rtc.signal':
+      await link?.accept(event.data);
+      return;
+
     default:
       return;
   }
 }
 
-/** Session id -> the LiveKit credentials that came with it. */
-const media = new Map<
-  string,
-  PendingSession & { room: string; livekitUrl: string; token: string }
->();
+/** Session id -> how to reach the controller that opened it. */
+const media = new Map<string, PendingSession & { iceServers: IceServer[] }>();
 
 /** The displays this machine offers, and the one currently on the wire. */
 let displays: DisplayInfo[] = [];
@@ -352,14 +361,13 @@ let activeDisplayId: string | null = null;
  * travels with the session, and `screen.select` swaps it.
  *
  * Resolution follows the display rather than a fixed preset, which is what
- * makes text on the far end readable. LiveKit caps a screen share at 1080p
- * unless it is told the capture size, so a 1440p or a scaled display arrived
- * soft; asking for the display's real pixel size and telling the encoder to
- * keep resolution over frame rate is the same bargain RustDesk makes - a remote
- * desktop that is sharp at 10fps beats a blurry one at 30. The bitrate is
- * derived from the pixel count rather than fixed, so a 4K machine is not sent
- * through a 1080p-sized pipe, and LiveKit still drops frames on its own when
- * the link cannot carry it.
+ * makes text on the far end readable. A capture left to its default is 1080p,
+ * so a 1440p or a scaled display arrived soft; asking for the display's real
+ * pixel size and telling the encoder to keep resolution over frame rate is the
+ * same bargain RustDesk makes - a remote desktop that is sharp at 10fps beats a
+ * blurry one at 30. The bitrate is derived from the pixel count rather than
+ * fixed, so a 4K machine is not sent through a 1080p-sized pipe, and congestion
+ * control still lowers it when the link cannot carry it.
  */
 async function startPublishing(pending: PendingSession): Promise<void> {
   const credentials = media.get(pending.sessionId);
@@ -370,16 +378,17 @@ async function startPublishing(pending: PendingSession): Promise<void> {
     const display = displays.find((entry) => entry.primary) ?? displays[0];
     if (!display) throw new Error('no display to share');
 
-    const next = new Room({ adaptiveStream: false, dynacast: false });
-    room = next;
-    next.on(RoomEvent.Disconnected, () => {
-      if (room === next) room = null;
+    // The agent offers, because the agent is the one with a screen to send.
+    const next = new ScreenLink(true, {
+      iceServers: credentials.iceServers,
+      send: (data) => send({ type: 'rtc.signal', sessionId: pending.sessionId, data }),
+      onFailed: (reason) => {
+        send({ type: 'session.ended', sessionId: pending.sessionId });
+        void teardown(reason);
+      },
     });
+    link = next;
 
-    const url = credentials.livekitUrl.startsWith('/')
-      ? `${wsUrl()}${credentials.livekitUrl}`
-      : credentials.livekitUrl;
-    await next.connect(url, credentials.token);
     await publishDisplay(next, display);
 
     useAgentStore.setState({
@@ -409,13 +418,30 @@ async function startPublishing(pending: PendingSession): Promise<void> {
  * clicks on the first, which is the multi-monitor version of the bug that made
  * clicks land short on a scaled display.
  */
-async function publishDisplay(target: Room, display: DisplayInfo): Promise<void> {
+async function publishDisplay(target: ScreenLink, display: DisplayInfo): Promise<void> {
   await window.nexora?.selectScreenSource(display.sourceId, false);
   // The same encoder settings a screen share in a call uses - a remote desktop
   // is the 'detail' case of the same problem, and there is no reason for two
   // sets of numbers. `share-quality.ts` says why they are what they are.
   const options = shareOptions('detail', { width: display.width, height: display.height }, false);
-  await target.localParticipant.setScreenShareEnabled(true, options.capture, options.publish);
+
+  const stream = await navigator.mediaDevices.getDisplayMedia({
+    video: {
+      width: { ideal: options.capture.video.width },
+      height: { ideal: options.capture.video.height },
+      frameRate: { ideal: options.capture.video.frameRate },
+    },
+    audio: false,
+  });
+
+  const track = stream.getVideoTracks()[0];
+  if (!track) throw new Error('the capture handed back no video');
+  track.contentHint = options.capture.contentHint;
+
+  captured?.stop();
+  captured = track;
+  await target.setDisplay(track, options.publish);
+
   activeDisplayId = display.id;
   window.nexora?.remoteTarget(display.id);
 }
@@ -423,18 +449,19 @@ async function publishDisplay(target: Room, display: DisplayInfo): Promise<void>
 /**
  * Switches which monitor the session is watching.
  *
- * The old track is unpublished first: Chromium's capture is bound to the source
- * it was started with, so there is no way to redirect it in place. The
- * controller finds out it worked from the `screens` that follows, never from
- * having asked.
+ * A fresh capture is taken: Chromium's capture is bound to the source it was
+ * started with, so there is no way to redirect it in place. What does not
+ * change is the connection - `replaceTrack` swaps the track under it, so the
+ * controller's picture changes rather than going black while a new connection
+ * is negotiated. The controller finds out it worked from the `screens` that
+ * follows, never from having asked.
  */
 async function switchScreen(sessionId: string, screenId: string): Promise<void> {
-  const current = room;
+  const current = link;
   const display = displays.find((entry) => entry.id === screenId);
   if (!current || !display || display.id === activeDisplayId) return;
 
   try {
-    await current.localParticipant.setScreenShareEnabled(false);
     await publishDisplay(current, display);
   } catch {
     // The old screen is gone and the new one did not start. Say what is true
@@ -498,13 +525,16 @@ function stopClipboardSync(): void {
 async function teardown(_reason: string): Promise<void> {
   clearConsentTimer();
   stopClipboardSync();
-  const current = room;
-  room = null;
+  link?.close();
+  link = null;
+  // The capture keeps the OS "being shared" indicator up until it is stopped,
+  // which on a machine nobody is sitting at is the one visible sign left.
+  captured?.stop();
+  captured = null;
   displays = [];
   activeDisplayId = null;
   useAgentStore.setState({ session: null });
   window.nexora?.remoteInputStop();
-  if (current) await current.disconnect().catch(() => undefined);
 }
 
 function clearConsentTimer(): void {

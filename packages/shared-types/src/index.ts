@@ -784,9 +784,10 @@ export interface StartRemoteSessionRequest {
 }
 
 /**
- * Media rides the SFU the voice channels already use: the agent publishes its
- * screen into a room of its own and the controller subscribes. Nothing about a
- * remote session passes pixels through NestJS.
+ * The screen goes directly from the agent to the controller over WebRTC, the
+ * same way a call does. `remote-gateway` relays the offer, the answer and the
+ * ICE candidates that set that up, along with input and the audit trail; it
+ * never carries a pixel, and neither does the tunnel in front of it.
  */
 export interface RemoteSessionResponse {
   sessionId: string;
@@ -794,10 +795,24 @@ export interface RemoteSessionResponse {
   machineName: string;
   /** Frozen when the session started; the gateway enforces these, not the UI. */
   permissions: RemotePermission[];
-  room: string;
-  livekitUrl: string;
-  token: string;
+  /** STUN, and TURN when the deployment configures one. See `CallIceResponse`. */
+  iceServers: IceServer[];
 }
+
+/**
+ * One end of a remote session describing itself to the other.
+ *
+ * Deliberately without the `fingerprintProof` a call's signal carries: the two
+ * machines in a remote session share no secret the gateway has never seen, so
+ * there is nothing to sign it with. The screen is still end-to-end encrypted -
+ * DTLS-SRTP directly between them, with no server holding a decodable frame -
+ * but an actively malicious gateway could substitute a fingerprint, which a
+ * call's channel key makes impossible. See "Known limits" in E2EE.md.
+ */
+export type RemoteSignal =
+  | { kind: 'offer'; sdp: string }
+  | { kind: 'answer'; sdp: string }
+  | { kind: 'ice'; candidate: IceCandidatePayload };
 
 /**
  * One of the machine's displays, as the controller picks between them.
@@ -841,6 +856,8 @@ export type ClientRemoteEvent =
   | { type: 'control.release' }
   /** Switches which of the machine's displays is being shared. */
   | { type: 'screen.select'; screenId: string }
+  /** Relayed straight to the agent; the gateway does not read it. */
+  | { type: 'rtc.signal'; data: RemoteSignal }
   | { type: 'session.end' }
   | { type: 'ping' };
 
@@ -855,6 +872,8 @@ export type AgentRemoteEvent =
   | { type: 'screens'; sessionId: string; screens: RemoteScreen[]; activeId: string }
   | { type: 'control.granted'; sessionId: string }
   | { type: 'control.denied'; sessionId: string; reason?: string }
+  /** Relayed straight to that session's controller; the gateway does not read it. */
+  | { type: 'rtc.signal'; sessionId: string; data: RemoteSignal }
   | { type: 'pong' };
 
 /** Sent by the gateway to either kind of socket. */
@@ -867,9 +886,11 @@ export type ServerRemoteEvent =
       controllerId: string;
       controllerName: string;
       permissions: RemotePermission[];
-      room: string;
-      livekitUrl: string;
-      token: string;
+      /**
+       * How to reach the controller. The agent is the one with a screen to
+       * send, so it is the one that offers.
+       */
+      iceServers: IceServer[];
     }
   | { type: 'session.ended'; sessionId: string; reason: string }
   | { type: 'agent.state'; sessionId: string; state: 'accepted' | 'refused'; reason?: string }
@@ -882,6 +903,13 @@ export type ServerRemoteEvent =
   | { type: 'screen.select'; sessionId: string; screenId: string }
   /** To the agent: somebody is asking for control and the machine must answer. */
   | { type: 'control.requested'; sessionId: string; controllerName: string }
+  /**
+   * Relayed between the two ends of one session, in both directions. The
+   * gateway stamps nothing and reads nothing; `sessionId` is present on the way
+   * to an agent, which may hold several sessions at once, and absent on the way
+   * to a controller, which has exactly one.
+   */
+  | { type: 'rtc.signal'; sessionId?: string; data: RemoteSignal }
   /**
    * To the controller: what this session may do now. Sent whenever control is
    * taken, granted, refused or released - the client renders from this rather
