@@ -202,6 +202,13 @@ function Workbench(): JSX.Element {
   }, []);
 
   const panelOpen = rightPanel !== 'none' && !(rightPanel === 'members' && !showMembers);
+  /**
+   * The same condition the main column below is chosen by: only the chat
+   * surface has a right-hand panel. The voice channel, the friends screen and
+   * the machine list fill the window themselves, and the toggle for a panel
+   * they do not have would be a button that does nothing.
+   */
+  const chatOnScreen = !(view === 'home' && homeScreen) && channel?.type !== 'VOICE';
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
@@ -209,6 +216,7 @@ function Workbench(): JSX.Element {
         onOpenSwitcher={() => setSwitcher(true)}
         sidebarOpen={sidebarOpen}
         onToggleSidebar={() => setSidebarOpen((open) => !open)}
+        panelAvailable={chatOnScreen}
         panelOpen={panelOpen}
         onTogglePanel={() => {
           if (rightPanel === 'none') useChatStore.getState().showPanel('members');

@@ -20,12 +20,19 @@ export function TopBar({
   onToggleSidebar,
   panelOpen,
   onTogglePanel,
+  panelAvailable,
 }: {
   onOpenSwitcher: () => void;
   sidebarOpen: boolean;
   onToggleSidebar: () => void;
   panelOpen: boolean;
   onTogglePanel: () => void;
+  /**
+   * Whether what is on screen has a right-hand panel at all. A voice channel,
+   * the friends screen and the machine list do not, and a toggle that is
+   * present but does nothing is worse than no toggle.
+   */
+  panelAvailable: boolean;
 }): JSX.Element {
   const view = useChatStore((state) => state.view);
   const servers = useChatStore((state) => state.servers);
@@ -71,12 +78,14 @@ export function TopBar({
           on={sidebarOpen}
           onClick={onToggleSidebar}
         />
-        <LayoutToggle
-          label={panelOpen ? 'Hide right panel' : 'Show right panel'}
-          on={panelOpen}
-          onClick={onTogglePanel}
-          mirrored
-        />
+        {panelAvailable && (
+          <LayoutToggle
+            label={panelOpen ? 'Hide right panel' : 'Show right panel'}
+            on={panelOpen}
+            onClick={onTogglePanel}
+            mirrored
+          />
+        )}
       </div>
     </header>
   );
