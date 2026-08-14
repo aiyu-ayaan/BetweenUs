@@ -26,6 +26,7 @@ import type { Track } from 'livekit-client';
 import { useChatStore } from '../../stores/chat';
 import { usePresenceStore } from '../../stores/presence';
 import { useRemoteStore } from '../../stores/remote';
+import { isDesktopRuntime } from '../../services/platform';
 import { useShareControlStore } from '../../stores/shareControl';
 import { useVoiceStore, type VoiceShare, type VoiceTile } from '../../stores/voice';
 import { VoiceControls } from './VoiceControls';
@@ -310,7 +311,10 @@ function Theatre({ share, tiles }: { share: VoiceShare; tiles: Stage[] }): JSX.E
  * - **Open a session** is the remote-desktop path, for a machine this account
  *   was granted standing access to. It survives the call, reaches the whole
  *   machine rather than the shared screen, and is audited. It only appears when
- *   such a grant already exists.
+ *   such a grant already exists - and only in the Electron app, because the
+ *   remote-desktop section is what a browser tab does not get (see
+ *   services/platform.ts). A tab therefore never asks for the machine list
+ *   either: `/api/v1/remote` is not in the web client's proxy table on purpose.
  */
 function ControlButtons({ share }: { share: VoiceShare }): JSX.Element {
   const machines = useRemoteStore((state) => state.machines);
@@ -324,12 +328,16 @@ function ControlButtons({ share }: { share: VoiceShare }): JSX.Element {
   const ask = useShareControlStore((state) => state.ask);
   const stop = useShareControlStore((state) => state.stop);
 
+  const onDesktop = isDesktopRuntime();
+
   useEffect(() => {
-    void load();
-  }, [load]);
+    if (onDesktop) void load();
+  }, [load, onDesktop]);
 
   const controlling = driving === share.identity;
-  const machine = machines.find((candidate) => candidate.ownerId === share.identity);
+  const machine = onDesktop
+    ? machines.find((candidate) => candidate.ownerId === share.identity)
+    : undefined;
 
   return (
     <>
