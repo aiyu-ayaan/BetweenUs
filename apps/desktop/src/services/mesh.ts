@@ -23,8 +23,12 @@
  * share never renegotiates: after the initial exchange, a call this size
  * usually never sends another offer.
  *
- * Both sides create the same four in the same order, so the m-lines match up by
- * position and each side's slot *n* is the other's slot *n*.
+ * Only one side creates them: the impolite one. The other adopts the four the
+ * offer brings with it - see `adopt`. Both sides creating their own is the
+ * shape this file had when a call connected, showed everybody, and carried no
+ * media at all: two sets of four m-lines that no offer could pair up, so every
+ * arriving track landed on a transceiver the receiving side did not recognise
+ * and was thrown away.
  *
  * ## Perfect negotiation
  *
@@ -78,6 +82,9 @@ const SLOT_KIND: Record<Slot, 'audio' | 'video'> = {
 
 /** How often remote audio levels are read, for the speaking ring. */
 const SPEAKING_POLL_MS = 200;
+
+/** Speaking polls per check of whether video is really arriving - so, a second. */
+const VIDEO_POLL_EVERY = 5;
 
 /**
  * Audio level above which somebody counts as speaking.
@@ -216,6 +223,17 @@ class PeerLink {
   private micEncoding: MicEncoding | null = null;
   private closed = false;
   /**
+   * What this client wants to be sending, held for the answering side: it has
+   * no senders until the offer arrives, and a microphone opened before that
+   * would otherwise be asked for once and never sent.
+   */
+  private readonly wanted = new Map<Slot, MediaStreamTrack | null>();
+  /** Remembered for the same reason: the screen slot may not exist yet. */
+  private shareCodec: SharePublish['videoCodec'] | null = null;
+  /** Frames decoded per video slot at the last look. See `pollVideo`. */
+  private readonly frames = new Map<Slot, number>();
+  private readonly liveVideo = new Set<Slot>();
+  /**
    * Candidates that arrived before there was a remote description to attach
    * them to.
    *
@@ -255,12 +273,15 @@ class PeerLink {
       bundlePolicy: 'max-bundle',
     });
 
-    // The four slots, in order, on both sides. Created before anything is
-    // negotiated, so the m-lines line up by position.
-    for (const slot of SLOTS) {
-      const transceiver = this.pc.addTransceiver(SLOT_KIND[slot], { direction: 'sendrecv' });
-      this.transceivers.set(slot, transceiver);
-      this.senders.set(slot, transceiver.sender);
+    // The four slots, in order - created by the offering side only. See
+    // `adopt`: creating them on both sides is what produced nine m-lines and a
+    // call where no media was ever received.
+    if (!this.polite) {
+      for (const slot of SLOTS) {
+        const transceiver = this.pc.addTransceiver(SLOT_KIND[slot], { direction: 'sendrecv' });
+        this.transceivers.set(slot, transceiver);
+        this.senders.set(slot, transceiver.sender);
+      }
     }
 
     // Negotiated on both sides with a fixed id, so neither has to wait for the
@@ -284,12 +305,24 @@ class PeerLink {
         this.setPlayoutDelay(event.receiver, PLAYOUT_DELAY.watching);
       }
 
-      this.events.onTrack(slot, event.track);
+      // Every slot produces a track whether or not anybody is sending on it,
+      // so a slot is empty until something actually arrives on it - otherwise
+      // a camera nobody turned on is a black rectangle where an avatar goes,
+      // and a screen nobody shared is announced to the whole call.
+      //
+      // What "actually arrives" means differs by kind. Audio is honest: the
+      // track is muted until packets come and `unmute` says when they do.
+      // Video is not - a receiver unmutes on the padding Chromium sends to
+      // probe for bandwidth, which is a screen share that never happened - so
+      // video is decided by frames decoded instead. See `pollVideo`.
+      if (SLOT_KIND[slot] === 'audio') {
+        this.events.onTrack(slot, event.track.muted ? null : event.track);
+        event.track.onmute = () => this.events.onTrack(slot, null);
+        event.track.onunmute = () => this.events.onTrack(slot, event.track);
+      }
       // A remote track that ends is a device switched off at the far end. The
       // slot stays; what was in it does not.
       event.track.onended = () => this.events.onTrack(slot, null);
-      event.track.onmute = () => this.events.onTrack(slot, null);
-      event.track.onunmute = () => this.events.onTrack(slot, event.track);
     };
 
     this.pc.onicecandidate = ({ candidate }) => {
@@ -306,6 +339,11 @@ class PeerLink {
     };
 
     this.pc.onnegotiationneeded = () => {
+      // The first offer is the impolite side's, always. The polite side has
+      // nothing to describe yet - its transceivers come from that offer - and
+      // an offer from here before one has arrived is the glare that used to
+      // leave both ends with two sets of m-lines that never paired up.
+      if (this.polite && !this.pc.remoteDescription) return;
       void this.offer();
     };
 
@@ -337,11 +375,53 @@ class PeerLink {
     }
   }
 
+  /**
+   * Which slot a transceiver is, by position.
+   *
+   * Position rather than object identity because `ontrack` fires *during*
+   * `setRemoteDescription`, before the answering side has had a chance to write
+   * anything down - and on that side the transceivers were created by the
+   * description itself, in m-line order, which is the same order as `SLOTS`.
+   */
   private slotOf(transceiver: RTCRtpTransceiver): Slot | null {
-    for (const [slot, candidate] of this.transceivers) {
-      if (candidate === transceiver) return slot;
+    return SLOTS[this.pc.getTransceivers().indexOf(transceiver)] ?? null;
+  }
+
+  /**
+   * The answering side takes ownership of the transceivers the offer created.
+   *
+   * Both sides used to create their own four, and then neither offer could be
+   * matched to the other's: each connection ended up with eight transceivers
+   * and nine m-lines, every one of them one-directional, and every arriving
+   * track on a transceiver this side had never heard of. Media was negotiated
+   * and then dropped on the floor - a call that connects, shows everybody, and
+   * carries nothing.
+   *
+   * So only the impolite side creates them, and the polite side adopts what the
+   * offer brought. They arrive `recvonly`, which is the direction that would
+   * make this end permanently silent, so they are flipped before the answer is
+   * written - and whatever this client is already capturing goes on immediately,
+   * because it was asked for while there was no sender to put it on.
+   */
+  private async adopt(): Promise<void> {
+    if (this.transceivers.size > 0) return;
+
+    const found = this.pc.getTransceivers();
+    for (const [index, slot] of SLOTS.entries()) {
+      const transceiver = found[index];
+      if (!transceiver || transceiver.receiver.track?.kind !== SLOT_KIND[slot]) return;
     }
-    return null;
+
+    for (const [index, slot] of SLOTS.entries()) {
+      const transceiver = found[index] as RTCRtpTransceiver;
+      transceiver.direction = 'sendrecv';
+      this.transceivers.set(slot, transceiver);
+      this.senders.set(slot, transceiver.sender);
+    }
+
+    if (this.shareCodec) this.preferShareCodec(this.shareCodec);
+    for (const [slot, track] of this.wanted) await this.setTrack(slot, track);
+    if (this.micEncoding) await this.tune('mic', { maxBitrate: this.micEncoding.maxBitrate });
   }
 
   /**
@@ -480,6 +560,9 @@ class PeerLink {
       await this.flushCandidates();
 
       if (signal.kind === 'offer') {
+        // Before the answer is written: the directions it carries are the ones
+        // decided here.
+        await this.adopt();
         await this.setLocalDescription('answer');
         await this.sendDescription();
       }
@@ -495,7 +578,10 @@ class PeerLink {
    * makes toggling a microphone free.
    */
   async setTrack(slot: Slot, track: MediaStreamTrack | null): Promise<void> {
+    this.wanted.set(slot, track);
     const sender = this.senders.get(slot);
+    // No sender yet means this side is still waiting for the offer that makes
+    // one. `adopt` plays this back.
     if (!sender) return;
     await sender.replaceTrack(track).catch(() => undefined);
   }
@@ -538,6 +624,7 @@ class PeerLink {
    * 1080p60 possible. Ignored where the codec is unavailable.
    */
   preferShareCodec(codec: SharePublish['videoCodec']): void {
+    this.shareCodec = codec;
     const transceiver = this.transceivers.get('screen');
     if (!transceiver?.setCodecPreferences) return;
 
@@ -551,6 +638,42 @@ class PeerLink {
       transceiver.setCodecPreferences([...wanted, ...rest]);
     } catch {
       // Codec preferences are an optimisation; the call works without them.
+    }
+  }
+
+  /**
+   * Whether a camera and a screen are really arriving, by counting frames.
+   *
+   * Nothing a video receiver *says* is trustworthy here: it unmutes on padding
+   * packets and stays unmuted after the far end stops sending, so both a share
+   * that never started and one that has ended look live. Frames decoded since
+   * the last look do not lie in either direction, which is what makes this
+   * poll worth its cost - one `getStats` per peer per second.
+   */
+  async pollVideo(): Promise<void> {
+    if (this.closed) return;
+
+    const decoded = new Map<string, number>();
+    (await this.pc.getStats()).forEach((report) => {
+      const entry = report as RTCInboundRtpStreamStats & { mid?: string; framesDecoded?: number };
+      if (entry.type === 'inbound-rtp' && entry.kind === 'video' && entry.mid) {
+        decoded.set(entry.mid, entry.framesDecoded ?? 0);
+      }
+    });
+
+    for (const slot of ['camera', 'screen'] as const) {
+      const transceiver = this.transceivers.get(slot);
+      const track = transceiver?.receiver.track;
+      if (!transceiver?.mid || !track) continue;
+
+      const frames = decoded.get(transceiver.mid) ?? 0;
+      const moving = frames > (this.frames.get(slot) ?? 0);
+      this.frames.set(slot, frames);
+
+      if (moving === this.liveVideo.has(slot)) continue;
+      if (moving) this.liveVideo.add(slot);
+      else this.liveVideo.delete(slot);
+      this.events.onTrack(slot, moving ? track : null);
     }
   }
 
@@ -821,7 +944,15 @@ export class Mesh {
    * second is both cheap and faster than a person notices.
    */
   private startSpeakingPoll(): void {
+    let tick = 0;
     this.speakingTimer = window.setInterval(() => {
+      // A fifth as often as the speaking ring: a share appearing a beat late is
+      // invisible next to the second it takes to pick a window, and `getStats`
+      // is not free.
+      if (++tick % VIDEO_POLL_EVERY === 0) {
+        for (const link of this.links.values()) void link.pollVideo();
+      }
+
       const speaking = new Set<string>();
       if (this.localSpeaking) speaking.add('local');
       for (const link of this.links.values()) {
