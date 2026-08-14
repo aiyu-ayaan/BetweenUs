@@ -309,7 +309,25 @@ services:
     # note in docker-compose.dev.yml.
     image: livekit/livekit-server:v1.13.5
     restart: unless-stopped
-    command: ["--config", "/etc/livekit.yaml"]
+    # The address the SFU puts in its ICE candidates, which is the address every
+    # client will try to send media to. Left alone it advertises the address it
+    # sees on itself - a Docker bridge address like 172.29.0.2 - and no client is
+    # on that network. Signalling still succeeds, because that goes through the
+    # gateway, so a join negotiates all the way to media and then sits there
+    # until the client gives up with "Connection to voice server timed out".
+    #
+    # Required rather than defaulted, for the same reason as the keys below:
+    # there is no answer that is right for every deployment, and a wrong one is
+    # invisible until somebody tries to talk. It is the address clients reach
+    # this host on - a LAN address for a machine on a network, the public
+    # address for a server that has one. Note that media does NOT go through a
+    # Cloudflare tunnel: WebRTC needs 7881/tcp and the UDP range published below
+    # reachable at whatever this says.
+    command:
+      - "--config"
+      - "/etc/livekit.yaml"
+      - "--node-ip"
+      - "${LIVEKIT_NODE_IP:?LIVEKIT_NODE_IP is required - the address clients reach this host on, e.g. 192.168.1.115. Without it the SFU advertises its Docker bridge address and every call times out}"
     environment:
       # Overrides the key pair in the mounted config file. LiveKit parses this
       # as YAML, so the secret is single-quoted: an unquoted scalar loses a
