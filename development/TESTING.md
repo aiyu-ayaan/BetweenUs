@@ -366,6 +366,32 @@ paths are the ones where the person connecting is *not* the owner.
    still appears for that account, then wait past it: the machine leaves their
    list and a session is refused with 404.
 
+## A call that follows you
+
+Two accounts in one voice channel, as usual. Everything here is about the call
+outliving the screen it was started on.
+
+1. **Walk away from the call.** While connected, switch to another server, open
+   a direct message, open the Friends screen, open Settings. The voice panel
+   stays at the bottom of whichever sidebar is showing, and — the part that used
+   to break — you keep *hearing* the other person the whole way. Silence while
+   the panel still says "Voice connected" is the failure this section exists
+   for.
+2. **Get back to it.** Click the channel name in the panel from another server.
+   It loads that server and opens the call's channel, cameras and shared screens
+   included.
+3. **Two devices, one account.** Sign in as the same account in a browser tab
+   (`pnpm dev:web`) and in the Electron window. Join a call from the desktop,
+   then join any call from the tab. The desktop call ends and says "This call
+   moved to another device — you joined it there", the other participant sees
+   the desktop peer leave, and only the tab is in the room. Join again from the
+   desktop and the call moves back the same way. What must never happen is both
+   being in the call at once, which sounds like the account echoing itself.
+4. **Closing a tab mid-call.** With a call up in the browser, close the tab or
+   press reload: the browser asks to confirm. Hang up first and it closes
+   without a word. The Electron window is deliberately not in this — it has a
+   tray behind it.
+
 ## Watching something together
 
 1. **Pick the right trade.** Share with **Video and motion** and play something
@@ -540,7 +566,8 @@ share encoder profiles and their bitrate ceilings, the microphone profiles and
 the noise gate (including compiling the worklet that gate's own source is
 spliced into), the ICE configuration a client is handed (STUN is never absent,
 and an unconfigured deployment relays nothing), the DTLS fingerprint signature
-that stops the signalling server standing in the middle of a call, and
+that stops the signalling server standing in the middle of a call, the scan
+that keeps one account in one call across every device it is signed in on, and
 `AuthService` against an in-memory database (register, login, refresh
 rotation, reuse detection, logout).
 
@@ -599,6 +626,10 @@ is worth checking is only where the two runtimes differ.
   machine. The reverse is refused on purpose — share from the tab and the
   desktop client is told "control is not supported on that machine", because
   nothing in a browser can move the host's mouse.
+- **A live call blocks a stray close.** With a call up, closing or reloading the
+  tab raises the browser's own "leave site?" dialog; the desktop app has no such
+  prompt. Joining a call in the tab also ends the same account's call in the
+  Electron window — see "A call that follows you" above.
 - **Notifications.** The first message that arrives while the tab is in the
   background asks for permission and raises nothing; allow it and the next one
   appears, and clicking it focuses the tab on that channel. The unread count

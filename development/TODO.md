@@ -26,6 +26,38 @@ somebody does that, treat phase 24 as unverified rather than done.
 The container stack has still never been run end to end, which now matters more
 rather than less: the compose file changed shape.
 
+Phase 25 sits on top of it: the call now survives being navigated away from,
+follows the account to whichever device joined last, and warns before a browser
+tab carrying one is closed. It is also unverified in front of a human, and its
+two cases are cheap to try - `pnpm dev:duo` plus a browser tab signed in as one
+of the same accounts.
+
+### Phase 25 — the call follows the account
+
+- [x] `CallAudio`: every remote audio track mounted once at the root of the
+      workbench, so switching servers or opening the home screen cannot unmount
+      the call's ears
+- [x] `stores/voice.ts`: the call's channel name and server recorded at join -
+      `chat.channels` is per server, and a call outlives switching away from it
+- [x] `VoicePanel` mounted in the home sidebar as well as the server one, with
+      the channel name a button that loads that server and reopens the call
+- [x] `leave(reason?)`: a call ended by something other than the user keeps the
+      reason, where the old path set an error and then cleared it a line later
+- [x] `call-service`: one call per account across devices - the other
+      connections of that account are evicted on join, sent `superseded` first,
+      and left open so joining again moves the call back
+- [x] `shared-types`: the `superseded` server event
+- [x] `mesh.ts`: `superseded` ends the call with "this call moved to another
+      device" instead of "the connection was lost"
+- [x] `call-service`: a self-check over the eviction scan (`devices.check.ts`) -
+      the service's first, so `pnpm check` now covers it
+- [x] Web: `beforeunload` while a call is up, so closing the tab asks first;
+      desktop deliberately excluded
+- [ ] **Unverified in front of a human.** Two devices on one account - the tab
+      and the Electron window - joining the same call in turn, and a call left
+      running while the client is driven around the app. See "A call that
+      follows you" in `TESTING.md`.
+
 ### Phase 24 — peer-to-peer media
 
 Signalling:

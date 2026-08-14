@@ -29,12 +29,52 @@ we get there in stages and what each stage delivers.
 | 18 | Production ingress | Cloudflare Tunnel (host or container), gateway healthcheck, image pipeline | In progress |
 | 23 | Web client | `apps/web`: the same UI in a browser at the root of the gateway, without the remote-desktop section | In progress |
 | 24 | Peer-to-peer media | LiveKit removed; `/ws/call` signalling, a WebRTC mesh for calls, a direct peer connection for remote desktop | In progress |
+| 25 | The call follows the account | Call survives navigating anywhere in the client, one call per account across devices, a browser prompt before a tab with a live call closes | In progress |
 
 Hardening moved to phase 10: encryption changes the message format and presence
 adds a service, so both were cheaper to land before tests were written against
 the older shape.
 
 ## Architecture decisions made so far
+
+### The call follows the account (phase 25)
+
+Phase 24 made a call a set of peer connections owned by a store. Phase 25 makes
+the rest of the client behave as though that were true.
+
+- **A call is a connection, not a screen.** The audio sinks used to live inside
+  the sidebar's voice panel, and the home screen swaps the whole sidebar out -
+  so opening a direct message or switching servers unmounted every `<audio>`
+  element and the call went silent while still connected by every other
+  measure. They now live in `CallAudio`, mounted once at the root of the
+  workbench and never unmounted. Nothing below the root may own a piece of the
+  call.
+
+- **The call remembers where it is; the channel list does not.** `chat.channels`
+  holds the *current* server's channels, which is exactly the thing a call
+  outlives, so the voice store records the channel's name and server at join.
+  That is what lets the panel say where you are from another server, and what
+  makes the name a button that loads the server back and reopens the call.
+
+- **One call per account, across devices.** A peer id stays per socket - two
+  windows really are two ends of two different peer connections, and collapsing
+  them is what the phase-24 design deliberately avoided. What is limited is the
+  *person*: `call-service` evicts an account's other connections when it joins
+  a call, in that channel or any other, so joining on the laptop takes the call
+  off the desktop instead of putting one person in the room twice with two
+  microphones. The evicted device gets `superseded` before it is dropped, so it
+  can say the call moved rather than reporting a lost connection, and its socket
+  stays open so joining again simply moves the call back.
+
+  Enforcing this in the gateway rather than the client is the point: the client
+  that has to be told to leave is the one that has already stopped being
+  trusted to.
+
+- **The web client asks before the tab closes.** Closing or reloading a tab
+  takes every peer connection with it and there is no undo, so a `beforeunload`
+  handler is registered for exactly as long as a call is up. Desktop is excluded
+  - a window that closes has a tray and a main process behind it - which is the
+  same runtime split `services/platform.ts` draws everywhere else.
 
 ### Peer-to-peer media (phase 24)
 
