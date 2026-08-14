@@ -8,7 +8,7 @@
  * Run with: pnpm --filter @nexora/desktop check
  */
 import assert from 'node:assert/strict';
-import { api, configureApi } from './api';
+import { ApiError, api, configureApi } from './api';
 
 interface Call {
   url: string;
@@ -69,9 +69,48 @@ async function refreshItselfNeverWaitsOnAToken(): Promise<void> {
   assert.equal(calls[0]?.authorization, null, 'the refresh call carries no bearer token');
 }
 
+/** Answers every call with one body, whatever it was asked for. */
+function stubBody(body: string, contentType: string, status = 200): void {
+  globalThis.fetch = (() =>
+    Promise.resolve(new Response(body, { status, headers: { 'Content-Type': contentType } }))) as typeof fetch;
+  configureApi(
+    () => 'token',
+    () => Promise.resolve('token'),
+  );
+}
+
+/**
+ * The bug this pins down: the web dev server answers a route missing from its
+ * proxy table with `index.html` - a 200 carrying HTML. That used to be swallowed
+ * into `null` and returned as whatever the caller's type said, so the remote
+ * store kept `null` where it had promised an array and the first render that
+ * called `.find` on it unmounted React's whole tree - a blank window, with the
+ * real cause three layers away.
+ */
+async function anHtmlTwoHundredIsAFailure(): Promise<void> {
+  stubBody('<!doctype html><title>Nexora</title>', 'text/html');
+
+  await assert.rejects(
+    () => api.machines(),
+    (error: unknown) =>
+      error instanceof ApiError &&
+      error.code === 'INVALID_RESPONSE' &&
+      error.message.includes('/api/v1/remote/machines'),
+    'a 200 that is not JSON must be an error, not data',
+  );
+}
+
+/** An empty 200 is still a 200: a few routes acknowledge a write that way. */
+async function anEmptyTwoHundredIsNotAFailure(): Promise<void> {
+  stubBody('', 'application/json');
+  await api.removeFriend('someone');
+}
+
 async function main(): Promise<void> {
   await parallelCallsShareOneRefresh();
   await refreshItselfNeverWaitsOnAToken();
+  await anHtmlTwoHundredIsAFailure();
+  await anEmptyTwoHundredIsNotAFailure();
   console.log('api.check.ts: ok');
 }
 

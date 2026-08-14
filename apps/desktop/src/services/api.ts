@@ -93,6 +93,46 @@ async function bearer(): Promise<string | null> {
   return minting;
 }
 
+/**
+ * A reply's body, and whether it was JSON at all.
+ *
+ * An empty body is reported as JSON holding `null`: a 200 with nothing in it is
+ * how a few routes acknowledge a write, and no caller reads a field off that.
+ * A body that is present and unparseable is the case worth separating - see
+ * `requirePayload`.
+ */
+async function payloadOf(response: Response): Promise<{ value: unknown; json: boolean }> {
+  const body = await response.text();
+  if (!body) return { value: null, json: true };
+  try {
+    return { value: JSON.parse(body) as unknown, json: true };
+  } catch {
+    return { value: null, json: false };
+  }
+}
+
+/**
+ * A 200 whose body is not JSON is a failed request, not data.
+ *
+ * Nothing that answers this app replies to a successful call with anything but
+ * JSON, so such a reply did not come from a service at all: in development the
+ * web dev server answers a route missing from its proxy table with `index.html`
+ * - and `/api/v1/remote` is deliberately missing from it, because the web
+ * client has no remote-desktop section. That used to be swallowed into `null`
+ * and returned as whatever type the caller asked for, so a store kept `null`
+ * where it had promised an array and the first render that read a field off it
+ * threw - which unmounts React's whole tree and leaves a blank window. Far
+ * better to fail where the reply arrived, with the path that produced it.
+ */
+function requirePayload(path: string, response: Response, body: { value: unknown; json: boolean }): unknown {
+  if (body.json) return body.value;
+  throw new ApiError(
+    'INVALID_RESPONSE',
+    `${path} answered ${response.status} with something that is not JSON`,
+    response.status,
+  );
+}
+
 async function send<T>(path: string, init: RequestInit, token: string | null): Promise<T> {
   const response = await fetch(`${serverUrl()}${path}`, {
     ...init,
@@ -105,18 +145,18 @@ async function send<T>(path: string, init: RequestInit, token: string | null): P
 
   if (response.status === 204) return undefined as T;
 
-  const payload: unknown = await response.json().catch(() => null);
+  const body = await payloadOf(response);
 
   if (!response.ok) {
-    const body = payload as ApiErrorBody | null;
+    const failure = body.value as ApiErrorBody | null;
     throw new ApiError(
-      body?.error?.code ?? 'REQUEST_FAILED',
-      body?.error?.message ?? 'Request failed',
+      failure?.error?.code ?? 'REQUEST_FAILED',
+      failure?.error?.message ?? 'Request failed',
       response.status,
     );
   }
 
-  return payload as T;
+  return requirePayload(path, response, body) as T;
 }
 
 async function request<T>(path: string, init: RequestInit = {}, retry = true): Promise<T> {
@@ -154,18 +194,18 @@ async function upload<T>(path: string, form: FormData, retry = true): Promise<T>
     if (refreshed) return upload<T>(path, form, false);
   }
 
-  const payload: unknown = await response.json().catch(() => null);
+  const body = await payloadOf(response);
 
   if (!response.ok) {
-    const body = payload as ApiErrorBody | null;
+    const failure = body.value as ApiErrorBody | null;
     throw new ApiError(
-      body?.error?.code ?? 'UPLOAD_FAILED',
-      body?.error?.message ?? 'The upload failed',
+      failure?.error?.code ?? 'UPLOAD_FAILED',
+      failure?.error?.message ?? 'The upload failed',
       response.status,
     );
   }
 
-  return payload as T;
+  return requirePayload(path, response, body) as T;
 }
 
 /** Where the browser has to reach this deployment; `/start` is opened there. */
