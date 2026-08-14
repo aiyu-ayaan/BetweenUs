@@ -1,16 +1,14 @@
 # Nexora
 
-A Discord-like communication platform with secure remote desktop access, built
-as a pnpm + Turborepo monorepo of independently deployable NestJS services and
-an Electron desktop client.
+<p align="center">
+  <img src="pictures/home.png" alt="Nexora Client Preview" width="100%" />
+</p>
 
-Messages, attachments and call media are end-to-end encrypted: the server
-stores ciphertext and routes it, and never holds a key that opens it.
+A modern, secure communication platform with end-to-end encrypted messaging, peer-to-peer (P2P) WebRTC voice/video channels, interactive screen sharing, picture-in-picture, and remote desktop access. Built as a high-performance pnpm + Turborepo monorepo of NestJS microservices and an Electron / Web client.
 
-`CLAUDE.md` is the target architecture. `development/` tracks what is built,
-why each decision was taken, and what is deliberately left open. `DEPLOYMENT.md`
-is the step-by-step for putting it on a server: secrets, the first
-administrator, public ingress, and why each endpoint has to be on the tunnel.
+Messages, attachments, and call media are end-to-end encrypted: the server stores and routes ciphertext, never holding any key that can decrypt it. Voice, video, and screen sharing stream directly between participants via a peer-to-peer WebRTC mesh with DTLS-SRTP encryption — requiring zero media server infrastructure.
+
+`CLAUDE.md` is the target architecture. `development/` tracks what is built, why each decision was taken, and what is deliberately left open. `DEPLOYMENT.md` is the step-by-step guide for deploying on a server with Docker Compose, Cloudflare Tunnels, and STUN/TURN relays.
 
 ---
 

@@ -211,12 +211,9 @@ on the same network and fails between two particular networks, that is this,
 and it is one environment variable and a `docker compose up -d call-service`
 away.
 
-> There used to be a long section here about `LIVEKIT_NODE_IP`,
-> `use_external_ip`, rotating keys between the SFU and call-service, keeping the
-> server image in step with the client, and opening `7881/tcp` plus a UDP range
-> on the host firewall and the cloud security group. All of it is gone with the
-> SFU. If you are upgrading a deployment that had those ports open, you can
-> close them.
+> [!TIP]
+> **Zero Media Server / No LiveKit Infrastructure:**
+> Nexora uses a direct peer-to-peer (P2P) WebRTC mesh for voice, video, and screen sharing. There is no SFU (such as LiveKit), no extra media port ranges to open on your firewall (`7881/tcp` or UDP ranges), and no external IP binding required on the host. If upgrading from an older deployment that had media ports open, you can safely close them.
 
 ---
 
