@@ -418,9 +418,28 @@ function Theatre({ share, tiles }: { share: VoiceShare; tiles: Stage[] }): JSX.E
 
         {/* Fullscreen Main Content Area (Side Gallery and Center Stage) */}
         <div className="relative flex min-h-0 flex-1 flex-row items-center justify-center overflow-hidden bg-black w-full h-full">
+          {/* Floating Show Cameras pill when hidden */}
+          {!showParticipants && (
+            <button
+              type="button"
+              onClick={() => setShowParticipants(true)}
+              title="Show cameras alongside stream"
+              className={`absolute left-4 top-20 z-20 flex items-center gap-1.5 rounded-full border border-white/10 bg-black/70 px-3.5 py-1.5 text-xs font-semibold text-slate-200 backdrop-blur-md shadow-xl transition-all duration-300 hover:bg-white/20 hover:text-white active:scale-95 ${
+                showControls ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-4 pointer-events-none'
+              }`}
+            >
+              <UsersIcon className="h-3.5 w-3.5" />
+              <span>Show cameras ({tiles.length})</span>
+            </button>
+          )}
+
           {layout === 'side-left' && showParticipants && (
             <div className="z-20 h-full p-4 flex flex-col justify-center">
-              <SideGallery tiles={tiles} isFullscreen />
+              <SideGallery
+                tiles={tiles}
+                isFullscreen
+                onClose={() => setShowParticipants(false)}
+              />
             </div>
           )}
 
@@ -436,7 +455,11 @@ function Theatre({ share, tiles }: { share: VoiceShare; tiles: Stage[] }): JSX.E
 
           {layout === 'side-right' && showParticipants && (
             <div className="z-20 h-full p-4 flex flex-col justify-center">
-              <SideGallery tiles={tiles} isFullscreen />
+              <SideGallery
+                tiles={tiles}
+                isFullscreen
+                onClose={() => setShowParticipants(false)}
+              />
             </div>
           )}
         </div>
@@ -470,7 +493,9 @@ function Theatre({ share, tiles }: { share: VoiceShare; tiles: Stage[] }): JSX.E
     <div className="flex min-h-0 flex-1 flex-col gap-3">
       <div className="flex min-h-0 flex-1 flex-row gap-3">
         {/* Left Side Gallery (Teams / Meet style) */}
-        {layout === 'side-left' && showParticipants && <SideGallery tiles={tiles} />}
+        {layout === 'side-left' && showParticipants && (
+          <SideGallery tiles={tiles} onClose={() => setShowParticipants(false)} />
+        )}
 
         {/* Center Screen Share Stage */}
         <div className="relative min-h-0 flex-1 overflow-hidden rounded-lg bg-black">
@@ -486,6 +511,19 @@ function Theatre({ share, tiles }: { share: VoiceShare; tiles: Stage[] }): JSX.E
             {share.isLocal ? 'Your screen' : `${share.name}'s screen`}
           </p>
 
+          {/* Floating Show Cameras pill in normal view when hidden */}
+          {!showParticipants && (
+            <button
+              type="button"
+              onClick={() => setShowParticipants(true)}
+              title="Show cameras alongside stream"
+              className="absolute left-2 top-10 z-10 flex items-center gap-1.5 rounded-full border border-white/10 bg-black/70 px-3 py-1 text-xs font-medium text-slate-200 backdrop-blur-md shadow-lg transition-all duration-200 hover:bg-white/20 hover:text-white"
+            >
+              <UsersIcon className="h-3.5 w-3.5" />
+              <span>Show cameras ({tiles.length})</span>
+            </button>
+          )}
+
           <div className="absolute right-2 top-2 flex gap-2">
             {!share.isLocal && <ControlButtons share={share} />}
             {share.isLocal && (
@@ -497,6 +535,23 @@ function Theatre({ share, tiles }: { share: VoiceShare; tiles: Stage[] }): JSX.E
                 Stop sharing
               </button>
             )}
+            <button
+              type="button"
+              onClick={() => setShowParticipants((prev) => !prev)}
+              aria-label={showParticipants ? 'Hide cameras' : 'Show cameras'}
+              title={showParticipants ? 'Hide cameras' : 'Show cameras'}
+              className={`flex cursor-pointer items-center gap-1.5 rounded-md border border-white/10 px-2.5 py-1 text-xs font-medium backdrop-blur-md shadow-md transition-all duration-200 active:scale-95 ${
+                showParticipants
+                  ? 'bg-white/15 text-white'
+                  : 'bg-black/60 text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <UsersIcon className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">
+                {showParticipants ? 'Hide cameras' : 'Cameras'}
+              </span>
+              <span>({tiles.length})</span>
+            </button>
             <button
               type="button"
               onClick={cycleLayout}
@@ -541,7 +596,9 @@ function Theatre({ share, tiles }: { share: VoiceShare; tiles: Stage[] }): JSX.E
         </div>
 
         {/* Right Side Gallery */}
-        {layout === 'side-right' && showParticipants && <SideGallery tiles={tiles} />}
+        {layout === 'side-right' && showParticipants && (
+          <SideGallery tiles={tiles} onClose={() => setShowParticipants(false)} />
+        )}
       </div>
 
       {/* Bottom Filmstrip (when layout is set to 'bottom') */}
@@ -562,24 +619,42 @@ function Theatre({ share, tiles }: { share: VoiceShare; tiles: Stage[] }): JSX.E
 function SideGallery({
   tiles,
   isFullscreen = false,
+  onClose,
 }: {
   tiles: Stage[];
   isFullscreen?: boolean;
+  onClose?: () => void;
 }): JSX.Element {
   return (
-    <ul
-      className={`flex flex-col gap-2.5 overflow-y-auto max-h-full shrink-0 ${
+    <div
+      className={`flex flex-col gap-2 overflow-hidden max-h-full shrink-0 ${
         isFullscreen
           ? 'w-64 sm:w-72 md:w-80 rounded-2xl border border-white/10 bg-black/70 p-2.5 backdrop-blur-md shadow-2xl'
           : 'w-56 sm:w-64 md:w-72 rounded-lg border border-white/10 bg-surface-900/80 p-2 backdrop-blur-sm'
       }`}
     >
-      {tiles.map((tile) => (
-        <li key={tile.key} className="w-full shrink-0">
-          <StageTile tile={tile} />
-        </li>
-      ))}
-    </ul>
+      {onClose && (
+        <div className="flex items-center justify-between pb-1 px-1 border-b border-white/10 text-slate-300 text-xs">
+          <span className="font-semibold text-slate-200">Cameras ({tiles.length})</span>
+          <button
+            type="button"
+            onClick={onClose}
+            title="Hide cameras to make stream full screen"
+            className="flex items-center gap-1 text-[11px] font-medium text-slate-400 hover:text-white rounded px-1.5 py-0.5 hover:bg-white/10 transition-colors cursor-pointer"
+          >
+            <span>Hide</span>
+            <ChevronLeftIcon className="h-3 w-3" />
+          </button>
+        </div>
+      )}
+      <ul className="flex flex-col gap-2.5 overflow-y-auto max-h-full pr-0.5">
+        {tiles.map((tile) => (
+          <li key={tile.key} className="w-full shrink-0">
+            <StageTile tile={tile} />
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 
