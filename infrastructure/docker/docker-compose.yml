@@ -270,6 +270,13 @@ services:
       LIVEKIT_INTERNAL_URL: ${LIVEKIT_INTERNAL_URL:-http://livekit:7880}
       LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:?LIVEKIT_API_KEY is required}
       LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:?LIVEKIT_API_SECRET is required}
+      # Relays for clients that are not on the SFU's own network, minted per
+      # call. Optional: a deployment whose clients are all local needs none, and
+      # unset means the client uses its own defaults. The key never leaves this
+      # service - only the short-lived credentials it mints are handed out.
+      CLOUDFLARE_TURN_KEY_ID: ${CLOUDFLARE_TURN_KEY_ID:-}
+      CLOUDFLARE_TURN_KEY_API_TOKEN: ${CLOUDFLARE_TURN_KEY_API_TOKEN:-}
+      CLOUDFLARE_TURN_TTL_SECONDS: ${CLOUDFLARE_TURN_TTL_SECONDS:-86400}
     depends_on:
       migrate:
         condition: service_completed_successfully

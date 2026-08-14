@@ -538,6 +538,26 @@ export interface CallTokenResponse {
   token: string;
   room: string;
   identity: string;
+  /**
+   * Relays for a client that cannot reach the SFU directly, when the deployment
+   * has any. Empty or absent means the client uses whatever its browser
+   * defaults to, which is what a LAN-only deployment wants.
+   *
+   * A self-hosted SFU behind a home router is reachable from its own network and
+   * from nowhere else: signalling arrives through the gateway, media negotiates
+   * to an address the outside world has no route to, and the call times out.
+   * These are short-lived credentials for a public relay, minted per request, so
+   * both ends can meet somewhere they can both reach. The media stays end-to-end
+   * encrypted across it - a relay forwards packets it cannot read.
+   */
+  iceServers?: IceServer[];
+}
+
+/** One entry of a WebRTC `RTCConfiguration.iceServers`. */
+export interface IceServer {
+  urls: string[];
+  username?: string;
+  credential?: string;
 }
 
 // --- Presence ---

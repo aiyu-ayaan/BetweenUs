@@ -7,7 +7,7 @@
     "build": "nest build",
     "dev": "nest start --watch",
     "start": "node dist/main.js",
-    "check": "tsx src/livekit-check.check.ts",
+    "check": "tsx src/livekit-check.check.ts && tsx src/turn.check.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {

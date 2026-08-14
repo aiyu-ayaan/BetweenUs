@@ -17,6 +17,7 @@ import { resolveChannelAccess } from '@nexora/database';
 import { PERMISSIONS } from '@nexora/permissions';
 import type { CallTokenResponse } from '@nexora/shared-types';
 import { livekitKeyStatusForJoin } from '../../livekit-check';
+import { iceServers } from '../../turn';
 
 const TOKEN_TTL = '2h';
 
@@ -95,7 +96,15 @@ export class CallsService {
       canPublishData: true,
     });
 
-    return { url, token: await grant.toJwt(), room, identity: user.id };
+    // Relays for whoever is not on the SFU's own network. Empty on a deployment
+    // that has none configured, which is every LAN-only one.
+    return {
+      url,
+      token: await grant.toJwt(),
+      room,
+      identity: user.id,
+      iceServers: await iceServers(),
+    };
   }
 
   /**

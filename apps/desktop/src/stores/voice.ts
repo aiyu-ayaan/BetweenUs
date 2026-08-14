@@ -248,7 +248,15 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
           }
         });
 
-      const connectPromise = room.connect(livekitUrl, credentials.token);
+      // Relays, when the deployment has any. A self-hosted SFU is reachable on
+      // its own network and nowhere else, so a client on another network needs
+      // somewhere both ends can meet; without this the join reaches "joined,
+      // no media" and dies of the race below. `iceTransportPolicy` is
+      // deliberately not set to 'relay': a direct path is better whenever there
+      // is one, and on the SFU's own network there always is.
+      const connectPromise = room.connect(livekitUrl, credentials.token, {
+        ...(credentials.iceServers?.length ? { rtcConfig: { iceServers: credentials.iceServers } } : {}),
+      });
       const timeoutPromise = new Promise<never>((_, reject) =>
         setTimeout(() => reject(new Error('Connection to voice server timed out')), 15_000),
       );
