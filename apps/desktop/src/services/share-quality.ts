@@ -265,9 +265,9 @@ export function patchVideoBandwidth(sdp: string, publish?: SharePublish | null):
  * compression efficiency over baseline profile.
  */
 export function sortPreferredVideoCodecs(
-  codecs: RTCRtpCodecCapability[],
+  codecs: RTCRtpCodec[],
   preferred: SharePublish['videoCodec'],
-): RTCRtpCodecCapability[] {
+): RTCRtpCodec[] {
   const target = preferred.toLowerCase();
   const matched = codecs.filter((c) => c.mimeType.toLowerCase().endsWith(`/${target}`));
   const others = codecs.filter((c) => !c.mimeType.toLowerCase().endsWith(`/${target}`));

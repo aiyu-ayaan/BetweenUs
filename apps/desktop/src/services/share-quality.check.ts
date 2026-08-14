@@ -105,7 +105,7 @@ const mockCodecs = [
   { mimeType: 'video/VP8', clockRate: 90000 },
   { mimeType: 'video/H264', clockRate: 90000, sdpFmtpLine: 'profile-level-id=42e01f' },
   { mimeType: 'video/H264', clockRate: 90000, sdpFmtpLine: 'profile-level-id=640032;packetization-mode=1' },
-] as RTCRtpCodecCapability[];
+] as RTCRtpCodec[];
 
 const sorted = sortPreferredVideoCodecs(mockCodecs, 'H264');
 assert.equal(sorted[0]?.sdpFmtpLine, 'profile-level-id=640032;packetization-mode=1');
