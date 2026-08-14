@@ -369,3 +369,17 @@ export const MinimizeIcon = (props: IconProps): JSX.Element => (
     <path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3" />
   </Base>
 );
+
+export const LayoutSidebarIcon = (props: IconProps): JSX.Element => (
+  <Base {...props}>
+    <rect x="3" y="3" width="18" height="18" rx="2" />
+    <path d="M9 3v18" />
+  </Base>
+);
+
+export const LayoutBottomIcon = (props: IconProps): JSX.Element => (
+  <Base {...props}>
+    <rect x="3" y="3" width="18" height="18" rx="2" />
+    <path d="M3 15h18" />
+  </Base>
+);

@@ -34,6 +34,8 @@ import { ShareStage } from './ShareStage';
 import {
   ChevronLeftIcon,
   ChevronRightIcon,
+  LayoutBottomIcon,
+  LayoutSidebarIcon,
   LockIcon,
   MaximizeIcon,
   MicOffIcon,
@@ -247,13 +249,16 @@ function ShareBanners({
   );
 }
 
-/** One shared screen big, everyone else small underneath. Movie night. */
+type LayoutMode = 'side-left' | 'side-right' | 'bottom';
+
+/** One shared screen big, everyone else small underneath or in a side rail. Movie night. */
 function Theatre({ share, tiles }: { share: VoiceShare; tiles: Stage[] }): JSX.Element {
   const watch = useVoiceStore((state) => state.watch);
   const stopScreenShare = useVoiceStore((state) => state.stopScreenShare);
   const [fullscreen, setFullscreen] = useState(false);
   const [showControls, setShowControls] = useState(true);
   const [showParticipants, setShowParticipants] = useState(true);
+  const [layout, setLayout] = useState<LayoutMode>('side-left');
   const hideTimerRef = useRef<number | null>(null);
 
   const resetHideTimer = useCallback(() => {
@@ -305,6 +310,12 @@ function Theatre({ share, tiles }: { share: VoiceShare; tiles: Stage[] }): JSX.E
     setFullscreen((prev) => !prev);
   };
 
+  const cycleLayout = (): void => {
+    setLayout((curr) =>
+      curr === 'side-left' ? 'side-right' : curr === 'side-right' ? 'bottom' : 'side-left',
+    );
+  };
+
   if (fullscreen) {
     return (
       <div
@@ -347,6 +358,29 @@ function Theatre({ share, tiles }: { share: VoiceShare; tiles: Stage[] }): JSX.E
             )}
             <button
               type="button"
+              onClick={cycleLayout}
+              title={`Layout: ${
+                layout === 'side-left'
+                  ? 'Left Side Gallery'
+                  : layout === 'side-right'
+                    ? 'Right Side Gallery'
+                    : 'Bottom Dock'
+              } (Click to switch)`}
+              className="flex cursor-pointer items-center gap-1.5 rounded-md border border-white/10 bg-black/60 px-3 py-1.5 text-xs font-medium text-slate-200 backdrop-blur-md shadow-md transition-all duration-200 hover:bg-white/10 active:scale-95"
+            >
+              {layout === 'side-left' ? (
+                <LayoutSidebarIcon className="h-3.5 w-3.5" />
+              ) : layout === 'side-right' ? (
+                <LayoutSidebarIcon className="h-3.5 w-3.5 scale-x-[-1]" />
+              ) : (
+                <LayoutBottomIcon className="h-3.5 w-3.5" />
+              )}
+              <span className="hidden sm:inline">
+                {layout === 'side-left' ? 'Left' : layout === 'side-right' ? 'Right' : 'Bottom'}
+              </span>
+            </button>
+            <button
+              type="button"
               onClick={() => setShowParticipants((prev) => !prev)}
               aria-label={showParticipants ? 'Hide participants' : 'Show participants'}
               title={showParticipants ? 'Hide participants' : 'Show participants'}
@@ -382,18 +416,40 @@ function Theatre({ share, tiles }: { share: VoiceShare; tiles: Stage[] }): JSX.E
           </div>
         </div>
 
-        {/* Fullscreen Video Stage Area */}
-        <div className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden bg-black">
-          {share.track ? (
-            <ShareStage share={share} />
-          ) : (
-            <p className="flex h-full items-center justify-center text-sm text-slate-400">
-              Waiting for {share.isLocal ? 'your' : `${share.name}'s`} screen…
-            </p>
+        {/* Fullscreen Main Content Area (Side Gallery or Center Stage) */}
+        <div className="relative flex min-h-0 flex-1 flex-row items-center justify-center overflow-hidden bg-black w-full h-full">
+          {layout === 'side-left' && showParticipants && (
+            <div
+              className={`z-20 h-full p-4 flex flex-col justify-center transition-all duration-300 ease-out ${
+                showControls ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-6'
+              }`}
+            >
+              <SideGallery tiles={tiles} isFullscreen />
+            </div>
+          )}
+
+          <div className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden bg-black h-full w-full">
+            {share.track ? (
+              <ShareStage share={share} />
+            ) : (
+              <p className="flex h-full items-center justify-center text-sm text-slate-400">
+                Waiting for {share.isLocal ? 'your' : `${share.name}'s`} screen…
+              </p>
+            )}
+          </div>
+
+          {layout === 'side-right' && showParticipants && (
+            <div
+              className={`z-20 h-full p-4 flex flex-col justify-center transition-all duration-300 ease-out ${
+                showControls ? 'opacity-100 translate-x-0' : 'opacity-0 translate-x-6'
+              }`}
+            >
+              <SideGallery tiles={tiles} isFullscreen />
+            </div>
           )}
         </div>
 
-        {/* Fullscreen Bottom Overlay: Floating Participant Dock & Voice Controls (Auto-Hiding) */}
+        {/* Fullscreen Bottom Overlay: Floating Voice Controls & optional Bottom filmstrip (Auto-Hiding) */}
         <div
           className={`absolute left-0 right-0 bottom-0 z-30 flex flex-col items-center gap-3 bg-gradient-to-t from-black/95 via-black/60 to-transparent px-6 pb-5 pt-8 transition-all duration-300 ease-out ${
             showControls
@@ -401,7 +457,7 @@ function Theatre({ share, tiles }: { share: VoiceShare; tiles: Stage[] }): JSX.E
               : 'opacity-0 translate-y-6 pointer-events-none'
           }`}
         >
-          {showParticipants && (
+          {layout === 'bottom' && showParticipants && (
             <ul className="flex shrink-0 justify-center gap-2.5 overflow-x-auto max-w-full pb-1">
               {tiles.map((tile) => (
                 <li key={tile.key} className="w-36 shrink-0">
@@ -420,59 +476,118 @@ function Theatre({ share, tiles }: { share: VoiceShare; tiles: Stage[] }): JSX.E
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
-      <div className="relative min-h-0 flex-1 overflow-hidden rounded-lg bg-black">
-        {share.track ? (
-          <ShareStage share={share} />
-        ) : (
-          <p className="flex h-full items-center justify-center text-sm text-slate-400">
-            Waiting for {share.isLocal ? 'your' : `${share.name}'s`} screen…
+      <div className="flex min-h-0 flex-1 flex-row gap-3">
+        {/* Left Side Gallery (Teams / Meet style) */}
+        {layout === 'side-left' && showParticipants && <SideGallery tiles={tiles} />}
+
+        {/* Center Screen Share Stage */}
+        <div className="relative min-h-0 flex-1 overflow-hidden rounded-lg bg-black">
+          {share.track ? (
+            <ShareStage share={share} />
+          ) : (
+            <p className="flex h-full items-center justify-center text-sm text-slate-400">
+              Waiting for {share.isLocal ? 'your' : `${share.name}'s`} screen…
+            </p>
+          )}
+
+          <p className="pointer-events-none absolute left-2 top-2 rounded bg-black/70 px-2 py-1 text-xs text-slate-200">
+            {share.isLocal ? 'Your screen' : `${share.name}'s screen`}
           </p>
-        )}
 
-        <p className="pointer-events-none absolute left-2 top-2 rounded bg-black/70 px-2 py-1 text-xs text-slate-200">
-          {share.isLocal ? 'Your screen' : `${share.name}'s screen`}
-        </p>
-
-        <div className="absolute right-2 top-2 flex gap-2">
-          {!share.isLocal && <ControlButtons share={share} />}
-          {share.isLocal && (
+          <div className="absolute right-2 top-2 flex gap-2">
+            {!share.isLocal && <ControlButtons share={share} />}
+            {share.isLocal && (
+              <button
+                type="button"
+                onClick={() => void stopScreenShare()}
+                className="cursor-pointer rounded-md bg-red-500/90 px-3 py-1 text-xs font-semibold text-white transition-colors duration-200 hover:bg-red-500"
+              >
+                Stop sharing
+              </button>
+            )}
             <button
               type="button"
-              onClick={() => void stopScreenShare()}
-              className="cursor-pointer rounded-md bg-red-500/90 px-3 py-1 text-xs font-semibold text-white transition-colors duration-200 hover:bg-red-500"
+              onClick={cycleLayout}
+              title={`Layout: ${
+                layout === 'side-left'
+                  ? 'Left Side Gallery'
+                  : layout === 'side-right'
+                    ? 'Right Side Gallery'
+                    : 'Bottom Dock'
+              } (Click to switch)`}
+              className="flex cursor-pointer items-center gap-1 rounded-md bg-black/70 px-2.5 py-1 text-xs text-slate-200 transition-colors duration-200 hover:bg-black"
             >
-              Stop sharing
+              {layout === 'side-left' ? (
+                <LayoutSidebarIcon className="h-3.5 w-3.5" />
+              ) : layout === 'side-right' ? (
+                <LayoutSidebarIcon className="h-3.5 w-3.5 scale-x-[-1]" />
+              ) : (
+                <LayoutBottomIcon className="h-3.5 w-3.5" />
+              )}
+              <span className="hidden sm:inline">
+                {layout === 'side-left' ? 'Left' : layout === 'side-right' ? 'Right' : 'Bottom'}
+              </span>
             </button>
-          )}
-          <button
-            type="button"
-            onClick={toggleFullscreen}
-            aria-label="Full screen"
-            title="Full screen (F)"
-            className="flex cursor-pointer items-center gap-1 rounded-md bg-black/70 px-3 py-1 text-xs text-slate-200 transition-colors duration-200 hover:bg-black"
-          >
-            <MaximizeIcon className="h-3.5 w-3.5" />
-            Full screen
-          </button>
-          <button
-            type="button"
-            onClick={() => watch(null)}
-            className="cursor-pointer rounded-md bg-black/70 px-3 py-1 text-xs text-slate-200 transition-colors duration-200 hover:bg-black"
-          >
-            Back to grid
-          </button>
+            <button
+              type="button"
+              onClick={toggleFullscreen}
+              aria-label="Full screen"
+              title="Full screen (F)"
+              className="flex cursor-pointer items-center gap-1 rounded-md bg-black/70 px-3 py-1 text-xs text-slate-200 transition-colors duration-200 hover:bg-black"
+            >
+              <MaximizeIcon className="h-3.5 w-3.5" />
+              Full screen
+            </button>
+            <button
+              type="button"
+              onClick={() => watch(null)}
+              className="cursor-pointer rounded-md bg-black/70 px-3 py-1 text-xs text-slate-200 transition-colors duration-200 hover:bg-black"
+            >
+              Back to grid
+            </button>
+          </div>
         </div>
+
+        {/* Right Side Gallery */}
+        {layout === 'side-right' && showParticipants && <SideGallery tiles={tiles} />}
       </div>
 
-      {/* The filmstrip stays narrow: the screen is the point, the faces are context. */}
-      <ul className="flex shrink-0 gap-2 overflow-x-auto pb-1">
-        {tiles.map((tile) => (
-          <li key={tile.key} className="w-40 shrink-0">
-            <StageTile tile={tile} />
-          </li>
-        ))}
-      </ul>
+      {/* Bottom Filmstrip (when layout is set to 'bottom') */}
+      {layout === 'bottom' && showParticipants && (
+        <ul className="flex shrink-0 gap-2 overflow-x-auto pb-1">
+          {tiles.map((tile) => (
+            <li key={tile.key} className="w-40 shrink-0">
+              <StageTile tile={tile} />
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
+  );
+}
+
+/** Side Gallery Rail (Teams / Meet style) for prominent webcam projection */
+function SideGallery({
+  tiles,
+  isFullscreen = false,
+}: {
+  tiles: Stage[];
+  isFullscreen?: boolean;
+}): JSX.Element {
+  return (
+    <ul
+      className={`flex flex-col gap-2.5 overflow-y-auto max-h-full shrink-0 ${
+        isFullscreen
+          ? 'w-64 sm:w-72 md:w-80 rounded-2xl border border-white/10 bg-black/70 p-2.5 backdrop-blur-md shadow-2xl'
+          : 'w-56 sm:w-64 md:w-72 rounded-lg border border-white/10 bg-surface-900/80 p-2 backdrop-blur-sm'
+      }`}
+    >
+      {tiles.map((tile) => (
+        <li key={tile.key} className="w-full shrink-0">
+          <StageTile tile={tile} />
+        </li>
+      ))}
+    </ul>
   );
 }
 
