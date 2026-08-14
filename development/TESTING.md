@@ -369,11 +369,11 @@ paths are the ones where the person connecting is *not* the owner.
 ## Watching something together
 
 1. **Pick the right trade.** Share with **Video and motion** and play something
-   with movement in it. It should be smooth rather than sharp: 60 fps, and the
-   encoder giving up resolution before it gives up frames. Share the same thing
-   with **Text and detail** and the opposite happens - crisper stills, visible
-   judder on a pan. Both are correct; the wrong one for the content is what
-   looks broken.
+   with movement in it. It should be clean and smooth at 60 fps: 24 Mbps at
+   1080p, with the encoder giving up resolution before it gives up frames.
+   Share the same thing with **Text and detail** and the opposite happens -
+   crisper stills, visible judder on a pan. Both are correct; the wrong one for
+   the content is what looks broken.
 2. **Sound.** With **Share system audio** on and the motion profile, a
    soundtrack should arrive in stereo and stay full-band through quiet
    passages. On the detail profile it is treated as incidental noise, which is

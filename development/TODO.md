@@ -429,7 +429,7 @@ in `apps/desktop/src/services/share-quality.ts` with the reasoning.
       where the surface is chosen, and the checkbox is desktop-only where this
       app really is the one doing the capturing
 - [x] Bitrate scales with pixels instead of being one low number: 6 Mbps at
-      1080p for detail, 14 for motion, clamped at both ends. A ceiling, not a
+      1080p for detail, 24 for motion, clamped at both ends. A ceiling, not a
       target - a still desktop spends a fraction of it and congestion control
       lowers it the moment the link says so
 - [x] Simulcast off. It divides the budget three ways so a weak viewer can be
@@ -456,8 +456,8 @@ Left open on purpose:
 - [ ] No manual override. There is no "use 20 Mbps" box and no way to force a
       codec, so a LAN cannot be told it is a LAN. Parsec's whole trick is
       knowing that; this only ever infers it from congestion control
-- [ ] Motion is capped from 1440p up, so a 4K film is not sharper than a 1440p
-      one. The cap is about links, not screens
+- [ ] Motion is capped at 48 Mbps, so a 4K film can still be limited by the
+      link. The cap is about links, not screens
 - [ ] Nothing measures the result. There is no bitrate, frame rate or round
       trip anywhere in the UI, so "it looks bad" cannot be told apart from "the
       link is bad" without opening `chrome://webrtc-internals`

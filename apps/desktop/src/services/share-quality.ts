@@ -104,9 +104,12 @@ const PROFILES: Record<ShareIntent, Profile> = {
     frameRate: 60,
     contentHint: 'motion',
     degradation: 'maintain-framerate',
-    referenceBitrate: 14_000_000,
-    minBitrate: 4_000_000,
-    maxBitrate: 24_000_000,
+    // H.264 needs more than the old 14 Mbps ceiling to keep a 1080p60 film
+    // clean. A direct mesh can spend it, and congestion control still backs
+    // off immediately when the link cannot.
+    referenceBitrate: 24_000_000,
+    minBitrate: 8_000_000,
+    maxBitrate: 48_000_000,
   },
 };
 

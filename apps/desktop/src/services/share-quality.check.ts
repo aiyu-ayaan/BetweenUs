@@ -15,7 +15,7 @@ const UHD = { width: 3840, height: 2160 };
 // The reference size gets the reference number, and a film gets more than a
 // document at the same size.
 assert.equal(bitrateFor('detail', HD), 6_000_000);
-assert.equal(bitrateFor('motion', HD), 14_000_000);
+assert.equal(bitrateFor('motion', HD), 24_000_000);
 
 // More pixels, more bitrate - the bug being guarded against is a 4K share sent
 // through a pipe sized for 1080p.
@@ -25,7 +25,8 @@ assert.ok(bitrateFor('motion', HD) > bitrateFor('motion', { width: 1280, height:
 
 // Both ends are clamped, and nothing between them ever goes backwards.
 assert.equal(bitrateFor('detail', { width: 320, height: 240 }), 2_000_000);
-assert.equal(bitrateFor('motion', { width: 7680, height: 4320 }), 24_000_000);
+assert.equal(bitrateFor('motion', { width: 320, height: 240 }), 8_000_000);
+assert.equal(bitrateFor('motion', { width: 7680, height: 4320 }), 48_000_000);
 for (const intent of ['detail', 'motion'] as const) {
   let previous = 0;
   for (const size of [{ width: 1280, height: 720 }, HD, QHD, UHD]) {
@@ -35,10 +36,10 @@ for (const intent of ['detail', 'motion'] as const) {
   }
 }
 
-// Motion is capped from 1440p up - past that the ceiling is the link, not the
-// screen. Deliberate, and the reason a 4K film is not sharper than a 1440p one.
-assert.equal(bitrateFor('motion', QHD), 24_000_000);
-assert.equal(bitrateFor('motion', UHD), 24_000_000);
+// Motion has room for a sharp 1440p60 share, then caps at 4K so one viewer
+// cannot make a mesh consume unlimited upstream bandwidth.
+assert.equal(bitrateFor('motion', QHD), 42_666_667);
+assert.equal(bitrateFor('motion', UHD), 48_000_000);
 
 // Capture is asked for at the real size, never left to the 1080p default.
 const movie = shareOptions('motion', QHD, { music: true });
