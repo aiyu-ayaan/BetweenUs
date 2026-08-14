@@ -593,7 +593,12 @@ class PeerLink {
   /** Bitrate and degradation on a live sender; no renegotiation. */
   async tune(
     slot: Slot,
-    encoding: { maxBitrate?: number; maxFramerate?: number },
+    encoding: {
+      maxBitrate?: number;
+      maxFramerate?: number;
+      scaleResolutionDownBy?: number;
+      priority?: RTCPriorityType;
+    },
     degradation?: RTCDegradationPreference,
   ): Promise<void> {
     const sender = this.senders.get(slot);
@@ -609,6 +614,10 @@ class PeerLink {
       if (first) {
         if (encoding.maxBitrate !== undefined) first.maxBitrate = encoding.maxBitrate;
         if (encoding.maxFramerate !== undefined) first.maxFramerate = encoding.maxFramerate;
+        if (encoding.scaleResolutionDownBy !== undefined) {
+          first.scaleResolutionDownBy = encoding.scaleResolutionDownBy;
+        }
+        if (encoding.priority !== undefined) first.priority = encoding.priority;
       }
       if (degradation) parameters.degradationPreference = degradation;
       await sender.setParameters(parameters);
@@ -891,7 +900,12 @@ export class Mesh {
     if (this.sharePublish) {
       await link.tune(
         'screen',
-        { maxBitrate: this.sharePublish.maxBitrate, maxFramerate: this.sharePublish.maxFramerate },
+        {
+          maxBitrate: this.sharePublish.maxBitrate,
+          maxFramerate: this.sharePublish.maxFramerate,
+          scaleResolutionDownBy: this.sharePublish.scaleResolutionDownBy,
+          priority: this.sharePublish.priority,
+        },
         this.sharePublish.degradationPreference,
       );
       if (this.sharePublish.audio) {

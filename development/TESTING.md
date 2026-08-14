@@ -383,7 +383,9 @@ paths are the ones where the person connecting is *not* the owner.
    more a default jitter buffer costs. Take control of the share and it should
    tighten further.
 4. **Native resolution.** Share a 1440p or a scaled display and read something
-   small on the far end. It must not look like a 1080p image stretched up.
+   small on the far end. It must not look like a 1080p image stretched up; the
+   sender keeps the native capture scale and treats the share as high-priority
+   video.
 5. **What it costs.** `chrome://webrtc-internals` in the receiving window: the
    inbound bitrate should sit in the megabits, not the hundreds of kilobits,
    and the frame rate should hold. Nothing in the app reports this yet.

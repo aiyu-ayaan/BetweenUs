@@ -47,6 +47,8 @@ assert.deepEqual(movie.capture.video, { width: 2560, height: 1440, frameRate: 60
 assert.equal(movie.capture.contentHint, 'motion');
 assert.equal(movie.publish.degradationPreference, 'maintain-framerate');
 assert.equal(movie.publish.maxFramerate, 60);
+assert.equal(movie.publish.scaleResolutionDownBy, 1);
+assert.equal(movie.publish.priority, 'high');
 assert.equal(movie.publish.videoCodec, 'H264');
 // A soundtrack keeps both channels and none of the speech processing.
 assert.deepEqual(movie.capture.audio, {

@@ -57,6 +57,10 @@ export interface ShareCapture {
 export interface SharePublish {
   maxBitrate: number;
   maxFramerate: number;
+  /** Keep the native capture size; congestion control decides when to shrink. */
+  scaleResolutionDownBy: number;
+  /** A share is the call's primary visual media, not background video. */
+  priority: RTCPriorityType;
   degradationPreference: RTCDegradationPreference;
   /** Preferred video codec, by MIME subtype. Ignored when unavailable. */
   videoCodec: 'H264';
@@ -175,6 +179,8 @@ export function shareOptions(
     publish: {
       maxFramerate: profile.frameRate,
       maxBitrate: bitrateFor(intent, size),
+      scaleResolutionDownBy: 1,
+      priority: 'high',
       degradationPreference: profile.degradation,
       // Hardware-encoded on any Windows machine with a GPU from this decade,
       // which is what makes 1080p60 possible without melting the CPU. VP9 looks
