@@ -31,7 +31,7 @@ export function PinnedPanel(): JSX.Element {
           type="button"
           onClick={() => showPanel('members')}
           aria-label="Close pinned messages"
-          className="cursor-pointer rounded p-1 text-slate-400 transition-colors duration-200 hover:bg-surface-700 hover:text-slate-100"
+          className="cursor-pointer rounded-md p-1 text-slate-400 transition-colors duration-150 hover:bg-white/[0.07] hover:text-slate-100"
         >
           <XIcon className="h-4 w-4" />
         </button>
@@ -48,7 +48,7 @@ export function PinnedPanel(): JSX.Element {
               <button
                 type="button"
                 onClick={() => jumpToMessage(message.id)}
-                className="w-full cursor-pointer rounded-lg bg-surface-800 p-2.5 text-left transition-colors duration-200 hover:bg-surface-700"
+                className="w-full cursor-pointer rounded-lg bg-surface-800 p-2.5 text-left transition-colors duration-200 hover:bg-white/[0.06]"
               >
                 <span className="flex items-center gap-2">
                   <Avatar

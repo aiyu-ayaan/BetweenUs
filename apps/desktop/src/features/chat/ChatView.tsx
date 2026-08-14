@@ -46,8 +46,8 @@ function MuteButton({ channelId }: { channelId: string }): JSX.Element {
       aria-pressed={muted}
       aria-label={muted ? 'Unmute this channel' : 'Mute this channel'}
       title={muted ? 'Muted - no notifications' : 'Mute this channel'}
-      className={`cursor-pointer rounded p-1.5 transition-colors duration-200 hover:bg-surface-700 hover:text-slate-50 ${
-        muted ? 'text-slate-500' : 'text-slate-300'
+      className={`cursor-pointer rounded-md p-1.5 transition-colors duration-150 hover:bg-white/[0.07] hover:text-slate-100 ${
+        muted ? 'text-slate-600' : 'text-slate-400'
       }`}
     >
       {muted ? <BellOffIcon className="h-5 w-5" /> : <BellIcon className="h-5 w-5" />}
@@ -79,8 +79,8 @@ function PanelButton({
       aria-pressed={open}
       aria-label={label}
       title={label}
-      className={`cursor-pointer rounded p-1.5 transition-colors duration-200 hover:bg-surface-700 hover:text-slate-50 ${
-        open ? 'bg-surface-700 text-slate-50' : 'text-slate-300'
+      className={`cursor-pointer rounded-md p-1.5 transition-colors duration-150 hover:bg-white/[0.07] hover:text-slate-100 ${
+        open ? 'bg-white/[0.07] text-slate-100' : 'text-slate-400'
       }`}
     >
       {icon}
@@ -107,7 +107,7 @@ export function ChatView({ onToggleMembers }: { onToggleMembers?: () => void }):
 
   return (
     <section className="panel flex min-w-0 flex-1 flex-col bg-surface-900">
-      <header className="flex h-12 shrink-0 items-center gap-2 border-b border-edge px-4 shadow-sm">
+      <header className="flex h-11 shrink-0 items-center gap-2 border-b border-edge px-3.5">
         {isDirect ? (
           <Avatar name={channel.name} size="sm" ringColour="border-surface-900" />
         ) : channel.isPrivate ? (
@@ -115,11 +115,11 @@ export function ChatView({ onToggleMembers }: { onToggleMembers?: () => void }):
         ) : (
           <HashIcon className="h-5 w-5 text-slate-500" />
         )}
-        <h1 className="truncate font-semibold text-slate-50">{channel.name}</h1>
+        <h1 className="truncate text-[15px] font-semibold text-slate-50">{channel.name}</h1>
 
         {channel.topic && (
           <>
-            <span aria-hidden="true" className="h-5 w-px bg-surface-700" />
+            <span aria-hidden="true" className="h-4 w-px bg-white/10" />
             <p className="truncate text-sm text-slate-400">{channel.topic}</p>
           </>
         )}
@@ -139,7 +139,7 @@ export function ChatView({ onToggleMembers }: { onToggleMembers?: () => void }):
               onClick={onToggleMembers}
               aria-label="Toggle member list"
               title="Members"
-              className="cursor-pointer rounded p-1.5 text-slate-300 transition-colors duration-200 hover:bg-surface-700 hover:text-slate-50"
+              className="cursor-pointer rounded-md p-1.5 text-slate-400 transition-colors duration-150 hover:bg-white/[0.07] hover:text-slate-100"
             >
               <UsersIcon className="h-5 w-5" />
             </button>
@@ -281,12 +281,12 @@ function MessageList({
                 setArmedDelete(null);
                 setMenu({ id: message.id, at: { x: event.clientX, y: event.clientY } });
               }}
-              className={`relative rounded px-2 transition-colors duration-500 ${
+              className={`relative rounded-lg px-2 transition-colors duration-500 ${
                 highlighted === message.id
                   ? 'bg-accent/20'
                   : message.pinnedAt
-                    ? 'bg-amber-400/5 hover:bg-surface-950/25'
-                    : 'hover:bg-surface-950/25'
+                    ? 'bg-amber-400/[0.04] hover:bg-white/[0.03]'
+                    : 'hover:bg-white/[0.025]'
               } ${grouped ? 'py-0.5 pl-[60px]' : 'mt-4 flex gap-3 py-0.5'}`}
             >
               {!grouped && (
@@ -666,7 +666,7 @@ function MessageComposer({ channel }: { channel: Channel }): JSX.Element {
         setDropping(false);
         addFiles([...event.dataTransfer.files]);
       }}
-      className="shrink-0 px-4 pb-6"
+      className="shrink-0 px-3.5 pb-4"
     >
       {failure && (
         <p role="alert" className="mb-2 text-sm text-danger">
@@ -681,8 +681,10 @@ function MessageComposer({ channel }: { channel: Channel }): JSX.Element {
       )}
 
       <div
-        className={`rounded-lg bg-surface-600 transition-colors duration-200 ${
-          dropping ? 'ring-2 ring-accent' : ''
+        className={`rounded-xl border transition-colors duration-150 ${
+          dropping
+            ? 'border-accent bg-accent/[0.06]'
+            : 'border-edge bg-surface-800 focus-within:border-white/[0.14]'
         }`}
       >
         {files.length > 0 && (

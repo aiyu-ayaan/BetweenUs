@@ -86,7 +86,7 @@ export function EmojiPicker({
                     onClose();
                   }}
                   aria-label={emoji}
-                  className="cursor-pointer rounded p-1 text-xl leading-none transition-colors duration-150 hover:bg-surface-700"
+                  className="cursor-pointer rounded p-1 text-xl leading-none transition-colors duration-150 hover:bg-white/[0.06]"
                 >
                   {emoji}
                 </button>

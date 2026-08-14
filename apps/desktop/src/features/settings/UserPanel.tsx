@@ -47,7 +47,7 @@ export function UserPanel({ onOpenSettings }: { onOpenSettings: () => void }): J
   }, [open]);
 
   return (
-    <div ref={panel} className="relative flex items-center gap-2 bg-surface-850 px-2 py-1.5">
+    <div ref={panel} className="relative flex shrink-0 items-center gap-2 border-t border-edge bg-black/20 px-2 py-1.5">
       {open && (
         <div
           role="menu"
@@ -64,7 +64,7 @@ export function UserPanel({ onOpenSettings }: { onOpenSettings: () => void }): J
                 setStatus(choice.value);
                 setOpen(false);
               }}
-              className="flex w-full cursor-pointer items-start gap-2.5 px-3 py-2 text-left hover:bg-surface-700"
+              className="flex w-full cursor-pointer items-start gap-2.5 px-3 py-2 text-left hover:bg-white/[0.06]"
             >
               <span
                 aria-hidden="true"
@@ -89,7 +89,7 @@ export function UserPanel({ onOpenSettings }: { onOpenSettings: () => void }): J
         aria-haspopup="menu"
         aria-expanded={open}
         aria-label="Set your status"
-        className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 rounded px-1 py-1 text-left transition-colors duration-200 hover:bg-surface-700"
+        className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 rounded px-1 py-1 text-left transition-colors duration-200 hover:bg-white/[0.06]"
       >
         <Avatar
           name={user?.displayName ?? '?'}
@@ -114,7 +114,7 @@ export function UserPanel({ onOpenSettings }: { onOpenSettings: () => void }): J
         disabled={voiceStatus !== 'connected'}
         aria-label={micEnabled ? 'Mute microphone' : 'Unmute microphone'}
         title={voiceStatus === 'connected' ? 'Microphone' : 'Join a voice channel first'}
-        className="cursor-pointer rounded p-2 text-slate-300 transition-colors duration-200 hover:bg-surface-700 disabled:cursor-not-allowed disabled:opacity-40"
+        className="cursor-pointer rounded p-2 text-slate-300 transition-colors duration-200 hover:bg-white/[0.06] disabled:cursor-not-allowed disabled:opacity-40"
       >
         {micEnabled ? <MicIcon className="h-5 w-5" /> : <MicOffIcon className="h-5 w-5 text-danger" />}
       </button>
@@ -124,7 +124,7 @@ export function UserPanel({ onOpenSettings }: { onOpenSettings: () => void }): J
         onClick={onOpenSettings}
         aria-label="User settings"
         title="User settings"
-        className="cursor-pointer rounded p-2 text-slate-300 transition-colors duration-200 hover:bg-surface-700"
+        className="cursor-pointer rounded p-2 text-slate-300 transition-colors duration-200 hover:bg-white/[0.06]"
       >
         <SettingsIcon className="h-5 w-5" />
       </button>

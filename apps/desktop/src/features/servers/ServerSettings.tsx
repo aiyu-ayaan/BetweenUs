@@ -58,11 +58,11 @@ export function ServerSettings({ onClose }: { onClose: () => void }): JSX.Elemen
       role="dialog"
       aria-modal="true"
       aria-label={`${server.name} settings`}
-      className="fixed inset-0 z-50 flex bg-surface-900"
+      className="fixed inset-0 z-50 flex animate-fade gap-1.5 bg-ground p-1.5"
     >
       <nav
         aria-label="Server settings sections"
-        className="flex w-[232px] shrink-0 flex-col items-end overflow-y-auto bg-surface-800 py-14 pr-2"
+        className="panel flex w-[232px] shrink-0 flex-col items-end overflow-y-auto bg-surface-800 py-8 pr-2"
       >
         <div className="w-[192px]">
           <p className="truncate px-2.5 pb-1 text-xs font-bold uppercase tracking-wide text-slate-400">
@@ -76,7 +76,7 @@ export function ServerSettings({ onClose }: { onClose: () => void }): JSX.Elemen
               aria-current={section === entry.id ? 'page' : undefined}
               className={`mt-0.5 flex w-full cursor-pointer items-center gap-2 rounded px-2.5 py-1.5 text-left text-[15px] transition-colors duration-200 ${
                 section === entry.id
-                  ? 'bg-surface-700 text-slate-50'
+                  ? 'row-active'
                   : 'text-slate-300 hover:bg-white/[0.05]'
               }`}
             >
@@ -90,7 +90,7 @@ export function ServerSettings({ onClose }: { onClose: () => void }): JSX.Elemen
         </div>
       </nav>
 
-      <div className="relative flex-1 overflow-y-auto px-10 py-14">
+      <div className="panel relative flex-1 overflow-y-auto bg-surface-900 px-10 py-10">
         <div className="max-w-[740px]">
           {section === 'overview' && <Overview />}
           {section === 'roles' && <Roles />}
@@ -103,7 +103,7 @@ export function ServerSettings({ onClose }: { onClose: () => void }): JSX.Elemen
           type="button"
           onClick={onClose}
           aria-label="Close server settings"
-          className="absolute right-10 top-14 flex h-9 w-9 cursor-pointer items-center justify-center rounded-full border-2 border-slate-500 text-slate-400 transition-colors duration-200 hover:bg-surface-700 hover:text-slate-100"
+          className="absolute right-8 top-8 flex h-9 w-9 cursor-pointer items-center justify-center rounded-full border-2 border-slate-500 text-slate-400 transition-colors duration-200 hover:bg-white/[0.07] hover:text-slate-100"
         >
           <XIcon className="h-4 w-4" />
         </button>
@@ -224,7 +224,7 @@ function Overview(): JSX.Element {
           value={name}
           disabled={!canManage}
           onChange={(event) => setName(event.target.value)}
-          className="mt-2 w-full rounded bg-surface-950 px-3 py-2.5 text-slate-100 focus:outline-none focus:ring-2 focus:ring-accent disabled:opacity-50"
+          className="mt-2 w-full rounded-lg border border-edge bg-surface-950 px-3 py-2.5 text-slate-100 outline-none transition-colors focus:border-accent/60 disabled:opacity-50"
         />
       </label>
 
@@ -315,9 +315,9 @@ function Roles(): JSX.Element {
                 type="button"
                 onClick={() => setSelectedId(member.userId)}
                 aria-current={member.userId === selected.userId ? 'true' : undefined}
-                className={`flex w-full cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-left transition-colors duration-200 ${
+                className={`flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors duration-200 ${
                   member.userId === selected.userId
-                    ? 'bg-surface-700 text-slate-50'
+                    ? 'row-active'
                     : 'text-slate-300 hover:bg-white/[0.05]'
                 }`}
               >
@@ -347,7 +347,7 @@ function Roles(): JSX.Element {
               value={selected.role}
               disabled={!canManageRoles}
               onChange={(event) => void apply({ role: event.target.value as ServerRole })}
-              className="mt-2 w-full cursor-pointer rounded bg-surface-950 px-3 py-2.5 text-slate-100 focus:outline-none focus:ring-2 focus:ring-accent disabled:opacity-50"
+              className="mt-2 w-full cursor-pointer rounded-lg border border-edge bg-surface-950 px-3 py-2.5 text-slate-100 outline-none transition-colors focus:border-accent/60 disabled:opacity-50"
             >
               {SERVER_ROLES.filter((role) => role !== 'OWNER').map((role) => (
                 <option key={role} value={role}>
@@ -451,7 +451,7 @@ function PermissionRow({
                   : option === 'deny'
                     ? 'bg-danger text-white'
                     : 'bg-surface-600 text-slate-100'
-                : 'bg-surface-950 text-slate-400 hover:bg-surface-700'
+                : 'bg-surface-950 text-slate-400 hover:bg-white/[0.06]'
             }`}
           >
             {option === 'inherit' ? 'Role' : option}
@@ -498,7 +498,7 @@ function Members(): JSX.Element {
         onChange={(event) => setQuery(event.target.value)}
         placeholder="Search members"
         aria-label="Search members"
-        className="mt-4 w-full max-w-sm rounded bg-surface-950 px-3 py-2 text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-accent"
+        className="mt-4 w-full max-w-sm rounded-lg border border-edge bg-surface-950 px-3 py-2 text-slate-100 placeholder-slate-500 outline-none transition-colors focus:border-accent/60"
       />
 
       {note && (
@@ -603,7 +603,7 @@ function AddMember(): JSX.Element {
           }}
           placeholder="Search by username"
           aria-label="Search for someone to add"
-          className="w-full max-w-sm rounded bg-surface-950 px-3 py-2 text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-accent"
+          className="w-full max-w-sm rounded-lg border border-edge bg-surface-950 px-3 py-2 text-slate-100 placeholder-slate-500 outline-none transition-colors focus:border-accent/60"
         />
         <button
           type="button"

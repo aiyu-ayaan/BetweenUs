@@ -61,7 +61,7 @@ export function IdentityUnlock(): JSX.Element | null {
           value={secret}
           onChange={(event) => setSecret(event.target.value)}
           placeholder={isPassword ? 'Account password' : 'Recovery passphrase'}
-          className="mt-4 w-full rounded bg-surface-950 px-3 py-2.5 text-slate-100 focus:outline-none focus:ring-2 focus:ring-accent"
+          className="mt-4 w-full rounded-lg border border-edge bg-surface-950 px-3 py-2.5 text-slate-100 outline-none transition-colors focus:border-accent/60"
         />
         {problem && <p className="mt-2 text-sm text-rose-300">{problem}</p>}
 
@@ -69,7 +69,7 @@ export function IdentityUnlock(): JSX.Element | null {
           <button
             type="button"
             onClick={() => setDismissed(true)}
-            className="flex-1 cursor-pointer rounded-md bg-surface-700 px-4 py-2.5 font-medium text-slate-100 transition-colors duration-200 hover:bg-surface-600"
+            className="flex-1 cursor-pointer rounded-md bg-white/[0.07] px-4 py-2.5 font-medium text-slate-100 transition-colors duration-150 hover:bg-white/[0.12]"
           >
             Not now
           </button>

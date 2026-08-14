@@ -90,7 +90,7 @@ export function MessageMenu({
               onClose();
             }}
             aria-label={`React with ${emoji}`}
-            className="cursor-pointer rounded p-1 text-lg leading-none transition-colors duration-150 hover:bg-surface-700"
+            className="cursor-pointer rounded p-1 text-lg leading-none transition-colors duration-150 hover:bg-white/[0.06]"
           >
             {emoji}
           </button>
@@ -104,7 +104,7 @@ export function MessageMenu({
           }}
           aria-label="More emoji"
           title="More emoji"
-          className="ml-auto cursor-pointer rounded p-1 text-slate-300 transition-colors duration-150 hover:bg-surface-700 hover:text-slate-50"
+          className="ml-auto cursor-pointer rounded p-1 text-slate-300 transition-colors duration-150 hover:bg-white/[0.07] hover:text-slate-100"
         >
           <SmileIcon className="h-4 w-4" />
         </button>
@@ -186,7 +186,7 @@ function Item({
           ? 'cursor-not-allowed text-slate-500'
           : danger
             ? 'cursor-pointer text-danger hover:bg-danger hover:text-white'
-            : 'cursor-pointer text-slate-200 hover:bg-surface-700 hover:text-slate-50'
+            : 'cursor-pointer text-slate-200 hover:bg-white/[0.07] hover:text-slate-100'
       }`}
     >
       {icon}

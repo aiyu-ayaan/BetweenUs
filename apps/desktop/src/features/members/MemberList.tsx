@@ -53,7 +53,7 @@ function Group({
         {members.map((member) => (
           <li key={member.userId}>
             <div
-              className={`flex items-center gap-3 rounded px-2 py-1.5 transition-colors duration-200 hover:bg-white/[0.05] ${
+              className={`flex items-center gap-3 rounded-md px-2 py-1.5 transition-colors duration-200 hover:bg-white/[0.05] ${
                 muted ? 'opacity-40' : ''
               }`}
             >

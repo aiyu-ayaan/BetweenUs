@@ -185,7 +185,7 @@ export function ScreenSharePicker({ onClose }: { onClose: () => void }): JSX.Ele
           <button
             type="button"
             onClick={onClose}
-            className="ml-auto cursor-pointer rounded-md px-4 py-2 text-sm text-slate-300 transition-colors duration-200 hover:bg-surface-700"
+            className="ml-auto cursor-pointer rounded-md px-4 py-2 text-sm text-slate-300 transition-colors duration-200 hover:bg-white/[0.06]"
           >
             Cancel
           </button>

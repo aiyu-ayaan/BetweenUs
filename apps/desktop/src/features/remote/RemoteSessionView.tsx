@@ -203,7 +203,7 @@ export function RemoteSessionView(): JSX.Element {
               <button
                 type="button"
                 onClick={() => void disconnect()}
-                className="mt-3 cursor-pointer rounded bg-surface-700 px-4 py-2 text-sm text-slate-100 transition-colors duration-200 hover:bg-surface-600"
+                className="mt-3 cursor-pointer rounded bg-surface-700 px-4 py-2 text-sm text-slate-100 transition-colors duration-200 hover:bg-white/[0.1]"
               >
                 Back to machines
               </button>

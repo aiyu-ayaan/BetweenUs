@@ -69,7 +69,7 @@ export function ServerPicker({ onClose }: { onClose: () => void }): JSX.Element 
             type="button"
             onClick={onClose}
             aria-label="Close"
-            className="cursor-pointer rounded p-1 text-slate-400 transition-colors duration-200 hover:bg-surface-700 hover:text-slate-100"
+            className="cursor-pointer rounded-md p-1 text-slate-400 transition-colors duration-150 hover:bg-white/[0.07] hover:text-slate-100"
           >
             <XIcon className="h-4 w-4" />
           </button>

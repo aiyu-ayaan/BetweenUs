@@ -450,7 +450,7 @@ function IconButton({
       onClick={onClick}
       aria-label={label}
       title={label}
-      className="cursor-pointer rounded p-1.5 text-slate-300 transition-colors duration-200 hover:bg-surface-700 hover:text-slate-50"
+      className="cursor-pointer rounded-md p-1.5 text-slate-400 transition-colors duration-150 hover:bg-white/[0.07] hover:text-slate-100"
     >
       {icon}
     </button>

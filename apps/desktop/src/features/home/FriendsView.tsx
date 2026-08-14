@@ -194,7 +194,7 @@ function AddFriend(): JSX.Element {
         You can add a friend with their Nexora username.
       </p>
 
-      <div className="mt-4 flex items-center gap-2 rounded-lg bg-surface-950 px-4 py-2.5 focus-within:ring-2 focus-within:ring-accent">
+      <div className="mt-4 flex items-center gap-2 rounded-lg border border-edge bg-surface-950 px-4 py-2.5 transition-colors focus-within:border-accent/60">
         <input
           value={query}
           autoFocus
@@ -283,7 +283,7 @@ function IconButton({
       onClick={onClick}
       title={label}
       aria-label={label}
-      className={`cursor-pointer rounded-full bg-surface-850 p-2.5 text-slate-300 transition-colors duration-200 hover:bg-surface-700 ${hoverClasses}`}
+      className={`cursor-pointer rounded-full bg-surface-850 p-2.5 text-slate-300 transition-colors duration-200 hover:bg-white/[0.06] ${hoverClasses}`}
     >
       {children}
     </button>

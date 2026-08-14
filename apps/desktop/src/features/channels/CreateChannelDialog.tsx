@@ -80,7 +80,7 @@ export function CreateChannelDialog({
           >
             Channel name
           </label>
-          <div className="mt-2 flex items-center gap-2 rounded bg-surface-950 px-3 focus-within:ring-2 focus-within:ring-accent">
+          <div className="mt-2 flex items-center gap-2 rounded-lg border border-edge bg-surface-950 px-3 transition-colors focus-within:border-accent/60">
             {type === 'VOICE' ? (
               <SpeakerIcon className="h-5 w-5 shrink-0 text-slate-500" />
             ) : (
@@ -141,7 +141,7 @@ export function CreateChannelDialog({
                         type="button"
                         onClick={() => toggle(member.userId)}
                         aria-pressed={selected}
-                        className="flex w-full cursor-pointer items-center gap-2.5 rounded px-2 py-1.5 text-left hover:bg-surface-700"
+                        className="flex w-full cursor-pointer items-center gap-2.5 rounded-md px-2 py-1.5 text-left hover:bg-white/[0.06]"
                       >
                         <Avatar
                           name={member.displayName}

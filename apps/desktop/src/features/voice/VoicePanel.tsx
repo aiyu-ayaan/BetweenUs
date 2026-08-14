@@ -28,10 +28,10 @@ export function VoicePanel(): JSX.Element | null {
   if (status === 'idle') return null;
 
   return (
-    <section aria-label="Voice connection" className="border-t border-edge bg-surface-900 p-2">
+    <section aria-label="Voice connection" className="border-t border-edge bg-black/20 p-2">
       <p className="flex items-center gap-1.5 px-1 pb-2 text-xs">
-        {encrypted && <LockIcon className="h-3.5 w-3.5 text-emerald-400" />}
-        <span className="font-medium text-emerald-400">
+        {encrypted && <LockIcon className="h-3.5 w-3.5 text-status-online" />}
+        <span className="font-medium text-status-online">
           {status === 'connecting' ? 'Connecting…' : 'Voice connected'}
         </span>
         {channelName && (
@@ -47,7 +47,7 @@ export function VoicePanel(): JSX.Element | null {
       </p>
 
       {error && (
-        <p role="alert" className="mb-2 rounded bg-red-500/10 px-2 py-1 text-xs text-red-300">
+        <p role="alert" className="mb-2 rounded bg-danger/10 px-2 py-1 text-xs text-danger">
           {error}
         </p>
       )}
@@ -57,7 +57,7 @@ export function VoicePanel(): JSX.Element | null {
           <li key={tile.identity} className="flex items-center gap-2 px-1 text-sm">
             <span
               className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${
-                tile.speaking ? 'bg-emerald-500 text-slate-950' : 'bg-surface-700 text-slate-200'
+                tile.speaking ? 'bg-status-online text-slate-950' : 'bg-surface-700 text-slate-200'
               }`}
               aria-hidden="true"
             >
@@ -67,7 +67,7 @@ export function VoicePanel(): JSX.Element | null {
               {tile.name}
               {tile.isLocal && ' (you)'}
             </span>
-            {!tile.micEnabled && <MicOffIcon className="ml-auto h-3.5 w-3.5 text-red-400" />}
+            {!tile.micEnabled && <MicOffIcon className="ml-auto h-3.5 w-3.5 text-danger" />}
           </li>
         ))}
       </ul>

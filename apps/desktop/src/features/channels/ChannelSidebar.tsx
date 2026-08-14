@@ -62,7 +62,7 @@ export function ChannelSidebar({
               type="button"
               onClick={() => void selectChannel(channel.id)}
               aria-current={channel.id === activeChannelId ? 'page' : undefined}
-              className={`group flex w-full cursor-pointer items-center gap-1.5 rounded px-2 py-1.5 text-left text-[15px] transition-colors duration-200 ${
+              className={`group flex w-full cursor-pointer items-center gap-1.5 rounded-md px-2 py-1.5 text-left text-[15px] transition-colors duration-200 ${
                 channel.id === activeChannelId
                   ? 'row-active'
                   : 'row-idle'
@@ -207,7 +207,7 @@ function SectionHeading({
           onClick={onAdd}
           aria-label={addLabel}
           title={addLabel}
-          className="cursor-pointer rounded p-1 text-slate-400 transition-colors duration-200 hover:bg-surface-700 hover:text-slate-100"
+          className="cursor-pointer rounded-md p-1 text-slate-400 transition-colors duration-150 hover:bg-white/[0.07] hover:text-slate-100"
         >
           <PlusIcon className="h-4 w-4" />
         </button>
@@ -244,7 +244,7 @@ function VoiceChannelRow({ channel }: { channel: Channel }): JSX.Element {
         type="button"
         onClick={open}
         aria-current={viewing ? 'page' : undefined}
-        className={`flex w-full cursor-pointer items-center gap-1.5 rounded px-2 py-1.5 text-left text-[15px] transition-colors duration-200 ${
+        className={`flex w-full cursor-pointer items-center gap-1.5 rounded-md px-2 py-1.5 text-left text-[15px] transition-colors duration-200 ${
           here || connectingHere || viewing
             ? 'row-active'
             : 'row-idle'

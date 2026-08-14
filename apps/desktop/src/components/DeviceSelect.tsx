@@ -30,7 +30,7 @@ export function DeviceSelect({
       <select
         value={value ?? ''}
         onChange={(event) => onChange(event.target.value || null)}
-        className="mt-2 w-full cursor-pointer rounded bg-surface-950 px-3 py-2 text-slate-100 focus:outline-none focus:ring-2 focus:ring-accent"
+        className="mt-2 w-full cursor-pointer rounded-lg border border-edge bg-surface-950 px-3 py-2 text-slate-100 outline-none transition-colors focus:border-accent/60"
       >
         <option value="">System default</option>
         {options.map((device) => (

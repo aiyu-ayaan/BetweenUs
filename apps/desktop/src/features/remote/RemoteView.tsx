@@ -46,7 +46,7 @@ export function RemoteView(): JSX.Element {
         <button
           type="button"
           onClick={() => void load()}
-          className="ml-auto cursor-pointer rounded px-3 py-1 text-sm text-slate-300 transition-colors duration-200 hover:bg-surface-600"
+          className="ml-auto cursor-pointer rounded px-3 py-1 text-sm text-slate-300 transition-colors duration-200 hover:bg-white/[0.1]"
         >
           Refresh
         </button>
@@ -100,7 +100,7 @@ export function RemoteView(): JSX.Element {
                 <button
                   type="button"
                   onClick={() => setManaging(machine)}
-                  className="cursor-pointer rounded bg-surface-700 px-3 py-1.5 text-sm text-slate-200 transition-colors duration-200 hover:bg-surface-600"
+                  className="cursor-pointer rounded bg-white/[0.07] px-3 py-1.5 text-sm text-slate-200 transition-colors duration-200 hover:bg-white/[0.1]"
                 >
                   Access
                 </button>
@@ -209,7 +209,7 @@ function AccessDialog({
             type="button"
             onClick={onClose}
             aria-label="Close"
-            className="cursor-pointer rounded p-1 text-slate-400 transition-colors duration-200 hover:bg-surface-700 hover:text-slate-100"
+            className="cursor-pointer rounded-md p-1 text-slate-400 transition-colors duration-150 hover:bg-white/[0.07] hover:text-slate-100"
           >
             <XIcon className="h-4 w-4" />
           </button>
@@ -257,7 +257,7 @@ function AccessDialog({
                       <button
                         type="button"
                         onClick={() => void save(user.id, ['REMOTE_VIEW'], null)}
-                        className="flex w-full cursor-pointer items-center gap-3 rounded px-2 py-2 text-left transition-colors duration-200 hover:bg-surface-700"
+                        className="flex w-full cursor-pointer items-center gap-3 rounded-md px-2 py-2 text-left transition-colors duration-200 hover:bg-white/[0.06]"
                       >
                         <Avatar name={user.displayName} avatarUrl={user.avatarUrl} size="sm" />
                         <span className="min-w-0 flex-1 truncate text-sm text-slate-100">

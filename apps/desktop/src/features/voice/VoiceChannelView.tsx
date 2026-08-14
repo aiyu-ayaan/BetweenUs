@@ -238,7 +238,7 @@ function ShareBanners({
             <button
               type="button"
               onClick={() => void stopScreenShare()}
-              className="shrink-0 cursor-pointer rounded-md px-3 py-1 text-xs text-slate-300 transition-colors duration-200 hover:bg-surface-700"
+              className="shrink-0 cursor-pointer rounded-md px-3 py-1 text-xs text-slate-300 transition-colors duration-200 hover:bg-white/[0.06]"
             >
               Stop
             </button>
@@ -808,7 +808,7 @@ function PagerButton({
       onClick={onClick}
       disabled={disabled}
       aria-label={label}
-      className="cursor-pointer rounded-md bg-surface-800 p-2 text-slate-300 transition-colors duration-200 hover:bg-surface-700 disabled:cursor-not-allowed disabled:opacity-40"
+      className="cursor-pointer rounded-md bg-surface-800 p-2 text-slate-300 transition-colors duration-200 hover:bg-white/[0.06] disabled:cursor-not-allowed disabled:opacity-40"
     >
       {children}
     </button>

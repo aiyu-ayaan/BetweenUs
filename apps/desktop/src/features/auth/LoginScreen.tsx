@@ -33,11 +33,11 @@ export function LoginScreen(): JSX.Element {
   };
 
   return (
-    <div className="flex h-full items-center justify-center bg-surface-950 px-4">
-      <div className="w-full max-w-md rounded-xl bg-surface-800 p-8 shadow-pop border border-surface-700/50">
+    <div className="flex h-full items-center justify-center bg-ground px-4">
+      <div className="w-full max-w-md animate-pop rounded-2xl border border-edge bg-surface-900 p-8 shadow-pop">
         <div className="mb-6 text-center">
-          <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-600 via-indigo-700 to-slate-900 p-2.5 shadow-lg shadow-purple-500/20 ring-1 ring-white/20">
-            <NexoraLogoIcon className="h-full w-full text-white" />
+          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl border border-edge bg-accent/15 p-2.5">
+            <NexoraLogoIcon className="h-full w-full text-accent" />
           </div>
           <h1 className="text-2xl font-semibold text-slate-50">
             {mode === 'login' ? 'Welcome back' : 'Create your account'}
@@ -64,7 +64,7 @@ export function LoginScreen(): JSX.Element {
                 setEmail(event.target.value);
                 clearError();
               }}
-              className="w-full rounded-md border border-surface-700 bg-surface-900 px-3 py-2 text-slate-100 placeholder-slate-500 transition-colors duration-200 focus:border-accent"
+              className="w-full rounded-md border border-edge bg-surface-950 px-3 py-2 text-slate-100 placeholder-slate-500 transition-colors duration-200 focus:border-accent"
               placeholder="you@example.com"
             />
           </div>
@@ -89,7 +89,7 @@ export function LoginScreen(): JSX.Element {
                   setUsername(event.target.value);
                   clearError();
                 }}
-                className="w-full rounded-md border border-surface-700 bg-surface-900 px-3 py-2 text-slate-100 placeholder-slate-500 transition-colors duration-200 focus:border-accent"
+                className="w-full rounded-md border border-edge bg-surface-950 px-3 py-2 text-slate-100 placeholder-slate-500 transition-colors duration-200 focus:border-accent"
                 placeholder="ayaan"
               />
             </div>
@@ -113,7 +113,7 @@ export function LoginScreen(): JSX.Element {
                 setPassword(event.target.value);
                 clearError();
               }}
-              className="w-full rounded-md border border-surface-700 bg-surface-900 px-3 py-2 text-slate-100 placeholder-slate-500 transition-colors duration-200 focus:border-accent"
+              className="w-full rounded-md border border-edge bg-surface-950 px-3 py-2 text-slate-100 placeholder-slate-500 transition-colors duration-200 focus:border-accent"
               placeholder="At least 8 characters"
             />
             {mode === 'register' && (
@@ -122,7 +122,7 @@ export function LoginScreen(): JSX.Element {
           </div>
 
           {error && (
-            <p role="alert" className="rounded-md bg-red-500/10 px-3 py-2 text-sm text-red-300">
+            <p role="alert" className="rounded-md bg-danger/10 px-3 py-2 text-sm text-danger">
               {error}
             </p>
           )}
@@ -139,9 +139,9 @@ export function LoginScreen(): JSX.Element {
         {providers.length > 0 && (
           <div className="mt-6">
             <div className="mb-3 flex items-center gap-3">
-              <span className="h-px flex-1 bg-surface-700" />
+              <span className="h-px flex-1 bg-white/10" />
               <span className="text-xs uppercase tracking-wide text-slate-500">or continue with</span>
-              <span className="h-px flex-1 bg-surface-700" />
+              <span className="h-px flex-1 bg-white/10" />
             </div>
 
             <div className="space-y-2">
@@ -151,7 +151,7 @@ export function LoginScreen(): JSX.Element {
                   type="button"
                   disabled={busy}
                   onClick={() => void loginWithProvider(provider.provider)}
-                  className="w-full cursor-pointer rounded-md border border-surface-700 bg-surface-900 px-4 py-2.5 font-medium text-slate-100 transition-colors duration-200 hover:border-accent disabled:cursor-not-allowed disabled:opacity-60"
+                  className="w-full cursor-pointer rounded-md border border-edge bg-surface-950 px-4 py-2.5 font-medium text-slate-100 transition-colors duration-200 hover:border-accent disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   Continue with {provider.label}
                 </button>
@@ -177,7 +177,7 @@ export function LoginScreen(): JSX.Element {
 
         {/* Which deployment this is. Nexora is meant to be self-hosted, so the
             address is worth showing even when nobody wants to change it. */}
-        <div className="mt-6 border-t border-surface-700 pt-4">
+        <div className="mt-6 border-t border-edge pt-4">
           <button
             type="button"
             onClick={() => setPickingServer(true)}

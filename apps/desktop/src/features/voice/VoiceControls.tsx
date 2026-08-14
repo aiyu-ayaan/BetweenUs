@@ -123,8 +123,8 @@ function ControlButton({
         disabled
           ? 'cursor-not-allowed bg-surface-800 text-slate-600 opacity-50'
           : active
-          ? 'cursor-pointer bg-surface-700 text-slate-100 hover:bg-surface-700'
-          : 'cursor-pointer bg-surface-800 text-slate-400 hover:bg-surface-700'
+          ? 'cursor-pointer bg-surface-700 text-slate-100 hover:bg-white/[0.06]'
+          : 'cursor-pointer bg-surface-800 text-slate-400 hover:bg-white/[0.06]'
       }`}
     >
       {children}
