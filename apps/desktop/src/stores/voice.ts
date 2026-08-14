@@ -322,6 +322,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
     if (channelId) presenceSocket.send({ type: 'voice.leave', channelId });
     useShareControlStore.getState().detach();
     teardown();
+    // Close PiP overlay window if open
     void window.nexora?.closePip();
     set({
       status: 'idle',

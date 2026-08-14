@@ -31,7 +31,6 @@ import { CallAudio } from './features/voice/CallAudio';
 import { ShareControlConsent } from './features/voice/ShareControlConsent';
 import { TopBar } from './features/shell/TopBar';
 import { QuickSwitcher } from './features/shell/QuickSwitcher';
-import { PipOverlayView } from './features/voice/PipOverlayView';
 import { useVoiceStore } from './stores/voice';
 import { NexoraLogoIcon } from './components/icons';
 import { ErrorBoundary } from './components/ErrorBoundary';
@@ -43,16 +42,6 @@ import { ErrorBoundary } from './components/ErrorBoundary';
  * message on screen, not an empty window.
  */
 export default function App(): JSX.Element {
-  const isPip = typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('pip');
-
-  if (isPip) {
-    return (
-      <ErrorBoundary>
-        <PipOverlayView />
-      </ErrorBoundary>
-    );
-  }
-
   return (
     <ErrorBoundary>
       <Session />
@@ -122,7 +111,9 @@ function Session(): JSX.Element {
     [],
   );
 
-  // Auto-PiP on minimize when connected to a voice channel
+  // ─── Auto Picture-in-Picture on minimize ──────────────────────────────────
+  // When minimized during an active voice call, open a floating PiP overlay.
+  // It only shows the other participant (active remote speaker or remote share).
   useEffect(() => {
     if (!window.nexora?.onWindowMinimize) return;
 
@@ -137,9 +128,121 @@ function Session(): JSX.Element {
       void window.nexora?.closePip();
     });
 
+    const unsubAction = window.nexora.onPipAction?.((action) => {
+      if (action.type === 'toggleMic') {
+        void useVoiceStore.getState().toggleMic();
+      } else if (action.type === 'toggleCamera') {
+        void useVoiceStore.getState().toggleCamera();
+      } else if (action.type === 'leave') {
+        void useVoiceStore.getState().leave();
+      }
+    });
+
     return () => {
       unsubMinimize();
       unsubRestore?.();
+      unsubAction?.();
+    };
+  }, []);
+
+  // ─── PiP State & Video Streamer ──────────────────────────────────────────
+  // Periodically synchronizes remote speaker state and video frames with the PiP overlay.
+  useEffect(() => {
+    if (!window.nexora?.sendPipState) return;
+
+    let offscreenCanvas: HTMLCanvasElement | null = null;
+    let offscreenCtx: CanvasRenderingContext2D | null = null;
+
+    const syncInterval = setInterval(() => {
+      const voice = useVoiceStore.getState();
+      if (voice.status !== 'connected') return;
+
+      const remoteTiles = voice.tiles.filter((t) => !t.isLocal);
+      const remoteShares = voice.shares.filter((s) => !s.isLocal);
+
+      // Prioritize remote screen share, then actively speaking peer, then last spoke / first peer
+      const activeShare = remoteShares.find((s) => s.track && s.track.readyState === 'live');
+      const activeSpeakingTile = remoteTiles.find((t) => t.speaking);
+      const latestTile = [...remoteTiles].sort((a, b) => b.lastSpokeAt - a.lastSpokeAt)[0];
+      const activeTile = activeSpeakingTile ?? latestTile ?? remoteTiles[0];
+
+      let hasVideo = false;
+      let targetTrack: MediaStreamTrack | null = null;
+
+      if (activeShare && activeShare.track) {
+        hasVideo = true;
+        targetTrack = activeShare.track;
+      } else if (activeTile && activeTile.videoTrack && activeTile.videoTrack.readyState === 'live') {
+        hasVideo = true;
+        targetTrack = activeTile.videoTrack;
+      }
+
+      const activeSpeaker = activeShare
+        ? {
+            name: `${activeShare.name}'s screen`,
+            speaking: false,
+            micEnabled: true,
+            hasVideo: true,
+          }
+        : activeTile
+        ? {
+            name: activeTile.name,
+            speaking: activeTile.speaking,
+            micEnabled: activeTile.micEnabled,
+            hasVideo,
+          }
+        : null;
+
+      window.nexora?.sendPipState?.({
+        channelName: voice.channelName ?? 'Voice Channel',
+        activeSpeaker,
+        totalParticipants: voice.tiles.length,
+        localMicEnabled: voice.micEnabled,
+        localCameraEnabled: voice.cameraEnabled,
+      });
+
+      // If there is an active video, capture and stream frame with native aspect ratio
+      if (hasVideo && targetTrack) {
+        const videos = Array.from(document.querySelectorAll('video'));
+        const matchingVideo = videos.find((v) => {
+          const stream = v.srcObject;
+          if (stream instanceof MediaStream) {
+            return stream.getTracks().some((t) => t === targetTrack || t.id === targetTrack?.id);
+          }
+          return false;
+        });
+
+        const videoToCapture = matchingVideo ?? videos.find((v) => v.srcObject instanceof MediaStream && v.videoWidth > 0);
+
+        if (videoToCapture && videoToCapture.videoWidth > 0 && videoToCapture.videoHeight > 0) {
+          const rawW = videoToCapture.videoWidth;
+          const rawH = videoToCapture.videoHeight;
+          const maxDim = 640;
+          const scale = Math.min(1, maxDim / Math.max(rawW, rawH));
+          const targetW = Math.round(rawW * scale);
+          const targetH = Math.round(rawH * scale);
+
+          if (!offscreenCanvas || offscreenCanvas.width !== targetW || offscreenCanvas.height !== targetH) {
+            offscreenCanvas = document.createElement('canvas');
+            offscreenCanvas.width = targetW;
+            offscreenCanvas.height = targetH;
+            offscreenCtx = offscreenCanvas.getContext('2d');
+          }
+          if (offscreenCtx) {
+            try {
+              offscreenCtx.drawImage(videoToCapture, 0, 0, targetW, targetH);
+              const frameData = offscreenCanvas.toDataURL('image/jpeg', 0.7);
+              window.nexora?.sendPipFrame?.(frameData);
+            } catch {
+              // Frame capture error ignored
+            }
+          }
+        }
+      }
+    }, 60);
+
+    return () => {
+      clearInterval(syncInterval);
     };
   }, []);
 

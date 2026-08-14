@@ -12,13 +12,11 @@ import {
   MicIcon,
   MicOffIcon,
   PhoneOffIcon,
-  PipIcon,
   ScreenShareIcon,
   SettingsIcon,
   VideoIcon,
   VideoOffIcon,
 } from '../../components/icons';
-import { isDesktopRuntime } from '../../services/platform';
 
 export function VoiceControls({ size = 'sm' }: { size?: 'sm' | 'lg' }): JSX.Element {
   const status = useVoiceStore((state) => state.status);
@@ -85,18 +83,6 @@ export function VoiceControls({ size = 'sm' }: { size?: 'sm' | 'lg' }): JSX.Elem
         </ControlButton>
         {choosingDevices && <DevicePicker onClose={() => setChoosingDevices(false)} />}
       </div>
-
-      {isDesktopRuntime() && (
-        <ControlButton
-          active={false}
-          disabled={disabled}
-          pad={pad}
-          label="Picture-in-Picture / Pop out"
-          onClick={() => void window.nexora?.openPip()}
-        >
-          <PipIcon className={icon} />
-        </ControlButton>
-      )}
 
       <button
         type="button"

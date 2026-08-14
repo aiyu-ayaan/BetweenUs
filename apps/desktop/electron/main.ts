@@ -95,7 +95,7 @@ app.commandLine.appendSwitch('disable-features', 'CalculateNativeWinOcclusion');
 /** The window a notification click brings back. */
 let mainWindow: BrowserWindow | null = null;
 
-/** Floating Picture-in-Picture window for incoming video and quick call controls. */
+/** Floating PiP overlay – mirrors the main window's live content. */
 let pipWindow: BrowserWindow | null = null;
 
 /** Set on `before-quit`, so closing the window can mean "hide" until then. */
@@ -273,62 +273,365 @@ function createWindow(hidden = false): BrowserWindow {
   return window;
 }
 
-function createPipWindow(): BrowserWindow {
+// ─── Picture-in-Picture overlay ────────────────────────────────────────────
+// Dedicated floating overlay showing the active remote participant / speaker.
+// Main window streams state and video frames (if camera/share is on) via IPC.
+
+function createPipWindow(): void {
   if (pipWindow && !pipWindow.isDestroyed()) {
     pipWindow.show();
     pipWindow.focus();
-    return pipWindow;
+    return;
   }
+
+  if (!mainWindow || mainWindow.isDestroyed()) return;
 
   const primaryDisplay = screen.getPrimaryDisplay();
   const workArea = primaryDisplay.workArea;
   const pipWidth = 360;
-  const pipHeight = 220;
-  const x = Math.round(workArea.x + workArea.width - pipWidth - 20);
-  const y = Math.round(workArea.y + workArea.height - pipHeight - 20);
+  const pipHeight = 225;
+  const x = Math.round(workArea.x + workArea.width - pipWidth - 24);
+  const y = Math.round(workArea.y + workArea.height - pipHeight - 24);
 
-  const window = new BrowserWindow({
+  const pip = new BrowserWindow({
     width: pipWidth,
     height: pipHeight,
-    minWidth: 260,
-    minHeight: 160,
+    minWidth: 240,
+    minHeight: 150,
     maxWidth: 640,
-    maxHeight: 400,
+    maxHeight: 440,
     x,
     y,
     frame: false,
     transparent: false,
-    backgroundColor: '#06070a',
+    backgroundColor: '#0c0d12',
     alwaysOnTop: true,
     skipTaskbar: true,
     hasShadow: true,
     resizable: true,
+    focusable: true,
     webPreferences: {
-      preload: fs.existsSync(path.join(dirname, 'preload.mjs'))
-        ? path.join(dirname, 'preload.mjs')
-        : path.join(dirname, 'preload.js'),
-      contextIsolation: true,
-      nodeIntegration: false,
-      sandbox: true,
-      webviewTag: false,
+      nodeIntegration: true,
+      contextIsolation: false,
+      sandbox: false,
       backgroundThrottling: false,
     },
   });
 
-  window.setAlwaysOnTop(true, 'floating');
+  pip.setAlwaysOnTop(true, 'floating');
 
-  window.on('closed', () => {
-    if (pipWindow === window) pipWindow = null;
+  pip.on('closed', () => {
+    if (pipWindow === pip) pipWindow = null;
   });
 
-  if (rendererDevUrl) {
-    void window.loadURL(`${rendererDevUrl}?pip=1`);
-  } else {
-    void window.loadFile(path.join(dirname, '../dist/index.html'), { query: { pip: '1' } });
+  const html = `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; user-select: none; }
+  html, body {
+    width: 100%; height: 100%; overflow: hidden;
+    background: #090a0f; color: #f1f5f9;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    border-radius: 14px;
+  }
+  body {
+    display: flex; flex-direction: column;
+    position: relative; border: 1px solid rgba(255,255,255,0.14);
+    box-shadow: 0 12px 36px rgba(0,0,0,0.6);
+  }
+  
+  /* Main clickable stage */
+  #mainStage {
+    position: absolute; inset: 0; width: 100%; height: 100%;
+    cursor: pointer; -webkit-app-region: no-drag;
+    border-radius: 14px; overflow: hidden;
   }
 
-  pipWindow = window;
-  return window;
+  #videoWrapper {
+    position: absolute; inset: 0; width: 100%; height: 100%;
+    display: none; align-items: center; justify-content: center;
+    background: #000;
+  }
+  #videoCanvas {
+    width: 100%; height: 100%;
+    object-fit: cover;
+  }
+  #avatarContainer {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 10px; background: radial-gradient(circle at center, #171d2b 0%, #090a0f 100%);
+  }
+  .avatar-ring {
+    position: relative; width: 68px; height: 68px;
+    border-radius: 50%; display: flex; align-items: center; justify-content: center;
+    background: #1e293b; color: #38bdf8; font-size: 24px; font-weight: 700;
+    border: 2.5px solid transparent;
+    transition: all 0.25s ease;
+  }
+  .avatar-ring.speaking {
+    border-color: #22c55e;
+    box-shadow: 0 0 0 4px rgba(34, 197, 94, 0.25), 0 0 24px rgba(34, 197, 94, 0.5);
+    transform: scale(1.06);
+  }
+  .speaker-name {
+    font-size: 13px; font-weight: 600; color: #f8fafc;
+    max-width: 80%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    text-shadow: 0 1px 4px rgba(0,0,0,0.9);
+  }
+  .speaker-status {
+    font-size: 11px; color: #94a3b8; margin-top: -6px;
+  }
+  .speaking-indicator {
+    color: #4ade80; font-weight: 600;
+  }
+
+  /* Overlay top bar (drag handle) */
+  .top-bar {
+    position: absolute; top: 0; left: 0; right: 0;
+    padding: 8px 10px; display: flex; align-items: center; justify-content: space-between;
+    background: linear-gradient(to bottom, rgba(0,0,0,0.8), transparent);
+    z-index: 20; opacity: 0; transition: opacity 0.2s ease;
+  }
+  body:hover .top-bar { opacity: 1; }
+  
+  .drag-zone {
+    -webkit-app-region: drag;
+    display: flex; align-items: center; gap: 6px; flex: 1; height: 26px;
+    cursor: move;
+  }
+  .channel-badge {
+    font-size: 10px; font-weight: 600; color: #cbd5e1;
+    background: rgba(0,0,0,0.65); padding: 3px 8px; border-radius: 5px;
+    backdrop-filter: blur(6px); border: 1px solid rgba(255,255,255,0.1);
+    max-width: 170px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    display: flex; align-items: center; gap: 5px;
+  }
+  .live-dot {
+    width: 6px; height: 6px; border-radius: 50%; background: #22c55e;
+    box-shadow: 0 0 6px #22c55e;
+  }
+  
+  .top-actions {
+    -webkit-app-region: no-drag;
+    display: flex; align-items: center; gap: 5px;
+  }
+  .icon-btn {
+    width: 26px; height: 26px; border-radius: 6px; border: none;
+    background: rgba(0,0,0,0.65); color: #cbd5e1; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    backdrop-filter: blur(6px); transition: all 0.15s ease;
+    border: 1px solid rgba(255,255,255,0.08);
+  }
+  .icon-btn:hover { background: rgba(255,255,255,0.25); color: #fff; transform: scale(1.05); }
+
+  /* Bottom Controls Bar */
+  .bottom-bar {
+    -webkit-app-region: no-drag;
+    position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%);
+    display: flex; align-items: center; gap: 6px;
+    padding: 5px 10px; border-radius: 9999px;
+    background: rgba(15, 23, 42, 0.92); border: 1px solid rgba(255,255,255,0.15);
+    backdrop-filter: blur(14px); box-shadow: 0 6px 20px rgba(0,0,0,0.6);
+    z-index: 20; opacity: 0; transition: opacity 0.2s ease;
+  }
+  body:hover .bottom-bar { opacity: 1; }
+  .control-btn {
+    width: 32px; height: 32px; border-radius: 50%; border: none;
+    background: rgba(255,255,255,0.1); color: #e2e8f0; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: all 0.15s ease;
+  }
+  .control-btn:hover { background: rgba(255,255,255,0.25); transform: scale(1.1); color: #fff; }
+  .control-btn.active-off { background: rgba(239, 68, 68, 0.3); color: #f87171; border: 1px solid rgba(239,68,68,0.4); }
+  .control-btn.hangup { background: #dc2626; color: #fff; }
+  .control-btn.hangup:hover { background: #b91c1c; }
+
+  /* Remote video label overlay */
+  .video-label {
+    position: absolute; bottom: 8px; left: 10px; z-index: 15;
+    font-size: 11px; font-weight: 600; color: #fff;
+    background: rgba(0,0,0,0.7); padding: 3px 8px; border-radius: 5px;
+    backdrop-filter: blur(4px); display: none;
+    border: 1px solid rgba(255,255,255,0.12);
+  }
+</style>
+</head>
+<body>
+  <div id="mainStage" title="Click or double-click to open Nexora">
+    <div id="videoWrapper">
+      <canvas id="videoCanvas"></canvas>
+    </div>
+    <div class="video-label" id="videoLabel"></div>
+
+    <div id="avatarContainer">
+      <div class="avatar-ring" id="avatarRing">
+        <span id="avatarInitials">?</span>
+      </div>
+      <div class="speaker-name" id="speakerName">Waiting for participant...</div>
+      <div class="speaker-status" id="speakerStatus">Connected to voice</div>
+    </div>
+  </div>
+
+  <div class="top-bar">
+    <div class="drag-zone">
+      <div class="channel-badge" id="channelBadge">
+        <span class="live-dot"></span>
+        <span id="channelNameText">Voice Channel</span>
+      </div>
+    </div>
+    <div class="top-actions">
+      <button class="icon-btn" id="expandBtn" title="Open Nexora">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+      </button>
+      <button class="icon-btn" id="closeBtn" title="Close PiP">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6L6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <div class="bottom-bar">
+    <button class="control-btn" id="micBtn" title="Toggle Microphone">
+      <svg id="micIcon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+    </button>
+    <button class="control-btn" id="cameraBtn" title="Toggle Camera">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
+    </button>
+    <button class="control-btn" id="returnBtn" title="Open Nexora">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+    </button>
+    <button class="control-btn hangup" id="leaveBtn" title="Disconnect">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.68 13.31a16 16 0 0 0 3.41 2.6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7 2 2 0 0 1 1.72 2v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.42 19.42 0 0 1-6-6 19.8 19.8 0 0 1-3.11-8.69A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91"/><line x1="23" y1="1" x2="1" y2="23"/></svg>
+    </button>
+  </div>
+
+  <script>
+    const { ipcRenderer } = require('electron');
+
+    const videoWrapper = document.getElementById('videoWrapper');
+    const canvas = document.getElementById('videoCanvas');
+    const ctx = canvas.getContext('2d');
+    const videoLabel = document.getElementById('videoLabel');
+    const avatarContainer = document.getElementById('avatarContainer');
+    const avatarRing = document.getElementById('avatarRing');
+    const avatarInitials = document.getElementById('avatarInitials');
+    const speakerName = document.getElementById('speakerName');
+    const speakerStatus = document.getElementById('speakerStatus');
+    const channelNameText = document.getElementById('channelNameText');
+    const micBtn = document.getElementById('micBtn');
+    const cameraBtn = document.getElementById('cameraBtn');
+
+    let hasActiveVideo = false;
+    const img = new Image();
+
+    img.onload = () => {
+      if (!hasActiveVideo) return;
+      const w = img.naturalWidth || 640;
+      const h = img.naturalHeight || 360;
+      if (canvas.width !== w || canvas.height !== h) {
+        canvas.width = w;
+        canvas.height = h;
+      }
+      ctx.drawImage(img, 0, 0, w, h);
+    };
+
+    ipcRenderer.on('pip:frame', (_e, dataUrl) => {
+      if (hasActiveVideo && dataUrl) {
+        img.src = dataUrl;
+      }
+    });
+
+    ipcRenderer.on('pip:state', (_e, state) => {
+      if (!state) return;
+      
+      if (state.channelName) channelNameText.textContent = state.channelName;
+      
+      const sp = state.activeSpeaker;
+      if (sp) {
+        speakerName.textContent = sp.name || 'Participant';
+        const initials = (sp.name || '?').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
+        avatarInitials.textContent = initials;
+        
+        if (sp.speaking) {
+          avatarRing.classList.add('speaking');
+          speakerStatus.innerHTML = '<span class="speaking-indicator">Speaking...</span>';
+        } else {
+          avatarRing.classList.remove('speaking');
+          speakerStatus.textContent = sp.micEnabled ? 'Muted' : 'Connected';
+        }
+
+        hasActiveVideo = Boolean(sp.hasVideo);
+        if (hasActiveVideo) {
+          videoWrapper.style.display = 'flex';
+          videoLabel.style.display = 'block';
+          videoLabel.textContent = sp.name;
+          avatarContainer.style.display = 'none';
+          
+          if (sp.isScreenShare) {
+            canvas.style.objectFit = 'contain';
+          } else {
+            canvas.style.objectFit = 'cover';
+          }
+        } else {
+          videoWrapper.style.display = 'none';
+          videoLabel.style.display = 'none';
+          avatarContainer.style.display = 'flex';
+        }
+      } else {
+        speakerName.textContent = 'Voice Channel';
+        avatarInitials.textContent = 'VC';
+        avatarRing.classList.remove('speaking');
+        speakerStatus.textContent = state.totalParticipants > 1 ? (state.totalParticipants - 1) + ' participants' : 'Listening...';
+        videoWrapper.style.display = 'none';
+        videoLabel.style.display = 'none';
+        avatarContainer.style.display = 'flex';
+      }
+
+      // Local mic state
+      if (!state.localMicEnabled) {
+        micBtn.classList.add('active-off');
+      } else {
+        micBtn.classList.remove('active-off');
+      }
+
+      // Local camera state
+      if (!state.localCameraEnabled) {
+        cameraBtn.classList.add('active-off');
+      } else {
+        cameraBtn.classList.remove('active-off');
+      }
+    });
+
+    const openNexora = () => ipcRenderer.send('pip:action', { type: 'restore' });
+
+    // Clicking or double clicking anywhere on the main stage opens Nexora
+    document.getElementById('mainStage').onclick = openNexora;
+    document.getElementById('mainStage').ondblclick = openNexora;
+
+    document.getElementById('expandBtn').onclick = (e) => { e.stopPropagation(); openNexora(); };
+    document.getElementById('closeBtn').onclick = (e) => { e.stopPropagation(); openNexora(); };
+    document.getElementById('returnBtn').onclick = (e) => { e.stopPropagation(); openNexora(); };
+    document.getElementById('micBtn').onclick = (e) => { e.stopPropagation(); ipcRenderer.send('pip:action', { type: 'toggleMic' }); };
+    document.getElementById('cameraBtn').onclick = (e) => { e.stopPropagation(); ipcRenderer.send('pip:action', { type: 'toggleCamera' }); };
+    document.getElementById('leaveBtn').onclick = (e) => { e.stopPropagation(); ipcRenderer.send('pip:action', { type: 'leave' }); };
+  </script>
+</body>
+</html>`;
+
+  void pip.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
+
+  pipWindow = pip;
+}
+
+function closePipWindow(restoreMain = false): void {
+  if (restoreMain) showMainWindow();
+  if (pipWindow && !pipWindow.isDestroyed()) {
+    pipWindow.close();
+    pipWindow = null;
+  }
+  if (restoreMain) showMainWindow();
 }
 
 ipcMain.handle('pip:open', (): void => {
@@ -336,21 +639,38 @@ ipcMain.handle('pip:open', (): void => {
 });
 
 ipcMain.handle('pip:close', (): void => {
+  closePipWindow();
+});
+
+ipcMain.on('pip:frame', (_event, frameData: string): void => {
   if (pipWindow && !pipWindow.isDestroyed()) {
-    pipWindow.close();
-    pipWindow = null;
+    pipWindow.webContents.send('pip:frame', frameData);
   }
 });
 
-ipcMain.handle('pip:is-open', (): boolean => {
-  return Boolean(pipWindow && !pipWindow.isDestroyed());
+ipcMain.on('pip:state', (_event, stateData: unknown): void => {
+  if (pipWindow && !pipWindow.isDestroyed()) {
+    pipWindow.webContents.send('pip:state', stateData);
+  }
 });
 
-ipcMain.handle('pip:focus-main', (): void => {
-  showMainWindow();
-  if (pipWindow && !pipWindow.isDestroyed()) {
-    pipWindow.close();
-    pipWindow = null;
+ipcMain.on('pip:action', (_event, action: { type: string }): void => {
+  if (action.type === 'restore') {
+    showMainWindow();
+    closePipWindow(false);
+  } else if (action.type === 'leave') {
+    closePipWindow(false);
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('pip:action', action);
+    }
+  } else if (action.type === 'toggleMic') {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('pip:action', action);
+    }
+  } else if (action.type === 'toggleCamera') {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('pip:action', action);
+    }
   }
 });
 
@@ -703,7 +1023,11 @@ function showMainWindow(): void {
   const window = mainWindow ?? createWindow();
   if (window.isMinimized()) window.restore();
   window.show();
+  window.setAlwaysOnTop(true);
   window.focus();
+  window.setAlwaysOnTop(false);
+  window.moveTop();
+  window.flashFrame(false);
 }
 
 function trayTooltip(): string {
@@ -872,6 +1196,16 @@ void app.whenReady().then(() => {
     );
   });
 
+  session.defaultSession.setPermissionCheckHandler((_webContents, permission) => {
+    const perm = permission as string;
+    return (
+      perm === 'media' ||
+        perm === 'audioCapture' ||
+        perm === 'videoCapture' ||
+        perm === 'display-capture'
+    );
+  });
+
   session.defaultSession.setDisplayMediaRequestHandler((request, callback) => {
     // Consumed once: a later capture that skipped the picker falls back to the
     // primary screen rather than silently re-sharing the last choice.
@@ -912,11 +1246,8 @@ void app.whenReady().then(() => {
 app.on('before-quit', () => {
   quitting = true;
   stopInputBackend();
+  closePipWindow();
   releaseDesktopComposition(true);
-  if (pipWindow && !pipWindow.isDestroyed()) {
-    pipWindow.destroy();
-    pipWindow = null;
-  }
 });
 
 // The tray keeps the app alive with no window on screen, which is the point of

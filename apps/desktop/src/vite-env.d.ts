@@ -97,8 +97,9 @@ interface Window {
     devLogin: () => Promise<DevLogin | null>;
     openPip: () => Promise<void>;
     closePip: () => Promise<void>;
-    isPipOpen: () => Promise<boolean>;
-    focusMain: () => Promise<void>;
+    sendPipState?: (state: unknown) => void;
+    sendPipFrame?: (frameData: string) => void;
+    onPipAction?: (handler: (action: { type: string }) => void) => () => void;
     onWindowMinimize?: (handler: () => void) => () => void;
     onWindowRestore?: (handler: () => void) => () => void;
   };

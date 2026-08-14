@@ -134,11 +134,18 @@ const api = {
   devLogin: (): Promise<{ email: string; password: string; label: string } | null> =>
     ipcRenderer.invoke('dev:login'),
 
-  /** Picture-in-Picture floating overlay window controls */
+  /** Window PiP overlay */
   openPip: (): Promise<void> => ipcRenderer.invoke('pip:open'),
   closePip: (): Promise<void> => ipcRenderer.invoke('pip:close'),
-  isPipOpen: (): Promise<boolean> => ipcRenderer.invoke('pip:is-open'),
-  focusMain: (): Promise<void> => ipcRenderer.invoke('pip:focus-main'),
+  sendPipState: (state: unknown): void => ipcRenderer.send('pip:state', state),
+  sendPipFrame: (frameData: string): void => ipcRenderer.send('pip:frame', frameData),
+  onPipAction: (handler: (action: { type: string }) => void): (() => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, action: { type: string }): void => handler(action);
+    ipcRenderer.on('pip:action', listener);
+    return () => ipcRenderer.removeListener('pip:action', listener);
+  },
+
+  /** Window state change listeners for auto Picture-in-Picture */
   onWindowMinimize: (handler: () => void): (() => void) => {
     const listener = (): void => handler();
     ipcRenderer.on('window:minimize', listener);
