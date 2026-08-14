@@ -13,7 +13,6 @@ import {
   Room,
   RoomEvent,
   Track,
-  setLogLevel,
   type LocalParticipant,
   type Participant,
   type RemoteParticipant,
@@ -34,8 +33,6 @@ import {
   type ShareIntent,
   type ShareSize,
 } from '../services/share-quality';
-
-if (import.meta.env.DEV) setLogLevel('debug');
 
 export interface VoiceTile {
   identity: string;
@@ -129,11 +126,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
   error: null,
 
   join: async (channelId) => {
-    console.log('[voice.ts] 1. Starting join for channel:', channelId);
-    if (get().channelId === channelId && get().status !== 'idle') {
-      console.log('[voice.ts] Already in or connecting to channel:', channelId);
-      return;
-    }
+    if (get().channelId === channelId && get().status !== 'idle') return;
 
     const currentJoinId = ++joinCounter;
 
@@ -158,7 +151,6 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
     });
 
     try {
-      console.log('[voice.ts] 2. Fetching key & call token...');
       const [key, credentials] = await Promise.all([
         callKeyForChannel(channelId),
         api.callToken(channelId),
@@ -170,8 +162,6 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
       const livekitUrl = credentials.url.startsWith('/')
         ? `${wsUrl()}${credentials.url}`
         : credentials.url;
-
-      console.log('[voice.ts] 3. Got credentials url:', livekitUrl);
 
       if (joinCounter !== currentJoinId) return;
 
@@ -189,7 +179,6 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
         ...(settings.outputDeviceId ? { audioOutput: { deviceId: settings.outputDeviceId } } : {}),
       });
 
-      console.log('[voice.ts] 4. Setting E2EE key...');
       await keyProvider.setKey(key);
 
       if (joinCounter !== currentJoinId) {
@@ -198,13 +187,14 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
       }
 
       try {
-        console.log('[voice.ts] 5. Enabling E2EE...');
         await room.setE2EEEnabled(true);
-        console.log('[voice.ts] 5b. E2EE enabled successfully');
-      } catch (e2eeErr) {
-        console.error('[voice.ts] 5x. E2EE enable failed:', e2eeErr);
+      } catch (error) {
         room.disconnect().catch(() => undefined);
-        throw new Error('This runtime cannot encrypt voice media, so the join was cancelled');
+        // The cause carries what the runtime actually objected to - insertable
+        // streams, usually - which the message above deliberately does not.
+        throw new Error('This runtime cannot encrypt voice media, so the join was cancelled', {
+          cause: error,
+        });
       }
 
       if (joinCounter !== currentJoinId) {
@@ -258,14 +248,12 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
           }
         });
 
-      console.log('[voice.ts] 6. Connecting to LiveKit room...');
       const connectPromise = room.connect(livekitUrl, credentials.token);
       const timeoutPromise = new Promise<never>((_, reject) =>
         setTimeout(() => reject(new Error('Connection to voice server timed out')), 15_000),
       );
 
       await Promise.race([connectPromise, timeoutPromise]);
-      console.log('[voice.ts] 6b. Room connected successfully!');
 
       if (joinCounter !== currentJoinId) {
         void room.disconnect().catch(() => undefined);
@@ -277,19 +265,15 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
       let micEnabled = true;
       let micProblem: string | null = null;
       try {
-        console.log('[voice.ts] 7. Enabling microphone...');
         await room.localParticipant.setMicrophoneEnabled(
           true,
           micCapture(settings),
           micPublish(settings),
         );
         await attachGate(room, settings);
-        console.log('[voice.ts] 7b. Microphone enabled!');
       } catch (error) {
         micEnabled = false;
-        const reason = error instanceof Error ? error.message : 'unknown error';
-        console.warn('[voice.ts] 7x. Microphone failed to enable:', reason);
-        micProblem = `Connected, but microphone did not start (${reason}). Use the mic button to retry.`;
+        micProblem = `Connected, but microphone did not start (${messageOf(error)}). Use the mic button to retry.`;
       }
 
       if (joinCounter !== currentJoinId) {
@@ -302,7 +286,6 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
       // they exist for exactly as long as the room does.
       useShareControlStore.getState().attach(room);
 
-      console.log('[voice.ts] 8. Join complete!');
       set({
         error: micProblem,
         status: 'connected',
@@ -317,7 +300,6 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
     } catch (error) {
       if (joinCounter !== currentJoinId) return;
 
-      console.error('[voice.ts] JOIN ERROR:', error);
       set({
         status: 'idle',
         channelId: null,
