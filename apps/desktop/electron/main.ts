@@ -40,6 +40,38 @@ const devLoginEmail = process.env.NEXORA_DEV_EMAIL;
 const devLoginPassword = process.env.NEXORA_DEV_PASSWORD;
 const windowLabel = process.env.NEXORA_WINDOW_LABEL;
 
+// --- Capture and throttling switches ----------------------------------------
+//
+// Both of these have to be set before `app.whenReady`, and both exist for the
+// same scenario: somebody shares their screen and then alt-tabs away to the
+// thing they are showing.
+//
+// The default Windows capturer is DXGI desktop duplication, which reads the
+// desktop plane only. A browser playing a video hands its frames to a hardware
+// overlay plane instead, so duplication captures a black rectangle where the
+// video is while the page around it comes through fine - and the rectangle
+// appears and disappears as the source window gains and loses focus, because
+// that is when the overlay is turned on and off. Windows Graphics Capture asks
+// DWM for what it actually composited, overlays included, and it keeps
+// producing frames for a window that is behind another one instead of
+// returning the last one it saw.
+if (process.platform === 'win32') {
+  app.commandLine.appendSwitch(
+    'enable-features',
+    'AllowWgcDesktopCapturer,AllowWgcScreenCapturer,AllowWgcWindowCapturer',
+  );
+}
+
+// The capture and the encoder both live in the renderer, and the renderer is
+// exactly what Chromium puts to sleep when its window is minimised or covered -
+// which is the normal state of this app for the whole duration of a share.
+// Asleep, timers stall and the encoder is told it is over budget, so the far
+// end sees the picture freeze or the resolution collapse. Not a saving worth
+// having while media is on the wire.
+app.commandLine.appendSwitch('disable-backgrounding-occluded-windows');
+app.commandLine.appendSwitch('disable-renderer-backgrounding');
+app.commandLine.appendSwitch('disable-background-timer-throttling');
+
 /** The window a notification click brings back. */
 let mainWindow: BrowserWindow | null = null;
 
@@ -143,6 +175,9 @@ function createWindow(hidden = false): BrowserWindow {
       nodeIntegration: false,
       sandbox: true,
       webviewTag: false,
+      // The per-window half of the switches at the top of this file: a hidden
+      // or covered window still has to capture, encode and send a share.
+      backgroundThrottling: false,
     },
   });
 
