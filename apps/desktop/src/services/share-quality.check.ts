@@ -42,11 +42,11 @@ assert.equal(bitrateFor('motion', UHD), 24_000_000);
 
 // Capture is asked for at the real size, never left to the 1080p default.
 const movie = shareOptions('motion', QHD, { music: true });
-assert.deepEqual(movie.capture.resolution, { width: 2560, height: 1440, frameRate: 60 });
+assert.deepEqual(movie.capture.video, { width: 2560, height: 1440, frameRate: 60 });
 assert.equal(movie.capture.contentHint, 'motion');
 assert.equal(movie.publish.degradationPreference, 'maintain-framerate');
-assert.equal(movie.publish.simulcast, false);
-assert.equal(movie.publish.videoCodec, 'h264');
+assert.equal(movie.publish.maxFramerate, 60);
+assert.equal(movie.publish.videoCodec, 'H264');
 // A soundtrack keeps both channels and none of the speech processing.
 assert.deepEqual(movie.capture.audio, {
   restrictOwnAudio: true,
@@ -55,14 +55,17 @@ assert.deepEqual(movie.capture.audio, {
   autoGainControl: false,
   channelCount: 2,
 });
-assert.equal(movie.publish.dtx, false);
+assert.equal(movie.publish.audio !== false && movie.publish.audio.dtx, false);
+assert.equal(movie.publish.audio !== false && movie.publish.audio.stereo, true);
 
 // A desktop makes the opposite trade, and its audio is not a soundtrack.
 const desktop = shareOptions('detail', HD, { music: false });
 assert.equal(desktop.capture.contentHint, 'text');
 assert.equal(desktop.publish.degradationPreference, 'maintain-resolution');
 assert.deepEqual(desktop.capture.audio, { restrictOwnAudio: true });
-assert.equal(desktop.publish.dtx, undefined);
+// No music options at all, rather than music options turned off: a shared
+// terminal's beeps are not worth half a megabit of stereo Opus.
+assert.equal(desktop.publish.audio, false);
 
 // Silent shares ask for no audio track at all: handing back a track the page
 // never requested fails the whole capture.

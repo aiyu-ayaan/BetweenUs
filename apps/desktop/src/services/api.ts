@@ -2,7 +2,7 @@ import type {
   ApiErrorBody,
   AuthResponse,
   AuthTokens,
-  CallTokenResponse,
+  CallIceResponse,
   Channel,
   ChannelKeysResponse,
   ChannelMember,
@@ -517,6 +517,11 @@ export const api = {
 
   // --- Calls ---
 
-  callToken: (channelId: string): Promise<CallTokenResponse> =>
-    request('/api/v1/calls/token', { method: 'POST', body: JSON.stringify({ channelId }) }),
+  /**
+   * How to reach the other peers - STUN, and TURN when this deployment
+   * configures one. Deliberately not "where the media server is": there is not
+   * one, and nothing here ever hands a client an address to dial.
+   */
+  callIce: (channelId: string): Promise<CallIceResponse> =>
+    request('/api/v1/calls/ice', { method: 'POST', body: JSON.stringify({ channelId }) }),
 };

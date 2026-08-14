@@ -1,49 +1,46 @@
 /**
  * Voice-channel state: the client is connected to at most one at a time.
  *
- * Signalling and media are LiveKit's job; this store only decides when to join,
- * installs the channel key so frames are end-to-end encrypted, flattens the
- * room into tiles React can render, and tells presence-service who is in the
- * channel so other members see it without joining.
+ * The media itself is `mesh.ts` - one peer connection per other participant,
+ * with no server in the path. This store decides when to join, captures the
+ * local devices, flattens the mesh into tiles React can render, and tells
+ * presence-service who is in the channel so other members see it without
+ * joining.
+ *
+ * Identity here is a *peer* id, not a user id: one account can have two windows
+ * open and each is its own end of its own connections. `userId` is carried
+ * alongside for the things that are about the person rather than the
+ * connection - finding their machine in the remote-desktop list, mostly.
  */
 import { create } from 'zustand';
-import {
-  ExternalE2EEKeyProvider,
-  LocalAudioTrack,
-  Room,
-  RoomEvent,
-  Track,
-  type LocalParticipant,
-  type Participant,
-  type RemoteParticipant,
-  type RemoteTrack,
-} from 'livekit-client';
-import E2eeWorker from 'livekit-client/e2ee-worker?worker';
+import type { CallPeer } from '@nexora/shared-types';
 import { api } from '../services/api';
 import { callKeyForChannel } from '../services/e2ee';
+import { Mesh, SLOTS, type Slot } from '../services/mesh';
 import { presenceSocket } from '../services/socket';
-import { wsUrl } from '../services/endpoint';
+import { useAuthStore } from './auth';
 import { useShareControlStore } from './shareControl';
 import { useAudioSettings } from './audioSettings';
 import { NoiseGate } from '../services/mic-gate';
-import { micCapture, micProcessing, micPublish, type VoiceSettings } from '../services/voice-quality';
-import {
-  PLAYOUT_DELAY,
-  shareOptions,
-  type ShareIntent,
-  type ShareSize,
-} from '../services/share-quality';
+import { micCapture, micEncoding, micProcessing, type VoiceSettings } from '../services/voice-quality';
+import { shareOptions, type ShareIntent, type ShareSize } from '../services/share-quality';
+
+/** The local participant's own key in every map here. */
+export const LOCAL = 'local';
 
 export interface VoiceTile {
+  /** Peer id, or `LOCAL`. Unique per connection, not per person. */
   identity: string;
+  /** Who this is. Two tiles can share one, if somebody has two windows open. */
+  userId: string;
   name: string;
   isLocal: boolean;
   speaking: boolean;
   micEnabled: boolean;
-  videoTrack: Track | null;
-  audioTrack: Track | null;
+  videoTrack: MediaStreamTrack | null;
+  audioTrack: MediaStreamTrack | null;
   /** Audio that came with a shared screen - a film's soundtrack, usually. */
-  screenAudioTrack: Track | null;
+  screenAudioTrack: MediaStreamTrack | null;
   /** Epoch ms of the last time this person was an active speaker. */
   lastSpokeAt: number;
 }
@@ -51,15 +48,15 @@ export interface VoiceTile {
 /** A screen someone is sharing. Separate from their tile: both can be on. */
 export interface VoiceShare {
   identity: string;
+  userId: string;
   name: string;
   isLocal: boolean;
-  track: Track | null;
+  track: MediaStreamTrack | null;
 }
 
 interface VoiceState {
   status: 'idle' | 'connecting' | 'connected';
   channelId: string | null;
-  room: Room | null;
   tiles: VoiceTile[];
   shares: VoiceShare[];
   /** Identity whose shared screen fills the stage, or null for the grid. */
@@ -73,7 +70,11 @@ interface VoiceState {
    * and a window has no such fraction - it can be dragged between two of them.
    */
   sharedDisplayId: string | null;
-  /** False when the browser/runtime refused insertable streams. */
+  /**
+   * Whether media is end-to-end encrypted. Always true in a mesh: DTLS-SRTP
+   * between two peers with nothing in between *is* end to end, and a peer whose
+   * DTLS fingerprint is not signed with the channel key is never connected to.
+   */
   encrypted: boolean;
   error: string | null;
 
@@ -91,6 +92,20 @@ interface VoiceState {
 }
 
 /**
+ * The live call. Outside the store because it is machinery rather than rendered
+ * state, and because React must never re-render on a peer-connection event.
+ */
+let mesh: Mesh | null = null;
+
+/** peerId -> what has arrived from them, by slot. */
+const remoteTracks = new Map<string, Partial<Record<Slot, MediaStreamTrack | null>>>();
+let peers: CallPeer[] = [];
+let speaking = new Set<string>();
+
+/** What this client captured, so it can be stopped and replaced. */
+const localTracks: Partial<Record<Slot, MediaStreamTrack | null>> = {};
+
+/**
  * Identity -> when they last spoke. Kept outside the store because it is a
  * running record rather than rendered state: the grid sorts by it so whoever
  * just talked is on the first page.
@@ -101,9 +116,15 @@ const lastSpoke = new Map<string, number>();
  * The gate the microphone is published through, for as long as one call lasts.
  * Kept outside the store because it is a piece of audio plumbing rather than
  * rendered state: the sensitivity slider talks to it directly, which is what
- * lets a threshold change take effect without republishing the track.
+ * lets a threshold change take effect without recapturing the track.
  */
 let gate: NoiseGate | null = null;
+
+/**
+ * The gate's own audio context, one per window. Created on the first join,
+ * which is a click, so it is never blocked by autoplay policy.
+ */
+let gateContext: AudioContext | null = null;
 
 function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : 'unknown error';
@@ -114,7 +135,6 @@ let joinCounter = 0;
 export const useVoiceStore = create<VoiceState>((set, get) => ({
   status: 'idle',
   channelId: null,
-  room: null,
   tiles: [],
   shares: [],
   watching: null,
@@ -130,20 +150,13 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
 
     const currentJoinId = ++joinCounter;
 
-    const existingRoom = get().room;
-    const existingChannelId = get().channelId;
-    if (existingChannelId) {
-      presenceSocket.send({ type: 'voice.leave', channelId: existingChannelId });
-    }
-    if (existingRoom) {
-      void existingRoom.disconnect().catch(() => undefined);
-    }
+    const previousChannelId = get().channelId;
+    if (previousChannelId) presenceSocket.send({ type: 'voice.leave', channelId: previousChannelId });
+    teardown();
 
-    lastSpoke.clear();
     set({
       status: 'connecting',
       channelId,
-      room: null,
       error: null,
       tiles: [],
       shares: [],
@@ -151,167 +164,102 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
     });
 
     try {
-      const [key, credentials] = await Promise.all([
-        callKeyForChannel(channelId),
-        api.callToken(channelId),
-      ]);
+      const token = useAuthStore.getState().accessToken;
+      if (!token) throw new Error('Not signed in');
 
-      // A deployment that puts LiveKit behind its own gateway answers with a
-      // path (/livekit) rather than a host, so one address covers the whole
-      // deployment. Anything absolute is used as it stands.
-      const livekitUrl = credentials.url.startsWith('/')
-        ? `${wsUrl()}${credentials.url}`
-        : credentials.url;
+      // The key is the channel's own, and it never leaves this machine: it is
+      // used here only to sign this client's DTLS fingerprint, so the
+      // signalling server cannot substitute one of its own and stand in the
+      // middle. See mesh.ts.
+      const [channelKey, { iceServers }] = await Promise.all([
+        callKeyForChannel(channelId),
+        api.callIce(channelId),
+      ]);
 
       if (joinCounter !== currentJoinId) return;
 
       const settings = useAudioSettings.getState().settings;
 
-      const keyProvider = new ExternalE2EEKeyProvider();
-      const room = new Room({
-        adaptiveStream: true,
-        dynacast: true,
-        e2ee: { keyProvider, worker: new E2eeWorker() },
-        // Everything about how the microphone is captured and encoded lives in
-        // `voice-quality.ts`, including why the defaults were not it. Passed at
-        // every publish rather than as a room default, so a screen share's
-        // soundtrack keeps its own answer.
-        ...(settings.outputDeviceId ? { audioOutput: { deviceId: settings.outputDeviceId } } : {}),
-      });
-
-      await keyProvider.setKey(key);
-
-      if (joinCounter !== currentJoinId) {
-        void room.disconnect().catch(() => undefined);
-        return;
-      }
-
-      try {
-        await room.setE2EEEnabled(true);
-      } catch (error) {
-        room.disconnect().catch(() => undefined);
-        // The cause carries what the runtime actually objected to - insertable
-        // streams, usually - which the message above deliberately does not.
-        throw new Error('This runtime cannot encrypt voice media, so the join was cancelled', {
-          cause: error,
-        });
-      }
-
-      if (joinCounter !== currentJoinId) {
-        void room.disconnect().catch(() => undefined);
-        return;
-      }
-
-      const refresh = (): void => {
-        if (get().room !== room) return;
-        const next = snapshot(room);
-        // A share that ends takes the stage with it. Leaving `watching` pointed
-        // at somebody who has stopped sharing is a black rectangle with their
-        // name on it and no way out of it but leaving the call.
-        const watched = get().watching;
-        const stillSharing = next.shares.some((share) => share.identity === watched);
-        set(watched === null || stillSharing ? next : { ...next, watching: null });
-      };
-
-      room
-        .on(RoomEvent.ParticipantConnected, refresh)
-        .on(RoomEvent.ParticipantDisconnected, refresh)
-        .on(RoomEvent.TrackSubscribed, (track: RemoteTrack) => {
-          tuneLatency(track);
+      const next = new Mesh({
+        channelId,
+        token,
+        iceServers,
+        channelKey,
+        onTrack: (peerId, slot, track) => {
+          const slots = remoteTracks.get(peerId) ?? {};
+          slots[slot] = track;
+          remoteTracks.set(peerId, slots);
           refresh();
-        })
-        .on(RoomEvent.TrackUnsubscribed, refresh)
-        .on(RoomEvent.TrackMuted, refresh)
-        .on(RoomEvent.TrackUnmuted, refresh)
-        .on(RoomEvent.LocalTrackPublished, refresh)
-        .on(RoomEvent.LocalTrackUnpublished, refresh)
-        .on(RoomEvent.ActiveSpeakersChanged, (speakers: Participant[]) => {
-          const now = Date.now();
-          for (const speaker of speakers) lastSpoke.set(speaker.identity, now);
-          refresh();
-        })
-        .on(RoomEvent.Disconnected, () => {
-          if (get().room === room) {
-            presenceSocket.send({ type: 'voice.leave', channelId });
-            useShareControlStore.getState().detach();
-            gate = null;
-            set({
-              status: 'idle',
-              channelId: null,
-              room: null,
-              tiles: [],
-              shares: [],
-              watching: null,
-              screenEnabled: false,
-              sharedDisplayId: null,
-            });
+        },
+        onPeers: (next_) => {
+          peers = next_;
+          for (const peerId of [...remoteTracks.keys()]) {
+            if (!peers.some((peer) => peer.peerId === peerId)) remoteTracks.delete(peerId);
           }
-        });
-
-      // Relays, when the deployment has any. A self-hosted SFU is reachable on
-      // its own network and nowhere else, so a client on another network needs
-      // somewhere both ends can meet; without this the join reaches "joined,
-      // no media" and dies of the race below. `iceTransportPolicy` is
-      // deliberately not set to 'relay': a direct path is better whenever there
-      // is one, and on the SFU's own network there always is.
-      const connectPromise = room.connect(livekitUrl, credentials.token, {
-        ...(credentials.iceServers?.length ? { rtcConfig: { iceServers: credentials.iceServers } } : {}),
+          // Somebody who left cannot still be driving this machine.
+          useShareControlStore.getState().peersChanged(peers);
+          refresh();
+        },
+        onSpeaking: (next_) => {
+          speaking = next_;
+          const now = Date.now();
+          for (const identity of speaking) lastSpoke.set(identity, now);
+          refresh();
+        },
+        onData: (peer, payload) => useShareControlStore.getState().receive(peer, payload),
+        onFatal: (message) => {
+          if (get().channelId !== channelId) return;
+          set({ error: message });
+          void get().leave();
+        },
       });
-      const timeoutPromise = new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('Connection to voice server timed out')), 15_000),
-      );
 
-      await Promise.race([connectPromise, timeoutPromise]);
+      mesh = next;
+      await next.setMicEncoding(micEncoding(settings));
+      await next.join();
 
       if (joinCounter !== currentJoinId) {
-        void room.disconnect().catch(() => undefined);
+        next.close();
+        if (mesh === next) mesh = null;
         return;
       }
-
-      await room.startAudio().catch(() => undefined);
 
       let micEnabled = true;
       let micProblem: string | null = null;
       try {
-        await room.localParticipant.setMicrophoneEnabled(
-          true,
-          micCapture(settings),
-          micPublish(settings),
-        );
-        await attachGate(room, settings);
+        await openMicrophone(settings);
       } catch (error) {
         micEnabled = false;
         micProblem = `Connected, but microphone did not start (${messageOf(error)}). Use the mic button to retry.`;
       }
 
       if (joinCounter !== currentJoinId) {
-        void room.disconnect().catch(() => undefined);
+        next.close();
+        if (mesh === next) mesh = null;
         return;
       }
 
       presenceSocket.send({ type: 'voice.join', channelId });
-      // Pointers and "give me the mouse" ride the room's own data channel, so
-      // they exist for exactly as long as the room does.
-      useShareControlStore.getState().attach(room);
+      // Pointers and "give me the mouse" ride the peers' data channels, so they
+      // exist for exactly as long as the mesh does.
+      useShareControlStore.getState().attach(next);
 
       set({
         error: micProblem,
         status: 'connected',
-        room,
         encrypted: true,
         micEnabled,
         cameraEnabled: false,
         screenEnabled: false,
         sharedDisplayId: null,
-        ...snapshot(room),
+        ...snapshot(),
       });
     } catch (error) {
       if (joinCounter !== currentJoinId) return;
-
+      teardown();
       set({
         status: 'idle',
         channelId: null,
-        room: null,
         error: error instanceof Error ? error.message : 'Could not join the voice channel',
       });
     }
@@ -319,52 +267,60 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
 
   leave: async () => {
     joinCounter++;
-    const { room, channelId } = get();
+    const { channelId } = get();
     if (channelId) presenceSocket.send({ type: 'voice.leave', channelId });
     useShareControlStore.getState().detach();
-    gate = null;
-    lastSpoke.clear();
+    teardown();
     set({
       status: 'idle',
       channelId: null,
-      room: null,
       tiles: [],
       shares: [],
       watching: null,
+      micEnabled: false,
+      cameraEnabled: false,
       screenEnabled: false,
       sharedDisplayId: null,
       error: null,
     });
-    if (room) {
-      await room.disconnect().catch(() => undefined);
-    }
   },
 
   toggleMic: async () => {
-    const { room, micEnabled, status } = get();
-    if (!room || status !== 'connected') return;
-    const settings = useAudioSettings.getState().settings;
+    const { micEnabled, status } = get();
+    if (!mesh || status !== 'connected') return;
+
     try {
-      await room.localParticipant.setMicrophoneEnabled(
-        !micEnabled,
-        micCapture(settings),
-        micPublish(settings),
-      );
-      if (!micEnabled) await attachGate(room, settings);
-      set({ micEnabled: !micEnabled, error: null, ...snapshot(room) });
+      if (micEnabled) {
+        await closeMicrophone();
+        set({ micEnabled: false, error: null, ...snapshot() });
+        return;
+      }
+      await openMicrophone(useAudioSettings.getState().settings);
+      set({ micEnabled: true, error: null, ...snapshot() });
     } catch (error) {
-      set({ error: `Microphone: ${messageOf(error)}`, ...snapshot(room) });
+      set({ error: `Microphone: ${messageOf(error)}`, ...snapshot() });
     }
   },
 
   toggleCamera: async () => {
-    const { room, cameraEnabled, status } = get();
-    if (!room || status !== 'connected') return;
+    const { cameraEnabled, status } = get();
+    if (!mesh || status !== 'connected') return;
+
     try {
-      await room.localParticipant.setCameraEnabled(!cameraEnabled);
-      set({ cameraEnabled: !cameraEnabled, error: null, ...snapshot(room) });
+      if (cameraEnabled) {
+        stopLocal('camera');
+        await mesh.setTrack('camera', null);
+        set({ cameraEnabled: false, error: null, ...snapshot() });
+        return;
+      }
+
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      const track = stream.getVideoTracks()[0] ?? null;
+      localTracks.camera = track;
+      await mesh.setTrack('camera', track);
+      set({ cameraEnabled: Boolean(track), error: null, ...snapshot() });
     } catch (error) {
-      set({ error: `Camera: ${messageOf(error)}`, ...snapshot(room) });
+      set({ error: `Camera: ${messageOf(error)}`, ...snapshot() });
     }
   },
 
@@ -384,8 +340,9 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
    * why the defaults were never going to be watchable.
    */
   shareScreen: async (source, withAudio, intent) => {
-    const { room, status } = get();
-    if (!room || status !== 'connected') return;
+    const { status } = get();
+    if (!mesh || status !== 'connected') return;
+
     try {
       await window.nexora?.selectScreenSource(source?.id ?? '', withAudio);
       const options = shareOptions(intent, await captureSize(source), {
@@ -395,59 +352,227 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
         music: intent === 'motion',
       });
       if (!withAudio) options.capture.audio = false;
-      await room.localParticipant.setScreenShareEnabled(true, options.capture, options.publish);
 
-      // The browser's own "Stop sharing" bar, and the Windows capture ending
-      // for any other reason, never touch the button in this app - so the
-      // publication stayed up with a dead track behind it and everyone else
-      // kept staring at the last frame. Ending the capture has to mean the same
-      // thing however it was ended.
-      const published = room.localParticipant.getTrackPublication(Track.Source.ScreenShare)?.track;
-      published?.mediaStreamTrack.addEventListener(
-        'ended',
-        () => {
-          void get().stopScreenShare();
+      const stream = await navigator.mediaDevices.getDisplayMedia({
+        video: {
+          width: { ideal: options.capture.video.width },
+          height: { ideal: options.capture.video.height },
+          frameRate: { ideal: options.capture.video.frameRate },
         },
-        { once: true },
-      );
+        audio: options.capture.audio === false ? false : options.capture.audio,
+      } as DisplayMediaStreamOptions);
+
+      const video = stream.getVideoTracks()[0] ?? null;
+      const audio = stream.getAudioTracks()[0] ?? null;
+      // The encoder is told what it is looking at: a text profile keeps edges
+      // sharp and drops frames, a motion one does the opposite.
+      if (video) video.contentHint = options.capture.contentHint;
+
+      localTracks.screen = video;
+      localTracks.screenAudio = audio;
+      await mesh.setSharePublish(options.publish);
+      await mesh.setTrack('screen', video);
+      await mesh.setTrack('screenAudio', audio);
+
+      // The OS "Stop sharing" bar, and the capture ending for any other reason,
+      // never touch the button in this app - so the share stayed up with a dead
+      // track behind it and everyone else kept staring at the last frame.
+      // Ending the capture has to mean the same thing however it was ended.
+      video?.addEventListener('ended', () => void get().stopScreenShare(), { once: true });
 
       // Watch your own share, so you can see what the others are seeing.
       set({
-        screenEnabled: true,
+        screenEnabled: Boolean(video),
         // Null for a window, and for a runtime with no source list: control of
         // a share is refused unless a whole display is on the wire.
         sharedDisplayId: source?.displayId ?? null,
         error: null,
-        watching: room.localParticipant.identity,
-        ...snapshot(room),
+        watching: LOCAL,
+        ...snapshot(),
       });
     } catch (error) {
-      set({ error: `Screen share: ${messageOf(error)}`, ...snapshot(room) });
+      set({ error: `Screen share: ${messageOf(error)}`, ...snapshot() });
     }
   },
 
   stopScreenShare: async () => {
-    const { room, status, watching } = get();
-    if (!room || status !== 'connected') return;
+    const { status, watching } = get();
+    if (!mesh || status !== 'connected') return;
+
     try {
-      await room.localParticipant.setScreenShareEnabled(false);
+      stopLocal('screen');
+      stopLocal('screenAudio');
+      await mesh.setTrack('screen', null);
+      await mesh.setTrack('screenAudio', null);
+      await mesh.setSharePublish(null);
       // Control cannot outlive the share it was given over.
       useShareControlStore.getState().stop();
-      const stoppedWhatWeWatched = watching === room.localParticipant.identity;
+
       set({
         screenEnabled: false,
         sharedDisplayId: null,
         error: null,
-        watching: stoppedWhatWeWatched ? null : watching,
-        ...snapshot(room),
+        watching: watching === LOCAL ? null : watching,
+        ...snapshot(),
       });
     } catch (error) {
-      set({ error: `Screen share: ${messageOf(error)}`, ...snapshot(room) });
+      set({ error: `Screen share: ${messageOf(error)}`, ...snapshot() });
     }
   },
 
   watch: (identity) => set({ watching: identity }),
 }));
+
+/** Re-derives the rendered view from the mesh. Cheap; called on every event. */
+function refresh(): void {
+  const state = useVoiceStore.getState();
+  if (state.status === 'idle') return;
+
+  const next = snapshot();
+  // A share that ends takes the stage with it. Leaving `watching` pointed at
+  // somebody who has stopped sharing is a black rectangle with their name on it
+  // and no way out of it but leaving the call.
+  const watched = state.watching;
+  const stillSharing = next.shares.some((share) => share.identity === watched);
+  useVoiceStore.setState(watched === null || stillSharing ? next : { ...next, watching: null });
+}
+
+function snapshot(): { tiles: VoiceTile[]; shares: VoiceShare[] } {
+  const state = useVoiceStore.getState();
+  const self = useAuthStore.getState().user;
+
+  const localTile: VoiceTile = {
+    identity: LOCAL,
+    userId: self?.id ?? LOCAL,
+    name: self?.displayName || self?.username || 'You',
+    isLocal: true,
+    speaking: speaking.has(LOCAL),
+    micEnabled: state.micEnabled,
+    videoTrack: localTracks.camera ?? null,
+    // Never played back locally: hearing your own microphone is a howl.
+    audioTrack: null,
+    screenAudioTrack: null,
+    lastSpokeAt: lastSpoke.get(LOCAL) ?? 0,
+  };
+
+  const tiles: VoiceTile[] = [
+    localTile,
+    ...peers.map((peer) => {
+      const slots = remoteTracks.get(peer.peerId) ?? {};
+      return {
+        identity: peer.peerId,
+        userId: peer.userId,
+        name: peer.username,
+        isLocal: false,
+        speaking: speaking.has(peer.peerId),
+        micEnabled: Boolean(slots.mic),
+        videoTrack: slots.camera ?? null,
+        audioTrack: slots.mic ?? null,
+        screenAudioTrack: slots.screenAudio ?? null,
+        lastSpokeAt: lastSpoke.get(peer.peerId) ?? 0,
+      };
+    }),
+  ];
+
+  const shares: VoiceShare[] = [];
+  if (state.screenEnabled && localTracks.screen) {
+    shares.push({
+      identity: LOCAL,
+      userId: localTile.userId,
+      name: localTile.name,
+      isLocal: true,
+      track: localTracks.screen,
+    });
+  }
+  for (const peer of peers) {
+    const track = remoteTracks.get(peer.peerId)?.screen;
+    if (!track) continue;
+    shares.push({
+      identity: peer.peerId,
+      userId: peer.userId,
+      name: peer.username,
+      isLocal: false,
+      track,
+    });
+  }
+
+  return { tiles, shares };
+}
+
+/**
+ * Captures the microphone, puts the gate on it, and sends the gated track.
+ *
+ * The gate rather than the raw capture is what goes on the wire, which is the
+ * whole point of it: what the gate closes never reaches anybody.
+ */
+async function openMicrophone(settings: VoiceSettings): Promise<void> {
+  if (!mesh) return;
+
+  const stream = await navigator.mediaDevices.getUserMedia({ audio: micCapture(settings) });
+  const raw = stream.getAudioTracks()[0];
+  if (!raw) throw new Error('That microphone handed back no audio');
+
+  localTracks.mic = raw;
+  await mesh.setMicEncoding(micEncoding(settings));
+  await mesh.setTrack('mic', (await attachGate(raw, settings)) ?? raw);
+}
+
+async function closeMicrophone(): Promise<void> {
+  await mesh?.setTrack('mic', null);
+  await gate?.destroy().catch(() => undefined);
+  gate = null;
+  mesh?.setLocalSpeaking(false);
+  stopLocal('mic');
+}
+
+/**
+ * Puts the gate on the captured microphone and returns what should be sent.
+ *
+ * Never fatal: a call without a gate is the call this app had before the gate
+ * existed, and losing the microphone over a failed processor would be a far
+ * worse trade.
+ */
+async function attachGate(
+  track: MediaStreamTrack,
+  settings: VoiceSettings,
+): Promise<MediaStreamTrack | null> {
+  try {
+    await gate?.destroy().catch(() => undefined);
+    gate = new NoiseGate(settings.gateThresholdDb);
+
+    gateContext ??= new AudioContext();
+    await gateContext.resume().catch(() => undefined);
+
+    // The gate already measures the level on the audio thread, so local
+    // speaking is free rather than a second analyser doing the same arithmetic.
+    gate.onLevel((level) => mesh?.setLocalSpeaking(level.open));
+    await gate.init({ track, audioContext: gateContext });
+
+    return gate.processedTrack ?? null;
+  } catch (error) {
+    gate = null;
+    console.warn('[voice.ts] microphone gate not attached:', error);
+    return null;
+  }
+}
+
+function stopLocal(slot: Slot): void {
+  localTracks[slot]?.stop();
+  localTracks[slot] = null;
+}
+
+/** Ends the call's machinery without touching rendered state. */
+function teardown(): void {
+  void gate?.destroy().catch(() => undefined);
+  gate = null;
+  mesh?.close();
+  mesh = null;
+  for (const slot of SLOTS) stopLocal(slot);
+  remoteTracks.clear();
+  peers = [];
+  speaking = new Set();
+  lastSpoke.clear();
+}
 
 /**
  * The real pixel size of what is about to be captured.
@@ -477,151 +602,34 @@ async function captureSize(source: ScreenSource | null): Promise<ShareSize> {
 }
 
 /**
- * Asks the receiver to stop hoarding frames.
- *
- * A jitter buffer left to itself is a third of a second of latency, most of it
- * spent guarding against network conditions this link does not have. Whoever is
- * driving gets none of it; whoever is watching gets a couple of frames, which
- * absorbs ordinary jitter without anybody noticing.
- */
-function tuneLatency(track: RemoteTrack): void {
-  const driving = useShareControlStore.getState().driving !== null;
-  track.setPlayoutDelay(driving ? PLAYOUT_DELAY.driving : PLAYOUT_DELAY.watching);
-}
-
-function snapshot(room: Room): { tiles: VoiceTile[]; shares: VoiceShare[] } {
-  const speaking = new Set(room.activeSpeakers.map((participant) => participant.identity));
-  const participants: Array<LocalParticipant | RemoteParticipant> = [
-    room.localParticipant,
-    ...room.remoteParticipants.values(),
-  ];
-
-  const tiles = participants.map((participant) =>
-    toTile(participant, speaking.has(participant.identity)),
-  );
-
-  const shares = participants.flatMap((participant) => {
-    const screen = participant.getTrackPublication(Track.Source.ScreenShare);
-    if (!screen) return [];
-    return [
-      {
-        identity: participant.identity,
-        name: participant.name || participant.identity,
-        isLocal: participant.isLocal,
-        track: screen.track ?? null,
-      },
-    ];
-  });
-
-  return { tiles, shares };
-}
-
-function toTile(participant: Participant, speaking: boolean): VoiceTile {
-  const camera = participant.getTrackPublication(Track.Source.Camera);
-  const mic = participant.getTrackPublication(Track.Source.Microphone);
-  const screenAudio = participant.getTrackPublication(Track.Source.ScreenShareAudio);
-
-  if (speaking) lastSpoke.set(participant.identity, Date.now());
-
-  return {
-    identity: participant.identity,
-    name: participant.name || participant.identity,
-    isLocal: participant.isLocal,
-    speaking,
-    micEnabled: Boolean(mic && !mic.isMuted),
-    videoTrack: camera?.isMuted ? null : (camera?.track ?? null),
-    audioTrack: participant.isLocal ? null : (mic?.track ?? null),
-    screenAudioTrack: participant.isLocal ? null : (screenAudio?.track ?? null),
-    lastSpokeAt: lastSpoke.get(participant.identity) ?? 0,
-  };
-}
-
-/**
- * The gate's own audio context, one per window.
- *
- * LiveKit will not attach a processor to a track that has no audio context, and
- * the one it acquires for the room is not on the track yet at the moment a
- * processor passed in the capture options would be applied - which is why the
- * gate is attached after the track is published rather than with it. Ours is
- * created on the first join, which is a click, so it is never blocked by
- * autoplay policy.
- */
-let gateContext: AudioContext | null = null;
-
-/**
- * Puts the gate on the published microphone, takes it off, or retunes it.
- *
- * Never fatal: a call without a gate is the call this app had last week, and
- * losing the microphone over a failed processor would be a far worse trade.
- */
-async function attachGate(room: Room, settings: VoiceSettings): Promise<void> {
-  const track = room.localParticipant.getTrackPublication(Track.Source.Microphone)?.track;
-  if (!(track instanceof LocalAudioTrack)) return;
-
-  try {
-    if (settings.gateThresholdDb === null) {
-      if (gate) {
-        gate = null;
-        await track.stopProcessor();
-      }
-      return;
-    }
-
-    if (gate) {
-      gate.setThreshold(settings.gateThresholdDb);
-      return;
-    }
-
-    gateContext ??= new AudioContext();
-    await gateContext.resume().catch(() => undefined);
-    track.setAudioContext(gateContext);
-
-    gate = new NoiseGate(settings.gateThresholdDb);
-    await track.setProcessor(gate);
-  } catch (error) {
-    gate = null;
-    console.warn('[voice.ts] microphone gate not attached:', error);
-  }
-}
-
-/**
  * Voice settings changed while a call is running.
  *
  * Three different costs, so three different paths: a threshold is a message to
  * the gate on the audio thread, the three processing switches are a constraint
  * applied to the track that is already open, and a different device or a
- * different mode is the only one that needs the track republished - the bitrate
- * and channel count are fixed when it is published, and nothing can change them
- * in place.
+ * different mode is the only one that needs the microphone recaptured - the
+ * bitrate and channel count are fixed when the connection is negotiated, and
+ * only a new capture picks up a new device.
  */
 async function applyAudioSettings(next: VoiceSettings, previous: VoiceSettings): Promise<void> {
-  const { room, status, micEnabled } = useVoiceStore.getState();
-  if (!room || status !== 'connected') return;
+  const { status, micEnabled } = useVoiceStore.getState();
+  if (!mesh || status !== 'connected') return;
 
-  if (next.outputDeviceId !== previous.outputDeviceId) {
-    await room
-      .switchActiveDevice('audiooutput', next.outputDeviceId ?? 'default')
-      .catch(() => undefined);
-  }
-
+  // Output device is the sink's business, not the mesh's - see MediaSink.
   if (!micEnabled) return;
 
   if (next.mode !== previous.mode || next.inputDeviceId !== previous.inputDeviceId) {
-    // A republished track is a new track, so the gate has to be put back on it.
-    gate = null;
-    await room.localParticipant.setMicrophoneEnabled(false).catch(() => undefined);
-    await room.localParticipant
-      .setMicrophoneEnabled(true, micCapture(next), micPublish(next))
-      .catch(() => undefined);
-    await attachGate(room, next);
+    await closeMicrophone();
+    await openMicrophone(next).catch(() => undefined);
     return;
   }
 
-  const track = room.localParticipant.getTrackPublication(Track.Source.Microphone)?.track;
-  if (track instanceof LocalAudioTrack) {
-    await track.applyConstraints(micProcessing(next)).catch(() => undefined);
+  if (next.gateThresholdDb !== previous.gateThresholdDb) {
+    gate?.setThreshold(next.gateThresholdDb);
   }
-  await attachGate(room, next);
+
+  const track = localTracks.mic;
+  if (track) await track.applyConstraints(micProcessing(next)).catch(() => undefined);
 }
 
 useAudioSettings.subscribe((state, previous) => {
@@ -634,15 +642,7 @@ useAudioSettings.subscribe((state, previous) => {
 // you are only watching is invisible.
 useShareControlStore.subscribe((state, previous) => {
   if (state.driving === previous.driving) return;
-  const room = useVoiceStore.getState().room;
-  if (!room) return;
-  for (const participant of room.remoteParticipants.values()) {
-    for (const publication of participant.trackPublications.values()) {
-      if (publication.track && !publication.track.isLocal) {
-        tuneLatency(publication.track as RemoteTrack);
-      }
-    }
-  }
+  mesh?.setDriving(state.driving !== null);
 });
 
 if (import.meta.hot) {

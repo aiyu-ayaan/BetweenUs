@@ -16,7 +16,6 @@
  * a screen share is for. Teams draws them the same way.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { Track } from 'livekit-client';
 import { useShareControlStore } from '../../stores/shareControl';
 import type { VoiceShare } from '../../stores/voice';
 import { contentBox, fractionIn, EMPTY_BOX, type Box } from './stage-geometry';
@@ -147,12 +146,15 @@ export function ShareStage({ share }: { share: VoiceShare }): JSX.Element {
   );
 }
 
-/** Attaches a LiveKit track to an element and takes it off again. */
-function attachTrack(element: HTMLVideoElement | null, track: Track | null): () => void {
+/** Puts a track on an element and takes it off again. */
+function attachTrack(
+  element: HTMLVideoElement | null,
+  track: MediaStreamTrack | null,
+): () => void {
   if (!element || !track) return () => undefined;
-  track.attach(element);
+  element.srcObject = new MediaStream([track]);
   return () => {
-    track.detach(element);
+    element.srcObject = null;
   };
 }
 

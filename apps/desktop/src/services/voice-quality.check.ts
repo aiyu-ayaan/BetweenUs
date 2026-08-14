@@ -13,8 +13,8 @@ import {
   GATE_RANGE,
   amplitudeToDb,
   micCapture,
+  micEncoding,
   micProcessing,
-  micPublish,
   stepGate,
   type VoiceSettings,
 } from './voice-quality';
@@ -58,22 +58,21 @@ assert.equal(micCapture(hifi).channelCount, 2);
 assert.equal('deviceId' in micCapture(clear), false);
 assert.equal(micCapture({ ...clear, inputDeviceId: 'usb-mic' }).deviceId, 'usb-mic');
 
-// A processor is only attached when one is passed - a gate is optional.
+// Capture constraints are constraints and nothing else. The gate is applied
+// after the capture now rather than passed into it - see voice.ts.
 assert.equal('processor' in micCapture(clear), false);
-const gate = { name: 'test' } as unknown as Parameters<typeof micCapture>[1];
-assert.equal(micCapture(clear, gate).processor, gate);
 
 // Speech at Discord's bitrate, silence not transmitted; music at twice that in
 // stereo, with every silence sent because a held note is one.
-assert.equal(micPublish(clear).audioPreset?.maxBitrate, 64_000);
-assert.equal(micPublish(clear).dtx, true);
-assert.equal(micPublish(clear).forceStereo, false);
-assert.equal(micPublish(hifi).audioPreset?.maxBitrate, 128_000);
-assert.equal(micPublish(hifi).dtx, false);
-assert.equal(micPublish(hifi).forceStereo, true);
+assert.equal(micEncoding(clear).maxBitrate, 64_000);
+assert.equal(micEncoding(clear).dtx, true);
+assert.equal(micEncoding(clear).stereo, false);
+assert.equal(micEncoding(hifi).maxBitrate, 128_000);
+assert.equal(micEncoding(hifi).dtx, false);
+assert.equal(micEncoding(hifi).stereo, true);
 // Loss redundancy on both: a lost packet is inaudible rather than a click.
-assert.equal(micPublish(clear).red, true);
-assert.equal(micPublish(hifi).red, true);
+assert.equal(micEncoding(clear).red, true);
+assert.equal(micEncoding(hifi).red, true);
 
 // dBFS: full scale is 0, quiet is negative, silence is floored rather than
 // -Infinity (which would take the gate's arithmetic with it).

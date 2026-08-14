@@ -1,9 +1,9 @@
 /**
  * How a microphone is captured and encoded, and why the defaults are not it.
  *
- * A voice channel was published with LiveKit's defaults: `AudioPresets.music`
- * (48 kbps), mono, echo cancellation / noise suppression / gain control left at
- * whatever the browser felt like, one device (the system default), and no way
+ * A voice channel used to be published with a media SDK's defaults: 48 kbps,
+ * mono, echo cancellation / noise suppression / gain control left at whatever
+ * the browser felt like, one device (the system default), and no way
  * for anybody to change any of it. That is fine on a headset in a quiet room and
  * audibly worse than Discord anywhere else - a fan, a mechanical keyboard or a
  * flatmate ends up in the room with you, and somebody with two microphones has
@@ -23,8 +23,8 @@
  *   threshold here.
  * - **Spend a sensible bitrate.** 64 kbps mono is Discord's voice channel and is
  *   transparent for speech; 128 kbps stereo is what a music bot or a "hi-fi"
- *   mode wants. LiveKit's `AudioPresets` are nothing but these numbers, so they
- *   are written out here where the reason for them can sit beside them.
+ *   mode wants. These are the numbers every media SDK's "presets" are made of,
+ *   written out here where the reason for them can sit beside them.
  * - **Let the two modes be opposite.** Everything that makes speech clear ruins
  *   music: gain control pumps, suppression eats reverb tails, DTX cuts a quiet
  *   passage out entirely, and mono throws half a recording away. Rather than a
@@ -35,10 +35,45 @@
  * The pure part lives here, with a self-check, because a wrong constraint object
  * is inaudible until somebody else is listening to it.
  */
-import type { AudioCaptureOptions, TrackPublishOptions } from 'livekit-client';
 
-/** LiveKit does not export its processor types from the package root. */
-export type AudioProcessor = NonNullable<AudioCaptureOptions['processor']>;
+/**
+ * Something that sits between a captured track and the one that is sent.
+ *
+ * The gate in `mic-gate.ts` is the only implementation, and the shape is the
+ * one a media SDK used to call with. It is kept because it is the right shape
+ * independently of who calls it: give it the raw track and an audio context,
+ * take `processedTrack` back, send that instead.
+ */
+export interface AudioProcessor {
+  readonly name: string;
+  processedTrack?: MediaStreamTrack;
+  init(options: { track: MediaStreamTrack; audioContext: AudioContext }): Promise<void>;
+  restart(options: { track: MediaStreamTrack; audioContext: AudioContext }): Promise<void>;
+  destroy(): Promise<void>;
+}
+
+/**
+ * The constraints half of `getUserMedia({ audio })`.
+ *
+ * `voiceIsolation` is not in the DOM types yet, so the extra member is spelled
+ * out rather than cast away at every call site.
+ */
+export type MicConstraints = MediaTrackConstraints & { voiceIsolation?: boolean };
+
+/**
+ * How the microphone is encoded once it is on a sender.
+ *
+ * `maxBitrate` goes on the encoding parameters, which can be changed on a live
+ * sender. `stereo`, `dtx` and `red` are Opus payload options and live in the
+ * SDP's `fmtp` line, so they are fixed when the connection is negotiated - see
+ * `mesh.ts`, which is where both are applied.
+ */
+export interface MicEncoding {
+  maxBitrate: number;
+  stereo: boolean;
+  dtx: boolean;
+  red: boolean;
+}
 
 /**
  * What the microphone is for. Not a quality slider - the two want opposite
@@ -96,8 +131,10 @@ const BITRATE = {
  * `noiseSuppression` entirely. Where it does not, an unknown constraint is
  * ignored - so asking costs nothing and never fails a capture.
  */
-export function micProcessing(settings: VoiceSettings): Pick<
-  AudioCaptureOptions,
+export function micProcessing(
+  settings: VoiceSettings,
+): Pick<
+  MicConstraints,
   'echoCancellation' | 'noiseSuppression' | 'autoGainControl' | 'voiceIsolation'
 > {
   if (settings.mode === 'hifi') {
@@ -119,34 +156,30 @@ export function micProcessing(settings: VoiceSettings): Pick<
   };
 }
 
-/** Capture constraints for the microphone, gate included when one is asked for. */
-export function micCapture(
-  settings: VoiceSettings,
-  processor?: AudioProcessor,
-): AudioCaptureOptions {
+/** Capture constraints for the microphone. */
+export function micCapture(settings: VoiceSettings): MicConstraints {
   return {
     ...micProcessing(settings),
     channelCount: settings.mode === 'hifi' ? 2 : 1,
     // `exact` is deliberately not used: a device that has been unplugged since
     // it was chosen should fall back to the default rather than fail the join.
     ...(settings.inputDeviceId ? { deviceId: settings.inputDeviceId } : {}),
-    ...(processor ? { processor } : {}),
   };
 }
 
-/** Publish options for the microphone track. */
-export function micPublish(settings: VoiceSettings): TrackPublishOptions {
+/** How the microphone is encoded on the wire. */
+export function micEncoding(settings: VoiceSettings): MicEncoding {
   const hifi = settings.mode === 'hifi';
 
   return {
-    audioPreset: { maxBitrate: hifi ? BITRATE.hifi : BITRATE.clear },
+    maxBitrate: hifi ? BITRATE.hifi : BITRATE.clear,
+    stereo: hifi,
     // DTX stops sending during silence, which is most of a call and none of a
     // recording - a held piano note is exactly what it deletes.
     dtx: !hifi,
     // Redundant audio data: a packet carries the previous one as well, so a
     // single loss is inaudible. Cheap at these bitrates and worth it for both.
     red: true,
-    forceStereo: hifi,
   };
 }
 

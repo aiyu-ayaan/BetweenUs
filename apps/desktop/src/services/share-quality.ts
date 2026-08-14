@@ -1,8 +1,8 @@
 /**
  * How a screen is encoded, and why the defaults were never going to do.
  *
- * LiveKit's out-of-the-box screen share is 1080p15 at about 3 Mbps, simulcast
- * on, VP8, and the receiver's jitter buffer wherever the browser feels like
+ * An out-of-the-box screen share is 1080p15 at about 3 Mbps, VP8, and the
+ * receiver's jitter buffer wherever the browser feels like
  * putting it. That is a sensible default for showing somebody a spreadsheet
  * over a bad connection. It is a terrible way to watch a film, and not much
  * better for driving a desktop: fifteen frames a second is visibly a slideshow,
@@ -15,18 +15,18 @@
  *   congestion control will take whatever it can get and back off when it
  *   cannot, so the number that matters is the ceiling, and the ceiling was the
  *   thing set too low. It scales with pixels here rather than being one number.
- * - **One layer.** Simulcast exists so a weak viewer can be sent a small
- *   stream; the cost is that the encoder divides its budget between layers and
- *   the SFU may hand somebody the bad one. Off, and everybody gets the good
- *   stream or nothing.
+ * - **One layer.** Simulcast exists so a server can forward a small stream to a
+ *   weak viewer; the cost is that the encoder divides its budget between
+ *   layers. There is no server to do the choosing any more, so there is nothing
+ *   to choose between: one encoding, and congestion control adapts it.
  * - **Hardware H.264.** Parsec encodes on the GPU. H.264 is the one codec with
  *   a hardware encoder on essentially every Windows machine, so it is the one
  *   that can do 1080p60 without setting a laptop on fire. VP9 or AV1 would look
  *   better per bit; they would also be encoded in software, which costs the
  *   latency this is trying to buy.
  * - **Do not buffer.** A receiver's jitter buffer is where a third of a second
- *   goes. `setPlayoutDelay` asks for a smaller one - near zero when somebody is
- *   driving, a couple of frames when they are watching.
+ *   goes. `RTCRtpReceiver.playoutDelayHint` asks for a smaller one - near zero
+ *   when somebody is driving, a couple of frames when they are watching.
  * - **Say what the content is.** A film and a text editor want opposite
  *   choices: one wants frames kept and resolution sacrificed, the other the
  *   reverse. Guessing gets it wrong half the time, so the picker asks.
@@ -34,7 +34,37 @@
  * The pure part is here, with a self-check, because the arithmetic is what
  * decides whether a 4K share is sent through a 1080p-sized pipe.
  */
-import { AudioPresets, type ScreenShareCaptureOptions, type TrackPublishOptions } from 'livekit-client';
+
+/**
+ * Constraints for `getDisplayMedia`.
+ *
+ * `restrictOwnAudio` is Electron's, and is not in the DOM types; the rest are
+ * ordinary audio constraints applied to the system-audio track.
+ */
+export interface ShareCapture {
+  video: { width: number; height: number; frameRate: number };
+  contentHint: 'text' | 'motion';
+  audio:
+    | false
+    | (MediaTrackConstraints & { restrictOwnAudio?: boolean });
+}
+
+/**
+ * How a share is encoded once it is on a sender. Applied in `mesh.ts`:
+ * `maxBitrate` and `degradationPreference` on the sender's parameters, the
+ * codec through `setCodecPreferences`, and the audio options in the SDP.
+ */
+export interface SharePublish {
+  maxBitrate: number;
+  maxFramerate: number;
+  degradationPreference: RTCDegradationPreference;
+  /** Preferred video codec, by MIME subtype. Ignored when unavailable. */
+  videoCodec: 'H264';
+  audio: false | { maxBitrate: number; stereo: boolean; dtx: boolean; red: boolean };
+}
+
+/** Full-band stereo Opus, the ceiling a soundtrack is worth. */
+const MUSIC_BITRATE = 510_000;
 
 /**
  * What is on the screen. Not a quality slider - the two want opposite things,
@@ -101,8 +131,8 @@ export function bitrateFor(intent: ShareIntent, size: ShareSize): number {
 /**
  * Capture and publish options for one share.
  *
- * `size` is the real pixel size of what is being captured. It has to be passed
- * in: without it LiveKit caps the capture at 1080p, so a 1440p display arrives
+ * `size` is the real pixel size of what is being captured. It has to be asked
+ * for: the default caps a capture at 1080p, so a 1440p display arrives
  * downscaled and is then stretched back up on the far end - soft, and for no
  * saving, because it was scaled after it was captured rather than before.
  */
@@ -110,12 +140,12 @@ export function shareOptions(
   intent: ShareIntent,
   size: ShareSize,
   audio: false | { music: boolean },
-): { capture: ScreenShareCaptureOptions; publish: TrackPublishOptions } {
+): { capture: ShareCapture; publish: SharePublish } {
   const profile = PROFILES[intent];
 
   return {
     capture: {
-      resolution: { width: size.width, height: size.height, frameRate: profile.frameRate },
+      video: { width: size.width, height: size.height, frameRate: profile.frameRate },
       contentHint: profile.contentHint,
       audio: audio
         ? {
@@ -140,24 +170,20 @@ export function shareOptions(
         : false,
     },
     publish: {
-      // One layer. Simulcast would divide this budget three ways and then let
-      // the SFU hand somebody the bottom one.
-      simulcast: false,
+      maxFramerate: profile.frameRate,
+      maxBitrate: bitrateFor(intent, size),
+      degradationPreference: profile.degradation,
       // Hardware-encoded on any Windows machine with a GPU from this decade,
       // which is what makes 1080p60 possible without melting the CPU. VP9 looks
       // better per bit and is encoded in software; that trade is the wrong way
       // round when the point is latency.
-      videoCodec: 'h264',
-      degradationPreference: profile.degradation,
-      screenShareEncoding: {
-        maxFramerate: profile.frameRate,
-        maxBitrate: bitrateFor(intent, size),
-      },
+      videoCodec: 'H264',
       // Full-band stereo Opus for a soundtrack, and no discontinuous
       // transmission - DTX cuts the quiet passages of a film out entirely.
-      ...(audio && audio.music
-        ? { audioPreset: AudioPresets.musicHighQualityStereo, dtx: false, red: true }
-        : {}),
+      audio:
+        audio && audio.music
+          ? { maxBitrate: MUSIC_BITRATE, stereo: true, dtx: false, red: true }
+          : false,
     },
   };
 }

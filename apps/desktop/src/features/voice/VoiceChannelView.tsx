@@ -22,7 +22,6 @@
  */
 import { useEffect, useMemo, useState } from 'react';
 import type { Channel } from '@nexora/shared-types';
-import type { Track } from 'livekit-client';
 import { useChatStore } from '../../stores/chat';
 import { usePresenceStore } from '../../stores/presence';
 import { useRemoteStore } from '../../stores/remote';
@@ -52,7 +51,7 @@ interface Stage {
   isLocal: boolean;
   speaking: boolean;
   micEnabled: boolean;
-  videoTrack: Track | null;
+  videoTrack: MediaStreamTrack | null;
   lastSpokeAt: number;
 }
 
@@ -73,8 +72,9 @@ export function VoiceChannelView({ channel }: { channel: Channel }): JSX.Element
   const connected = inThisChannel && status === 'connected';
   const connecting = inThisChannel && status === 'connecting';
 
-  // Connected: LiveKit knows who is really in the room and carries their media.
-  // Otherwise fall back to the presence roster, which has names but no tracks.
+  // Connected: the mesh knows who is really in the call, because it holds a
+  // connection to each of them. Otherwise fall back to the presence roster,
+  // which has names but no tracks.
   const stage: Stage[] = connected
     ? tiles.map(toStage)
     : occupants.map((userId) => ({
@@ -334,9 +334,12 @@ function ControlButtons({ share }: { share: VoiceShare }): JSX.Element {
     if (onDesktop) void load();
   }, [load, onDesktop]);
 
+  // Control is asked of a *connection*; a machine belongs to a *person*. One
+  // account with two windows open is two peers and one owner, so these two
+  // lines deliberately key off different ids.
   const controlling = driving === share.identity;
   const machine = onDesktop
-    ? machines.find((candidate) => candidate.ownerId === share.identity)
+    ? machines.find((candidate) => candidate.ownerId === share.userId)
     : undefined;
 
   return (
@@ -372,7 +375,7 @@ function ControlButtons({ share }: { share: VoiceShare }): JSX.Element {
               ? `Open a remote session on ${machine.name}`
               : `${machine.name} is offline`
           }
-          onClick={() => void connectToOwner(share.identity, true)}
+          onClick={() => void connectToOwner(share.userId, true)}
           className="cursor-pointer rounded-md bg-black/70 px-3 py-1 text-xs text-slate-200 transition-colors duration-200 hover:bg-black disabled:cursor-not-allowed disabled:opacity-50"
         >
           Open a session
