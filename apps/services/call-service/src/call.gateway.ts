@@ -34,6 +34,7 @@ import type {
   ClientCallEvent,
   ServerCallEvent,
 } from '@nexora/shared-types';
+import { otherDevicesInCall } from './devices';
 
 const HEARTBEAT_INTERVAL_MS = 30_000;
 
@@ -183,6 +184,28 @@ export class CallGateway implements OnModuleDestroy {
     // One call per socket. Leaving the old one first keeps a roster honest when
     // a client switches channels without saying goodbye to the first.
     if (state.channelId && state.channelId !== channelId) this.depart(socket, true);
+
+    // One call per *account*, across every device it is signed in on. A peer id
+    // is still per socket - two windows are still two ends of two connections -
+    // but only one of them may be in a call at a time, so joining on the laptop
+    // takes the call off the desktop rather than putting the same person in the
+    // room twice, talking over themselves through two microphones.
+    //
+    // The old device is told why before it is dropped: `superseded` is what
+    // lets it say "this call moved" instead of "the connection was lost". Its
+    // socket stays open, so it can join again - which is what moving the call
+    // back looks like from the other end.
+    const otherDevices = otherDevicesInCall(
+      this.calls.values(),
+      (member) => this.state.get(member)?.userId,
+      state.userId,
+      socket,
+    );
+    for (const other of otherDevices) {
+      this.send(other, { type: 'superseded', channelId });
+      this.depart(other, true);
+      this.logger.info('Call moved to another device', { userId: state.userId, channelId });
+    }
 
     const members = this.calls.get(channelId) ?? new Set<WebSocket>();
     if (!members.has(socket) && members.size >= MAX_PEERS_PER_CALL) {

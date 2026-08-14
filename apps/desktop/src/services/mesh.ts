@@ -876,6 +876,17 @@ export class Mesh {
         return;
       }
 
+      case 'superseded':
+        // The same account joined this call somewhere else, so the server has
+        // already taken this connection off the roster. Marking the mesh closed
+        // first is what keeps the reason: the socket shuts straight after, and
+        // `onclose` would otherwise report a lost connection over the top of it.
+        this.closed = true;
+        this.options.onFatal(
+          'This call moved to another device - you joined it there. Rejoin here to bring it back.',
+        );
+        return;
+
       case 'error':
         console.warn('[mesh] signalling error', event.code, event.message);
         return;

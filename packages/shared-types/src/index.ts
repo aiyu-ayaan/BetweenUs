@@ -596,6 +596,13 @@ export type ServerCallEvent =
   | { type: 'peer.joined'; peer: CallPeer }
   | { type: 'peer.left'; peerId: string }
   | { type: 'signal'; from: string; data: CallSignal }
+  /**
+   * This account joined a call from somewhere else, so this connection is no
+   * longer the one carrying it. One call per account across every device, which
+   * is what stops a phone and a desktop from both being in a room, and what
+   * makes joining on a second device feel like moving rather than duplicating.
+   */
+  | { type: 'superseded'; channelId: string }
   | { type: 'pong' }
   | { type: 'error'; code: string; message: string };
 
