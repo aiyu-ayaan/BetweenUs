@@ -73,16 +73,11 @@ export default defineConfig(({ mode }) => {
         '/api/v1/e2ee': CHAT,
         '/api/v1/calls': CALL,
         '/api/v1/notifications': NOTIFICATION,
-        // LiveKit signalling, same prefix and stripping as the gateway, so a
-        // call token that says "/livekit" works in development too. Media itself
-        // never comes through here - WebRTC negotiates its own path to the SFU.
-        '/livekit': {
-          target: 'http://127.0.0.1:7880',
-          ws: true,
-          rewrite: (path) => path.replace(/^\/livekit/, ''),
-        },
         '/ws/chat': { target: CHAT, ws: true },
         '/ws/presence': { target: PRESENCE, ws: true },
+        // Call signalling. Media never comes through here, or through the
+        // gateway this stands in for: peers reach each other directly.
+        '/ws/call': { target: CALL, ws: true },
       },
     },
     build: { outDir: 'dist', emptyOutDir: true },

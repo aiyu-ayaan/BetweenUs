@@ -67,18 +67,9 @@ export default defineConfig({
       '/api/v1/calls': CALL,
       '/api/v1/notifications': NOTIFICATION,
       '/api/v1/remote': REMOTE,
-      // LiveKit signalling, same prefix and same stripping as the gateway does,
-      // so LIVEKIT_URL can be "/livekit" in development too. An absolute
-      // ws://127.0.0.1:7880 works here as well, but it sends a client to *its
-      // own* loopback - which is another SFU entirely once the app is packaged
-      // and pointed at a real deployment.
-      '/livekit': {
-        target: 'http://127.0.0.1:7880',
-        ws: true,
-        rewrite: (path) => path.replace(/^\/livekit/, ''),
-      },
       '/ws/chat': { target: CHAT, ws: true },
       '/ws/presence': { target: PRESENCE, ws: true },
+      '/ws/call': { target: CALL, ws: true },
       '/ws/remote': { target: REMOTE, ws: true },
     },
   },

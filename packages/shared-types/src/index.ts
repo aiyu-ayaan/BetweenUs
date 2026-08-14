@@ -522,35 +522,25 @@ export interface IdentityBackupResponse {
 
 // --- Calls ---
 
-export interface CallTokenRequest {
+export interface CallIceRequest {
   channelId: string;
 }
 
-export interface CallTokenResponse {
+/**
+ * How to find a path to the other peer. Deliberately not "where the media
+ * server is": there is no media server, and no client is ever told to dial one.
+ */
+export interface CallIceResponse {
   /**
-   * LiveKit server the client dials directly - media never touches NestJS.
+   * STUN first, then TURN when the deployment configures one.
    *
-   * Either absolute (`wss://livekit.example.com`) or a path on the gateway the
-   * client is already talking to (`/livekit`), which is what lets a whole
-   * deployment be one address. The client resolves the second form itself.
+   * STUN is address discovery, not a relay: a peer asks what its own public
+   * address looks like and offers that to the other side. TURN *is* a relay,
+   * for the pairs of networks - symmetric NAT, carrier-grade NAT - that cannot
+   * form a direct path at all; a deployment with none configured gets STUN
+   * alone and those calls fail rather than being quietly relayed.
    */
-  url: string;
-  token: string;
-  room: string;
-  identity: string;
-  /**
-   * Relays for a client that cannot reach the SFU directly, when the deployment
-   * has any. Empty or absent means the client uses whatever its browser
-   * defaults to, which is what a LAN-only deployment wants.
-   *
-   * A self-hosted SFU behind a home router is reachable from its own network and
-   * from nowhere else: signalling arrives through the gateway, media negotiates
-   * to an address the outside world has no route to, and the call times out.
-   * These are short-lived credentials for a public relay, minted per request, so
-   * both ends can meet somewhere they can both reach. The media stays end-to-end
-   * encrypted across it - a relay forwards packets it cannot read.
-   */
-  iceServers?: IceServer[];
+  iceServers: IceServer[];
 }
 
 /** One entry of a WebRTC `RTCConfiguration.iceServers`. */
@@ -559,6 +549,55 @@ export interface IceServer {
   username?: string;
   credential?: string;
 }
+
+/**
+ * Somebody else in the call.
+ *
+ * Keyed by `peerId`, not `userId`: one account can have two windows open, and
+ * each is a separate end of a separate peer connection.
+ */
+export interface CallPeer {
+  peerId: string;
+  userId: string;
+  username: string;
+}
+
+/** A plain `RTCIceCandidateInit`, spelled out so Node can name the type too. */
+export interface IceCandidatePayload {
+  candidate: string;
+  sdpMid?: string | null;
+  sdpMLineIndex?: number | null;
+  usernameFragment?: string | null;
+}
+
+/**
+ * What one peer sends another. `call-service` relays these without reading
+ * them - it stamps who they came from and forwards the rest verbatim.
+ *
+ * `fingerprintProof` is `HMAC-SHA256(channel key, the DTLS fingerprint in this
+ * SDP)`, base64. It is what stops the relay from substituting a fingerprint of
+ * its own and sitting in the middle of a connection both ends believe is
+ * direct: the server has never held a channel key, so it cannot produce one.
+ */
+export type CallSignal =
+  | { kind: 'offer'; sdp: string; fingerprintProof: string }
+  | { kind: 'answer'; sdp: string; fingerprintProof: string }
+  | { kind: 'ice'; candidate: IceCandidatePayload };
+
+export type ClientCallEvent =
+  | { type: 'join'; channelId: string }
+  | { type: 'leave' }
+  | { type: 'signal'; to: string; data: CallSignal }
+  | { type: 'ping' };
+
+export type ServerCallEvent =
+  | { type: 'ready'; peerId: string }
+  | { type: 'joined'; channelId: string; peers: CallPeer[] }
+  | { type: 'peer.joined'; peer: CallPeer }
+  | { type: 'peer.left'; peerId: string }
+  | { type: 'signal'; from: string; data: CallSignal }
+  | { type: 'pong' }
+  | { type: 'error'; code: string; message: string };
 
 // --- Presence ---
 

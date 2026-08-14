@@ -1,7 +1,7 @@
 import { IsUUID } from 'class-validator';
-import type { CallTokenRequest } from '@nexora/shared-types';
+import type { CallIceRequest } from '@nexora/shared-types';
 
-export class CallTokenDto implements CallTokenRequest {
+export class CallIceDto implements CallIceRequest {
   @IsUUID()
   channelId!: string;
 }

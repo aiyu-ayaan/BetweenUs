@@ -1,30 +1,34 @@
 /**
- * Relays for clients that cannot reach the SFU directly.
+ * How two peers find a path to each other.
  *
- * A self-hosted SFU behind a home router is reachable from its own network and
- * from nowhere else. Signalling is fine - that arrives through the gateway, and
- * a Cloudflare tunnel carries it happily - but media is WebRTC, which negotiates
- * its own path and needs the SFU's RTC ports reachable at whatever
- * `LIVEKIT_NODE_IP` says. From another network there is no such route, so the
- * call gets as far as a joined participant with no media and then dies of the
- * client's own timeout.
+ * There is no media server in this deployment, so nothing here tells a client
+ * where to dial. It hands out the two things WebRTC needs to work out a path on
+ * its own, and they are not the same kind of thing at all:
  *
- * A TURN relay is the way out that opens no ports. Both ends can reach a public
- * relay outbound, and LiveKit runs a full ICE agent rather than ICE-lite, so the
- * SFU itself sends connectivity checks to the client's relay candidate - which
- * is what makes this work in the direction that matters, with the SFU behind the
- * NAT rather than the client.
+ * **STUN is address discovery, and is required.** A machine behind NAT does not
+ * know what its own public address looks like from outside, so it cannot offer
+ * one. It asks a STUN server, gets told, and puts that in its candidate list.
+ * No media goes through a STUN server, no port has to be opened for it, and one
+ * request per call is the whole of the traffic. Public servers are fine and the
+ * default; a deployment that would rather not talk to Google can point
+ * `STUN_URLS` somewhere else, including at its own coturn.
  *
- * The credentials are short-lived and minted per call. They are not a secret
- * this service holds on anyone's behalf: the key that mints them is, and it
- * never leaves here.
+ * **TURN is a relay, and is optional.** Some pairs of networks - symmetric NAT
+ * on both sides, mobile carrier-grade NAT - cannot form a direct path however
+ * well they describe themselves. TURN is a machine both ends can reach outbound
+ * that forwards packets between them, and it is the only thing that makes those
+ * calls work. It costs bandwidth and it puts a third party in the path, so it
+ * stays unconfigured unless an operator decides otherwise: with none set, those
+ * particular calls fail rather than being quietly relayed.
  *
- * Nothing about privacy changes. Call media is end-to-end encrypted with the
- * channel key, which the server has never held; a relay forwards packets it
- * cannot read, exactly as the SFU already does.
+ * When one is wanted, Cloudflare's own TURN service is the natural fit for a
+ * deployment already behind a Cloudflare Tunnel - both peers reach it outbound,
+ * so it opens no ports either. The credentials are short-lived and minted here;
+ * the key that mints them never leaves this service.
  *
- * Unconfigured is a supported state, not a degraded one: a deployment whose
- * clients are all on its own network needs no relay, and gets an empty list.
+ * Privacy is unchanged by any of it. A relay forwards DTLS-SRTP it has no key
+ * for, so a relayed call is as unreadable to Cloudflare as a direct one is to
+ * everybody else.
  */
 import { env, envNumber, envOr } from '@nexora/config';
 import type { IceServer } from '@nexora/shared-types';
@@ -33,6 +37,14 @@ import { createLogger, type LogLevel } from '@nexora/logger';
 const logger = createLogger('call-service', envOr('LOG_LEVEL', 'info') as LogLevel);
 
 const API = 'https://rtc.live.cloudflare.com/v1/turn/keys';
+
+/**
+ * Where to ask for one's own public address when the deployment says nothing.
+ *
+ * Two, from different operators: STUN is the one step with no fallback, and a
+ * call that cannot get a candidate is a call that cannot happen.
+ */
+const DEFAULT_STUN = 'stun:stun.l.google.com:19302,stun:stun.cloudflare.com:3478';
 
 /**
  * How long a minted credential is good for.
@@ -60,10 +72,26 @@ function ttlSeconds(): number {
 }
 
 /**
+ * The STUN servers this deployment uses. Comma-separated, so an operator can
+ * name several without a config file.
+ *
+ * Exported for the self-check; there is no other reason for it to be public.
+ */
+export function stunServers(): IceServer[] {
+  const urls = envOr('STUN_URLS', DEFAULT_STUN)
+    .split(',')
+    .map((url) => url.trim())
+    .filter((url) => url.length > 0);
+
+  return urls.length > 0 ? [{ urls }] : [];
+}
+
+/**
  * Cloudflare answers `{ iceServers: ... }`, and has done so in two shapes: a
  * single object in the original API and an array since. Both are accepted here
  * rather than pinned to one, because the cost of being wrong is a call that
- * cannot connect from outside and a response body nobody is looking at.
+ * cannot connect from a hostile network and a response body nobody is looking
+ * at.
  *
  * Exported for the self-check; there is no other reason for it to be public.
  */
@@ -93,20 +121,25 @@ export function parseIceServers(payload: unknown): IceServer[] {
 }
 
 async function mint(keyId: string, apiToken: string): Promise<IceServer[]> {
-  const response = await fetch(`${API}/${encodeURIComponent(keyId)}/credentials/generate-ice-servers`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiToken}`,
-      'Content-Type': 'application/json',
+  const response = await fetch(
+    `${API}/${encodeURIComponent(keyId)}/credentials/generate-ice-servers`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ ttl: ttlSeconds() }),
     },
-    body: JSON.stringify({ ttl: ttlSeconds() }),
-  });
+  );
 
   if (!response.ok) {
     // The body may name the problem - a revoked key, a wrong id - and the status
     // alone never does. It cannot contain the API token, which is only ever sent.
     const detail = await response.text().catch(() => '');
-    throw new Error(`Cloudflare TURN answered ${response.status}${detail ? `: ${detail.slice(0, 200)}` : ''}`);
+    throw new Error(
+      `Cloudflare TURN answered ${response.status}${detail ? `: ${detail.slice(0, 200)}` : ''}`,
+    );
   }
 
   const servers = parseIceServers(await response.json());
@@ -114,14 +147,8 @@ async function mint(keyId: string, apiToken: string): Promise<IceServer[]> {
   return servers;
 }
 
-/**
- * Relays for one call, or an empty list when this deployment has none.
- *
- * Never throws. A relay is what makes a call work from outside; failing to mint
- * one must not also break the calls that were going to work anyway, so the
- * failure is logged and the client is left with its own defaults.
- */
-export async function iceServers(): Promise<IceServer[]> {
+/** Relays for one call, or an empty list when this deployment configures none. */
+async function turnServers(): Promise<IceServer[]> {
   const keyId = env('CLOUDFLARE_TURN_KEY_ID');
   const apiToken = env('CLOUDFLARE_TURN_KEY_API_TOKEN');
   if (!keyId || !apiToken) return [];
@@ -129,7 +156,7 @@ export async function iceServers(): Promise<IceServer[]> {
   const now = Date.now();
   if (cached && cached.expiresAt > now) return cached.servers;
 
-  // Twenty people joining a call at once is one mint, not twenty.
+  // Eight people joining a call at once is one mint, not eight.
   inFlight ??= mint(keyId, apiToken)
     .then((servers) => {
       cached = {
@@ -141,7 +168,7 @@ export async function iceServers(): Promise<IceServer[]> {
     })
     .catch((error: unknown) => {
       logger.error(
-        'Could not mint TURN credentials; calls from outside this network will fail',
+        'Could not mint TURN credentials; calls between two hostile NATs will fail',
         error,
       );
       return [] as IceServer[];
@@ -151,6 +178,17 @@ export async function iceServers(): Promise<IceServer[]> {
     });
 
   return inFlight;
+}
+
+/**
+ * Everything a client needs to find a path, STUN first.
+ *
+ * Never throws. STUN alone is a working configuration for most pairs of
+ * networks, so a relay that cannot be minted must not also take down the calls
+ * that were never going to need one.
+ */
+export async function iceServers(): Promise<IceServer[]> {
+  return [...stunServers(), ...(await turnServers())];
 }
 
 /** Test seam: the cache is process-wide and a self-check needs it empty. */

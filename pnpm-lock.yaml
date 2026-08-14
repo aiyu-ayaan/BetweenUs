@@ -223,21 +223,24 @@ importers:
       '@nexora/shared-types':
         specifier: workspace:*
         version: link:../../../packages/shared-types
+      '@nexora/websocket':
+        specifier: workspace:*
+        version: link:../../../packages/websocket
       class-transformer:
         specifier: ^0.5.1
         version: 0.5.1
       class-validator:
         specifier: ^0.14.1
         version: 0.14.4
-      livekit-server-sdk:
-        specifier: ^2.7.2
-        version: 2.17.0
       reflect-metadata:
         specifier: ^0.2.2
         version: 0.2.2
       rxjs:
         specifier: ^7.8.1
         version: 7.8.2
+      ws:
+        specifier: ^8.18.0
+        version: 8.21.3
     devDependencies:
       '@nestjs/cli':
         specifier: ^10.4.4
@@ -251,6 +254,9 @@ importers:
       '@types/node':
         specifier: ^20.14.10
         version: 20.19.43
+      '@types/ws':
+        specifier: ^8.5.12
+        version: 8.18.1
       tsx:
         specifier: ^4.16.5
         version: 4.23.11
