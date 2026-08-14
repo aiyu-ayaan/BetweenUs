@@ -65,7 +65,7 @@ export function ServerRail(): JSX.Element {
           onClick={() => void selectServer(server.id)}
           activeClasses="bg-accent text-white"
         >
-          <ServerIcon server={server} />
+          <ServerIcon server={server} size="rail" />
         </RailButton>
       ))}
 

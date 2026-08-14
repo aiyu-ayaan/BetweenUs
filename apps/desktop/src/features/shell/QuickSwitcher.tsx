@@ -79,7 +79,7 @@ export function QuickSwitcher({ onClose }: { onClose: () => void }): JSX.Element
         key: `server:${server.id}`,
         label: server.name,
         hint: 'Server',
-        glyph: <ServerIcon server={server} />,
+        glyph: <ServerIcon server={server} size="sm" />,
         open: () => void selectServer(server.id),
       });
     }
