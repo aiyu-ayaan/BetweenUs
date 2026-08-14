@@ -62,6 +62,27 @@ a human in front of the app, and so does most of phase 12.
       the repo is configured and nothing has to be put back - which is the
       point, since the alternative was mirrored networking plus a Hyper-V
       firewall rule
+- [x] A call from outside the SFU's own network. `LIVEKIT_NODE_IP` makes the SFU
+      reachable where it is reachable, and a self-hosted box behind a home
+      router is reachable on its own network only - signalling arrives through
+      the tunnel from anywhere, media negotiates to an address the outside world
+      has no route to, and the call reaches "joined, no media" before the
+      client's 15s race calls it a timeout. A Cloudflare tunnel cannot carry it:
+      that is HTTP and this is WebRTC. call-service now mints short-lived
+      Cloudflare TURN credentials and returns them with the call token, and the
+      client passes them as `rtcConfig.iceServers`. It works with the SFU behind
+      the NAT rather than the client because LiveKit runs a full ICE agent, not
+      ICE-lite: the SFU sends its own checks to the client's relay candidate and
+      opens the mapping from the inside. No port is forwarded and no LAN call
+      changes - a direct path still wins the race whenever there is one
+- [ ] Drive a call from a second network end to end, with the TURN key set. The
+      code and its self-check have landed; nobody has yet joined one from off
+      the LAN and heard the other side
+- [ ] Remote sessions get no relay yet. `remote-gateway` hands out its own
+      LiveKit URL and token and has the same reachability problem; the minting
+      lives in `call-service/src/turn.ts` and would move to a shared package the
+      day the second caller appears. Not done because the remote path has never
+      been driven by a human at all
 - [x] Calls through the gateway at all. With `LIVEKIT_URL=/livekit` and every
       container healthy, a join still died with "Encountered websocket error
       during connection establishment": the `/livekit` block was not stripping
