@@ -103,6 +103,8 @@ export interface MeshEvents {
   onSpeaking: (speaking: Set<string>) => void;
   /** A message on a peer's data channel. */
   onData: (peer: CallPeer, payload: unknown) => void;
+  /** A peer's data channel can send reliable application state. */
+  onDataOpen?: (peer: CallPeer) => void;
   /**
    * One peer is in trouble, but the call is not over.
    *
@@ -255,6 +257,7 @@ class PeerLink {
     private readonly events: {
       onTrack: (slot: Slot, track: MediaStreamTrack | null) => void;
       onData: (payload: unknown) => void;
+      onDataOpen: () => void;
       onFailed: () => void;
       /** Something went wrong that the person in the call should be told about. */
       onProblem: (message: string) => void;
@@ -294,6 +297,7 @@ class PeerLink {
         // A peer sending something unparseable is not this call's problem.
       }
     };
+    this.channel.onopen = () => this.events.onDataOpen();
 
     this.pc.ontrack = (event) => {
       const slot = this.slotOf(event.transceiver);
@@ -702,6 +706,7 @@ class PeerLink {
   close(): void {
     this.closed = true;
     this.channel.onmessage = null;
+    this.channel.onopen = null;
     this.pc.ontrack = null;
     this.pc.onicecandidate = null;
     this.pc.onnegotiationneeded = null;
@@ -842,6 +847,7 @@ export class Mesh {
       {
         onTrack: (slot, track) => this.options.onTrack(peer.peerId, slot, track),
         onData: (payload) => this.options.onData(peer, payload),
+        onDataOpen: () => this.options.onDataOpen?.(peer),
         onFailed: () => {
           this.links.get(peer.peerId)?.close();
           this.links.delete(peer.peerId);

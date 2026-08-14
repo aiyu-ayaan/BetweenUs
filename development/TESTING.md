@@ -205,6 +205,9 @@ Closing both windows stops the dev server. Ctrl+C does the same.
   the join was aborted rather than downgraded to plaintext media.
 - Toggle microphone and camera from either the sidebar panel or the bar under
   the channel screen - both drive the same store, so they always agree.
+- With both windows connected, toggle one microphone: its muted icon updates in
+  the other window's sidebar roster and participant tile as well. Join the
+  second window after the first has muted to check the initial state arrives.
 - A machine with no microphone still joins - the panel just shows the mic off.
 
 **Screen share and watching together**

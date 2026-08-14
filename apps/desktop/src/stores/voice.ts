@@ -28,6 +28,15 @@ import { shareOptions, type ShareIntent, type ShareSize } from '../services/shar
 /** The local participant's own key in every map here. */
 export const LOCAL = 'local';
 
+/** Application state sent over each encrypted peer data channel. */
+const VOICE_STATE_TOPIC = 'nexora.voice-state';
+type MediaState = Record<Slot, boolean>;
+
+interface MediaStateEnvelope {
+  topic: typeof VOICE_STATE_TOPIC;
+  media: MediaState;
+}
+
 export interface VoiceTile {
   /** Peer id, or `LOCAL`. Unique per connection, not per person. */
   identity: string;
@@ -99,6 +108,8 @@ let mesh: Mesh | null = null;
 
 /** peerId -> what has arrived from them, by slot. */
 const remoteTracks = new Map<string, Partial<Record<Slot, MediaStreamTrack | null>>>();
+/** peerId -> the media switches the remote participant intentionally enabled. */
+const remoteMediaStates = new Map<string, MediaState>();
 let peers: CallPeer[] = [];
 let speaking = new Set<string>();
 
@@ -196,6 +207,9 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
           for (const peerId of [...remoteTracks.keys()]) {
             if (!peers.some((peer) => peer.peerId === peerId)) remoteTracks.delete(peerId);
           }
+          for (const peerId of [...remoteMediaStates.keys()]) {
+            if (!peers.some((peer) => peer.peerId === peerId)) remoteMediaStates.delete(peerId);
+          }
           // Somebody who left cannot still be driving this machine.
           useShareControlStore.getState().peersChanged(peers);
           refresh();
@@ -206,7 +220,12 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
           for (const identity of speaking) lastSpoke.set(identity, now);
           refresh();
         },
-        onData: (peer, payload) => useShareControlStore.getState().receive(peer, payload),
+        onData: (peer, payload) => {
+          if (!receiveMediaState(peer, payload)) {
+            useShareControlStore.getState().receive(peer, payload);
+          }
+        },
+        onDataOpen: (peer) => publishMediaState([peer.peerId]),
         onProblem: (message) => {
           if (useVoiceStore.getState().channelId !== channelId) return;
           useVoiceStore.setState({ error: message });
@@ -257,6 +276,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
         screenEnabled: false,
         sharedDisplayId: null,
       });
+      publishMediaState();
       refresh();
     } catch (error) {
       if (joinCounter !== currentJoinId) return;
@@ -297,11 +317,13 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
       if (micEnabled) {
         await closeMicrophone();
         set({ micEnabled: false, error: null });
-      refresh();
+        publishMediaState();
+        refresh();
         return;
       }
       await openMicrophone(useAudioSettings.getState().settings);
       set({ micEnabled: true, error: null });
+      publishMediaState();
       refresh();
     } catch (error) {
       set({ error: `Microphone: ${messageOf(error)}` });
@@ -318,7 +340,8 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
         stopLocal('camera');
         await mesh.setTrack('camera', null);
         set({ cameraEnabled: false, error: null });
-      refresh();
+        publishMediaState();
+        refresh();
         return;
       }
 
@@ -327,6 +350,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
       localTracks.camera = track;
       await mesh.setTrack('camera', track);
       set({ cameraEnabled: Boolean(track), error: null });
+      publishMediaState();
       refresh();
     } catch (error) {
       set({ error: `Camera: ${messageOf(error)}` });
@@ -399,6 +423,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
         error: null,
         watching: LOCAL,
       });
+      publishMediaState();
       refresh();
     } catch (error) {
       set({ error: `Screen share: ${messageOf(error)}` });
@@ -425,6 +450,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
         error: null,
         watching: watching === LOCAL ? null : watching,
       });
+      publishMediaState();
       refresh();
     } catch (error) {
       set({ error: `Screen share: ${messageOf(error)}` });
@@ -471,13 +497,16 @@ function snapshot(): { tiles: VoiceTile[]; shares: VoiceShare[] } {
     localTile,
     ...peers.map((peer) => {
       const slots = remoteTracks.get(peer.peerId) ?? {};
+      const media = remoteMediaStates.get(peer.peerId);
       return {
         identity: peer.peerId,
         userId: peer.userId,
         name: peer.username,
         isLocal: false,
         speaking: speaking.has(peer.peerId),
-        micEnabled: Boolean(slots.mic),
+        // Track mute means packets are not arriving right now; it does not
+        // reliably mean the participant pressed their microphone button.
+        micEnabled: media?.mic ?? Boolean(slots.mic),
         videoTrack: slots.camera ?? null,
         audioTrack: slots.mic ?? null,
         screenAudioTrack: slots.screenAudio ?? null,
@@ -509,6 +538,41 @@ function snapshot(): { tiles: VoiceTile[]; shares: VoiceShare[] } {
   }
 
   return { tiles, shares };
+}
+
+function currentMediaState(): MediaState {
+  const { micEnabled, cameraEnabled, screenEnabled } = useVoiceStore.getState();
+  return {
+    mic: micEnabled,
+    camera: cameraEnabled,
+    screen: screenEnabled,
+    screenAudio: screenEnabled && Boolean(localTracks.screenAudio),
+  };
+}
+
+function publishMediaState(to?: string[]): void {
+  mesh?.sendData({ topic: VOICE_STATE_TOPIC, media: currentMediaState() } satisfies MediaStateEnvelope, to);
+}
+
+/** Returns true when the payload belongs to this store, even if malformed. */
+function receiveMediaState(peer: CallPeer, payload: unknown): boolean {
+  if (typeof payload !== 'object' || payload === null) return false;
+
+  const envelope = payload as { topic?: unknown; media?: unknown };
+  if (envelope.topic !== VOICE_STATE_TOPIC) return false;
+  if (typeof envelope.media !== 'object' || envelope.media === null) return true;
+
+  const media = envelope.media as Partial<Record<Slot, unknown>>;
+  if (!SLOTS.every((slot) => typeof media[slot] === 'boolean')) return true;
+
+  remoteMediaStates.set(peer.peerId, {
+    mic: media.mic === true,
+    camera: media.camera === true,
+    screen: media.screen === true,
+    screenAudio: media.screenAudio === true,
+  });
+  refresh();
+  return true;
 }
 
 /**
@@ -581,6 +645,7 @@ function teardown(): void {
   mesh = null;
   for (const slot of SLOTS) stopLocal(slot);
   remoteTracks.clear();
+  remoteMediaStates.clear();
   peers = [];
   speaking = new Set();
   lastSpoke.clear();
