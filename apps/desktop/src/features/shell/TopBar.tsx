@@ -53,9 +53,19 @@ export function TopBar({
 
   return (
     <header className="drag-region flex h-10 shrink-0 items-center gap-2 px-2.5">
-      <div className="flex w-14 shrink-0 items-center gap-2 pl-1.5">
-        <NexoraLogoIcon className="h-[18px] w-[18px] text-accent" aria-hidden="true" />
-        <span className="text-[13px] font-semibold tracking-tight text-slate-300">Nexora</span>
+      {/* Each toggle sits on the side it acts on. Both of them together in one
+          corner is what the layout controls in most apps look like, and it
+          leaves you guessing which button hides which column. */}
+      <div className="flex w-32 shrink-0 items-center gap-1.5 pl-1">
+        <NexoraLogoIcon className="h-[18px] w-[18px] shrink-0 text-accent" aria-hidden="true" />
+        <span className="truncate text-[13px] font-semibold tracking-tight text-slate-300">
+          Nexora
+        </span>
+        <LayoutToggle
+          label={sidebarOpen ? 'Hide sidebar' : 'Show sidebar'}
+          on={sidebarOpen}
+          onClick={onToggleSidebar}
+        />
       </div>
 
       <div className="flex min-w-0 flex-1 justify-center">
@@ -72,12 +82,7 @@ export function TopBar({
         </button>
       </div>
 
-      <div className="flex w-14 shrink-0 items-center justify-end gap-0.5">
-        <LayoutToggle
-          label={sidebarOpen ? 'Hide sidebar' : 'Show sidebar'}
-          on={sidebarOpen}
-          onClick={onToggleSidebar}
-        />
+      <div className="flex w-32 shrink-0 items-center justify-end">
         {panelAvailable && (
           <LayoutToggle
             label={panelOpen ? 'Hide right panel' : 'Show right panel'}
