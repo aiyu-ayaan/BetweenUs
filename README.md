@@ -4,7 +4,7 @@
   <img src="pictures/home.png" alt="Nexora Client Preview" width="100%" />
 </p>
 
-A modern, secure communication platform with end-to-end encrypted messaging, peer-to-peer (P2P) WebRTC voice/video channels, interactive screen sharing, picture-in-picture, and remote desktop access. Built as a high-performance pnpm + Turborepo monorepo of NestJS microservices and an Electron / Web client.
+A modern, secure communication platform with end-to-end encrypted messaging, peer-to-peer (P2P) WebRTC voice/video channels, interactive screen sharing, picture-in-picture, and remote desktop access. Built as a high-performance pnpm + Turborepo monorepo of NestJS microservices with Desktop (Electron), Web (React), and Native Mobile (Android Jetpack Compose) clients.
 
 Messages, attachments, and call media are end-to-end encrypted: the server stores and routes ciphertext, never holding any key that can decrypt it. Voice, video, and screen sharing stream directly between participants via a peer-to-peer WebRTC mesh with DTLS-SRTP encryption — requiring zero media server infrastructure.
 
@@ -19,8 +19,9 @@ Messages, attachments, and call media are end-to-end encrypted: the server store
 | Accounts | Register, login, refresh-token rotation with reuse detection, Google and GitHub sign-in, admin panel |
 | Servers | Servers, roles, per-member permission overrides, invites by slug, server settings |
 | Channels | Public and private text channels, private channels as an allowlist, direct messages between friends |
-| Messages | End-to-end encrypted, realtime over WebSocket, history paging, attachments of any type |
+| Messages & Chat | End-to-end encrypted, realtime over WebSocket, history paging, emoji reactions, WhatsApp-style attachment sheet & composer with quick camera auto-hide, full-screen zoomable image viewer, integrated video player, and local media album saving |
 | Voice and video | Peer-to-peer voice channels, camera, screen share with a source picker, end-to-end encrypted media, no media server |
+| Android Client | Native Jetpack Compose + Material 3 app with E2EE messaging, WhatsApp-style media picker and composer, media viewers, and public gallery saving (`Pictures/Nexora`, `Movies/Nexora`) |
 | Presence | Online / idle / do not disturb / invisible, typing indicators, voice rosters |
 | Notifications | Desktop notifications, system tray, start with the system, per-channel mute, quiet hours, persisted unread |
 | Remote desktop | Not built - `remote-gateway` and `remote-agent` are scaffolds |
@@ -369,6 +370,34 @@ set of ports. Peers now reach each other directly, so the hostname really is
 the whole address: one URL carries everything a client asks the backend for,
 and media asks the backend for nothing.
 
+## Android client
+
+A native Android mobile application built with **Kotlin 2.2**, **Jetpack Compose**, and **Material 3** (`apps/android`).
+
+- **End-to-End Encrypted Chat**: Client-side AES-256-GCM message encryption/decryption, channel & direct messaging, real-time typing indicators, read markers, and offline Room/memory caching.
+- **WhatsApp-Style Attachment Sheet**:
+  - Inline recent photos & videos tray with multi-select badge counter and batch sending.
+  - Dedicated action buttons: **Document** (`OpenMultipleDocuments`), **Camera** (`TakePicture` with `FileProvider`), **Gallery** (`PickMultipleVisualMedia`), and **Audio** picker.
+  - Handles modern Android 14+ (`READ_MEDIA_VISUAL_USER_SELECTED`), Android 13 (`READ_MEDIA_IMAGES` / `READ_MEDIA_VIDEO`), and legacy storage permissions.
+- **Modern Message Composer**:
+  - Rounded pill input well with accent active borders and typing indicator dispatch.
+  - Built-in **Emoji Picker Sheet** with categorized emojis (Smileys, Gestures, Hearts, Fun & Symbols).
+  - Quick **Camera Button** that automatically hides when the on-screen keyboard is open (`WindowInsets.isImeVisible`) or while typing to maximize input area.
+  - Active circular Send button that illuminates in `Accent` when content is staged.
+- **In-Chat Media & Dedicated Viewers**:
+  - Responsive inline photo and video cards with client-side decryption.
+  - **Fullscreen Zoomable Image Viewer**: Multi-touch pinch-to-zoom, pan gestures, reset zoom, and native system share sheet.
+  - **Integrated Video Player**: Fullscreen playback with standard media playback controls.
+  - **Direct Gallery Storage Saving**: "Save to Gallery" action saves media directly into the device's public media albums under `Pictures/Nexora` and `Movies/Nexora` using modern Android Scoped Storage (`MediaStore`).
+- **WebRTC Voice & Video**: Peer-to-peer audio and video calls.
+
+```bash
+# Build and verify the Android client:
+cd apps/android
+./gradlew assembleDebug      # compiles debug APK
+./gradlew test               # runs unit test suite
+```
+
 ## Remote desktop
 
 A machine offers itself by turning on **Settings → Remote Access**. It enrols
@@ -452,6 +481,7 @@ apps/
   desktop/                Electron + React + Tailwind + Zustand client
   web/                    The same UI in a browser, served at / (no remote desktop)
   admin/                  Admin panel (React, served under /admin)
+  android/                Native Android client (Kotlin 2.2 + Jetpack Compose + Material 3)
   services/
     api-gateway/          Nginx configuration
     auth-service/         Accounts, tokens, OAuth, admin API
@@ -466,7 +496,7 @@ apps/
 packages/                 shared-types, database, auth, permissions, events,
                           nest-common, storage, websocket, logger, config
 infrastructure/           docker compose, nginx, cloudflare
-development/              planning, MVP, E2EE design, testing guide, TODO
+development/              planning, MVP, E2EE design, testing guide, TODO, Android roadmap
 DEPLOYMENT.md             putting it on a server, end to end
 ```
 
@@ -486,6 +516,8 @@ DEPLOYMENT.md             putting it on a server, end to end
 | `pnpm --filter @nexora/presence-service smoke` | Presence, typing and voice rosters |
 | `pnpm --filter @nexora/notification-service smoke` | Preferences, unread counting, read markers |
 | `pnpm --filter @nexora/remote-gateway smoke` | Enrolment, grants, and what the remote relay refuses |
+| `cd apps/android && ./gradlew test` | Run Android core & UI unit test suite |
+| `cd apps/android && ./gradlew assembleDebug` | Build debug APK for Android |
 
 ## Testing and CI
 
@@ -564,3 +596,4 @@ Third-party dependencies keep their own licences.
 | `development/E2EE.md` | Encryption design, threat model, known limits |
 | `development/TESTING.md` | Running two clients locally, and what to try |
 | `development/TODO.md` | Ordered backlog, including what each phase left open |
+| `development/ANDROID_TODO.md` | Native Android client architecture, roadmap, and completed phases |
