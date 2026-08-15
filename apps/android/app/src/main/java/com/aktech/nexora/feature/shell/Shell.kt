@@ -27,6 +27,7 @@ import com.aktech.nexora.core.crypto.E2ee
 import com.aktech.nexora.core.crypto.IdentityStatus
 import com.aktech.nexora.core.data.ChannelType
 import com.aktech.nexora.core.data.PublicUser
+import com.aktech.nexora.core.store.LastPlace
 import com.aktech.nexora.core.store.Workspace
 import com.aktech.nexora.feature.auth.IdentityUnlockSheet
 import com.aktech.nexora.feature.chat.ChatScreen
@@ -56,8 +57,21 @@ fun Shell(user: PublicUser) {
     val navigation = rememberNavController()
 
     val servers by Workspace.servers.collectAsState()
-    var serverId by rememberSaveable { mutableStateOf<String?>(null) }
-    var channelId by rememberSaveable { mutableStateOf<String?>(null) }
+    var serverId by rememberSaveable { mutableStateOf(LastPlace.serverId) }
+    var channelId by rememberSaveable { mutableStateOf(LastPlace.channelId) }
+
+    /**
+     * Whether the voice screen should join on arrival, rather than showing a
+     * button that says so. Tapping a voice channel is the decision; asking
+     * again on the next screen is asking twice.
+     */
+    var joinOnArrival by rememberSaveable { mutableStateOf(false) }
+
+    // Read once. The start destination cannot change under a NavHost, and this
+    // is the only moment it means anything anyway.
+    val start = remember { if (LastPlace.channelId != null) Route.Chat else Route.Friends }
+
+    LaunchedEffect(serverId, channelId) { LastPlace.remember(serverId, channelId) }
 
     val identity by E2ee.status.collectAsState()
     var unlocking by remember { mutableStateOf(false) }
@@ -89,12 +103,23 @@ fun Shell(user: PublicUser) {
                     servers = servers,
                     selectedServerId = serverId,
                     selectedChannelId = channelId,
-                    onSelectServer = { serverId = it },
+                    // Picking a server opens the conversation in it, because
+                    // that is what picking a server is for. Its first text
+                    // channel - #general on a server nobody has renamed - is
+                    // the one every client lands on.
+                    onSelectServer = { picked ->
+                        serverId = picked
+                        val landing = picked
+                            ?.let { Workspace.channelsOf(it) }
+                            ?.firstOrNull { it.type == ChannelType.TEXT }
+                        if (landing != null) openChannel(landing.id, picked)
+                    },
                     onSelectChannel = { channel ->
                         when (channel.type) {
                             ChannelType.VOICE -> {
                                 channelId = channel.id
                                 serverId = channel.serverId
+                                joinOnArrival = true
                                 scope.launch { drawer.close() }
                                 navigation.navigate(Route.Voice)
                             }
@@ -119,7 +144,7 @@ fun Shell(user: PublicUser) {
         },
     ) {
         Box(Modifier.fillMaxSize().background(Ground)) {
-            NavHost(navigation, startDestination = Route.Friends) {
+            NavHost(navigation, startDestination = start) {
                 composable(Route.Friends) {
                     FriendsScreen(
                         onOpenMenu = { scope.launch { drawer.open() } },
@@ -155,6 +180,8 @@ fun Shell(user: PublicUser) {
                     VoiceChannelScreen(
                         channelId = channelId,
                         self = user,
+                        joinOnArrival = joinOnArrival,
+                        onJoined = { joinOnArrival = false },
                         onBack = { navigation.popBackStack() },
                     )
                 }
