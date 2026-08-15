@@ -32,6 +32,9 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
+        // minSdk 24 has no java.time. Desugaring is one line and gets it, which
+        // beats hand-parsing an ISO timestamp in three places.
+        isCoreLibraryDesugaringEnabled = true
     }
     buildFeatures {
         compose = true
@@ -39,6 +42,7 @@ android {
 }
 
 dependencies {
+    coreLibraryDesugaring(libs.desugar.jdk.libs)
     // :core is the session and the API client; :ui-common is the palette and
     // the widgets. Features live here and are the only thing that knows both.
     implementation(project(":core"))
@@ -53,6 +57,9 @@ dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
+    implementation(libs.androidx.navigation.compose)
+    // Voice, video, screen share and the remote screen. A mesh, never an SFU.
+    implementation(libs.webrtc)
     testImplementation(libs.junit)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)

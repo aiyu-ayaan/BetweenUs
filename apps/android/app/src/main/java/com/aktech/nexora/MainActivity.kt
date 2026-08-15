@@ -16,7 +16,7 @@ import androidx.lifecycle.lifecycleScope
 import com.aktech.nexora.core.data.AuthPhase
 import com.aktech.nexora.core.data.Session
 import com.aktech.nexora.feature.auth.LoginScreen
-import com.aktech.nexora.feature.home.HomeScreen
+import com.aktech.nexora.feature.shell.Shell
 import com.aktech.nexora.ui.components.NexoraLogoTile
 import com.aktech.nexora.ui.theme.Ground
 import com.aktech.nexora.ui.theme.NexoraTheme
@@ -61,6 +61,6 @@ private fun NexoraRoot() {
         }
 
         is AuthPhase.SignedOut -> LoginScreen(signedOutReason = current.reason)
-        is AuthPhase.SignedIn -> HomeScreen(current.user)
+        is AuthPhase.SignedIn -> Shell(current.user)
     }
 }

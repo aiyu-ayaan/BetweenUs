@@ -1,0 +1,393 @@
+package com.aktech.nexora.feature.settings
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.systemBarsPadding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.unit.dp
+import com.aktech.nexora.core.crypto.BackupSecret
+import com.aktech.nexora.core.crypto.E2ee
+import com.aktech.nexora.core.crypto.IdentityStatus
+import com.aktech.nexora.core.data.Endpoint
+import com.aktech.nexora.core.data.NexoraApi
+import com.aktech.nexora.core.data.NotificationPreferences
+import com.aktech.nexora.core.data.PresenceStatus
+import com.aktech.nexora.core.data.PublicUser
+import com.aktech.nexora.core.data.Session
+import com.aktech.nexora.core.store.Presence
+import com.aktech.nexora.feature.auth.ServerSheet
+import com.aktech.nexora.ui.components.Avatar
+import com.aktech.nexora.ui.components.Chip
+import com.aktech.nexora.ui.components.IconAction
+import com.aktech.nexora.ui.components.ListRow
+import com.aktech.nexora.ui.components.NexoraButton
+import com.aktech.nexora.ui.components.NexoraField
+import com.aktech.nexora.ui.components.NexoraIcon
+import com.aktech.nexora.ui.components.NexoraIcons
+import com.aktech.nexora.ui.components.Notice
+import com.aktech.nexora.ui.components.SectionLabel
+import com.aktech.nexora.ui.theme.Accent
+import com.aktech.nexora.ui.theme.Danger
+import com.aktech.nexora.ui.theme.Edge
+import com.aktech.nexora.ui.theme.Ground
+import com.aktech.nexora.ui.theme.Slate100
+import com.aktech.nexora.ui.theme.Slate400
+import com.aktech.nexora.ui.theme.Slate50
+import com.aktech.nexora.ui.theme.Slate500
+import com.aktech.nexora.ui.theme.StatusOnline
+import com.aktech.nexora.ui.theme.Surface700
+import com.aktech.nexora.ui.theme.Surface950
+import kotlinx.coroutines.launch
+
+/**
+ * Account, presence, encryption, notifications, permissions, deployment.
+ *
+ * The port of `apps/desktop/src/features/settings/UserSettings.tsx`, plus the
+ * one section a phone needs that a desktop does not: what Android has been
+ * asked for and what it said.
+ */
+@Composable
+fun SettingsScreen(user: PublicUser, onBack: () -> Unit, onServerSettings: () -> Unit) {
+    val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+
+    val identity by E2ee.status.collectAsState()
+    val presence by Presence.self.collectAsState()
+
+    var displayName by remember { mutableStateOf(user.displayName) }
+    var note by remember { mutableStateOf<String?>(null) }
+    var busy by remember { mutableStateOf(false) }
+    var pickingServer by remember { mutableStateOf(false) }
+    var passphrase by remember { mutableStateOf("") }
+    var currentPassword by remember { mutableStateOf("") }
+    var newPassword by remember { mutableStateOf("") }
+    var preferences by remember { mutableStateOf<NotificationPreferences?>(null) }
+
+    LaunchedEffect(Unit) {
+        preferences = runCatching { NexoraApi.notificationPreferences() }.getOrNull()
+    }
+
+    val notifications = rememberPermission(NexoraPermissions.NOTIFICATIONS) {}
+    val microphone = rememberPermission(NexoraPermissions.MICROPHONE) {}
+    val camera = rememberPermission(NexoraPermissions.CAMERA) {}
+
+    fun act(block: suspend () -> Unit) {
+        scope.launch {
+            busy = true
+            note = runCatching { block() }.exceptionOrNull()?.message
+            busy = false
+        }
+    }
+
+    Column(Modifier.fillMaxSize().background(Ground).systemBarsPadding()) {
+        Row(
+            modifier = Modifier.fillMaxWidth().background(Surface950).padding(4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            IconAction(NexoraIcons.ChevronLeft, "Back", onBack)
+            Text(
+                text = "Settings",
+                style = MaterialTheme.typography.titleMedium,
+                color = Slate50,
+                modifier = Modifier.weight(1f).padding(start = 8.dp),
+            )
+        }
+        HorizontalDivider(color = Edge)
+
+        Column(Modifier.verticalScroll(rememberScrollState()).padding(bottom = 40.dp)) {
+            // --- account ---
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Avatar(
+                    id = user.id,
+                    label = user.label,
+                    url = user.avatarUrl?.let { Endpoint.absolute(it) },
+                    size = 56.dp,
+                )
+                Column {
+                    Text(user.label, style = MaterialTheme.typography.titleMedium, color = Slate50)
+                    Text(
+                        text = "@${user.username} · ${user.email}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Slate500,
+                    )
+                }
+            }
+
+            SectionLabel("Profile")
+            Column(Modifier.padding(horizontal = 12.dp)) {
+                NexoraField(
+                    label = "Display name",
+                    value = displayName,
+                    onValueChange = { displayName = it; note = null },
+                    placeholder = user.username,
+                    imeAction = ImeAction.Done,
+                    enabled = !busy,
+                )
+                Spacer(Modifier.height(10.dp))
+                NexoraButton(
+                    text = "Save",
+                    busy = busy,
+                    enabled = displayName.isNotBlank() && displayName != user.displayName,
+                    onClick = { act { NexoraApi.updateAccount(displayName.trim(), null, null) } },
+                )
+            }
+
+            // --- presence ---
+            SectionLabel("Appear as")
+            Row(
+                modifier = Modifier.padding(horizontal = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                listOf(
+                    PresenceStatus.ONLINE,
+                    PresenceStatus.IDLE,
+                    PresenceStatus.DND,
+                    PresenceStatus.INVISIBLE,
+                ).forEach { option ->
+                    Chip(
+                        text = option.wire,
+                        selected = option == presence,
+                        onClick = { Presence.setStatus(option) },
+                    )
+                }
+            }
+
+            // --- encryption ---
+            SectionLabel("Encryption")
+            Column(Modifier.padding(horizontal = 16.dp)) {
+                Text(
+                    text = when (val state = identity) {
+                        is IdentityStatus.Ready -> if (state.backedUp) {
+                            "This device holds your identity key, and the account has a sealed " +
+                                "backup of it. Signing in elsewhere will restore your history."
+                        } else {
+                            "This device holds your identity key, but the account has no backup. " +
+                                "Lose this device and the messages sealed for it go with it."
+                        }
+
+                        is IdentityStatus.Locked ->
+                            "Your messages are locked until this device can open the account backup."
+
+                        IdentityStatus.Absent -> "No identity key on this device yet."
+                    },
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Slate400,
+                )
+                Spacer(Modifier.height(10.dp))
+                NexoraField(
+                    label = "Recovery passphrase",
+                    value = passphrase,
+                    onValueChange = { passphrase = it; note = null },
+                    placeholder = "Something only you know",
+                    secret = true,
+                    imeAction = ImeAction.Done,
+                    enabled = !busy,
+                )
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    text = "A passphrase is never sent anywhere in any form. Set one if your " +
+                        "threat model includes the running server, which does see your password " +
+                        "when you sign in.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Slate500,
+                )
+                Spacer(Modifier.height(10.dp))
+                NexoraButton(
+                    text = "Seal my identity with this passphrase",
+                    busy = busy,
+                    enabled = passphrase.length >= 8,
+                    onClick = {
+                        act {
+                            E2ee.backupIdentity(BackupSecret.passphrase(passphrase))
+                            passphrase = ""
+                        }
+                    },
+                )
+            }
+
+            // --- password ---
+            SectionLabel("Password")
+            Column(Modifier.padding(horizontal = 12.dp)) {
+                NexoraField(
+                    label = "Current",
+                    value = currentPassword,
+                    onValueChange = { currentPassword = it; note = null },
+                    placeholder = "Your password now",
+                    secret = true,
+                    enabled = !busy,
+                )
+                Spacer(Modifier.height(10.dp))
+                NexoraField(
+                    label = "New",
+                    value = newPassword,
+                    onValueChange = { newPassword = it; note = null },
+                    placeholder = "At least 8 characters",
+                    secret = true,
+                    imeAction = ImeAction.Done,
+                    enabled = !busy,
+                )
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    text = "Changing it signs every other session out, and re-seals your identity " +
+                        "backup if it was keyed to the password.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Slate500,
+                )
+                Spacer(Modifier.height(10.dp))
+                NexoraButton(
+                    text = "Change password",
+                    busy = busy,
+                    enabled = currentPassword.isNotBlank() && newPassword.length >= 8,
+                    onClick = {
+                        act {
+                            NexoraApi.changePassword(currentPassword, newPassword)
+                            E2ee.rewrapBackupForPassword(newPassword)
+                            currentPassword = ""
+                            newPassword = ""
+                        }
+                    },
+                )
+            }
+
+            // --- notifications ---
+            SectionLabel("Notifications")
+            preferences?.let { prefs ->
+                ListRow(
+                    title = "Notify me",
+                    subtitle = "Mentions, direct messages, calls and remote sessions",
+                    leading = { NexoraIcon(NexoraIcons.Bell) },
+                    trailing = {
+                        Switch(
+                            checked = prefs.enabled,
+                            onCheckedChange = { enabled ->
+                                preferences = prefs.copy(enabled = enabled)
+                                act {
+                                    preferences =
+                                        NexoraApi.updateNotificationPreferences(enabled = enabled)
+                                }
+                            },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = Slate100,
+                                checkedTrackColor = Accent,
+                                uncheckedTrackColor = Surface700,
+                                uncheckedBorderColor = Surface700,
+                                uncheckedThumbColor = Slate400,
+                            ),
+                        )
+                    },
+                )
+            }
+
+            // --- android permissions ---
+            SectionLabel("This device")
+            PermissionRow(
+                title = "Notifications",
+                detail = "So a message or a call can reach you when the app is closed.",
+                icon = NexoraIcons.Bell,
+                granted = NexoraPermissions.granted(context, NexoraPermissions.NOTIFICATIONS),
+                request = notifications,
+            )
+            PermissionRow(
+                title = "Microphone",
+                detail = "Asked for when you join a voice channel, not before.",
+                icon = NexoraIcons.Mic,
+                granted = NexoraPermissions.granted(context, NexoraPermissions.MICROPHONE),
+                request = microphone,
+            )
+            PermissionRow(
+                title = "Camera",
+                detail = "Asked for when you turn video on in a call.",
+                icon = NexoraIcons.Video,
+                granted = NexoraPermissions.granted(context, NexoraPermissions.CAMERA),
+                request = camera,
+            )
+
+            // --- deployment ---
+            SectionLabel("Deployment")
+            ListRow(
+                title = Endpoint.label(),
+                subtitle = "The Nexora server this app talks to",
+                leading = { NexoraIcon(NexoraIcons.Globe) },
+                onClick = { pickingServer = true },
+            )
+            ListRow(
+                title = "Server settings",
+                subtitle = "Name, channels, leaving",
+                leading = { NexoraIcon(NexoraIcons.Settings) },
+                onClick = onServerSettings,
+            )
+
+            note?.let {
+                Spacer(Modifier.height(12.dp))
+                Notice(it, Danger, Modifier.padding(horizontal = 16.dp))
+            }
+
+            SectionLabel("Session")
+            ListRow(
+                title = "Sign out",
+                titleColor = Danger,
+                leading = { NexoraIcon(NexoraIcons.LogOut, tint = Danger) },
+                onClick = { scope.launch { Session.signOut() } },
+            )
+        }
+    }
+
+    if (pickingServer) {
+        ServerSheet(onDismiss = { pickingServer = false })
+    }
+}
+
+@Composable
+private fun PermissionRow(
+    title: String,
+    detail: String,
+    icon: Int,
+    granted: Boolean,
+    request: PermissionRequest,
+) {
+    ListRow(
+        title = title,
+        subtitle = if (request.refused) {
+            "Refused. Android will not ask again from here."
+        } else {
+            detail
+        },
+        leading = { NexoraIcon(icon, tint = if (granted) StatusOnline else Slate400) },
+        trailing = {
+            when {
+                granted -> NexoraIcon(NexoraIcons.Check, tint = StatusOnline, size = 18.dp)
+                request.refused -> Chip("Open settings", onClick = request.openSettings)
+                else -> Chip("Allow", onClick = request.request)
+            }
+        },
+    )
+}
