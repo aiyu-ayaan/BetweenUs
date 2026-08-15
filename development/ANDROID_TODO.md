@@ -21,6 +21,27 @@ Nothing after phase 2 exists yet. Phase 3 (servers, channels, messages over
 REST) is the next thing worth building, because every later phase needs a
 channel to attach itself to.
 
+### Pointing a local build at a local backend
+
+There is no gateway on port 8080 during `pnpm dev`. The desktop and web dev
+servers each carry a Vite proxy table that stands in for Nginx, and Android
+cannot use either of them, so it has to reach something that is actually
+listening:
+
+| Backend you are running | `nexora.serverUrl` in `apps/android/local.properties` |
+| --- | --- |
+| `pnpm dev` (services only) | `http://10.0.2.2:3001` — auth-service directly, which is all phase 2 calls |
+| `pnpm dev:infra` (gateway container) | `http://10.0.2.2:8080` — the real thing, and what phase 3 needs |
+
+`10.0.2.2` is the emulator's route to the host's loopback, so it reaches a
+locally running service without going near the LAN address or the host
+firewall. A physical device has no such route and needs the host's LAN address
+plus a firewall rule.
+
+The value is only the default: the server picker on the login screen overrides
+it at runtime, and that stored choice wins until it is changed or the app's
+data is cleared.
+
 ---
 
 ## Ground rules

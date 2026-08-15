@@ -27,8 +27,14 @@ object Http {
     fun send(method: String, url: String, body: String?, bearer: String? = null): Result {
         var target = url
         repeat(MAX_REDIRECTS + 1) {
-            val connection = open(method, target, body, bearer)
+            var connection: HttpURLConnection? = null
             try {
+                // Opening is inside the try because that is where a POST body
+                // gets written, which is where the connection is actually made:
+                // leaving it outside let a raw socket error past the wrapping
+                // and put "failed to connect to /10.0.2.16 after 15000ms" under
+                // a login form.
+                connection = open(method, target, body, bearer)
                 val status = connection.responseCode
                 if (status in 300..399) {
                     val location = connection.getHeaderField("Location")
@@ -41,19 +47,25 @@ object Http {
                 val text = stream?.bufferedReader()?.use { it.readText() }.orEmpty()
                 return Result(status, text, target)
             } catch (error: IOException) {
-                throw IOException("Could not reach that address", error)
+                // Name the host. "Could not reach that address" is true of a
+                // wrong port, a stopped service and a firewall alike, and the
+                // one thing that separates them is which address was tried.
+                throw IOException("Could not reach ${hostOf(target)}", error)
             } finally {
-                connection.disconnect()
+                connection?.disconnect()
             }
         }
         throw IOException("That address redirected too many times")
     }
 
+    private fun hostOf(url: String): String =
+        runCatching { URL(url).authority }.getOrNull() ?: "that address"
+
     private fun open(method: String, url: String, body: String?, bearer: String?): HttpURLConnection {
         val connection = try {
             URL(url).openConnection() as HttpURLConnection
         } catch (error: Exception) {
-            throw IOException("Could not reach that address", error)
+            throw IOException("Could not reach ${hostOf(url)}", error)
         }
         connection.requestMethod = method
         connection.instanceFollowRedirects = false
