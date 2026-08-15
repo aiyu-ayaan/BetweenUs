@@ -61,6 +61,14 @@ fun Shell(user: PublicUser) {
     var channelId by rememberSaveable { mutableStateOf(LastPlace.channelId) }
 
     /**
+     * The voice channel, kept apart from the text one. They are both "the
+     * channel" from the drawer's point of view and neither is from the chat
+     * screen's: sharing one slot meant leaving a call dropped you into a voice
+     * channel drawn as a conversation with nothing in it.
+     */
+    var voiceChannelId by rememberSaveable { mutableStateOf<String?>(null) }
+
+    /**
      * Whether the voice screen should join on arrival, rather than showing a
      * button that says so. Tapping a voice channel is the decision; asking
      * again on the next screen is asking twice.
@@ -116,8 +124,12 @@ fun Shell(user: PublicUser) {
                     },
                     onSelectChannel = { channel ->
                         when (channel.type) {
+                            // A voice channel does not become "the channel".
+                            // It used to, and since the chat route reads the
+                            // same value, leaving a call landed on a voice
+                            // channel rendered as an empty conversation.
                             ChannelType.VOICE -> {
-                                channelId = channel.id
+                                voiceChannelId = channel.id
                                 serverId = channel.serverId
                                 joinOnArrival = true
                                 scope.launch { drawer.close() }
@@ -164,7 +176,19 @@ fun Shell(user: PublicUser) {
                             self = user,
                             onOpenMenu = { scope.launch { drawer.open() } },
                             onOpenMembers = { navigation.navigate(Route.Members) },
-                            onStartCall = { navigation.navigate(Route.Voice) },
+                            // The call button in a text channel means the voice
+                            // channel of the server it is in - a text channel
+                            // id is not something the call service will admit.
+                            onStartCall = {
+                                val voice = serverId
+                                    ?.let { Workspace.channelsOf(it) }
+                                    ?.firstOrNull { it.type == ChannelType.VOICE }
+                                if (voice != null) {
+                                    voiceChannelId = voice.id
+                                    joinOnArrival = true
+                                    navigation.navigate(Route.Voice)
+                                }
+                            },
                         )
                     }
                 }
@@ -178,7 +202,7 @@ fun Shell(user: PublicUser) {
                 }
                 composable(Route.Voice) {
                     VoiceChannelScreen(
-                        channelId = channelId,
+                        channelId = voiceChannelId,
                         self = user,
                         joinOnArrival = joinOnArrival,
                         onJoined = { joinOnArrival = false },
