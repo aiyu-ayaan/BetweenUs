@@ -141,6 +141,17 @@ class VoiceEngine(private val context: Context) {
 
     val eglBase: EglBase = EglBase.create()
 
+    /**
+     * Held, because muting has to reach the microphone itself and not only the
+     * track carrying it. See [toggleMute].
+     */
+    private val audioDevice: JavaAudioDeviceModule by lazy {
+        JavaAudioDeviceModule.builder(context)
+            .setUseHardwareAcousticEchoCanceler(true)
+            .setUseHardwareNoiseSuppressor(true)
+            .createAudioDeviceModule()
+    }
+
     private val factory: PeerConnectionFactory by lazy {
         PeerConnectionFactory.initialize(
             PeerConnectionFactory.InitializationOptions.builder(context)
@@ -149,12 +160,7 @@ class VoiceEngine(private val context: Context) {
         PeerConnectionFactory.builder()
             .setVideoEncoderFactory(DefaultVideoEncoderFactory(eglBase.eglBaseContext, true, true))
             .setVideoDecoderFactory(DefaultVideoDecoderFactory(eglBase.eglBaseContext))
-            .setAudioDeviceModule(
-                JavaAudioDeviceModule.builder(context)
-                    .setUseHardwareAcousticEchoCanceler(true)
-                    .setUseHardwareNoiseSuppressor(true)
-                    .createAudioDeviceModule(),
-            )
+            .setAudioDeviceModule(audioDevice)
             .createPeerConnectionFactory()
     }
 
@@ -331,9 +337,26 @@ class VoiceEngine(private val context: Context) {
     private fun startMicrophone() {
         if (audioTrack != null) return
         val source = factory.createAudioSource(MediaConstraints())
-        audioTrack = factory.createAudioTrack("nexora-audio", source).apply {
-            setEnabled(!_muted.value)
-        }
+        audioTrack = factory.createAudioTrack("nexora-audio", source)
+        applyMute()
+    }
+
+    /**
+     * Mute in both places it can be meant.
+     *
+     * Disabling the track stops the samples being packetised, which is what
+     * mute usually means. It does not stop the microphone being read - and
+     * with the speaker carrying the call, a microphone that is still open is
+     * still hearing the room and whatever the phone is playing. Muting the
+     * device module is the part that actually closes the ear.
+     *
+     * Doing only the first is why a muted phone sharing its screen still sent
+     * audio.
+     */
+    private fun applyMute() {
+        val muted = _muted.value
+        audioTrack?.setEnabled(!muted)
+        runCatching { audioDevice.setMicrophoneMute(muted) }
     }
 
     /**
@@ -344,7 +367,7 @@ class VoiceEngine(private val context: Context) {
      */
     fun toggleMute() {
         _muted.update { !it }
-        audioTrack?.setEnabled(!_muted.value)
+        applyMute()
         publishMediaState()
         // Only while there is a call. Starting the service to relabel a
         // notification for a call that has ended is how the notification came
