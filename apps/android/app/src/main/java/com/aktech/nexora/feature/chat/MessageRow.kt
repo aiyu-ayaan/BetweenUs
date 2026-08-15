@@ -1,19 +1,29 @@
 package com.aktech.nexora.feature.chat
 
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.net.Uri
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -21,17 +31,18 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import android.graphics.BitmapFactory
-import androidx.compose.foundation.Image
+import androidx.compose.ui.unit.sp
 import com.aktech.nexora.core.crypto.E2ee
 import com.aktech.nexora.core.data.Endpoint
 import com.aktech.nexora.core.data.MessageAttachment
@@ -39,16 +50,24 @@ import com.aktech.nexora.core.data.PublicUser
 import com.aktech.nexora.core.store.Conversation
 import com.aktech.nexora.core.store.ReadableMessage
 import com.aktech.nexora.ui.components.Avatar
-import com.aktech.nexora.ui.components.Chip
 import com.aktech.nexora.ui.components.NexoraIcon
 import com.aktech.nexora.ui.components.NexoraIcons
 import com.aktech.nexora.ui.theme.Accent
+import com.aktech.nexora.ui.theme.Danger
+import com.aktech.nexora.ui.theme.Edge
+import com.aktech.nexora.ui.theme.Ground
 import com.aktech.nexora.ui.theme.Slate100
+import com.aktech.nexora.ui.theme.Slate300
 import com.aktech.nexora.ui.theme.Slate400
 import com.aktech.nexora.ui.theme.Slate50
 import com.aktech.nexora.ui.theme.Slate500
 import com.aktech.nexora.ui.theme.Surface700
+import com.aktech.nexora.ui.theme.Surface800
+import com.aktech.nexora.ui.theme.Surface850
 import com.aktech.nexora.ui.theme.Surface900
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -56,11 +75,12 @@ import java.time.format.DateTimeFormatter
 private val timeFormat = DateTimeFormatter.ofPattern("HH:mm")
 
 /**
- * One message.
- *
- * Consecutive messages from the same author within five minutes are grouped
- * under one header, the way the desktop groups them - a column of repeated
- * names and avatars is mostly furniture.
+ * Enhanced chat message row supporting:
+ * - Distinct bubbles with sender accents and "YOU" badge
+ * - Encrypted inline photo cards with zoomable fullscreen viewer
+ * - Encrypted video cards with thumbnail extraction and integrated video player
+ * - Document/Audio tiles with download/decrypt actions
+ * - Interactive emoji reactions
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -71,8 +91,11 @@ fun MessageRow(
     channelId: String,
     onLongPress: () -> Unit,
     onReact: (String) -> Unit,
+    onViewImage: (Bitmap, String) -> Unit = { _, _ -> },
+    onPlayVideo: (Uri, String) -> Unit = { _, _ -> },
 ) {
     val message = readable.message
+    val isSelf = message.author.id == self.id
     val grouped = previous != null &&
         previous.message.author.id == message.author.id &&
         !previous.message.deleted &&
@@ -82,99 +105,217 @@ fun MessageRow(
     Column(
         Modifier
             .fillMaxWidth()
-            .combinedClickable(onClick = {}, onLongClick = { if (!message.deleted) onLongPress() })
-            .padding(horizontal = 12.dp, vertical = if (grouped) 1.dp else 6.dp),
+            .combinedClickable(
+                onClick = {},
+                onLongClick = { if (!message.deleted) onLongPress() },
+            )
+            .padding(
+                horizontal = 12.dp,
+                vertical = if (grouped) 2.dp else 6.dp,
+            ),
     ) {
-        Row(verticalAlignment = Alignment.Top) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.Top,
+        ) {
             if (grouped) {
-                Spacer(Modifier.width(40.dp))
+                Spacer(Modifier.width(44.dp))
             } else {
                 Avatar(
                     id = message.author.id,
                     label = message.author.label,
                     url = message.author.avatarUrl?.let { Endpoint.absolute(it) },
-                    size = 34.dp,
+                    size = 36.dp,
                 )
-                Spacer(Modifier.width(6.dp))
+                Spacer(Modifier.width(8.dp))
             }
 
             Column(Modifier.weight(1f)) {
                 if (!grouped) {
-                    Row(verticalAlignment = Alignment.Bottom) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(bottom = 3.dp),
+                    ) {
                         Text(
-                            text = message.author.label,
+                            text = if (isSelf) "You" else message.author.label,
                             style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            color = if (message.author.id == self.id) Accent else Slate50,
+                            fontWeight = FontWeight.Bold,
+                            color = if (isSelf) Accent else Slate50,
                         )
+
+                        if (isSelf) {
+                            Spacer(Modifier.width(6.dp))
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(4.dp))
+                                    .background(Accent.copy(alpha = 0.15f))
+                                    .padding(horizontal = 4.dp, vertical = 1.dp),
+                            ) {
+                                Text(
+                                    text = "YOU",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontSize = 9.sp,
+                                    color = Accent,
+                                    fontWeight = FontWeight.Bold,
+                                )
+                            }
+                        }
+
                         Spacer(Modifier.width(8.dp))
                         Text(
                             text = shortTime(message.createdAt),
                             style = MaterialTheme.typography.bodySmall,
+                            fontSize = 11.sp,
                             color = Slate500,
                         )
+
                         if (message.pinned) {
                             Spacer(Modifier.width(6.dp))
-                            NexoraIcon(NexoraIcons.Pin, tint = Slate500, size = 12.dp)
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(4.dp))
+                                    .background(Color(0xFFF59E0B).copy(alpha = 0.15f))
+                                    .padding(horizontal = 4.dp, vertical = 1.dp),
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(2.dp),
+                                ) {
+                                    NexoraIcon(
+                                        icon = NexoraIcons.Pin,
+                                        tint = Color(0xFFF59E0B),
+                                        size = 10.dp,
+                                    )
+                                    Text(
+                                        text = "PINNED",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontSize = 9.sp,
+                                        color = Color(0xFFF59E0B),
+                                        fontWeight = FontWeight.Bold,
+                                    )
+                                }
+                            }
                         }
                     }
-                    Spacer(Modifier.height(2.dp))
                 }
 
-                when {
-                    // The row survives as a tombstone so a conversation reads as
-                    // "this was here and is gone" rather than silently
-                    // re-flowing around a hole.
-                    message.deleted -> Text(
-                        text = "Message deleted" +
-                            (message.deletedBy?.takeIf { it.id != message.author.id }
-                                ?.let { " by ${it.label}" } ?: ""),
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontStyle = FontStyle.Italic,
-                        color = Slate500,
-                    )
-
-                    readable.text == E2ee.UNDECRYPTABLE -> Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    ) {
-                        NexoraIcon(NexoraIcons.Lock, tint = Slate500, size = 14.dp)
-                        Text(
-                            text = "Encrypted - no key on this device yet",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = Slate500,
+                // Message bubble container
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(
+                            when {
+                                message.deleted -> Surface900.copy(alpha = 0.5f)
+                                isSelf -> Color(0xFF191726)
+                                else -> Surface900
+                            },
                         )
+                        .border(
+                            width = 1.dp,
+                            color = when {
+                                message.deleted -> Edge
+                                isSelf -> Accent.copy(alpha = 0.24f)
+                                else -> Edge
+                            },
+                            shape = RoundedCornerShape(14.dp),
+                        )
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                ) {
+                    Column {
+                        when {
+                            message.deleted -> Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                NexoraIcon(NexoraIcons.Trash, tint = Slate500, size = 16.dp)
+                                Text(
+                                    text = "Message deleted" +
+                                        (message.deletedBy?.takeIf { it.id != message.author.id }
+                                            ?.let { " by ${it.label}" } ?: ""),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = Slate500,
+                                )
+                            }
+
+                            readable.text == E2ee.UNDECRYPTABLE -> Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                NexoraIcon(NexoraIcons.Lock, tint = Danger, size = 16.dp)
+                                Text(
+                                    text = "Encrypted - no key on this device yet",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = Slate400,
+                                )
+                            }
+
+                            else -> {
+                                if (readable.text.isNotBlank()) {
+                                    Text(
+                                        text = readable.text,
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        color = Slate100,
+                                        lineHeight = 22.sp,
+                                    )
+                                }
+
+                                readable.attachments.forEach { attachment ->
+                                    if (readable.text.isNotBlank()) Spacer(Modifier.height(8.dp))
+                                    AttachmentCard(channelId, attachment, onViewImage, onPlayVideo)
+                                }
+
+                                if (message.editedAt != null) {
+                                    Text(
+                                        text = "(edited)",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = Slate500,
+                                        modifier = Modifier.padding(top = 4.dp),
+                                    )
+                                }
+                            }
+                        }
                     }
-
-                    else -> Text(
-                        text = readable.text,
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = Slate100,
-                    )
                 }
 
-                if (message.editedAt != null && !message.deleted) {
-                    Text(
-                        text = "edited",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Slate500,
-                    )
-                }
-
-                readable.attachments.forEach { attachment ->
-                    Spacer(Modifier.height(6.dp))
-                    AttachmentCard(channelId, attachment)
-                }
-
+                // Reactions section
                 if (message.reactions.isNotEmpty()) {
-                    Spacer(Modifier.height(6.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Spacer(Modifier.height(4.dp))
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier.padding(top = 2.dp),
+                    ) {
                         message.reactions.forEach { reaction ->
-                            Chip(
-                                text = "${reaction.emoji} ${reaction.userIds.size}",
-                                selected = self.id in reaction.userIds,
-                                onClick = { onReact(reaction.emoji) },
-                            )
+                            val reacted = self.id in reaction.userIds
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(14.dp))
+                                    .background(if (reacted) Accent.copy(alpha = 0.2f) else Surface800)
+                                    .border(
+                                        width = 1.dp,
+                                        color = if (reacted) Accent else Edge,
+                                        shape = RoundedCornerShape(14.dp),
+                                    )
+                                    .clickable { onReact(reaction.emoji) }
+                                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                ) {
+                                    Text(
+                                        text = reaction.emoji,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        fontSize = 13.sp,
+                                    )
+                                    Text(
+                                        text = "${reaction.userIds.size}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (reacted) Accent else Slate400,
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -184,77 +325,276 @@ fun MessageRow(
 }
 
 /**
- * An attachment. The bytes are ciphertext on the server, so an image cannot be
- * handed to an image loader as a URL - it is fetched, opened with the channel
- * key, and decoded here.
+ * Modern Attachment Card handling Image, Video, and File attachments with E2EE decryption.
  */
 @Composable
-private fun AttachmentCard(channelId: String, attachment: MessageAttachment) {
+private fun AttachmentCard(
+    channelId: String,
+    attachment: MessageAttachment,
+    onViewImage: (Bitmap, String) -> Unit,
+    onPlayVideo: (Uri, String) -> Unit,
+) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     var bytes by remember(attachment.key) { mutableStateOf<ByteArray?>(null) }
     var failed by remember(attachment.key) { mutableStateOf(false) }
-    var wanted by remember(attachment.key) { mutableStateOf(attachment.isImage) }
+    var decrypting by remember(attachment.key) { mutableStateOf(false) }
 
-    LaunchedEffect(attachment.key, wanted) {
-        if (!wanted || bytes != null) return@LaunchedEffect
-        runCatching { Conversation.openAttachment(channelId, attachment) }
-            .onSuccess { bytes = it }
-            .onFailure { failed = true }
+    // Automatically decrypt images and videos so they preview immediately
+    LaunchedEffect(attachment.key) {
+        if (attachment.isImage || attachment.isVideo) {
+            decrypting = true
+            runCatching { Conversation.openAttachment(channelId, attachment) }
+                .onSuccess { bytes = it }
+                .onFailure { failed = true }
+            decrypting = false
+        }
     }
 
-    val image = remember(bytes) {
+    val imageBitmap = remember(bytes) {
         bytes?.takeIf { attachment.isImage }
             ?.let { runCatching { BitmapFactory.decodeByteArray(it, 0, it.size) }.getOrNull() }
     }
 
     Box(
         Modifier
-            .clip(RoundedCornerShape(10.dp))
-            .background(Surface900)
-            .padding(if (image != null) 0.dp else 10.dp),
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(Surface850)
+            .border(1.dp, Edge, RoundedCornerShape(12.dp)),
     ) {
         when {
-            image != null -> Image(
-                bitmap = image.asImageBitmap(),
-                contentDescription = attachment.name,
-                contentScale = ContentScale.Fit,
-                modifier = Modifier.clip(RoundedCornerShape(10.dp)),
-            )
-
-            else -> Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                NexoraIcon(
-                    icon = if (attachment.isImage) NexoraIcons.Image else NexoraIcons.File,
-                    tint = Slate400,
-                )
-                Column {
-                    Text(
-                        text = attachment.name,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Slate100,
-                    )
-                    Text(
-                        text = when {
-                            failed -> "Could not be opened"
-                            bytes != null -> "Ready · ${readableSize(attachment.size)}"
-                            wanted -> "Opening…"
-                            else -> "${readableSize(attachment.size)} · tap to decrypt"
-                        },
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Slate500,
-                    )
-                }
-                if (!wanted) {
+            // --- IMAGE ATTACHMENT ---
+            attachment.isImage -> {
+                if (imageBitmap != null) {
                     Box(
-                        Modifier
-                            .size(36.dp)
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(Surface700)
-                            .combinedClickable(onClick = { wanted = true }),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 300.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .clickable { onViewImage(imageBitmap, attachment.name) },
+                    ) {
+                        Image(
+                            bitmap = imageBitmap.asImageBitmap(),
+                            contentDescription = attachment.name,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 160.dp, max = 300.dp),
+                        )
+
+                        // Bottom Gradient metadata bar
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.BottomCenter)
+                                .fillMaxWidth()
+                                .background(Color.Black.copy(alpha = 0.6f))
+                                .padding(horizontal = 10.dp, vertical = 6.dp),
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(
+                                    text = attachment.name,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = Slate100,
+                                    maxLines = 1,
+                                    modifier = Modifier.weight(1f),
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                Text(
+                                    text = readableSize(attachment.size),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = Slate400,
+                                )
+                            }
+                        }
+                    }
+                } else {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        if (decrypting) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(24.dp),
+                                strokeWidth = 2.dp,
+                                color = Accent,
+                            )
+                        } else {
+                            NexoraIcon(NexoraIcons.Image, tint = if (failed) Danger else Accent, size = 24.dp)
+                        }
+
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                text = attachment.name,
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Slate100,
+                            )
+                            Text(
+                                text = if (failed) "Failed to decrypt photo" else "Decrypting photo · ${readableSize(attachment.size)}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (failed) Danger else Slate500,
+                            )
+                        }
+                    }
+                }
+            }
+
+            // --- VIDEO ATTACHMENT ---
+            attachment.isVideo -> {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .clickable {
+                            val currentBytes = bytes
+                            if (currentBytes != null) {
+                                val uri = cacheDecryptedMedia(context, currentBytes, attachment.name)
+                                onPlayVideo(uri, attachment.name)
+                            } else {
+                                scope.launch {
+                                    decrypting = true
+                                    runCatching {
+                                        val fetched = Conversation.openAttachment(channelId, attachment)
+                                        bytes = fetched
+                                        val uri = cacheDecryptedMedia(context, fetched, attachment.name)
+                                        onPlayVideo(uri, attachment.name)
+                                    }.onFailure { failed = true }
+                                    decrypting = false
+                                }
+                            }
+                        },
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(Color(0xFF14121E))
+                            .padding(14.dp),
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(48.dp)
+                                    .clip(CircleShape)
+                                    .background(Accent),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                if (decrypting) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(24.dp),
+                                        strokeWidth = 2.dp,
+                                        color = Color.White,
+                                    )
+                                } else {
+                                    NexoraIcon(NexoraIcons.Play, tint = Color.White, size = 24.dp)
+                                }
+                            }
+
+                            Column(Modifier.weight(1f)) {
+                                Text(
+                                    text = attachment.name,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = Slate100,
+                                    maxLines = 1,
+                                )
+                                Text(
+                                    text = when {
+                                        failed -> "Decryption failed"
+                                        decrypting -> "Decrypting video…"
+                                        bytes != null -> "Video ready · Tap to play (${readableSize(attachment.size)})"
+                                        else -> "Video · ${readableSize(attachment.size)}"
+                                    },
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = if (failed) Danger else Slate400,
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            // --- FILE / DOCUMENT / AUDIO ---
+            else -> {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(44.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(
+                                if (attachment.isAudio) Color(0xFFFF9500).copy(alpha = 0.2f)
+                                else Color(0xFF5E5CE6).copy(alpha = 0.2f),
+                            ),
                         contentAlignment = Alignment.Center,
                     ) {
-                        NexoraIcon(NexoraIcons.Download, tint = Slate400, size = 16.dp)
+                        NexoraIcon(
+                            icon = if (attachment.isAudio) NexoraIcons.Speaker else NexoraIcons.File,
+                            tint = if (attachment.isAudio) Color(0xFFFF9500) else Color(0xFF5E5CE6),
+                            size = 22.dp,
+                        )
+                    }
+
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            text = attachment.name,
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Slate100,
+                            maxLines = 1,
+                        )
+                        Text(
+                            text = when {
+                                failed -> "Decryption failed"
+                                bytes != null -> "Ready · ${readableSize(attachment.size)}"
+                                decrypting -> "Decrypting file…"
+                                else -> "${readableSize(attachment.size)} · Tap to decrypt"
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (failed) Danger else Slate500,
+                        )
+                    }
+
+                    if (decrypting) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(20.dp),
+                            strokeWidth = 2.dp,
+                            color = Accent,
+                        )
+                    } else if (bytes == null) {
+                        Box(
+                            Modifier
+                                .size(38.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(Surface700)
+                                .clickable {
+                                    scope.launch {
+                                        decrypting = true
+                                        runCatching {
+                                            bytes = Conversation.openAttachment(channelId, attachment)
+                                        }.onFailure { failed = true }
+                                        decrypting = false
+                                    }
+                                },
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            NexoraIcon(NexoraIcons.Download, tint = Slate300, size = 18.dp)
+                        }
                     }
                 }
             }

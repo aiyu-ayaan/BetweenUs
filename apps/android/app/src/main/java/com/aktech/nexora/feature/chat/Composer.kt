@@ -1,21 +1,30 @@
 package com.aktech.nexora.feature.chat
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -25,25 +34,39 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.aktech.nexora.core.data.MessageAttachment
 import com.aktech.nexora.core.store.Presence
 import com.aktech.nexora.core.store.ReadableMessage
-import com.aktech.nexora.ui.components.Chip
 import com.aktech.nexora.ui.components.IconAction
+import com.aktech.nexora.ui.components.NexoraIcon
 import com.aktech.nexora.ui.components.NexoraIcons
 import com.aktech.nexora.ui.theme.Accent
 import com.aktech.nexora.ui.theme.Edge
 import com.aktech.nexora.ui.theme.Slate100
+import com.aktech.nexora.ui.theme.Slate300
 import com.aktech.nexora.ui.theme.Slate400
+import com.aktech.nexora.ui.theme.Slate50
 import com.aktech.nexora.ui.theme.Slate500
 import com.aktech.nexora.ui.theme.Surface700
+import com.aktech.nexora.ui.theme.Surface800
+import com.aktech.nexora.ui.theme.Surface850
 import com.aktech.nexora.ui.theme.Surface900
 import com.aktech.nexora.ui.theme.Surface950
 
-/** The message box: text, attachments waiting to go, and the send button. */
+/**
+ * Modern, polished message composer with WhatsApp/Discord-grade polish:
+ * rounded pill input well, attachment preview tray, active Send button, and editing banner.
+ */
 @Composable
 fun Composer(
     channelId: String,
@@ -57,95 +80,207 @@ fun Composer(
 ) {
     var text by remember(channelId) { mutableStateOf("") }
 
-    // Editing loads the existing body in, which is what "edit" has to mean.
     LaunchedEffect(editing?.id) {
         text = editing?.text ?: ""
     }
 
     val canSend = text.isNotBlank() || attachments.isNotEmpty()
 
-    Column(Modifier.fillMaxWidth().background(Surface950)) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .background(Surface950),
+    ) {
         HorizontalDivider(color = Edge)
 
-        if (editing != null) {
+        // Editing banner
+        AnimatedVisibility(
+            visible = editing != null,
+            enter = fadeIn() + expandVertically(),
+            exit = fadeOut() + shrinkVertically(),
+        ) {
             Row(
-                modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Surface900)
+                    .padding(horizontal = 16.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                Text(
-                    text = "Editing a message",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Slate400,
-                    modifier = Modifier.weight(1f),
+                NexoraIcon(NexoraIcons.Pencil, tint = Accent, size = 16.dp)
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        text = "Editing message",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = Accent,
+                    )
+                    Text(
+                        text = editing?.text.orEmpty(),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Slate400,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                IconAction(
+                    icon = NexoraIcons.X,
+                    contentDescription = "Cancel editing",
+                    onClick = onCancelEdit,
+                    tint = Slate400,
                 )
-                IconAction(NexoraIcons.X, "Stop editing", onCancelEdit)
             }
         }
 
-        if (attachments.isNotEmpty() || uploading) {
+        // Attachments preview tray
+        AnimatedVisibility(
+            visible = attachments.isNotEmpty() || uploading,
+            enter = fadeIn() + expandVertically(),
+            exit = fadeOut() + shrinkVertically(),
+        ) {
             Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Surface900.copy(alpha = 0.6f))
+                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 attachments.forEach { attachment ->
-                    Chip(text = "${attachment.name} ✕", onClick = { onRemoveAttachment(attachment) })
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Surface800)
+                            .border(1.dp, Edge, RoundedCornerShape(8.dp))
+                            .padding(horizontal = 8.dp, vertical = 4.dp),
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            NexoraIcon(
+                                icon = if (attachment.isImage) NexoraIcons.Image else NexoraIcons.File,
+                                tint = Accent,
+                                size = 14.dp,
+                            )
+                            Text(
+                                text = attachment.name,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Slate100,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.heightIn(max = 18.dp),
+                            )
+                            Box(
+                                modifier = Modifier
+                                    .clip(CircleShape)
+                                    .clickable { onRemoveAttachment(attachment) }
+                                    .padding(2.dp),
+                            ) {
+                                NexoraIcon(NexoraIcons.X, tint = Slate400, size = 12.dp)
+                            }
+                        }
+                    }
                 }
+
                 if (uploading) {
-                    CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = Accent)
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(16.dp),
+                        strokeWidth = 2.dp,
+                        color = Accent,
+                    )
                     Text(
-                        text = "Encrypting…",
-                        style = MaterialTheme.typography.bodySmall,
+                        text = "Encrypting attachment…",
+                        style = MaterialTheme.typography.labelSmall,
                         color = Slate500,
                     )
                 }
             }
         }
 
+        // Main input bar
         Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 8.dp, vertical = 8.dp),
             verticalAlignment = Alignment.Bottom,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            IconAction(NexoraIcons.Paperclip, "Attach a file", onPickFile)
+            // Attachment Button
+            Box(
+                modifier = Modifier
+                    .size(44.dp)
+                    .clip(CircleShape)
+                    .background(Surface850)
+                    .border(1.dp, Edge, CircleShape)
+                    .clickable(onClick = onPickFile),
+                contentAlignment = Alignment.Center,
+            ) {
+                NexoraIcon(
+                    icon = NexoraIcons.Paperclip,
+                    tint = Slate300,
+                    size = 20.dp,
+                )
+            }
 
-            OutlinedTextField(
-                value = text,
-                onValueChange = {
-                    text = it
-                    if (it.isNotEmpty()) Presence.noteTyping(channelId)
-                },
-                placeholder = {
-                    Text("Message", style = MaterialTheme.typography.bodyLarge, color = Slate500)
-                },
-                maxLines = 6,
-                shape = RoundedCornerShape(20.dp),
-                keyboardOptions = KeyboardOptions(
-                    capitalization = KeyboardCapitalization.Sentences,
-                    imeAction = ImeAction.Default,
-                ),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedContainerColor = Surface900,
-                    unfocusedContainerColor = Surface900,
-                    focusedBorderColor = Accent,
-                    unfocusedBorderColor = Surface700,
-                    focusedTextColor = Slate100,
-                    unfocusedTextColor = Slate100,
-                    cursorColor = Accent,
-                ),
-                modifier = Modifier.weight(1f).heightIn(min = 48.dp),
-            )
+            // Text Input Pill
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .heightIn(min = 44.dp)
+                    .clip(RoundedCornerShape(22.dp))
+                    .background(Surface900)
+                    .border(1.dp, if (text.isNotEmpty()) Accent.copy(alpha = 0.5f) else Surface700, RoundedCornerShape(22.dp))
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                contentAlignment = Alignment.CenterStart,
+            ) {
+                if (text.isEmpty()) {
+                    Text(
+                        text = "Message…",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = Slate500,
+                        fontSize = 15.sp,
+                    )
+                }
 
-            Box(Modifier.padding(start = 4.dp)) {
-                IconAction(
-                    icon = NexoraIcons.Send,
-                    contentDescription = "Send",
-                    tint = if (canSend) Accent else Slate500,
-                    enabled = canSend,
-                    onClick = {
+                BasicTextField(
+                    value = text,
+                    onValueChange = {
+                        text = it
+                        if (it.isNotEmpty()) Presence.noteTyping(channelId)
+                    },
+                    textStyle = TextStyle(
+                        color = Slate100,
+                        fontSize = 15.sp,
+                    ),
+                    cursorBrush = SolidColor(Accent),
+                    maxLines = 6,
+                    keyboardOptions = KeyboardOptions(
+                        capitalization = KeyboardCapitalization.Sentences,
+                        imeAction = ImeAction.Default,
+                    ),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+
+            // Send Button
+            Box(
+                modifier = Modifier
+                    .size(44.dp)
+                    .clip(CircleShape)
+                    .background(if (canSend) Accent else Surface850)
+                    .border(1.dp, if (canSend) Accent else Edge, CircleShape)
+                    .let { if (canSend) it.clickable {
                         val payload = text.trim()
                         text = ""
                         onSend(payload)
-                    },
+                    } else it },
+                contentAlignment = Alignment.Center,
+            ) {
+                NexoraIcon(
+                    icon = NexoraIcons.Send,
+                    tint = if (canSend) Color.White else Slate500,
+                    size = 18.dp,
                 )
             }
         }
