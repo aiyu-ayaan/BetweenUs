@@ -6,7 +6,7 @@
   "license": "SEE LICENSE IN LICENSE",
   "scripts": {
     "build": "turbo run build",
-    "dev": "turbo run dev",
+    "dev": "turbo run dev dev:gateway",
     "dev:backend": "turbo run dev --filter=./apps/services/*",
     "dev:gateway": "node scripts/dev-gateway.mjs",
     "dev:infra": "docker compose --env-file .env -f infrastructure/docker/docker-compose.dev.yml up -d",

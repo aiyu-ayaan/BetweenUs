@@ -43,10 +43,12 @@ listening:
 
 | Backend you are running | `nexora.serverUrl` in `apps/android/local.properties` |
 | --- | --- |
-| `pnpm dev` + `pnpm dev:gateway` | `http://10.0.2.2:8090` — the development stand-in for Nginx, and what everything past phase 2 needs |
+| `pnpm dev` | `http://10.0.2.2:8090` — the development stand-in for Nginx, started as part of `pnpm dev`, and what everything past phase 2 needs |
 | `pnpm dev:infra` (gateway container) | `http://10.0.2.2:8080` — the real thing |
 
-`pnpm dev:gateway` is `scripts/dev-gateway.mjs`: it routes every `/api/v1/*`
+The gateway is `scripts/dev-gateway.mjs`, which `pnpm dev` starts alongside the
+services; `pnpm dev:gateway` runs it on its own when the services are already
+up elsewhere. It routes every `/api/v1/*`
 and `/ws/*` the way `infrastructure/nginx/nginx.conf` does, and exists because
 Android cannot use the Vite proxy the desktop and web clients get. It listens
 on 8090 rather than 8080 so it can run alongside the container stack — and

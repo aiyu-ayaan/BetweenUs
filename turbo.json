@@ -16,6 +16,14 @@
       "cache": false,
       "persistent": true
     },
+    // The dev gateway lives at the repo root rather than in a package, so it
+    // needs the `//#` form to be runnable as a task at all. `pnpm dev` starts
+    // it alongside everything else: the Android client is pointed at one
+    // address and has no Vite proxy, so without this it has nothing to reach.
+    "//#dev:gateway": {
+      "cache": false,
+      "persistent": true
+    },
     "lint": {},
     "typecheck": {
       "dependsOn": ["^build"]
