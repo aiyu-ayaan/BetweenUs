@@ -36,10 +36,15 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.Nexora">
+        <!-- singleTask, because the call notification points here. The default
+             launch mode builds a second MainActivity on top of the first, which
+             starts a fresh navigation graph on the home screen and destroys the
+             one holding the call - so tapping "return to the call" ended it. -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
             android:label="@string/app_name"
+            android:launchMode="singleTask"
             android:theme="@style/Theme.Nexora"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>

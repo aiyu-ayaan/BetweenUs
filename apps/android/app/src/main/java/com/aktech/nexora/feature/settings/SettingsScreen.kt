@@ -39,6 +39,7 @@ import com.aktech.nexora.core.data.NotificationPreferences
 import com.aktech.nexora.core.data.PresenceStatus
 import com.aktech.nexora.core.data.PublicUser
 import com.aktech.nexora.core.data.Session
+import com.aktech.nexora.feature.voice.VoiceEngine
 import com.aktech.nexora.core.store.Presence
 import com.aktech.nexora.feature.auth.ServerSheet
 import com.aktech.nexora.ui.components.Avatar
@@ -356,7 +357,9 @@ fun SettingsScreen(user: PublicUser, onBack: () -> Unit, onServerSettings: () ->
                 title = "Sign out",
                 titleColor = Danger,
                 leading = { NexoraIcon(NexoraIcons.LogOut, tint = Danger) },
-                onClick = { scope.launch { Session.signOut() } },
+                // A call outlives every screen, so signing out is the one place
+                // that has to reach across and end one it did not start.
+                onClick = { scope.launch { VoiceEngine.release(); Session.signOut() } },
             )
         }
     }

@@ -278,9 +278,14 @@ class VoiceEngine(private val context: Context) {
         _sharing.value = false
     }
 
+    /**
+     * Ends the call and gives the graphics context back. Only signing out gets
+     * to do this: a screen going away is not the end of a call.
+     */
     fun dispose() {
         leave()
         eglBase.release()
+        synchronized(VoiceEngine) { if (instance === this) instance = null }
     }
 
     // --- local media ---
@@ -903,17 +908,42 @@ class VoiceEngine(private val context: Context) {
         }
     }
 
-    private companion object {
-        /** The topic the desktop stamps its media state with. Must match. */
-        const val VOICE_STATE_TOPIC = "nexora.voice-state"
+    companion object {
+        /**
+         * The one call this process can be in.
+         *
+         * A call cannot belong to a composable. The screen it is shown on is
+         * destroyed by a rotation, by navigating to a channel, and by the
+         * activity being recreated - and when the engine was remembered there,
+         * every one of those hung the call up. It belongs to the process, like
+         * the session and the workspace do, and only leaving ends it.
+         */
+        @Volatile
+        private var instance: VoiceEngine? = null
 
-        const val POLL_MS = 1_000L
+        fun of(context: Context): VoiceEngine =
+            instance ?: synchronized(this) {
+                instance ?: VoiceEngine(context.applicationContext).also { instance = it }
+            }
+
+        /**
+         * Ends whatever call is running, if there is one. Signing out is the
+         * one thing that has to reach across and stop a call it did not start.
+         */
+        fun release() {
+            synchronized(this) { instance }?.dispose()
+        }
+
+        /** The topic the desktop stamps its media state with. Must match. */
+        private const val VOICE_STATE_TOPIC = "nexora.voice-state"
+
+        private const val POLL_MS = 1_000L
 
         /**
          * Audio level above which somebody counts as speaking. About -40 dBFS:
          * below a voice, above the residue a suppressor leaves.
          */
-        const val SPEAKING_LEVEL = 0.01
+        private const val SPEAKING_LEVEL = 0.01
     }
 }
 

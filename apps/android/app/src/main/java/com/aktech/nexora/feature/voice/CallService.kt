@@ -74,10 +74,18 @@ class CallService : Service() {
     private fun notification(label: String, muted: Boolean): Notification {
         ensureChannel(this)
 
+        // Resumes the task that is already running rather than starting another
+        // one on top of it. Both halves matter: the activity is `singleTask` in
+        // the manifest and the intent has to say so too, or the system builds a
+        // second one - which is a second navigation graph, on the home screen,
+        // with the call screen destroyed underneath it.
         val open = PendingIntent.getActivity(
             this,
             0,
-            Intent(this, MainActivity::class.java),
+            Intent(this, MainActivity::class.java)
+                .setAction(Intent.ACTION_MAIN)
+                .addCategory(Intent.CATEGORY_LAUNCHER)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
 
