@@ -92,6 +92,13 @@ const SPEAKING_POLL_MS = 200;
 const VIDEO_POLL_EVERY = 5;
 
 /**
+ * Video polls without a new frame before a slot counts as finished - so, five
+ * seconds. Longer than any still moment in a screen share, short enough that a
+ * camera switched off does not linger.
+ */
+const STALL_TOLERANCE = 5;
+
+/**
  * Audio level above which somebody counts as speaking.
  *
  * `getSynchronizationSources` reports 0..1, roughly linear in amplitude. This
@@ -240,6 +247,8 @@ class PeerLink {
   private shareCodec: SharePublish['videoCodec'] | null = null;
   /** Frames decoded per video slot at the last look. See `pollVideo`. */
   private readonly frames = new Map<Slot, number>();
+  /** Consecutive polls a video slot has gone without a new frame. */
+  private readonly stalled = new Map<Slot, number>();
   private readonly liveVideo = new Set<Slot>();
   /**
    * Candidates that arrived before there was a remote description to attach
@@ -726,10 +735,21 @@ class PeerLink {
       const moving = frames > (this.frames.get(slot) ?? 0);
       this.frames.set(slot, frames);
 
-      if (moving === this.liveVideo.has(slot)) continue;
-      if (moving) this.liveVideo.add(slot);
+      // Patience, because "no new frames this second" is not "it ended". A
+      // screen share of a document nobody is typing in sends almost nothing,
+      // and treating every still moment as the end took the stage down with
+      // it - which is what made clicking "watch" open the share and bounce
+      // straight back to the grid.
+      const stalls = moving ? 0 : (this.stalled.get(slot) ?? 0) + 1;
+      this.stalled.set(slot, stalls);
+
+      // Nothing has ever arrived on this slot; no patience is owed.
+      const live = frames > 0 && stalls <= STALL_TOLERANCE;
+
+      if (live === this.liveVideo.has(slot)) continue;
+      if (live) this.liveVideo.add(slot);
       else this.liveVideo.delete(slot);
-      this.events.onTrack(slot, moving ? track : null);
+      this.events.onTrack(slot, live ? track : null);
     }
   }
 
