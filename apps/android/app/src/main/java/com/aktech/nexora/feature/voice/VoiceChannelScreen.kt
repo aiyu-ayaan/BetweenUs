@@ -135,7 +135,8 @@ fun VoiceChannelScreen(channelId: String?, self: PublicUser, onBack: () -> Unit)
                     modifier = Modifier.align(Alignment.Center),
                 )
 
-                state is VoiceEngine.CallState.Idle -> Column(
+                state is VoiceEngine.CallState.Idle ||
+                    state is VoiceEngine.CallState.Failed -> Column(
                     modifier = Modifier.align(Alignment.Center).padding(24.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
@@ -147,6 +148,10 @@ fun VoiceChannelScreen(channelId: String?, self: PublicUser, onBack: () -> Unit)
                         textAlign = TextAlign.Center,
                     )
                     Spacer(Modifier.height(16.dp))
+                    (state as? VoiceEngine.CallState.Failed)?.let {
+                        Notice(it.reason, Danger)
+                        Spacer(Modifier.height(12.dp))
+                    }
                     if (microphone.refused) {
                         Notice(
                             "Nexora cannot use the microphone. Android will not ask again from here.",
@@ -155,7 +160,10 @@ fun VoiceChannelScreen(channelId: String?, self: PublicUser, onBack: () -> Unit)
                         Spacer(Modifier.height(12.dp))
                         NexoraButton("Open app settings", onClick = microphone.openSettings)
                     } else {
-                        NexoraButton("Join the call", onClick = microphone.request)
+                        NexoraButton(
+                            text = if (state is VoiceEngine.CallState.Failed) "Try again" else "Join the call",
+                            onClick = microphone.request,
+                        )
                     }
                 }
 
@@ -187,7 +195,7 @@ fun VoiceChannelScreen(channelId: String?, self: PublicUser, onBack: () -> Unit)
             }
         }
 
-        if (state !is VoiceEngine.CallState.Idle) {
+        if (state is VoiceEngine.CallState.Connecting || state is VoiceEngine.CallState.Live) {
             HorizontalDivider(color = Edge)
             Row(
                 modifier = Modifier.fillMaxWidth().background(Surface950).padding(8.dp),

@@ -120,8 +120,16 @@ class VoiceEngine(private val context: Context) {
 
     // --- lifecycle ---
 
+    /**
+     * Joins, or tries again after a failure.
+     *
+     * A failed join has to be retryable. The first attempt can lose to a
+     * service that happened to be restarting, and treating `Failed` as
+     * terminal left the screen showing an error with no way back to the button
+     * that caused it.
+     */
     fun join(channelId: String) {
-        if (_state.value !is CallState.Idle) return
+        if (_state.value is CallState.Connecting || _state.value is CallState.Live) return
         this.channelId = channelId
         _state.value = CallState.Connecting(channelId)
 
@@ -141,14 +149,30 @@ class VoiceEngine(private val context: Context) {
                 // From here the call has to survive the screen going off.
                 CallService.start(context, "In a Nexora call")
             } catch (error: Exception) {
-                _state.value = CallState.Failed(error.message ?: "The call could not start")
+                fail(error.message ?: "The call could not start")
             }
         }
     }
 
     fun leave() {
-        CallService.stop(context)
         CallSocket.send(JSONObject().put("type", "leave"))
+        teardown()
+        _state.value = CallState.Idle
+        channelId = null
+    }
+
+    /**
+     * A failure has to leave as little behind as a clean exit does. Without
+     * this a half-started call kept its microphone track and its socket
+     * listener, and every retry added another listener to the pile.
+     */
+    private fun fail(reason: String) {
+        teardown()
+        _state.value = CallState.Failed(reason)
+    }
+
+    private fun teardown() {
+        CallService.stop(context)
         detach?.invoke()
         detach = null
         connections.values.forEach { it.close() }
@@ -159,8 +183,6 @@ class VoiceEngine(private val context: Context) {
         _participants.value = emptyList()
         _localVideo.value = null
         _sharing.value = false
-        _state.value = CallState.Idle
-        channelId = null
     }
 
     fun dispose() {
@@ -279,12 +301,9 @@ class VoiceEngine(private val context: Context) {
             // This account joined a call from somewhere else, so this
             // connection is no longer the one carrying it. One call per
             // account across every device.
-            "superseded" -> {
-                leave()
-                _state.value = CallState.Failed("This call moved to another device")
-            }
+            "superseded" -> fail("This call moved to another device")
 
-            "error" -> _state.value = CallState.Failed(event.optString("message"))
+            "error" -> fail(event.optString("message").ifEmpty { "The call service refused this" })
         }
     }
 
