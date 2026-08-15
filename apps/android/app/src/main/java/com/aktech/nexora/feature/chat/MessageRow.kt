@@ -139,27 +139,9 @@ fun MessageRow(
                         Text(
                             text = if (isSelf) "You" else message.author.label,
                             style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.Bold,
+                            fontWeight = FontWeight.SemiBold,
                             color = if (isSelf) Accent else Slate50,
                         )
-
-                        if (isSelf) {
-                            Spacer(Modifier.width(6.dp))
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(4.dp))
-                                    .background(Accent.copy(alpha = 0.15f))
-                                    .padding(horizontal = 4.dp, vertical = 1.dp),
-                            ) {
-                                Text(
-                                    text = "YOU",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontSize = 9.sp,
-                                    color = Accent,
-                                    fontWeight = FontWeight.Bold,
-                                )
-                            }
-                        }
 
                         Spacer(Modifier.width(8.dp))
                         Text(
