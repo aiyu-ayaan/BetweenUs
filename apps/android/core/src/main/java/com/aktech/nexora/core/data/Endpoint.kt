@@ -47,6 +47,21 @@ object Endpoint {
         cached = null
     }
 
+    /**
+     * Resolves a URL the server handed back - an avatar, a server icon, an
+     * attachment - against the current deployment. They come back rooted at
+     * `/api/v1/uploads/...`, which is not a URL anything can fetch on its own.
+     */
+    fun absolute(url: String): String = when {
+        Regex("^(https?|blob|data):", RegexOption.IGNORE_CASE).containsMatchIn(url) -> url
+        url.startsWith("/") -> current() + url
+        else -> current() + "/" + url
+    }
+
+    /** Base for the WebSockets. Same host, same path, ws scheme. */
+    fun webSocket(): String =
+        current().replaceFirst(Regex("^http", RegexOption.IGNORE_CASE), "ws")
+
     /** The host, for a line under a sign-in form. */
     fun label(): String = current().replace(Regex("^https?://", RegexOption.IGNORE_CASE), "")
 

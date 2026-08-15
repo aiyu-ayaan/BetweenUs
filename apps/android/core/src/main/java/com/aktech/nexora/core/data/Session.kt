@@ -2,6 +2,12 @@ package com.aktech.nexora.core.data
 
 import android.content.Context
 import android.content.SharedPreferences
+import com.aktech.nexora.core.crypto.BackupSecret
+import com.aktech.nexora.core.crypto.E2ee
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -62,12 +68,36 @@ object Session {
             if (value == null) remove(REFRESH_KEY) else putString(REFRESH_KEY, value)
         }.apply()
 
-    /** A sign-in or a registration that worked. */
-    fun start(response: AuthResponse, email: String? = null) {
+    /**
+     * A sign-in or a registration that worked.
+     *
+     * The password is passed through rather than stored: it is the secret that
+     * opens this account's identity backup, so a sign-in is the one moment
+     * where a new device can recover its keys without asking for anything. It
+     * is used here and dropped.
+     */
+    fun start(response: AuthResponse, email: String? = null, password: String? = null) {
         accessToken = response.tokens.accessToken
         refreshToken = response.tokens.refreshToken
         if (email != null) prefs.edit().putString(EMAIL_KEY, email).apply()
         _state.value = AuthPhase.SignedIn(response.user)
+        begin(response.user, password?.let { BackupSecret.password(it) })
+    }
+
+    /**
+     * Everything a live session needs running: both sockets, and the identity
+     * key that makes messages readable.
+     *
+     * The identity is allowed to fail without ending the session. A locked one
+     * puts [E2ee.status] into `Locked` and the app asks for the secret; an
+     * offline one is retried the next time a channel needs a key. Neither is a
+     * reason to throw somebody back to a login form they have just filled in.
+     */
+    private fun begin(user: PublicUser, secret: BackupSecret?) {
+        val token = accessToken ?: return
+        ChatSocket.connect(token)
+        PresenceSocket.connect(token)
+        scope.launch { runCatching { E2ee.initIdentity(user.id, secret) } }
     }
 
     /**
@@ -83,7 +113,9 @@ object Session {
         val token = refreshAccessToken()
         if (token == null) return
         try {
-            _state.value = AuthPhase.SignedIn(NexoraApi.me())
+            val user = NexoraApi.me()
+            _state.value = AuthPhase.SignedIn(user)
+            begin(user, secret = null)
         } catch (error: Exception) {
             _state.value = AuthPhase.SignedOut(messageOf(error))
         }
@@ -108,6 +140,10 @@ object Session {
             val tokens = NexoraApi.refresh(stored)
             refreshToken = tokens.refreshToken
             accessToken = tokens.accessToken
+            // Both sockets carry the access token in their URL, so a rotation
+            // is a reconnect. They are idempotent when already open.
+            ChatSocket.connect(tokens.accessToken)
+            PresenceSocket.connect(tokens.accessToken)
             tokens.accessToken
         } catch (error: Exception) {
             val rejected = error is ApiError && error.status == 401
@@ -132,8 +168,17 @@ object Session {
     private fun clear() {
         accessToken = null
         refreshToken = null
+        ChatSocket.forget()
+        ChatSocket.disconnect()
+        PresenceSocket.disconnect()
+        CallSocket.disconnect()
+        RemoteSocket.disconnect()
+        E2ee.reset()
         _state.value = AuthPhase.SignedOut()
     }
+
+    /** Outlives any one screen: sockets and key setup belong to the session. */
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     fun messageOf(error: Throwable): String =
         error.message?.takeIf { it.isNotBlank() } ?: "Something went wrong"

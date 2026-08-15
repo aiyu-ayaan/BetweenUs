@@ -57,6 +57,11 @@ dependencies {
     // Every public type here is a suspend function or a StateFlow, so callers
     // need coroutines on their own compile classpath: api, not implementation.
     api(libs.kotlinx.coroutines.android)
+    // The HTTP client and the WebSocket client, which are the same client.
+    api(libs.okhttp)
     testImplementation(libs.junit)
+    // android.jar's org.json is a stub that throws. The real one on the test
+    // classpath is what lets the crypto interop test parse a JWK off the JVM.
+    testImplementation(libs.json)
     testImplementation(libs.kotlinx.coroutines.test)
 }
