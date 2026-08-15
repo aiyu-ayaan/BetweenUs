@@ -35,6 +35,7 @@ import org.webrtc.MediaConstraints
 import org.webrtc.MediaStreamTrack
 import org.webrtc.PeerConnection
 import org.webrtc.PeerConnectionFactory
+import org.webrtc.RtpParameters
 import org.webrtc.RtpTransceiver
 import org.webrtc.ScreenCapturerAndroid
 import org.webrtc.SdpObserver
@@ -197,6 +198,9 @@ class VoiceEngine(private val context: Context) {
     private var videoCapturer: VideoCapturer? = null
     private var cameraTrack: VideoTrack? = null
     private var screenTrack: VideoTrack? = null
+
+    /** What the screen is actually being captured at, which sets its ceiling. */
+    private var shareSize = ShareQuality.Size(1920, 1080)
     private var surfaceHelper: SurfaceTextureHelper? = null
 
     // --- lifecycle ---
@@ -357,7 +361,14 @@ class VoiceEngine(private val context: Context) {
             if (front) enumerator.isFrontFacing(it) else enumerator.isBackFacing(it)
         } ?: enumerator.deviceNames.firstOrNull() ?: return
 
-        val track = beginCapture(enumerator.createCapturer(name, null), 960, 540, 24) ?: return
+        // 1080p30 asked for; the enumerator picks the nearest format the camera
+        // actually has, which on most phones is 1080p or 720p.
+        val track = beginCapture(
+            enumerator.createCapturer(name, null),
+            1920,
+            1080,
+            ShareQuality.CAMERA_FRAME_RATE,
+        ) ?: return
         cameraTrack = track
         _cameraOn.value = true
         publish(Slot.CAMERA, track)
@@ -382,6 +393,13 @@ class VoiceEngine(private val context: Context) {
             _muted.value,
         )
 
+        // The display's own shape and size, not a fixed 720p box: capturing
+        // small and stretching on the far end is what "very low quality" looks
+        // like, and it saves nothing, because the scaling happens after the
+        // pixels have already been read.
+        val size = ShareQuality.captureSize(context)
+        shareSize = size
+
         val track = beginCapture(
             ScreenCapturerAndroid(
                 permission,
@@ -391,9 +409,9 @@ class VoiceEngine(private val context: Context) {
                     }
                 },
             ),
-            1280,
-            720,
-            15,
+            size.width,
+            size.height,
+            ShareQuality.SCREEN_FRAME_RATE,
         ) ?: return
         screenTrack = track
         _sharing.value = true
@@ -655,6 +673,7 @@ class VoiceEngine(private val context: Context) {
                         ),
                     )
                 }
+                preferScreenCodec()
             }
 
             data.registerObserver(object : DataChannel.Observer {
@@ -696,7 +715,72 @@ class VoiceEngine(private val context: Context) {
             wanted[slot] = track
             // No transceiver yet means this side is still waiting for the offer
             // that makes one. `adopt` plays this back.
-            transceivers[slot]?.sender?.setTrack(track, false)
+            val transceiver = transceivers[slot] ?: return
+            transceiver.sender.setTrack(track, false)
+            if (track != null) tune(slot)
+        }
+
+        /**
+         * The bitrate ceiling and frame rate on one sender.
+         *
+         * Set on the live sender rather than in the offer, because encoding
+         * parameters are not part of the SDP and changing them costs no
+         * renegotiation. Without this a share was whatever WebRTC's default
+         * decided - about 3 Mbps - regardless of what was captured.
+         */
+        private fun tune(slot: Slot) {
+            val sender = transceivers[slot]?.sender ?: return
+            if (slot != Slot.SCREEN && slot != Slot.CAMERA) return
+
+            runCatching {
+                val parameters = sender.parameters ?: return
+                // A sender that has not negotiated yet has nothing to change.
+                val encodings = parameters.encodings ?: return
+                if (encodings.isEmpty()) return
+
+                val screen = slot == Slot.SCREEN
+                for (encoding in encodings) {
+                    encoding.maxBitrateBps =
+                        if (screen) ShareQuality.screenBitrate(shareSize) else ShareQuality.cameraBitrate()
+                    encoding.maxFramerate =
+                        if (screen) ShareQuality.SCREEN_FRAME_RATE else ShareQuality.CAMERA_FRAME_RATE
+                    // Send what was captured. Congestion control still shrinks
+                    // it when the link says so; this only stops it starting
+                    // small for no reason.
+                    encoding.scaleResolutionDownBy = 1.0
+                    // A share is the call's primary visual media, not
+                    // background video.
+                    if (screen) encoding.networkPriority = 3
+                }
+
+                // Text stays readable and frames are what gets sacrificed - the
+                // opposite trade to a camera, where a dropped frame is invisible
+                // and a soft face is not.
+                parameters.degradationPreference = if (screen) {
+                    RtpParameters.DegradationPreference.MAINTAIN_RESOLUTION
+                } else {
+                    RtpParameters.DegradationPreference.BALANCED
+                }
+
+                sender.parameters = parameters
+            }
+        }
+
+        /**
+         * Asks for H.264 on the screen, which is the one codec with a hardware
+         * encoder on essentially every phone - and hardware is what makes a
+         * high frame rate possible without the battery paying for it. Ignored
+         * where it is unavailable; the call works either way.
+         */
+        private fun preferScreenCodec() {
+            val transceiver = transceivers[Slot.SCREEN] ?: return
+            runCatching {
+                val codecs = factory.getRtpSenderCapabilities(
+                    MediaStreamTrack.MediaType.MEDIA_TYPE_VIDEO,
+                ).codecs
+                val sorted = codecs.sortedByDescending { it.name.equals("H264", ignoreCase = true) }
+                transceiver.setCodecPreferences(sorted)
+            }
         }
 
         fun sendData(payload: JSONObject) {
@@ -739,7 +823,11 @@ class VoiceEngine(private val context: Context) {
                 transceiver.direction = RtpTransceiver.RtpTransceiverDirection.SEND_RECV
                 transceivers[slot] = transceiver
             }
-            for ((slot, track) in wanted) transceivers[slot]?.sender?.setTrack(track, false)
+            preferScreenCodec()
+            for ((slot, track) in wanted) {
+                transceivers[slot]?.sender?.setTrack(track, false)
+                if (track != null) tune(slot)
+            }
         }
 
         private suspend fun offer() {
@@ -805,7 +893,14 @@ class VoiceEngine(private val context: Context) {
             for (candidate in pendingCandidates) pc.addIceCandidate(candidate)
             pendingCandidates.clear()
 
-            if (kind != "offer") return
+            if (kind != "offer") {
+                // An answer settles the senders, and encodings only exist once
+                // they are settled - so this is the first moment the ceilings
+                // can be put on at all.
+                tune(Slot.SCREEN)
+                tune(Slot.CAMERA)
+                return
+            }
 
             // Before the answer is written: the directions it carries are the
             // ones decided here.
@@ -813,6 +908,8 @@ class VoiceEngine(private val context: Context) {
             val answer = create(offer = false) ?: return
             if (!setLocal(answer)) return
             sendDescription("answer", answer)
+            tune(Slot.SCREEN)
+            tune(Slot.CAMERA)
         }
 
         private fun sendDescription(kind: String, description: SessionDescription) {
