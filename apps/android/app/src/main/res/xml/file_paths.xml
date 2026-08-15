@@ -7,4 +7,5 @@
 -->
 <paths>
     <cache-path name="camera" path="camera/" />
+    <cache-path name="media" path="media/" />
 </paths>

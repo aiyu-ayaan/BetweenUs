@@ -334,6 +334,8 @@ data class MessageAttachment(
     val height: Int? = null,
 ) {
     val isImage: Boolean get() = contentType.startsWith("image/")
+    val isVideo: Boolean get() = contentType.startsWith("video/")
+    val isAudio: Boolean get() = contentType.startsWith("audio/")
 
     fun toJson(): JSONObject = JSONObject()
         .put("key", key)

@@ -48,6 +48,14 @@ object NexoraPermissions {
             null
         }
 
+    /** Only needed on API <= 28 for writing to public storage; API 29+ uses Scoped MediaStore without permission. */
+    val WRITE_STORAGE: String? =
+        if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.P) {
+            Manifest.permission.WRITE_EXTERNAL_STORAGE
+        } else {
+            null
+        }
+
     /**
      * What it takes to read the phone's photos, which changed twice.
      *
