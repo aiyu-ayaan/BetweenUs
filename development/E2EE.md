@@ -331,6 +331,15 @@ access to the origin has the key. A web client that would rather not persist it
 at all can hold the identity in memory and re-open the backup on each load,
 which is exactly what the backup makes possible.
 
+A client that caches messages locally has a second thing to store: the channel
+keys. The Android client does, because a cached envelope with no key on hand is
+a conversation that opens instantly and then says it cannot be read. They go
+wherever the identity goes — the Keystore-sealed store on Android — and never
+into the message cache itself, which is what keeps that cache worth exactly
+what the server's own rows are worth. Keys held across restarts are also keys
+that can be an epoch behind, so a client that persists them has to re-read the
+directory when it opens a channel and take the newer epoch when there is one.
+
 ## Not covered
 
 Metadata privacy, sealed sender, forward secrecy (no ratchet: one key per epoch

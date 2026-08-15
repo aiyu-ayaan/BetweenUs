@@ -11,7 +11,7 @@ land, and keep "Next up" honest — it is what a new session reads first.
 
 ## Next up
 
-Phases 1 to 4 and 6 to 12 have landed in code. The client signs in, keys
+Phases 1 to 4, 6 to 12 and 14 have landed in code. The client signs in, keys
 itself, reads and writes end-to-end encrypted messages, holds both realtime
 sockets, and has voice, screen share and a remote-desktop viewer built on the
 same WebRTC mesh the desktop uses.
@@ -26,6 +26,14 @@ watch it appear without a restart. Messages were checked on the server and hold
 Two clients in one channel were also driven against each other, one of them a
 script using the desktop's own crypto: same epoch, then a re-key, and messages
 stayed readable in both directions across it.
+
+The client also opens on what it already knows: servers, channels, the DM
+list, friends, unread counts and message history come off a local Room
+database before anything is asked of the server. **This has not been in front
+of a human yet** - it compiles and the codec round-trip test passes, and that
+is all. A cold start with the network off, a second account on the same
+device, and paging back through cached history are the three things to try
+first.
 
 **Everything to do with media is unverified.** A mesh needs two ends, and
 nobody has put two devices in a call or driven a real agent's screen. Those are
@@ -110,6 +118,13 @@ data is cleared.
 
   A feature that wants a colour takes it from `:ui-common`; a widget that wants
   to know who is signed in is a widget in the wrong module.
+- **The server is the authority; the cache only decides what is drawn first.**
+  Nothing is read from the local database and treated as true. Every hydrate is
+  followed by the request it stood in for, and the answer replaces it.
+- **No plaintext on disk.** Cached messages are the envelopes the server sent.
+  Decryption happens on the way to the screen and nowhere else, so the cache
+  database is worth what the server's own rows are worth. Key material goes in
+  the Keystore-sealed store, never beside the ciphertext.
 - **No dependency-injection framework** until there is something to inject that
   a constructor cannot supply.
 - **Design system is shared, not re-invented.** `:ui-common`'s `theme/Color.kt`
@@ -322,6 +337,45 @@ says so too; both halves are needed.
 - [ ] Instrumented tests for sign-in, server switch, send-message.
 - [ ] Crash reporting, opt-in.
 - [ ] CI: assemble debug on pull request, alongside the existing pnpm jobs.
+
+## Phase 14 — Local cache ✅ (compiles; not yet seen working on a device)
+
+Opening the app used to mean an empty server rail and an empty channel until
+the network answered, and nothing at all when it did not: everything the UI
+drew was fetched fresh on each launch and held only in memory.
+
+- [x] Room in `:core`, behind `store/Cache.kt`. No DAO and no entity is visible
+      to another module, or to another package.
+- [x] `Workspace` hydrates servers, channels, DMs, friends, members and unread
+      counts from disk before its first request, and writes back every load.
+- [x] `Conversation` opens a channel from the cache, then merges the fresh page
+      over it rather than replacing it - the page is the newest 50, and a
+      replace would throw away history somebody had already scrolled to.
+- [x] Paging back reads the database first and only goes to the network when it
+      runs out, so scrolling through a conversation a second time is a local
+      read.
+- [x] Channel keys persist, in the Keystore-sealed store. Without them a cached
+      envelope is unreadable and the cache buys nothing.
+- [x] The cache belongs to one account. `Cache.claim` wipes it when the user id
+      changes and every read waits on it, so a second account cannot flash the
+      first one's servers on screen.
+- [x] A deliberate sign-out empties it; a session that merely expired keeps it,
+      so signing back in is still instant.
+- [x] `CacheCodecTest` round-trips every cached model. `toJson` is written
+      against `from`, and the two drift silently - a forgotten field comes back
+      as a default, not as a crash.
+- [ ] Seen working on a device: cold start with the network off, two accounts on
+      one device, paging back through cached history.
+- [ ] Presence is deliberately not cached. A stale "online" is worse than no
+      answer, and it arrives on a socket within a second of connecting.
+- [ ] Attachments are still fetched every time they are opened. Caching the
+      ciphertext next to the message is the obvious next step and nothing here
+      blocks it.
+
+`android.disallowKotlinSourceSets=false` in `gradle.properties` is part of this
+phase: AGP 9's built-in Kotlin rejects source sets added through the `kotlin`
+DSL, which is how KSP registers what Room generates. It goes when KSP starts
+registering through `android.sourceSets`.
 
 ---
 
