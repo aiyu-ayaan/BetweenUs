@@ -106,6 +106,36 @@ fun ChatScreen(
     var viewingImage by remember { mutableStateOf<Pair<Bitmap, String>?>(null) }
     var playingVideo by remember { mutableStateOf<Pair<Uri, String>?>(null) }
 
+    // Quick Camera capture
+    var photoUri by remember { mutableStateOf<Uri?>(null) }
+    val cameraCaptureLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.TakePicture(),
+    ) { taken ->
+        if (taken && photoUri != null) {
+            scope.launch {
+                uploading = true
+                failure = runCatching {
+                    val picked = readPicked(context, photoUri!!)
+                    val uploaded = Conversation.uploadAttachment(
+                        channelId = channelId,
+                        name = picked.name,
+                        contentType = picked.contentType,
+                        bytes = picked.bytes,
+                    )
+                    pending = pending + uploaded
+                    null
+                }.exceptionOrNull()?.message
+                uploading = false
+            }
+        }
+    }
+
+    val cameraPermission = com.aktech.nexora.feature.settings.rememberPermission(
+        com.aktech.nexora.feature.settings.NexoraPermissions.CAMERA,
+    ) {
+        photoUri = cameraTarget(context).also { cameraCaptureLauncher.launch(it) }
+    }
+
     DisposableEffect(channelId) {
         Conversation.open(channelId)
         onDispose { Conversation.close(channelId) }
@@ -286,6 +316,7 @@ fun ChatScreen(
             onCancelEdit = { editing = null },
             onRemoveAttachment = { pending = pending - it },
             onPickFile = { showAttachmentSheet = true },
+            onCameraClick = { cameraPermission.request() },
             onSend = { text ->
                 scope.launch {
                     val target = editing

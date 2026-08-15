@@ -1,9 +1,11 @@
 package com.aktech.nexora.feature.chat
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -11,10 +13,13 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -64,9 +69,14 @@ import com.aktech.nexora.ui.theme.Surface900
 import com.aktech.nexora.ui.theme.Surface950
 
 /**
- * Modern, polished message composer with WhatsApp/Discord-grade polish:
- * rounded pill input well, attachment preview tray, active Send button, and editing banner.
+ * WhatsApp-style Composer with:
+ * - Emoji picker button on the left of input well
+ * - Text input field with typing indicator dispatch
+ * - Attachment paperclip button
+ * - Quick Camera button (automatically hidden when keyboard is open or when typing)
+ * - Circular Accent Send button
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun Composer(
     channelId: String,
@@ -76,15 +86,19 @@ fun Composer(
     onCancelEdit: () -> Unit,
     onRemoveAttachment: (MessageAttachment) -> Unit,
     onPickFile: () -> Unit,
+    onCameraClick: () -> Unit,
     onSend: (String) -> Unit,
 ) {
     var text by remember(channelId) { mutableStateOf("") }
+    var showEmojiPicker by remember { mutableStateOf(false) }
 
     LaunchedEffect(editing?.id) {
         text = editing?.text ?: ""
     }
 
+    val isImeVisible = WindowInsets.isImeVisible
     val canSend = text.isNotBlank() || attachments.isNotEmpty()
+    val showCamera = !isImeVisible && text.isEmpty()
 
     Column(
         Modifier
@@ -204,85 +218,144 @@ fun Composer(
                 .fillMaxWidth()
                 .padding(horizontal = 8.dp, vertical = 8.dp),
             verticalAlignment = Alignment.Bottom,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            // Attachment Button
-            Box(
-                modifier = Modifier
-                    .size(44.dp)
-                    .clip(CircleShape)
-                    .background(Surface850)
-                    .border(1.dp, Edge, CircleShape)
-                    .clickable(onClick = onPickFile),
-                contentAlignment = Alignment.Center,
-            ) {
-                NexoraIcon(
-                    icon = NexoraIcons.Paperclip,
-                    tint = Slate300,
-                    size = 20.dp,
-                )
-            }
-
-            // Text Input Pill
-            Box(
+            // Text Input Pill Container (holding Emoji, text, Paperclip, and Camera)
+            Row(
                 modifier = Modifier
                     .weight(1f)
-                    .heightIn(min = 44.dp)
-                    .clip(RoundedCornerShape(22.dp))
+                    .heightIn(min = 46.dp)
+                    .clip(RoundedCornerShape(24.dp))
                     .background(Surface900)
-                    .border(1.dp, if (text.isNotEmpty()) Accent.copy(alpha = 0.5f) else Surface700, RoundedCornerShape(22.dp))
-                    .padding(horizontal = 14.dp, vertical = 10.dp),
-                contentAlignment = Alignment.CenterStart,
+                    .border(
+                        1.dp,
+                        if (text.isNotEmpty()) Accent.copy(alpha = 0.45f) else Surface700,
+                        RoundedCornerShape(24.dp),
+                    )
+                    .padding(horizontal = 6.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                if (text.isEmpty()) {
-                    Text(
-                        text = "Message…",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = Slate500,
-                        fontSize = 15.sp,
+                // Emoji Picker Button
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(CircleShape)
+                        .clickable { showEmojiPicker = true },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    NexoraIcon(
+                        icon = NexoraIcons.Smile,
+                        tint = Slate400,
+                        size = 20.dp,
                     )
                 }
 
-                BasicTextField(
-                    value = text,
-                    onValueChange = {
-                        text = it
-                        if (it.isNotEmpty()) Presence.noteTyping(channelId)
-                    },
-                    textStyle = TextStyle(
-                        color = Slate100,
-                        fontSize = 15.sp,
-                    ),
-                    cursorBrush = SolidColor(Accent),
-                    maxLines = 6,
-                    keyboardOptions = KeyboardOptions(
-                        capitalization = KeyboardCapitalization.Sentences,
-                        imeAction = ImeAction.Default,
-                    ),
-                    modifier = Modifier.fillMaxWidth(),
-                )
+                Spacer(Modifier.width(4.dp))
+
+                // Text Input Field
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(vertical = 4.dp),
+                    contentAlignment = Alignment.CenterStart,
+                ) {
+                    if (text.isEmpty()) {
+                        Text(
+                            text = "Message…",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = Slate500,
+                            fontSize = 15.sp,
+                        )
+                    }
+
+                    BasicTextField(
+                        value = text,
+                        onValueChange = {
+                            text = it
+                            if (it.isNotEmpty()) Presence.noteTyping(channelId)
+                        },
+                        textStyle = TextStyle(
+                            color = Slate100,
+                            fontSize = 15.sp,
+                        ),
+                        cursorBrush = SolidColor(Accent),
+                        maxLines = 6,
+                        keyboardOptions = KeyboardOptions(
+                            capitalization = KeyboardCapitalization.Sentences,
+                            imeAction = ImeAction.Default,
+                        ),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+
+                // Paperclip Attachment Button
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(CircleShape)
+                        .clickable(onClick = onPickFile),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    NexoraIcon(
+                        icon = NexoraIcons.Paperclip,
+                        tint = Slate400,
+                        size = 19.dp,
+                    )
+                }
+
+                // Camera Button (hidden when keyboard is open or when typing)
+                AnimatedVisibility(
+                    visible = showCamera,
+                    enter = fadeIn() + expandHorizontally(),
+                    exit = fadeOut() + shrinkHorizontally(),
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(CircleShape)
+                            .clickable(onClick = onCameraClick),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        NexoraIcon(
+                            icon = NexoraIcons.Video,
+                            tint = Slate400,
+                            size = 19.dp,
+                        )
+                    }
+                }
             }
 
-            // Send Button
+            // Circular Send Button
             Box(
                 modifier = Modifier
-                    .size(44.dp)
+                    .size(46.dp)
                     .clip(CircleShape)
                     .background(if (canSend) Accent else Surface850)
                     .border(1.dp, if (canSend) Accent else Edge, CircleShape)
-                    .let { if (canSend) it.clickable {
-                        val payload = text.trim()
-                        text = ""
-                        onSend(payload)
-                    } else it },
+                    .let {
+                        if (canSend) it.clickable {
+                            val payload = text.trim()
+                            text = ""
+                            onSend(payload)
+                        } else it
+                    },
                 contentAlignment = Alignment.Center,
             ) {
                 NexoraIcon(
                     icon = NexoraIcons.Send,
                     tint = if (canSend) Color.White else Slate500,
-                    size = 18.dp,
+                    size = 19.dp,
                 )
             }
         }
+    }
+
+    if (showEmojiPicker) {
+        EmojiPickerSheet(
+            onDismiss = { showEmojiPicker = false },
+            onEmojiPicked = { emoji ->
+                text = text + emoji
+            },
+        )
     }
 }
