@@ -26,7 +26,11 @@ import androidx.core.content.ContextCompat
  * the thing again. So each one is tied to the action that needs it:
  *
  *   RECORD_AUDIO      joining a voice channel
- *   CAMERA            turning the camera on inside a call
+ *   CAMERA            turning the camera on inside a call, or taking a photo
+ *                     to send
+ *   READ_MEDIA_*      opening the attachment sheet, for the grid of recent
+ *                     photos - and only for that; the system photo picker and
+ *                     the document browser need nothing
  *   POST_NOTIFICATIONS  the first time a notification would be worth showing
  *
  * A permanently refused permission is not asked for twice; the caller is told,
@@ -44,9 +48,38 @@ object NexoraPermissions {
             null
         }
 
+    /**
+     * What it takes to read the phone's photos, which changed twice.
+     *
+     * API 33 split storage into per-type permissions; API 34 added a third that
+     * means "these photos and no others", granted precisely when the first two
+     * are refused. So this is a list and the test is [anyGranted]: holding only
+     * the user-selected one is real access to a real set of photos, and calling
+     * that "no" would show an empty grid to somebody who had just chosen what
+     * to share.
+     */
+    val MEDIA: List<String> = when {
+        Build.VERSION.SDK_INT >= 34 -> listOf(
+            Manifest.permission.READ_MEDIA_IMAGES,
+            Manifest.permission.READ_MEDIA_VIDEO,
+            Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED,
+        )
+
+        Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU -> listOf(
+            Manifest.permission.READ_MEDIA_IMAGES,
+            Manifest.permission.READ_MEDIA_VIDEO,
+        )
+
+        else -> listOf(Manifest.permission.READ_EXTERNAL_STORAGE)
+    }
+
     fun granted(context: Context, permission: String?): Boolean =
         permission == null ||
             ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
+
+    /** True when at least one of [permissions] is held. See [MEDIA]. */
+    fun anyGranted(context: Context, permissions: List<String>): Boolean =
+        permissions.any { granted(context, it) }
 
     fun openSettings(context: Context) {
         context.startActivity(
@@ -83,7 +116,7 @@ fun rememberPermission(
 
     return PermissionRequest(
         refused = refused,
-        request = {
+        onRequest = {
             if (NexoraPermissions.granted(context, permission)) {
                 onGranted()
             } else {
@@ -91,7 +124,7 @@ fun rememberPermission(
                 launcher.launch(permission!!)
             }
         },
-        openSettings = { NexoraPermissions.openSettings(context) },
+        onOpenSettings = { NexoraPermissions.openSettings(context) },
     )
 }
 
@@ -125,7 +158,7 @@ fun rememberPermissions(
 
     return PermissionRequest(
         refused = refused,
-        request = {
+        onRequest = {
             val missing = asked.filterNot { NexoraPermissions.granted(context, it) }
             if (missing.isEmpty()) {
                 onGranted()
@@ -134,12 +167,65 @@ fun rememberPermissions(
                 launcher.launch(missing.toTypedArray())
             }
         },
-        openSettings = { NexoraPermissions.openSettings(context) },
+        onOpenSettings = { NexoraPermissions.openSettings(context) },
+    )
+}
+
+/**
+ * Functions, not `() -> Unit` properties, and that is the point.
+ *
+ * As properties, `camera.request` compiled - it is a perfectly good lambda
+ * value - and did nothing, so the camera button in a call silently never asked
+ * for the permission and never turned the camera on. As a member function the
+ * same line will not compile. Anywhere one is genuinely wanted as a callback,
+ * `{ camera.request() }` says so.
+ */
+/**
+ * Asks for a set of permissions where holding any one of them is enough.
+ *
+ * Reading photos is the case this exists for: on API 34 "only these photos" is
+ * a different permission from "all photos", and somebody who chose the first
+ * has granted access, not refused it. See [NexoraPermissions.MEDIA].
+ */
+@Composable
+fun rememberAnyPermission(
+    permissions: List<String>,
+    onGranted: () -> Unit,
+): PermissionRequest {
+    val context = LocalContext.current
+    var refused by remember { mutableStateOf(false) }
+
+    val launcher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions(),
+    ) {
+        // The results map is not consulted: what matters is what is held now,
+        // and on API 34 the system can grant a permission that was not asked
+        // for in place of one that was.
+        val allowed = NexoraPermissions.anyGranted(context, permissions)
+        refused = !allowed
+        if (allowed) onGranted()
+    }
+
+    return PermissionRequest(
+        refused = refused,
+        onRequest = {
+            if (NexoraPermissions.anyGranted(context, permissions)) {
+                onGranted()
+            } else {
+                refused = false
+                launcher.launch(permissions.toTypedArray())
+            }
+        },
+        onOpenSettings = { NexoraPermissions.openSettings(context) },
     )
 }
 
 class PermissionRequest(
     val refused: Boolean,
-    val request: () -> Unit,
-    val openSettings: () -> Unit,
-)
+    private val onRequest: () -> Unit,
+    private val onOpenSettings: () -> Unit,
+) {
+    fun request() = onRequest()
+
+    fun openSettings() = onOpenSettings()
+}

@@ -12,6 +12,22 @@
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
+    <!-- The attachment sheet shows the phone's recent photos inline, which
+         means reading them. The system photo picker and the document browser
+         are still there and need none of this, so refusing it costs the grid
+         and nothing else.
+
+         READ_MEDIA_VISUAL_USER_SELECTED is API 34's "only these photos": it is
+         granted where the other two are refused, and MediaStore then returns
+         exactly what was picked. Treating it as "no access" would show an
+         empty grid to somebody who had just chosen what to share. -->
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
+    <uses-permission android:name="android.permission.READ_MEDIA_VISUAL_USER_SELECTED" />
+    <uses-permission
+        android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
+
     <!-- A call has to survive the screen going off, which on Android means a
          foreground service with an ongoing notification saying so. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
@@ -60,6 +76,19 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- Where a photo taken from the attachment sheet lands. The camera app
+             is a different process and cannot be handed a `file://` path, so it
+             gets a content URI into our own cache instead. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.files"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
 
         <service
             android:name=".feature.voice.CallService"

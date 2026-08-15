@@ -398,8 +398,8 @@ private fun PermissionRow(
         trailing = {
             when {
                 granted -> NexoraIcon(NexoraIcons.Check, tint = StatusOnline, size = 18.dp)
-                request.refused -> Chip("Open settings", onClick = request.openSettings)
-                else -> Chip("Allow", onClick = request.request)
+                request.refused -> Chip("Open settings", onClick = { request.openSettings() })
+                else -> Chip("Allow", onClick = { request.request() })
             }
         },
     )

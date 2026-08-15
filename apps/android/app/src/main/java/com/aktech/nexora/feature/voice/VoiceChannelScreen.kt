@@ -230,11 +230,11 @@ fun VoiceChannelScreen(
                             Danger,
                         )
                         Spacer(Modifier.height(12.dp))
-                        NexoraButton("Open app settings", onClick = microphone.openSettings)
+                        NexoraButton("Open app settings", onClick = { microphone.openSettings() })
                     } else {
                         NexoraButton(
                             text = if (state is VoiceEngine.CallState.Failed) "Try again" else "Join the call",
-                            onClick = microphone.request,
+                            onClick = { microphone.request() },
                         )
                     }
                 }
@@ -286,7 +286,7 @@ fun VoiceChannelScreen(
                     icon = if (cameraOn) NexoraIcons.Video else NexoraIcons.VideoOff,
                     contentDescription = if (cameraOn) "Turn the camera off" else "Turn the camera on",
                     tint = if (cameraOn) Accent else Slate400,
-                    onClick = { if (cameraOn) engine.stopVideo() else camera.request },
+                    onClick = { if (cameraOn) engine.stopVideo() else camera.request() },
                 )
                 IconAction(
                     icon = NexoraIcons.ScreenShare,

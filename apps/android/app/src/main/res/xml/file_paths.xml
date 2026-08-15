@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    One directory, and only one: photos taken from the attachment sheet, on
+    their way into a message. Nothing else in the app's storage is shared, and
+    nothing here survives being uploaded - the cache is the right place for a
+    file whose whole life is the next few seconds.
+-->
+<paths>
+    <cache-path name="camera" path="camera/" />
+</paths>
