@@ -31,6 +31,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import com.aktech.nexora.core.data.Channel
@@ -44,6 +45,7 @@ import com.aktech.nexora.feature.servers.JoinOrCreateServerSheet
 import com.aktech.nexora.ui.components.AvatarWithStatus
 import com.aktech.nexora.ui.components.Badge
 import com.aktech.nexora.ui.components.IconAction
+import com.aktech.nexora.ui.components.Avatar
 import com.aktech.nexora.ui.components.ListRow
 import com.aktech.nexora.ui.components.NexoraIcon
 import com.aktech.nexora.ui.components.NexoraIcons
@@ -79,10 +81,21 @@ fun WorkspaceDrawer(
     val channels by Workspace.channels.collectAsState()
     val unread by Workspace.unread.collectAsState()
     val self by Presence.self.collectAsState()
+
+    // Collected, not read: `Presence.voiceMembers()` returns the value at the
+    // moment it is called, so a room that fills up after this drawer was drawn
+    // never redrew it. The member list is what puts names to the ids.
+    val voiceRooms by Presence.voice.collectAsState()
+    val members by Workspace.members.collectAsState()
+
     val server = servers.firstOrNull { it.id == selectedServerId }
 
     LaunchedEffect(selectedServerId) {
-        selectedServerId?.let { Workspace.loadChannels(it) }
+        selectedServerId?.let {
+            Workspace.loadChannels(it)
+            // Names for whoever is sitting in a voice channel.
+            Workspace.loadMembers(it)
+        }
     }
 
     Row(Modifier.fillMaxSize().systemBarsPadding()) {
@@ -175,13 +188,26 @@ fun WorkspaceDrawer(
                     }
                     if (voice.isNotEmpty()) item { SectionLabel("Voice channels") }
                     items(voice, key = { it.id }) { channel ->
-                        val members = Presence.voiceMembers(channel.id)
-                        ChannelRow(
-                            channel = channel,
-                            selected = channel.id == selectedChannelId,
-                            unread = 0,
-                            subtitle = if (members.isEmpty()) null else "${members.size} in the room",
-                        ) { onSelectChannel(channel) }
+                        // Presence gives user ids; the member list of the
+                        // server is what turns them into people. Without that
+                        // a voice channel could only say how many were in it,
+                        // which is the one thing you can already see.
+                        val inRoom = voiceRooms[channel.id].orEmpty()
+                        val roster = members[channel.serverId].orEmpty()
+                        val names = inRoom.map { id ->
+                            roster.firstOrNull { it.userId == id }?.label ?: "Someone"
+                        }
+
+                        Column {
+                            ChannelRow(
+                                channel = channel,
+                                selected = channel.id == selectedChannelId,
+                                unread = 0,
+                                subtitle = if (inRoom.isEmpty()) null else "${inRoom.size} in the room",
+                            ) { onSelectChannel(channel) }
+
+                            for (name in names) VoiceMember(name)
+                        }
                     }
                 }
             }
@@ -219,6 +245,31 @@ fun WorkspaceDrawer(
     }
     if (addingChannel && server != null) {
         CreateChannelSheet(server = server, onDismiss = { addingChannel = false })
+    }
+}
+
+/**
+ * One person sitting in a voice channel, under its row.
+ *
+ * The count alone was no use: "1 in the room" does not say whether the room is
+ * worth joining, and the web has said who all along. Indented to the width of
+ * the channel icon, so the list reads as belonging to the channel above it.
+ */
+@Composable
+private fun VoiceMember(name: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(start = 44.dp, end = 12.dp, bottom = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Avatar(id = name, label = name, url = null, size = 20.dp)
+        Text(
+            text = name,
+            style = MaterialTheme.typography.bodySmall,
+            color = Slate400,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
 }
 
