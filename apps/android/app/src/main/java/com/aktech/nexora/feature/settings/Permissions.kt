@@ -95,6 +95,49 @@ fun rememberPermission(
     )
 }
 
+/**
+ * Asks for several permissions at once, where only [required] decides whether
+ * the action goes ahead.
+ *
+ * Joining a call is the case this exists for. It needs the microphone, and it
+ * wants notifications - a call that cannot show its ongoing notification still
+ * works, it is just harder to get back to - so refusing the second must not
+ * refuse the first. Android shows the prompts one after another and reports
+ * them together.
+ */
+@Composable
+fun rememberPermissions(
+    permissions: List<String>,
+    required: String,
+    onGranted: () -> Unit,
+): PermissionRequest {
+    val context = LocalContext.current
+    var refused by remember { mutableStateOf(false) }
+    val asked = remember(permissions) { permissions.distinct() }
+
+    val launcher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions(),
+    ) { results ->
+        val allowed = results[required] ?: NexoraPermissions.granted(context, required)
+        refused = !allowed
+        if (allowed) onGranted()
+    }
+
+    return PermissionRequest(
+        refused = refused,
+        request = {
+            val missing = asked.filterNot { NexoraPermissions.granted(context, it) }
+            if (missing.isEmpty()) {
+                onGranted()
+            } else {
+                refused = false
+                launcher.launch(missing.toTypedArray())
+            }
+        },
+        openSettings = { NexoraPermissions.openSettings(context) },
+    )
+}
+
 class PermissionRequest(
     val refused: Boolean,
     val request: () -> Unit,

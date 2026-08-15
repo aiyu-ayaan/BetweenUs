@@ -6,6 +6,7 @@ import android.media.projection.MediaProjectionManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -40,6 +41,7 @@ import com.aktech.nexora.core.data.PublicUser
 import com.aktech.nexora.core.store.Workspace
 import com.aktech.nexora.feature.settings.NexoraPermissions
 import com.aktech.nexora.feature.settings.rememberPermission
+import com.aktech.nexora.feature.settings.rememberPermissions
 import com.aktech.nexora.ui.components.Avatar
 import com.aktech.nexora.ui.components.EmptyState
 import com.aktech.nexora.ui.components.IconAction
@@ -79,6 +81,7 @@ fun VoiceChannelScreen(channelId: String?, self: PublicUser, onBack: () -> Unit)
     val cameraOn by engine.cameraOn.collectAsState()
     val sharing by engine.sharing.collectAsState()
     val localVideo by engine.localVideo.collectAsState()
+    val problem by engine.problem.collectAsState()
 
     val channel = channelId?.let { Workspace.channel(it) }
 
@@ -86,7 +89,14 @@ fun VoiceChannelScreen(channelId: String?, self: PublicUser, onBack: () -> Unit)
         onDispose { engine.dispose() }
     }
 
-    val microphone = rememberPermission(NexoraPermissions.MICROPHONE) {
+    // The microphone is the one that decides whether the call happens.
+    // Notifications are asked for in the same breath because a call runs as a
+    // foreground service and the notification is how anyone gets back to it -
+    // but refusing them is not a reason to refuse the call.
+    val microphone = rememberPermissions(
+        permissions = listOfNotNull(NexoraPermissions.MICROPHONE, NexoraPermissions.NOTIFICATIONS),
+        required = NexoraPermissions.MICROPHONE,
+    ) {
         channelId?.let { engine.join(it) }
     }
     val camera = rememberPermission(NexoraPermissions.CAMERA) { engine.startCamera() }
@@ -125,6 +135,13 @@ fun VoiceChannelScreen(channelId: String?, self: PublicUser, onBack: () -> Unit)
             }
         }
         HorizontalDivider(color = Edge)
+
+        // One peer failing is one tile, not the call - but a tile that silently
+        // never carries anything is indistinguishable from a working one, which
+        // is exactly how a mesh that negotiated nothing went unnoticed.
+        problem?.let {
+            Notice(it, Danger, modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp))
+        }
 
         Box(Modifier.weight(1f)) {
             when {
@@ -186,8 +203,10 @@ fun VoiceChannelScreen(channelId: String?, self: PublicUser, onBack: () -> Unit)
                         Tile(
                             label = participant.peer.username,
                             id = participant.peer.userId,
-                            track = participant.track,
+                            track = participant.video,
                             eglContext = engine.eglBase.eglBaseContext,
+                            muted = !participant.micEnabled,
+                            speaking = participant.speaking,
                             connected = participant.connected,
                         )
                     }
@@ -212,7 +231,7 @@ fun VoiceChannelScreen(channelId: String?, self: PublicUser, onBack: () -> Unit)
                     icon = if (cameraOn) NexoraIcons.Video else NexoraIcons.VideoOff,
                     contentDescription = if (cameraOn) "Turn the camera off" else "Turn the camera on",
                     tint = if (cameraOn) Accent else Slate400,
-                    onClick = { if (cameraOn) engine.stopCamera() else camera.request },
+                    onClick = { if (cameraOn) engine.stopVideo() else camera.request },
                 )
                 IconAction(
                     icon = NexoraIcons.ScreenShare,
@@ -220,7 +239,7 @@ fun VoiceChannelScreen(channelId: String?, self: PublicUser, onBack: () -> Unit)
                     tint = if (sharing) Accent else Slate400,
                     onClick = {
                         if (sharing) {
-                            engine.stopCamera()
+                            engine.stopVideo()
                         } else {
                             val manager = context.getSystemService(Context.MEDIA_PROJECTION_SERVICE)
                                 as MediaProjectionManager
@@ -247,13 +266,20 @@ private fun Tile(
     track: VideoTrack?,
     eglContext: org.webrtc.EglBase.Context,
     muted: Boolean = false,
+    speaking: Boolean = false,
     connected: Boolean = true,
 ) {
     Box(
         modifier = Modifier
             .aspectRatio(1f)
             .clip(RoundedCornerShape(14.dp))
-            .background(Surface900),
+            .background(Surface900)
+            .then(
+                // The ring is the only thing that says who is talking when
+                // nobody has a camera on, which is most calls from a phone.
+                if (speaking) Modifier.border(2.dp, StatusOnline, RoundedCornerShape(14.dp))
+                else Modifier,
+            ),
         contentAlignment = Alignment.Center,
     ) {
         if (track != null) {
