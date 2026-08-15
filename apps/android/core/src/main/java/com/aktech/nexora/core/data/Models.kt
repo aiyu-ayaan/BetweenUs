@@ -290,34 +290,49 @@ data class MessageAttachment(
 }
 
 /**
- * The plaintext inside a message once it carries files. A message with no
- * attachments is still written as bare text, so everything sent before
- * attachments existed keeps rendering.
+ * The plaintext inside a message once it carries files.
+ *
+ * The encoding is the contract between the clients, and it is
+ * `apps/desktop/src/services/message-body.ts` - not something for each client
+ * to arrive at on its own. This one did, and the result was a phone's photo
+ * arriving on the web as a paragraph of raw JSON.
+ *
+ * A message with no files is still stored as the bare text somebody typed, so
+ * every row written before attachments existed keeps rendering as it did. Only
+ * a message carrying files becomes a JSON document, and it is hidden behind a
+ * marker starting with a NUL: a character no text field can produce, so nobody
+ * can type a message that pretends to be one. Sniffing for a leading `{`,
+ * which is what this used to do, is exactly the hole the marker closes.
  */
 data class MessageBody(val text: String, val attachments: List<MessageAttachment> = emptyList()) {
     fun encode(): String =
         if (attachments.isEmpty()) {
             text
         } else {
-            JSONObject()
+            BODY_MARKER + JSONObject()
                 .put("text", text)
                 .put("attachments", JSONArray().also { a -> attachments.forEach { a.put(it.toJson()) } })
                 .toString()
         }
 
     companion object {
+        /** Byte for byte the desktop's `BODY_MARKER`. Changing one changes both. */
+        const val BODY_MARKER = "\u0000nexora-body:1\n"
+
         fun decode(plaintext: String): MessageBody {
-            if (!plaintext.startsWith("{")) return MessageBody(plaintext)
+            if (!plaintext.startsWith(BODY_MARKER)) return MessageBody(plaintext)
             return runCatching {
-                val json = JSONObject(plaintext)
-                if (!json.has("text")) return MessageBody(plaintext)
+                val json = JSONObject(plaintext.removePrefix(BODY_MARKER))
                 MessageBody(
                     text = json.optString("text"),
                     attachments = json.optJSONArray("attachments")
                         ?.map { MessageAttachment.from(it) }
                         .orEmpty(),
                 )
-            }.getOrDefault(MessageBody(plaintext))
+            }
+                // A body we cannot read is still a message; show it rather than
+                // nothing.
+                .getOrDefault(MessageBody(plaintext))
         }
     }
 }
