@@ -73,7 +73,13 @@ import org.webrtc.VideoTrack
  * leaves the screen saying so rather than appearing to do nothing.
  */
 @Composable
-fun VoiceChannelScreen(channelId: String?, self: PublicUser, onBack: () -> Unit) {
+fun VoiceChannelScreen(
+    channelId: String?,
+    self: PublicUser,
+    joinOnArrival: Boolean = false,
+    onJoined: () -> Unit = {},
+    onBack: () -> Unit,
+) {
     val context = LocalContext.current
     // The call belongs to the process, not to this composable. A rotation, a
     // navigation, or the activity being rebuilt used to take the call with it.
@@ -99,19 +105,6 @@ fun VoiceChannelScreen(channelId: String?, self: PublicUser, onBack: () -> Unit)
         if (watching == null) dismissed = null
     }
 
-    if (watching != null && watching.peer.peerId != dismissed) {
-        ShareStage(
-            label = watching.peer.username,
-            track = watching.screen!!,
-            eglContext = engine.eglBase.eglBaseContext,
-            muted = muted,
-            onToggleMute = engine::toggleMute,
-            onLeave = { engine.leave(); onBack() },
-            onClose = { dismissed = watching.peer.peerId },
-        )
-        return
-    }
-
     // The microphone is the one that decides whether the call happens.
     // Notifications are asked for in the same breath because a call runs as a
     // foreground service and the notification is how anyone gets back to it -
@@ -124,12 +117,51 @@ fun VoiceChannelScreen(channelId: String?, self: PublicUser, onBack: () -> Unit)
     }
     val camera = rememberPermission(NexoraPermissions.CAMERA) { engine.startCamera() }
 
+    // Tapping a voice channel is the decision to join it. Landing on a screen
+    // with a button that asks the same question again is asking twice - the
+    // permission prompt is the only thing that still has to be asked, and it
+    // only appears the first time.
+    LaunchedEffect(joinOnArrival, channelId) {
+        if (joinOnArrival && channelId != null && state is VoiceEngine.CallState.Idle) {
+            onJoined()
+            microphone.request()
+        }
+    }
+
     val projection = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult(),
     ) { result ->
         if (result.resultCode == Activity.RESULT_OK && result.data != null) {
             engine.startScreenShare(result.data!!)
         }
+    }
+
+    if (watching != null && watching.peer.peerId != dismissed) {
+        ShareStage(
+            label = watching.peer.username,
+            track = watching.screen!!,
+            participants = participants.filterNot { it.peer.peerId == watching.peer.peerId },
+            self = self.label,
+            selfId = self.id,
+            eglContext = engine.eglBase.eglBaseContext,
+            muted = muted,
+            cameraOn = cameraOn,
+            sharing = sharing,
+            onToggleMute = engine::toggleMute,
+            onToggleCamera = { if (cameraOn) engine.stopVideo() else camera.request() },
+            onToggleShare = {
+                if (sharing) {
+                    engine.stopVideo()
+                } else {
+                    val manager = context.getSystemService(Context.MEDIA_PROJECTION_SERVICE)
+                        as MediaProjectionManager
+                    projection.launch(manager.createScreenCaptureIntent())
+                }
+            },
+            onLeave = { engine.leave(); onBack() },
+            onClose = { dismissed = watching.peer.peerId },
+        )
+        return
     }
 
     Column(Modifier.fillMaxSize().background(Ground).systemBarsPadding()) {
