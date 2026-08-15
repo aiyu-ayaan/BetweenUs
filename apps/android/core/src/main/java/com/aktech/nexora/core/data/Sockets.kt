@@ -44,6 +44,13 @@ open class JsonSocket(private val path: String) {
         open()
     }
 
+    /**
+     * Never the token, never a message body - see section 23 of CLAUDE.md. Just
+     * enough to tell a socket that is refusing to open from one that opened and
+     * was never spoken to, which is a distinction that cost a day.
+     */
+    private fun log(what: String) = android.util.Log.i("nexora.socket", "$path $what")
+
     @Synchronized
     private fun open() {
         val token = this.token ?: return
@@ -54,6 +61,7 @@ open class JsonSocket(private val path: String) {
             Request.Builder().url(url).build(),
             object : WebSocketListener() {
                 override fun onOpen(webSocket: WebSocket, response: Response) {
+                    log("open")
                     attempt = 0
                     connected = true
                     onConnected()
@@ -69,10 +77,12 @@ open class JsonSocket(private val path: String) {
                 }
 
                 override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
+                    log("closed code=$code reason=$reason")
                     drop(code)
                 }
 
                 override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
+                    log("failed http=${response?.code ?: 0} ${t.javaClass.simpleName}: ${t.message}")
                     drop(response?.code ?: 0)
                 }
             },
@@ -106,7 +116,12 @@ open class JsonSocket(private val path: String) {
     fun send(event: JSONObject) {
         val text = event.toString()
         val live = socket
-        if (connected && live != null) live.send(text) else pending.addLast(text)
+        if (connected && live != null) {
+            live.send(text)
+        } else {
+            log("queued ${event.optString("type")} (not connected)")
+            pending.addLast(text)
+        }
     }
 
     fun on(listener: (JSONObject) -> Unit): () -> Unit {
@@ -215,8 +230,37 @@ object PresenceSocket : JsonSocket("/ws/presence") {
  * `/ws/call`: the switchboard. It carries the roster, the offers, the answers
  * and the ICE candidates, and never a byte of media - see section 28 of
  * CLAUDE.md, which is the rule the whole design is built around.
+ *
+ * The server keeps nothing across connections, so a call has to be rejoined on
+ * every reconnect exactly as chat has to be resubscribed. Without that, a phone
+ * losing its signal for a moment - a lift, a train, a screen that went off -
+ * came back on a socket the call service had never heard of: still showing a
+ * call, absent from everybody else's roster, and never told why.
  */
-object CallSocket : JsonSocket("/ws/call")
+object CallSocket : JsonSocket("/ws/call") {
+    @Volatile
+    private var channelId: String? = null
+
+    override fun onConnected() {
+        channelId?.let { send(JSONObject().put("type", "join").put("channelId", it)) }
+    }
+
+    /**
+     * Joins, and remembers the call for as long as it lasts.
+     *
+     * Nothing is queued when the socket is down: [onConnected] sends it on the
+     * way up, and queuing as well would arrive as two joins.
+     */
+    fun join(channelId: String) {
+        this.channelId = channelId
+        if (connected) send(JSONObject().put("type", "join").put("channelId", channelId))
+    }
+
+    fun leave() {
+        channelId = null
+        send(JSONObject().put("type", "leave"))
+    }
+}
 
 /** `/ws/remote`: remote-session handshake, input and signalling. Never the screen. */
 object RemoteSocket : JsonSocket("/ws/remote")
