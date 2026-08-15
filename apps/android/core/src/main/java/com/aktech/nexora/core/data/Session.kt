@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.SharedPreferences
 import com.aktech.nexora.core.crypto.BackupSecret
 import com.aktech.nexora.core.crypto.E2ee
+import com.aktech.nexora.core.store.Cache
 import com.aktech.nexora.core.store.Conversation
 import com.aktech.nexora.core.store.Presence
 import com.aktech.nexora.core.store.Workspace
@@ -98,6 +99,9 @@ object Session {
      */
     private fun begin(user: PublicUser, secret: BackupSecret?) {
         val token = accessToken ?: return
+        // Before either store starts reading from it: a cache belonging to
+        // another account has to be gone, not merely about to be.
+        Cache.claim(user.id)
         ChatSocket.connect(token)
         PresenceSocket.connect(token)
         Presence.start()
@@ -169,6 +173,9 @@ object Session {
         val stored = refreshToken
         if (stored != null) runCatching { NexoraApi.logout(stored) }
         clear()
+        // Only a deliberate sign-out empties the cache. A session that expired
+        // on its own is coming back, and should come back instantly.
+        Cache.clear()
     }
 
     private fun clear() {

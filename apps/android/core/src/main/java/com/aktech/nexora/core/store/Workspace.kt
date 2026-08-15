@@ -88,7 +88,25 @@ object Workspace {
             // than the exception.
             ChatSocket.onConnection { up -> if (up) scope.launch { refresh() } }
         }
-        scope.launch { refresh() }
+        scope.launch {
+            hydrate()
+            refresh()
+        }
+    }
+
+    /**
+     * Puts last session's workspace on screen before the network is asked for
+     * anything. Everything here is replaced by [refresh] a moment later - the
+     * point is only that the moment has something in it other than an empty rail.
+     */
+    private suspend fun hydrate() {
+        if (_servers.value.isNotEmpty()) return
+        Cache.servers()?.let { _servers.value = it }
+        Cache.channels()?.let { _channels.value = it }
+        Cache.directChannels()?.let { _directChannels.value = it }
+        Cache.friends()?.let { _friends.value = it }
+        Cache.members()?.let { _members.value = it }
+        Cache.unread()?.let { _unread.value = it }
     }
 
     fun stop() {
@@ -106,6 +124,7 @@ object Workspace {
         try {
             val servers = NexoraApi.servers()
             _servers.value = servers
+            Cache.putServers(servers)
             ChatSocket.syncServers(servers.map { it.id })
             // Every server's channels, not only the one on screen: the socket
             // has to be subscribed to all of them or a message in another
@@ -126,6 +145,7 @@ object Workspace {
     suspend fun loadChannels(serverId: String) {
         runCatching { NexoraApi.channels(serverId) }.onSuccess { channels ->
             _channels.update { it + (serverId to channels) }
+            Cache.putChannels(_channels.value)
             resubscribe()
         }
     }
@@ -133,23 +153,31 @@ object Workspace {
     suspend fun loadDirectChannels() {
         runCatching { NexoraApi.directChannels() }.onSuccess {
             _directChannels.value = it
+            Cache.putDirectChannels(it)
             resubscribe()
         }
     }
 
     suspend fun loadFriends() {
-        runCatching { NexoraApi.friends() }.onSuccess { _friends.value = it }
+        runCatching { NexoraApi.friends() }.onSuccess {
+            _friends.value = it
+            Cache.putFriends(it)
+        }
     }
 
     suspend fun loadUnread() {
-        runCatching { NexoraApi.unread() }
-            .onSuccess { list -> _unread.value = list.associate { it.channelId to it.count } }
+        runCatching { NexoraApi.unread() }.onSuccess { list ->
+            _unread.value = list.associate { it.channelId to it.count }
+            Cache.putUnread(_unread.value)
+        }
     }
 
     suspend fun loadMembers(serverId: String, force: Boolean = false) {
         if (!force && _members.value.containsKey(serverId)) return
-        runCatching { NexoraApi.members(serverId) }
-            .onSuccess { members -> _members.update { it + (serverId to members) } }
+        runCatching { NexoraApi.members(serverId) }.onSuccess { members ->
+            _members.update { it + (serverId to members) }
+            Cache.putMembers(_members.value)
+        }
     }
 
     /** Subscribes the socket to every text channel this account can read. */
@@ -178,10 +206,12 @@ object Workspace {
 
     fun noteUnread(channelId: String, delta: Int) {
         _unread.update { it + (channelId to ((it[channelId] ?: 0) + delta)) }
+        Cache.putUnread(_unread.value)
     }
 
     fun markRead(channelId: String) {
         _unread.update { it - channelId }
+        Cache.putUnread(_unread.value)
         scope.launch { runCatching { NexoraApi.markChannelRead(channelId) } }
     }
 

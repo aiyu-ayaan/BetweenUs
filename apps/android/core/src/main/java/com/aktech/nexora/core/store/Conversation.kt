@@ -75,6 +75,10 @@ object Conversation {
 
     private suspend fun onEvent(event: JSONObject) {
         val message = event.optJSONObject("message")?.let { Message.from(it) } ?: return
+        // Cached whether or not the channel is open. A conversation nobody has
+        // looked at this session is exactly the one that should not be a spinner
+        // when the badge is finally tapped.
+        Cache.putMessages(listOf(message))
         when (event.optString("type")) {
             "message.created" -> {
                 // Only decrypt for a channel already open: a message arriving in
@@ -104,6 +108,13 @@ object Conversation {
         if (_messages.value.containsKey(channelId)) return
         scope.launch {
             _loading.update { it + channelId }
+            // What was on screen last time, before anything is asked of the
+            // network. A conversation that has been read before opens at once,
+            // and opens at all with no signal.
+            val cached = Cache.messages(channelId).map { read(it) }
+            if (cached.isNotEmpty() && !_messages.value.containsKey(channelId)) {
+                _messages.update { it + (channelId to cached) }
+            }
             runCatching {
                 // Re-wrap the key for anyone who joined since it was minted, so
                 // they can read without waiting for a restart.
@@ -111,8 +122,12 @@ object Conversation {
                 val page = NexoraApi.messages(channelId)
                 page.items.lastOrNull()?.let { cursors[channelId] = it.id }
                 if (page.nextCursor == null && page.items.size < 2) exhausted.add(channelId)
+                Cache.putMessages(page.items)
                 val readable = page.items.map { read(it) }
-                _messages.update { it + (channelId to readable.sortedBy { m -> m.message.createdAt }) }
+                // Merged over what came out of the cache rather than replacing
+                // it: the fresh page is the newest 50, and dropping everything
+                // else would throw away history somebody had already scrolled to.
+                _messages.update { all -> all + (channelId to merge(all[channelId], readable)) }
             }
             _loading.update { it - channelId }
         }
@@ -124,19 +139,26 @@ object Conversation {
 
     fun loadOlder(channelId: String) {
         if (channelId in exhausted || channelId in _loading.value) return
-        val before = _messages.value[channelId]?.firstOrNull()?.id ?: return
+        val oldest = _messages.value[channelId]?.firstOrNull()?.message ?: return
         scope.launch {
             _loading.update { it + channelId }
-            runCatching { NexoraApi.messages(channelId, before) }.onSuccess { page ->
-                if (page.items.isEmpty()) {
-                    exhausted.add(channelId)
-                } else {
-                    val older = page.items.map { read(it) }
-                    _messages.update { all ->
-                        val existing = all[channelId].orEmpty()
-                        val ids = existing.map { it.id }.toSet()
-                        all + (channelId to (older.filter { it.id !in ids } + existing)
-                            .sortedBy { it.message.createdAt })
+
+            // History already on this device first. Anything fetched once is
+            // kept, so scrolling back through a conversation a second time is
+            // a database read and not a round trip - which is the difference
+            // between a list that moves and one that stutters.
+            val local = Cache.messagesBefore(channelId, oldest.createdAt)
+            if (local.isNotEmpty()) {
+                val older = local.map { read(it) }
+                _messages.update { all -> all + (channelId to merge(all[channelId], older)) }
+            } else {
+                runCatching { NexoraApi.messages(channelId, oldest.id) }.onSuccess { page ->
+                    if (page.items.isEmpty()) {
+                        exhausted.add(channelId)
+                    } else {
+                        Cache.putMessages(page.items)
+                        val older = page.items.map { read(it) }
+                        _messages.update { all -> all + (channelId to merge(all[channelId], older)) }
                     }
                 }
             }
@@ -212,7 +234,18 @@ object Conversation {
         return ReadableMessage(message, MessageBody.decode(plaintext))
     }
 
+    /** One channel's list with [arrivals] laid over it, oldest first. */
+    private fun merge(
+        existing: List<ReadableMessage>?,
+        arrivals: List<ReadableMessage>,
+    ): List<ReadableMessage> {
+        val fresh = arrivals.map { it.id }.toSet()
+        return (existing.orEmpty().filterNot { it.id in fresh } + arrivals)
+            .sortedBy { it.message.createdAt }
+    }
+
     private fun insert(readable: ReadableMessage) {
+        Cache.putMessages(listOf(readable.message))
         _messages.update { all ->
             val channelId = readable.message.channelId
             val existing = all[channelId] ?: return@update all
@@ -222,6 +255,7 @@ object Conversation {
     }
 
     private fun replace(readable: ReadableMessage) {
+        Cache.putMessages(listOf(readable.message))
         _messages.update { all ->
             val channelId = readable.message.channelId
             val existing = all[channelId] ?: return@update all

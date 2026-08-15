@@ -30,6 +30,16 @@ internal fun <T> JSONArray.map(parse: (JSONObject) -> T): List<T> =
 internal fun jsonArrayOf(values: Collection<String>): JSONArray =
     JSONArray().also { array -> values.forEach { array.put(it) } }
 
+/**
+ * The other direction, for the local cache.
+ *
+ * Only the types the cache stores carry a `toJson`, and every one of them is
+ * covered by a round-trip test - a field added to a `from` and forgotten here
+ * would come back off disk as a default and be very hard to see.
+ */
+internal fun <T> jsonArrayOfObjects(values: Collection<T>, toJson: (T) -> JSONObject): JSONArray =
+    JSONArray().also { array -> values.forEach { array.put(toJson(it)) } }
+
 // --- users ---
 
 /** The public face of an account: a search result, a DM header, an author. */
@@ -40,6 +50,12 @@ data class UserSummary(
     val avatarUrl: String?,
 ) {
     val label: String get() = displayName.ifBlank { username }
+
+    fun toJson(): JSONObject = JSONObject()
+        .put("id", id)
+        .put("username", username)
+        .put("displayName", displayName)
+        .put("avatarUrl", avatarUrl)
 
     companion object {
         fun from(json: JSONObject) = UserSummary(
@@ -74,6 +90,15 @@ data class ServerWithRole(
     fun can(permission: String): Boolean =
         role == ServerRole.OWNER || permissions.contains(permission)
 
+    fun toJson(): JSONObject = JSONObject()
+        .put("id", id)
+        .put("name", name)
+        .put("slug", slug)
+        .put("iconUrl", iconUrl)
+        .put("ownerId", ownerId)
+        .put("role", role.name)
+        .put("permissions", jsonArrayOf(permissions))
+
     companion object {
         fun from(json: JSONObject) = ServerWithRole(
             id = json.getString("id"),
@@ -98,6 +123,16 @@ data class ServerMember(
     val deniedPermissions: List<String>,
 ) {
     val label: String get() = displayName.ifBlank { username }
+
+    fun toJson(): JSONObject = JSONObject()
+        .put("userId", userId)
+        .put("username", username)
+        .put("displayName", displayName)
+        .put("avatarUrl", avatarUrl)
+        .put("role", role.name)
+        .put("permissions", jsonArrayOf(permissions))
+        .put("grantedPermissions", jsonArrayOf(grantedPermissions))
+        .put("deniedPermissions", jsonArrayOf(deniedPermissions))
 
     companion object {
         fun from(json: JSONObject) = ServerMember(
@@ -131,6 +166,14 @@ data class Channel(
     val topic: String?,
     val isPrivate: Boolean,
 ) {
+    fun toJson(): JSONObject = JSONObject()
+        .put("id", id)
+        .put("serverId", serverId)
+        .put("name", name)
+        .put("type", type.name)
+        .put("topic", topic)
+        .put("isPrivate", isPrivate)
+
     companion object {
         fun from(json: JSONObject) = Channel(
             id = json.getString("id"),
@@ -155,6 +198,10 @@ data class ChannelMember(val userId: String, val username: String, val displayNa
 
 /** A direct message channel, named by the person on the other end of it. */
 data class DirectChannel(val channelId: String, val participant: UserSummary) {
+    fun toJson(): JSONObject = JSONObject()
+        .put("channelId", channelId)
+        .put("participant", participant.toJson())
+
     companion object {
         fun from(json: JSONObject) = DirectChannel(
             channelId = json.getString("channelId"),
@@ -176,6 +223,11 @@ data class Friend(
     val incoming: Boolean get() = status == FriendshipStatus.PENDING && direction == "incoming"
     val outgoing: Boolean get() = status == FriendshipStatus.PENDING && direction == "outgoing"
 
+    fun toJson(): JSONObject = JSONObject()
+        .put("user", user.toJson())
+        .put("status", status.name)
+        .put("direction", direction)
+
     companion object {
         fun from(json: JSONObject) = Friend(
             user = UserSummary.from(json.getJSONObject("user")),
@@ -192,6 +244,10 @@ data class Friend(
 // --- messages ---
 
 data class MessageReaction(val emoji: String, val userIds: List<String>) {
+    fun toJson(): JSONObject = JSONObject()
+        .put("emoji", emoji)
+        .put("userIds", jsonArrayOf(userIds))
+
     companion object {
         fun from(json: JSONObject) = MessageReaction(
             emoji = json.optString("emoji"),
@@ -220,6 +276,24 @@ data class Message(
 ) {
     val deleted: Boolean get() = deletedAt != null
     val pinned: Boolean get() = pinnedAt != null
+
+    /**
+     * What the cache stores: the envelope, untouched. The plaintext is never
+     * written to disk - the body is decrypted on the way to the screen and
+     * nowhere else, so a copy of the database is worth exactly what a copy of
+     * the server's rows is worth.
+     */
+    fun toJson(): JSONObject = JSONObject()
+        .put("id", id)
+        .put("channelId", channelId)
+        .put("content", content)
+        .put("author", author.toJson())
+        .put("createdAt", createdAt)
+        .put("editedAt", editedAt)
+        .put("deletedAt", deletedAt)
+        .put("deletedBy", deletedBy?.toJson())
+        .put("pinnedAt", pinnedAt)
+        .put("reactions", jsonArrayOfObjects(reactions) { it.toJson() })
 
     companion object {
         fun from(json: JSONObject) = Message(

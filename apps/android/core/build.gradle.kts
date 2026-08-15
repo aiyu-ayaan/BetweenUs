@@ -2,6 +2,9 @@ import java.util.Properties
 
 plugins {
     alias(libs.plugins.android.library)
+    // Room generates its DAO implementations; nothing else here needs a
+    // processor, so KSP is applied in this module and no other.
+    alias(libs.plugins.ksp)
 }
 
 /**
@@ -63,6 +66,11 @@ dependencies {
     api(libs.kotlinx.coroutines.android)
     // The HTTP client and the WebSocket client, which are the same client.
     api(libs.okhttp)
+    // The local cache. Room stays behind `Cache`: no other module, and nothing
+    // outside this package, sees a DAO or an entity.
+    implementation(libs.androidx.room.runtime)
+    implementation(libs.androidx.room.ktx)
+    ksp(libs.androidx.room.compiler)
     testImplementation(libs.junit)
     // android.jar's org.json is a stub that throws. The real one on the test
     // classpath is what lets the crypto interop test parse a JWK off the JVM.
