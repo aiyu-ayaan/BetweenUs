@@ -9,7 +9,9 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import androidx.core.app.NotificationCompat
 import androidx.core.app.Person
 import com.aktech.nexora.MainActivity
@@ -44,6 +46,7 @@ class CallService : Service() {
         when (intent?.action) {
             ACTION_HANG_UP -> {
                 onHangUp?.invoke()
+                stopSelf()
                 return START_NOT_STICKY
             }
 
@@ -57,7 +60,26 @@ class CallService : Service() {
         val muted = intent?.getBooleanExtra(EXTRA_MUTED, false) ?: false
         val types = intent?.getIntExtra(EXTRA_TYPES, TYPE_MICROPHONE) ?: TYPE_MICROPHONE
         startForeground(NOTIFICATION_ID, notification(label, muted), foregroundTypes(types))
-        return START_STICKY
+
+        // Only now is the service genuinely carrying the type it was started
+        // with, which is the moment a projection is allowed to begin. See
+        // `startThen`.
+        if (types and TYPE_PROJECTION != 0) {
+            val ready = whenProjectionReady
+            whenProjectionReady = null
+            ready?.let { Handler(Looper.getMainLooper()).post(it) }
+        }
+
+        // Never START_STICKY. A call cannot be resumed by the system - the
+        // sockets are gone, the peer connections are gone, and the person hung
+        // up - so a restarted service is an ongoing call notification for a
+        // call that ended, which is exactly what kept coming back.
+        return START_NOT_STICKY
+    }
+
+    override fun onDestroy() {
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        super.onDestroy()
     }
 
     /** The manifest's types, filtered to what this platform version knows about. */
@@ -150,6 +172,9 @@ class CallService : Service() {
         private var onHangUp: (() -> Unit)? = null
         private var onToggleMute: (() -> Unit)? = null
 
+        /** Run once the service is carrying the media-projection type. */
+        private var whenProjectionReady: (() -> Unit)? = null
+
         /**
          * Wires the notification's buttons to the live call. Static because the
          * service is started by the system and there is exactly one call.
@@ -195,7 +220,24 @@ class CallService : Service() {
             }
         }
 
+        /**
+         * Starts the service carrying the media-projection type and runs
+         * [then] once it genuinely is.
+         *
+         * `startForegroundService` returns before the service has run a single
+         * line, so starting a projection on the next statement is a race the
+         * platform loses on purpose: "Media projections require a foreground
+         * service of type FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION", thrown
+         * straight through `onActivityResult` and taking the process with it.
+         * The capture has to wait for `startForeground` to have happened.
+         */
+        fun startThen(context: Context, label: String, types: Int, muted: Boolean, then: () -> Unit) {
+            whenProjectionReady = then
+            start(context, label, types, muted)
+        }
+
         fun stop(context: Context) {
+            whenProjectionReady = null
             context.stopService(Intent(context, CallService::class.java))
         }
     }

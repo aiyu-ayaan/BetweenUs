@@ -346,8 +346,16 @@ class VoiceEngine(private val context: Context) {
         _muted.update { !it }
         audioTrack?.setEnabled(!_muted.value)
         publishMediaState()
-        CallService.start(context, "In a Nexora call", foregroundTypes(), _muted.value)
+        // Only while there is a call. Starting the service to relabel a
+        // notification for a call that has ended is how the notification came
+        // back after everything had been hung up.
+        if (inCall()) {
+            CallService.start(context, callLabel(), foregroundTypes(), _muted.value)
+        }
     }
+
+    private fun inCall(): Boolean =
+        _state.value is CallState.Live || _state.value is CallState.Connecting
 
     /** The camera. [startScreenShare] instead turns the capture into a share. */
     fun startCamera(front: Boolean = true) {
@@ -386,13 +394,23 @@ class VoiceEngine(private val context: Context) {
      */
     fun startScreenShare(permission: Intent) {
         if (videoCapturer != null) stopVideo()
-        CallService.start(
+
+        // The capture cannot begin until the service is genuinely carrying the
+        // media-projection type, and asking for it is not the same as having
+        // it: startForegroundService returns before the service has run a line.
+        // Capturing on the next statement threw a SecurityException straight
+        // through onActivityResult and killed the process.
+        CallService.startThen(
             context,
             "Sharing your screen",
             foregroundTypes(screen = true),
             _muted.value,
-        )
+        ) {
+            beginScreenCapture(permission)
+        }
+    }
 
+    private fun beginScreenCapture(permission: Intent) {
         // The display's own shape and size, not a fixed 720p box: capturing
         // small and stretching on the far end is what "very low quality" looks
         // like, and it saves nothing, because the scaling happens after the
@@ -423,7 +441,18 @@ class VoiceEngine(private val context: Context) {
         val helper = SurfaceTextureHelper.create("nexora-capture", eglBase.eglBaseContext)
         val source = factory.createVideoSource(capturer.isScreencast)
         capturer.initialize(helper, context, source.capturerObserver)
-        capturer.startCapture(width, height, fps)
+
+        // A capturer that will not start is a tile that stays empty, not a
+        // process that dies. The platform throws here for reasons that are
+        // nothing to do with the call - a revoked projection, a camera another
+        // app has - and taking the whole call down with it is the wrong trade.
+        val started = runCatching { capturer.startCapture(width, height, fps) }
+        started.exceptionOrNull()?.let { error ->
+            _problem.value = "The capture could not start: ${error.message}"
+            runCatching { capturer.dispose() }
+            helper.dispose()
+            return null
+        }
 
         surfaceHelper = helper
         videoCapturer = capturer
@@ -455,9 +484,7 @@ class VoiceEngine(private val context: Context) {
 
     private fun afterMediaChange() {
         publishMediaState()
-        if (_state.value is CallState.Live || _state.value is CallState.Connecting) {
-            CallService.start(context, callLabel(), foregroundTypes(), _muted.value)
-        }
+        if (inCall()) CallService.start(context, callLabel(), foregroundTypes(), _muted.value)
     }
 
     private fun callLabel(): String = if (_sharing.value) "Sharing your screen" else "In a Nexora call"
