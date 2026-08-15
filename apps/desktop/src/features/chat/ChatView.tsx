@@ -299,8 +299,12 @@ function MessageList({
               <div className="min-w-0 flex-1">
                 {!grouped && (
                   <p className="flex items-baseline gap-2">
-                    <span className="font-medium text-slate-50">
-                      {message.author.displayName}
+                    <span
+                      className={`font-medium ${
+                        message.author.id === me?.id ? 'font-semibold text-accent' : 'text-slate-50'
+                      }`}
+                    >
+                      {message.author.id === me?.id ? 'You' : message.author.displayName}
                     </span>
                     <time dateTime={message.createdAt} className="text-xs text-slate-500">
                       {formatTime(message.createdAt)}

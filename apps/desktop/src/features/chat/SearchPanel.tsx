@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useChatStore, type DecryptedMessage } from '../../stores/chat';
+import { useAuthStore } from '../../stores/auth';
 import { Avatar } from '../../components/Avatar';
 import { SearchIcon, XIcon } from '../../components/icons';
 
@@ -14,6 +15,7 @@ import { SearchIcon, XIcon } from '../../components/icons';
  * conversation further back widens it.
  */
 export function SearchPanel(): JSX.Element {
+  const me = useAuthStore((state) => state.user);
   const channelId = useChatStore((state) => state.activeChannelId);
   const history = useChatStore((state) => (channelId ? state.history[channelId] : undefined));
   const messages = useChatStore((state) => state.messages);
@@ -78,8 +80,12 @@ export function SearchPanel(): JSX.Element {
                     size="sm"
                     ringColour="border-surface-800"
                   />
-                  <span className="min-w-0 flex-1 truncate text-sm font-medium text-slate-100">
-                    {message.author.displayName}
+                  <span
+                    className={`min-w-0 flex-1 truncate text-sm font-medium ${
+                      message.author.id === me?.id ? 'font-semibold text-accent' : 'text-slate-100'
+                    }`}
+                  >
+                    {message.author.id === me?.id ? 'You' : message.author.displayName}
                   </span>
                   <time dateTime={message.createdAt} className="shrink-0 text-xs text-slate-500">
                     {new Date(message.createdAt).toLocaleDateString()}

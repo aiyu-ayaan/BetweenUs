@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { useChatStore, type DecryptedMessage } from '../../stores/chat';
+import { useAuthStore } from '../../stores/auth';
 import { Avatar } from '../../components/Avatar';
 import { PinIcon, XIcon } from '../../components/icons';
 
@@ -12,6 +13,7 @@ import { PinIcon, XIcon } from '../../components/icons';
  * is a bookmark into the channel, not a separate document.
  */
 export function PinnedPanel(): JSX.Element {
+  const me = useAuthStore((state) => state.user);
   const pins = useChatStore((state) => state.pins);
   const loadPins = useChatStore((state) => state.loadPins);
   const jumpToMessage = useChatStore((state) => state.jumpToMessage);
@@ -57,8 +59,12 @@ export function PinnedPanel(): JSX.Element {
                     size="sm"
                     ringColour="border-surface-800"
                   />
-                  <span className="min-w-0 flex-1 truncate text-sm font-medium text-slate-100">
-                    {message.author.displayName}
+                  <span
+                    className={`min-w-0 flex-1 truncate text-sm font-medium ${
+                      message.author.id === me?.id ? 'font-semibold text-accent' : 'text-slate-100'
+                    }`}
+                  >
+                    {message.author.id === me?.id ? 'You' : message.author.displayName}
                   </span>
                 </span>
                 <span className="mt-1.5 block line-clamp-3 break-words text-sm text-slate-300">
