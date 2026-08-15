@@ -65,10 +65,28 @@ object Workspace {
             ChatSocket.on { event ->
                 when (event.optString("type")) {
                     "friends.changed" -> scope.launch { loadFriends() }
-                    "server.members.changed" ->
-                        scope.launch { loadMembers(event.optString("serverId"), force = true) }
+
+                    "server.members.changed" -> scope.launch {
+                        val serverId = event.optString("serverId")
+                        // The event goes to everyone watching the server *and*
+                        // to whoever joined or left it - so a server we have
+                        // never heard of means this account was just added to
+                        // one. Refreshing the member list of a server that is
+                        // not in our list yet does nothing visible, which is
+                        // why being added from another client used to need the
+                        // app restarting before it showed up.
+                        if (_servers.value.none { it.id == serverId }) refresh()
+                        else loadMembers(serverId, force = true)
+                    }
                 }
             }
+
+            // A socket that has been away has missed whatever happened while it
+            // was gone, and nothing replays it. Re-reading on every reconnect is
+            // one round trip and covers every event that was dropped - which on
+            // a phone, going in and out of signal, is the common case rather
+            // than the exception.
+            ChatSocket.onConnection { up -> if (up) scope.launch { refresh() } }
         }
         scope.launch { refresh() }
     }
@@ -82,6 +100,7 @@ object Workspace {
         _unread.value = emptyMap()
     }
 
+    /** Re-reads everything. Cheap enough to call on resume and on reconnect. */
     suspend fun refresh() {
         _loading.value = true
         try {

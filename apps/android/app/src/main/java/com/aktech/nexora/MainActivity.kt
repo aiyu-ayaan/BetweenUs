@@ -15,6 +15,7 @@ import androidx.compose.ui.Modifier
 import androidx.lifecycle.lifecycleScope
 import com.aktech.nexora.core.data.AuthPhase
 import com.aktech.nexora.core.data.Session
+import com.aktech.nexora.core.store.Workspace
 import com.aktech.nexora.feature.auth.LoginScreen
 import com.aktech.nexora.feature.shell.Shell
 import com.aktech.nexora.ui.components.NexoraLogoTile
@@ -35,6 +36,19 @@ class MainActivity : ComponentActivity() {
             NexoraTheme {
                 NexoraRoot()
             }
+        }
+    }
+
+    /**
+     * A phone spends most of its life with the app in the background, where
+     * Android is free to drop a socket without telling anybody. Coming back is
+     * therefore the other moment - besides a reconnect - when what is on screen
+     * may be stale, so it is re-read.
+     */
+    override fun onStart() {
+        super.onStart()
+        if (Session.state.value is AuthPhase.SignedIn) {
+            lifecycleScope.launch { Workspace.refresh() }
         }
     }
 }
