@@ -70,7 +70,8 @@ open a channel
 
 send a message                     read a message
    AES-GCM encrypt                    AES-GCM decrypt with the epoch's key
-   POST ciphertext envelope            no key for that epoch -> placeholder text
+   POST ciphertext envelope            epoch not held? re-read the directory once
+                                       still not held -> placeholder text
 
 join a voice channel
    channel key -> HMAC over this peer's DTLS fingerprint
@@ -192,6 +193,18 @@ decide who may publish it:
 - An identity backup is readable and writable only by its owner, and only in
   the shape the DTO allows — including a PBKDF2 iteration floor, the one number
   in the blob that decides what stealing the table is worth.
+
+One rule is the client's rather than the server's, and it belongs next to these
+because leaving it out breaks the same thing they protect: **a client that meets
+an epoch it holds no key for re-reads the directory once before giving up.**
+
+A member who joins after a channel was keyed mints the next epoch rather than
+waiting to be re-wrapped for. Without the re-read, every client already in the
+channel stays cached an epoch behind: it draws the newcomer's messages as a
+padlock, and keeps *sending* under the old epoch, so the newcomer cannot read
+the reply either and the conversation quietly splits in two. The re-read finds
+the key the newcomer sealed for them and moves them onto the newer epoch, which
+is what makes the next message work in both directions.
 
 ## Voice channels
 

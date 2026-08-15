@@ -259,6 +259,31 @@ Closing both windows stops the dev server. Ctrl+C does the same.
 - Set a recovery passphrase in Settings → My Account → Encryption key, then
   wipe the profile again: the same dialog asks for the passphrase instead.
 
+## Two clients, one channel, and a re-key
+
+The case that used to split a conversation in half, and the reason the Android
+client and the desktop both re-read the key directory when they meet an epoch
+they hold nothing for.
+
+Needs two accounts in one server, signed in on two clients - two `pnpm dev:duo`
+windows, or one desktop and one phone.
+
+1. On client A, open a text channel and say something. A has keyed the channel
+   at epoch 1.
+2. Add account B to the server, and open the same channel on client B. B holds
+   nothing for epoch 1, so it mints epoch 2 and seals it for both of them.
+3. Say something on B.
+
+What should happen: A reads it. Before the fix, A was cached on epoch 1, drew
+B's message as "Encrypted - no key on this device yet", and - worse - kept
+sending under epoch 1, so B could not read A's replies either. Each side sat
+behind a padlock until it was restarted.
+
+4. Reply on A, and check B reads it too. A should now be sending under epoch 2.
+
+Messages written *before* B joined stay closed to B. That is the design, not a
+failure of this test: earlier epochs are never re-wrapped for a new member.
+
 ## Pointing the client at another server
 
 The address in the build is a default, not a decision, so this is worth driving

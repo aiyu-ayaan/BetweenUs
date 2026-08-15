@@ -18,9 +18,14 @@ same WebRTC mesh the desktop uses.
 
 What has actually been in front of a human, on an emulator against a locally
 running backend: register, sign in, session restore across a cold start, server
-switch, create a server, open a channel, send a message, react to it. The
-server was checked and holds `{"v":1,"epoch":1,"iv":...,"ct":...}` - the
-plaintext never left the phone.
+switch, create a server, open a channel, send a message, react to it, join a
+voice channel, and be added to somebody else's server from another client and
+watch it appear without a restart. Messages were checked on the server and hold
+`{"v":1,"epoch":1,"iv":...,"ct":...}` - the plaintext never left the phone.
+
+Two clients in one channel were also driven against each other, one of them a
+script using the desktop's own crypto: same epoch, then a re-key, and messages
+stayed readable in both directions across it.
 
 **Everything to do with media is unverified.** A mesh needs two ends, and
 nobody has put two devices in a call or driven a real agent's screen. Those are
@@ -137,8 +142,10 @@ data is cleared.
 - [x] `/ws/chat` client with reconnect and backoff, carrying the access token.
 - [x] `/ws/presence`: online/idle/dnd/offline, typing indicators.
 - [x] Reconnect on token refresh, and on any socket failure with backoff.
-- [ ] Reconnect driven by a network-change callback and by app resume, rather
-      than waiting for the backoff timer to come round.
+- [x] Re-read the workspace on reconnect and on resume, which is what actually
+      recovers from a socket that was away - nothing replays a missed event.
+- [ ] Reconnect driven by a network-change callback, rather than waiting for the
+      backoff timer to come round.
 - [x] Unread state and per-channel read markers.
 - [ ] An OS notification for a message that arrives while the app is open but
       the channel is not on screen. Everything is in place except the posting.
