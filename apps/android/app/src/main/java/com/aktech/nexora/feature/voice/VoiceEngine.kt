@@ -11,22 +11,27 @@ import com.aktech.nexora.core.data.NexoraApi
 import com.aktech.nexora.core.data.Session
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import org.json.JSONObject
 import kotlinx.coroutines.suspendCancellableCoroutine
+import org.json.JSONObject
 import org.webrtc.AudioTrack
 import org.webrtc.Camera1Enumerator
 import org.webrtc.Camera2Enumerator
+import org.webrtc.DataChannel
 import org.webrtc.DefaultVideoDecoderFactory
 import org.webrtc.DefaultVideoEncoderFactory
 import org.webrtc.EglBase
 import org.webrtc.IceCandidate
 import org.webrtc.MediaConstraints
+import org.webrtc.MediaStreamTrack
 import org.webrtc.PeerConnection
 import org.webrtc.PeerConnectionFactory
 import org.webrtc.RtpTransceiver
@@ -37,6 +42,7 @@ import org.webrtc.SurfaceTextureHelper
 import org.webrtc.VideoCapturer
 import org.webrtc.VideoTrack
 import org.webrtc.audio.JavaAudioDeviceModule
+import java.nio.charset.StandardCharsets
 import java.util.concurrent.ConcurrentHashMap
 
 /**
@@ -44,10 +50,43 @@ import java.util.concurrent.ConcurrentHashMap
  * directly between the two devices, and `call-service` as a switchboard that
  * never sees a frame.
  *
- * The port of `apps/desktop/src/services/mesh.ts`. The two rules it exists to
- * keep are section 28 of CLAUDE.md - never proxy media, never run a media
- * server - and the fingerprint signature that stops the relay sitting in the
+ * The port of `apps/desktop/src/services/mesh.ts`, and it has to be a faithful
+ * one - the two clients are talking to each other, so anything this file does
+ * differently is a call that connects and carries nothing.
+ *
+ * ## Fixed transceiver slots
+ *
+ * Every connection is built with exactly four transceivers, always in the same
+ * order: microphone, camera, screen, screen audio. They are created empty and
+ * stay for the life of the connection, and turning a device on is
+ * `sender.setTrack` on a sender that already exists - which never renegotiates.
+ *
+ * Only the impolite side creates them; the polite side adopts the four the
+ * offer brought (see `adopt`). This is the part that was missing: Android used
+ * to `addTrack` whatever it happened to be capturing, so a phone offered one
+ * audio m-line to a desktop expecting four, the desktop's `adopt` refused to
+ * run, and it never put a single track on the wire. Two tiles, both connected,
+ * no media in either direction.
+ *
+ * ## Perfect negotiation
+ *
+ * Either side may need to offer, and if both do at once the connection breaks.
+ * Politeness is decided by comparing peer ids, which both ends can do without
+ * agreeing anything, and the impolite peer's offer wins.
+ *
+ * ## The fingerprint signature
+ *
+ * Each peer sends `HMAC-SHA256(channel key, its own DTLS fingerprint)` beside
+ * the SDP and the receiver recomputes it. The relay has never held the channel
+ * key, so it cannot put its own fingerprint in each direction and sit in the
  * middle of a connection both ends believe is direct.
+ *
+ * ## What is really arriving
+ *
+ * A video receiver on an empty slot is not honest - it unmutes on the padding
+ * sent to probe for bandwidth - so a camera nobody turned on would be a black
+ * rectangle where an avatar belongs. Frames decoded per second do not lie, so
+ * that is what decides whether a slot is showing (see `poll`).
  *
  * ponytail: no simulcast and no bandwidth ladder. The mesh ceiling is the
  * desktop's - comfortable to five, video degrades past six - and a phone hits
@@ -57,12 +96,37 @@ import java.util.concurrent.ConcurrentHashMap
  */
 class VoiceEngine(private val context: Context) {
 
+    /**
+     * What a transceiver carries. The declaration order is the m-line order and
+     * is load-bearing: it is how both ends agree what arrived without a
+     * side-channel to race against.
+     */
+    enum class Slot(val media: MediaStreamTrack.MediaType, val wire: String) {
+        MIC(MediaStreamTrack.MediaType.MEDIA_TYPE_AUDIO, "mic"),
+        CAMERA(MediaStreamTrack.MediaType.MEDIA_TYPE_VIDEO, "camera"),
+        SCREEN(MediaStreamTrack.MediaType.MEDIA_TYPE_VIDEO, "screen"),
+
+        /**
+         * Never sent from a phone: Android's playback capture needs its own
+         * consent flow and is not wired up. The slot still exists, because
+         * dropping it would shift every m-line after it and the desktop counts
+         * on the order.
+         */
+        SCREEN_AUDIO(MediaStreamTrack.MediaType.MEDIA_TYPE_AUDIO, "screenAudio"),
+    }
+
     data class Participant(
         val peer: CallPeer,
-        val track: VideoTrack? = null,
+        val camera: VideoTrack? = null,
+        val screen: VideoTrack? = null,
+        /** What they say their microphone is doing, over the data channel. */
+        val micEnabled: Boolean = true,
         val speaking: Boolean = false,
         val connected: Boolean = false,
-    )
+    ) {
+        /** What a tile shows. A share wins over a camera; a phone has one tile. */
+        val video: VideoTrack? get() = screen ?: camera
+    }
 
     sealed interface CallState {
         data object Idle : CallState
@@ -83,7 +147,12 @@ class VoiceEngine(private val context: Context) {
         PeerConnectionFactory.builder()
             .setVideoEncoderFactory(DefaultVideoEncoderFactory(eglBase.eglBaseContext, true, true))
             .setVideoDecoderFactory(DefaultVideoDecoderFactory(eglBase.eglBaseContext))
-            .setAudioDeviceModule(JavaAudioDeviceModule.builder(context).createAudioDeviceModule())
+            .setAudioDeviceModule(
+                JavaAudioDeviceModule.builder(context)
+                    .setUseHardwareAcousticEchoCanceler(true)
+                    .setUseHardwareNoiseSuppressor(true)
+                    .createAudioDeviceModule(),
+            )
             .createPeerConnectionFactory()
     }
 
@@ -107,15 +176,25 @@ class VoiceEngine(private val context: Context) {
     private val _localVideo = MutableStateFlow<VideoTrack?>(null)
     val localVideo: StateFlow<VideoTrack?> = _localVideo.asStateFlow()
 
+    /**
+     * One peer in trouble is one tile, not the call, so this is said out loud
+     * rather than ending anything. A failure nobody can see is a failure nobody
+     * can report - which is exactly how the missing slots went unnoticed.
+     */
+    private val _problem = MutableStateFlow<String?>(null)
+    val problem: StateFlow<String?> = _problem.asStateFlow()
+
     private var selfPeerId: String? = null
     private var channelId: String? = null
     private var channelKey: String = ""
     private var iceServers: List<PeerConnection.IceServer> = emptyList()
     private var detach: (() -> Unit)? = null
+    private var pollJob: Job? = null
 
     private var audioTrack: AudioTrack? = null
     private var videoCapturer: VideoCapturer? = null
-    private var videoTrack: VideoTrack? = null
+    private var cameraTrack: VideoTrack? = null
+    private var screenTrack: VideoTrack? = null
     private var surfaceHelper: SurfaceTextureHelper? = null
 
     // --- lifecycle ---
@@ -132,6 +211,7 @@ class VoiceEngine(private val context: Context) {
         if (_state.value is CallState.Connecting || _state.value is CallState.Live) return
         this.channelId = channelId
         _state.value = CallState.Connecting(channelId)
+        _problem.value = null
 
         scope.launch {
             try {
@@ -146,8 +226,17 @@ class VoiceEngine(private val context: Context) {
                 detach = CallSocket.on { event -> scope.launch { onSignal(event) } }
                 Session.accessToken?.let { CallSocket.connect(it) }
                 CallSocket.send(JSONObject().put("type", "join").put("channelId", channelId))
-                // From here the call has to survive the screen going off.
-                CallService.start(context, "In a Nexora call")
+
+                // From here the call has to survive the screen going off, and
+                // the earpiece is not where a call this app starts belongs.
+                CallService.attach(
+                    onHangUp = { scope.launch { leave() } },
+                    onToggleMute = { scope.launch { toggleMute() } },
+                )
+                CallService.start(context, "In a Nexora call", foregroundTypes(), _muted.value)
+                CallAudio.start(context)
+
+                startPolling()
             } catch (error: Exception) {
                 fail(error.message ?: "The call could not start")
             }
@@ -172,12 +261,16 @@ class VoiceEngine(private val context: Context) {
     }
 
     private fun teardown() {
+        pollJob?.cancel()
+        pollJob = null
+        CallAudio.stop(context)
         CallService.stop(context)
+        CallService.detach()
         detach?.invoke()
         detach = null
         connections.values.forEach { it.close() }
         connections.clear()
-        stopCamera()
+        stopVideo()
         audioTrack?.dispose()
         audioTrack = null
         _participants.value = emptyList()
@@ -200,14 +293,22 @@ class VoiceEngine(private val context: Context) {
         }
     }
 
+    /**
+     * Muting is the track going quiet, not the sender going away: a slot that
+     * empties would tell the far end the microphone was never there. The far
+     * end learns about it from the media state on the data channel, which is
+     * the only thing that can distinguish "muted" from "silent room".
+     */
     fun toggleMute() {
         _muted.update { !it }
         audioTrack?.setEnabled(!_muted.value)
+        publishMediaState()
+        CallService.start(context, "In a Nexora call", foregroundTypes(), _muted.value)
     }
 
-    /** The camera. [screenIntent] instead turns the capture into a screen share. */
+    /** The camera. [startScreenShare] instead turns the capture into a share. */
     fun startCamera(front: Boolean = true) {
-        if (videoCapturer != null) stopCamera()
+        if (videoCapturer != null) stopVideo()
         val enumerator = if (Camera2Enumerator.isSupported(context)) {
             Camera2Enumerator(context)
         } else {
@@ -217,31 +318,51 @@ class VoiceEngine(private val context: Context) {
             if (front) enumerator.isFrontFacing(it) else enumerator.isBackFacing(it)
         } ?: enumerator.deviceNames.firstOrNull() ?: return
 
-        beginCapture(enumerator.createCapturer(name, null), 960, 540, 24)
+        val track = beginCapture(enumerator.createCapturer(name, null), 960, 540, 24) ?: return
+        cameraTrack = track
         _cameraOn.value = true
+        publish(Slot.CAMERA, track)
+        afterMediaChange()
     }
 
     /**
      * Screen share. The intent is what `MediaProjectionManager` handed back
      * after the system asked - Android will not let an app capture the screen
      * on any other terms, and that consent is the right place for it.
+     *
+     * The foreground service has to be carrying the `mediaProjection` type
+     * before the capturer starts, or Android 14 and later kill the process for
+     * capturing under a service that never said it would.
      */
     fun startScreenShare(permission: Intent) {
-        if (videoCapturer != null) stopCamera()
-        beginCapture(
-            ScreenCapturerAndroid(permission, object : android.media.projection.MediaProjection.Callback() {
-                override fun onStop() {
-                    scope.launch { stopCamera() }
-                }
-            }),
+        if (videoCapturer != null) stopVideo()
+        CallService.start(
+            context,
+            "Sharing your screen",
+            foregroundTypes(screen = true),
+            _muted.value,
+        )
+
+        val track = beginCapture(
+            ScreenCapturerAndroid(
+                permission,
+                object : android.media.projection.MediaProjection.Callback() {
+                    override fun onStop() {
+                        scope.launch { stopVideo() }
+                    }
+                },
+            ),
             1280,
             720,
             15,
-        )
+        ) ?: return
+        screenTrack = track
         _sharing.value = true
+        publish(Slot.SCREEN, track)
+        afterMediaChange()
     }
 
-    private fun beginCapture(capturer: VideoCapturer, width: Int, height: Int, fps: Int) {
+    private fun beginCapture(capturer: VideoCapturer, width: Int, height: Int, fps: Int): VideoTrack? {
         val helper = SurfaceTextureHelper.create("nexora-capture", eglBase.eglBaseContext)
         val source = factory.createVideoSource(capturer.isScreencast)
         capturer.initialize(helper, context, source.capturerObserver)
@@ -249,25 +370,66 @@ class VoiceEngine(private val context: Context) {
 
         surfaceHelper = helper
         videoCapturer = capturer
-        videoTrack = factory.createVideoTrack("nexora-video", source)
-        _localVideo.value = videoTrack
-
-        // Every existing connection has to be told there is video now.
-        connections.values.forEach { it.attachVideo(videoTrack) }
+        val track = factory.createVideoTrack("nexora-video", source)
+        _localVideo.value = track
+        return track
     }
 
-    fun stopCamera() {
+    /** Stops whichever of the camera and the share is running. */
+    fun stopVideo() {
         runCatching { videoCapturer?.stopCapture() }
         videoCapturer?.dispose()
         videoCapturer = null
         surfaceHelper?.dispose()
         surfaceHelper = null
-        videoTrack?.dispose()
-        videoTrack = null
+
+        publish(Slot.CAMERA, null)
+        publish(Slot.SCREEN, null)
+        cameraTrack?.dispose()
+        cameraTrack = null
+        screenTrack?.dispose()
+        screenTrack = null
+
         _localVideo.value = null
         _cameraOn.value = false
         _sharing.value = false
-        connections.values.forEach { it.attachVideo(null) }
+        afterMediaChange()
+    }
+
+    private fun afterMediaChange() {
+        publishMediaState()
+        if (_state.value is CallState.Live || _state.value is CallState.Connecting) {
+            CallService.start(context, callLabel(), foregroundTypes(), _muted.value)
+        }
+    }
+
+    private fun callLabel(): String = if (_sharing.value) "Sharing your screen" else "In a Nexora call"
+
+    /**
+     * The foreground types the service may legally declare right now. Android
+     * 14 requires each one to be genuinely in use, so a camera that is off is a
+     * type that cannot be claimed.
+     */
+    private fun foregroundTypes(screen: Boolean = _sharing.value): Int {
+        var types = CallService.TYPE_MICROPHONE
+        if (_cameraOn.value) types = types or CallService.TYPE_CAMERA
+        if (screen) types = types or CallService.TYPE_PROJECTION
+        return types
+    }
+
+    /** Puts a local track on one slot of every connection. */
+    private fun publish(slot: Slot, track: MediaStreamTrack?) {
+        connections.values.forEach { it.setTrack(slot, track) }
+    }
+
+    private fun publishMediaState() {
+        val media = JSONObject()
+            .put(Slot.MIC.wire, !_muted.value)
+            .put(Slot.CAMERA.wire, _cameraOn.value)
+            .put(Slot.SCREEN.wire, _sharing.value)
+            .put(Slot.SCREEN_AUDIO.wire, false)
+        val envelope = JSONObject().put("topic", VOICE_STATE_TOPIC).put("media", media)
+        connections.values.forEach { it.sendData(envelope) }
     }
 
     // --- signalling ---
@@ -310,6 +472,8 @@ class VoiceEngine(private val context: Context) {
     private fun addPeer(peer: CallPeer) {
         if (connections.containsKey(peer.peerId)) return
         val self = selfPeerId ?: return
+        // Whoever has the larger peer id yields. Both sides compute this from
+        // the same two strings, so they always disagree - which is the point.
         val link = PeerLink(peer, polite = self > peer.peerId)
         connections[peer.peerId] = link
         _participants.update { it + Participant(peer) }
@@ -320,12 +484,60 @@ class VoiceEngine(private val context: Context) {
         CallSocket.send(JSONObject().put("type", "signal").put("to", to).put("data", data))
     }
 
+    private fun update(peerId: String, change: (Participant) -> Participant) {
+        _participants.update { list ->
+            list.map { if (it.peer.peerId == peerId) change(it) else it }
+        }
+    }
+
+    /**
+     * One `getStats` per peer per second, which is what decides whether a video
+     * slot is really carrying anything and who is speaking. Both are statistics
+     * rather than events, because WebRTC offers no event for either that can be
+     * trusted.
+     */
+    private fun startPolling() {
+        pollJob?.cancel()
+        pollJob = scope.launch {
+            while (isActive) {
+                delay(POLL_MS)
+                connections.values.forEach { it.poll() }
+            }
+        }
+    }
+
     // --- one connection to one other participant ---
 
     private inner class PeerLink(val peer: CallPeer, val polite: Boolean) {
+
+        private val transceivers = LinkedHashMap<Slot, RtpTransceiver>()
+
+        /**
+         * What this client wants to be sending, held for the answering side: it
+         * has no senders until the offer arrives, and a camera turned on before
+         * that would otherwise never reach anybody.
+         */
+        private val wanted = HashMap<Slot, MediaStreamTrack?>()
+
+        /**
+         * Candidates that arrived before there was a remote description to
+         * attach them to. This is the normal path, not an edge case:
+         * `addIceCandidate` is rejected until `setRemoteDescription` has run,
+         * and a candidate dropped there is dropped for good - which is a call
+         * that negotiates cleanly and then never carries a packet.
+         */
+        private val pendingCandidates = mutableListOf<IceCandidate>()
+
+        private var makingOffer = false
+        private var closed = false
+        private val frames = HashMap<Slot, Long>()
+
         private val pc: PeerConnection = factory.createPeerConnection(
             PeerConnection.RTCConfiguration(iceServers).apply {
                 sdpSemantics = PeerConnection.SdpSemantics.UNIFIED_PLAN
+                // Both match the desktop. A different bundle policy is a
+                // different set of m-lines, and the slot order is the contract.
+                bundlePolicy = PeerConnection.BundlePolicy.MAXBUNDLE
                 continualGatheringPolicy =
                     PeerConnection.ContinualGatheringPolicy.GATHER_CONTINUALLY
             },
@@ -345,105 +557,218 @@ class VoiceEngine(private val context: Context) {
                     )
                 }
 
-                override fun onTrack(transceiver: RtpTransceiver) {
-                    val track = transceiver.receiver.track()
-                    if (track is VideoTrack) {
-                        _participants.update { list ->
-                            list.map {
-                                if (it.peer.peerId == peer.peerId) it.copy(track = track) else it
-                            }
-                        }
-                    }
-                }
-
                 override fun onConnectionChange(state: PeerConnection.PeerConnectionState) {
                     val up = state == PeerConnection.PeerConnectionState.CONNECTED
-                    _participants.update { list ->
-                        list.map {
-                            if (it.peer.peerId == peer.peerId) it.copy(connected = up) else it
-                        }
-                    }
+                    scope.launch { update(peer.peerId) { it.copy(connected = up) } }
                 }
 
+                override fun onIceConnectionChange(state: PeerConnection.IceConnectionState) {
+                    // One restart, then leave it. A mesh with one dead link is a
+                    // call with one silent tile, not a call that ends.
+                    if (state == PeerConnection.IceConnectionState.FAILED) pc.restartIce()
+                }
+
+                // Tracks are read off the slots after negotiation instead: the
+                // transceiver handed to this callback is a fresh wrapper, so it
+                // cannot be matched against the ones held here by identity.
+                override fun onTrack(transceiver: RtpTransceiver) = Unit
                 override fun onSignalingChange(state: PeerConnection.SignalingState) = Unit
-                override fun onIceConnectionChange(state: PeerConnection.IceConnectionState) = Unit
                 override fun onIceConnectionReceivingChange(receiving: Boolean) = Unit
                 override fun onIceGatheringChange(state: PeerConnection.IceGatheringState) = Unit
                 override fun onIceCandidatesRemoved(candidates: Array<out IceCandidate>) = Unit
                 override fun onAddStream(stream: org.webrtc.MediaStream) = Unit
                 override fun onRemoveStream(stream: org.webrtc.MediaStream) = Unit
-                override fun onDataChannel(channel: org.webrtc.DataChannel) = Unit
+                override fun onDataChannel(channel: DataChannel) = Unit
                 override fun onRenegotiationNeeded() = Unit
             },
         ) ?: error("This device could not open a peer connection")
 
-        private var videoSender: org.webrtc.RtpSender? = null
+        /**
+         * Negotiated on both sides with a fixed id, so neither has to wait for
+         * the other's `onDataChannel` and there is no race about who opens it.
+         * It carries the media state - which is the only way a mute is told
+         * apart from a quiet room.
+         */
+        private val data: DataChannel = pc.createDataChannel(
+            "nexora.share",
+            DataChannel.Init().apply {
+                negotiated = true
+                id = 0
+            },
+        )
+
+        init {
+            // The four slots, in order, created by the offering side only.
+            // Creating them on both sides is two sets of m-lines that no offer
+            // can pair up, and every arriving track lands on a transceiver the
+            // receiving side has never heard of.
+            if (!polite) {
+                for (slot in Slot.entries) {
+                    transceivers[slot] = pc.addTransceiver(
+                        slot.media,
+                        RtpTransceiver.RtpTransceiverInit(
+                            RtpTransceiver.RtpTransceiverDirection.SEND_RECV,
+                        ),
+                    )
+                }
+            }
+
+            data.registerObserver(object : DataChannel.Observer {
+                override fun onStateChange() {
+                    if (data.state() == DataChannel.State.OPEN) {
+                        scope.launch { publishMediaState() }
+                    }
+                }
+
+                override fun onMessage(buffer: DataChannel.Buffer) {
+                    val bytes = ByteArray(buffer.data.remaining())
+                    buffer.data.get(bytes)
+                    val payload = runCatching {
+                        JSONObject(String(bytes, StandardCharsets.UTF_8))
+                    }.getOrNull() ?: return
+                    scope.launch { onData(payload) }
+                }
+
+                override fun onBufferedAmountChange(previous: Long) = Unit
+            })
+        }
 
         fun start() {
-            audioTrack?.let { pc.addTrack(it, listOf("nexora")) }
-            videoTrack?.let { videoSender = pc.addTrack(it, listOf("nexora")) }
-            // Only the impolite side offers. Both offering at once is the
-            // glare the polite/impolite rule exists to settle.
+            for (slot in Slot.entries) {
+                val track = when (slot) {
+                    Slot.MIC -> audioTrack
+                    Slot.CAMERA -> cameraTrack
+                    Slot.SCREEN -> screenTrack
+                    Slot.SCREEN_AUDIO -> null
+                }
+                setTrack(slot, track)
+            }
+            // Only the impolite side offers first. Both offering at once is the
+            // glare the polite rule exists to settle.
             if (!polite) scope.launch { offer() }
         }
 
-        fun attachVideo(track: VideoTrack?) {
-            when {
-                track == null -> videoSender?.let { pc.removeTrack(it); videoSender = null }
-                videoSender == null -> videoSender = pc.addTrack(track, listOf("nexora"))
-                else -> videoSender?.setTrack(track, false)
+        fun setTrack(slot: Slot, track: MediaStreamTrack?) {
+            wanted[slot] = track
+            // No transceiver yet means this side is still waiting for the offer
+            // that makes one. `adopt` plays this back.
+            transceivers[slot]?.sender?.setTrack(track, false)
+        }
+
+        fun sendData(payload: JSONObject) {
+            if (data.state() != DataChannel.State.OPEN) return
+            val bytes = payload.toString().toByteArray(StandardCharsets.UTF_8)
+            runCatching { data.send(DataChannel.Buffer(java.nio.ByteBuffer.wrap(bytes), false)) }
+        }
+
+        private fun onData(payload: JSONObject) {
+            if (payload.optString("topic") != VOICE_STATE_TOPIC) return
+            val media = payload.optJSONObject("media") ?: return
+            if (!media.has(Slot.MIC.wire)) return
+            update(peer.peerId) { it.copy(micEnabled = media.optBoolean(Slot.MIC.wire, true)) }
+        }
+
+        /**
+         * The answering side takes ownership of the transceivers the offer
+         * created. They arrive `recvonly`, which is the direction that would
+         * make this end permanently silent, so they are flipped before the
+         * answer is written - and whatever is already being captured goes on
+         * immediately, because it was asked for while there was no sender.
+         */
+        private fun adopt() {
+            if (transceivers.isNotEmpty()) return
+
+            val found = pc.transceivers
+            if (found.size < Slot.entries.size) {
+                problem("${peer.username}: their offer carried ${found.size} media slots, not ${Slot.entries.size}")
+                return
             }
-            if (!polite) scope.launch { offer() }
+            for ((index, slot) in Slot.entries.withIndex()) {
+                if (found[index].mediaType != slot.media) {
+                    problem("${peer.username}: their offer put ${found[index].mediaType} where ${slot.wire} belongs")
+                    return
+                }
+            }
+
+            for ((index, slot) in Slot.entries.withIndex()) {
+                val transceiver = found[index]
+                transceiver.direction = RtpTransceiver.RtpTransceiverDirection.SEND_RECV
+                transceivers[slot] = transceiver
+            }
+            for ((slot, track) in wanted) transceivers[slot]?.sender?.setTrack(track, false)
         }
 
         private suspend fun offer() {
-            val description = create(offer = true) ?: return
-            pc.setLocalDescription(NoopSdpObserver, description)
-            sendDescription("offer", description)
+            if (closed) return
+            makingOffer = true
+            try {
+                val description = create(offer = true) ?: return
+                if (!setLocal(description)) return
+                sendDescription("offer", description)
+            } finally {
+                makingOffer = false
+            }
         }
 
         fun onSignal(data: JSONObject) {
             when (data.optString("kind")) {
                 "offer", "answer" -> scope.launch { onDescription(data) }
-                "ice" -> data.optJSONObject("candidate")?.let {
-                    pc.addIceCandidate(
-                        IceCandidate(
-                            it.optString("sdpMid"),
-                            it.optInt("sdpMLineIndex"),
-                            it.optString("candidate"),
-                        ),
+                "ice" -> data.optJSONObject("candidate")?.let { payload ->
+                    val candidate = IceCandidate(
+                        payload.optString("sdpMid"),
+                        payload.optInt("sdpMLineIndex"),
+                        payload.optString("candidate"),
                     )
+                    if (pc.remoteDescription == null) {
+                        pendingCandidates += candidate
+                    } else {
+                        pc.addIceCandidate(candidate)
+                    }
                 }
             }
         }
 
-        private suspend fun onDescription(data: JSONObject) {
-            val sdp = data.optString("sdp")
-            val proof = data.optString("fingerprintProof")
+        private suspend fun onDescription(payload: JSONObject) {
+            if (closed) return
+            val sdp = payload.optString("sdp")
+            val proof = payload.optString("fingerprintProof")
 
             // The relay has never held a channel key, so it cannot sign a
             // fingerprint of its own. A signature that does not check out means
             // somebody in the middle, and the connection is never made.
             if (!verifyFingerprint(sdp, proof)) {
-                _state.value = CallState.Failed(
-                    "Refused ${peer.username}: their connection fingerprint is not signed with this channel's key",
+                problem(
+                    "${peer.username}: refused - their media key does not match this channel's",
                 )
                 return
             }
 
-            val kind = data.optString("kind")
+            val kind = payload.optString("kind")
+
+            // Perfect negotiation: on a collision the impolite side ignores the
+            // offer and its own wins. The polite side applies it.
+            val collision = kind == "offer" &&
+                (makingOffer || pc.signalingState() != PeerConnection.SignalingState.STABLE)
+            if (collision && !polite) return
+
             val type = if (kind == "offer") {
                 SessionDescription.Type.OFFER
             } else {
                 SessionDescription.Type.ANSWER
             }
-            pc.setRemoteDescription(NoopSdpObserver, SessionDescription(type, sdp))
+            if (!setRemote(SessionDescription(type, sdp))) return
 
-            if (kind == "offer") {
-                val answer = create(offer = false) ?: return
-                pc.setLocalDescription(NoopSdpObserver, answer)
-                sendDescription("answer", answer)
-            }
+            for (candidate in pendingCandidates) pc.addIceCandidate(candidate)
+            pendingCandidates.clear()
+
+            if (kind != "offer") return
+
+            // Before the answer is written: the directions it carries are the
+            // ones decided here.
+            adopt()
+            val answer = create(offer = false) ?: return
+            if (!setLocal(answer)) return
+            sendDescription("answer", answer)
         }
 
         private fun sendDescription(kind: String, description: SessionDescription) {
@@ -476,6 +801,7 @@ class VoiceEngine(private val context: Context) {
                     }
 
                     override fun onCreateFailure(error: String?) {
+                        problem("${peer.username}: could not ${if (offer) "offer" else "answer"} - $error")
                         if (continuation.isActive) continuation.resumeWith(Result.success(null))
                     }
 
@@ -486,10 +812,108 @@ class VoiceEngine(private val context: Context) {
                 if (offer) pc.createOffer(observer, constraints) else pc.createAnswer(observer, constraints)
             }
 
+        /**
+         * Setting a description is awaited rather than fired and forgotten.
+         * `adopt` and `createAnswer` both depend on the remote description
+         * having actually landed, and the old code ran them against whatever
+         * state happened to be there.
+         */
+        private suspend fun setLocal(description: SessionDescription): Boolean =
+            applyDescription { observer -> pc.setLocalDescription(observer, description) }
+
+        private suspend fun setRemote(description: SessionDescription): Boolean =
+            applyDescription { observer -> pc.setRemoteDescription(observer, description) }
+
+        private suspend fun applyDescription(apply: (SdpObserver) -> Unit): Boolean =
+            suspendCancellableCoroutine { continuation ->
+                apply(
+                    object : SdpObserver {
+                        override fun onSetSuccess() {
+                            if (continuation.isActive) continuation.resumeWith(Result.success(true))
+                        }
+
+                        override fun onSetFailure(error: String?) {
+                            problem("${peer.username}: $error")
+                            if (continuation.isActive) continuation.resumeWith(Result.success(false))
+                        }
+
+                        override fun onCreateSuccess(description: SessionDescription?) = Unit
+                        override fun onCreateFailure(error: String?) = Unit
+                    },
+                )
+            }
+
+        /**
+         * Whether a camera and a share are really arriving, by counting frames,
+         * and who is speaking, by reading audio levels.
+         *
+         * Nothing a video receiver says is trustworthy: it unmutes on the
+         * padding sent to probe for bandwidth and stays unmuted after the far
+         * end stops, so both a share that never started and one that has ended
+         * look live. Frames decoded since the last look do not lie.
+         */
+        fun poll() {
+            if (closed) return
+            pc.getStats { report ->
+                val decoded = HashMap<String, Long>()
+                val levels = HashMap<String, Double>()
+                for (stats in report.statsMap.values) {
+                    if (stats.type != "inbound-rtp") continue
+                    val mid = stats.members["mid"] as? String ?: continue
+                    when (stats.members["kind"] as? String) {
+                        "video" -> decoded[mid] = (stats.members["framesDecoded"] as? Number)?.toLong() ?: 0L
+                        "audio" -> levels[mid] = (stats.members["audioLevel"] as? Number)?.toDouble() ?: 0.0
+                    }
+                }
+
+                val camera = liveVideo(Slot.CAMERA, decoded)
+                val screen = liveVideo(Slot.SCREEN, decoded)
+                val speaking = (levels[transceivers[Slot.MIC]?.mid] ?: 0.0) >= SPEAKING_LEVEL
+
+                scope.launch {
+                    update(peer.peerId) {
+                        it.copy(camera = camera, screen = screen, speaking = speaking)
+                    }
+                }
+            }
+        }
+
+        /** The track on a video slot, but only while frames are still arriving. */
+        private fun liveVideo(slot: Slot, decoded: Map<String, Long>): VideoTrack? {
+            val transceiver = transceivers[slot] ?: return null
+            val track = transceiver.receiver.track() as? VideoTrack ?: return null
+            val mid = transceiver.mid ?: return null
+
+            val now = decoded[mid] ?: 0L
+            val moving = now > (frames[slot] ?: 0L)
+            frames[slot] = now
+            return if (moving) track else null
+        }
+
+        private fun problem(message: String) {
+            scope.launch { _problem.value = message }
+        }
+
         fun close() {
+            closed = true
+            runCatching { data.unregisterObserver() }
+            runCatching { data.close() }
             runCatching { pc.close() }
             runCatching { pc.dispose() }
         }
+    }
+
+    private companion object {
+        /** The topic the desktop stamps its media state with. Must match. */
+        const val VOICE_STATE_TOPIC = "nexora.voice-state"
+
+        const val POLL_MS = 1_000L
+
+        /**
+         * Audio level above which somebody counts as speaking. About -40 dBFS:
+         * below a voice, above the residue a suppressor leaves.
+         */
+        const val SPEAKING_LEVEL = 0.01
     }
 }
 
@@ -509,10 +933,3 @@ private fun IceServer.toWebRtc(): PeerConnection.IceServer =
         .setUsername(username.orEmpty())
         .setPassword(credential.orEmpty())
         .createIceServer()
-
-private object NoopSdpObserver : SdpObserver {
-    override fun onCreateSuccess(description: SessionDescription?) = Unit
-    override fun onSetSuccess() = Unit
-    override fun onCreateFailure(error: String?) = Unit
-    override fun onSetFailure(error: String?) = Unit
-}
