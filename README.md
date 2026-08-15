@@ -63,16 +63,16 @@ internal routing, application logic, realtime media, and remote access.
       │   :5432    │            │   :6379   │  rate limits, sessions
       └────────────┘            └───────────┘
 
-  Desktop A ──── /ws/call ──▶ call-service :3007 ◀── /ws/call ──── Desktop B
-                              (roster, SDP, ICE relay)
-      │                                                                │
-      └──────────── WebRTC, direct: voice / video / screen ────────────┘
+  Client A (Desktop/Web/Android) ── /ws/call ──▶ call-service :3007 ◀── /ws/call ── Client B (Desktop/Web/Android)
+                                                 (roster, SDP, ICE relay)
+      │                                                                                        │
+      └───────────────────── WebRTC, direct: voice / video / screen ───────────────────────────┘
 ```
 
 There is no media server. `call-service` decides who may join a call and
 introduces the participants to each other; everyone then holds one
 `RTCPeerConnection` per other participant and the media goes straight between
-the two machines.
+the two clients.
 
 That is also what makes the deployment simple. A Cloudflare Tunnel carries HTTP
 and WebSocket and not UDP, so anything with a media server in it has to smuggle
@@ -86,13 +86,15 @@ calls want an SFU, and that would be a deliberate decision rather than a drift.
 
 ### How a request actually flows
 
-Sending a message, from the keystroke to the other person's screen. Every layer
+Sending a message, from the keystroke or tap to the other person's screen. Every layer
 does one job, and the boundaries are where the security properties live.
 
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
-│ 1  Electron renderer                                                 │
-│    Zustand store → encrypt with the channel key (AES-256-GCM)        │
+│ 1  Client (Desktop Electron / Browser Web / Native Android)          │
+│    Store/State → encrypt with the channel key (AES-256-GCM)          │
+│    • Desktop/Web: Zustand store + WebCrypto API                      │
+│    • Android: Conversation store + javax.crypto AES/GCM/NoPadding    │
 │    Plaintext stops here. Everything below sees ciphertext.           │
 └───────────────────────────────┬──────────────────────────────────────┘
                                 │  POST /api/v1/messages   (JWT bearer)
@@ -120,6 +122,7 @@ does one job, and the boundaries are where the security properties live.
 ┌───────────────────────────────▼──────────────────────────────────────┐
 │ 5  PostgreSQL :5432                                                  │
 │    messages(id, channelId, authorId, content = ciphertext, …)        │
+│    attachments(id, key, size, … = ciphertext / unidentifiable blobs) │
 └───────────────────────────────┬──────────────────────────────────────┘
                                 │  row written
 ┌───────────────────────────────▼──────────────────────────────────────┐
@@ -130,8 +133,8 @@ does one job, and the boundaries are where the security properties live.
                                 │
 ┌───────────────────────────────▼──────────────────────────────────────┐
 │ 7  /ws/chat gateways → sockets subscribed to that channel            │
-│    → each renderer decrypts with its own copy of the channel key,    │
-│      updates the store, and decides whether to notify                │
+│    → each client (Desktop / Web / Android) decrypts with channel key │
+│      updates local state/cache (Zustand / Room DB) and notifies      │
 └──────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -141,14 +144,15 @@ one that came back through the fanout.
 
 Reads take the first five steps and stop: `GET /api/v1/messages` is the same
 guard, the same access check, and one indexed Prisma query on
-`(channelId, createdAt)`. The client caches the decrypted result per channel in
-memory, so reopening a conversation paints immediately and refreshes behind it.
+`(channelId, createdAt)`. The clients (Desktop, Web, Android) cache the decrypted
+result per channel in memory/Room DB, so reopening a conversation paints immediately
+and refreshes behind it.
 
 Two paths deliberately skip this stack:
 
-- **Media** goes `desktop → desktop` over WebRTC. `call-service` only relays the
-  offers, answers and ICE candidates the two clients use to find each other.
-- **Attachments** are sealed in the renderer and uploaded as bytes; the server
+- **Media** goes `client ↔ client` over WebRTC mesh (Desktop, Web, Android). `call-service` only relays the
+  offers, answers and ICE candidates the clients use to find each other.
+- **Attachments** are sealed on the client (Desktop, Web, Android) and uploaded as encrypted bytes; the server
   stores an object it cannot type and hands back a key.
 
 ### Services
