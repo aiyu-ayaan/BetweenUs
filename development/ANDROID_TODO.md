@@ -179,20 +179,51 @@ needs something the desktop does not.
       moment it means something rather than on launch.
 - [ ] Never log a registration token, an access token or a refresh token.
 
-## Phase 6 — Voice and video ✅ (unverified)
+## Phase 6 — Voice and video ✅ (compiles; not yet seen working on a device)
 
 - [x] WebRTC dependency (`io.github.webrtc-sdk:android` or equivalent) —
       the mesh, not an SFU.
 - [x] `/ws/call` signalling client: roster, offer/answer, ICE, matching
       `apps/desktop/src/services/mesh.ts`.
+- [x] The four fixed transceiver slots, in the desktop's order — mic, camera,
+      screen, screen audio — created by the impolite side and adopted by the
+      polite one. This is the interop contract, not an implementation detail;
+      see the note below.
+- [x] Perfect negotiation, and ICE candidates queued until there is a remote
+      description to attach them to.
+- [x] Media state over the negotiated `nexora.share` data channel, so a muted
+      microphone is told apart from a quiet room.
 - [x] One `PeerConnection` per other participant; the same 2–5 comfortable /
       6–8 degraded ceiling the desktop has.
-- [x] Mic capture, mute, speaker/earpiece routing, Bluetooth headsets.
+- [x] Mic capture, mute, speaker routing, audio focus.
 - [x] Camera capture, front/back switch.
-- [x] Foreground service + ongoing notification while in a call; call survives
-      backgrounding and screen lock.
+- [x] Foreground service with a `CallStyle` ongoing notification, hang-up and
+      mute actions; call survives backgrounding and screen lock.
+- [x] `POST_NOTIFICATIONS` asked for when a call is joined, alongside the
+      microphone — refusing it does not refuse the call.
 - [ ] Incoming-call UI, from an FCM push when the app is dead.
-- [ ] Audio focus, ducking, and behaviour on an incoming phone call.
+- [ ] Ducking, and behaviour on an incoming phone call.
+- [ ] Bluetooth and wired-headset routing, and a route picker.
+
+### The slot contract
+
+Both clients build every connection with exactly four transceivers in one
+order — mic, camera, screen, screen audio — and identify what arrived by which
+slot it came in on. Only the impolite side creates them; the polite side adopts
+the four the offer brought.
+
+Android did not do this at first. It added whatever it happened to be
+capturing, so a phone offered a desktop one audio m-line where four were
+expected, the desktop's `adopt` refused to run, and it put no track on the wire
+at all. Both ends showed two connected tiles and carried nothing in either
+direction — the exact failure the desktop comment warns about, arrived at from
+the other side.
+
+A phone never sends on the screen-audio slot: Android's playback capture needs
+its own consent flow and is not wired up. The slot still exists, because
+dropping it would shift every m-line after it.
+
+Anything changing the slots has to change both clients in the same commit.
 
 ## Phase 7 — Screen share and viewing ✅ (unverified)
 
