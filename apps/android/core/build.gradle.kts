@@ -46,6 +46,9 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
+        // minSdk 24 has no java.time. Desugaring is one line and gets it, which
+        // beats hand-parsing an ISO timestamp in three places.
+        isCoreLibraryDesugaringEnabled = true
     }
     buildFeatures {
         buildConfig = true
@@ -53,6 +56,7 @@ android {
 }
 
 dependencies {
+    coreLibraryDesugaring(libs.desugar.jdk.libs)
     implementation(libs.androidx.core.ktx)
     // Every public type here is a suspend function or a StateFlow, so callers
     // need coroutines on their own compile classpath: api, not implementation.

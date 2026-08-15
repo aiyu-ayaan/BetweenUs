@@ -181,11 +181,19 @@ object Crypto {
         return output
     }
 
-    /** HMAC-SHA256 under the channel key: what signs a DTLS fingerprint. */
-    fun hmacSha256(keyBase64: String, message: String): String {
+    /**
+     * `HMAC-SHA256(channel key, fingerprint)`, base64 - what signs a DTLS
+     * fingerprint so the signalling relay cannot substitute one of its own.
+     *
+     * The key is the UTF-8 bytes of the base64 *string*, not the 32 bytes it
+     * decodes to. That is what `signFingerprint` in the desktop's mesh.ts does,
+     * and matching it is the whole requirement: a signature computed over
+     * different key bytes verifies nowhere and every call fails to connect.
+     */
+    fun signFingerprint(channelKey: String, fingerprint: String): String {
         val mac = Mac.getInstance("HmacSHA256")
-        mac.init(SecretKeySpec(unbase64(keyBase64), "HmacSHA256"))
-        return base64(mac.doFinal(message.toByteArray()))
+        mac.init(SecretKeySpec(channelKey.toByteArray(), "HmacSHA256"))
+        return base64(mac.doFinal(fingerprint.toByteArray()))
     }
 
     // --- content ---

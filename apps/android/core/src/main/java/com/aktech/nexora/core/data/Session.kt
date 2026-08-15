@@ -4,6 +4,9 @@ import android.content.Context
 import android.content.SharedPreferences
 import com.aktech.nexora.core.crypto.BackupSecret
 import com.aktech.nexora.core.crypto.E2ee
+import com.aktech.nexora.core.store.Conversation
+import com.aktech.nexora.core.store.Presence
+import com.aktech.nexora.core.store.Workspace
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -97,6 +100,9 @@ object Session {
         val token = accessToken ?: return
         ChatSocket.connect(token)
         PresenceSocket.connect(token)
+        Presence.start()
+        Conversation.start()
+        Workspace.start()
         scope.launch { runCatching { E2ee.initIdentity(user.id, secret) } }
     }
 
@@ -174,6 +180,9 @@ object Session {
         CallSocket.disconnect()
         RemoteSocket.disconnect()
         E2ee.reset()
+        Workspace.stop()
+        Conversation.stop()
+        Presence.stop()
         _state.value = AuthPhase.SignedOut()
     }
 

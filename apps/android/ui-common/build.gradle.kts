@@ -20,6 +20,9 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
+        // minSdk 24 has no java.time. Desugaring is one line and gets it, which
+        // beats hand-parsing an ISO timestamp in three places.
+        isCoreLibraryDesugaringEnabled = true
     }
     buildFeatures {
         compose = true
@@ -27,6 +30,7 @@ android {
 }
 
 dependencies {
+    coreLibraryDesugaring(libs.desugar.jdk.libs)
     // Compose is the whole surface of this module - a feature that depends on
     // it is going to write @Composable functions, so it gets the toolkit too.
     api(platform(libs.androidx.compose.bom))
@@ -35,6 +39,8 @@ dependencies {
     api(libs.androidx.compose.ui.graphics)
     api(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.core.ktx)
+    // Avatars and server icons come off the deployment as URLs.
+    api(libs.coil.compose)
     debugImplementation(libs.androidx.compose.ui.tooling)
     testImplementation(libs.junit)
 }
