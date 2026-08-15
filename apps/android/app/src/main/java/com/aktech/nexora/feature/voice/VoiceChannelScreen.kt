@@ -26,10 +26,12 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -73,7 +75,9 @@ import org.webrtc.VideoTrack
 @Composable
 fun VoiceChannelScreen(channelId: String?, self: PublicUser, onBack: () -> Unit) {
     val context = LocalContext.current
-    val engine = remember { VoiceEngine(context) }
+    // The call belongs to the process, not to this composable. A rotation, a
+    // navigation, or the activity being rebuilt used to take the call with it.
+    val engine = remember { VoiceEngine.of(context) }
 
     val state by engine.state.collectAsState()
     val participants by engine.participants.collectAsState()
@@ -85,8 +89,27 @@ fun VoiceChannelScreen(channelId: String?, self: PublicUser, onBack: () -> Unit)
 
     val channel = channelId?.let { Workspace.channel(it) }
 
-    DisposableEffect(engine) {
-        onDispose { engine.dispose() }
+    // Somebody else's screen takes the whole display: a share is usually text,
+    // and text in a quarter of a phone is not text. Closing the stage goes back
+    // to the grid and is remembered, so it does not reopen on the next poll -
+    // only a share that stops and starts again does that.
+    val watching = participants.firstOrNull { it.screen != null }
+    var dismissed by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(watching?.peer?.peerId) {
+        if (watching == null) dismissed = null
+    }
+
+    if (watching != null && watching.peer.peerId != dismissed) {
+        ShareStage(
+            label = watching.peer.username,
+            track = watching.screen!!,
+            eglContext = engine.eglBase.eglBaseContext,
+            muted = muted,
+            onToggleMute = engine::toggleMute,
+            onLeave = { engine.leave(); onBack() },
+            onClose = { dismissed = watching.peer.peerId },
+        )
+        return
     }
 
     // The microphone is the one that decides whether the call happens.
