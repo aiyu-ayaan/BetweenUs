@@ -267,9 +267,10 @@ class VoiceEngine(private val context: Context) {
     fun leave() {
         CallSocket.leave()
         channelId?.let { PresenceSocket.leaveVoice(it) }
-        teardown()
+        // The state goes first, and it matters. See `teardown`.
         _state.value = CallState.Idle
         channelId = null
+        teardown()
     }
 
     /**
@@ -298,10 +299,22 @@ class VoiceEngine(private val context: Context) {
      * listener, and every retry added another listener to the pile.
      */
     private fun fail(reason: String) {
-        teardown()
         _state.value = CallState.Failed(reason)
+        teardown()
     }
 
+    /**
+     * Tears the call down. Both callers set the state *before* calling this,
+     * and that is not a style choice.
+     *
+     * `stopVideo` ends with `afterMediaChange`, which restarts the foreground
+     * service whenever `inCall()` is true - it has to, because giving up the
+     * camera changes the types the service may legally claim. With the state
+     * still saying `Live`, hanging up stopped the service and then started it
+     * again three lines later, and the call notification came back with a fresh
+     * chronometer for a call that had ended. Hanging up from the notification
+     * did the same thing, so it could not be got rid of at all.
+     */
     private fun teardown() {
         pollJob?.cancel()
         pollJob = null
