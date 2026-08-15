@@ -228,8 +228,27 @@ Anything changing the slots has to change both clients in the same commit.
 ## Phase 7 — Screen share and viewing ✅ (unverified)
 
 - [x] `MediaProjection` capture as an outbound share.
-- [ ] Viewing someone else's share full-screen, with pinch-zoom.
+- [x] Viewing someone else's share full-screen, with pinch-zoom, pan and
+      double-tap to reset.
+- [x] Orientation the viewer chooses, overriding the phone's rotation lock, and
+      handed back when the stage closes.
 - [ ] Quality ladder mirroring `share-quality.ts`.
+
+A share is not another tile in the grid. It is usually text, and text in a
+quarter of a phone screen is not text, so an arriving share takes the whole
+display and the call controls come along on an overlay. Closing it goes back to
+the grid and is remembered per peer, so it does not reopen on the next stats
+poll - only a share that stops and starts again does that.
+
+## The call outlives its screen
+
+A call belongs to the process, like the session and the workspace, and only
+leaving ends it. It used to be `remember`ed inside the call screen, which meant
+a rotation ended it, navigating to a channel ended it, and - worst - tapping
+the ongoing notification ended it: the default launch mode built a second
+`MainActivity` over the first, so the call screen was destroyed and the new one
+started at the home screen. The activity is `singleTask` now and the intent
+says so too; both halves are needed.
 
 ## Phase 8 — Remote desktop (viewer only) ✅ (unverified)
 
