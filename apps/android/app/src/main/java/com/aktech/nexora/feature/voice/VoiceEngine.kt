@@ -8,6 +8,7 @@ import com.aktech.nexora.core.data.CallPeer
 import com.aktech.nexora.core.data.CallSocket
 import com.aktech.nexora.core.data.IceServer
 import com.aktech.nexora.core.data.NexoraApi
+import com.aktech.nexora.core.data.PresenceSocket
 import com.aktech.nexora.core.data.Session
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -190,6 +191,7 @@ class VoiceEngine(private val context: Context) {
     private var iceServers: List<PeerConnection.IceServer> = emptyList()
     private var detach: (() -> Unit)? = null
     private var pollJob: Job? = null
+    private var joinTimeout: Job? = null
 
     private var audioTrack: AudioTrack? = null
     private var videoCapturer: VideoCapturer? = null
@@ -225,7 +227,16 @@ class VoiceEngine(private val context: Context) {
 
                 detach = CallSocket.on { event -> scope.launch { onSignal(event) } }
                 Session.accessToken?.let { CallSocket.connect(it) }
-                CallSocket.send(JSONObject().put("type", "join").put("channelId", channelId))
+                CallSocket.join(channelId)
+
+                // Being in a call and being *seen* to be in one are two
+                // different subscriptions. The roster under a voice channel in
+                // everybody else's sidebar is presence, not the call service,
+                // so a client that skips this is in the call and on nobody's
+                // list - which is exactly how the phone looked from the web.
+                PresenceSocket.joinVoice(channelId)
+
+                startJoinTimeout(channelId)
 
                 // From here the call has to survive the screen going off, and
                 // the earpiece is not where a call this app starts belongs.
@@ -244,10 +255,31 @@ class VoiceEngine(private val context: Context) {
     }
 
     fun leave() {
-        CallSocket.send(JSONObject().put("type", "leave"))
+        CallSocket.leave()
+        channelId?.let { PresenceSocket.leaveVoice(it) }
         teardown()
         _state.value = CallState.Idle
         channelId = null
+    }
+
+    /**
+     * A join that is never answered has to end somewhere.
+     *
+     * The call service answers every join with `joined` or an error, so silence
+     * means the message never arrived - a socket that was still opening when
+     * the app was killed, a reconnect that lost the join, a service that was
+     * restarting. Without this the screen said "Connecting…" for as long as the
+     * process lived, and since the engine outlives the screen there was no way
+     * back: every later attempt found a call already "connecting" and returned.
+     */
+    private fun startJoinTimeout(channelId: String) {
+        joinTimeout?.cancel()
+        joinTimeout = scope.launch {
+            delay(JOIN_TIMEOUT_MS)
+            if (_state.value == CallState.Connecting(channelId)) {
+                fail("The call server did not answer. Try again.")
+            }
+        }
     }
 
     /**
@@ -263,6 +295,8 @@ class VoiceEngine(private val context: Context) {
     private fun teardown() {
         pollJob?.cancel()
         pollJob = null
+        joinTimeout?.cancel()
+        joinTimeout = null
         CallAudio.stop(context)
         CallService.stop(context)
         CallService.detach()
@@ -444,6 +478,8 @@ class VoiceEngine(private val context: Context) {
             "ready" -> selfPeerId = event.optString("peerId")
 
             "joined" -> {
+                joinTimeout?.cancel()
+                joinTimeout = null
                 _state.value = CallState.Live(channelId.orEmpty())
                 val peers = event.optJSONArray("peers")
                 for (index in 0 until (peers?.length() ?: 0)) {
@@ -938,6 +974,9 @@ class VoiceEngine(private val context: Context) {
         private const val VOICE_STATE_TOPIC = "nexora.voice-state"
 
         private const val POLL_MS = 1_000L
+
+        /** The desktop waits the same fifteen seconds before giving up on a join. */
+        private const val JOIN_TIMEOUT_MS = 15_000L
 
         /**
          * Audio level above which somebody counts as speaking. About -40 dBFS:
