@@ -959,13 +959,40 @@ class VoiceEngine(private val context: Context) {
          * having actually landed, and the old code ran them against whatever
          * state happened to be there.
          */
-        private suspend fun setLocal(description: SessionDescription): Boolean =
-            applyDescription { observer -> pc.setLocalDescription(observer, description) }
+        /**
+         * Sets the local description, with the receive-side quality asked for.
+         *
+         * The patch is a preference, not a requirement - a stack that refuses
+         * the munged SDP still has a working call - so the patched one is tried
+         * first and the untouched one is the fallback. Same shape as the
+         * desktop's `setLocalDescription`.
+         */
+        private suspend fun setLocal(description: SessionDescription): Boolean {
+            val patched = runCatching {
+                SdpQuality.patch(description.description, ShareQuality.screenBitrate(shareSize))
+            }.getOrNull()
+
+            if (patched != null && patched != description.description) {
+                val applied = applyDescription(quiet = true) { observer ->
+                    pc.setLocalDescription(observer, SessionDescription(description.type, patched))
+                }
+                if (applied) return true
+            }
+            return applyDescription { observer -> pc.setLocalDescription(observer, description) }
+        }
 
         private suspend fun setRemote(description: SessionDescription): Boolean =
             applyDescription { observer -> pc.setRemoteDescription(observer, description) }
 
-        private suspend fun applyDescription(apply: (SdpObserver) -> Unit): Boolean =
+        /**
+         * [quiet] is for an attempt that has a fallback behind it: a refused
+         * quality patch is not something to put in front of anybody, because
+         * the call carries on either way.
+         */
+        private suspend fun applyDescription(
+            quiet: Boolean = false,
+            apply: (SdpObserver) -> Unit,
+        ): Boolean =
             suspendCancellableCoroutine { continuation ->
                 apply(
                     object : SdpObserver {
@@ -974,7 +1001,7 @@ class VoiceEngine(private val context: Context) {
                         }
 
                         override fun onSetFailure(error: String?) {
-                            problem("${peer.username}: $error")
+                            if (!quiet) problem("${peer.username}: $error")
                             if (continuation.isActive) continuation.resumeWith(Result.success(false))
                         }
 
