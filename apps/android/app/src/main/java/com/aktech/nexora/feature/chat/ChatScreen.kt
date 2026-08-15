@@ -117,25 +117,7 @@ fun ChatScreen(
         }
     }
 
-    val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri == null) return@rememberLauncherForActivityResult
-        scope.launch {
-            uploading = true
-            failure = runCatching {
-                val resolver = context.contentResolver
-                val bytes = resolver.openInputStream(uri)?.use { it.readBytes() }
-                    ?: error("That file could not be read")
-                require(bytes.size <= MAX_ATTACHMENT_BYTES) {
-                    "That file is larger than 25 MB"
-                }
-                val name = uri.lastPathSegment?.substringAfterLast('/') ?: "attachment"
-                val type = resolver.getType(uri) ?: "application/octet-stream"
-                pending = pending + Conversation.uploadAttachment(channelId, name, type, bytes)
-                null
-            }.exceptionOrNull()?.message
-            uploading = false
-        }
-    }
+    var showAttachmentSheet by remember { mutableStateOf(false) }
 
     Column(
         Modifier
@@ -248,7 +230,7 @@ fun ChatScreen(
             uploading = uploading,
             onCancelEdit = { editing = null },
             onRemoveAttachment = { pending = pending - it },
-            onPickFile = { picker.launch(arrayOf("*/*")) },
+            onPickFile = { showAttachmentSheet = true },
             onSend = { text ->
                 scope.launch {
                     val target = editing
@@ -262,6 +244,34 @@ fun ChatScreen(
                         }
                         null
                     }.exceptionOrNull()?.message
+                }
+            },
+        )
+    }
+
+    if (showAttachmentSheet) {
+        AttachmentSheet(
+            onDismiss = { showAttachmentSheet = false },
+            onPicked = { uris ->
+                scope.launch {
+                    uploading = true
+                    failure = runCatching {
+                        uris.forEach { uri ->
+                            val picked = readPicked(context, uri)
+                            require(picked.bytes.size <= MAX_ATTACHMENT_BYTES) {
+                                "${picked.name} is larger than 25 MB"
+                            }
+                            val uploaded = Conversation.uploadAttachment(
+                                channelId = channelId,
+                                name = picked.name,
+                                contentType = picked.contentType,
+                                bytes = picked.bytes,
+                            )
+                            pending = pending + uploaded
+                        }
+                        null
+                    }.exceptionOrNull()?.message
+                    uploading = false
                 }
             },
         )
