@@ -14,8 +14,10 @@ import androidx.compose.foundation.gestures.rememberTransformableState
 import androidx.compose.foundation.gestures.transformable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -38,11 +40,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.DpSize
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.aktech.nexora.ui.components.Avatar
@@ -137,30 +142,13 @@ fun ShareStage(
     }
 
     Box(Modifier.fillMaxSize().background(Color.Black)) {
-        AndroidView(
-            factory = { context ->
-                SurfaceViewRenderer(context).apply {
-                    init(eglContext, null)
-                    // Fit, not fill: a share cropped to the phone's shape loses
-                    // its edges, which is where the toolbars are.
-                    setScalingType(RendererCommon.ScalingType.SCALE_ASPECT_FIT)
-                    setEnableHardwareScaler(true)
-                    track.addSink(this)
-                }
-            },
-            onRelease = { renderer ->
-                track.removeSink(renderer)
-                renderer.release()
-            },
-            modifier = Modifier
-                .fillMaxSize()
-                .graphicsLayer(
-                    scaleX = scale,
-                    scaleY = scale,
-                    translationX = offsetX,
-                    translationY = offsetY,
-                )
-                .transformable(transform),
+        ProjectedVideo(
+            track = track,
+            eglContext = eglContext,
+            scale = scale,
+            offsetX = offsetX,
+            offsetY = offsetY,
+            modifier = Modifier.fillMaxSize().transformable(transform),
         )
 
         // Above the renderer, so a tap anywhere brings the chrome back.
@@ -291,6 +279,108 @@ fun ShareStage(
                 }
             }
         }
+    }
+}
+
+/**
+ * The share, at the shape and the resolution it is being sent at.
+ *
+ * Two things here are not the obvious way round, and both were wrong before.
+ *
+ * **The shape comes from the sender.** The renderer is laid out to the incoming
+ * frame's aspect ratio, reported by `onFrameResolutionChanged`, and centred in
+ * whatever is left. Handing a phone-shaped box to the renderer and asking it to
+ * fit inside it produces the same picture only when the phone happens to agree
+ * with the desktop about what shape a screen is, which it never does.
+ *
+ * **Zooming resizes the view rather than transforming it.** A
+ * `SurfaceViewRenderer` is a `SurfaceView`: the video is punched through the
+ * window by the compositor, not drawn into the Compose layer tree, so a
+ * `graphicsLayer` scale moves the hole and not the picture. Laying the view out
+ * bigger is what actually magnifies it - and it magnifies properly, because the
+ * surface is reallocated at the new size and the frame is drawn into it at that
+ * resolution.
+ *
+ * Which is also why the hardware scaler is off. It sizes the surface buffer to
+ * the view, so a share fitted into a phone-sized box was being resampled down
+ * to that box and then blown back up by the zoom: a blurred copy of a picture
+ * that arrived sharp.
+ *
+ * ponytail: no quality ladder on the receiving side, because there is nothing
+ * here to turn. What arrives is what the sender chose to send - see
+ * `share-quality.ts` on the desktop - and asking for more is a REMB/bitrate
+ * negotiation this does not have.
+ */
+@Composable
+private fun ProjectedVideo(
+    track: VideoTrack,
+    eglContext: EglBase.Context,
+    scale: Float,
+    offsetX: Float,
+    offsetY: Float,
+    modifier: Modifier = Modifier,
+) {
+    // 16:9 until the first frame says otherwise, which is one frame away.
+    var aspect by remember { mutableFloatStateOf(16f / 9f) }
+
+    val events = remember {
+        object : RendererCommon.RendererEvents {
+            override fun onFirstFrameRendered() = Unit
+
+            override fun onFrameResolutionChanged(width: Int, height: Int, rotation: Int) {
+                if (width <= 0 || height <= 0) return
+                // A rotated frame arrives with its axes swapped; the shape on
+                // screen is the shape after rotation.
+                val upright = rotation == 90 || rotation == 270
+                val w = if (upright) height else width
+                val h = if (upright) width else height
+                aspect = w.toFloat() / h.toFloat()
+            }
+        }
+    }
+
+    BoxWithConstraints(modifier.clipToBounds(), contentAlignment = Alignment.Center) {
+        val boxAspect = maxWidth / maxHeight
+        // The largest rectangle of the sender's shape that fits, then zoom.
+        val fitted = if (boxAspect > aspect) {
+            DpSize(maxHeight * aspect, maxHeight)
+        } else {
+            DpSize(maxWidth, maxWidth / aspect)
+        }
+
+        val density = LocalDensity.current
+        val width = fitted.width * scale
+        val height = fitted.height * scale
+
+        // Panning is bounded by how much of the picture is off-screen, so it
+        // cannot be dragged away and lost.
+        val slackX = with(density) { ((width - maxWidth).coerceAtLeast(0.dp)).toPx() / 2f }
+        val slackY = with(density) { ((height - maxHeight).coerceAtLeast(0.dp)).toPx() / 2f }
+
+        AndroidView(
+            factory = { context ->
+                SurfaceViewRenderer(context).apply {
+                    init(eglContext, events)
+                    setScalingType(RendererCommon.ScalingType.SCALE_ASPECT_FIT)
+                    // Off on purpose. See the note above: this is what was
+                    // resampling the share down to the size of a phone.
+                    setEnableHardwareScaler(false)
+                    track.addSink(this)
+                }
+            },
+            onRelease = { renderer ->
+                track.removeSink(renderer)
+                renderer.release()
+            },
+            modifier = Modifier
+                .size(width, height)
+                .offset {
+                    IntOffset(
+                        offsetX.coerceIn(-slackX, slackX).toInt(),
+                        offsetY.coerceIn(-slackY, slackY).toInt(),
+                    )
+                },
+        )
     }
 }
 
