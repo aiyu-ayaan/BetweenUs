@@ -35,24 +35,37 @@ channel to attach itself to.
 - **No media server, ever.** Voice, video, screen share and the remote-desktop
   picture are peer-to-peer WebRTC, exactly as on desktop. The Android client
   gets its ICE servers from `call-service` and nothing else.
-- **Keep the layers thin.** `data/` (endpoint, api, session) → `feature/` (UI +
-  a ViewModel per screen). No dependency-injection framework until there is
-  something to inject that a constructor cannot supply.
-- **Design system is shared, not re-invented.** `ui/theme/Color.kt` mirrors
-  `apps/desktop/tailwind.theme.mjs`. When that file changes, this one changes.
+- **Three Gradle modules, and the dependency arrow only points one way.**
+
+      :core        session, endpoint, HTTP, API client. No Compose, no UI.
+      :ui-common   palette, type scale, shared widgets and marks. No business
+                   logic and no knowledge of any endpoint.
+      :app         features (a screen plus its ViewModel), the Application and
+                   the Activity. The only module that knows about both others.
+
+  A feature that wants a colour takes it from `:ui-common`; a widget that wants
+  to know who is signed in is a widget in the wrong module.
+- **No dependency-injection framework** until there is something to inject that
+  a constructor cannot supply.
+- **Design system is shared, not re-invented.** `:ui-common`'s `theme/Color.kt`
+  mirrors `apps/desktop/tailwind.theme.mjs`. When that file changes, this one
+  changes.
 
 ---
 
 ## Phase 1 — Foundation ✅
 
-- [x] Compose scaffold, `minSdk 24`, edge-to-edge.
+- [x] Compose scaffold, `minSdk 24`, `compileSdk 37`, edge-to-edge.
+- [x] `:core` and `:ui-common` split out of `:app`.
 - [x] `Nexora` colour ramp, typography and shapes ported from
       `apps/desktop/tailwind.theme.mjs` (ground, surface 500–950, accent, status,
       danger, hairline edge).
 - [x] `local.properties` key `nexora.serverUrl` read at build time into
-      `BuildConfig.DEFAULT_SERVER_URL`, defaulting to the emulator loopback
-      `http://10.0.2.2:8080`.
-- [x] `INTERNET` permission; cleartext allowed for private/LAN hosts only.
+      `:core`'s `BuildConfig.DEFAULT_SERVER_URL`, defaulting to the emulator
+      loopback `http://10.0.2.2:8080`.
+- [x] `INTERNET` permission, and a network security config that permits
+      cleartext — self-hosted boxes on a LAN are plain http, and Android cannot
+      express "private ranges only" here. See the hardening phase.
 
 ## Phase 2 — Sign in ✅
 
@@ -65,8 +78,11 @@ channel to attach itself to.
       prefs, restore on cold start.
 - [x] Login / register screen with the same copy and shape as
       `apps/desktop/src/features/auth/LoginScreen.tsx`.
-- [x] Server picker sheet, including "back to the default".
+- [x] Server picker bottom sheet, including "back to the default"; switching
+      signs out and recreates the activity.
 - [x] Home placeholder showing the signed-in account and a sign-out.
+- [x] `EndpointTest` covering address normalisation and probe-URL handling, the
+      same cases as `apps/desktop/src/services/endpoint.check.ts`.
 
 ## Phase 3 — Servers, channels, messages (REST)
 
@@ -182,8 +198,6 @@ needs something the desktop does not.
 - [ ] R8/ProGuard rules, shrink, and a release signing config sourced from
       `local.properties`.
 - [ ] Instrumented tests for sign-in, server switch, send-message.
-- [ ] Unit tests for `Endpoint` normalisation and probe-URL handling, mirroring
-      `apps/desktop/src/services/endpoint.check.ts`.
 - [ ] Crash reporting, opt-in.
 - [ ] CI: assemble debug on pull request, alongside the existing pnpm jobs.
 

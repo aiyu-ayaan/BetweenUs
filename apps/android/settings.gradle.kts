@@ -24,3 +24,5 @@ dependencyResolutionManagement {
 
 rootProject.name = "Nexora"
 include(":app")
+include(":core")
+include(":ui-common")
