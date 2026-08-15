@@ -225,6 +225,7 @@ export function resetE2ee(): void {
   channels.clear();
   inFlight.clear();
   rekeyed.clear();
+  missedEpochs.clear();
   setIdentityStatus({ status: 'absent' });
 }
 
@@ -305,14 +306,46 @@ export async function syncChannelKeys(channelId: string): Promise<void> {
   await shareKey(channelId, state.epoch, key, latest.missingRecipients);
 }
 
+/**
+ * Epochs this client has already gone back to the directory for and still not
+ * found. Without it, a channel with one genuinely unreadable message would
+ * re-read the key directory on every render of that message.
+ */
+const missedEpochs = new Set<string>();
+
 async function keyForEpoch(channelId: string, epoch: number): Promise<string> {
   const cached = channels.get(channelId)?.keys.get(epoch);
   if (cached) return cached;
 
   const state = await ensureChannelKey(channelId);
   const key = state.keys.get(epoch);
-  if (!key) throw new MissingChannelKeyError();
-  return key;
+  if (key) return key;
+
+  // An epoch we hold nothing for, on a channel we already loaded. Somebody
+  // re-keyed it while we were holding the old one - a member who joined after
+  // it was minted and could not wait for a re-wrap does exactly that - and our
+  // cached state is now behind. Re-read once.
+  //
+  // Without this the two clients sit on different epochs until one of them is
+  // restarted, each rendering the other's messages as "no key on this device",
+  // and each *sending* under its own stale epoch so the other cannot read the
+  // reply either. Reloading also moves this client onto the newer epoch, which
+  // is what makes the next message readable in both directions.
+  const seen = `${channelId}#${epoch}`;
+  if (missedEpochs.has(seen)) throw new MissingChannelKeyError();
+  missedEpochs.add(seen);
+
+  channels.delete(channelId);
+  const reloaded = await ensureChannelKey(channelId);
+  const fresh = reloaded.keys.get(epoch);
+  if (!fresh) throw new MissingChannelKeyError();
+
+  // It was there after all, so anything else we gave up on for this channel
+  // deserves another go.
+  for (const key of [...missedEpochs]) {
+    if (key.startsWith(`${channelId}#`)) missedEpochs.delete(key);
+  }
+  return fresh;
 }
 
 /**

@@ -66,6 +66,13 @@ object E2ee {
      */
     private val rekeyed = ConcurrentHashMap.newKeySet<String>()
 
+    /**
+     * Epochs this client has already gone back to the directory for and still
+     * not found. Without it, a channel holding one genuinely unreadable message
+     * would re-read the key directory every time that message is drawn.
+     */
+    private val missedEpochs = ConcurrentHashMap.newKeySet<String>()
+
     private val _status = MutableStateFlow<IdentityStatus>(IdentityStatus.Absent)
     val status: StateFlow<IdentityStatus> = _status.asStateFlow()
 
@@ -159,6 +166,7 @@ object E2ee {
         channels.clear()
         channelLocks.clear()
         rekeyed.clear()
+        missedEpochs.clear()
         _status.value = IdentityStatus.Absent
     }
 
@@ -313,8 +321,27 @@ object E2ee {
 
     private suspend fun keyForEpoch(channelId: String, epoch: Int): String? {
         channels[channelId]?.keys?.get(epoch)?.let { return it }
-        val state = runCatching { ensureChannelKey(channelId) }.getOrNull() ?: return null
-        return state.keys[epoch]
+        runCatching { ensureChannelKey(channelId) }.getOrNull()?.keys?.get(epoch)?.let { return it }
+
+        // An epoch we hold nothing for, on a channel we have already loaded.
+        // Somebody re-keyed it while we were holding the old one - which is
+        // exactly what a member who joined after the key was minted does, since
+        // waiting for a re-wrap is not a fix - and our cached state is behind.
+        //
+        // Without re-reading here, the two clients sit on different epochs
+        // until one of them is restarted: each renders the other's messages as
+        // "no key on this device", and each keeps *sending* under its own stale
+        // epoch so the reply is unreadable too. Reloading also moves this
+        // client onto the newer epoch, which is what makes the conversation
+        // work in both directions again.
+        if (!missedEpochs.add("$channelId#$epoch")) return null
+        channels.remove(channelId)
+
+        val fresh = runCatching { ensureChannelKey(channelId) }.getOrNull()?.keys?.get(epoch)
+        // It was there after all, so anything else given up on for this channel
+        // deserves another go.
+        if (fresh != null) missedEpochs.removeAll { it.startsWith("$channelId#") }
+        return fresh
     }
 
     /**
