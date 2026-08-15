@@ -11,15 +11,23 @@ land, and keep "Next up" honest — it is what a new session reads first.
 
 ## Next up
 
-Phase 1 (foundation) and phase 2 (sign in) have landed: the app reads a default
-server address out of `local.properties`, lets a person point it at another
-deployment the way the desktop server picker does, signs in or registers
-against `/api/v1/auth`, keeps the session across restarts, and lands on a
-placeholder home screen.
+Phases 1 to 4 and 6 to 12 have landed in code. The client signs in, keys
+itself, reads and writes end-to-end encrypted messages, holds both realtime
+sockets, and has voice, screen share and a remote-desktop viewer built on the
+same WebRTC mesh the desktop uses.
 
-Nothing after phase 2 exists yet. Phase 3 (servers, channels, messages over
-REST) is the next thing worth building, because every later phase needs a
-channel to attach itself to.
+What has actually been in front of a human, on an emulator against a locally
+running backend: register, sign in, session restore across a cold start, server
+switch, create a server, open a channel, send a message, react to it. The
+server was checked and holds `{"v":1,"epoch":1,"iv":...,"ct":...}` - the
+plaintext never left the phone.
+
+**Everything to do with media is unverified.** A mesh needs two ends, and
+nobody has put two devices in a call or driven a real agent's screen. Those are
+the cases the design is built around and the ones most likely to be wrong.
+
+Phase 5 (FCM) is the largest thing not started, and the only one that needs
+backend work.
 
 ### Pointing a local build at a local backend
 
@@ -30,8 +38,15 @@ listening:
 
 | Backend you are running | `nexora.serverUrl` in `apps/android/local.properties` |
 | --- | --- |
-| `pnpm dev` (services only) | `http://10.0.2.2:3001` — auth-service directly, which is all phase 2 calls |
-| `pnpm dev:infra` (gateway container) | `http://10.0.2.2:8080` — the real thing, and what phase 3 needs |
+| `pnpm dev` + `pnpm dev:gateway` | `http://10.0.2.2:8090` — the development stand-in for Nginx, and what everything past phase 2 needs |
+| `pnpm dev:infra` (gateway container) | `http://10.0.2.2:8080` — the real thing |
+
+`pnpm dev:gateway` is `scripts/dev-gateway.mjs`: it routes every `/api/v1/*`
+and `/ws/*` the way `infrastructure/nginx/nginx.conf` does, and exists because
+Android cannot use the Vite proxy the desktop and web clients get. It listens
+on 8090 rather than 8080 so it can run alongside the container stack — and
+because on Windows 8080 often sits inside a reserved port range and cannot be
+bound at all.
 
 `10.0.2.2` is the emulator's route to the host's loopback, so it reaches a
 locally running service without going near the LAN address or the host
@@ -83,7 +98,7 @@ data is cleared.
       danger, hairline edge).
 - [x] `local.properties` key `nexora.serverUrl` read at build time into
       `:core`'s `BuildConfig.DEFAULT_SERVER_URL`, defaulting to the emulator
-      loopback `http://10.0.2.2:8080`.
+      loopback. See the table above for which port to point it at.
 - [x] `INTERNET` permission, and a network security config that permits
       cleartext — self-hosted boxes on a LAN are plain http, and Android cannot
       express "private ranges only" here. See the hardening phase.
@@ -93,8 +108,8 @@ data is cleared.
 - [x] `Endpoint`: normalise a typed address, remember a chosen one, fall back to
       the build default, probe `/api/v1/auth/oauth/providers` before committing.
       Mirrors `apps/desktop/src/services/endpoint.ts`.
-- [x] `NexoraApi`: JSON over `HttpURLConnection`, bearer access token, single
-      refresh on 401 with one retry. Mirrors `apps/desktop/src/services/api.ts`.
+- [x] `NexoraApi`: JSON over OkHttp, bearer access token, single refresh on a
+      401 with one retry. Mirrors `apps/desktop/src/services/api.ts`.
 - [x] `Session`: access token in memory, refresh token and last email in
       prefs, restore on cold start.
 - [x] Login / register screen with the same copy and shape as
@@ -105,23 +120,28 @@ data is cleared.
 - [x] `EndpointTest` covering address normalisation and probe-URL handling, the
       same cases as `apps/desktop/src/services/endpoint.check.ts`.
 
-## Phase 3 — Servers, channels, messages (REST)
+## Phase 3 — Servers, channels, messages (REST) ✅
 
-- [ ] `GET /api/v1/servers` list, server rail as a Compose drawer.
-- [ ] Channel list per server; text channels only for now.
-- [ ] Message history, pagination, send/edit/delete, replies.
-- [ ] Direct messages and the DM list.
-- [ ] Reactions.
-- [ ] Attachments: pick, upload to `/api/v1/uploads`, render images inline.
+- [x] `GET /api/v1/servers` list, server rail as a Compose drawer.
+- [x] Channel list per server; text channels only for now.
+- [x] Message history, pagination, send, edit, delete, pin.
+- [ ] Replies. The desktop has them; nothing here threads a message yet.
+- [x] Direct messages and the DM list.
+- [x] Reactions.
+- [x] Attachments: pick, upload to `/api/v1/uploads`, render images inline.
 - [ ] Markdown-ish message body rendering, matching
       `apps/desktop/src/services/message-body.ts`.
 
-## Phase 4 — Realtime
+## Phase 4 — Realtime ✅
 
-- [ ] `/ws/chat` client with reconnect and backoff, carrying the access token.
-- [ ] `/ws/presence`: online/idle/dnd/offline, typing indicators.
-- [ ] Reconnect on token refresh, on network change and on app resume.
-- [ ] Unread state and per-channel read markers.
+- [x] `/ws/chat` client with reconnect and backoff, carrying the access token.
+- [x] `/ws/presence`: online/idle/dnd/offline, typing indicators.
+- [x] Reconnect on token refresh, and on any socket failure with backoff.
+- [ ] Reconnect driven by a network-change callback and by app resume, rather
+      than waiting for the backoff timer to come round.
+- [x] Unread state and per-channel read markers.
+- [ ] An OS notification for a message that arrives while the app is open but
+      the channel is not on screen. Everything is in place except the posting.
 
 ## Phase 5 — Notifications (FCM)
 
@@ -150,59 +170,59 @@ needs something the desktop does not.
       moment it means something rather than on launch.
 - [ ] Never log a registration token, an access token or a refresh token.
 
-## Phase 6 — Voice and video
+## Phase 6 — Voice and video ✅ (unverified)
 
-- [ ] WebRTC dependency (`io.github.webrtc-sdk:android` or equivalent) —
+- [x] WebRTC dependency (`io.github.webrtc-sdk:android` or equivalent) —
       the mesh, not an SFU.
-- [ ] `/ws/call` signalling client: roster, offer/answer, ICE, matching
+- [x] `/ws/call` signalling client: roster, offer/answer, ICE, matching
       `apps/desktop/src/services/mesh.ts`.
-- [ ] One `PeerConnection` per other participant; the same 2–5 comfortable /
+- [x] One `PeerConnection` per other participant; the same 2–5 comfortable /
       6–8 degraded ceiling the desktop has.
-- [ ] Mic capture, mute, speaker/earpiece routing, Bluetooth headsets.
-- [ ] Camera capture, front/back switch.
-- [ ] Foreground service + ongoing notification while in a call; call survives
+- [x] Mic capture, mute, speaker/earpiece routing, Bluetooth headsets.
+- [x] Camera capture, front/back switch.
+- [x] Foreground service + ongoing notification while in a call; call survives
       backgrounding and screen lock.
 - [ ] Incoming-call UI, from an FCM push when the app is dead.
 - [ ] Audio focus, ducking, and behaviour on an incoming phone call.
 
-## Phase 7 — Screen share and viewing
+## Phase 7 — Screen share and viewing ✅ (unverified)
 
-- [ ] `MediaProjection` capture as an outbound share.
+- [x] `MediaProjection` capture as an outbound share.
 - [ ] Viewing someone else's share full-screen, with pinch-zoom.
 - [ ] Quality ladder mirroring `share-quality.ts`.
 
-## Phase 8 — Remote desktop (viewer only)
+## Phase 8 — Remote desktop (viewer only) ✅ (unverified)
 
-- [ ] `/ws/remote` session handshake and permission checks.
-- [ ] Screen over WebRTC, direct to the agent.
-- [ ] Touch → mouse mapping; a soft keyboard for key events.
+- [x] `/ws/remote` session handshake and permission checks.
+- [x] Screen over WebRTC, direct to the agent.
+- [x] Touch → mouse mapping; a soft keyboard for key events.
 - [ ] Clipboard and file transfer, each gated on its own permission.
-- [ ] Audit trail is the gateway's job; the client only shows the state.
-- [ ] No Android *agent* — a phone is a controller, not a target.
+- [x] Audit trail is the gateway's job; the client only shows the state.
+- [x] No Android *agent* — a phone is a controller, not a target.
 
-## Phase 9 — End-to-end encryption
+## Phase 9 — End-to-end encryption ✅
 
-- [ ] Port the identity/device key model from `apps/desktop/src/services/e2ee.ts`.
-- [ ] Keys in the Android Keystore, not in prefs.
-- [ ] Device verification and the backup secret flow.
-- [ ] Decrypt history on a new device via the existing backup mechanism.
+- [x] Port the identity/device key model from `apps/desktop/src/services/e2ee.ts`.
+- [x] Keys in the Android Keystore, not in prefs.
+- [x] Device verification and the backup secret flow.
+- [x] Decrypt history on a new device via the existing backup mechanism.
 
-## Phase 10 — Settings and account
+## Phase 10 — Settings and account ✅
 
-- [ ] Profile: display name, username, avatar upload.
-- [ ] Password change, sessions/devices list, sign out everywhere.
-- [ ] Notification preferences per server and per channel.
+- [x] Profile: display name, username, avatar upload.
+- [x] Password change, sessions/devices list, sign out everywhere.
+- [x] Notification preferences per server and per channel.
 - [ ] Audio device and input-sensitivity settings.
 - [ ] Theme: dark is the design; a light variant only if it is asked for.
-- [ ] Server switcher reachable from settings, not just from the login screen.
+- [x] Server switcher reachable from settings, not just from the login screen.
 
-## Phase 11 — Servers, roles and moderation
+## Phase 11 — Servers, roles and moderation ✅
 
 - [ ] Create/join a server, invites, invite links.
-- [ ] Member list with presence and roles.
-- [ ] Role and permission editing for those who hold `MANAGE_ROLE`.
-- [ ] Channel create/rename/delete.
-- [ ] Every one of these is enforced server-side; the UI only hides what the
+- [x] Member list with presence and roles.
+- [x] Role and permission editing for those who hold `MANAGE_ROLE`.
+- [x] Channel create/rename/delete.
+- [x] Every one of these is enforced server-side; the UI only hides what the
       backend would refuse anyway.
 
 ## Phase 12 — OAuth sign-in
