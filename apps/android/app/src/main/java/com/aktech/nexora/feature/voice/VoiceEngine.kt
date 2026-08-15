@@ -573,6 +573,9 @@ class VoiceEngine(private val context: Context) {
         private var closed = false
         private val frames = HashMap<Slot, Long>()
 
+        /** Consecutive polls a video slot has gone without a new frame. */
+        private val stalled = HashMap<Slot, Int>()
+
         private val pc: PeerConnection = factory.createPeerConnection(
             PeerConnection.RTCConfiguration(iceServers).apply {
                 sdpSemantics = PeerConnection.SdpSemantics.UNIFIED_PLAN
@@ -919,7 +922,21 @@ class VoiceEngine(private val context: Context) {
             }
         }
 
-        /** The track on a video slot, but only while frames are still arriving. */
+        /**
+         * The track on a video slot, while frames are still arriving - with
+         * enough patience to survive a share that is simply not changing.
+         *
+         * Frames decoded is the only honest signal that something is arriving,
+         * because a receiver unmutes on the padding sent to probe for
+         * bandwidth. But a screen share of a document nobody is typing in sends
+         * almost nothing, so "no new frames this second" is not "the share
+         * ended" - and treating it as one made the share stage open, close,
+         * open and close again, taking the requested orientation down with it
+         * every time.
+         *
+         * So a slot goes live on the first frame and stays live until several
+         * seconds have passed with none.
+         */
         private fun liveVideo(slot: Slot, decoded: Map<String, Long>): VideoTrack? {
             val transceiver = transceivers[slot] ?: return null
             val track = transceiver.receiver.track() as? VideoTrack ?: return null
@@ -928,7 +945,13 @@ class VoiceEngine(private val context: Context) {
             val now = decoded[mid] ?: 0L
             val moving = now > (frames[slot] ?: 0L)
             frames[slot] = now
-            return if (moving) track else null
+
+            val misses = if (moving) 0 else (stalled[slot] ?: 0) + 1
+            stalled[slot] = misses
+
+            // Nothing has ever arrived on this slot: not live, no patience owed.
+            if (now == 0L) return null
+            return if (misses <= STALL_TOLERANCE) track else null
         }
 
         private fun problem(message: String) {
@@ -977,6 +1000,13 @@ class VoiceEngine(private val context: Context) {
 
         /** The desktop waits the same fifteen seconds before giving up on a join. */
         private const val JOIN_TIMEOUT_MS = 15_000L
+
+        /**
+         * Polls without a new frame before a video slot counts as finished.
+         * Five seconds: longer than any still moment in a screen share, short
+         * enough that a camera switched off does not linger.
+         */
+        private const val STALL_TOLERANCE = 5
 
         /**
          * Audio level above which somebody counts as speaking. About -40 dBFS:

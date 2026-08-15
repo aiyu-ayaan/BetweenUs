@@ -1,6 +1,8 @@
 package com.aktech.nexora.feature.voice
 
 import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
 import android.content.pm.ActivityInfo
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
@@ -112,7 +114,7 @@ fun ShareStage(
     onLeave: () -> Unit,
     onClose: () -> Unit,
 ) {
-    val activity = LocalContext.current as? Activity
+    val activity = LocalContext.current.findActivity()
     var orientation by rememberSaveable { mutableStateOf(StageOrientation.FOLLOW_PHONE) }
     var chrome by rememberSaveable { mutableStateOf(true) }
 
@@ -442,6 +444,20 @@ private fun FilmstripTile(
             )
         }
     }
+}
+
+/**
+ * The activity behind a composable's context.
+ *
+ * `LocalContext.current as? Activity` is the obvious line and it is wrong: the
+ * context Compose hands out is wrapped - by the theme, by the view tree - so
+ * the cast quietly produces null and every orientation request goes nowhere.
+ * A silent null is why the landscape button appeared to do nothing at all.
+ */
+private tailrec fun Context.findActivity(): Activity? = when (this) {
+    is Activity -> this
+    is ContextWrapper -> baseContext.findActivity()
+    else -> null
 }
 
 /**
