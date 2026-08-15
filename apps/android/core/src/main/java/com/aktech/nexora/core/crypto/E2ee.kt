@@ -308,9 +308,21 @@ object E2ee {
      */
     suspend fun syncChannelKeys(channelId: String) {
         val state = runCatching { ensureChannelKey(channelId) }.getOrNull() ?: return
-        val key = state.keys[state.epoch] ?: return
         val latest = NexoraApi.channelKeys(channelId)
-        if (latest.epoch != state.epoch || latest.missingRecipients.isEmpty()) return
+
+        // Held state now survives a restart, so it can be days rather than
+        // minutes behind. A different epoch means somebody re-keyed the channel
+        // while this device was closed: ours is stale and theirs is the one
+        // that counts. Without this the client would go on sealing under a dead
+        // epoch until something else happened to invalidate it.
+        if (latest.epoch != state.epoch) {
+            forgetKeys(channelId)
+            runCatching { ensureChannelKey(channelId) }
+            return
+        }
+
+        val key = state.keys[state.epoch] ?: return
+        if (latest.missingRecipients.isEmpty()) return
         shareKey(channelId, state.epoch, key, latest.missingRecipients)
     }
 
@@ -335,7 +347,7 @@ object E2ee {
         // client onto the newer epoch, which is what makes the conversation
         // work in both directions again.
         if (!missedEpochs.add("$channelId#$epoch")) return null
-        channels.remove(channelId)
+        forgetKeys(channelId)
 
         val fresh = runCatching { ensureChannelKey(channelId) }.getOrNull()?.keys?.get(epoch)
         // It was there after all, so anything else given up on for this channel
@@ -352,8 +364,54 @@ object E2ee {
         channels[channelId]?.let { return it }
         val lock = channelLocks.getOrPut(channelId) { Mutex() }
         return lock.withLock {
-            channels[channelId] ?: loadChannelKey(channelId).also { channels[channelId] = it }
+            channels[channelId]
+                ?: recallKeys(channelId)?.also { channels[channelId] = it }
+                ?: loadChannelKey(channelId).also {
+                    channels[channelId] = it
+                    rememberKeys(channelId, it)
+                }
         }
+    }
+
+    // --- channel keys at rest ---
+    //
+    // Without these, the message cache is useless: every cached row is an
+    // envelope, and opening one meant a round trip to the key directory first.
+    // A conversation would come back off disk instantly and then sit there
+    // saying it had no key until the network answered - and say it for good
+    // when there was no network to answer.
+    //
+    // They go in the same Keystore-sealed store the identity does, and not in
+    // the cache database, which is deliberately worth nothing on its own.
+
+    private fun keyStorageKey(channelId: String): String? =
+        userId?.let { "channelkeys:$it:$channelId" }
+
+    private fun rememberKeys(channelId: String, state: ChannelKeyState) {
+        val name = keyStorageKey(channelId) ?: return
+        runCatching {
+            val keys = JSONObject()
+            state.keys.forEach { (epoch, key) -> keys.put(epoch.toString(), key) }
+            store.put(name, JSONObject().put("epoch", state.epoch).put("keys", keys).toString())
+        }
+    }
+
+    private fun recallKeys(channelId: String): ChannelKeyState? {
+        val name = keyStorageKey(channelId) ?: return null
+        return runCatching {
+            val json = JSONObject(store.get(name) ?: return null)
+            val keys = json.getJSONObject("keys")
+            ChannelKeyState(
+                epoch = json.getInt("epoch"),
+                keys = keys.keys().asSequence().associate { it.toInt() to keys.getString(it) },
+            )
+        }.getOrNull()
+    }
+
+    /** Drops a channel's keys from memory and from disk, so the next read refetches. */
+    private fun forgetKeys(channelId: String) {
+        channels.remove(channelId)
+        keyStorageKey(channelId)?.let { runCatching { store.remove(it) } }
     }
 
     private suspend fun loadChannelKey(channelId: String): ChannelKeyState {
