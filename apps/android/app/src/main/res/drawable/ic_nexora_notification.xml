@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The status-bar mark. A notification icon is drawn as a mask - only its alpha
+  survives - so this is the logo silhouette in flat white rather than the
+  two-tone drawable the app uses everywhere else.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M12,3c-4.4,0 -8,3.1 -8,7v3.2C3.2,13.6 2.6,14.5 2.6,15.5v2.2c0,1.4 1.1,2.5 2.5,2.5h1.3c0.6,0 1,-0.4 1,-1v-6c0,-0.6 -0.4,-1 -1,-1H6v-2c0,-3 2.7,-5.2 6,-5.2s6,2.2 6,5.2v2h-0.4c-0.6,0 -1,0.4 -1,1v6c0,0.6 0.4,1 1,1h1.3c1.4,0 2.5,-1.1 2.5,-2.5v-2.2c0,-1 -0.6,-1.9 -1.4,-2.3V10C20,6.1 16.4,3 12,3z" />
+</vector>
