@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/aiyu-ayaan/Nexora"><img src="https://img.shields.io/tokei/lines/github/aiyu-ayaan/Nexora?style=flat-square&logo=visualstudiocode&logoColor=white&label=lines%20of%20code" alt="Lines of Code" /></a>
+  <a href="https://github.com/aiyu-ayaan/Nexora"><img src="https://sloc.xyz/github/aiyu-ayaan/Nexora" alt="Total Lines of Code" /></a>
   <a href="https://github.com/aiyu-ayaan/Nexora"><img src="https://img.shields.io/github/repo-size/aiyu-ayaan/Nexora?style=flat-square&logo=github&logoColor=white" alt="Repo Size" /></a>
   <a href="https://github.com/aiyu-ayaan/Nexora/commits/master"><img src="https://img.shields.io/github/last-commit/aiyu-ayaan/Nexora?style=flat-square&logo=git&logoColor=white" alt="Last Commit" /></a>
   <img src="https://img.shields.io/badge/monorepo-pnpm%20%2B%20Turborepo-F69220?style=flat-square&logo=pnpm&logoColor=white" alt="Monorepo" />
