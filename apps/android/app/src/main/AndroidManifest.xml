@@ -40,8 +40,15 @@
              launch mode builds a second MainActivity on top of the first, which
              starts a fresh navigation graph on the home screen and destroys the
              one holding the call - so tapping "return to the call" ended it. -->
+        <!-- Rotation does not rebuild the activity. Compose reads the new
+             configuration on its own, and the rebuild was actively harmful: the
+             share stage asks for an orientation while it is open and gives it
+             back when it closes, so a recreate meant close, hand back, reopen,
+             ask again - a rotation loop that ended in a crash. It also drops
+             every video renderer and rebuilds them mid-call for nothing. -->
         <activity
             android:name=".MainActivity"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|uiMode|density"
             android:exported="true"
             android:label="@string/app_name"
             android:launchMode="singleTask"
