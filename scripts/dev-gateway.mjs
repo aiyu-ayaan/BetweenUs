@@ -19,6 +19,7 @@
  */
 import http from 'node:http';
 import net from 'node:net';
+import { networkInterfaces } from 'node:os';
 
 /**
  * 8090 rather than 8080, which is what the Nginx container listens on. Two
@@ -126,8 +127,27 @@ server.on('upgrade', (request, socket, head) => {
   socket.on('error', () => outbound.destroy());
 });
 
+/**
+ * Every address a client could reach this on.
+ *
+ * `10.0.2.2` is the emulator's alias for this machine's loopback and means
+ * nothing anywhere else, so a physical phone needs the LAN address - and
+ * hunting for it with `ipconfig` is a detour every single time. Printing it
+ * costs nothing and is the answer to "it works on the emulator".
+ */
+function lanAddresses() {
+  return Object.values(networkInterfaces())
+    .flat()
+    .filter((entry) => entry && entry.family === 'IPv4' && !entry.internal)
+    .map((entry) => entry.address);
+}
+
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`dev gateway on http://0.0.0.0:${PORT}`);
   console.log('  emulator: http://10.0.2.2:%d', PORT);
+  for (const address of lanAddresses()) {
+    console.log('  device:   http://%s:%d', address, PORT);
+  }
+  console.log('            (same Wi-Fi, and the firewall has to allow inbound %d)', PORT);
   console.log('  routes:   %s', ROUTES.map(([prefix]) => prefix).join(' '));
 });

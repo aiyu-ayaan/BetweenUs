@@ -57,8 +57,30 @@ bound at all.
 
 `10.0.2.2` is the emulator's route to the host's loopback, so it reaches a
 locally running service without going near the LAN address or the host
-firewall. A physical device has no such route and needs the host's LAN address
-plus a firewall rule.
+firewall. It means nothing on a physical device, which is the usual reason a
+build that works on the emulator cannot reach anything on a phone.
+
+A phone needs three things instead, and no rebuild for any of them:
+
+1. **The host's LAN address.** `pnpm dev:gateway` prints it at startup, next to
+   the emulator one.
+2. **A hole in the firewall for 8090.** Windows blocks inbound connections to a
+   Node process by default, and the failure looks exactly like the server being
+   down. Once, elevated:
+
+   ```powershell
+   New-NetFirewallRule -DisplayName "Nexora dev gateway" -Direction Inbound `
+     -Protocol TCP -LocalPort 8090 -Action Allow -Profile Private
+   ```
+
+   `-Profile Private` on purpose: this opens the port on the home or office
+   network the machine is on, and not on a public one.
+3. **The address typed into the app.** The login screen has a server picker;
+   `nexora.serverUrl` in `local.properties` is only the default a build ships
+   with, and changing it for a phone would break the emulator.
+
+Both devices have to be on the same network. A host on Ethernet and a phone on
+Wi-Fi is fine as long as it is the same router.
 
 The value is only the default: the server picker on the login screen overrides
 it at runtime, and that stored choice wins until it is changed or the app's
