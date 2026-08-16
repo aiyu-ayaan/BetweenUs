@@ -77,8 +77,36 @@ model User {
   remoteGranted  RemoteGrant[]   @relation("RemoteGrantGrantedBy")
   remoteSessions RemoteSession[] @relation("RemoteSessionUser")
   remoteAudit    RemoteAudit[]   @relation("RemoteAuditActor")
+  adminAudit     AdminAudit[]    @relation("AdminAuditActor")
 
   @@map("users")
+}
+
+/// Append-only record of what an administrator did in the admin panel.
+///
+/// The subject of an admin action is very often an account that no longer
+/// exists - deleting somebody is the action most worth having a record of - so
+/// the target is stored as a label as well as an id. The id goes null with the
+/// account; the label is what the log still reads back afterwards.
+model AdminAudit {
+  id      String  @id @default(uuid())
+  /// Null once the administrator's own account is deleted. The row outlives it.
+  actorId String?
+  /// Who or what it was done to: a user id, or a provider name for OAuth.
+  targetId String?
+  /// How the target read at the time - `@ayaan`, `google`. Never updated.
+  targetLabel String?
+  /// user.role.changed, user.disabled, user.enabled, user.deleted,
+  /// oauth.updated.
+  action String
+  detail Json?
+
+  createdAt DateTime @default(now())
+
+  actor User? @relation("AdminAuditActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt])
+  @@map("admin_audit")
 }
 
 /// Per-account notification settings, owned by notification-service. One row

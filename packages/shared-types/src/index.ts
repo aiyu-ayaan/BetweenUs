@@ -97,9 +97,41 @@ export interface AdminUser extends PublicUser {
   lastSeenAt: string | null;
 }
 
+/**
+ * One page of the directory, plus where the next one starts.
+ *
+ * A cursor rather than an offset: the list is ordered newest first and
+ * registrations keep arriving, so paging by offset would show the same account
+ * twice - once on page one, once again on page two after it was pushed down.
+ */
+export interface AdminUserPage {
+  users: AdminUser[];
+  /** Opaque; pass it back as `cursor`. Null when this was the last page. */
+  nextCursor: string | null;
+}
+
 export interface AdminUserUpdate {
   role?: GlobalRole;
   disabled?: boolean;
+}
+
+/** One thing an administrator did. Append-only; nothing edits or deletes it. */
+export interface AdminAuditEntry {
+  id: string;
+  action: string;
+  actorId: string | null;
+  /** How the actor read at the time; null once their account is gone. */
+  actorLabel: string | null;
+  targetId: string | null;
+  /** The subject as it read when it happened - it may not exist any more. */
+  targetLabel: string | null;
+  detail: Record<string, unknown> | null;
+  createdAt: string;
+}
+
+export interface AdminAuditPage {
+  entries: AdminAuditEntry[];
+  nextCursor: string | null;
 }
 
 /** Never carries the secret itself - only whether one is stored. */

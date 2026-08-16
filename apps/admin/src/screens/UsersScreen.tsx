@@ -7,6 +7,7 @@ import { messageOf } from '../App';
 export function UsersScreen({ currentUserId }: { currentUserId: string }): JSX.Element {
   const [query, setQuery] = useState('');
   const [users, setUsers] = useState<AdminUser[]>([]);
+  const [cursor, setCursor] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -16,8 +17,10 @@ export function UsersScreen({ currentUserId }: { currentUserId: string }): JSX.E
       setLoading(true);
       api
         .users(query)
-        .then((result) => {
-          setUsers(result);
+        .then((page) => {
+          // A new search starts a new list; it never appends to the old one.
+          setUsers(page.users);
+          setCursor(page.nextCursor);
           setError(null);
         })
         .catch((caught: unknown) => setError(messageOf(caught)))
@@ -25,6 +28,20 @@ export function UsersScreen({ currentUserId }: { currentUserId: string }): JSX.E
     }, 250);
     return () => clearTimeout(timer);
   }, [query]);
+
+  const loadMore = async (): Promise<void> => {
+    if (!cursor) return;
+    setLoading(true);
+    try {
+      const page = await api.users(query, cursor);
+      setUsers((current) => [...current, ...page.users]);
+      setCursor(page.nextCursor);
+    } catch (caught) {
+      setError(messageOf(caught));
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const act = async (action: Promise<AdminUser | void>, userId: string): Promise<void> => {
     setError(null);
@@ -51,7 +68,9 @@ export function UsersScreen({ currentUserId }: { currentUserId: string }): JSX.E
           className="w-80 rounded-md border border-surface-700 bg-surface-900 px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:border-accent"
         />
         <span className="text-sm text-slate-500">
-          {loading ? 'Loading…' : `${users.length} account${users.length === 1 ? '' : 's'}`}
+          {loading
+            ? 'Loading…'
+            : `${users.length}${cursor ? '+' : ''} account${users.length === 1 ? '' : 's'}`}
         </span>
       </div>
 
@@ -146,6 +165,17 @@ export function UsersScreen({ currentUserId }: { currentUserId: string }): JSX.E
           </tbody>
         </table>
       </div>
+
+      {cursor && (
+        <button
+          type="button"
+          disabled={loading}
+          onClick={() => void loadMore()}
+          className="mt-4 w-full cursor-pointer rounded-md border border-surface-700 px-4 py-2 text-sm text-slate-300 transition-colors duration-200 hover:border-accent disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {loading ? 'Loading…' : 'Load more'}
+        </button>
+      )}
     </section>
   );
 }

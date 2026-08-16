@@ -7,14 +7,17 @@
  * other.
  */
 import type {
+  AdminAuditPage,
   AdminOAuthProvider,
   AdminOAuthProviderUpdate,
   AdminStatus,
   AdminUser,
+  AdminUserPage,
   AdminUserUpdate,
   ApiErrorBody,
   AuthResponse,
   AuthTokens,
+  OAuthProviderSummary,
   PublicUser,
 } from '@nexora/shared-types';
 
@@ -108,9 +111,28 @@ async function request<T>(path: string, init: RequestInit = {}, retry = true): P
   return payload as T;
 }
 
+/** Rows per request. Small enough that the first page draws immediately. */
+const PAGE_SIZE = 50;
+
 export const api = {
   /** Public - answers whether `pnpm admin:create` has been run. */
   status: (): Promise<AdminStatus> => request('/api/v1/admin/status'),
+
+  /** Public - which sign-in providers the operator switched on. */
+  signInProviders: (): Promise<OAuthProviderSummary[]> =>
+    request('/api/v1/auth/oauth/providers'),
+
+  /**
+   * Where to send the browser to sign in with a provider. It comes back to this
+   * origin with `?code=`, which `exchangeOAuthCode` trades for a session.
+   */
+  signInUrl: (provider: string): string =>
+    `${API_URL}/api/v1/auth/oauth/${provider}/start?redirect=${encodeURIComponent(
+      `${window.location.origin}${window.location.pathname}`,
+    )}`,
+
+  exchangeOAuthCode: (code: string): Promise<AuthResponse> =>
+    request('/api/v1/auth/oauth/exchange', { method: 'POST', body: JSON.stringify({ code }) }),
 
   login: (identifier: string, password: string): Promise<AuthResponse> =>
     request('/api/v1/auth/login', {
@@ -132,8 +154,17 @@ export const api = {
   updateAccount: (update: { username?: string; displayName?: string }): Promise<PublicUser> =>
     request('/api/v1/auth/account', { method: 'PATCH', body: JSON.stringify(update) }),
 
-  users: (query: string): Promise<AdminUser[]> =>
-    request(`/api/v1/admin/users?query=${encodeURIComponent(query)}&take=100`),
+  users: (query: string, cursor?: string): Promise<AdminUserPage> =>
+    request(
+      `/api/v1/admin/users?query=${encodeURIComponent(query)}&take=${PAGE_SIZE}` +
+        (cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''),
+    ),
+
+  audit: (cursor?: string): Promise<AdminAuditPage> =>
+    request(
+      `/api/v1/admin/audit?take=${PAGE_SIZE}` +
+        (cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''),
+    ),
 
   updateUser: (id: string, update: AdminUserUpdate): Promise<AdminUser> =>
     request(`/api/v1/admin/users/${id}`, { method: 'PATCH', body: JSON.stringify(update) }),

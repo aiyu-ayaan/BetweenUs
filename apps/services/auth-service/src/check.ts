@@ -21,6 +21,43 @@ import { rateLimitBuckets } from '@nexora/nest-common';
 import { AuthService } from './modules/auth/auth.service';
 import type { AuthDb } from './modules/auth/auth.db';
 import { CREDENTIALS_RATE_LIMIT, LOGIN_RATE_LIMIT } from './modules/auth/rate-limits';
+import { pageSize, paginate } from './modules/admin/admin.service';
+
+/**
+ * The admin panel's cursor paging.
+ *
+ * The failure this guards against is the quiet one: an off-by-one that either
+ * hands back the extra probe row (the reader sees a row twice, once at the end
+ * of one page and again at the start of the next) or returns a cursor on a full
+ * last page (an endless "Load more" that fetches nothing).
+ */
+function checkPagination(): void {
+  const rows = (count: number): Array<{ id: string }> =>
+    Array.from({ length: count }, (_, index) => ({ id: `row-${index}` }));
+
+  // A full page plus the probe row: the probe is never returned, and the cursor
+  // is the last row the caller actually got.
+  const full = paginate(rows(4), 3);
+  assert.deepEqual(
+    full.page.map((row) => row.id),
+    ['row-0', 'row-1', 'row-2'],
+  );
+  assert.equal(full.nextCursor, 'row-2');
+
+  // Exactly a page and no probe means this was the last one.
+  assert.equal(paginate(rows(3), 3).nextCursor, null);
+  assert.equal(paginate(rows(1), 3).nextCursor, null);
+  assert.equal(paginate(rows(0), 3).nextCursor, null);
+  assert.equal(paginate(rows(0), 3).page.length, 0);
+
+  // The cap is the point of the size: nothing a client asks for gets past it,
+  // and nothing it asks for produces a zero-or-negative page either.
+  assert.equal(pageSize(1_000_000), 100);
+  assert.equal(pageSize(0), 1);
+  assert.equal(pageSize(-5), 1);
+  assert.equal(pageSize(Number.NaN), 1);
+  assert.equal(pageSize(50), 50);
+}
 
 /**
  * The per-account half of the login limit.
@@ -288,6 +325,7 @@ async function main(): Promise<void> {
   await rejects(auth.me(randomUUID()), 'UNKNOWN_USER');
 
   checkLoginBuckets();
+  checkPagination();
 
   console.log('auth-service check ok');
 }

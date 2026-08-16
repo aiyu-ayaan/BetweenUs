@@ -44,6 +44,10 @@ Backend:
       year, abandoned multipart uploads every six hours.
 - [x] **Agent-token lookup.** A unique index instead of a full table scan on
       every agent reconnect.
+- [x] **Admin: audit log, paged users table, OAuth for the panel.** The trail is
+      append-only and keeps a label for a target that no longer exists; paging
+      is a cursor, so a registration between two requests cannot repeat a row;
+      the panel's own login now offers whichever providers are switched on.
 
 Desktop and web:
 
@@ -69,9 +73,6 @@ blocked by anything outside this document.
 
 ### Backend
 
-- [ ] **Admin: audit log, paged users table, OAuth for the panel.** Three small
-      independent pieces; the audit log is a table and a write on every admin
-      mutation, the pagination is a cursor on a query capped at 100 rows today.
 - [ ] **Remote sessions over Redis Pub/Sub.** Sessions are relayed in one
       process's memory, so agent and controller must land on the same instance -
       true for the single replica compose runs, not for two. Keyed by session id.

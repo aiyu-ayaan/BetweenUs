@@ -5,26 +5,45 @@
  * out, signed in but still on a generated password, and the panel proper.
  */
 import { useCallback, useEffect, useState } from 'react';
-import type { PublicUser } from '@nexora/shared-types';
+import type { AuthResponse, PublicUser } from '@nexora/shared-types';
 import { ApiError, api, refreshSession, session } from './api';
 import { LoginScreen } from './screens/LoginScreen';
 import { BootstrapScreen } from './screens/BootstrapScreen';
 import { ChangePasswordScreen } from './screens/ChangePasswordScreen';
 import { UsersScreen } from './screens/UsersScreen';
+import { AuditScreen } from './screens/AuditScreen';
 import { OAuthScreen } from './screens/OAuthScreen';
 import { AccountScreen } from './screens/AccountScreen';
 
-type Tab = 'users' | 'oauth' | 'account';
+type Tab = 'users' | 'audit' | 'oauth' | 'account';
 
 export default function App(): JSX.Element {
   const [hasAdmin, setHasAdmin] = useState<boolean | null>(null);
   const [user, setUser] = useState<PublicUser | null>(null);
   const [booting, setBooting] = useState(true);
   const [tab, setTab] = useState<Tab>('users');
+  const [signInError, setSignInError] = useState<string | null>(null);
 
   const load = useCallback(async (): Promise<void> => {
     const status = await api.status().catch(() => ({ hasAdmin: true }));
     setHasAdmin(status.hasAdmin);
+
+    // Coming back from a provider. The code is single-use and is stripped from
+    // the address bar either way, so a reload cannot try to spend it twice.
+    const code = new URLSearchParams(window.location.search).get('code');
+    if (code) {
+      window.history.replaceState(null, '', window.location.pathname);
+      try {
+        const result = await api.exchangeOAuthCode(code);
+        const refused = adminOnly(result);
+        if (refused) setSignInError(refused);
+        else setUser(result.user);
+      } catch (caught) {
+        setSignInError(messageOf(caught));
+      }
+      setBooting(false);
+      return;
+    }
 
     // A stored refresh token is worth one attempt; anything else means signed out.
     if (session.refreshToken) {
@@ -57,7 +76,7 @@ export default function App(): JSX.Element {
   }
 
   if (hasAdmin === false && !user) return <BootstrapScreen onRetry={load} />;
-  if (!user) return <LoginScreen onSignedIn={setUser} />;
+  if (!user) return <LoginScreen onSignedIn={setUser} initialError={signInError} />;
   if (user.mustChangePassword) return <ChangePasswordScreen user={user} onDone={setUser} />;
 
   return (
@@ -69,6 +88,7 @@ export default function App(): JSX.Element {
           {(
             [
               ['users', 'Users'],
+              ['audit', 'Audit log'],
               ['oauth', 'Sign-in providers'],
               ['account', 'My account'],
             ] as Array<[Tab, string]>
@@ -103,6 +123,7 @@ export default function App(): JSX.Element {
 
       <main className="min-h-0 flex-1 overflow-y-auto">
         {tab === 'users' && <UsersScreen currentUserId={user.id} />}
+        {tab === 'audit' && <AuditScreen />}
         {tab === 'oauth' && <OAuthScreen />}
         {tab === 'account' && <AccountScreen user={user} onUpdated={setUser} />}
       </main>
@@ -114,4 +135,18 @@ export default function App(): JSX.Element {
 export function messageOf(error: unknown): string {
   if (error instanceof ApiError) return error.message;
   return 'Could not reach the server.';
+}
+
+/**
+ * Starts the session if the account is an administrator, and refuses it
+ * otherwise. Signing in correctly is not the same as being allowed in here, and
+ * both doors - password and provider - have to say so.
+ */
+export function adminOnly(result: AuthResponse): string | null {
+  if (result.user.role !== 'ADMIN') {
+    session.end();
+    return 'That account is not an administrator.';
+  }
+  session.start(result);
+  return null;
 }

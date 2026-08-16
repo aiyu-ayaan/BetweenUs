@@ -12,7 +12,13 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { CurrentUser, JwtAuthGuard, type AuthenticatedUser } from '@nexora/auth';
-import type { AdminOAuthProvider, AdminStatus, AdminUser } from '@nexora/shared-types';
+import type {
+  AdminAuditPage,
+  AdminOAuthProvider,
+  AdminStatus,
+  AdminUser,
+  AdminUserPage,
+} from '@nexora/shared-types';
 import { AdminGuard } from './admin.guard';
 import { AdminService } from './admin.service';
 import { AdminOAuthProviderDto, AdminUserUpdateDto } from './dto';
@@ -37,9 +43,15 @@ export class AdminController {
   users(
     @Query('query') query?: string,
     @Query('take') take = '50',
-    @Query('skip') skip = '0',
-  ): Promise<AdminUser[]> {
-    return this.admin.users(query, Number(take) || 50, Number(skip) || 0);
+    @Query('cursor') cursor?: string,
+  ): Promise<AdminUserPage> {
+    return this.admin.users(query, Number(take) || 50, cursor || undefined);
+  }
+
+  @Get('audit')
+  @UseGuards(JwtAuthGuard, AdminGuard)
+  audit(@Query('take') take = '50', @Query('cursor') cursor?: string): Promise<AdminAuditPage> {
+    return this.admin.audit(Number(take) || 50, cursor || undefined);
   }
 
   @Patch('users/:id')
@@ -68,12 +80,13 @@ export class AdminController {
   @Put('oauth/:provider')
   @UseGuards(JwtAuthGuard, AdminGuard)
   updateOauth(
+    @CurrentUser() actor: AuthenticatedUser,
     @Param('provider') provider: string,
     @Body() dto: AdminOAuthProviderDto,
   ): Promise<AdminOAuthProvider> {
     if (!isProviderName(provider)) {
       throw new NotFoundException({ code: 'UNKNOWN_PROVIDER', message: 'No such provider' });
     }
-    return this.admin.updateOAuthProvider(provider, dto);
+    return this.admin.updateOAuthProvider(actor.id, provider, dto);
   }
 }

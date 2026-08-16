@@ -1007,9 +1007,18 @@ Phase 12 opened these, and left them open on purpose:
       through a real Google or GitHub client yet)
 - [ ] Admin panel served through the gateway container path (verified in dev on
       5174, not yet through `admin-web` behind Nginx)
-- [ ] OAuth sign-in for the admin panel itself (it is password-only today)
-- [ ] Audit log of admin actions - who disabled or deleted whom, and when
-- [ ] Pagination in the users table (capped at 100 rows today)
+- [x] OAuth sign-in for the admin panel itself. The login screen draws a button
+      per provider the operator switched on and comes back to the panel's own
+      origin with a one-time code; the administrator check is the same one the
+      password path uses, so signing in correctly is still not the same as
+      being let in here
+- [x] Audit log of admin actions - who disabled or deleted whom, and when. One
+      row per thing that actually changed, and the target is stored as a label
+      as well as an id, because the action most worth auditing destroys the row
+      the id points at
+- [x] Pagination in the users table. A cursor rather than an offset: the list is
+      newest first and registrations keep arriving, so an offset would show the
+      same account at the end of one page and the start of the next
 
 ## Done
 
