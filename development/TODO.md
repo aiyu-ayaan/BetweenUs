@@ -89,11 +89,18 @@ Backend:
 - [ ] Safety numbers, so a lying server is detectable
 - [ ] Invite codes with an expiry, instead of a permanent server slug
 - [ ] Custom named roles with a colour and an ordering
-- [ ] Attachment blobs swept when their message is deleted, and stale multipart
-      sessions swept on a schedule
-- [ ] Ended remote sessions and old audit rows swept
+- [x] Stale multipart sessions swept on a schedule (chat-service, local driver
+      only - S3 has a lifecycle rule for exactly this)
+- [ ] Attachment blobs swept when their message is deleted. Harder than it
+      looks and deliberately not bundled with the sweep above: the manifest
+      naming the blobs is *inside* the encrypted body, so no service can tell
+      which blob belongs to which message. It needs either a stored attachment
+      row per upload or the deleting client to remove the blobs it can read
+- [x] Ended remote sessions and old audit rows swept, on a daily timer with
+      the windows in the environment: 30 days for a finished session, a year
+      for the audit trail, and a running session never
 - [ ] Remote sessions relayed through Redis Pub/Sub, so two replicas work
-- [ ] `machineForAgentToken` on a lookup key instead of a full table scan
+- [x] `machineForAgentToken` on a lookup key instead of a full table scan
 - [ ] Admin: an audit log of admin actions, a paged users table, OAuth for the
       panel itself
 - [ ] The shared Prisma schema split per service, and `user-service` serving the
@@ -546,10 +553,12 @@ Left open on purpose:
 - [ ] Sessions are relayed in one process's memory, so agent and controller
       must land on the same instance - true for the single replica compose runs,
       not for two. Redis Pub/Sub keyed by session id is the upgrade
-- [ ] `machineForAgentToken` compares against every machine's hash, which is one
-      full table read per agent connection. Fine at hundreds of machines, not at
-      hundreds of thousands - a lookup key alongside the hash fixes it
-- [ ] Nothing sweeps ended sessions or old audit rows; both grow forever
+- [x] `machineForAgentToken` is one indexed lookup. The constant-time compare it
+      replaced was defending a value with no structure to leak - a SHA-256 of a
+      256-bit random token - and costing a full table read per agent reconnect
+- [x] Ended sessions and old audit rows are swept daily -
+      `REMOTE_SESSION_RETENTION_DAYS` (30) and `REMOTE_AUDIT_RETENTION_DAYS`
+      (365). A session with no `endedAt` is never swept, whatever its age
 - [ ] `apps/services/remote-agent` is still a scaffold. A headless server has no
       Nexora window to run the agent inside, and that is what it is for
 - [ ] The controller sends key events with an empty `modifiers` list; a
@@ -983,8 +992,11 @@ Left open on purpose:
 
 - [ ] Nothing deletes an attachment's blob when its message is deleted; the
       ciphertext stays in storage until something sweeps it
-- [ ] `sweepStaleMultipart` exists on the local driver but nothing calls it on
-      a schedule, and S3's own lifecycle rule is not configured either
+- [x] `sweepStaleMultipart` runs every six hours on the local driver, clearing
+      scratch directories untouched for `UPLOAD_SCRATCH_MAX_AGE_HOURS` (12).
+      S3 is deliberately left to its own `AbortIncompleteMultipartUpload`
+      lifecycle rule, which is one line of bucket configuration and a better
+      answer than walking a bucket from the application
 - [ ] An attachment is sealed in one operation, so the client holds the whole
       file in memory; chunked AEAD would lift the 100 MB ceiling
 - [ ] No video transcoding — a large video is sent as it is. Doing it properly

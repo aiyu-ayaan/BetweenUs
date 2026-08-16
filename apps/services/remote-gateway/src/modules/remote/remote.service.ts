@@ -7,7 +7,7 @@
  * connection, exactly the way a call does, and the gateway's part is relaying
  * the offer and answer that set it up.
  */
-import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import {
   BadRequestException,
   ConflictException,
@@ -413,24 +413,21 @@ export class RemoteService {
   // --- Agent credentials ----------------------------------------------------
 
   /**
-   * Resolves the token an agent presents on its socket. Compared in constant
-   * time against every candidate hash: a token is a bearer credential, and how
-   * long a comparison took should not narrow it down.
+   * Resolves the token an agent presents on its socket.
+   *
+   * One indexed lookup on the hash. It used to read every machine's hash and
+   * compare them in constant time, which was the right instinct applied to the
+   * wrong value: the thing being compared is a SHA-256 of a 256-bit random
+   * token, so it has no structure for a timing signal to leak and no
+   * near-misses for one to walk towards. What that cost was a full table read
+   * on every agent reconnect - and reconnects are what an agent does all day.
    */
   async machineForAgentToken(token: string): Promise<{ id: string; ownerId: string } | null> {
     if (!token) return null;
-    const hash = hashToken(token);
-    const candidates = await prisma.remoteMachine.findMany({
-      select: { id: true, ownerId: true, agentTokenHash: true },
+    return prisma.remoteMachine.findUnique({
+      where: { agentTokenHash: hashToken(token) },
+      select: { id: true, ownerId: true },
     });
-
-    let found: { id: string; ownerId: string } | null = null;
-    for (const candidate of candidates) {
-      if (safeEqual(candidate.agentTokenHash, hash)) {
-        found = { id: candidate.id, ownerId: candidate.ownerId };
-      }
-    }
-    return found;
   }
 
   async touchMachine(machineId: string): Promise<void> {
@@ -489,13 +486,6 @@ const REMOTE_ALL: RemotePermission[] = [
 
 function hashToken(token: string): string {
   return createHash('sha256').update(token).digest('hex');
-}
-
-function safeEqual(a: string, b: string): boolean {
-  const left = Buffer.from(a);
-  const right = Buffer.from(b);
-  if (left.length !== right.length) return false;
-  return timingSafeEqual(left, right);
 }
 
 function parseExpiry(value: string | null | undefined): Date | null {

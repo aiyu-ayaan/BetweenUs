@@ -6,6 +6,7 @@ import { createHealthController } from '@nexora/nest-common';
 import { RemoteController } from './modules/remote/remote.controller';
 import { RemoteService } from './modules/remote/remote.service';
 import { RemoteGateway } from './remote.gateway';
+import { RetentionSweeper } from './modules/remote/retention';
 
 const SERVICE_NAME = 'remote-gateway';
 
@@ -14,6 +15,7 @@ const SERVICE_NAME = 'remote-gateway';
   providers: [
     RemoteService,
     RemoteGateway,
+    RetentionSweeper,
     {
       provide: Logger,
       useFactory: (): Logger => createLogger(SERVICE_NAME, envOr('LOG_LEVEL', 'info') as never),

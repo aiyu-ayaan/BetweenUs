@@ -408,7 +408,10 @@ model RemoteMachine {
   /// ponytail: a shared secret, not a device keypair. It is what cloudflared
   /// and every other outbound agent uses; a signed handshake is the upgrade if
   /// a stolen token at rest ever becomes the threat that matters.
-  agentTokenHash String
+  ///
+  /// Unique, and indexed by being so: an agent connecting is one lookup rather
+  /// than a scan of every machine's hash.
+  agentTokenHash String @unique
   /// Null until the agent has connected once.
   lastSeenAt DateTime?
   createdAt  DateTime  @default(now())
