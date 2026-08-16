@@ -1,5 +1,12 @@
-// Presence smoke: two sockets, one channel. Covers the handshake, presence.sync,
-// online/offline fanout, typing echo rules and the voice roster.
+// Presence smoke: three sockets, one channel. Covers the handshake,
+// presence.sync, online/offline fanout, typing echo rules, the voice roster and
+// the scoping - who is entitled to hear any of it.
+//
+// Carol is the point of the third socket. She shares no server and no
+// friendship with the other two, so every event they generate must miss her:
+// presence used to go to every connected socket, which made the online list the
+// whole deployment's user directory and a typing event a channel id handed to
+// strangers.
 //
 // Needs Postgres, Redis, auth-service, server-service and presence-service.
 import WebSocket from 'ws';
@@ -69,7 +76,8 @@ const connect = (token) =>
 
 const alice = await register('a');
 const bob = await register('b');
-console.log('accounts ok', alice.user.username, bob.user.username);
+const carol = await register('c');
+console.log('accounts ok', alice.user.username, bob.user.username, carol.user.username);
 
 const aliceAuth = { Authorization: `Bearer ${alice.accessToken}` };
 const server = await json(`${SERVER}/api/v1/servers`, {
@@ -84,6 +92,15 @@ const voiceChannel = await json(`${SERVER}/api/v1/channels`, {
   body: JSON.stringify({ serverId: server.id, name: 'lounge', type: 'VOICE' }),
 });
 console.log('voice channel ok', voiceChannel.name, voiceChannel.type);
+
+// Bob shares the server, so he is entitled to Alice's presence. Carol is not
+// added to anything, which is the whole of her job here.
+await json(`${SERVER}/api/v1/servers/${server.id}/members`, {
+  method: 'POST',
+  headers: aliceAuth,
+  body: JSON.stringify({ username: bob.user.username }),
+});
+console.log('membership ok', bob.user.username);
 
 const a = await connect(alice.accessToken);
 const ready = await a.waitFor((event) => event.type === 'ready');
@@ -111,15 +128,28 @@ const bobOnline = await a.waitFor(
 );
 ok('online fanout', bobOnline?.user.status === 'online');
 
+// Carol shares nothing with either of them, so Bob coming online is not news
+// she is entitled to. Her socket opened before his did, so if it were going to
+// arrive it would have by now.
+const c = await connect(carol.accessToken);
+await c.waitFor((event) => event.type === 'presence.sync');
+ok(
+  'a stranger is not in the sync',
+  !c.events
+    .filter((event) => event.type === 'presence.sync')
+    .some((event) => event.users.some((user) => user.userId === alice.user.id)),
+);
+
 // Typing is broadcast to others and never echoed to its author.
 a.send({ type: 'typing.start', channelId: voiceChannel.id });
 const typing = await b.waitFor((event) => event.type === 'typing');
 ok('typing fanout', typing?.userId === alice.user.id && typing.channelId === voiceChannel.id);
 ok('typing not echoed to author', !a.events.some((event) => event.type === 'typing'));
+ok('typing not sent to a stranger', !c.events.some((event) => event.type === 'typing'));
 
-// Bob is not a member of Alice's server, so the channel is not his to touch.
-b.send({ type: 'voice.join', channelId: voiceChannel.id });
-const forbidden = await b.waitFor((event) => event.type === 'error');
+// Carol is not a member of Alice's server, so the channel is not hers to touch.
+c.send({ type: 'voice.join', channelId: voiceChannel.id });
+const forbidden = await c.waitFor((event) => event.type === 'error');
 ok('non-member voice join refused', forbidden?.code === 'CHANNEL_FORBIDDEN');
 
 a.send({ type: 'voice.join', channelId: voiceChannel.id });
@@ -136,6 +166,10 @@ const left = await b.waitFor(
     !event.voice.userIds.includes(alice.user.id),
 );
 ok('voice roster leave', left !== null);
+ok(
+  'voice roster not sent to a stranger',
+  !c.events.some((event) => event.type === 'voice.changed'),
+);
 
 a.send({ type: 'ping' });
 ok('heartbeat', (await a.waitFor((event) => event.type === 'pong')) !== null);
@@ -191,7 +225,12 @@ const offline = await b.waitFor(
     event.user.status === 'offline',
 );
 ok('offline fanout', offline !== null);
+ok(
+  'no presence about strangers at all',
+  !c.events.some((event) => event.type === 'presence.changed'),
+);
 
 b.socket.close();
+c.socket.close();
 console.log('\nPRESENCE SMOKE PASSED');
 process.exit(0);

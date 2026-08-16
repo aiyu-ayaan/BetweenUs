@@ -16,6 +16,7 @@ import { Logger } from '@nexora/logger';
 import { authenticateHandshake } from '@nexora/websocket';
 import type { ClientPresenceEvent, ServerPresenceEvent } from '@nexora/shared-types';
 import { PresenceStore, isActiveStatus } from './presence.store';
+import { audienceOfChannel, audienceOfUser } from './audience';
 
 const HEARTBEAT_INTERVAL_MS = 30_000;
 
@@ -84,15 +85,25 @@ export class PresenceGateway implements OnModuleDestroy {
       }
     }, HEARTBEAT_INTERVAL_MS);
 
+    // Every one of these is scoped. A status change reaches the people who
+    // share a server or a friendship with whoever changed; anything about a
+    // channel reaches the people who can see that channel. Nothing goes to
+    // every connected socket any more.
     await this.events.subscribe(EVENTS.PRESENCE_CHANGED, (envelope) => {
-      this.broadcast({ type: 'presence.changed', user: envelope.payload.user });
+      const { user } = envelope.payload;
+      void this.broadcastTo(audienceOfUser(user.userId), { type: 'presence.changed', user });
     });
     await this.events.subscribe(EVENTS.PRESENCE_TYPING, (envelope) => {
       const { channelId, userId, username } = envelope.payload;
-      this.broadcast({ type: 'typing', channelId, userId, username }, userId);
+      void this.broadcastTo(
+        audienceOfChannel(channelId),
+        { type: 'typing', channelId, userId, username },
+        userId,
+      );
     });
     await this.events.subscribe(EVENTS.PRESENCE_VOICE, (envelope) => {
-      this.broadcast({ type: 'voice.changed', voice: envelope.payload.voice });
+      const { voice } = envelope.payload;
+      void this.broadcastTo(audienceOfChannel(voice.channelId), { type: 'voice.changed', voice });
     });
 
     this.logger.info('Presence WebSocket gateway ready', { path: '/ws/presence' });
@@ -108,14 +119,28 @@ export class PresenceGateway implements OnModuleDestroy {
 
     this.send(socket, { type: 'ready', userId });
 
-    const [users, voice, own] = await Promise.all([
+    const [users, voice, own, audience] = await Promise.all([
       this.store.onlineUsers(),
       this.store.allVoiceStates(),
       // The chosen status survives a restart, so the picker has to be told what
       // it currently is rather than assuming "online".
       this.store.statusOf(userId),
+      audienceOfUser(userId),
     ]);
-    this.send(socket, { type: 'presence.sync', users, voice });
+
+    // The same scoping the live events get. Without it the first message on a
+    // socket is the whole deployment's online list, and every later one is
+    // filtered - which is the sort of half-done that looks like it works.
+    const visibleUsers = users.filter((user) => audience.has(user.userId));
+    const rooms = await Promise.all(
+      voice.map(async (room) => ({
+        room,
+        allowed: (await audienceOfChannel(room.channelId)).has(userId),
+      })),
+    );
+    const visibleVoice = rooms.filter((entry) => entry.allowed).map((entry) => entry.room);
+
+    this.send(socket, { type: 'presence.sync', users: visibleUsers, voice: visibleVoice });
     this.send(socket, { type: 'status.self', status: own });
 
     await this.publishStatus(userId);
@@ -254,10 +279,36 @@ export class PresenceGateway implements OnModuleDestroy {
     }
   }
 
-  /** `exceptUserId` keeps a typing indicator from echoing to its own author. */
-  private broadcast(event: ServerPresenceEvent, exceptUserId?: string): void {
+  /**
+   * Sends to the sockets whose user is in `audience`, and to nobody else.
+   *
+   * The audience is worked out once per event rather than once per socket,
+   * which is what the symmetry in `audience.ts` buys: the set of people allowed
+   * to hear about a user is the set that user is allowed to hear about.
+   *
+   * `exceptUserId` keeps a typing indicator from echoing to its own author.
+   */
+  private async broadcastTo(
+    audience: Promise<Set<string>>,
+    event: ServerPresenceEvent,
+    exceptUserId?: string,
+  ): Promise<void> {
+    let allowed: Set<string>;
+    try {
+      allowed = await audience;
+    } catch (error) {
+      // A database that cannot answer must not turn into a broadcast to
+      // everybody. Dropping the event is the safe direction: a dot is stale,
+      // rather than shown to somebody with no right to it.
+      this.logger.warn('Could not scope a presence event', { reason: String(error) });
+      return;
+    }
+
     for (const socket of this.server?.clients ?? []) {
-      if (exceptUserId && this.state.get(socket)?.userId === exceptUserId) continue;
+      const state = this.state.get(socket);
+      if (!state) continue;
+      if (exceptUserId && state.userId === exceptUserId) continue;
+      if (!allowed.has(state.userId)) continue;
       this.send(socket, event);
     }
   }

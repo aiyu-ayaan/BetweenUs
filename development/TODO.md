@@ -64,7 +64,11 @@ Backend:
       machine's idle time; a browser tab has no such thing and watches its own
       events. A call counts as being present, and a chosen status is never
       overwritten (`services/idle.ts`, with a self-check)
-- [ ] Presence broadcasts scoped to a server instead of every connected socket
+- [x] Presence broadcasts scoped instead of going to every connected socket: a
+      status reaches people who share a server or a friendship, and anything
+      about a channel reaches people who can see that channel. The sync at
+      connect is filtered the same way. 30-second TTL cache, so a new member
+      appears to the others within half a minute rather than instantly
 - [ ] Voice roster cross-checked against `call-service`'s own peer list
 - [ ] Mentions told apart from ordinary messages, and a "mentions only" mute
 - [ ] Channel-key rotation when somebody is dropped from a private channel
@@ -1217,7 +1221,12 @@ Follow-ups this phase deliberately left open:
 
 ### Presence follow-ups
 - [x] Idle status, automatic as well as chosen
-- [ ] Scope presence broadcasts to a server instead of every connected socket
+- [x] Scope presence broadcasts instead of sending every event to every socket.
+      `presence-service/src/audience.ts` answers who may hear about a user and
+      who may hear about a channel; the smoke script now carries a third account
+      that shares nothing and must receive nothing. Left open: the cache is a
+      30-second TTL rather than an invalidation, so a membership change takes
+      that long to be reflected
 - [ ] Server-authoritative voice rosters. There is no media server to ask any
       more, so the authority is `call-service`'s own `/ws/call` roster: a client
       appears in a channel because presence-service was told so, and nothing
