@@ -72,6 +72,7 @@ export function VoiceChannelView({ channel }: { channel: Channel }): JSX.Element
   const encrypted = useVoiceStore((state) => state.encrypted);
   const error = useVoiceStore((state) => state.error);
   const join = useVoiceStore((state) => state.join);
+  const notHeard = useVoiceStore((state) => state.notHeard);
 
   const inThisChannel = connectedTo === channel.id;
   const connected = inThisChannel && status === 'connected';
@@ -116,6 +117,13 @@ export function VoiceChannelView({ channel }: { channel: Channel }): JSX.Element
         {error && (
           <p role="alert" className="rounded bg-red-500/10 px-3 py-2 text-center text-sm text-red-300">
             {error}
+          </p>
+        )}
+
+        {notHeard && (
+          <p role="alert" className="rounded bg-danger/10 px-3 py-2 text-center text-sm text-danger">
+            Nobody can hear you - your microphone is sending nothing. Check the device picker in
+            the controls below.
           </p>
         )}
 

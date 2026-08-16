@@ -8,6 +8,8 @@ import { useState, type ReactNode } from 'react';
 import { useVoiceStore } from '../../stores/voice';
 import { useAudioSettings } from '../../stores/audioSettings';
 import { describeKey } from '../../services/talk-key';
+import { healthWarning } from '../../services/call-stats';
+import { ConnectionPanel } from './ConnectionPanel';
 import { ScreenSharePicker } from './ScreenSharePicker';
 import { DevicePicker } from './DevicePicker';
 import {
@@ -15,6 +17,7 @@ import {
   MicOffIcon,
   PhoneOffIcon,
   ScreenShareIcon,
+  ActivityIcon,
   SettingsIcon,
   VideoIcon,
   VideoOffIcon,
@@ -32,12 +35,15 @@ export function VoiceControls({ size = 'sm' }: { size?: 'sm' | 'lg' }): JSX.Elem
   const toggleCamera = useVoiceStore((state) => state.toggleCamera);
   const stopScreenShare = useVoiceStore((state) => state.stopScreenShare);
   const leave = useVoiceStore((state) => state.leave);
+  const stats = useVoiceStore((state) => state.stats);
 
   // Starting a share asks what to share first; stopping is immediate.
   const [picking, setPicking] = useState(false);
   // Devices can be changed before the call connects - a headset plugged in
   // late is exactly when somebody goes looking for this.
   const [choosingDevices, setChoosingDevices] = useState(false);
+  const [showingStats, setShowingStats] = useState(false);
+  const warning = healthWarning(stats);
 
   const disabled = status !== 'connected';
   const icon = size === 'lg' ? 'h-5 w-5' : 'h-4 w-4';
@@ -86,6 +92,21 @@ export function VoiceControls({ size = 'sm' }: { size?: 'sm' | 'lg' }): JSX.Elem
       </ControlButton>
 
       {picking && <ScreenSharePicker onClose={() => setPicking(false)} />}
+
+      {/* Amber when something is measurably wrong, so the numbers are worth
+          opening before anybody has thought to ask for them. */}
+      <div className="relative">
+        <ControlButton
+          active={showingStats}
+          pad={pad}
+          disabled={disabled}
+          label={warning ?? 'Connection'}
+          onClick={() => setShowingStats((open) => !open)}
+        >
+          <ActivityIcon className={`${icon} ${warning ? 'text-amber-300' : ''}`} />
+        </ControlButton>
+        {showingStats && <ConnectionPanel onClose={() => setShowingStats(false)} />}
+      </div>
 
       <div className="relative">
         <ControlButton

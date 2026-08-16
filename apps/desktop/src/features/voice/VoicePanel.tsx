@@ -26,6 +26,7 @@ export function VoicePanel(): JSX.Element | null {
   const channelName = useVoiceStore((state) => state.channelName);
   const error = useVoiceStore((state) => state.error);
   const openCallChannel = useVoiceStore((state) => state.openCallChannel);
+  const notHeard = useVoiceStore((state) => state.notHeard);
 
   if (status === 'idle') return null;
 
@@ -51,6 +52,16 @@ export function VoicePanel(): JSX.Element | null {
       {error && (
         <p role="alert" className="mb-2 rounded bg-danger/10 px-2 py-1 text-xs text-danger">
           {error}
+        </p>
+      )}
+
+      {/* The one measurement worth interrupting somebody for. Everything else
+          about the connection waits behind a button; a microphone that is
+          sending nothing while its owner talks into it cannot. */}
+      {notHeard && (
+        <p role="alert" className="mb-2 rounded bg-danger/10 px-2 py-1 text-xs text-danger">
+          Nobody can hear you - your microphone is sending nothing. Try another device from the
+          controls below.
         </p>
       )}
 

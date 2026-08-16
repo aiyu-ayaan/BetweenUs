@@ -1,0 +1,167 @@
+/**
+ * What the call is actually doing, in numbers.
+ *
+ * Until now nothing measured anything: "it looks bad" and "the link is bad"
+ * were the same sentence, and the only way to tell them apart was to open
+ * `chrome://webrtc-internals`, which is not a thing to ask of somebody in a
+ * meeting. Worse, the most common failure in any voice app - a microphone that
+ * is sending nothing at all while its owner talks happily into it - is silent
+ * on both sides.
+ *
+ * The arithmetic is here and pure; the sampling is in `mesh.ts`, which is the
+ * only thing holding a peer connection to ask.
+ */
+
+/** One `getStats` sample of one peer connection, already reduced to numbers. */
+export interface LinkSample {
+  at: number;
+  /** Bytes this peer has sent us, ever, per kind. */
+  inboundAudioBytes: number;
+  inboundVideoBytes: number;
+  /** Bytes we have sent them, ever. */
+  outboundAudioBytes: number;
+  outboundVideoBytes: number;
+  /** Packets they sent that never arrived, and the ones that did. */
+  packetsLost: number;
+  packetsReceived: number;
+  /** Round trip on the selected candidate pair, in seconds, when known. */
+  roundTripSeconds: number | null;
+  /** The screen or camera as it arrives, when one does. */
+  frameWidth: number | null;
+  frameHeight: number | null;
+  framesPerSecond: number | null;
+}
+
+/** What a person is shown about one other person in the call. */
+export interface LinkStats {
+  peerId: string;
+  name: string;
+  /** Null until there are two samples to compare. */
+  downKbps: number | null;
+  upKbps: number | null;
+  /** Percentage of their packets that never arrived, over the whole call. */
+  lossPercent: number | null;
+  roundTripMs: number | null;
+  frameWidth: number | null;
+  frameHeight: number | null;
+  framesPerSecond: number | null;
+  /** False when we are sending them no audio at all - see `notBeingHeard`. */
+  sendingAudio: boolean;
+}
+
+/**
+ * Kilobits per second between two samples.
+ *
+ * Null rather than zero when there is nothing to compare, because "no reading
+ * yet" and "nothing is flowing" are the two answers this is asked for and
+ * showing 0 kbps for the first second of every call is how a healthy call gets
+ * reported as broken.
+ */
+export function kbpsBetween(
+  bytesNow: number,
+  bytesBefore: number,
+  msElapsed: number,
+): number | null {
+  if (msElapsed <= 0) return null;
+  const bytes = bytesNow - bytesBefore;
+  // A counter that went backwards is a connection that was rebuilt underneath
+  // us; the next sample will be right and this one is not worth guessing at.
+  if (bytes < 0) return null;
+  return Math.round((bytes * 8) / msElapsed);
+}
+
+/** Share of their packets that never arrived, as a percentage. */
+export function lossPercent(lost: number, received: number): number | null {
+  const total = lost + received;
+  if (total <= 0) return null;
+  return Math.round((lost / total) * 1000) / 10;
+}
+
+/**
+ * "Your microphone is not being heard."
+ *
+ * The one warning worth interrupting somebody for, and the reason this file
+ * exists. It is true when this client believes it is sending audio - the mic is
+ * on, the key is down if push to talk is on - and the bytes on the wire say
+ * otherwise for long enough that it cannot be a pause.
+ *
+ * Deliberately not derived from "am I speaking": somebody silent for ten
+ * seconds is still being heard, and a microphone that is muted at the OS level
+ * sends comfort noise rather than nothing at all. What this catches is the
+ * capture that failed, the device that was unplugged, and the sender that was
+ * never attached.
+ */
+export function notBeingHeard(
+  intendsToSend: boolean,
+  stats: LinkStats[],
+  quietSamples: number,
+  requiredSamples = 3,
+): boolean {
+  if (!intendsToSend) return false;
+  if (stats.length === 0) return false;
+  if (quietSamples < requiredSamples) return false;
+  return stats.every((link) => !link.sendingAudio);
+}
+
+/**
+ * A short sentence about the link, or null when there is nothing worth saying.
+ *
+ * One threshold per problem, chosen where a person would notice: 5% loss is
+ * where speech starts breaking up, and 300 ms round trip is where a
+ * conversation starts talking over itself.
+ */
+export function healthWarning(stats: LinkStats[]): string | null {
+  const lossy = stats.filter((link) => (link.lossPercent ?? 0) >= 5);
+  if (lossy.length > 0) {
+    const worst = Math.max(...lossy.map((link) => link.lossPercent ?? 0));
+    return lossy.length === 1
+      ? `Losing ${worst}% of the packets from ${lossy[0]!.name}`
+      : `Losing packets from ${lossy.length} people - up to ${worst}%`;
+  }
+
+  const slow = stats.filter((link) => (link.roundTripMs ?? 0) >= 300);
+  if (slow.length > 0) {
+    const worst = Math.max(...slow.map((link) => link.roundTripMs ?? 0));
+    return `Round trip of ${worst} ms - expect to talk over each other`;
+  }
+
+  return null;
+}
+
+/** Turns two samples into what the panel shows. */
+export function toStats(
+  peerId: string,
+  name: string,
+  now: LinkSample,
+  before: LinkSample | undefined,
+): LinkStats {
+  const elapsed = before ? now.at - before.at : 0;
+
+  return {
+    peerId,
+    name,
+    downKbps: before
+      ? kbpsBetween(
+          now.inboundAudioBytes + now.inboundVideoBytes,
+          before.inboundAudioBytes + before.inboundVideoBytes,
+          elapsed,
+        )
+      : null,
+    upKbps: before
+      ? kbpsBetween(
+          now.outboundAudioBytes + now.outboundVideoBytes,
+          before.outboundAudioBytes + before.outboundVideoBytes,
+          elapsed,
+        )
+      : null,
+    lossPercent: lossPercent(now.packetsLost, now.packetsReceived),
+    roundTripMs:
+      now.roundTripSeconds === null ? null : Math.round(now.roundTripSeconds * 1000),
+    frameWidth: now.frameWidth,
+    frameHeight: now.frameHeight,
+    framesPerSecond: now.framesPerSecond === null ? null : Math.round(now.framesPerSecond),
+    // Any movement at all counts. Opus sends a few hundred bytes a second even
+    // through silence, so a sender that is attached and working is never still.
+    sendingAudio: before ? now.outboundAudioBytes > before.outboundAudioBytes : true,
+  };
+}

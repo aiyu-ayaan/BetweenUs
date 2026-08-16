@@ -170,6 +170,13 @@ export const ChevronDownIcon = (props: IconProps): JSX.Element => (
   </Base>
 );
 
+/** A heartbeat line: how the connection is doing. */
+export const ActivityIcon = (props: IconProps): JSX.Element => (
+  <Base {...props}>
+    <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
+  </Base>
+);
+
 export const SettingsIcon = (props: IconProps): JSX.Element => (
   <Base {...props}>
     <circle cx="12" cy="12" r="3" />

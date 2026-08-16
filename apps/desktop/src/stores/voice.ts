@@ -24,6 +24,7 @@ import { useChatStore } from './chat';
 import { useShareControlStore } from './shareControl';
 import { useAudioSettings } from './audioSettings';
 import { startPushToTalk, stopPushToTalk } from '../services/push-to-talk';
+import { notBeingHeard, type LinkStats } from '../services/call-stats';
 import { NoiseGate } from '../services/mic-gate';
 import { micCapture, micEncoding, micProcessing, type VoiceSettings } from '../services/voice-quality';
 import { shareOptions, type ShareIntent, type ShareSize } from '../services/share-quality';
@@ -107,6 +108,17 @@ interface VoiceState {
    */
   encrypted: boolean;
   error: string | null;
+  /**
+   * Per-peer measurements, and a warning when they say something is wrong.
+   *
+   * Sampled for as long as the call lasts rather than only while a panel is
+   * open, because the warning this exists for - a microphone sending nothing -
+   * has to reach somebody who has no reason to go looking at statistics. Two
+   * seconds, alongside the video poll the mesh already runs.
+   */
+  stats: LinkStats[];
+  /** Set when this client is sending no audio while believing it is. */
+  notHeard: boolean;
 
   join: (channelId: string) => Promise<void>;
   /**
@@ -189,6 +201,8 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
   sharedDisplayId: null,
   encrypted: false,
   error: null,
+  stats: [],
+  notHeard: false,
 
   join: async (channelId) => {
     if (get().channelId === channelId && get().status !== 'idle') return;
@@ -304,6 +318,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
       // microphone nobody is listening to is a key that does nothing, and one
       // listened for all day is a listener for nothing.
       startPushToTalk();
+      startStatsPoll();
       // Pointers and "give me the mouse" ride the peers' data channels, so they
       // exist for exactly as long as the mesh does.
       useShareControlStore.getState().attach(next);
@@ -335,6 +350,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
   leave: async (reason) => {
     joinCounter++;
     stopPushToTalk();
+    stopStatsPoll();
     const { channelId } = get();
     if (channelId) presenceSocket.send({ type: 'voice.leave', channelId });
     useShareControlStore.getState().detach();
@@ -717,6 +733,51 @@ function applyTalking(): void {
   if (raw) raw.enabled = pass;
   if (!pass) mesh?.setLocalSpeaking(false);
   refresh();
+}
+
+// --- Statistics --------------------------------------------------------------
+
+let statsTimer: number | null = null;
+/** Consecutive samples that carried no outbound audio at all. */
+let quietSamples = 0;
+
+/**
+ * Every two seconds: often enough that a number on screen feels live and that a
+ * dead microphone is noticed inside ten, slow enough that the difference
+ * between two samples is a rate rather than noise.
+ */
+const STATS_POLL_MS = 2_000;
+
+function startStatsPoll(): void {
+  if (statsTimer !== null) return;
+  quietSamples = 0;
+
+  const tick = (): void => {
+    const current = mesh;
+    if (!current) return;
+    void current.stats().then((stats) => {
+      // The mesh may have gone while the sample was in flight; writing then
+      // would leave numbers from a call that has ended on screen.
+      if (mesh !== current) return;
+
+      const intendsToSend = shouldPassAudio();
+      quietSamples = stats.some((link) => link.sendingAudio) ? 0 : quietSamples + 1;
+      useVoiceStore.setState({
+        stats,
+        notHeard: notBeingHeard(intendsToSend, stats, quietSamples),
+      });
+    });
+  };
+
+  statsTimer = window.setInterval(tick, STATS_POLL_MS);
+  tick();
+}
+
+function stopStatsPoll(): void {
+  if (statsTimer !== null) window.clearInterval(statsTimer);
+  statsTimer = null;
+  quietSamples = 0;
+  useVoiceStore.setState({ stats: [], notHeard: false });
 }
 
 async function closeMicrophone(): Promise<void> {

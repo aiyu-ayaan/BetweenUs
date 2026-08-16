@@ -73,6 +73,7 @@ import {
   type SharePublish,
 } from './share-quality';
 import type { MicEncoding } from './voice-quality';
+import { toStats, type LinkSample, type LinkStats } from './call-stats';
 
 /** What a slot carries. The order is the transceiver order and is load-bearing. */
 export const SLOTS = ['mic', 'camera', 'screen', 'screenAudio'] as const;
@@ -753,6 +754,75 @@ class PeerLink {
     }
   }
 
+  /**
+   * One `getStats` reduced to the numbers a person is shown.
+   *
+   * Everything is a running total except the frame size and rate, so the
+   * arithmetic of turning it into a rate belongs to whoever holds the previous
+   * sample - `call-stats.ts` - and this is only the reading.
+   */
+  async sample(): Promise<LinkSample> {
+    const now: LinkSample = {
+      at: Date.now(),
+      inboundAudioBytes: 0,
+      inboundVideoBytes: 0,
+      outboundAudioBytes: 0,
+      outboundVideoBytes: 0,
+      packetsLost: 0,
+      packetsReceived: 0,
+      roundTripSeconds: null,
+      frameWidth: null,
+      frameHeight: null,
+      framesPerSecond: null,
+    };
+    if (this.closed) return now;
+
+    const reports = await this.pc.getStats().catch(() => null);
+    if (!reports) return now;
+
+    reports.forEach((report) => {
+      const entry = report as RTCStats & Record<string, number | string | undefined>;
+
+      if (entry.type === 'inbound-rtp') {
+        const bytes = Number(entry.bytesReceived ?? 0);
+        if (entry.kind === 'audio') now.inboundAudioBytes += bytes;
+        else now.inboundVideoBytes += bytes;
+        now.packetsLost += Number(entry.packetsLost ?? 0);
+        now.packetsReceived += Number(entry.packetsReceived ?? 0);
+
+        // The biggest picture arriving, which is the share when there is one
+        // and the camera otherwise - the number somebody actually wants when
+        // they ask why it looks soft.
+        if (entry.kind === 'video') {
+          const width = Number(entry.frameWidth ?? 0);
+          const height = Number(entry.frameHeight ?? 0);
+          if (width * height > (now.frameWidth ?? 0) * (now.frameHeight ?? 0)) {
+            now.frameWidth = width || null;
+            now.frameHeight = height || null;
+            now.framesPerSecond = Number(entry.framesPerSecond ?? 0) || null;
+          }
+        }
+        return;
+      }
+
+      if (entry.type === 'outbound-rtp') {
+        const bytes = Number(entry.bytesSent ?? 0);
+        if (entry.kind === 'audio') now.outboundAudioBytes += bytes;
+        else now.outboundVideoBytes += bytes;
+        return;
+      }
+
+      // Only the pair actually carrying the call. Chromium keeps the losers of
+      // the ICE race in the report, and their round trip means nothing.
+      if (entry.type === 'candidate-pair' && entry.state === 'succeeded' && entry.nominated) {
+        const rtt = Number(entry.currentRoundTripTime ?? Number.NaN);
+        if (Number.isFinite(rtt)) now.roundTripSeconds = rtt;
+      }
+    });
+
+    return now;
+  }
+
   /** Audio levels this peer is producing on their microphone right now, 0..1. */
   audioLevel(): number {
     let loudest = 0;
@@ -810,6 +880,8 @@ export class Mesh {
   /** Local speaking, fed by the microphone gate rather than by statistics. */
   private localSpeaking = false;
   private lastSpeaking = '';
+  /** The previous reading per peer, so a rate can be worked out from a total. */
+  private readonly lastSamples = new Map<string, LinkSample>();
   private closed = false;
 
   constructor(private readonly options: MeshOptions) {}
@@ -1019,6 +1091,24 @@ export class Mesh {
     this.localSpeaking = speaking;
   }
 
+  /**
+   * A reading per peer, turned into rates against the previous one.
+   *
+   * Called only while somebody is looking at the connection panel: `getStats`
+   * is not free, and a number nobody is reading is a number not worth taking.
+   */
+  async stats(): Promise<LinkStats[]> {
+    const links = [...this.links.values()];
+    const samples = await Promise.all(links.map((link) => link.sample()));
+
+    return links.map((link, index) => {
+      const now = samples[index]!;
+      const before = this.lastSamples.get(link.peer.peerId);
+      this.lastSamples.set(link.peer.peerId, now);
+      return toStats(link.peer.peerId, link.peer.username, now, before);
+    });
+  }
+
   /** Broadcasts on every peer's data channel, or to one peer. */
   sendData(payload: unknown, to?: string[]): void {
     if (to) {
@@ -1078,6 +1168,7 @@ export class Mesh {
     this.speakingTimer = null;
     for (const link of this.links.values()) link.close();
     this.links.clear();
+    this.lastSamples.clear();
     this.local.clear();
     this.send({ type: 'leave' });
     this.socket?.close();

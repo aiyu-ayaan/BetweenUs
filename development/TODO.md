@@ -118,8 +118,10 @@ Desktop and web:
 - [x] Per-person volume and mute, stored per machine and keyed by user id so a
       reconnect does not reset it. A muted person is played at zero rather than
       dropped, so unmuting is instant and their speaking ring still moves
-- [ ] Call and share statistics in the UI - bitrate, loss, "you are not being
-      heard"
+- [x] Call and share statistics in the UI - bitrate up and down, packet loss,
+      round trip and the arriving picture's size, per peer, behind a button in
+      the call controls; plus the one warning that cannot wait behind a button,
+      which is a microphone sending nothing
 - [ ] A manual quality override for a share and for a remote session
 - [ ] Modifier chords, so Ctrl+Alt+Del travels as a chord
 - [ ] Input injection on macOS and Linux
@@ -642,8 +644,10 @@ Left open on purpose:
       shown to them: it is this machine's opinion of how loud somebody is.
       Capped at their original level, because that is `HTMLMediaElement.volume`'s
       ceiling - boosting past it needs a WebAudio gain node in the path
-- [ ] Nothing measures the result: no bitrate, no packet loss, no "your
-      microphone is not being heard" warning, the same gap phase 21 left
+- [x] Measured now: `services/call-stats.ts` samples every peer connection
+      every two seconds, the connection panel shows it, and a microphone that
+      is sending nothing raises a warning in the call itself rather than waiting
+      to be looked for
 - [ ] The gate is level-based, not a voice-activity model. A door slamming
       opens it; Discord's does the same, but Krisp's does not
 - [ ] The meter opens a second capture of the same microphone rather than
@@ -710,9 +714,10 @@ Left open on purpose:
       knowing that; this only ever infers it from congestion control
 - [ ] Motion is capped at 48 Mbps, so a 4K film can still be limited by the
       link. The cap is about links, not screens
-- [ ] Nothing measures the result. There is no bitrate, frame rate or round
-      trip anywhere in the UI, so "it looks bad" cannot be told apart from "the
-      link is bad" without opening `chrome://webrtc-internals`
+- [x] Measured now. Bitrate, frame size, frame rate, loss and round trip are in
+      the connection panel in the call controls, so "it looks bad" and "the link
+      is bad" are different sentences without opening
+      `chrome://webrtc-internals`
 - [ ] If a machine has no hardware H.264 encoder the fallback is software
       H.264, which is worse per bit than the VP8 it replaced. Nothing detects
       this or switches back
