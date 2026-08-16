@@ -29,6 +29,13 @@ import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { app, screen } from 'electron';
+import {
+  MODIFIER_VIRTUAL_KEYS,
+  modifierOf,
+  planModifiers,
+  readModifiers,
+  type Modifier,
+} from './modifiers';
 
 export interface MouseInput {
   action: 'move' | 'down' | 'up' | 'wheel';
@@ -45,6 +52,12 @@ export interface KeyInput {
   key: string;
   /** The physical key - `KeyA`, `Enter`, `ArrowLeft`. */
   code: string;
+  /**
+   * Which modifiers the controller was holding when this happened. Sent with
+   * every event, because a chord cannot be reconstructed from the order three
+   * separate events happened to arrive in - see `modifiers.ts`.
+   */
+  modifiers?: string[];
 }
 
 /**
@@ -222,6 +235,10 @@ function ensureBackend(): ChildProcessWithoutNullStreams | null {
 
 /** Ends the helper. Called when the last session closes and on quit. */
 export function stopInputBackend(): void {
+  // Before the helper goes: a modifier is held by the operating system, not by
+  // the process that pressed it, so killing the helper mid-chord would leave
+  // the machine holding Ctrl with nobody left to let go of it.
+  releaseModifiers();
   backend?.stdin.end();
   backend?.kill();
   backend = null;
@@ -299,7 +316,43 @@ export function applyMouse(input: MouseInput): void {
   }
 }
 
+/** What the machine is currently holding down on the controller's behalf. */
+let heldModifiers: Modifier[] = [];
+
+/**
+ * Brings the machine's modifiers in line with the controller's, and returns
+ * whether the event was itself a modifier - in which case there is nothing
+ * further to press: the state change *is* the keystroke.
+ */
+function reconcileModifiers(input: KeyInput): boolean {
+  const own = modifierOf(input.code);
+  // A modifier's own event is the most reliable statement of its state there
+  // is, and `event.ctrlKey` on the Ctrl keydown itself is not consistent
+  // across browsers - so take the action at its word for that one modifier.
+  const wanted = new Set(readModifiers(input.modifiers));
+  if (own) {
+    if (input.action === 'down') wanted.add(own);
+    else wanted.delete(own);
+  }
+
+  for (const step of planModifiers(heldModifiers, wanted)) {
+    write(`k ${step.action} ${MODIFIER_VIRTUAL_KEYS[step.modifier]}`);
+  }
+  heldModifiers = [...wanted];
+  return own !== null;
+}
+
+/** Lets go of everything, so a session that ends cannot leave Ctrl down. */
+export function releaseModifiers(): void {
+  for (const step of planModifiers(heldModifiers, [])) {
+    write(`k ${step.action} ${MODIFIER_VIRTUAL_KEYS[step.modifier]}`);
+  }
+  heldModifiers = [];
+}
+
 export function applyKey(input: KeyInput): void {
+  if (reconcileModifiers(input)) return;
+
   const virtualKey = VIRTUAL_KEYS[input.code];
   if (virtualKey !== undefined) {
     write(`k ${input.action} ${virtualKey}`);

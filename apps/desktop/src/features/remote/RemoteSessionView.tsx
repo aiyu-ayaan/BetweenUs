@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { useRemoteStore } from '../../stores/remote';
+import { modifiersOf } from '../../services/keyboard';
 import { MonitorIcon, PhoneOffIcon } from '../../components/icons';
 
 /**
@@ -66,7 +67,11 @@ export function RemoteSessionView(): JSX.Element {
         action: event.type === 'keydown' ? 'down' : 'up',
         key: event.key,
         code: event.code,
-        modifiers: [],
+        // Sent with every key, not only when a modifier changes: a chord is
+        // only a chord if the far side knows what was held at the moment the
+        // key was struck, and a modifier released while this window was not
+        // focused never arrives as an event of its own.
+        modifiers: modifiersOf(event),
       });
     };
 

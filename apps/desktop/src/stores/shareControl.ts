@@ -83,7 +83,7 @@ type Wire =
       b?: 'left' | 'right' | 'middle';
       d?: number;
     }
-  | { k: 'key'; a: 'down' | 'up'; key: string; code: string }
+  | { k: 'key'; a: 'down' | 'up'; key: string; code: string; mods?: string[] }
   | { k: 'p'; x: number; y: number }
   | { k: 'p.off' };
 
@@ -129,7 +129,8 @@ interface ShareControlState {
     button?: 'left' | 'right' | 'middle',
     deltaY?: number,
   ) => void;
-  sendKey: (action: 'down' | 'up', key: string, code: string) => void;
+  /** `modifiers` is what was held at the moment of the press - see keyboard.ts. */
+  sendKey: (action: 'down' | 'up', key: string, code: string, modifiers?: string[]) => void;
 }
 
 let mesh: Mesh | null = null;
@@ -287,10 +288,10 @@ export const useShareControlStore = create<ShareControlState>((set, get) => ({
     publish({ k: 'm', a: action, x, y, b: button, d: deltaY }, [target]);
   },
 
-  sendKey: (action, key, code) => {
+  sendKey: (action, key, code, modifiers) => {
     const target = get().driving;
     if (!target) return;
-    publish({ k: 'key', a: action, key, code }, [target]);
+    publish({ k: 'key', a: action, key, code, mods: modifiers }, [target]);
   },
 }));
 
@@ -381,7 +382,12 @@ function onMessage(
 
     case 'key': {
       if (!mayDrive(identity, get)) return;
-      window.nexora?.remoteKey({ action: message.a, key: message.key, code: message.code });
+      window.nexora?.remoteKey({
+        action: message.a,
+        key: message.key,
+        code: message.code,
+        modifiers: message.mods,
+      });
       return;
     }
 

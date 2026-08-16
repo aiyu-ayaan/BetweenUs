@@ -126,7 +126,13 @@ const api = {
   }): void => {
     ipcRenderer.send('remote:mouse', input);
   },
-  remoteKey: (input: { action: 'down' | 'up'; key: string; code: string }): void => {
+  remoteKey: (input: {
+    action: 'down' | 'up';
+    key: string;
+    code: string;
+    /** Modifiers held when this happened, so a chord survives the trip. */
+    modifiers?: string[];
+  }): void => {
     ipcRenderer.send('remote:key', input);
   },
   /** Ends the input helper when the last session closes. */

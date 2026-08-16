@@ -72,6 +72,11 @@ Desktop and web:
       Window-scoped: `globalShortcut` reports a press and never a release.
 - [x] **Call statistics.** Bitrate, loss, round trip and frame size per peer,
       plus a "nobody can hear you" warning that does not hide behind a button.
+- [x] **Modifier chords.** Every key event now carries the modifiers held when
+      it happened, and the machine being driven reconciles to that rather than
+      inferring a chord from the order three events arrived in. One module, two
+      callers - a remote session and control handed over in a call - and a
+      modifier released off-focus is let go on the next key instead of sticking.
 - [x] **Private-channel allowlist editing.** "Who is on it" in server settings,
       re-keying the channel on save.
 
@@ -105,9 +110,6 @@ blocked by anything outside this document.
 - [ ] **The permission editor learning to read custom roles.** The backend has
       them - name, colour, rank, permission bundle, and `roleIds` on the member
       editor - and no client draws any of it.
-- [ ] **Modifier chords.** Keys travel one at a time on both the remote path and
-      the give-control-in-a-call path, so Ctrl+Alt+Del is not delivered as a
-      chord. One change, two callers.
 - [ ] **Manual quality override** for a share and for a remote session. There is
       no "use 20 Mbps" and no way to force a codec, so a LAN cannot be told it
       is a LAN - everything is inferred from congestion control.

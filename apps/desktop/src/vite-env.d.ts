@@ -97,7 +97,12 @@ interface Window {
       button?: 'left' | 'right' | 'middle';
       deltaY?: number;
     }) => void;
-    remoteKey: (input: { action: 'down' | 'up'; key: string; code: string }) => void;
+    remoteKey: (input: {
+      action: 'down' | 'up';
+      key: string;
+      code: string;
+      modifiers?: string[];
+    }) => void;
     remoteInputStop: () => void;
     machineName: () => Promise<string>;
     devLogin: () => Promise<DevLogin | null>;

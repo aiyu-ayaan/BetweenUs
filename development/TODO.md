@@ -487,8 +487,12 @@ Left open on purpose:
       (365). A session with no `endedAt` is never swept, whatever its age
 - [ ] `apps/services/remote-agent` is still a scaffold. A headless server has no
       Nexora window to run the agent inside, and that is what it is for
-- [ ] The controller sends key events with an empty `modifiers` list; a
-      Ctrl+Alt+Del or a Windows-key chord is not delivered as a chord
+- [x] The controller sends what it was holding with every key event, and the
+      machine reconciles its modifiers to it, so a chord arrives as a chord.
+      It also self-heals: a modifier released while the controller's window
+      was not focused is let go on the next key rather than staying down.
+      Windows still reserves Ctrl+Alt+Del itself - no injected input can
+      raise the secure attention sequence, and nothing here pretends to
 - [ ] Quality is set once at the display's size and left to LiveKit's
       congestion control from there. There is no manual quality picker and no
       "balanced / sharp / smooth" choice the way RustDesk offers, and nothing
@@ -686,8 +690,8 @@ Left open on purpose:
       matters
 - [ ] A pointer is sent to everyone in the room, watching or not, and dropped
       by clients that are not looking at a share. Fine at call sizes
-- [ ] No modifier chords, the same gap the remote path has: keys travel one at
-      a time and a Ctrl+Alt+Del is not delivered as a chord
+- [x] Modifier chords, through the same reconciliation the remote path uses -
+      one module, two callers. The held modifiers ride on every key event
 
 ### Phase 18 — production ingress
 

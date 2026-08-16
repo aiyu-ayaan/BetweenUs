@@ -953,9 +953,18 @@ ipcMain.on('remote:mouse', (_event, input: unknown) => {
 });
 
 ipcMain.on('remote:key', (_event, input: unknown) => {
-  const payload = input as { action?: string; key?: string; code?: string };
+  const payload = input as { action?: string; key?: string; code?: string; modifiers?: unknown };
   if (payload?.action !== 'down' && payload?.action !== 'up') return;
   if (typeof payload.key !== 'string' || typeof payload.code !== 'string') return;
+  // Anything unrecognised in here is dropped further down; this only refuses a
+  // shape that is not a list of strings at all.
+  if (
+    payload.modifiers !== undefined &&
+    (!Array.isArray(payload.modifiers) ||
+      payload.modifiers.some((entry) => typeof entry !== 'string'))
+  ) {
+    return;
+  }
   applyKey(input as Parameters<typeof applyKey>[0]);
 });
 

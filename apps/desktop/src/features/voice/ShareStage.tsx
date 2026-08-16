@@ -17,6 +17,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useShareControlStore } from '../../stores/shareControl';
+import { modifiersOf } from '../../services/keyboard';
 import type { VoiceShare } from '../../stores/voice';
 import { contentBox, fractionIn, EMPTY_BOX, type Box } from './stage-geometry';
 
@@ -71,7 +72,14 @@ export function ShareStage({ share }: { share: VoiceShare }): JSX.Element {
         return;
       }
       event.preventDefault();
-      sendKey(event.type === 'keydown' ? 'down' : 'up', event.key, event.code);
+      // The modifiers ride along with every key: the far side reconstructs the
+      // chord from them rather than from the order three events arrived in.
+      sendKey(
+        event.type === 'keydown' ? 'down' : 'up',
+        event.key,
+        event.code,
+        modifiersOf(event),
+      );
     };
     window.addEventListener('keydown', onKey);
     window.addEventListener('keyup', onKey);
