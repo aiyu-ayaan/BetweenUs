@@ -684,10 +684,10 @@ Left open on purpose:
 - [ ] No audit trail. A remote session writes every refusal to the machine's
       history; this writes nothing anywhere, because there is no server in the
       path at all. The banner and the prompt are the whole record
-- [ ] One input target for the whole process, so a machine that is in a remote
-      session *and* handing control out in a call points both at whichever was
-      set last. Per-session targets are the fix if that combination ever
-      matters
+- [x] One input target per source, not per process: a remote session and control
+      handed out in a call each keep their own display, so a machine doing both
+      at once no longer points both at whichever was set last. Held modifiers
+      are tracked per source for the same reason
 - [ ] A pointer is sent to everyone in the room, watching or not, and dropped
       by clients that are not looking at a share. Fine at call sizes
 - [x] Modifier chords, through the same reconciliation the remote path uses -

@@ -172,7 +172,7 @@ export const useShareControlStore = create<ShareControlState>((set, get) => ({
     sweeper = null;
     mesh = null;
     asked = null;
-    window.nexora?.remoteTarget(null);
+    window.nexora?.remoteTarget(null, 'call');
     set({
       requests: [],
       controller: null,
@@ -210,7 +210,7 @@ export const useShareControlStore = create<ShareControlState>((set, get) => ({
       };
     });
 
-    if (get().controller === null) window.nexora?.remoteTarget(null);
+    if (get().controller === null) window.nexora?.remoteTarget(null, 'call');
   },
 
   ask: (sharer) => {
@@ -245,11 +245,11 @@ export const useShareControlStore = create<ShareControlState>((set, get) => ({
     }
 
     // Input arrives as a fraction of the shared display, so the main process
-    // has to be told which display that is before the first event lands.
-    // ponytail: one target for the whole process, so a machine that is in a
-    // remote session *and* handing control out in a call has the later of the
-    // two win. Per-session targets are the fix if that ever matters.
-    window.nexora?.remoteTarget(sharedDisplayId());
+    // has to be told which display that is before the first event lands. Under
+    // `call`, which is its own target: a machine can be in a remote session at
+    // the same time, watching a different monitor, and the two must not
+    // overwrite each other.
+    window.nexora?.remoteTarget(sharedDisplayId(), 'call');
     set({ controller: request });
     publish({ k: 'grant' }, [identity]);
   },
@@ -258,7 +258,7 @@ export const useShareControlStore = create<ShareControlState>((set, get) => ({
     const { controller, driving } = get();
     if (controller) {
       publish({ k: 'revoke' }, [controller.identity]);
-      window.nexora?.remoteTarget(null);
+      window.nexora?.remoteTarget(null, 'call');
       set({ controller: null });
     }
     if (driving) {
@@ -362,7 +362,7 @@ function onMessage(
     // Sent by either side: the sharer taking it back, or the driver letting go.
     case 'revoke':
       if (get().controller?.identity === identity) {
-        window.nexora?.remoteTarget(null);
+        window.nexora?.remoteTarget(null, 'call');
         set({ controller: null });
       }
       if (get().driving === identity) set({ driving: null, asking: false });
@@ -376,6 +376,7 @@ function onMessage(
         y: message.y,
         button: message.b,
         deltaY: message.d,
+        source: 'call',
       });
       return;
     }
@@ -387,6 +388,7 @@ function onMessage(
         key: message.key,
         code: message.code,
         modifiers: message.mods,
+        source: 'call',
       });
       return;
     }

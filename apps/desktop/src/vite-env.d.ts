@@ -70,7 +70,7 @@ interface Window {
     secureSet: (key: string, value: string) => Promise<void>;
     screenSources: () => Promise<ScreenSource[]>;
     screenDisplays: () => Promise<DisplayInfo[]>;
-    remoteTarget: (displayId: string | null) => void;
+    remoteTarget: (displayId: string | null, source?: 'session' | 'call') => void;
     selectScreenSource: (id: string, audio: boolean) => Promise<void>;
     /** One call per capture that started, when its track stops. */
     releaseScreenCapture: () => Promise<void>;
@@ -96,12 +96,14 @@ interface Window {
       y: number;
       button?: 'left' | 'right' | 'middle';
       deltaY?: number;
+      source?: 'session' | 'call';
     }) => void;
     remoteKey: (input: {
       action: 'down' | 'up';
       key: string;
       code: string;
       modifiers?: string[];
+      source?: 'session' | 'call';
     }) => void;
     remoteInputStop: () => void;
     machineName: () => Promise<string>;

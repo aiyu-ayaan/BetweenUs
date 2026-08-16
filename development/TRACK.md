@@ -77,6 +77,10 @@ Desktop and web:
       inferring a chord from the order three events arrived in. One module, two
       callers - a remote session and control handed over in a call - and a
       modifier released off-focus is let go on the next key instead of sticking.
+- [x] **Per-session input targets.** A remote session and control handed out in
+      a call carry their own display target and their own held modifiers, so a
+      machine doing both at once no longer points both at whichever was set
+      last. Every input event says which of the two it came from.
 - [x] **Private-channel allowlist editing.** "Who is on it" in server settings,
       re-keying the channel on save.
 
@@ -116,9 +120,6 @@ blocked by anything outside this document.
 - [ ] **Display hot-plug noticed mid-session.** The display list is read once
       when a session opens; a monitor plugged in - or one that changes
       resolution - is not noticed until the next session.
-- [ ] **Per-session input targets.** One input target for the whole process, so
-      a machine in a remote session *and* handing control out in a call points
-      both at whichever was set last.
 - [ ] **An unread line that survives a restart, and a jump to it.** The read
       marker survives; the line is only placed when a channel is opened in this
       session.

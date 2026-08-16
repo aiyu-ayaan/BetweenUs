@@ -319,11 +319,11 @@ async function onEvent(event: ServerRemoteEvent): Promise<void> {
     // Input has already been checked against the session's permissions by the
     // gateway; this side only applies it.
     case 'input.mouse':
-      window.nexora?.remoteMouse(event);
+      window.nexora?.remoteMouse({ ...event, source: 'session' });
       return;
 
     case 'input.key':
-      window.nexora?.remoteKey(event);
+      window.nexora?.remoteKey({ ...event, source: 'session' });
       return;
 
     case 'clipboard.set':
@@ -460,7 +460,7 @@ async function publishDisplay(target: ScreenLink, display: DisplayInfo): Promise
   await target.setDisplay(track, options.publish);
 
   activeDisplayId = display.id;
-  window.nexora?.remoteTarget(display.id);
+  window.nexora?.remoteTarget(display.id, 'session');
 }
 
 /**

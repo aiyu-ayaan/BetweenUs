@@ -971,9 +971,14 @@ ipcMain.on('remote:key', (_event, input: unknown) => {
 // Which display the fractions in an input event are fractions *of*. Set when a
 // session starts, when the controller switches monitor, and when control of a
 // screen share is handed over in a call. Without it, a second monitor was
-// watched and the first one was clicked.
-ipcMain.on('remote:target', (_event, displayId: unknown) => {
-  setInputDisplay(typeof displayId === 'string' && displayId ? displayId : null);
+// watched and the first one was clicked - and one target for both paths meant
+// a machine doing both at once used whichever was set last, so there is one
+// per source.
+ipcMain.on('remote:target', (_event, displayId: unknown, source: unknown) => {
+  setInputDisplay(
+    typeof displayId === 'string' && displayId ? displayId : null,
+    source === 'call' ? 'call' : 'session',
+  );
 });
 
 ipcMain.on('remote:stop', () => stopInputBackend());

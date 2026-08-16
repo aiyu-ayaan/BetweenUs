@@ -71,9 +71,14 @@ const api = {
       primary: boolean;
     }>
   > => ipcRenderer.invoke('screen:displays'),
-  /** Which display the fractions in a later `remoteMouse` are fractions of. */
-  remoteTarget: (displayId: string | null): void => {
-    ipcRenderer.send('remote:target', displayId);
+  /**
+   * Which display the fractions in a later `remoteMouse` are fractions of, for
+   * one of the two ways this machine can be driven. A remote session and
+   * control handed out in a call keep their own target: this machine can be in
+   * both at once, watching a different monitor in each.
+   */
+  remoteTarget: (displayId: string | null, source: 'session' | 'call' = 'session'): void => {
+    ipcRenderer.send('remote:target', displayId, source);
   },
   /** Records the picked surface; the next display capture gets exactly it. */
   selectScreenSource: (id: string, audio: boolean): Promise<void> =>
@@ -123,6 +128,7 @@ const api = {
     y: number;
     button?: 'left' | 'right' | 'middle';
     deltaY?: number;
+    source?: 'session' | 'call';
   }): void => {
     ipcRenderer.send('remote:mouse', input);
   },
@@ -132,6 +138,7 @@ const api = {
     code: string;
     /** Modifiers held when this happened, so a chord survives the trip. */
     modifiers?: string[];
+    source?: 'session' | 'call';
   }): void => {
     ipcRenderer.send('remote:key', input);
   },

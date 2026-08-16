@@ -37,6 +37,14 @@ import {
   type Modifier,
 } from './modifiers';
 
+/**
+ * Which of the two ways somebody can be driving this machine an event came
+ * from. They are independent: a machine can be in a remote session and handing
+ * control out in a call at the same time, watching a different monitor in each,
+ * and a single target meant whichever was set last captured both.
+ */
+export type InputSource = 'session' | 'call';
+
 export interface MouseInput {
   action: 'move' | 'down' | 'up' | 'wheel';
   /** Fraction of the shared screen, 0..1, so the two sides need no shared DPI. */
@@ -44,6 +52,8 @@ export interface MouseInput {
   y: number;
   button?: 'left' | 'right' | 'middle';
   deltaY?: number;
+  /** Defaults to a remote session, which is the older of the two paths. */
+  source?: InputSource;
 }
 
 export interface KeyInput {
@@ -58,6 +68,7 @@ export interface KeyInput {
    * separate events happened to arrive in - see `modifiers.ts`.
    */
   modifiers?: string[];
+  source?: InputSource;
 }
 
 /**
@@ -257,16 +268,19 @@ function write(line: string): void {
 }
 
 /**
- * The display an input event is a fraction of, or null for the primary one.
+ * The display an input event is a fraction of, per source, or null for the
+ * primary one.
  *
  * A controller watching the second monitor sends a click at the middle of what
  * it can see; mapping that onto the primary display puts it on a different
- * screen entirely. Whoever chose the monitor sets this.
+ * screen entirely. Whoever chose the monitor sets this - and a remote session
+ * and a call are allowed to have chosen differently, which is why there is one
+ * of these per source rather than one for the process.
  */
-let targetDisplayId: string | null = null;
+const targetDisplays = new Map<InputSource, string | null>();
 
-export function setInputDisplay(displayId: string | null): void {
-  targetDisplayId = displayId;
+export function setInputDisplay(displayId: string | null, source: InputSource = 'session'): void {
+  targetDisplays.set(source, displayId);
 }
 
 /**
@@ -279,9 +293,10 @@ export function setInputDisplay(displayId: string | null): void {
  * conversion, so this stays right for a display that is scaled *and* offset -
  * and a second monitor is always offset.
  */
-function toScreenPoint(x: number, y: number): { x: number; y: number } {
+function toScreenPoint(x: number, y: number, source: InputSource): { x: number; y: number } {
+  const wanted = targetDisplays.get(source) ?? null;
   const target =
-    screen.getAllDisplays().find((display) => String(display.id) === targetDisplayId) ??
+    screen.getAllDisplays().find((display) => String(display.id) === wanted) ??
     screen.getPrimaryDisplay();
   const bounds = target.bounds;
   const clamp = (value: number): number => Math.min(1, Math.max(0, value));
@@ -292,7 +307,7 @@ function toScreenPoint(x: number, y: number): { x: number; y: number } {
 }
 
 export function applyMouse(input: MouseInput): void {
-  const point = toScreenPoint(input.x, input.y);
+  const point = toScreenPoint(input.x, input.y, input.source ?? 'session');
   const button = input.button ?? 'left';
 
   switch (input.action) {
@@ -316,8 +331,15 @@ export function applyMouse(input: MouseInput): void {
   }
 }
 
-/** What the machine is currently holding down on the controller's behalf. */
-let heldModifiers: Modifier[] = [];
+/**
+ * What the machine is currently holding down on each controller's behalf.
+ *
+ * Per source for the same reason the target display is: two people can be
+ * driving at once, and one of them letting go of Ctrl says nothing about the
+ * other. What the operating system holds is the union, which is the price of
+ * two drivers and not something this can fix.
+ */
+const heldModifiers = new Map<InputSource, Modifier[]>();
 
 /**
  * Brings the machine's modifiers in line with the controller's, and returns
@@ -325,6 +347,7 @@ let heldModifiers: Modifier[] = [];
  * further to press: the state change *is* the keystroke.
  */
 function reconcileModifiers(input: KeyInput): boolean {
+  const source = input.source ?? 'session';
   const own = modifierOf(input.code);
   // A modifier's own event is the most reliable statement of its state there
   // is, and `event.ctrlKey` on the Ctrl keydown itself is not consistent
@@ -335,19 +358,22 @@ function reconcileModifiers(input: KeyInput): boolean {
     else wanted.delete(own);
   }
 
-  for (const step of planModifiers(heldModifiers, wanted)) {
+  for (const step of planModifiers(heldModifiers.get(source) ?? [], wanted)) {
     write(`k ${step.action} ${MODIFIER_VIRTUAL_KEYS[step.modifier]}`);
   }
-  heldModifiers = [...wanted];
+  heldModifiers.set(source, [...wanted]);
   return own !== null;
 }
 
 /** Lets go of everything, so a session that ends cannot leave Ctrl down. */
-export function releaseModifiers(): void {
-  for (const step of planModifiers(heldModifiers, [])) {
-    write(`k ${step.action} ${MODIFIER_VIRTUAL_KEYS[step.modifier]}`);
+export function releaseModifiers(source?: InputSource): void {
+  for (const [held, modifiers] of heldModifiers) {
+    if (source && held !== source) continue;
+    for (const step of planModifiers(modifiers, [])) {
+      write(`k ${step.action} ${MODIFIER_VIRTUAL_KEYS[step.modifier]}`);
+    }
+    heldModifiers.set(held, []);
   }
-  heldModifiers = [];
 }
 
 export function applyKey(input: KeyInput): void {
