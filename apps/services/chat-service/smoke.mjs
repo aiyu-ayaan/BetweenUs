@@ -15,6 +15,15 @@ const json = async (url, options = {}) => {
   return body;
 };
 
+/** The status code alone, for the cases where the refusal is the point. */
+const statusOf = async (url, options = {}) => {
+  const response = await fetch(url, {
+    ...options,
+    headers: { 'Content-Type': 'application/json', ...(options.headers ?? {}) },
+  });
+  return response.status;
+};
+
 /** A false assertion fails the run: this script is the CI integration test. */
 const ok = (label, condition, detail = '') => {
   if (!condition) {
@@ -238,14 +247,97 @@ const otherAuth = await json(`${AUTH}/api/v1/auth/register`, {
 const other = { Authorization: `Bearer ${otherAuth.accessToken}` };
 const otherId = otherAuth.user.id;
 
+// Joining takes an invite now. The slug is a name, not a door.
+const invite = await json(`${SERVER}/api/v1/servers/${server.id}/invites`, {
+  method: 'POST',
+  headers: authed,
+  body: JSON.stringify({}),
+});
 await json(`${SERVER}/api/v1/servers/join`, {
   method: 'POST',
   headers: other,
-  body: JSON.stringify({ slug: server.slug }),
+  body: JSON.stringify({ code: invite.code }),
 });
 
 const members = await json(`${SERVER}/api/v1/servers/${server.id}/members`, { headers: authed });
 ok('member list', members.length === 2);
+
+// An invite that has been used up, and one that has been taken back, are both
+// refused - and refused the same way a code that never existed is, so guessing
+// codes learns nothing from the answer.
+const single = await json(`${SERVER}/api/v1/servers/${server.id}/invites`, {
+  method: 'POST',
+  headers: authed,
+  body: JSON.stringify({ maxUses: 1 }),
+});
+const inviteeAuth = await json(`${AUTH}/api/v1/auth/register`, {
+  method: 'POST',
+  body: JSON.stringify({
+    email: `smoke-invitee-${suffix}@nexora.local`,
+    username: `smokeinvitee${suffix}`,
+    password: 'hunter2000',
+  }),
+});
+const invitee = { Authorization: `Bearer ${inviteeAuth.accessToken}` };
+await json(`${SERVER}/api/v1/servers/join`, {
+  method: 'POST',
+  headers: invitee,
+  body: JSON.stringify({ code: single.code }),
+});
+
+const spentAuth = await json(`${AUTH}/api/v1/auth/register`, {
+  method: 'POST',
+  body: JSON.stringify({
+    email: `smoke-rejected-${suffix}@nexora.local`,
+    username: `smokerejected${suffix}`,
+    password: 'hunter2000',
+  }),
+});
+const rejected = { Authorization: `Bearer ${spentAuth.accessToken}` };
+ok(
+  'a spent invite is refused',
+  (await statusOf(`${SERVER}/api/v1/servers/join`, {
+    method: 'POST',
+    headers: rejected,
+    body: JSON.stringify({ code: single.code }),
+  })) === 404,
+);
+
+const revocable = await json(`${SERVER}/api/v1/servers/${server.id}/invites`, {
+  method: 'POST',
+  headers: authed,
+  body: JSON.stringify({}),
+});
+await json(`${SERVER}/api/v1/servers/${server.id}/invites/${revocable.code}`, {
+  method: 'DELETE',
+  headers: authed,
+});
+ok(
+  'a revoked invite is refused',
+  (await statusOf(`${SERVER}/api/v1/servers/join`, {
+    method: 'POST',
+    headers: rejected,
+    body: JSON.stringify({ code: revocable.code }),
+  })) === 404,
+);
+
+ok(
+  'the slug is not a way in',
+  (await statusOf(`${SERVER}/api/v1/servers/join`, {
+    method: 'POST',
+    headers: rejected,
+    body: JSON.stringify({ code: server.slug }),
+  })) === 404,
+);
+
+ok(
+  'a member without MANAGE_MEMBER cannot mint one',
+  (await statusOf(`${SERVER}/api/v1/servers/${server.id}/invites`, {
+    method: 'POST',
+    headers: other,
+    body: JSON.stringify({}),
+  })) === 403,
+);
 ok(
   'effective permissions',
   members.every((member) => Array.isArray(member.permissions) && member.permissions.length > 0),

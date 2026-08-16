@@ -220,8 +220,8 @@ object Workspace {
     suspend fun createServer(name: String): ServerWithRole =
         NexoraApi.createServer(name).also { refresh() }
 
-    suspend fun joinServer(slug: String): ServerWithRole =
-        NexoraApi.joinServer(slug).also { refresh() }
+    suspend fun joinServer(code: String): ServerWithRole =
+        NexoraApi.joinServer(code).also { refresh() }
 
     suspend fun leaveServer(serverId: String) {
         NexoraApi.leaveServer(serverId)

@@ -170,6 +170,37 @@ export interface UpdateServerRequest {
   iconUrl?: string | null;
 }
 
+/** An invite as whoever manages the server sees it. */
+export interface ServerInvite {
+  code: string;
+  serverId: string;
+  createdById: string | null;
+  /** Null for an invite with no expiry - a choice, not the only option. */
+  expiresAt: string | null;
+  /** Null for unlimited. */
+  maxUses: number | null;
+  uses: number;
+  revokedAt: string | null;
+  createdAt: string;
+  /**
+   * Whether it would work right now. Derived, so a client never has to
+   * re-implement "expired or revoked or spent" and get one of the three wrong.
+   */
+  active: boolean;
+}
+
+export interface CreateServerInviteRequest {
+  /** Null or absent for an invite that never expires. */
+  expiresInHours?: number | null;
+  /** Null or absent for unlimited uses. */
+  maxUses?: number | null;
+}
+
+export interface JoinServerRequest {
+  /** An invite code. The server's slug is not one, and no longer opens a door. */
+  code: string;
+}
+
 export interface ServerMember {
   id: string;
   userId: string;

@@ -1,10 +1,18 @@
-import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { randomBytes } from 'node:crypto';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { prisma, resolveChannelAccess } from '@nexora/database';
 import { EVENTS, EventBus } from '@nexora/events';
 import type {
   Channel,
   ChannelMember as ChannelMemberDto,
   CreateChannelRequest,
+  CreateServerInviteRequest,
+  ServerInvite as ServerInviteDto,
   UpdateChannelRequest,
   Server,
   ServerMember,
@@ -312,18 +320,132 @@ export class ServersService {
     await prisma.server.delete({ where: { id: serverId } });
   }
 
-  /** Joins by slug. Invitations with codes and expiry come later (see TODO.md). */
-  async joinBySlug(userId: string, slug: string): Promise<ServerWithRole> {
-    const server = await prisma.server.findUnique({ where: { slug } });
+  // --- Invites --------------------------------------------------------------
+
+  /**
+   * Mints a way in.
+   *
+   * `MANAGE_MEMBER` rather than `MANAGE_SERVER`: handing somebody an invite is
+   * the same act as adding them from the members screen, which is what that
+   * permission is for, and making it owner-only would mean a moderator cannot
+   * do the one thing moderators spend their time doing.
+   */
+  async createInvite(
+    userId: string,
+    serverId: string,
+    body: CreateServerInviteRequest,
+  ): Promise<ServerInviteDto> {
+    await this.requirePermission(userId, serverId, PERMISSIONS.MANAGE_MEMBER);
+
+    const hours = body.expiresInHours ?? null;
+    if (hours !== null && (!Number.isFinite(hours) || hours <= 0)) {
+      throw new BadRequestException({
+        code: 'BAD_EXPIRY',
+        message: 'An invite either expires in a positive number of hours or never',
+      });
+    }
+
+    const maxUses = body.maxUses ?? null;
+    if (maxUses !== null && (!Number.isInteger(maxUses) || maxUses < 1)) {
+      throw new BadRequestException({
+        code: 'BAD_MAX_USES',
+        message: 'An invite is good for at least one use, or for any number',
+      });
+    }
+
+    const invite = await prisma.serverInvite.create({
+      data: {
+        // Unguessable, and not derived from the server's name: the whole
+        // problem with the slug was that knowing the server was knowing the way
+        // in.
+        code: randomBytes(9).toString('base64url'),
+        serverId,
+        createdById: userId,
+        expiresAt: hours === null ? null : new Date(Date.now() + hours * 3_600_000),
+        maxUses,
+      },
+    });
+
+    return toInvite(invite);
+  }
+
+  async invites(userId: string, serverId: string): Promise<ServerInviteDto[]> {
+    await this.requirePermission(userId, serverId, PERMISSIONS.MANAGE_MEMBER);
+    const rows = await prisma.serverInvite.findMany({
+      where: { serverId },
+      orderBy: { createdAt: 'desc' },
+    });
+    return rows.map(toInvite);
+  }
+
+  /**
+   * Takes an invite back. Revoked rather than deleted, so the list still shows
+   * that it existed and how many people came in through it.
+   */
+  async revokeInvite(userId: string, serverId: string, code: string): Promise<ServerInviteDto> {
+    await this.requirePermission(userId, serverId, PERMISSIONS.MANAGE_MEMBER);
+
+    const invite = await prisma.serverInvite.findUnique({ where: { code } });
+    if (!invite || invite.serverId !== serverId) {
+      throw new NotFoundException({ code: 'INVITE_NOT_FOUND', message: 'Invite not found' });
+    }
+    if (invite.revokedAt) return toInvite(invite);
+
+    return toInvite(
+      await prisma.serverInvite.update({
+        where: { code },
+        data: { revokedAt: new Date() },
+      }),
+    );
+  }
+
+  /**
+   * Joins with an invite code.
+   *
+   * The slug used to be the way in and is not any more. It is permanent, it is
+   * derived from the server's name, and it is on screen for every member - so
+   * it was a password everybody knew and nobody could change without renaming
+   * the server for the people already inside.
+   *
+   * A member who is already in walks through without spending a use: rejoining
+   * is not joining, and burning a limited invite on it would be a way to empty
+   * one.
+   */
+  async joinByInvite(userId: string, code: string): Promise<ServerWithRole> {
+    const invite = await prisma.serverInvite.findUnique({ where: { code } });
+    // The same answer for a code that never existed, one that has expired and
+    // one that has been revoked: which of the three it is tells somebody
+    // guessing codes that they are close.
+    if (!invite || !isInviteActive(invite)) {
+      throw new NotFoundException({
+        code: 'INVITE_NOT_FOUND',
+        message: 'That invite is not valid',
+      });
+    }
+
+    const server = await prisma.server.findUnique({ where: { id: invite.serverId } });
     if (!server) {
       throw new NotFoundException({ code: 'SERVER_NOT_FOUND', message: 'Server not found' });
     }
 
-    const membership = await prisma.serverMember.upsert({
+    const existing = await prisma.serverMember.findUnique({
       where: { serverId_userId: { serverId: server.id, userId } },
-      update: {},
-      create: { serverId: server.id, userId, role: 'MEMBER' },
+      select: { role: true, grantedPermissions: true, deniedPermissions: true },
     });
+    if (existing) {
+      return {
+        ...toServer(server),
+        role: existing.role as ServerRole,
+        permissions: permissionsOf(existing),
+      };
+    }
+
+    // The count and the membership move together, so two people racing the
+    // last use of an invite cannot both get in.
+    const [, membership] = await prisma.$transaction([
+      prisma.serverInvite.update({ where: { code }, data: { uses: { increment: 1 } } }),
+      prisma.serverMember.create({ data: { serverId: server.id, userId, role: 'MEMBER' } }),
+    ]);
 
     await this.events.publish(EVENTS.SERVER_MEMBER_ADDED, {
       serverId: server.id,
@@ -632,5 +754,43 @@ function toChannel(row: {
     topic: row.topic,
     isPrivate: row.isPrivate,
     createdAt: row.createdAt.toISOString(),
+  };
+}
+
+interface InviteRow {
+  code: string;
+  serverId: string;
+  createdById: string | null;
+  expiresAt: Date | null;
+  maxUses: number | null;
+  uses: number;
+  revokedAt: Date | null;
+  createdAt: Date;
+}
+
+/**
+ * Would this invite let somebody in right now?
+ *
+ * One function, used by the join path and by the list the UI draws, so "expired
+ * or revoked or spent" cannot be right in one place and wrong in the other.
+ */
+export function isInviteActive(invite: InviteRow, now: Date = new Date()): boolean {
+  if (invite.revokedAt !== null) return false;
+  if (invite.expiresAt !== null && invite.expiresAt.getTime() <= now.getTime()) return false;
+  if (invite.maxUses !== null && invite.uses >= invite.maxUses) return false;
+  return true;
+}
+
+function toInvite(row: InviteRow): ServerInviteDto {
+  return {
+    code: row.code,
+    serverId: row.serverId,
+    createdById: row.createdById,
+    expiresAt: row.expiresAt?.toISOString() ?? null,
+    maxUses: row.maxUses,
+    uses: row.uses,
+    revokedAt: row.revokedAt?.toISOString() ?? null,
+    createdAt: row.createdAt.toISOString(),
+    active: isInviteActive(row),
   };
 }

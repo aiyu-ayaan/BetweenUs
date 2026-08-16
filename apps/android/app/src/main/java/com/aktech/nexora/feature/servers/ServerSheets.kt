@@ -41,7 +41,7 @@ import com.aktech.nexora.ui.theme.Surface700
 import com.aktech.nexora.ui.theme.Surface900
 import kotlinx.coroutines.launch
 
-/** Create a server, or join one by the slug somebody sent you. */
+/** Create a server, or join one with an invite code somebody sent you. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun JoinOrCreateServerSheet(onDismiss: () -> Unit, onDone: (ServerWithRole) -> Unit) {
@@ -67,7 +67,7 @@ fun JoinOrCreateServerSheet(onDismiss: () -> Unit, onDone: (ServerWithRole) -> U
                 text = if (creating) {
                     "You will be its owner. Everything else - channels, roles, who is in it - comes after."
                 } else {
-                    "The slug is the short name in the invite somebody sent you."
+                    "Paste the invite code somebody sent you. It may expire or run out."
                 },
                 style = MaterialTheme.typography.bodyMedium,
                 color = Slate500,
@@ -81,10 +81,10 @@ fun JoinOrCreateServerSheet(onDismiss: () -> Unit, onDone: (ServerWithRole) -> U
 
             Spacer(Modifier.height(16.dp))
             NexoraField(
-                label = if (creating) "Name" else "Slug",
+                label = if (creating) "Name" else "Invite code",
                 value = value,
                 onValueChange = { value = it; note = null },
-                placeholder = if (creating) "Weekend project" else "weekend-project",
+                placeholder = if (creating) "Weekend project" else "kJ3f9aQ2xR1p",
                 imeAction = ImeAction.Done,
                 enabled = !busy,
             )

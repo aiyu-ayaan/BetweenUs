@@ -326,7 +326,12 @@ says so too; both halves are needed.
 
 ## Phase 11 — Servers, roles and moderation ✅
 
-- [ ] Create/join a server, invites, invite links.
+- [x] Join a server with an invite code, and create one. The sheet asks for a
+      code rather than a slug, because a slug is a name and no longer opens a
+      door.
+- [ ] Managing invites from the phone: minting one with an expiry and a use
+      limit, revoking it, and a link that opens the app. The API client has the
+      three calls; there is no screen for them.
 - [x] Member list with presence and roles.
 - [x] Role and permission editing for those who hold `MANAGE_ROLE`.
 - [x] Channel create/rename/delete.

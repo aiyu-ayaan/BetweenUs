@@ -140,10 +140,15 @@ ok('own message is not unread', own !== undefined && own.count === 0, JSON.strin
 // could see the channel rather than from the start of its history.
 const bob = await register('b');
 const bobAuth = { Authorization: `Bearer ${bob.accessToken}` };
+const invite = await json(`${SERVER}/api/v1/servers/${server.id}/invites`, {
+  method: 'POST',
+  headers: aliceAuth,
+  body: JSON.stringify({}),
+});
 await json(`${SERVER}/api/v1/servers/join`, {
   method: 'POST',
   headers: bobAuth,
-  body: JSON.stringify({ slug: server.slug }),
+  body: JSON.stringify({ code: invite.code }),
 });
 await send(bobAuth, 'from someone else');
 

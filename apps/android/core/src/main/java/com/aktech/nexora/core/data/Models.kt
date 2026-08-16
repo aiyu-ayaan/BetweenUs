@@ -112,6 +112,39 @@ data class ServerWithRole(
     }
 }
 
+/**
+ * A way into a server that can expire, run out and be taken back.
+ *
+ * `active` is the server's answer rather than this client's: "expired or
+ * revoked or spent" is three conditions and re-deriving them here would be
+ * three chances to disagree with the service about who may join.
+ */
+data class ServerInvite(
+    val code: String,
+    val serverId: String,
+    val createdById: String?,
+    val expiresAt: String?,
+    val maxUses: Int?,
+    val uses: Int,
+    val revokedAt: String?,
+    val createdAt: String,
+    val active: Boolean,
+) {
+    companion object {
+        fun from(json: JSONObject) = ServerInvite(
+            code = json.optString("code"),
+            serverId = json.optString("serverId"),
+            createdById = json.stringOrNull("createdById"),
+            expiresAt = json.stringOrNull("expiresAt"),
+            maxUses = if (json.isNull("maxUses")) null else json.optInt("maxUses"),
+            uses = json.optInt("uses"),
+            revokedAt = json.stringOrNull("revokedAt"),
+            createdAt = json.optString("createdAt"),
+            active = json.optBoolean("active"),
+        )
+    }
+}
+
 data class ServerMember(
     val userId: String,
     val username: String,

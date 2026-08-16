@@ -1,4 +1,5 @@
 import type {
+  CreateServerInviteRequest,
   ApiErrorBody,
   AuthResponse,
   AuthTokens,
@@ -26,6 +27,7 @@ import type {
   RemotePermission,
   RemoteSessionResponse,
   ServerMember,
+  ServerInvite,
   ServerWithRole,
   StartMultipartResponse,
   UploadedObject,
@@ -264,8 +266,25 @@ export const api = {
   createServer: (name: string): Promise<ServerWithRole> =>
     request('/api/v1/servers', { method: 'POST', body: JSON.stringify({ name }) }),
 
-  joinServer: (slug: string): Promise<ServerWithRole> =>
-    request('/api/v1/servers/join', { method: 'POST', body: JSON.stringify({ slug }) }),
+  joinServer: (code: string): Promise<ServerWithRole> =>
+    request('/api/v1/servers/join', { method: 'POST', body: JSON.stringify({ code }) }),
+
+  serverInvites: (serverId: string): Promise<ServerInvite[]> =>
+    request(`/api/v1/servers/${serverId}/invites`),
+
+  createServerInvite: (
+    serverId: string,
+    body: CreateServerInviteRequest,
+  ): Promise<ServerInvite> =>
+    request(`/api/v1/servers/${serverId}/invites`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
+  revokeServerInvite: (serverId: string, code: string): Promise<ServerInvite> =>
+    request(`/api/v1/servers/${serverId}/invites/${encodeURIComponent(code)}`, {
+      method: 'DELETE',
+    }),
 
   updateServer: (serverId: string, body: UpdateServerRequest): Promise<ServerWithRole> =>
     request(`/api/v1/servers/${serverId}`, { method: 'PATCH', body: JSON.stringify(body) }),

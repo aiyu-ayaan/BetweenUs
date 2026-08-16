@@ -71,6 +71,7 @@ model User {
   identities    UserIdentity[]
   notifications NotificationSetting?
   channelReads  ChannelRead[]
+  serverInvites  ServerInvite[]  @relation("ServerInviteCreatedBy")
   remoteMachines RemoteMachine[] @relation("RemoteMachineOwner")
   remoteGrants   RemoteGrant[]   @relation("RemoteGrantUser")
   remoteGranted  RemoteGrant[]   @relation("RemoteGrantGrantedBy")
@@ -248,9 +249,42 @@ model Server {
   owner    User           @relation("ServerOwner", fields: [ownerId], references: [id], onDelete: Cascade)
   members  ServerMember[]
   channels Channel[]
+  invites  ServerInvite[]
 
   @@index([ownerId])
   @@map("servers")
+}
+
+/// A way in that can be taken away again.
+///
+/// The slug was the only way to join, and a slug is permanent, public and
+/// guessable from the server's name: handing it to one person handed it to
+/// everyone they ever forward it to, forever. An invite is a code with an
+/// optional expiry and an optional cap on how many times it may be used, and
+/// revoking it is a column rather than renaming the server.
+model ServerInvite {
+  id          String    @id @default(uuid())
+  /// Random and unguessable, not derived from the server's name.
+  code        String    @unique
+  serverId    String
+  /// Null once the account that made it is deleted; the invite is the server's,
+  /// not theirs, so it outlives them.
+  createdById String?
+  /// Null for an invite that does not expire, which is a deliberate choice
+  /// somebody has to make rather than the only behaviour available.
+  expiresAt   DateTime?
+  /// Null for unlimited. Counted rather than decremented so a spent invite
+  /// still says how popular it was.
+  maxUses     Int?
+  uses        Int       @default(0)
+  revokedAt   DateTime?
+  createdAt   DateTime  @default(now())
+
+  server    Server @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  createdBy User?  @relation("ServerInviteCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([serverId])
+  @@map("server_invites")
 }
 
 model ServerMember {

@@ -100,8 +100,29 @@ object NexoraApi {
         ServerWithRole.from(authed("POST", "/api/v1/servers", obj("name" to name)))
     }
 
-    suspend fun joinServer(slug: String): ServerWithRole = io {
-        ServerWithRole.from(authed("POST", "/api/v1/servers/join", obj("slug" to slug)))
+    /** An invite code, not a slug: a slug is a name and no longer opens a door. */
+    suspend fun joinServer(code: String): ServerWithRole = io {
+        ServerWithRole.from(authed("POST", "/api/v1/servers/join", obj("code" to code)))
+    }
+
+    suspend fun serverInvites(serverId: String): List<ServerInvite> = io {
+        authedArray("GET", "/api/v1/servers/$serverId/invites").map { ServerInvite.from(it) }
+    }
+
+    /** Null hours never expires; null uses is unlimited. */
+    suspend fun createServerInvite(
+        serverId: String,
+        expiresInHours: Int?,
+        maxUses: Int?,
+    ): ServerInvite = io {
+        val body = JSONObject()
+        expiresInHours?.let { body.put("expiresInHours", it) }
+        maxUses?.let { body.put("maxUses", it) }
+        ServerInvite.from(authed("POST", "/api/v1/servers/$serverId/invites", body))
+    }
+
+    suspend fun revokeServerInvite(serverId: String, code: String): ServerInvite = io {
+        ServerInvite.from(authed("DELETE", "/api/v1/servers/$serverId/invites/${enc(code)}"))
     }
 
     suspend fun updateServer(serverId: String, name: String?, iconUrl: String?): ServerWithRole = io {

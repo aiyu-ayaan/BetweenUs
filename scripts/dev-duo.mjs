@@ -89,11 +89,18 @@ async function seed() {
       body: JSON.stringify({ name: SERVER_NAME }),
     }));
 
-  // Joining is an upsert, so running this repeatedly is harmless.
+  // An invite per run, unlimited and non-expiring: this is a seed script, and
+  // joining a server somebody is already in returns their membership unchanged,
+  // so running it repeatedly stays harmless.
+  const invite = await json(`${SERVER}/api/v1/servers/${server.id}/invites`, {
+    method: 'POST',
+    headers: asAlice,
+    body: JSON.stringify({}),
+  });
   await json(`${SERVER}/api/v1/servers/join`, {
     method: 'POST',
     headers: asBob,
-    body: JSON.stringify({ slug: server.slug }),
+    body: JSON.stringify({ code: invite.code }),
   });
 
   const channels = await json(

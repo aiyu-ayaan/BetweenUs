@@ -1,5 +1,11 @@
 import { useEffect, useState } from 'react';
-import type { Channel, ServerMember, ServerRole, UserSummary } from '@nexora/shared-types';
+import type {
+  Channel,
+  ServerInvite,
+  ServerMember,
+  ServerRole,
+  UserSummary,
+} from '@nexora/shared-types';
 import { ASSIGNABLE_PERMISSIONS, PERMISSIONS, SERVER_ROLES } from '@nexora/permissions';
 import { api } from '../../services/api';
 import { useAuthStore } from '../../stores/auth';
@@ -242,8 +248,11 @@ function Overview(): JSX.Element {
 
       <dl className="mt-8 space-y-4 rounded-lg bg-surface-800 p-4">
         <div>
-          <dt className="text-xs font-bold uppercase tracking-wide text-slate-400">Invite slug</dt>
+          <dt className="text-xs font-bold uppercase tracking-wide text-slate-400">Address</dt>
           <dd className="mt-1 font-mono text-slate-100">{server?.slug}</dd>
+          <dd className="mt-1 text-xs text-slate-500">
+            A name, not a way in - see Invites for that.
+          </dd>
         </div>
         <div>
           <dt className="text-xs font-bold uppercase tracking-wide text-slate-400">Your role</dt>
@@ -722,18 +731,175 @@ function Invites(): JSX.Element {
   const activeServerId = useChatStore((state) => state.activeServerId);
   const server = servers.find((item) => item.id === activeServerId);
 
+  const [invites, setInvites] = useState<ServerInvite[]>([]);
+  const [expiresInHours, setExpiresInHours] = useState<number | null>(24);
+  const [maxUses, setMaxUses] = useState<number | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [failure, setFailure] = useState<string | null>(null);
+  const [copied, setCopied] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!server) return;
+    let live = true;
+    void api
+      .serverInvites(server.id)
+      .then((rows) => {
+        if (live) setInvites(rows);
+      })
+      .catch((error: unknown) =>
+        setFailure(error instanceof Error ? error.message : 'Could not read the invites'),
+      );
+    return () => {
+      live = false;
+    };
+  }, [server?.id]);
+
+  if (!server) return <></>;
+
+  const create = async (): Promise<void> => {
+    setBusy(true);
+    setFailure(null);
+    try {
+      const invite = await api.createServerInvite(server.id, { expiresInHours, maxUses });
+      setInvites((current) => [invite, ...current]);
+    } catch (error) {
+      setFailure(error instanceof Error ? error.message : 'Could not make an invite');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const revoke = async (code: string): Promise<void> => {
+    try {
+      const invite = await api.revokeServerInvite(server.id, code);
+      setInvites((current) => current.map((row) => (row.code === code ? invite : row)));
+    } catch (error) {
+      setFailure(error instanceof Error ? error.message : 'Could not revoke it');
+    }
+  };
+
+  const copy = (code: string): void => {
+    void navigator.clipboard?.writeText(code).then(() => {
+      setCopied(code);
+      window.setTimeout(() => setCopied((current) => (current === code ? null : current)), 2000);
+    });
+  };
+
   return (
     <>
       <h1 className="text-xl font-semibold text-slate-50">Invites</h1>
       <p className="mt-2 text-sm text-slate-400">
-        Anyone with the slug can join. Invite codes that expire, and invites that can be revoked,
-        are not built yet (development/TODO.md).
+        An invite is how somebody gets in. Each one can expire, can be limited to a number of
+        people, and can be taken back - which is what the server&apos;s name never could be.
       </p>
 
       <div className="mt-5 rounded-lg bg-surface-800 p-4">
-        <p className="text-xs font-bold uppercase tracking-wide text-slate-400">Invite slug</p>
-        <p className="mt-2 select-all font-mono text-lg text-slate-100">{server?.slug}</p>
+        <div className="flex flex-wrap items-end gap-4">
+          <label className="text-sm text-slate-300">
+            Expires after
+            <select
+              value={expiresInHours ?? 'never'}
+              onChange={(event) =>
+                setExpiresInHours(
+                  event.target.value === 'never' ? null : Number(event.target.value),
+                )
+              }
+              className="mt-1 block cursor-pointer rounded-md bg-surface-900 px-3 py-2 text-slate-100"
+            >
+              <option value={1}>1 hour</option>
+              <option value={24}>1 day</option>
+              <option value={24 * 7}>7 days</option>
+              <option value={24 * 30}>30 days</option>
+              <option value="never">Never</option>
+            </select>
+          </label>
+
+          <label className="text-sm text-slate-300">
+            Number of uses
+            <select
+              value={maxUses ?? 'any'}
+              onChange={(event) =>
+                setMaxUses(event.target.value === 'any' ? null : Number(event.target.value))
+              }
+              className="mt-1 block cursor-pointer rounded-md bg-surface-900 px-3 py-2 text-slate-100"
+            >
+              <option value={1}>1</option>
+              <option value={5}>5</option>
+              <option value={25}>25</option>
+              <option value={100}>100</option>
+              <option value="any">Any number</option>
+            </select>
+          </label>
+
+          <button
+            type="button"
+            onClick={() => void create()}
+            disabled={busy}
+            className="cursor-pointer rounded-md bg-accent px-4 py-2 font-medium text-white transition-colors duration-200 hover:bg-accent-hover active:scale-[0.98] disabled:opacity-50"
+          >
+            {busy ? 'Making…' : 'New invite'}
+          </button>
+        </div>
       </div>
+
+      {failure && <p className="mt-3 text-sm text-danger">{failure}</p>}
+
+      {invites.length === 0 ? (
+        <p className="mt-5 text-sm text-slate-400">
+          No invites yet. Nobody can join until there is one.
+        </p>
+      ) : (
+        <ul className="mt-5 divide-y divide-surface-700 rounded-lg bg-surface-800">
+          {invites.map((invite) => (
+            <li key={invite.code} className="flex items-center justify-between gap-4 px-4 py-3">
+              <div className="min-w-0">
+                <p
+                  className={`select-all font-mono text-sm ${
+                    invite.active ? 'text-slate-100' : 'text-slate-500 line-through'
+                  }`}
+                >
+                  {invite.code}
+                </p>
+                <p className="mt-1 text-xs text-slate-400">{describeInvite(invite)}</p>
+              </div>
+              <div className="flex shrink-0 gap-2">
+                <button
+                  type="button"
+                  onClick={() => copy(invite.code)}
+                  className="cursor-pointer rounded bg-white/[0.07] px-3 py-1.5 text-sm text-slate-100 transition-colors duration-200 hover:bg-white/[0.1]"
+                >
+                  {copied === invite.code ? 'Copied' : 'Copy'}
+                </button>
+                {invite.active && (
+                  <button
+                    type="button"
+                    onClick={() => void revoke(invite.code)}
+                    className="cursor-pointer rounded bg-white/[0.07] px-3 py-1.5 text-sm text-danger transition-colors duration-200 hover:bg-white/[0.1]"
+                  >
+                    Revoke
+                  </button>
+                )}
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
     </>
   );
+}
+
+/** One line saying what is left of an invite, or what happened to it. */
+function describeInvite(invite: ServerInvite): string {
+  if (invite.revokedAt) return 'Revoked';
+  if (invite.expiresAt && new Date(invite.expiresAt).getTime() <= Date.now()) return 'Expired';
+  if (invite.maxUses !== null && invite.uses >= invite.maxUses) return 'All uses spent';
+
+  const used =
+    invite.maxUses === null
+      ? `${invite.uses} used`
+      : `${invite.uses} of ${invite.maxUses} used`;
+  const until = invite.expiresAt
+    ? `expires ${new Date(invite.expiresAt).toLocaleString()}`
+    : 'never expires';
+  return `${used}, ${until}`;
 }

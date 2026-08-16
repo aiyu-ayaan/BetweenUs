@@ -107,14 +107,14 @@ export function ServerRail(): JSX.Element {
             <p className="mt-2 text-sm text-slate-400">
               {dialog === 'create'
                 ? 'Your server is where you and your people hang out. Make one and start talking.'
-                : 'Enter the invite slug someone sent you.'}
+                : 'Paste the invite code someone sent you.'}
             </p>
 
             <label
               htmlFor="server-input"
               className="mt-5 block text-xs font-bold uppercase tracking-wide text-slate-300"
             >
-              {dialog === 'create' ? 'Server name' : 'Invite slug'}
+              {dialog === 'create' ? 'Server name' : 'Invite code'}
             </label>
             <input
               id="server-input"

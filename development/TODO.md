@@ -87,7 +87,10 @@ Backend:
 - [ ] Multi-device E2EE: a key per device, so one can be revoked alone
 - [ ] Identity rotation after a lost device, re-sealing current channel keys
 - [ ] Safety numbers, so a lying server is detectable
-- [ ] Invite codes with an expiry, instead of a permanent server slug
+- [x] Invite codes with an expiry, a use limit and a revoke, instead of a
+      permanent server slug. `POST/GET/DELETE /api/v1/servers/:id/invites`,
+      `MANAGE_MEMBER` to mint one, and `POST /servers/join` takes a code - the
+      slug is a name now and opens nothing
 - [ ] Custom named roles with a colour and an ordering
 - [x] Stale multipart sessions swept on a schedule (chat-service, local driver
       only - S3 has a lifecycle rule for exactly this)
@@ -1052,7 +1055,10 @@ Phase 12 opened these, and left them open on purpose:
       cannot be taken back - and opens nothing after
 - [ ] Editing a private channel's allowlist from the UI (the endpoint exists;
       only the create dialog uses it)
-- [ ] Invite codes with an expiry, instead of a permanent server slug
+- [x] Invite codes with an expiry, a use limit and a revoke, instead of a
+      permanent server slug. `POST/GET/DELETE /api/v1/servers/:id/invites`,
+      `MANAGE_MEMBER` to mint one, and `POST /servers/join` takes a code - the
+      slug is a name now and opens nothing
 - [ ] Custom named roles with a colour and an ordering
 - [x] Idle status set automatically after a period of no input, rather than only
       by hand. Ten minutes, from the operating system's own idle clock on the

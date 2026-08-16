@@ -99,7 +99,8 @@ interface ChatState {
   loadDirects: () => Promise<void>;
   openDirectChannel: (direct: DirectChannel) => Promise<void>;
   createServer: (name: string) => Promise<void>;
-  joinServer: (slug: string) => Promise<void>;
+  /** Joins with an invite code. A slug is not one. */
+  joinServer: (code: string) => Promise<void>;
   createChannel: (options: {
     name: string;
     type?: ChannelType;
@@ -331,8 +332,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
     await get().selectServer(server.id);
   },
 
-  joinServer: async (slug) => {
-    const server = await api.joinServer(slug);
+  joinServer: async (code) => {
+    const server = await api.joinServer(code);
     const known = get().servers.some((item) => item.id === server.id);
     if (!known) set({ servers: [...get().servers, server] });
     await get().selectServer(server.id);

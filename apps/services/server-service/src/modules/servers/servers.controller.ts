@@ -16,6 +16,7 @@ import { CurrentUser, JwtAuthGuard, type AuthenticatedUser } from '@nexora/auth'
 import type {
   Channel,
   ChannelMember,
+  ServerInvite,
   ServerMember,
   ServerWithRole,
 } from '@nexora/shared-types';
@@ -24,6 +25,7 @@ import {
   AddServerMemberDto,
   CreateChannelDto,
   CreateServerDto,
+  CreateServerInviteDto,
   JoinServerDto,
   SetChannelMembersDto,
   UpdateChannelDto,
@@ -54,7 +56,34 @@ export class ServersController {
     @CurrentUser() user: AuthenticatedUser,
     @Body() dto: JoinServerDto,
   ): Promise<ServerWithRole> {
-    return this.servers.joinBySlug(user.id, dto.slug);
+    return this.servers.joinByInvite(user.id, dto.code);
+  }
+
+  @Get(':serverId/invites')
+  invites(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('serverId', ParseUUIDPipe) serverId: string,
+  ): Promise<ServerInvite[]> {
+    return this.servers.invites(user.id, serverId);
+  }
+
+  @Post(':serverId/invites')
+  createInvite(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('serverId', ParseUUIDPipe) serverId: string,
+    @Body() dto: CreateServerInviteDto,
+  ): Promise<ServerInvite> {
+    return this.servers.createInvite(user.id, serverId, dto);
+  }
+
+  /** Revoked, not deleted: the list keeps saying that it existed. */
+  @Delete(':serverId/invites/:code')
+  revokeInvite(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('serverId', ParseUUIDPipe) serverId: string,
+    @Param('code') code: string,
+  ): Promise<ServerInvite> {
+    return this.servers.revokeInvite(user.id, serverId, code);
   }
 
   @Patch(':serverId')

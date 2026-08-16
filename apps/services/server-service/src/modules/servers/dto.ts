@@ -3,12 +3,15 @@ import {
   IsArray,
   IsBoolean,
   IsIn,
+  IsInt,
   IsOptional,
   IsString,
   IsUUID,
   Length,
   Matches,
+  Max,
   MaxLength,
+  Min,
   ValidateIf,
 } from 'class-validator';
 import { SERVER_ROLES } from '@nexora/permissions';
@@ -32,9 +35,28 @@ export class CreateServerDto implements CreateServerRequest {
 }
 
 export class JoinServerDto {
+  /** An invite code. A server's slug is not one and no longer opens a door. */
   @IsString()
-  @Length(2, 64)
-  slug!: string;
+  @Length(4, 64)
+  code!: string;
+}
+
+export class CreateServerInviteDto {
+  /** Absent or null for an invite that never expires. A year is the ceiling. */
+  @IsOptional()
+  @ValidateIf((_object, value) => value !== null)
+  @IsInt()
+  @Min(1)
+  @Max(24 * 365)
+  expiresInHours?: number | null;
+
+  /** Absent or null for unlimited. */
+  @IsOptional()
+  @ValidateIf((_object, value) => value !== null)
+  @IsInt()
+  @Min(1)
+  @Max(1000)
+  maxUses?: number | null;
 }
 
 export class AddServerMemberDto implements AddServerMemberRequest {
