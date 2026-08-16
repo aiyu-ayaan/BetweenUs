@@ -44,12 +44,11 @@ Backend:
       year, abandoned multipart uploads every six hours.
 - [x] **Agent-token lookup.** A unique index instead of a full table scan on
       every agent reconnect.
-- [x] **Custom named roles with a colour and an ordering** - the backend half.
-      A table, a rank, a colour, and a permission bundle, additive on top of the
-      five built-ins rather than replacing them. A member's denials still beat
-      every role they hold. The permission editor in the clients does not draw
-      them yet, so this half is on the desktop list rather than done. Since
-      landed on desktop and web - see below.
+- [x] **Custom named roles with a colour and an ordering.** A table, a rank, a
+      colour, and a permission bundle, additive on top of the five built-ins
+      rather than replacing them. A member's denials still beat every role they
+      hold. The desktop and web editor draws and assigns them - see below;
+      Android's does not.
 - [x] **Remote sessions over Redis Pub/Sub.** The agent and the controller no
       longer have to be on the same replica. One pair of methods carries every
       message - local socket when this instance holds it, Pub/Sub when it does
@@ -73,11 +72,15 @@ Desktop and web:
       Window-scoped: `globalShortcut` reports a press and never a release.
 - [x] **Call statistics.** Bitrate, loss, round trip and frame size per peer,
       plus a "nobody can hear you" warning that does not hide behind a button.
+- [x] **Private-channel allowlist editing.** "Who is on it" in server settings,
+      re-keying the channel on save.
 - [x] **Modifier chords.** Every key event now carries the modifiers held when
       it happened, and the machine being driven reconciles to that rather than
       inferring a chord from the order three events arrived in. One module, two
       callers - a remote session and control handed over in a call - and a
       modifier released off-focus is let go on the next key instead of sticking.
+      Ctrl+Alt+Del is still Windows' own: no injected input raises the secure
+      attention sequence, and nothing here pretends to.
 - [x] **The permission editor reading custom roles.** The Roles screen creates
       a role, names it, colours it, ranks it and sets what holding it allows;
       each member's held roles are toggles beside their per-person overrides;
@@ -91,8 +94,6 @@ Desktop and web:
       a call carry their own display target and their own held modifiers, so a
       machine doing both at once no longer points both at whichever was set
       last. Every input event says which of the two it came from.
-- [x] **Private-channel allowlist editing.** "Who is on it" in server settings,
-      re-keying the channel on save.
 
 Documentation:
 
@@ -182,17 +183,41 @@ changed along the way - presence scoping in `presence-service/smoke.mjs`,
 invites in `chat-service/smoke.mjs` and `notification-service/smoke.mjs` - have
 been syntax-checked and not executed.
 
+**Two migrations are waiting, and their names sort backwards.**
+`20260810100000_custom_roles` and `20260810110000_attachments` exist as SQL and
+have to be applied - `pnpm db:migrate` - before the roles screen or any
+attachment upload can work at all. Both are stamped 10 August while migrations
+already applied are stamped the 16th, so they sort *before* the history a
+running database has. `migrate deploy` applies them anyway; `migrate dev` may
+call it drift and offer a reset, which on a database with anything in it is the
+wrong answer. Renaming both to a stamp after `20260816140000_server_invites`,
+before either reaches a deployment, is the cheap fix.
+
 The cases most worth putting a person in front of, in order:
 
 1. `pnpm dev:duo`, two accounts, one voice channel: per-person volume, push to
    talk, and the connection panel. Push to talk and the statistics are the two
    that can look right and be wrong.
-2. An invite: mint one with a use limit, spend it, watch the second person be
+2. An attachment, end to end: send one, delete the message, and confirm the
+   object is gone from storage on the sweep - and that a file uploaded but
+   never sent goes too. The sweep waits ten minutes after boot and then runs
+   every six hours, so this needs either patience or a shortened
+   `ATTACHMENT_GRACE_HOURS` and a restart.
+3. A chord on a remote session: Ctrl+C and Ctrl+V across the link, then
+   Alt+Tab away mid-chord and type a letter - it must arrive as a letter and
+   not as a shortcut, which is the whole point of the reconciliation.
+4. The roles screen: invent a role, colour it, give it one capability, hand it
+   to somebody, and watch their name change colour in the member list. Then
+   try to put a capability into it that you do not hold yourself - it must be
+   refused.
+5. An invite: mint one with a use limit, spend it, watch the second person be
    refused, then revoke another and watch that refused too.
-3. A private channel: remove somebody from "Who is on it" and confirm they stop
+6. A private channel: remove somebody from "Who is on it" and confirm they stop
    being able to read what is sent afterwards.
-4. Two accounts on different servers, signed in at once: neither should see the
+7. Two accounts on different servers, signed in at once: neither should see the
    other's presence at all.
-5. The container stack end to end, which has still never been run.
+8. Two monitors: open a remote session, unplug the one being watched, and
+   confirm the picture falls back to the primary rather than freezing.
+9. The container stack end to end, which has still never been run.
 
 `TESTING.md` is the fuller version of this list and predates it.
