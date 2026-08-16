@@ -47,7 +47,7 @@ export class MessagesController {
 
   @Post()
   send(@CurrentUser() user: AuthenticatedUser, @Body() dto: CreateMessageDto): Promise<Message> {
-    return this.messages.send(user.id, dto.channelId, dto.content);
+    return this.messages.send(user.id, dto.channelId, dto.content, dto.attachmentKeys);
   }
 
   @Patch(':messageId')

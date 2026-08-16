@@ -226,10 +226,28 @@ object NexoraApi {
         )
     }
 
-    /** `content` is the sealed envelope; this client never sends a plaintext body. */
-    suspend fun sendMessage(channelId: String, content: String): Message = io {
+    /**
+     * `content` is the sealed envelope; this client never sends a plaintext body.
+     *
+     * `attachmentKeys` names the blobs that envelope carries. The server cannot
+     * read the manifest inside it, so this is the only way an upload is ever
+     * tied to a message - and the only way a deleted message takes its files.
+     */
+    suspend fun sendMessage(
+        channelId: String,
+        content: String,
+        attachmentKeys: List<String> = emptyList(),
+    ): Message = io {
         Message.from(
-            authed("POST", "/api/v1/messages", obj("channelId" to channelId, "content" to content)),
+            authed(
+                "POST",
+                "/api/v1/messages",
+                obj(
+                    "channelId" to channelId,
+                    "content" to content,
+                    "attachmentKeys" to JSONArray(attachmentKeys),
+                ),
+            ),
         )
     }
 

@@ -436,6 +436,14 @@ export interface MessageReactionSummary {
 export interface CreateMessageRequest {
   channelId: string;
   content: string;
+  /**
+   * Storage keys of the blobs this message carries, so the server can tie them
+   * to it and remove them when it is deleted. The manifest that names them is
+   * inside `content` and unreadable to any service, so a client that wants its
+   * files swept has to say which they are; the keys alone reveal nothing the
+   * upload route did not already know.
+   */
+  attachmentKeys?: string[];
 }
 
 /** Replaces the body; the author only, and it stamps `editedAt`. */

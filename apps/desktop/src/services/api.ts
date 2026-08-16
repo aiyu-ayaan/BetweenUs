@@ -345,10 +345,15 @@ export const api = {
         (before ? `&before=${encodeURIComponent(before)}` : ''),
     ),
 
-  sendMessage: (channelId: string, content: string): Promise<Message> =>
+  /**
+   * `attachmentKeys` names the blobs the sealed body carries. The server cannot
+   * read the manifest, so this is the only way it can tie an upload to a
+   * message - and the only way a deleted message can take its files with it.
+   */
+  sendMessage: (channelId: string, content: string, attachmentKeys?: string[]): Promise<Message> =>
     request('/api/v1/messages', {
       method: 'POST',
-      body: JSON.stringify({ channelId, content }),
+      body: JSON.stringify({ channelId, content, attachmentKeys }),
     }),
 
   /** Author or moderator; the row survives as a tombstone, the body does not. */

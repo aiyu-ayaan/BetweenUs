@@ -54,6 +54,11 @@ Backend:
       message - local socket when this instance holds it, Pub/Sub when it does
       not - and which machines have an agent connected is a Redis key with a TTL
       rather than a map in one process.
+- [x] **Attachment blobs swept when their message is deleted.** Every upload
+      writes an `attachments` row; the client names the keys it is sending, so
+      the message claims them without the server reading the sealed manifest.
+      The sweep collects a blob whose message has been deleted at once, and an
+      upload nobody ever sent after a day.
 - [x] **Admin: audit log, paged users table, OAuth for the panel.** The trail is
       append-only and keeps a label for a target that no longer exists; paging
       is a cursor, so a registration between two requests cannot repeat a row;
@@ -83,11 +88,6 @@ blocked by anything outside this document.
 
 ### Backend
 
-- [ ] **Attachment blobs swept when their message is deleted.** Needs an
-      attachment row per upload first: the manifest naming the blobs is inside
-      the encrypted body, so no service can tell which blob belongs to which
-      message. The alternative is the deleting client removing what it can read,
-      which leaves anything deleted by a moderator behind.
 - [ ] **Multi-device E2EE.** A key list per user, one wrap per device, so a
       device can be revoked without rotating the account identity. What exists
       copies one identity to every machine.

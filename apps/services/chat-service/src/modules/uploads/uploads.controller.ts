@@ -32,6 +32,7 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import type { Response } from 'express';
+import { prisma } from '@nexora/database';
 import { CurrentUser, JwtAuthGuard, openSecret, sealSecret, type AuthenticatedUser } from '@nexora/auth';
 import {
   MAX_ATTACHMENT_BYTES,
@@ -109,7 +110,8 @@ export class UploadsController {
     // so an attacker cannot choose where the file lands. The real name travels
     // inside the encrypted message instead.
     const key = buildKey(`attachments/${user.id}`, '');
-    return getStorage().put(key, file.buffer, OPAQUE);
+    const object = await getStorage().put(key, file.buffer, OPAQUE);
+    return record(object, user.id);
   }
 
   // --- Multipart --------------------------------------------------------------
@@ -175,7 +177,7 @@ export class UploadsController {
           message: `Attachments are limited to ${MAX_ATTACHMENT_BYTES} bytes`,
         });
       }
-      return object;
+      return await record(object, user.id);
     } catch (error) {
       if (error instanceof BadRequestException) throw error;
       throw new BadRequestException({
@@ -244,6 +246,31 @@ export class UploadsController {
     stream.on('error', () => response.destroy());
     stream.pipe(response);
   }
+}
+
+/**
+ * Notes an uploaded blob so something can eventually collect it.
+ *
+ * Every attachment starts unclaimed. Sending a message claims the keys it
+ * carries; anything still unclaimed when the grace period runs out was an
+ * upload nobody sent, and the sweeper removes it either way. Recording it is
+ * therefore not optional bookkeeping - a blob with no row is a blob no sweep
+ * can ever name - so a failure here undoes the upload rather than leaving one
+ * behind for ever.
+ */
+async function record(object: StoredObject, userId: string): Promise<StoredObject> {
+  try {
+    await prisma.attachment.create({
+      data: { key: object.key, uploaderId: userId, size: object.size },
+    });
+  } catch (error) {
+    await getStorage().delete(object.key).catch(() => undefined);
+    throw new BadRequestException({
+      code: 'UPLOAD_NOT_RECORDED',
+      message: error instanceof Error ? error.message : 'The upload could not be recorded',
+    });
+  }
+  return object;
 }
 
 /**

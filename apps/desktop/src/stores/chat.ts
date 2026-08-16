@@ -363,7 +363,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
     );
     // No optimistic insert: the message arrives over the socket, so an
     // optimistic copy would have to be de-duplicated for no real gain.
-    await api.sendMessage(channelId, envelope);
+    // The keys travel outside the envelope as well as inside it: the server
+    // cannot read the manifest, and without them it could never sweep the
+    // blobs when this message is deleted.
+    await api.sendMessage(
+      channelId,
+      envelope,
+      attachments.map((attachment) => attachment.key),
+    );
   },
 
   /**

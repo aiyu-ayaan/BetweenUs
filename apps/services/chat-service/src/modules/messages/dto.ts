@@ -1,4 +1,11 @@
-import { IsOptional, IsString, IsUUID, Length } from 'class-validator';
+import {
+  ArrayMaxSize,
+  IsArray,
+  IsOptional,
+  IsString,
+  IsUUID,
+  Length,
+} from 'class-validator';
 import type {
   CreateMessageRequest,
   ReactToMessageRequest,
@@ -17,6 +24,17 @@ export class CreateMessageDto implements CreateMessageRequest {
   @IsString()
   @Length(1, 32000)
   content!: string;
+
+  /**
+   * Which uploaded blobs this message claims. Only keys this account uploaded
+   * and nothing else has claimed are taken; anything else is ignored rather
+   * than refused, because a message is not worth failing over a stale key.
+   */
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(50)
+  @IsString({ each: true })
+  attachmentKeys?: string[];
 }
 
 export class UpdateMessageDto implements UpdateMessageRequest {

@@ -812,7 +812,8 @@ Left open on purpose:
 - [ ] No "jump to the first unread" button on the line, and no unread bar at the
       top of the channel
 - [ ] A tombstone stays forever; nothing sweeps rows whose body has been empty
-      for months, and nothing sweeps their attachment blobs either
+      for months. Their attachment blobs do go - `AttachmentSweeper` collects
+      what a deleted message no longer justifies - but the empty row stays
 
 ### Phase 15 — the social graph in realtime
 
@@ -839,8 +840,9 @@ Left open on purpose:
 
 Left open on purpose:
 
-- [ ] Nothing deletes an attachment's blob when its message is deleted — the
-      same sweep phase 13 left open, now with a second thing that needs it
+- [x] An attachment's blob goes when its message does; the sweep phase 13 left
+      open now exists, and a destroyed channel or server reaches it too - the
+      row's `messageId` goes null, which is the same case as an unsent upload
 - [ ] An added member gets no notification, only a server that appears; there
       is no invite to accept or decline
 - [ ] `server.members.changed` makes the client re-read the member list, so a
@@ -926,8 +928,11 @@ Left open on purpose:
 
 Left open on purpose:
 
-- [ ] Nothing deletes an attachment's blob when its message is deleted; the
-      ciphertext stays in storage until something sweeps it
+- [x] An attachment's blob goes when its message does. Every upload writes an
+      `attachments` row; a message claims the keys it carries when it is sent,
+      and `AttachmentSweeper` deletes the object and the row once the message
+      is deleted - or, for an upload nobody ever sent, once
+      `ATTACHMENT_GRACE_HOURS` (24) has passed
 - [x] `sweepStaleMultipart` runs every six hours on the local driver, clearing
       scratch directories untouched for `UPLOAD_SCRATCH_MAX_AGE_HOURS` (12).
       S3 is deliberately left to its own `AbortIncompleteMultipartUpload`
@@ -1074,9 +1079,13 @@ Phase 12 opened these, and left them open on purpose:
 - [x] `POST /api/v1/uploads` and `GET /api/v1/uploads/:key` in chat-service
 - [x] Key generation, traversal guard, content-type allowlist, inline/attachment
       disposition rules
-- [ ] Attachment model on `Message` so uploads attach to a message
+- [x] Attachment model on `Message` so uploads attach to a message — one row per
+      uploaded blob, claimed by the message that carries it (the client names
+      the keys on send, because the manifest inside the body is sealed)
 - [ ] Avatar upload wired to the user profile
-- [ ] Orphan sweep for uploaded objects never referenced by a message
+- [x] Orphan sweep for uploaded objects never referenced by a message — the same
+      six-hourly sweep that collects the blobs of a deleted message; an
+      unclaimed upload goes after `ATTACHMENT_GRACE_HOURS` (24)
 
 ### Phase 6 — gateway
 - [x] Nginx REST + WebSocket routing, rate limiting, body size limits

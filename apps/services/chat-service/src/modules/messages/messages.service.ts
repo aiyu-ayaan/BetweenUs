@@ -75,7 +75,12 @@ export class MessagesService {
     return rows.map(toMessage);
   }
 
-  async send(userId: string, channelId: string, content: string): Promise<Message> {
+  async send(
+    userId: string,
+    channelId: string,
+    content: string,
+    attachmentKeys: string[] = [],
+  ): Promise<Message> {
     await this.requireChannelAccess(userId, channelId, PERMISSIONS.SEND_MESSAGE);
 
     const trimmed = content.trim();
@@ -90,6 +95,16 @@ export class MessagesService {
       data: { channelId, authorId: userId, content: trimmed },
       include: MESSAGE_INCLUDE,
     });
+
+    // The blobs become this message's, so deleting it can take them with it.
+    // Scoped to unclaimed uploads of this account: a key is not a capability,
+    // and naming somebody else's must not move it.
+    if (attachmentKeys.length > 0) {
+      await prisma.attachment.updateMany({
+        where: { key: { in: attachmentKeys.slice(0, 50) }, uploaderId: userId, messageId: null },
+        data: { messageId: row.id },
+      });
+    }
 
     const message = toMessage(row);
     // The WebSocket gateway - in this process and in every other instance -
@@ -144,8 +159,9 @@ export class MessagesService {
    * It is a soft delete: `deletedAt` and, when somebody else did it,
    * `deletedById` are set and the body is emptied. The row stays so the
    * conversation can show a tombstone and so a page cursor handed out a moment
-   * ago still points somewhere; the ciphertext does not. Attachment blobs are
-   * not swept yet - development/TODO.md carries that, and it is a storage job.
+   * ago still points somewhere; the ciphertext does not. The blobs it carried
+   * go too, but not here: the attachment sweeper collects what a deleted
+   * message no longer justifies, so a delete stays one row update.
    */
   async remove(userId: string, messageId: string): Promise<void> {
     const existing = await this.require(messageId);

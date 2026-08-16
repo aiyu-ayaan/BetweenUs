@@ -8,6 +8,7 @@ import { MessagesController } from './modules/messages/messages.controller';
 import { MessagesService } from './modules/messages/messages.service';
 import { UploadsController } from './modules/uploads/uploads.controller';
 import { ScratchSweeper } from './modules/uploads/scratch-sweeper';
+import { AttachmentSweeper } from './modules/uploads/attachment-sweeper';
 import { E2eeController } from './modules/e2ee/e2ee.controller';
 import { E2eeService } from './modules/e2ee/e2ee.service';
 import {
@@ -36,6 +37,7 @@ const SERVICE_NAME = 'chat-service';
     FriendsService,
     ChatGateway,
     ScratchSweeper,
+    AttachmentSweeper,
     {
       provide: EventBus,
       useFactory: () => new EventBus(envOr('REDIS_URL', 'redis://localhost:6379'), SERVICE_NAME),

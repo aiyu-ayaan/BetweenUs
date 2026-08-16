@@ -171,7 +171,10 @@ object Conversation {
     suspend fun send(channelId: String, text: String, attachments: List<MessageAttachment>) {
         val body = MessageBody(text, attachments).encode()
         val sealed = E2ee.encryptForChannel(channelId, body)
-        val message = NexoraApi.sendMessage(channelId, sealed)
+        // The keys go outside the envelope as well as inside it: the server
+        // cannot read the manifest, and without them nothing could ever sweep
+        // these blobs when the message is deleted.
+        val message = NexoraApi.sendMessage(channelId, sealed, attachments.map { it.key })
         insert(read(message))
     }
 
