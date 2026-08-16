@@ -40,7 +40,17 @@ nobody has put two devices in a call or driven a real agent's screen. Those are
 the cases the design is built around and the ones most likely to be wrong.
 
 Phase 5 (FCM) is the largest thing not started, and the only one that needs
-backend work.
+backend work. It is deferred on purpose and is now phase 27 in `TODO.md`, with
+the web client's Web Push beside it: one device registry, one fan-out, two
+transports. Two things wait behind it because they are the same push - an
+in-app notification for a message arriving in a channel that is not on screen
+(phase 4), and the incoming-call UI for a dead app (phase 6).
+
+Everything else that was open here is in `TODO.md`'s programme and is being
+worked through: replies, markdown bodies, network-change reconnect, audio
+routing and ducking, the share quality ladder, remote clipboard and file
+transfer, audio settings, server creation and invites, OAuth, and the whole of
+phase 13.
 
 ### Pointing a local build at a local backend
 
@@ -191,7 +201,10 @@ data is cleared.
 ## Phase 5 — Notifications (FCM)
 
 This is the phase with real backend work in it, and the only place Android
-needs something the desktop does not.
+needs something the desktop does not. It is deliberately not started, and it is
+tracked as **phase 27** in `TODO.md` alongside the web client's Web Push and the
+device registry both of them share - the transports differ, the registry and the
+fan-out do not, and building either one alone would build half of it twice.
 
 - [ ] Add `google-services.json` handling: file is git-ignored, its path and the
       project id come from `local.properties`; the build degrades to "no FCM"

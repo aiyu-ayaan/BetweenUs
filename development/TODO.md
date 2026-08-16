@@ -5,6 +5,15 @@ the top honest — it is what a new session reads first.
 
 ## Next up
 
+**Phase 27 - push notifications** is the next major phase and is deliberately
+not started: it is the only remaining work that needs a new backend surface, and
+it is the one thing every client is missing in the same way. See the phase-27
+section below for what it covers on the backend, the web client and Android.
+
+Everything else that was still open across web, desktop, Android and the backend
+has been pulled into an ordered programme below; the phase sections further down
+are the record of how each area got to where it is.
+
 Phase 24 - peer-to-peer media - has landed in code. LiveKit is gone from the
 repo, the deployment and the environment; calls and remote sessions are a
 WebRTC mesh with `call-service` and `remote-gateway` as switchboards. Read the
@@ -37,6 +46,128 @@ no service and no protocol changed. It matters because the client was Discord's
 palette and Discord's layout, hex for hex, which left Nexora with no way to
 look like anything. Read the phase-26 section of `PLANNING.md` for the shape,
 and "The workbench" in `TESTING.md` for what to click.
+
+### The programme
+
+What is being worked through now, in order. Each line is a commit-sized chunk
+and is ticked here when it lands; the phase sections below stay as the record of
+why each area looks the way it does.
+
+Backend:
+
+- [ ] Per-user login rate limit, not only per client address
+- [ ] Idle status set automatically after a period of no input
+- [ ] Presence broadcasts scoped to a server instead of every connected socket
+- [ ] Voice roster cross-checked against `call-service`'s own peer list
+- [ ] Mentions told apart from ordinary messages, and a "mentions only" mute
+- [ ] Channel-key rotation when somebody is dropped from a private channel
+- [ ] Multi-device E2EE: a key per device, so one can be revoked alone
+- [ ] Identity rotation after a lost device, re-sealing current channel keys
+- [ ] Safety numbers, so a lying server is detectable
+- [ ] Invite codes with an expiry, instead of a permanent server slug
+- [ ] Custom named roles with a colour and an ordering
+- [ ] Attachment blobs swept when their message is deleted, and stale multipart
+      sessions swept on a schedule
+- [ ] Ended remote sessions and old audit rows swept
+- [ ] Remote sessions relayed through Redis Pub/Sub, so two replicas work
+- [ ] `machineForAgentToken` on a lookup key instead of a full table scan
+- [ ] Admin: an audit log of admin actions, a paged users table, OAuth for the
+      panel itself
+- [ ] The shared Prisma schema split per service, and `user-service` serving the
+      routes chat-service holds today
+
+Desktop and web:
+
+- [ ] Push to talk
+- [ ] Per-person volume and mute
+- [ ] Call and share statistics in the UI - bitrate, loss, "you are not being
+      heard"
+- [ ] A manual quality override for a share and for a remote session
+- [ ] Modifier chords, so Ctrl+Alt+Del travels as a chord
+- [ ] Input injection on macOS and Linux
+- [ ] `REMOTE_FILE_TRANSFER` and `REMOTE_AUDIO`, which are vocabulary today
+- [ ] Display hot-plug noticed mid-session
+- [ ] Per-session input targets
+- [ ] The headless `remote-agent`, which is still a scaffold
+- [ ] A light theme
+- [ ] Edit history, encrypted reactions, paged search, who-reacted names, a
+      pinned panel that pages
+- [ ] An unread line that survives a restart, and a jump to it
+- [ ] Decrypted history persisted under a device key
+- [ ] Private-channel allowlist editing in the UI
+- [ ] Chunked AEAD attachments, and a video transcode
+- [ ] A recent-servers list, and a client/server version check
+- [ ] Whether the shared UI moves to `packages/ui`
+
+Android (`ANDROID_TODO.md` has the detail):
+
+- [ ] Replies, and markdown-ish body rendering
+- [ ] Reconnect driven by a network-change callback
+- [ ] Ducking, an incoming phone call, and headset routing
+- [ ] The share quality ladder
+- [ ] Remote clipboard and file transfer
+- [ ] Audio device and input-sensitivity settings
+- [ ] Create and join a server, invites
+- [ ] OAuth through Custom Tabs
+- [ ] The refresh token out of plain prefs, private-CA handling, R8 and signing
+- [ ] Instrumented tests and CI, opt-in crash reporting, a light theme
+
+## Phase 27 — push notifications (next major phase, not started)
+
+Every client today only raises a notification while it is running. A closed tab,
+a quit desktop app and a swiped-away phone are all unreachable, which is the one
+gap that makes Nexora feel unlike the thing it is copying. It is also the only
+remaining item that needs a service to grow a new surface, which is why it is a
+phase of its own rather than a line in somebody else's.
+
+The backend half is shared; the transports are per client.
+
+Backend (`notification-service`):
+
+- [ ] Device registry: `POST /api/v1/notifications/devices`
+      `{ token, platform, deviceId }`, `DELETE` on sign-out. One row per
+      (user, device), storing the transport token, the platform, the last seen
+      time and the app version
+- [ ] The registration is bound to the account that made it: a sign-out, a
+      server switch or an account switch deletes the row *before* the tokens are
+      discarded, and a refresh-token rotation must not orphan it
+- [ ] Fan-out on `message.created` (mentions and DMs), `call.started` and
+      `remote.session.started`, through the same predicate that already decides
+      whether a notification is allowed - mute, quiet hours, DND and the account
+      switch are not re-implemented per transport
+- [ ] Never log a registration token
+
+Web:
+
+- [ ] A service worker and a Web Push subscription per device, stored in the
+      registry above. What exists today is the Notifications API, which needs
+      the tab open
+- [ ] Tap-through into the channel, the call or the remote session
+
+Android:
+
+- [ ] `google-services.json` handling: git-ignored, its path and project id from
+      `local.properties`, and the build degrades to "no FCM" when it is absent
+      so a clone still compiles
+- [ ] Firebase Messaging dependency and a `FirebaseMessagingService`; register
+      on sign-in and on every `onNewToken`
+- [ ] Notification channels: messages, calls, remote access - separate, so one
+      can be silenced without the others
+- [ ] Incoming-call UI raised from a push with the app dead, which is the whole
+      reason a phone needs this and a desktop does not
+- [ ] Foreground suppression: nothing for the channel already on screen, and the
+      in-app notification for a message arriving in a channel that is *not* on
+      screen, which is the half already wired but never posted
+- [ ] `POST_NOTIFICATIONS` at the first moment it means something
+
+Desktop:
+
+- [ ] Nothing. A running Electron app has the tray, and a quit one is out of
+      scope until there is a reason to keep a process alive for it
+
+Deferred alongside it, because it is the same "cache the thing the network gave
+us" shape and nothing blocks it: caching attachment ciphertext next to the
+message on Android, so an attachment opened twice is fetched once.
 
 ### Phase 26 — the workbench
 
@@ -228,11 +359,11 @@ a human in front of the app, and so does most of phase 12.
 - [ ] Drive a call from a second network end to end, with the TURN key set. The
       code and its self-check have landed; nobody has yet joined one from off
       the LAN and heard the other side
-- [ ] Remote sessions get no relay yet. `remote-gateway` hands out its own
-      LiveKit URL and token and has the same reachability problem; the minting
-      lives in `call-service/src/turn.ts` and would move to a shared package the
-      day the second caller appears. Not done because the remote path has never
-      been driven by a human at all
+- [x] Remote sessions get a relay too. The minting moved to `@nexora/config`'s
+      `iceServers()` with its own self-check, and `remote-gateway` hands the
+      same short-lived credentials to both sides of a session that `call-service`
+      hands to a call. Neither service names a media server any more, because
+      phase 24 removed the one there was
 - [x] Calls through the gateway at all. With `LIVEKIT_URL=/livekit` and every
       container healthy, a join still died with "Encountered websocket error
       during connection establishment": the `/livekit` block was not stripping
@@ -299,8 +430,11 @@ a human in front of the app, and so does most of phase 12.
 - [x] A session's permissions are frozen when it opens and the relay enforces
       them; a refused event is audited as well as rejected, and revoking a grant
       ends the session running under it
-- [x] Screen over the SFU voice already uses - agent publishes, controller
-      subscribes, no pixels through NestJS
+- [x] Screen over the same media path a call uses - no pixels through NestJS.
+      Written against the SFU a call had then; since phase 24 it is one
+      `RTCPeerConnection` straight from the agent to the controller
+      (`services/remote-peer.ts`), and the gateway relays only the offer, the
+      answer and the ICE candidates
 - [x] Consent: the owner from another device starts immediately; anyone else
       raises a prompt on the machine that refuses itself if nobody answers, and
       a banner stays up for as long as the session does
@@ -345,7 +479,9 @@ a human in front of the app, and so does most of phase 12.
 - [x] The controller subscribes with `adaptiveStream` off. It sizes the
       subscription to the video element, so a session in a window smaller than
       the machine's screen was downscaled by the SFU and stretched back up -
-      which is what made the picture soft whatever the agent published
+      which is what made the picture soft whatever the agent published. Moot
+      since phase 24: there is nothing between the two machines to resize
+      anything, so the controller receives what the agent sent
 - [x] The agent shares the *primary* display rather than the first screen the
       capturer happens to list, because the primary display is the one input is
       injected into. On a two-monitor machine those were different screens
@@ -372,10 +508,15 @@ Left open on purpose:
       reliable clipboard event on any platform. Files and images through a
       clipboard are a transfer mechanism, which is the file-transfer permission's
       job rather than this one's
-- [ ] A remote session is not end-to-end encrypted, unlike a voice channel -
-      there is no channel key to reuse and no key exchange between two machines
-      that never spoke. The SFU the operator runs can see the frames
-      (`E2EE.md`, limit 10)
+- [ ] A remote session has no application-layer encryption of its own, unlike a
+      chat message - there is no channel key to reuse and no key exchange
+      between two machines that never spoke. Since phase 24 there is no SFU in
+      the path, so the frames are DTLS-SRTP between the two machines and the
+      operator's servers never see them; a configured TURN relay forwards
+      encrypted packets it cannot read. What is left is that the *signalling*
+      server introduces the peers, so a malicious gateway could try to sit in
+      the middle - which is exactly what the call path's fingerprint check
+      defends against and the remote path does not do yet (`E2EE.md`, limit 10)
 - [ ] The display list is read once when the session opens, so a monitor
       plugged in - or one that changes resolution - part way through a session
       is not noticed until the next one
@@ -543,8 +684,9 @@ giving control, and this is that.
       it is their machine, they are sitting at it, and they can see what is
       being done with it
 - [x] Checked on every event rather than once at the grant: the sender is the
-      identity control was given to (LiveKit's, from a token call-service
-      signed, so it cannot be claimed), a screen is still being shared, and
+      identity control was given to (since phase 24, the peer id `call-service`
+      assigns to a socket after it has authenticated it, so it cannot be
+      claimed), a screen is still being shared, and
       that share is a whole display. Control of a *window* is refused outright
       - a window can be dragged between monitors, so there is no fraction of a
       screen to map a click onto
@@ -591,9 +733,11 @@ Left open on purpose:
 
 Left open on purpose:
 
-- [ ] WebRTC media does not go through the tunnel: `7881/tcp` and
-      `50000-50019/udp` have to be reachable, or a TURN server on 443 has to
-      exist. That is the real remaining gap for a deployment behind NAT
+- [x] Media through the tunnel was the gap this phase left, and phase 24 closed
+      it by removing the thing that needed a port: there is no SFU, so no
+      `7881/tcp` and no UDP range have to be reachable. Media is peer to peer
+      and ICE finds its own path; a deployment behind a NAT that no direct path
+      survives configures TURN, which is outbound-only from both peers
 - [ ] Secrets are environment variables read from `.env`. No Docker secrets, no
       external secret manager, no rotation
 - [ ] Nothing deploys: the images are built and pushed, and putting them on a
@@ -626,9 +770,10 @@ Left open on purpose:
 
 Left open on purpose:
 
-- [ ] WebRTC media still needs its own ports (7881/tcp, 50000+/udp): one
-      hostname covers signalling, not media. A TURN server behind 443 is what
-      would close that, and it is a phase of its own
+- [x] WebRTC media needing its own ports was true while there was an SFU, and
+      is not any more: phase 24 made media peer to peer, so one hostname covers
+      everything the deployment has to serve. TURN on 443 is the fallback for a
+      pair of networks with no direct path, and it is optional
 - [ ] No list of recent servers - one address is remembered, not a history
 - [ ] The admin panel still reads its own `VITE_API_URL` at build time; it is
       served from the deployment it administers, so it has never needed more
@@ -876,7 +1021,8 @@ Phase 12 opened these, and left them open on purpose:
 ### Carried over
 
 - [ ] Two humans in a voice channel: audio actually heard, camera, screen share
-      (both clients already reach LiveKit and publish encrypted opus)
+      (both clients hold a mesh connection per peer and send opus over
+      DTLS-SRTP; nothing about it has been heard by a person)
 - [ ] Watch a typing indicator land in the UI
 - [ ] Per-user rate limit on login, not only per client address (a botnet spread
       across addresses still gets 20/min each against one account)
@@ -1061,8 +1207,10 @@ Follow-ups this phase deliberately left open:
 ### Presence follow-ups
 - [ ] Idle status (currently only online/offline)
 - [ ] Scope presence broadcasts to a server instead of every connected socket
-- [ ] Server-authoritative voice rosters via LiveKit webhooks, so a client that
-      lies about joining cannot appear in a channel
+- [ ] Server-authoritative voice rosters. There is no media server to ask any
+      more, so the authority is `call-service`'s own `/ws/call` roster: a client
+      appears in a channel because presence-service was told so, and nothing
+      cross-checks that against the peers `call-service` actually has
 
 ### Phase 11 — admin panel, OAuth and notifications
 - [x] `GlobalRole`, `mustChangePassword`, `disabledAt`, `UserIdentity` and
@@ -1083,8 +1231,11 @@ Follow-ups this phase deliberately left open:
       taskbar flash and click-to-open
 
 ### Phase 19 — what a deployment still needs
-- [ ] TURN on 443 so voice, screen share and remote desktop work from behind a
-      NAT that blocks the SFU's UDP range
+- [x] TURN so voice, screen share and remote desktop survive a pair of networks
+      with no direct path. `@nexora/config` mints short-lived Cloudflare TURN
+      credentials and both `call-service` and `remote-gateway` hand them out;
+      it is off until an operator configures a key, which is the intended
+      default
 - [ ] Secret management beyond `.env`, and rotation
 - [ ] Something that actually deploys the images the pipeline pushes
 
