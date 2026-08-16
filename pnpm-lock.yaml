@@ -208,6 +208,9 @@ importers:
       '@nexora/database':
         specifier: workspace:*
         version: link:../../../packages/database
+      '@nexora/events':
+        specifier: workspace:*
+        version: link:../../../packages/events
       '@nexora/logger':
         specifier: workspace:*
         version: link:../../../packages/logger

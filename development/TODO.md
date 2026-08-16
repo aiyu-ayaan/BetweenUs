@@ -69,7 +69,11 @@ Backend:
       about a channel reaches people who can see that channel. The sync at
       connect is filtered the same way. 30-second TTL cache, so a new member
       appears to the others within half a minute rather than instantly
-- [ ] Voice roster cross-checked against `call-service`'s own peer list
+- [x] Voice roster taken from `call-service` instead of from what a client
+      claims: it publishes `call.roster` on every join and departure, and
+      presence-service writes that through to Redis and fans it out. A client
+      can no longer put itself in a channel it never signalled into, and a
+      crashed one leaves the moment its signalling socket does
 - [ ] Mentions told apart from ordinary messages, and a "mentions only" mute
 - [ ] Channel-key rotation when somebody is dropped from a private channel
 - [ ] Multi-device E2EE: a key per device, so one can be revoked alone
@@ -1227,10 +1231,10 @@ Follow-ups this phase deliberately left open:
       that shares nothing and must receive nothing. Left open: the cache is a
       30-second TTL rather than an invalidation, so a membership change takes
       that long to be reflected
-- [ ] Server-authoritative voice rosters. There is no media server to ask any
-      more, so the authority is `call-service`'s own `/ws/call` roster: a client
-      appears in a channel because presence-service was told so, and nothing
-      cross-checks that against the peers `call-service` actually has
+- [x] Server-authoritative voice rosters. `call-service` holds the signalling
+      sockets, so it is the authority: it publishes `call.roster` and
+      presence-service applies it whole. `voice.join` over `/ws/presence` still
+      answers the permission question and no longer writes anything
 
 ### Phase 11 — admin panel, OAuth and notifications
 - [x] `GlobalRole`, `mustChangePassword`, `disabledAt`, `UserIdentity` and

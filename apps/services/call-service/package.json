@@ -17,6 +17,7 @@
     "@nexora/auth": "workspace:*",
     "@nexora/config": "workspace:*",
     "@nexora/database": "workspace:*",
+    "@nexora/events": "workspace:*",
     "@nexora/logger": "workspace:*",
     "@nexora/nest-common": "workspace:*",
     "@nexora/permissions": "workspace:*",

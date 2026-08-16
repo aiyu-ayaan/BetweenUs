@@ -106,17 +106,36 @@ export class PresenceGateway implements OnModuleDestroy {
       void this.broadcastTo(audienceOfChannel(voice.channelId), { type: 'voice.changed', voice });
     });
 
+    // The roster as call-service holds it, which is the only place it is really
+    // known: it owns the signalling sockets, so it sees a join, a departure and
+    // a crash alike. Written through to Redis so a client connecting later gets
+    // the same answer in its sync.
+    await this.events.subscribe(EVENTS.CALL_ROSTER, (envelope) => {
+      const { voice } = envelope.payload;
+      void this.store
+        .replaceVoice(voice.channelId, voice.userIds)
+        .then(() =>
+          this.broadcastTo(audienceOfChannel(voice.channelId), { type: 'voice.changed', voice }),
+        )
+        .catch((error) => {
+          this.logger.warn('Could not apply a call roster', {
+            channelId: voice.channelId,
+            reason: String(error),
+          });
+        });
+    });
+
     this.logger.info('Presence WebSocket gateway ready', { path: '/ws/presence' });
   }
 
   private async onConnect(socket: WebSocket, userId: string): Promise<void> {
     await this.store.touch(userId);
 
-    // A client that just connected is in no voice channel. Anything left over
-    // belongs to a session that died without saying goodbye - drop it, so a
-    // crashed window does not haunt the roster.
-    if (!this.hasOtherSocket(userId, socket)) await this.clearOtherVoiceChannels(userId, '');
-
+    // Nothing is cleared here any more. A client connecting used to drop itself
+    // from every voice channel on the assumption that a leftover was a dead
+    // session - which was a fair guess while the roster was client-written, and
+    // is now wrong: the roster belongs to call-service, and this connection
+    // says nothing about whether that one is still up.
     this.send(socket, { type: 'ready', userId });
 
     const [users, voice, own, audience] = await Promise.all([
@@ -160,22 +179,14 @@ export class PresenceGateway implements OnModuleDestroy {
     if (this.hasOtherSocket(userId, socket)) return;
 
     await this.store.goOffline(userId);
-    for (const channelId of await this.store.voiceChannelsOf(userId)) {
-      const voice = await this.store.leaveVoice(channelId, userId);
-      await this.events.publish(EVENTS.PRESENCE_VOICE, { voice });
-    }
+    // The call roster is not touched: a presence socket closing is not evidence
+    // that a call ended, and call-service publishes the departure itself the
+    // moment its own socket goes - including when it goes by being terminated
+    // for missing a heartbeat.
     await this.events.publish(EVENTS.PRESENCE_CHANGED, {
       user: { userId, status: 'offline' },
     });
     this.logger.info('Presence disconnected', { userId });
-  }
-
-  private async clearOtherVoiceChannels(userId: string, keep: string): Promise<void> {
-    for (const channelId of await this.store.voiceChannelsOf(userId)) {
-      if (channelId === keep) continue;
-      const voice = await this.store.leaveVoice(channelId, userId);
-      await this.events.publish(EVENTS.PRESENCE_VOICE, { voice });
-    }
   }
 
   /** Is this user connected through some socket other than `except`? */
@@ -232,6 +243,13 @@ export class PresenceGateway implements OnModuleDestroy {
         });
         return;
 
+      // Both of these used to write the roster, which meant the roster was
+      // whatever a client claimed: anybody could appear in a channel they had
+      // never signalled into, and anybody who crashed stayed in one. The roster
+      // now comes from `call-service`, which holds the signalling sockets and
+      // therefore knows. These are kept because the permission answer is still
+      // worth giving - a client that may not join should hear so from the
+      // service it asked, not by watching a roster it never appears in.
       case 'voice.join': {
         if (!(await this.canAccessChannel(state.userId, event.channelId))) {
           this.send(socket, {
@@ -239,24 +257,12 @@ export class PresenceGateway implements OnModuleDestroy {
             code: 'CHANNEL_FORBIDDEN',
             message: 'Cannot join this voice channel',
           });
-          return;
         }
-
-        // A client is in at most one voice channel. Clearing the others here
-        // keeps a roster honest even when a leave was lost - a kicked client,
-        // a dropped socket, a crash.
-        await this.clearOtherVoiceChannels(state.userId, event.channelId);
-
-        const voice = await this.store.joinVoice(event.channelId, state.userId);
-        await this.events.publish(EVENTS.PRESENCE_VOICE, { voice });
         return;
       }
 
-      case 'voice.leave': {
-        const voice = await this.store.leaveVoice(event.channelId, state.userId);
-        await this.events.publish(EVENTS.PRESENCE_VOICE, { voice });
+      case 'voice.leave':
         return;
-      }
 
       default:
         this.send(socket, { type: 'error', code: 'UNKNOWN_EVENT', message: 'Unsupported event' });

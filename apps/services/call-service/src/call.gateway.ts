@@ -26,6 +26,7 @@ import { randomUUID } from 'node:crypto';
 import type { Server as HttpServer } from 'node:http';
 import { WebSocket, WebSocketServer } from 'ws';
 import { resolveChannelAccess } from '@nexora/database';
+import { EVENTS, EventBus } from '@nexora/events';
 import { Logger } from '@nexora/logger';
 import { PERMISSIONS } from '@nexora/permissions';
 import { authenticateHandshake } from '@nexora/websocket';
@@ -70,7 +71,42 @@ export class CallGateway implements OnModuleDestroy {
    */
   private readonly calls = new Map<string, Set<WebSocket>>();
 
-  constructor(private readonly logger: Logger) {}
+  constructor(
+    private readonly logger: Logger,
+    private readonly events: EventBus,
+  ) {}
+
+  /**
+   * Says who is in a call, for anybody drawing it.
+   *
+   * The roster used to be whatever each client told presence-service it was
+   * doing, which meant a client could put itself in a channel it had never
+   * signalled into, and a client that crashed stayed in one until its presence
+   * socket noticed. This gateway is the only thing that knows the truth - it
+   * holds the sockets - so it is the thing that says it, on every change,
+   * including the changes nobody announced.
+   */
+  private announceRoster(channelId: string): void {
+    const userIds = [
+      ...new Set(
+        [...(this.calls.get(channelId) ?? [])].flatMap((member) => {
+          const peer = this.state.get(member);
+          return peer ? [peer.userId] : [];
+        }),
+      ),
+    ];
+
+    // One account with two windows is one person in the room, which is why this
+    // is a set: the peer list is per socket and the roster is per person.
+    void this.events
+      .publish(EVENTS.CALL_ROSTER, { voice: { channelId, userIds } })
+      .catch((error) => {
+        this.logger.warn('Could not publish a call roster', {
+          channelId,
+          reason: String(error),
+        });
+      });
+  }
 
   attach(httpServer: HttpServer): void {
     this.server = new WebSocketServer({ server: httpServer, path: '/ws/call' });
@@ -240,6 +276,7 @@ export class CallGateway implements OnModuleDestroy {
       socket,
     );
 
+    this.announceRoster(channelId);
     this.logger.info('Peer joined a call', {
       userId: state.userId,
       channelId,
@@ -292,6 +329,7 @@ export class CallGateway implements OnModuleDestroy {
     // never produce another frame. Saying so is what closes it; waiting for ICE
     // to time out is thirty seconds of a frozen tile.
     this.broadcast(channelId, { type: 'peer.left', peerId: state.peerId });
+    this.announceRoster(channelId);
     this.logger.info('Peer left a call', {
       userId: state.userId,
       channelId,

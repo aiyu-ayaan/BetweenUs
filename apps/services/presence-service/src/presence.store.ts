@@ -82,30 +82,32 @@ export class PresenceStore implements OnModuleDestroy {
     return states.filter((state) => state.status !== 'offline');
   }
 
-  async joinVoice(channelId: string, userId: string): Promise<VoiceState> {
-    await this.redis.sadd(VOICE_KEY(channelId), userId);
-    await this.redis.sadd(VOICE_INDEX, channelId);
-    return this.voiceState(channelId);
+  /**
+   * Writes a channel's roster to exactly what `call-service` says it is.
+   *
+   * A replace rather than an add or a remove, because the authority sends the
+   * whole roster: anything left in Redis that is not in it is a client that
+   * said it joined and never did, or one that died without saying goodbye.
+   */
+  async replaceVoice(channelId: string, userIds: string[]): Promise<VoiceState> {
+    const key = VOICE_KEY(channelId);
+    if (userIds.length === 0) {
+      await this.redis.del(key);
+      await this.redis.srem(VOICE_INDEX, channelId);
+      return { channelId, userIds: [] };
+    }
+
+    // Delete and rewrite in one round trip, so a reader never sees the empty
+    // moment in between.
+    await this.redis.multi().del(key).sadd(key, ...userIds).sadd(VOICE_INDEX, channelId).exec();
+    return { channelId, userIds };
   }
 
-  async leaveVoice(channelId: string, userId: string): Promise<VoiceState> {
-    await this.redis.srem(VOICE_KEY(channelId), userId);
-    const state = await this.voiceState(channelId);
-    if (state.userIds.length === 0) await this.redis.srem(VOICE_INDEX, channelId);
-    return state;
-  }
-
-  /** Channels this user is in, so a disconnect can clear all of them. */
-  async voiceChannelsOf(userId: string): Promise<string[]> {
-    const channels = await this.redis.smembers(VOICE_INDEX);
-    const memberships = await Promise.all(
-      channels.map(async (channelId) => ({
-        channelId,
-        member: await this.redis.sismember(VOICE_KEY(channelId), userId),
-      })),
-    );
-    return memberships.filter((entry) => entry.member === 1).map((entry) => entry.channelId);
-  }
+  // There were `joinVoice`, `leaveVoice` and `voiceChannelsOf` here, one per
+  // thing a client claimed about itself. They are gone with the claim: a roster
+  // arrives whole from call-service, so there is nothing to add, nothing to
+  // remove, and no need to ask which channels somebody is in so that a
+  // disconnect can guess its way out of them.
 
   async voiceState(channelId: string): Promise<VoiceState> {
     return { channelId, userIds: await this.redis.smembers(VOICE_KEY(channelId)) };

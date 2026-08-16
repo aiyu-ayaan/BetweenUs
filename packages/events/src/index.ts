@@ -23,6 +23,13 @@ export const EVENTS = {
   PRESENCE_CHANGED: 'presence.changed',
   PRESENCE_TYPING: 'presence.typing',
   PRESENCE_VOICE: 'presence.voice',
+  /**
+   * The roster of a call, as `call-service` knows it - which is the only place
+   * that knows it. Published on every join and every departure, including the
+   * ones nobody announced: a dropped socket, a crashed window, a device whose
+   * call moved elsewhere.
+   */
+  CALL_ROSTER: 'call.roster',
   MESSAGE_CREATED: 'message.created',
   MESSAGE_UPDATED: 'message.updated',
   MESSAGE_DELETED: 'message.deleted',
@@ -43,6 +50,7 @@ export interface EventPayloads {
   [EVENTS.PRESENCE_CHANGED]: { user: PresenceState };
   [EVENTS.PRESENCE_TYPING]: { channelId: string; userId: string; username: string };
   [EVENTS.PRESENCE_VOICE]: { voice: VoiceState };
+  [EVENTS.CALL_ROSTER]: { voice: VoiceState };
   [EVENTS.MESSAGE_CREATED]: { message: Message };
   [EVENTS.MESSAGE_UPDATED]: { message: Message };
   /** Carries the tombstone, because a deleted message still renders as one. */
