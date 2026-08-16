@@ -306,6 +306,10 @@ services:
         condition: service_completed_successfully
       postgres:
         condition: service_healthy
+      # Redis carries the session relay: the agent and the controller need not
+      # be on the same replica, so the messages between them go through Pub/Sub.
+      redis:
+        condition: service_healthy
     networks:
       - remote-network
       - data-network

@@ -34,12 +34,15 @@ import type {
   RemoteSessionResponse,
 } from '@nexora/shared-types';
 
-/** An agent that has not been heard from for this long is treated as offline. */
-export const AGENT_STALE_MS = 90_000;
-
-/** Reported by the ws gateway, which is the only thing that knows who is dialled in. */
+/**
+ * Reported by the ws gateway, which is the only thing that knows who is dialled
+ * in - and, since the answer is shared through Redis, dialled in to any replica
+ * rather than only to this one. Asynchronous for that reason.
+ */
 export interface AgentPresence {
-  isOnline(machineId: string): boolean;
+  isOnline(machineId: string): Promise<boolean>;
+  /** The subset of these machines with an agent connected. One round trip. */
+  onlineAmong(machineIds: string[]): Promise<Set<string>>;
 }
 
 @Injectable()
@@ -48,7 +51,10 @@ export class RemoteService {
    * Set by the WebSocket gateway at boot. Online-ness is a property of a live
    * socket, not of a column, so the HTTP side asks rather than storing it.
    */
-  private presence: AgentPresence = { isOnline: () => false };
+  private presence: AgentPresence = {
+    isOnline: async () => false,
+    onlineAmong: async () => new Set(),
+  };
 
   setPresence(presence: AgentPresence): void {
     this.presence = presence;
@@ -128,6 +134,9 @@ export class RemoteService {
       orderBy: { name: 'asc' },
     });
 
+    // One lookup for the whole list rather than one per machine.
+    const online = await this.presence.onlineAmong(rows.map((row) => row.id));
+
     return rows
       .map((row) => {
         const isOwner = row.ownerId === userId;
@@ -141,7 +150,7 @@ export class RemoteService {
           platform: row.platform,
           ownerId: row.ownerId,
           ownerUsername: row.owner.username,
-          online: this.presence.isOnline(row.id),
+          online: online.has(row.id),
           lastSeenAt: row.lastSeenAt?.toISOString() ?? null,
           permissions,
           expiresAt: isOwner ? null : (grant?.expiresAt?.toISOString() ?? null),
@@ -294,7 +303,7 @@ export class RemoteService {
       });
     }
 
-    if (!this.presence.isOnline(machineId)) {
+    if (!(await this.presence.isOnline(machineId))) {
       throw new ServiceUnavailableException({
         code: 'AGENT_OFFLINE',
         message: 'That machine is not connected',
@@ -383,11 +392,16 @@ export class RemoteService {
 
     if (session.endedAt) return;
     await this.endSession(sessionId, reason);
-    await this.onSessionEnded(sessionId, reason);
+    await this.onSessionEnded(sessionId, session.machineId, reason);
   }
 
-  /** Set by the module so ending over HTTP also drops the live sockets. */
-  onSessionEnded: (sessionId: string, reason: string) => Promise<void> = async () => undefined;
+  /**
+   * Set by the module so ending over HTTP also drops the live sockets. The
+   * machine id travels with it because the two sockets may be on two different
+   * instances, and the one that hears this may hold neither of them.
+   */
+  onSessionEnded: (sessionId: string, machineId: string, reason: string) => Promise<void> =
+    async () => undefined;
 
   /** The machine's own history. Owner or a delegated administrator only. */
   async audit(userId: string, machineId: string, limit = 100): Promise<RemoteAuditEntry[]> {

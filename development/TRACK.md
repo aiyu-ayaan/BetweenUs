@@ -44,6 +44,11 @@ Backend:
       year, abandoned multipart uploads every six hours.
 - [x] **Agent-token lookup.** A unique index instead of a full table scan on
       every agent reconnect.
+- [x] **Remote sessions over Redis Pub/Sub.** The agent and the controller no
+      longer have to be on the same replica. One pair of methods carries every
+      message - local socket when this instance holds it, Pub/Sub when it does
+      not - and which machines have an agent connected is a Redis key with a TTL
+      rather than a map in one process.
 - [x] **Admin: audit log, paged users table, OAuth for the panel.** The trail is
       append-only and keeps a label for a target that no longer exists; paging
       is a cursor, so a registration between two requests cannot repeat a row;
@@ -73,9 +78,6 @@ blocked by anything outside this document.
 
 ### Backend
 
-- [ ] **Remote sessions over Redis Pub/Sub.** Sessions are relayed in one
-      process's memory, so agent and controller must land on the same instance -
-      true for the single replica compose runs, not for two. Keyed by session id.
 - [ ] **Custom named roles with a colour and an ordering.** The five built-ins
       plus per-member overrides are what exists; this is a table, a rank, and
       the permission editor learning to read it.

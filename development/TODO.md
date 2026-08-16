@@ -468,9 +468,17 @@ Left open on purpose:
 - [ ] The display list is read once when the session opens, so a monitor
       plugged in - or one that changes resolution - part way through a session
       is not noticed until the next one
-- [ ] Sessions are relayed in one process's memory, so agent and controller
-      must land on the same instance - true for the single replica compose runs,
-      not for two. Redis Pub/Sub keyed by session id is the upgrade
+- [x] Sessions are relayed through Redis Pub/Sub, so the agent and the
+      controller need not land on the same instance. Every message goes out
+      through one pair of methods that deliver to a local socket when this
+      replica holds it and publish when it does not; an instance drops its own
+      publications, so nothing is delivered twice. Which machines have an agent
+      connected is a Redis key with a TTL rather than a map in one process, so
+      "that machine is not connected" is an answer about the deployment - and a
+      replica that dies stops claiming its agents by itself. A controller's live
+      permissions are read from the session row when the socket is elsewhere;
+      the in-memory list is a cache of that row, kept in step by
+      `control.changed` on its way past
 - [x] `machineForAgentToken` is one indexed lookup. The constant-time compare it
       replaced was defending a value with no structure to leak - a SHA-256 of a
       256-bit random token - and costing a full table read per agent reconnect

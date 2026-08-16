@@ -11,15 +11,24 @@
  * row, here, on the server. The desktop client hides what it cannot do, but
  * hiding is not enforcement.
  *
- * ponytail: sessions are relayed in this process's memory, so agent and
- * controller must land on the same instance - true for the single replica the
- * compose file runs. Redis Pub/Sub keyed by session id is the upgrade, the same
- * way chat- and presence-service fan out.
+ * The two halves of a session need not be on the same instance: the agent
+ * dialled out hours ago and the controller dialled in just now, through a load
+ * balancer with no idea they belong together. So every message goes through
+ * `toAgent` / `toController`, which deliver to a local socket when this instance
+ * holds it and publish through `RemoteRelay` when it does not. Nothing in this
+ * file may reach into `agents` or `controllers` directly to send.
+ *
+ * The one consequence worth naming: a controller's live permissions cannot be
+ * read from memory when the controller is somebody else's socket. They are read
+ * from the session row instead, which is the authoritative copy anyway - the
+ * in-memory list is a cache of it, kept in step by `control.changed`.
  */
 import { Injectable, OnModuleDestroy } from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
 import type { IncomingMessage, Server as HttpServer } from 'node:http';
 import { WebSocket, WebSocketServer } from 'ws';
-import { prisma, recordRemoteAudit } from '@nexora/database';
+import { envOr } from '@nexora/config';
+import { asRemotePermissions, prisma, recordRemoteAudit } from '@nexora/database';
 import { Logger } from '@nexora/logger';
 import { PERMISSIONS, type RemotePermission } from '@nexora/permissions';
 import { authenticateHandshake } from '@nexora/websocket';
@@ -29,6 +38,7 @@ import type {
   ServerRemoteEvent,
 } from '@nexora/shared-types';
 import { RemoteService } from './modules/remote/remote.service';
+import { RemoteRelay, type RelayTarget } from './remote.relay';
 
 const HEARTBEAT_INTERVAL_MS = 30_000;
 
@@ -55,7 +65,9 @@ interface ControllerSocket {
   /**
    * Mutable, unlike the row it started from: the machine can lend control
    * mid-session and take it back. Every change is written to the session row
-   * too, so the audit trail and a restart agree with what the relay enforces.
+   * too, so the audit trail and a restart agree with what the relay enforces -
+   * and so an instance that does not hold this socket can still read what this
+   * session may do.
    */
   permissions: RemotePermission[];
   alive: boolean;
@@ -68,12 +80,14 @@ export class RemoteGateway implements OnModuleDestroy {
   private server: WebSocketServer | null = null;
   private heartbeat: NodeJS.Timeout | null = null;
   private readonly state = new WeakMap<WebSocket, SocketState>();
-  /** machineId -> the agent's live socket. One agent per machine. */
+  /** machineId -> the agent's live socket *on this instance*. */
   private readonly agents = new Map<string, WebSocket>();
-  /** sessionId -> the controller's live socket. */
+  /** sessionId -> the controller's live socket *on this instance*. */
   private readonly controllers = new Map<string, WebSocket>();
-  /** sessionId -> machineId, so a teardown knows which agent to tell. */
-  private readonly sessionMachines = new Map<string, string>();
+  private readonly relay = new RemoteRelay(
+    envOr('REDIS_URL', 'redis://localhost:6379'),
+    randomUUID(),
+  );
 
   constructor(
     private readonly remote: RemoteService,
@@ -81,11 +95,16 @@ export class RemoteGateway implements OnModuleDestroy {
   ) {}
 
   attach(httpServer: HttpServer): void {
-    this.remote.setPresence({ isOnline: (machineId) => this.agents.has(machineId) });
+    this.remote.setPresence({
+      isOnline: (machineId) => this.relay.isAgentOnline(machineId),
+      onlineAmong: (machineIds) => this.relay.onlineAgents(machineIds),
+    });
     this.remote.onGrantRevoked = (machineId, userId) => this.endSessionsFor(machineId, userId);
-    this.remote.onSessionEnded = async (sessionId, reason) => {
-      this.tearDown(sessionId, reason);
+    this.remote.onSessionEnded = async (sessionId, machineId, reason) => {
+      this.tearDown(sessionId, machineId, reason);
     };
+
+    void this.relay.start((message) => this.deliverLocal(message.target, message.event, message.close));
 
     this.server = new WebSocketServer({ server: httpServer, path: '/ws/remote' });
 
@@ -103,7 +122,12 @@ export class RemoteGateway implements OnModuleDestroy {
         }
         state.alive = false;
         socket.ping();
-        if (state.kind === 'agent') void this.remote.touchMachine(state.machineId);
+        if (state.kind === 'agent') {
+          void this.remote.touchMachine(state.machineId);
+          // Renews the registry entry. It outlives two missed beats and no more,
+          // so an instance that dies stops claiming its agents by itself.
+          void this.relay.announceAgent(state.machineId);
+        }
       }
     }, HEARTBEAT_INTERVAL_MS);
 
@@ -131,7 +155,9 @@ export class RemoteGateway implements OnModuleDestroy {
     }
 
     // One agent per machine. A second connection is the same machine coming
-    // back after a network drop, so the older socket is the stale one.
+    // back after a network drop, so the older socket is the stale one - and it
+    // may be a socket on another instance, which is why the close is relayed
+    // rather than only applied here.
     const previous = this.agents.get(machine.id);
     if (previous && previous !== socket) previous.close(4409, 'Replaced');
 
@@ -143,6 +169,13 @@ export class RemoteGateway implements OnModuleDestroy {
       alive: true,
     });
     await this.remote.touchMachine(machine.id);
+    // Claimed before the older socket elsewhere is told to go: the registry
+    // should never have a window where the machine reads offline.
+    await this.relay.announceAgent(machine.id);
+    await this.relay.forward({ kind: 'agent', machineId: machine.id }, null, {
+      code: 4409,
+      reason: 'Replaced',
+    });
 
     this.send(socket, { type: 'ready', role: 'agent', machineId: machine.id });
     this.logger.info('Remote agent connected', { machineId: machine.id });
@@ -152,8 +185,13 @@ export class RemoteGateway implements OnModuleDestroy {
     socket.on('close', () => {
       // Only if this socket is still the registered one: a reconnect replaces
       // the entry before the old socket's close event arrives.
-      if (this.agents.get(machine.id) === socket) this.agents.delete(machine.id);
+      if (this.agents.get(machine.id) !== socket) {
+        this.state.delete(socket);
+        return;
+      }
+      this.agents.delete(machine.id);
       this.state.delete(socket);
+      void this.relay.forgetAgent(machine.id);
       // Every session on a machine that just went away is over; nothing is
       // going to answer for it.
       void this.endSessionsForMachine(machine.id, 'agent-offline');
@@ -185,26 +223,21 @@ export class RemoteGateway implements OnModuleDestroy {
 
       case 'session.accepted':
       case 'session.refused': {
-        const controller = this.controllers.get(event.sessionId);
         if (event.type === 'session.accepted') {
-          if (controller) {
-            this.send(controller, {
-              type: 'agent.state',
-              sessionId: event.sessionId,
-              state: 'accepted',
-            });
-          }
+          this.toController(event.sessionId, {
+            type: 'agent.state',
+            sessionId: event.sessionId,
+            state: 'accepted',
+          });
           return;
         }
 
-        if (controller) {
-          this.send(controller, {
-            type: 'agent.state',
-            sessionId: event.sessionId,
-            state: 'refused',
-            reason: event.reason,
-          });
-        }
+        this.toController(event.sessionId, {
+          type: 'agent.state',
+          sessionId: event.sessionId,
+          state: 'refused',
+          reason: event.reason,
+        });
         // The person sitting at the machine said no. That is a refusal worth
         // keeping: it is the record that consent was asked for and withheld.
         await recordRemoteAudit({
@@ -214,51 +247,49 @@ export class RemoteGateway implements OnModuleDestroy {
           detail: { reason: event.reason, by: 'agent' },
         });
         await this.remote.endSession(event.sessionId, 'refused');
-        this.tearDown(event.sessionId, 'refused');
+        this.tearDown(event.sessionId, state.machineId, 'refused');
         return;
       }
 
       case 'session.ended':
         await this.remote.endSession(event.sessionId, 'agent');
-        this.tearDown(event.sessionId, 'agent');
+        this.tearDown(event.sessionId, state.machineId, 'agent');
         return;
 
       case 'control.granted':
       case 'control.denied': {
-        const controller = this.controllers.get(event.sessionId);
-        const controllerState = controller ? this.state.get(controller) : undefined;
-        if (!controller || controllerState?.kind !== 'controller') return;
+        // Read from the session row rather than from a controller socket this
+        // instance may not hold. The row is what the relay enforces against, so
+        // it is also the right thing to change.
+        const session = await this.liveSession(event.sessionId);
+        if (!session) return;
 
         const granted = event.type === 'control.granted';
         const refusal = event.type === 'control.denied' ? (event.reason ?? 'declined') : null;
-        if (granted && !controllerState.permissions.includes(PERMISSIONS.REMOTE_CONTROL)) {
+        let permissions = session.permissions;
+
+        if (granted && !permissions.includes(PERMISSIONS.REMOTE_CONTROL)) {
           // Somebody at the machine said yes. That is a higher authority than a
           // stored grant, so it stands - but only for this session: it is
           // written to the session row, never to the grant.
-          controllerState.permissions = [
-            ...controllerState.permissions,
-            PERMISSIONS.REMOTE_CONTROL,
-          ];
+          permissions = [...permissions, PERMISSIONS.REMOTE_CONTROL];
           await prisma.remoteSession
-            .update({
-              where: { id: event.sessionId },
-              data: { permissions: controllerState.permissions },
-            })
+            .update({ where: { id: event.sessionId }, data: { permissions } })
             .catch(() => undefined);
         }
 
         await recordRemoteAudit({
           machineId: state.machineId,
           sessionId: event.sessionId,
-          actorId: controllerState.userId,
+          actorId: session.userId,
           action: granted ? 'control.granted' : 'control.denied',
           detail: granted ? {} : { reason: refusal },
         });
 
-        this.send(controller, {
+        this.toController(event.sessionId, {
           type: 'control.changed',
           sessionId: event.sessionId,
-          permissions: controllerState.permissions,
+          permissions,
           granted,
           ...(granted ? {} : { reason: refusal ?? 'The machine refused' }),
         });
@@ -267,29 +298,20 @@ export class RemoteGateway implements OnModuleDestroy {
 
       // Which displays the machine has. No permission of its own: a session
       // that may see the screen may know how many there are.
-      case 'screens': {
-        const controller = this.controllers.get(event.sessionId);
-        if (controller) {
-          this.send(controller, {
-            type: 'screens',
-            screens: event.screens,
-            activeId: event.activeId,
-          });
-        }
+      case 'screens':
+        this.toController(event.sessionId, {
+          type: 'screens',
+          screens: event.screens,
+          activeId: event.activeId,
+        });
         return;
-      }
 
       case 'clipboard.text': {
         // The machine's clipboard travelling to the controller needs the same
         // permission as the other direction.
-        const controller = this.controllers.get(event.sessionId);
-        const controllerState = controller ? this.state.get(controller) : undefined;
-        if (
-          controller &&
-          controllerState?.kind === 'controller' &&
-          controllerState.permissions.includes(PERMISSIONS.REMOTE_CLIPBOARD)
-        ) {
-          this.send(controller, { type: 'clipboard.set', text: event.text });
+        const session = await this.liveSession(event.sessionId);
+        if (session?.permissions.includes(PERMISSIONS.REMOTE_CLIPBOARD)) {
+          this.toController(event.sessionId, { type: 'clipboard.set', text: event.text });
         }
         return;
       }
@@ -297,11 +319,9 @@ export class RemoteGateway implements OnModuleDestroy {
       // The agent's half of setting up the peer connection, on its way to that
       // session's controller. Forwarded without being read: an SDP this gateway
       // rewrote would be an SDP it could put itself in the middle of.
-      case 'rtc.signal': {
-        const controller = this.controllers.get(event.sessionId);
-        if (controller) this.send(controller, { type: 'rtc.signal', data: event.data });
+      case 'rtc.signal':
+        this.toController(event.sessionId, { type: 'rtc.signal', data: event.data });
         return;
-      }
 
       case 'pong':
         return;
@@ -343,19 +363,16 @@ export class RemoteGateway implements OnModuleDestroy {
       return;
     }
 
-    const agent = this.agents.get(session.machineId);
-    if (!agent) {
+    // Connected to any instance, not only this one.
+    if (!(await this.relay.isAgentOnline(session.machineId))) {
       socket.close(4404, 'Agent offline');
       await this.remote.endSession(sessionId, 'agent-offline');
       return;
     }
 
-    const permissions = session.permissions.filter((value): value is RemotePermission =>
-      Object.prototype.hasOwnProperty.call(PERMISSIONS, value),
-    );
+    const permissions = asRemotePermissions(session.permissions);
 
     this.controllers.set(sessionId, socket);
-    this.sessionMachines.set(sessionId, session.machineId);
     this.state.set(socket, {
       kind: 'controller',
       sessionId,
@@ -372,7 +389,7 @@ export class RemoteGateway implements OnModuleDestroy {
     // and, if it does, to offer its screen to the controller directly. It is
     // given ICE servers rather than an address, because nothing here knows or
     // needs to know where either end is.
-    this.send(agent, {
+    this.toAgent(session.machineId, {
       type: 'session.start',
       sessionId,
       controllerId: user.id,
@@ -393,10 +410,7 @@ export class RemoteGateway implements OnModuleDestroy {
       this.state.delete(socket);
       if (this.controllers.get(sessionId) === socket) this.controllers.delete(sessionId);
       void this.remote.endSession(sessionId, 'controller');
-      const machineAgent = this.agents.get(session.machineId);
-      if (machineAgent) {
-        this.send(machineAgent, { type: 'session.ended', sessionId, reason: 'controller' });
-      }
+      this.toAgent(session.machineId, { type: 'session.ended', sessionId, reason: 'controller' });
     });
     socket.on('error', () => socket.close());
   }
@@ -419,7 +433,7 @@ export class RemoteGateway implements OnModuleDestroy {
 
     if (event.type === 'session.end') {
       await this.remote.endSession(state.sessionId, 'controller');
-      this.tearDown(state.sessionId, 'controller');
+      this.tearDown(state.sessionId, state.machineId, 'controller');
       return;
     }
 
@@ -437,11 +451,7 @@ export class RemoteGateway implements OnModuleDestroy {
         return;
       }
 
-      const agent = this.agents.get(state.machineId);
-      if (!agent) {
-        this.send(socket, { type: 'error', code: 'AGENT_OFFLINE', message: 'The machine is gone' });
-        return;
-      }
+      if (!(await this.requireAgent(socket, state.machineId))) return;
 
       await recordRemoteAudit({
         machineId: state.machineId,
@@ -449,7 +459,7 @@ export class RemoteGateway implements OnModuleDestroy {
         actorId: state.userId,
         action: 'control.requested',
       });
-      this.send(agent, {
+      this.toAgent(state.machineId, {
         type: 'control.requested',
         sessionId: state.sessionId,
         controllerName: state.username,
@@ -472,15 +482,12 @@ export class RemoteGateway implements OnModuleDestroy {
         permissions: state.permissions,
         granted: false,
       });
-      const agent = this.agents.get(state.machineId);
-      if (agent) {
-        this.send(agent, {
-          type: 'control.changed',
-          sessionId: state.sessionId,
-          permissions: state.permissions,
-          granted: false,
-        });
-      }
+      this.toAgent(state.machineId, {
+        type: 'control.changed',
+        sessionId: state.sessionId,
+        permissions: state.permissions,
+        granted: false,
+      });
       return;
     }
 
@@ -488,12 +495,8 @@ export class RemoteGateway implements OnModuleDestroy {
     // session is entitled to look at the other screen. The agent answers with a
     // fresh `screens`, so the controller never has to assume it worked.
     if (event.type === 'screen.select') {
-      const agent = this.agents.get(state.machineId);
-      if (!agent) {
-        this.send(socket, { type: 'error', code: 'AGENT_OFFLINE', message: 'The machine is gone' });
-        return;
-      }
-      this.send(agent, {
+      if (!(await this.requireAgent(socket, state.machineId))) return;
+      this.toAgent(state.machineId, {
         type: 'screen.select',
         sessionId: state.sessionId,
         screenId: event.screenId,
@@ -507,10 +510,11 @@ export class RemoteGateway implements OnModuleDestroy {
     // before the session existed. Forwarded without being read, for the same
     // reason the other direction is.
     if (event.type === 'rtc.signal') {
-      const agent = this.agents.get(state.machineId);
-      if (agent) {
-        this.send(agent, { type: 'rtc.signal', sessionId: state.sessionId, data: event.data });
-      }
+      this.toAgent(state.machineId, {
+        type: 'rtc.signal',
+        sessionId: state.sessionId,
+        data: event.data,
+      });
       return;
     }
 
@@ -538,32 +542,95 @@ export class RemoteGateway implements OnModuleDestroy {
       return;
     }
 
-    const agent = this.agents.get(state.machineId);
-    if (!agent) {
-      this.send(socket, { type: 'error', code: 'AGENT_OFFLINE', message: 'The machine is gone' });
+    if (!(await this.requireAgent(socket, state.machineId))) return;
+    this.toAgent(state.machineId, event as ServerRemoteEvent);
+  }
+
+  // --- Delivery -------------------------------------------------------------
+
+  /** Local socket if this instance holds it, the relay otherwise. */
+  private toAgent(
+    machineId: string,
+    event: ServerRemoteEvent,
+    close?: { code: number; reason: string },
+  ): void {
+    const target: RelayTarget = { kind: 'agent', machineId };
+    if (this.agents.has(machineId)) {
+      this.deliverLocal(target, event, close);
       return;
     }
+    void this.relay.forward(target, event, close);
+  }
 
-    this.send(agent, event as ServerRemoteEvent);
+  private toController(
+    sessionId: string,
+    event: ServerRemoteEvent,
+    close?: { code: number; reason: string },
+  ): void {
+    const target: RelayTarget = { kind: 'controller', sessionId };
+    if (this.controllers.has(sessionId)) {
+      this.deliverLocal(target, event, close);
+      return;
+    }
+    void this.relay.forward(target, event, close);
+  }
+
+  /**
+   * The one place a message reaches a socket, whether it came from this
+   * instance or another one - which is what makes the cached copy of a
+   * session's permissions impossible to get out of step: `control.changed` is
+   * applied here, on the way past, wherever the controller happens to be.
+   */
+  private deliverLocal(
+    target: RelayTarget,
+    event: ServerRemoteEvent | null,
+    close?: { code: number; reason: string },
+  ): void {
+    const socket =
+      target.kind === 'agent'
+        ? this.agents.get(target.machineId)
+        : this.controllers.get(target.sessionId);
+    if (!socket) return;
+
+    if (target.kind === 'controller' && event?.type === 'control.changed') {
+      const state = this.state.get(socket);
+      if (state?.kind === 'controller') state.permissions = asRemotePermissions(event.permissions);
+    }
+
+    if (event) this.send(socket, event);
+    if (close) socket.close(close.code, close.reason);
+  }
+
+  /** The session as the server holds it, or null if it is over. */
+  private async liveSession(
+    sessionId: string,
+  ): Promise<{ userId: string; permissions: RemotePermission[] } | null> {
+    const session = await prisma.remoteSession.findUnique({
+      where: { id: sessionId },
+      select: { userId: true, permissions: true, endedAt: true },
+    });
+    if (!session || session.endedAt) return null;
+    return { userId: session.userId, permissions: asRemotePermissions(session.permissions) };
+  }
+
+  /** Tells the controller when the machine is not there, and answers whether it is. */
+  private async requireAgent(socket: WebSocket, machineId: string): Promise<boolean> {
+    if (await this.relay.isAgentOnline(machineId)) return true;
+    this.send(socket, { type: 'error', code: 'AGENT_OFFLINE', message: 'The machine is gone' });
+    return false;
   }
 
   // --- Teardown -------------------------------------------------------------
 
   /** Closes both ends of a session that is over, whoever ended it. */
-  private tearDown(sessionId: string, reason: string): void {
-    const controller = this.controllers.get(sessionId);
-    if (controller) {
-      this.send(controller, { type: 'session.ended', sessionId, reason });
-      controller.close(4000, reason);
-      this.controllers.delete(sessionId);
-    }
-
-    const machineId = this.sessionMachines.get(sessionId);
-    const agent = machineId ? this.agents.get(machineId) : undefined;
+  private tearDown(sessionId: string, machineId: string, reason: string): void {
+    this.toController(sessionId, { type: 'session.ended', sessionId, reason }, {
+      code: 4000,
+      reason,
+    });
     // The agent has to stop capturing whether or not the controller is still
     // there to be told - a session nobody is watching must not stay open.
-    if (agent) this.send(agent, { type: 'session.ended', sessionId, reason });
-    this.sessionMachines.delete(sessionId);
+    this.toAgent(machineId, { type: 'session.ended', sessionId, reason });
   }
 
   /** Every live session on a machine, for when its agent disappears. */
@@ -574,7 +641,7 @@ export class RemoteGateway implements OnModuleDestroy {
     });
     for (const session of open) {
       await this.remote.endSession(session.id, reason);
-      this.tearDown(session.id, reason);
+      this.tearDown(session.id, machineId, reason);
     }
   }
 
@@ -590,7 +657,7 @@ export class RemoteGateway implements OnModuleDestroy {
     });
     for (const session of open) {
       await this.remote.endSession(session.id, 'revoked');
-      this.tearDown(session.id, 'revoked');
+      this.tearDown(session.id, machineId, 'revoked');
     }
   }
 
@@ -603,8 +670,9 @@ export class RemoteGateway implements OnModuleDestroy {
     if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(event));
   }
 
-  onModuleDestroy(): void {
+  async onModuleDestroy(): Promise<void> {
     if (this.heartbeat) clearInterval(this.heartbeat);
     this.server?.close();
+    await this.relay.close();
   }
 }
