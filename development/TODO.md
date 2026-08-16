@@ -11,8 +11,9 @@ it is the one thing every client is missing in the same way. See the phase-27
 section below for what it covers on the backend, the web client and Android.
 
 Everything else that was still open across web, desktop, Android and the backend
-has been pulled into an ordered programme below; the phase sections further down
-are the record of how each area got to where it is.
+has been pulled into `TRACK.md`, which is the ordered list of what is being
+built now; the phase sections further down are the record of how each area got
+to where it is.
 
 Phase 24 - peer-to-peer media - has landed in code. LiveKit is gone from the
 repo, the deployment and the environment; calls and remote sessions are a
@@ -49,110 +50,15 @@ and "The workbench" in `TESTING.md` for what to click.
 
 ### The programme
 
-What is being worked through now, in order. Each line is a commit-sized chunk
-and is ticked here when it lands; the phase sections below stay as the record of
-why each area looks the way it does.
+The work chosen for this pass has its own document: **`TRACK.md`**. It is one
+ordered list of what is being built now, what has landed, and what is left of
+it, and it is deliberately narrower than this file - nothing joins it without
+being chosen.
 
-Backend:
-
-- [x] Per-user login rate limit, not only per client address: `rateLimit` grew
-      a second bucket keyed on the account named in the body (10/min, normalised
-      so one spelling of an email is one bucket), covered by
-      `auth-service`'s check
-- [x] Idle status set automatically after ten minutes with no input, and back
-      to online the moment there is some. The desktop asks the OS for the whole
-      machine's idle time; a browser tab has no such thing and watches its own
-      events. A call counts as being present, and a chosen status is never
-      overwritten (`services/idle.ts`, with a self-check)
-- [x] Presence broadcasts scoped instead of going to every connected socket: a
-      status reaches people who share a server or a friendship, and anything
-      about a channel reaches people who can see that channel. The sync at
-      connect is filtered the same way. 30-second TTL cache, so a new member
-      appears to the others within half a minute rather than instantly
-- [x] Voice roster taken from `call-service` instead of from what a client
-      claims: it publishes `call.roster` on every join and departure, and
-      presence-service writes that through to Redis and fans it out. A client
-      can no longer put itself in a channel it never signalled into, and a
-      crashed one leaves the moment its signalling socket does
-- [x] Mentions told apart from ordinary messages, and a "mentions only" level
-      per channel - the bell in a channel header cycles all / mentions / none.
-      Detection is the client's, because a body is sealed with the channel key
-      and no service can read one (`services/mentions.ts`, with a check for the
-      prefix case that would make a quiet channel loud again)
-- [x] Channel-key rotation when somebody is dropped from a private channel (or
-      from the server, or the channel is made private around them). The keys
-      endpoint answers `rekeyNeeded` - derived by comparing who holds the epoch
-      with who is a member now - and the first holder to sync mints the next
-      epoch for the members who remain. Covered in `e2ee.check.ts`
-- [ ] Multi-device E2EE: a key per device, so one can be revoked alone
-- [ ] Identity rotation after a lost device, re-sealing current channel keys
-- [ ] Safety numbers, so a lying server is detectable
-- [x] Invite codes with an expiry, a use limit and a revoke, instead of a
-      permanent server slug. `POST/GET/DELETE /api/v1/servers/:id/invites`,
-      `MANAGE_MEMBER` to mint one, and `POST /servers/join` takes a code - the
-      slug is a name now and opens nothing
-- [ ] Custom named roles with a colour and an ordering
-- [x] Stale multipart sessions swept on a schedule (chat-service, local driver
-      only - S3 has a lifecycle rule for exactly this)
-- [ ] Attachment blobs swept when their message is deleted. Harder than it
-      looks and deliberately not bundled with the sweep above: the manifest
-      naming the blobs is *inside* the encrypted body, so no service can tell
-      which blob belongs to which message. It needs either a stored attachment
-      row per upload or the deleting client to remove the blobs it can read
-- [x] Ended remote sessions and old audit rows swept, on a daily timer with
-      the windows in the environment: 30 days for a finished session, a year
-      for the audit trail, and a running session never
-- [ ] Remote sessions relayed through Redis Pub/Sub, so two replicas work
-- [x] `machineForAgentToken` on a lookup key instead of a full table scan
-- [ ] Admin: an audit log of admin actions, a paged users table, OAuth for the
-      panel itself
-- [ ] The shared Prisma schema split per service, and `user-service` serving the
-      routes chat-service holds today
-
-Desktop and web:
-
-- [x] Push to talk: a key held opens the microphone, the mute button still says
-      whether you are in the call at all, and losing window focus closes it so a
-      key released elsewhere cannot leave it open. Window-scoped rather than
-      global - `globalShortcut` delivers a press and never a release
-- [x] Per-person volume and mute, stored per machine and keyed by user id so a
-      reconnect does not reset it. A muted person is played at zero rather than
-      dropped, so unmuting is instant and their speaking ring still moves
-- [x] Call and share statistics in the UI - bitrate up and down, packet loss,
-      round trip and the arriving picture's size, per peer, behind a button in
-      the call controls; plus the one warning that cannot wait behind a button,
-      which is a microphone sending nothing
-- [ ] A manual quality override for a share and for a remote session
-- [ ] Modifier chords, so Ctrl+Alt+Del travels as a chord
-- [ ] Input injection on macOS and Linux
-- [ ] `REMOTE_FILE_TRANSFER` and `REMOTE_AUDIO`, which are vocabulary today
-- [ ] Display hot-plug noticed mid-session
-- [ ] Per-session input targets
-- [ ] The headless `remote-agent`, which is still a scaffold
-- [ ] A light theme
-- [ ] Edit history, encrypted reactions, paged search, who-reacted names, a
-      pinned panel that pages
-- [ ] An unread line that survives a restart, and a jump to it
-- [ ] Decrypted history persisted under a device key
-- [x] Private-channel allowlist editing in the UI - "Who is on it" in server
-      settings, next to each private channel. Saving re-keys the channel there
-      and then rather than waiting for somebody to open it
-- [ ] Chunked AEAD attachments, and a video transcode
-- [ ] A recent-servers list, and a client/server version check
-- [ ] Whether the shared UI moves to `packages/ui`
-
-Android (`ANDROID_TODO.md` has the detail):
-
-- [ ] Replies, and markdown-ish body rendering
-- [ ] Reconnect driven by a network-change callback
-- [ ] Ducking, an incoming phone call, and headset routing
-- [ ] The share quality ladder
-- [ ] Remote clipboard and file transfer
-- [ ] Audio device and input-sensitivity settings
-- [ ] Create and join a server, invites
-- [ ] OAuth through Custom Tabs
-- [ ] The refresh token out of plain prefs, private-CA handling, R8 and signing
-- [ ] Instrumented tests and CI, opt-in crash reporting, a light theme
+This file stays what it has always been: the record of how each phase got where
+it is, and the backlog of everything anybody has thought of. Where an item
+appears in both, the phase sections below carry the reasoning and `TRACK.md`
+carries the state.
 
 ## Phase 27 — push notifications (next major phase, not started)
 
