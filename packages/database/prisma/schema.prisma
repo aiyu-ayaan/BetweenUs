@@ -78,6 +78,7 @@ model User {
   remoteSessions RemoteSession[] @relation("RemoteSessionUser")
   remoteAudit    RemoteAudit[]   @relation("RemoteAuditActor")
   adminAudit     AdminAudit[]    @relation("AdminAuditActor")
+  attachments    Attachment[]    @relation("AttachmentUploader")
 
   @@map("users")
 }
@@ -467,6 +468,7 @@ model Message {
   deletedBy User?   @relation("MessageDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull)
   pinnedBy  User?   @relation("MessagePinnedBy", fields: [pinnedById], references: [id], onDelete: SetNull)
   reactions MessageReaction[]
+  attachments Attachment[]
 
   // History paging reads newest-first within a channel.
   @@index([channelId, createdAt])
@@ -495,6 +497,46 @@ model MessageReaction {
   @@unique([messageId, userId, emoji])
   @@index([messageId])
   @@map("message_reactions")
+}
+
+/// One uploaded blob, and which message claims it.
+///
+/// This row exists for one reason: nothing else can say which object belongs to
+/// which message. The manifest naming a message's files is *inside* the
+/// encrypted body, so no service can read it, and without a row here a deleted
+/// message left its ciphertext in storage for ever. The alternative - the
+/// deleting client removing what it can read - leaves behind everything a
+/// moderator deletes, which is exactly the case that matters.
+///
+/// What this costs is one small piece of metadata: the server learns that some
+/// number of blobs, of some size, belong to one message. It already knew the
+/// blobs and their sizes; the name, the type and the contents stay sealed.
+///
+/// Neither foreign key cascades, deliberately. A row destroyed by somebody
+/// else's cascade is a blob nothing will ever name again, so both go null
+/// instead and the sweeper - which looks for rows no message claims - collects
+/// the object. That makes one mechanism cover a deleted message, a deleted
+/// channel, a deleted server, a deleted account and an upload nobody ever sent.
+model Attachment {
+  id String @id @default(uuid())
+  /// The storage key. Unique: one row per object, so claiming twice is caught.
+  key String @unique
+  /// Null once the account that uploaded it is gone. See the note above.
+  uploaderId String?
+  /// Ciphertext length, which is not the plaintext size and is not meant to be.
+  size Int
+  /// Null until the message carrying it is sent, and null again if that message
+  /// row is destroyed rather than tombstoned.
+  messageId String?
+  createdAt DateTime @default(now())
+
+  uploader User?    @relation("AttachmentUploader", fields: [uploaderId], references: [id], onDelete: SetNull)
+  message  Message? @relation(fields: [messageId], references: [id], onDelete: SetNull)
+
+  @@index([messageId])
+  /// The sweeper reads unclaimed rows oldest first.
+  @@index([createdAt])
+  @@map("attachments")
 }
 
 // --- Remote desktop (phase 17) ------------------------------------------------
