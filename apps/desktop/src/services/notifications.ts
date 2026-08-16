@@ -3,8 +3,8 @@
  *
  * The rule lives here rather than in the stores: notify when the user cannot
  * already see the thing, and when they have not said otherwise. "Otherwise" is
- * four things - the account's own switch, its muted channels, its quiet hours,
- * and a Do Not Disturb status. The first three come from notification-service,
+ * four things - the account's own switch, the channel's own level (everything,
+ * mentions only, or nothing), its quiet hours, and a Do Not Disturb status. The first three come from notification-service,
  * so they follow the account to another machine; the fourth is live presence.
  *
  * The OS half - the notification itself, the taskbar flash, the tray, restoring
@@ -12,7 +12,10 @@
  * browser (`pnpm --filter @nexora/desktop dev` in a tab) the bridge is absent
  * and every call here is a no-op.
  */
-import type { NotificationPreferences } from '@nexora/shared-types';
+import type {
+  ChannelNotificationLevel,
+  NotificationPreferences,
+} from '@nexora/shared-types';
 import { api } from './api';
 import { usePresenceStore } from '../stores/presence';
 
@@ -26,6 +29,7 @@ const DEFAULTS: NotificationPreferences = {
   quietStartMinute: null,
   quietEndMinute: null,
   mutedChannelIds: [],
+  mentionOnlyChannelIds: [],
 };
 
 // Held in a module rather than a store: the decision is taken inside a socket
@@ -75,12 +79,43 @@ export function isChannelMuted(channelId: string): boolean {
   return preferences.mutedChannelIds.includes(channelId);
 }
 
+/**
+ * What this channel's bell is set to.
+ *
+ * A mute wins over mentions-only, so the two lists cannot contradict each other
+ * however they were written - a client that only knows about muting can add a
+ * channel to that list and the answer is still "none".
+ */
+export function channelLevel(channelId: string): ChannelNotificationLevel {
+  if (preferences.mutedChannelIds.includes(channelId)) return 'none';
+  if (preferences.mentionOnlyChannelIds.includes(channelId)) return 'mentions';
+  return 'all';
+}
+
+/** The order the bell cycles through, which is loudest to quietest. */
+export const CHANNEL_LEVELS: ChannelNotificationLevel[] = ['all', 'mentions', 'none'];
+
+export async function setChannelLevel(
+  channelId: string,
+  level: ChannelNotificationLevel,
+): Promise<void> {
+  const without = (list: string[]): string[] => list.filter((id) => id !== channelId);
+  // Both lists are sent every time, so a channel is in exactly one of them and
+  // a level that moved cannot leave its old entry behind.
+  await updateNotificationPreferences({
+    mutedChannelIds:
+      level === 'none'
+        ? [...new Set([...preferences.mutedChannelIds, channelId])]
+        : without(preferences.mutedChannelIds),
+    mentionOnlyChannelIds:
+      level === 'mentions'
+        ? [...new Set([...preferences.mentionOnlyChannelIds, channelId])]
+        : without(preferences.mentionOnlyChannelIds),
+  });
+}
+
 export async function setChannelMuted(channelId: string, muted: boolean): Promise<void> {
-  const current = preferences.mutedChannelIds;
-  const next = muted
-    ? [...new Set([...current, channelId])]
-    : current.filter((id) => id !== channelId);
-  await updateNotificationPreferences({ mutedChannelIds: next });
+  await setChannelLevel(channelId, muted ? 'none' : 'all');
 }
 
 /**
@@ -96,14 +131,26 @@ export function inQuietHours(now = new Date()): boolean {
   return start < end ? minute >= start && minute < end : minute >= start || minute < end;
 }
 
-/** Everything that silences a notification, whatever it is about. */
-function silenced(channelId: string): boolean {
-  return (
+/**
+ * Everything that silences a notification, whatever it is about.
+ *
+ * `mentioned` is what the middle level turns on: a channel set to mentions-only
+ * is silent for everything else, and anything that is not a message at all -
+ * somebody joining a voice channel - is never a mention and so is silent there
+ * too, which is the point of setting a busy channel to mentions.
+ */
+function silenced(channelId: string, mentioned = false): boolean {
+  if (
     !preferences.enabled ||
-    isChannelMuted(channelId) ||
     inQuietHours() ||
     usePresenceStore.getState().selfStatus === 'dnd'
-  );
+  ) {
+    return true;
+  }
+
+  const level = channelLevel(channelId);
+  if (level === 'none') return true;
+  return level === 'mentions' && !mentioned;
 }
 
 interface MessageNotification {
@@ -114,10 +161,12 @@ interface MessageNotification {
   text: string | null;
   /** Is this the channel currently open? */
   active: boolean;
+  /** Decided by the window that decrypted it - see `mentions.ts`. */
+  mentioned?: boolean;
 }
 
 export function notifyMessage(message: MessageNotification): void {
-  if (silenced(message.channelId)) return;
+  if (silenced(message.channelId, message.mentioned ?? false)) return;
 
   // Whether the window is really focused is the main process's answer, not
   // this one's - so `active` is passed along rather than resolved here.

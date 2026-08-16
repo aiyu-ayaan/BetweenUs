@@ -87,6 +87,22 @@ ok(
 );
 ok('quiet hours stored', muted.quietStartMinute === 1320 && muted.quietEndMinute === null);
 
+// Mentions only is the third level, and it is stored the same way. Whether a
+// message counts as a mention is the client's answer - the body is sealed with
+// the channel key and this service never sees one - so all that is asserted
+// here is that the preference round-trips and does not disturb the mute list.
+const mentions = await json(`${NOTIFY}/api/v1/notifications/preferences`, {
+  method: 'PATCH',
+  headers: aliceAuth,
+  body: JSON.stringify({ mentionOnlyChannelIds: [channel.id, channel.id] }),
+});
+ok(
+  'mentions-only stored, deduplicated',
+  mentions.mentionOnlyChannelIds.length === 1 && mentions.mentionOnlyChannelIds[0] === channel.id,
+  JSON.stringify(mentions.mentionOnlyChannelIds),
+);
+ok('the mute list is untouched by it', mentions.mutedChannelIds.length === 1);
+
 // A patch touches only what it names.
 const patched = await json(`${NOTIFY}/api/v1/notifications/preferences`, {
   method: 'PATCH',

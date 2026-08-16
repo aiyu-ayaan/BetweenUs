@@ -96,6 +96,15 @@ model NotificationSetting {
   /// ponytail: an array column, not a join table - the list is small and is
   /// only ever read whole. Split it out when a mute grows its own settings.
   mutedChannelIds String[] @default([])
+  /// Channels that only raise a notification when this account is mentioned -
+  /// the middle setting between everything and nothing, and the one a busy
+  /// server actually needs. A channel in both lists is silent: the stronger
+  /// setting wins, so a mute is never weakened by another list.
+  ///
+  /// Whether a message mentions somebody is decided on the client, because the
+  /// server cannot read it: bodies are sealed with the channel key and this
+  /// service stores a preference, not a message.
+  mentionOnlyChannelIds String[] @default([])
   updatedAt       DateTime @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)

@@ -705,6 +705,35 @@ function NotificationsSection(): JSX.Element {
         </ul>
       )}
 
+      <h2 className="mt-8 text-base font-semibold text-slate-100">Mentions only</h2>
+      {preferences.mentionOnlyChannelIds.length === 0 ? (
+        <p className="mt-3 text-sm text-slate-400">
+          No channel is set to mentions only. Click the bell in a channel header twice to put it
+          here: it stays quiet unless somebody writes your name.
+        </p>
+      ) : (
+        <ul className="mt-3 divide-y divide-surface-700 rounded-lg bg-surface-800">
+          {preferences.mentionOnlyChannelIds.map((channelId) => (
+            <li key={channelId} className="flex items-center justify-between px-4 py-3">
+              <span className="text-slate-100">#{channelName(channelId)}</span>
+              <button
+                type="button"
+                onClick={() =>
+                  save({
+                    mentionOnlyChannelIds: preferences.mentionOnlyChannelIds.filter(
+                      (id) => id !== channelId,
+                    ),
+                  })
+                }
+                className="cursor-pointer rounded bg-white/[0.07] px-3 py-1.5 text-sm text-slate-100 transition-colors duration-200 hover:bg-white/[0.1]"
+              >
+                Notify for everything
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+
       <dl className="mt-8 space-y-4 rounded-lg bg-surface-800 p-4">
         <Field
           label="Do Not Disturb"

@@ -9,7 +9,12 @@ import { EmojiPicker } from './EmojiPicker';
 import { MessageMenu } from './MessageMenu';
 import { formatBytes, uploadAttachment } from '../../services/attachments';
 import { OVERFLOW_CHARS, overflowFile } from '../../services/message-body';
-import { isChannelMuted, onPreferencesChanged, setChannelMuted } from '../../services/notifications';
+import {
+  CHANNEL_LEVELS,
+  channelLevel,
+  onPreferencesChanged,
+  setChannelLevel,
+} from '../../services/notifications';
 import {
   BellIcon,
   BellOffIcon,
@@ -28,29 +33,43 @@ import {
   XIcon,
 } from '../../components/icons';
 
+/** What each level says when the pointer rests on the bell. */
+const LEVEL_LABELS = {
+  all: 'Every message notifies. Click for mentions only',
+  mentions: 'Only mentions notify. Click to silence',
+  none: 'Silenced. Click to notify on every message',
+} as const;
+
 /**
- * Mutes this channel for the account, not for this window: the setting is
- * stored by notification-service, so the next machine to sign in honours it.
+ * How loud this channel is, for the account rather than for this window: the
+ * setting is stored by notification-service, so the next machine to sign in
+ * honours it.
+ *
+ * Three states on one button, cycling loudest to quietest, because a busy
+ * channel wants the middle one and a two-way switch never offered it: either
+ * read every message of the channel the whole server talks in, or miss the one
+ * addressed to you.
  */
 function MuteButton({ channelId }: { channelId: string }): JSX.Element {
-  const [muted, setMuted] = useState(() => isChannelMuted(channelId));
+  const [level, setLevel] = useState(() => channelLevel(channelId));
 
   // Re-read on every preference change, including the one this button caused
   // and the ones the settings screen makes.
-  useEffect(() => onPreferencesChanged(() => setMuted(isChannelMuted(channelId))), [channelId]);
+  useEffect(() => onPreferencesChanged(() => setLevel(channelLevel(channelId))), [channelId]);
+
+  const next = CHANNEL_LEVELS[(CHANNEL_LEVELS.indexOf(level) + 1) % CHANNEL_LEVELS.length]!;
 
   return (
     <button
       type="button"
-      onClick={() => void setChannelMuted(channelId, !muted).catch(() => undefined)}
-      aria-pressed={muted}
-      aria-label={muted ? 'Unmute this channel' : 'Mute this channel'}
-      title={muted ? 'Muted - no notifications' : 'Mute this channel'}
+      onClick={() => void setChannelLevel(channelId, next).catch(() => undefined)}
+      aria-label={LEVEL_LABELS[level]}
+      title={LEVEL_LABELS[level]}
       className={`cursor-pointer rounded-md p-1.5 transition-colors duration-150 hover:bg-white/[0.07] hover:text-slate-100 ${
-        muted ? 'text-slate-600' : 'text-slate-400'
+        level === 'none' ? 'text-slate-600' : level === 'mentions' ? 'text-accent' : 'text-slate-400'
       }`}
     >
-      {muted ? <BellOffIcon className="h-5 w-5" /> : <BellIcon className="h-5 w-5" />}
+      {level === 'none' ? <BellOffIcon className="h-5 w-5" /> : <BellIcon className="h-5 w-5" />}
     </button>
   );
 }

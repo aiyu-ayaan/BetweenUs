@@ -667,7 +667,18 @@ export interface NotificationPreferences {
   quietStartMinute: number | null;
   quietEndMinute: number | null;
   mutedChannelIds: string[];
+  /**
+   * Channels that raise a notification only when this account is mentioned.
+   *
+   * The client decides what counts as a mention, because the server cannot: a
+   * message body is sealed with the channel key. A channel in both lists is
+   * silent - the stronger setting wins.
+   */
+  mentionOnlyChannelIds: string[];
 }
+
+/** What a channel's bell is set to. Three states, in order of loudness. */
+export type ChannelNotificationLevel = 'all' | 'mentions' | 'none';
 
 export interface UpdateNotificationPreferencesRequest {
   enabled?: boolean;
@@ -675,6 +686,7 @@ export interface UpdateNotificationPreferencesRequest {
   quietEndMinute?: number | null;
   /** Replaces the whole list; send the list you want, not a delta. */
   mutedChannelIds?: string[];
+  mentionOnlyChannelIds?: string[];
 }
 
 /** Messages a user has not read in one channel, derived from the read marker. */

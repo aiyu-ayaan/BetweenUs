@@ -41,6 +41,13 @@ export class UpdatePreferencesDto {
   @ArrayMaxSize(500)
   @IsString({ each: true })
   mutedChannelIds?: string[];
+
+  /** Same shape and same cap: the mentions-only list is the other half of it. */
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(500)
+  @IsString({ each: true })
+  mentionOnlyChannelIds?: string[];
 }
 
 export class MarkReadDto {

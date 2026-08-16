@@ -74,7 +74,11 @@ Backend:
       presence-service writes that through to Redis and fans it out. A client
       can no longer put itself in a channel it never signalled into, and a
       crashed one leaves the moment its signalling socket does
-- [ ] Mentions told apart from ordinary messages, and a "mentions only" mute
+- [x] Mentions told apart from ordinary messages, and a "mentions only" level
+      per channel - the bell in a channel header cycles all / mentions / none.
+      Detection is the client's, because a body is sealed with the channel key
+      and no service can read one (`services/mentions.ts`, with a check for the
+      prefix case that would make a quiet channel loud again)
 - [ ] Channel-key rotation when somebody is dropped from a private channel
 - [ ] Multi-device E2EE: a key per device, so one can be revoked alone
 - [ ] Identity rotation after a lost device, re-sealing current channel keys
@@ -917,8 +921,10 @@ Left open on purpose:
 - [ ] Nothing raises a notification while the client is signed out or the
       machine is asleep - that needs a push transport (APNs / FCM / Web Push),
       which is what a web and Android client will want anyway
-- [ ] A mention is not distinguished from an ordinary message, so there is no
-      "mentions only" mute level yet
+- [x] A mention is distinguished from an ordinary message, and a channel can be
+      set to mentions only. The client decides what a mention is - `@username`,
+      `@display name`, `@everyone`, `@here` - because it holds the only
+      plaintext there is; the account stores which channels are set that way
 - [ ] Unread counts are one query per channel; a single grouped query if a
       busy account makes that show
 - [ ] The tray icon is a data URI in the main process, not a real asset, and it

@@ -22,6 +22,7 @@ import {
 } from '../services/e2ee';
 import { decodeBody, encodeBody } from '../services/message-body';
 import { notifyMessage, publishUnreadCount, windowIsFocused } from '../services/notifications';
+import { mentionsMe } from '../services/mentions';
 import { useAuthStore } from './auth';
 
 /**
@@ -697,7 +698,8 @@ chatSocket.on((event) => {
     // Re-read: decryption is async, so the channel may have changed meanwhile.
     const state = useChatStore.getState();
     const active = incoming.channelId === state.activeChannelId;
-    const mine = incoming.author.id === useAuthStore.getState().user?.id;
+    const self = useAuthStore.getState().user;
+    const mine = incoming.author.id === self?.id;
 
     // Append to the cache as well as the view, so a channel read earlier in
     // the session is up to date when it is opened again.
@@ -743,6 +745,13 @@ chatSocket.on((event) => {
       // the notification goes to the OS, which is outside the encrypted path.
       text: notificationText(message),
       active,
+      // Decided here because this is where the plaintext exists at all: the
+      // services see ciphertext, so "was I mentioned" is not a question any of
+      // them could answer.
+      mentioned: mentionsMe(notificationText(message), {
+        username: self?.username ?? '',
+        displayName: self?.displayName,
+      }),
     });
   });
 });
