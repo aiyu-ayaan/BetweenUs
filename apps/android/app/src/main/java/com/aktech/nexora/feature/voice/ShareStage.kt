@@ -242,7 +242,7 @@ fun ShareStage(
                             label = participant.peer.username,
                             id = participant.peer.userId,
                             eglContext = eglContext,
-                            track = participant.camera,
+                            track = participant.visibleCamera,
                             muted = !participant.micEnabled,
                             speaking = participant.speaking,
                         )

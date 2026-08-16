@@ -93,13 +93,6 @@ const SPEAKING_POLL_MS = 200;
 const VIDEO_POLL_EVERY = 5;
 
 /**
- * Video polls without a new frame before a slot counts as finished - so, five
- * seconds. Longer than any still moment in a screen share, short enough that a
- * camera switched off does not linger.
- */
-const STALL_TOLERANCE = 5;
-
-/**
  * Audio level above which somebody counts as speaking.
  *
  * `getSynchronizationSources` reports 0..1, roughly linear in amplitude. This
@@ -246,10 +239,7 @@ class PeerLink {
   private readonly wanted = new Map<Slot, MediaStreamTrack | null>();
   /** Remembered for the same reason: the screen slot may not exist yet. */
   private shareCodec: SharePublish['videoCodec'] | null = null;
-  /** Frames decoded per video slot at the last look. See `pollVideo`. */
-  private readonly frames = new Map<Slot, number>();
-  /** Consecutive polls a video slot has gone without a new frame. */
-  private readonly stalled = new Map<Slot, number>();
+  /** Video slots that have decoded at least one frame. See `pollVideo`. */
   private readonly liveVideo = new Set<Slot>();
   /**
    * Candidates that arrived before there was a remote description to attach
@@ -349,7 +339,9 @@ class PeerLink {
       // track is muted until packets come and `unmute` says when they do.
       // Video is not - a receiver unmutes on the padding Chromium sends to
       // probe for bandwidth, which is a screen share that never happened - so
-      // video is decided by frames decoded instead. See `pollVideo`.
+      // a video slot waits for a frame to be decoded before it counts as
+      // arrived (`pollVideo`), and whether it is still *on* is the peer's own
+      // declared media state (`media-presence.ts`).
       if (SLOT_KIND[slot] === 'audio') {
         this.events.onTrack(slot, event.track.muted ? null : event.track);
         event.track.onmute = () => this.events.onTrack(slot, null);
@@ -708,13 +700,19 @@ class PeerLink {
   }
 
   /**
-   * Whether a camera and a screen are really arriving, by counting frames.
+   * Whether a camera or a screen has ever really carried a picture.
    *
    * Nothing a video receiver *says* is trustworthy here: it unmutes on padding
-   * packets and stays unmuted after the far end stops sending, so both a share
-   * that never started and one that has ended look live. Frames decoded since
-   * the last look do not lie in either direction, which is what makes this
-   * poll worth its cost - one `getStats` per peer per second.
+   * packets, so a slot that has never carried anything looks live, and a camera
+   * nobody turned on becomes a black rectangle where an avatar goes. A frame
+   * decoded is proof, and that is all this decides.
+   *
+   * It deliberately does not decide the *other* direction. Frames stopping is
+   * not sharing stopping: a screen share of a document nobody is typing in
+   * decodes nothing for minutes, and treating that as the end took the stage
+   * down under whoever was watching it and offered them the share again. Who is
+   * still sharing is the peer's own declared media state, which arrives on the
+   * data channel - see `media-presence.ts`.
    */
   async pollVideo(): Promise<void> {
     if (this.closed) return;
@@ -732,25 +730,14 @@ class PeerLink {
       const track = transceiver?.receiver.track;
       if (!transceiver?.mid || !track) continue;
 
-      const frames = decoded.get(transceiver.mid) ?? 0;
-      const moving = frames > (this.frames.get(slot) ?? 0);
-      this.frames.set(slot, frames);
+      // Cumulative, so this only ever goes from false to true: the first frame
+      // is the moment the slot is known to be real, and nothing after it is
+      // evidence of an ending.
+      if ((decoded.get(transceiver.mid) ?? 0) === 0) continue;
+      if (this.liveVideo.has(slot)) continue;
 
-      // Patience, because "no new frames this second" is not "it ended". A
-      // screen share of a document nobody is typing in sends almost nothing,
-      // and treating every still moment as the end took the stage down with
-      // it - which is what made clicking "watch" open the share and bounce
-      // straight back to the grid.
-      const stalls = moving ? 0 : (this.stalled.get(slot) ?? 0) + 1;
-      this.stalled.set(slot, stalls);
-
-      // Nothing has ever arrived on this slot; no patience is owed.
-      const live = frames > 0 && stalls <= STALL_TOLERANCE;
-
-      if (live === this.liveVideo.has(slot)) continue;
-      if (live) this.liveVideo.add(slot);
-      else this.liveVideo.delete(slot);
-      this.events.onTrack(slot, live ? track : null);
+      this.liveVideo.add(slot);
+      this.events.onTrack(slot, track);
     }
   }
 

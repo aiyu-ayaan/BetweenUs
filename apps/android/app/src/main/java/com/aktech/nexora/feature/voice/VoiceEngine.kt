@@ -123,11 +123,32 @@ class VoiceEngine(private val context: Context) {
         val screen: VideoTrack? = null,
         /** What they say their microphone is doing, over the data channel. */
         val micEnabled: Boolean = true,
+        /**
+         * What they say their camera and their screen share are doing, on the
+         * same data channel.
+         *
+         * These decide whether a picture is shown, and frames decided only
+         * whether one has ever arrived. Frames stopping is not sharing
+         * stopping: a share of a screen nobody is touching decodes nothing for
+         * minutes, and reading that as the end closed the stage under whoever
+         * was watching and offered them the share again.
+         *
+         * Null until their first media state lands, which is the one moment
+         * the frames are all there is to go on.
+         */
+        val cameraDeclared: Boolean? = null,
+        val screenDeclared: Boolean? = null,
         val speaking: Boolean = false,
         val connected: Boolean = false,
     ) {
         /** What a tile shows. A share wins over a camera; a phone has one tile. */
-        val video: VideoTrack? get() = screen ?: camera
+        val video: VideoTrack? get() = visibleScreen ?: visibleCamera
+
+        /** The share, unless they have said they stopped sharing. */
+        val visibleScreen: VideoTrack? get() = if (screenDeclared == false) null else screen
+
+        /** The camera, unless they have said they turned it off. */
+        val visibleCamera: VideoTrack? get() = if (cameraDeclared == false) null else camera
     }
 
     sealed interface CallState {
@@ -652,10 +673,6 @@ class VoiceEngine(private val context: Context) {
 
         private var makingOffer = false
         private var closed = false
-        private val frames = HashMap<Slot, Long>()
-
-        /** Consecutive polls a video slot has gone without a new frame. */
-        private val stalled = HashMap<Slot, Int>()
 
         private val pc: PeerConnection = factory.createPeerConnection(
             PeerConnection.RTCConfiguration(iceServers).apply {
@@ -856,7 +873,24 @@ class VoiceEngine(private val context: Context) {
             if (payload.optString("topic") != VOICE_STATE_TOPIC) return
             val media = payload.optJSONObject("media") ?: return
             if (!media.has(Slot.MIC.wire)) return
-            update(peer.peerId) { it.copy(micEnabled = media.optBoolean(Slot.MIC.wire, true)) }
+            update(peer.peerId) {
+                it.copy(
+                    micEnabled = media.optBoolean(Slot.MIC.wire, true),
+                    // A slot the sender did not mention stays as it was: an
+                    // older client that only ever spoke about its microphone
+                    // must not be read as having turned its camera off.
+                    cameraDeclared = if (media.has(Slot.CAMERA.wire)) {
+                        media.optBoolean(Slot.CAMERA.wire, false)
+                    } else {
+                        it.cameraDeclared
+                    },
+                    screenDeclared = if (media.has(Slot.SCREEN.wire)) {
+                        media.optBoolean(Slot.SCREEN.wire, false)
+                    } else {
+                        it.screenDeclared
+                    },
+                )
+            }
         }
 
         /**
@@ -1110,35 +1144,31 @@ class VoiceEngine(private val context: Context) {
         }
 
         /**
-         * The track on a video slot, while frames are still arriving - with
-         * enough patience to survive a share that is simply not changing.
+         * The track on a video slot, once a frame has actually been decoded on
+         * it.
          *
-         * Frames decoded is the only honest signal that something is arriving,
+         * Frames decoded is the only honest signal that something has arrived,
          * because a receiver unmutes on the padding sent to probe for
-         * bandwidth. But a screen share of a document nobody is typing in sends
-         * almost nothing, so "no new frames this second" is not "the share
-         * ended" - and treating it as one made the share stage open, close,
-         * open and close again, taking the requested orientation down with it
-         * every time.
+         * bandwidth - so a slot nobody is sending on looks live, and a camera
+         * nobody turned on becomes a black rectangle.
          *
-         * So a slot goes live on the first frame and stays live until several
-         * seconds have passed with none.
+         * It says nothing about the other direction, and it used to be asked.
+         * A screen share of a document nobody is typing in decodes nothing for
+         * minutes; treating that as the end made the share stage open, close,
+         * open and close again, taking the requested orientation down with it
+         * every time. Whether a slot is still *on* is what its owner says on
+         * the data channel - `screenDeclared` and `cameraDeclared`.
+         *
+         * `framesDecoded` only ever grows, so this only ever goes from nothing
+         * to a track.
          */
         private fun liveVideo(slot: Slot, decoded: Map<String, Long>): VideoTrack? {
             val transceiver = transceivers[slot] ?: return null
             val track = transceiver.receiver.track() as? VideoTrack ?: return null
             val mid = transceiver.mid ?: return null
 
-            val now = decoded[mid] ?: 0L
-            val moving = now > (frames[slot] ?: 0L)
-            frames[slot] = now
-
-            val misses = if (moving) 0 else (stalled[slot] ?: 0) + 1
-            stalled[slot] = misses
-
-            // Nothing has ever arrived on this slot: not live, no patience owed.
-            if (now == 0L) return null
-            return if (misses <= STALL_TOLERANCE) track else null
+            if ((decoded[mid] ?: 0L) == 0L) return null
+            return track
         }
 
         private fun problem(message: String) {
@@ -1187,13 +1217,6 @@ class VoiceEngine(private val context: Context) {
 
         /** The desktop waits the same fifteen seconds before giving up on a join. */
         private const val JOIN_TIMEOUT_MS = 15_000L
-
-        /**
-         * Polls without a new frame before a video slot counts as finished.
-         * Five seconds: longer than any still moment in a screen share, short
-         * enough that a camera switched off does not linger.
-         */
-        private const val STALL_TOLERANCE = 5
 
         /**
          * Audio level above which somebody counts as speaking. About -40 dBFS:

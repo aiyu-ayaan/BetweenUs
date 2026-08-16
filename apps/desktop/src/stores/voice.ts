@@ -25,6 +25,7 @@ import { useShareControlStore } from './shareControl';
 import { useAudioSettings } from './audioSettings';
 import { startPushToTalk, stopPushToTalk } from '../services/push-to-talk';
 import { notBeingHeard, type LinkStats } from '../services/call-stats';
+import { visibleVideo } from '../services/media-presence';
 import { NoiseGate } from '../services/mic-gate';
 import { micCapture, micEncoding, micProcessing, type VoiceSettings } from '../services/voice-quality';
 import { shareOptions, type ShareIntent, type ShareSize } from '../services/share-quality';
@@ -606,6 +607,9 @@ function snapshot(): { tiles: VoiceTile[]; shares: VoiceShare[] } {
       const slots = remoteTracks.get(peer.peerId) ?? {};
       const media = remoteMediaStates.get(peer.peerId);
       const micEnabled = media?.mic ?? Boolean(slots.mic);
+      // A camera that has stopped is taken down by its owner saying so, never
+      // by frames stopping - see `media-presence.ts`.
+      const camera = visibleVideo(media?.camera, slots.camera ?? null);
       return {
         identity: peer.peerId,
         userId: peer.userId,
@@ -615,7 +619,7 @@ function snapshot(): { tiles: VoiceTile[]; shares: VoiceShare[] } {
         // Track mute means packets are not arriving right now; it does not
         // reliably mean the participant pressed their microphone button.
         micEnabled,
-        videoTrack: slots.camera ?? null,
+        videoTrack: camera,
         audioTrack: slots.mic ?? null,
         screenAudioTrack: slots.screenAudio ?? null,
         lastSpokeAt: lastSpoke.get(peer.peerId) ?? 0,
@@ -634,7 +638,14 @@ function snapshot(): { tiles: VoiceTile[]; shares: VoiceShare[] } {
     });
   }
   for (const peer of peers) {
-    const track = remoteTracks.get(peer.peerId)?.screen;
+    // Whether they are still sharing is what they say, not whether a frame
+    // arrived this second. A still screen decodes nothing for minutes, and
+    // reading that as the end is what closed the stage under a viewer and
+    // offered them the share again.
+    const track = visibleVideo(
+      remoteMediaStates.get(peer.peerId)?.screen,
+      remoteTracks.get(peer.peerId)?.screen ?? null,
+    );
     if (!track) continue;
     shares.push({
       identity: peer.peerId,

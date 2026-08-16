@@ -99,7 +99,7 @@ fun VoiceChannelScreen(
     // and text in a quarter of a phone is not text. Closing the stage goes back
     // to the grid and is remembered, so it does not reopen on the next poll -
     // only a share that stops and starts again does that.
-    val watching = participants.firstOrNull { it.screen != null }
+    val watching = participants.firstOrNull { it.visibleScreen != null }
     var dismissed by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(watching?.peer?.peerId) {
         if (watching == null) dismissed = null
@@ -139,7 +139,7 @@ fun VoiceChannelScreen(
     if (watching != null && watching.peer.peerId != dismissed) {
         ShareStage(
             label = watching.peer.username,
-            track = watching.screen!!,
+            track = watching.visibleScreen!!,
             participants = participants.filterNot { it.peer.peerId == watching.peer.peerId },
             self = self.label,
             selfId = self.id,

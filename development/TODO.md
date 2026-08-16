@@ -606,6 +606,14 @@ in `apps/desktop/src/services/share-quality.ts` with the reasoning.
       the first place. A browser share now always asks, so that choice appears
       where the surface is chosen, and the checkbox is desktop-only where this
       app really is the one doing the capturing
+- [x] Fixed: a viewer opened somebody's share, watched a still screen for five
+      seconds, and was dropped back to the grid with the share offered again.
+      Whether a peer was sharing was answered by counting decoded frames, and a
+      screen nobody is touching decodes none - so every quiet moment read as
+      the share ending. Frames now only ever say a slot has *started* carrying
+      a picture; whether it is still on is the sender's own media state, which
+      every client already published on the data channel and no client read for
+      anything but the microphone. Desktop, web and Android all had it
 - [x] Bitrate scales with pixels instead of being one low number: 6 Mbps at
       1080p for detail, 24 for motion, clamped at both ends. A ceiling, not a
       target - a still desktop spends a fraction of it and congestion control
