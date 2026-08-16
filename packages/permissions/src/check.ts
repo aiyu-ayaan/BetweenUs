@@ -76,4 +76,47 @@ for (const role of SERVER_ROLES) {
 assert.ok(isRemotePermission(PERMISSIONS.REMOTE_CONTROL));
 assert.ok(!isRemotePermission(PERMISSIONS.SEND_MESSAGE));
 
+// --- Custom roles ---
+//
+// A custom role adds; a denial still wins over it. That last one is the whole
+// safety property: a member can collect any number of roles, and taking a
+// capability away from them has to work anyway, or every revocation turns into
+// a hunt for which role put it back.
+assert.ok(
+  memberHasPermission('MEMBER', PERMISSIONS.MANAGE_CHANNEL, [], [], [PERMISSIONS.MANAGE_CHANNEL]),
+  'a custom role must grant its permissions',
+);
+assert.ok(
+  !memberHasPermission(
+    'MEMBER',
+    PERMISSIONS.MANAGE_CHANNEL,
+    [],
+    [PERMISSIONS.MANAGE_CHANNEL],
+    [PERMISSIONS.MANAGE_CHANNEL],
+  ),
+  'a denial must beat a custom role',
+);
+// And beat a grant and a role at once, from either direction.
+assert.ok(
+  !memberHasPermission(
+    'ADMIN',
+    PERMISSIONS.MANAGE_MEMBER,
+    [PERMISSIONS.MANAGE_MEMBER],
+    [PERMISSIONS.MANAGE_MEMBER],
+    [PERMISSIONS.MANAGE_MEMBER],
+  ),
+  'a denial must beat every source at once',
+);
+// Two roles carrying the same permission is still one permission.
+const fromRoles = effectivePermissions(
+  'GUEST',
+  [],
+  [],
+  [PERMISSIONS.SEND_MESSAGE, PERMISSIONS.SEND_MESSAGE, 'NOT_A_PERMISSION'],
+);
+assert.equal(new Set(fromRoles).size, fromRoles.length);
+assert.ok(fromRoles.includes(PERMISSIONS.SEND_MESSAGE));
+// Holding no custom role changes nothing.
+assert.deepEqual(effectivePermissions('MEMBER', [], [], []), permissionsForRole('MEMBER'));
+
 console.log('permissions self-check ok');

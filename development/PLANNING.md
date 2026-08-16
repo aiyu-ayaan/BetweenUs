@@ -612,9 +612,12 @@ that has to be right for every future deployment is one that will be wrong.
   members. What was actually asked for is that an administrator can give one
   person one capability. So `ServerMember` keeps its role and gains two arrays -
   granted and denied - and the effective permission set is
-  `roleDefaults ∪ granted \ denied`. Custom named roles can be layered on later
-  without changing any call site, because every call site asks the same
-  question: does this member hold this permission.
+  `roleDefaults ∪ granted \ denied`. Custom named roles were layered on later
+  without changing any call site, exactly as this predicted, because every call
+  site asks the same question: does this member hold this permission. The
+  resolver became `roleDefaults ∪ customRoles ∪ granted \ denied`, and the
+  denial is applied last so it still beats every source - a member can collect
+  any number of roles and revoking one capability still works.
 - **One effective-permission resolver, used by all four services.** Chat, call
   and presence each carried their own copy of "look up the channel, look up the
   membership, check the role", which is three places to forget about private

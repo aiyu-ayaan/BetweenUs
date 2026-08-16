@@ -72,9 +72,14 @@ export function isPermission(value: string): value is Permission {
 }
 
 /**
- * What a member may actually do: the role's defaults, plus what was granted to
- * them individually, minus what was denied. Deny wins over grant so revoking a
- * capability never depends on which role the member happens to hold.
+ * What a member may actually do: the built-in role's defaults, plus whatever the
+ * custom roles they hold carry, plus what was granted to them individually,
+ * minus what was denied.
+ *
+ * Deny is applied last and beats all three sources. That is the property worth
+ * protecting: taking a capability away from one person has to work whatever
+ * role they hold and however many custom roles they collect, or every revocation
+ * becomes a hunt for which of them put it back.
  *
  * Unknown strings are ignored rather than rejected - a database written by a
  * newer build must not break an older one.
@@ -83,9 +88,11 @@ export function effectivePermissions(
   role: ServerRole,
   granted: readonly string[] = [],
   denied: readonly string[] = [],
+  fromCustomRoles: readonly string[] = [],
 ): Permission[] {
   const denySet = new Set(denied.filter(isPermission));
   const allowed = new Set<Permission>(permissionsForRole(role));
+  for (const value of fromCustomRoles) if (isPermission(value)) allowed.add(value);
   for (const value of granted) if (isPermission(value)) allowed.add(value);
   return [...allowed].filter((permission) => !denySet.has(permission));
 }
@@ -95,8 +102,9 @@ export function memberHasPermission(
   permission: Permission,
   granted: readonly string[] = [],
   denied: readonly string[] = [],
+  fromCustomRoles: readonly string[] = [],
 ): boolean {
-  return effectivePermissions(role, granted, denied).includes(permission);
+  return effectivePermissions(role, granted, denied, fromCustomRoles).includes(permission);
 }
 
 /**

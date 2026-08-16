@@ -21,7 +21,9 @@ import type {
   ChannelType,
   CreateChannelRequest,
   CreateServerRequest,
+  CreateServerRoleRequest,
   ServerRole,
+  UpdateServerRoleRequest,
   SetChannelMembersRequest,
   UpdateChannelRequest,
   UpdateServerMemberRequest,
@@ -144,4 +146,61 @@ export class UpdateServerMemberDto implements UpdateServerMemberRequest {
   @IsString({ each: true })
   @ArrayMaxSize(32)
   deniedPermissions?: string[];
+
+  /** Replaces the whole set. Ids from another server are dropped, not refused. */
+  @IsOptional()
+  @IsArray()
+  @IsUUID('4', { each: true })
+  @ArrayMaxSize(64)
+  roleIds?: string[];
+}
+
+/** Colour is validated in the service too - it ends up in a stylesheet. */
+export class CreateServerRoleDto implements CreateServerRoleRequest {
+  @IsString()
+  @Length(1, 32)
+  name!: string;
+
+  @IsOptional()
+  @ValidateIf((_object, value) => value !== null)
+  @IsString()
+  @Matches(/^#[0-9a-fA-F]{6}$/, { message: 'colour must be #rrggbb' })
+  colour?: string | null;
+
+  @IsOptional()
+  @IsInt()
+  @Min(-1000)
+  @Max(1000)
+  rank?: number;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  @ArrayMaxSize(32)
+  permissions?: string[];
+}
+
+export class UpdateServerRoleDto implements UpdateServerRoleRequest {
+  @IsOptional()
+  @IsString()
+  @Length(1, 32)
+  name?: string;
+
+  @IsOptional()
+  @ValidateIf((_object, value) => value !== null)
+  @IsString()
+  @Matches(/^#[0-9a-fA-F]{6}$/, { message: 'colour must be #rrggbb' })
+  colour?: string | null;
+
+  @IsOptional()
+  @IsInt()
+  @Min(-1000)
+  @Max(1000)
+  rank?: number;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  @ArrayMaxSize(32)
+  permissions?: string[];
 }

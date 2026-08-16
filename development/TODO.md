@@ -994,7 +994,13 @@ Phase 12 opened these, and left them open on purpose:
       permanent server slug. `POST/GET/DELETE /api/v1/servers/:id/invites`,
       `MANAGE_MEMBER` to mint one, and `POST /servers/join` takes a code - the
       slug is a name now and opens nothing
-- [ ] Custom named roles with a colour and an ordering
+- [x] Custom named roles with a colour and an ordering, on the backend.
+      `GET/POST/PATCH/DELETE /api/v1/servers/:id/roles`, assigned through
+      `roleIds` on the member editor. Additive on top of the five built-ins
+      rather than replacing them - the built-ins are the hierarchy, and a
+      hierarchy anyone can extend is a hierarchy anyone can climb - and a
+      member's denials still beat every role they hold. No client UI yet: the
+      permission editor does not draw them
 - [x] Idle status set automatically after a period of no input, rather than only
       by hand. Ten minutes, from the operating system's own idle clock on the
       desktop and from the tab's events in a browser; Android still only sets a
@@ -1240,7 +1246,8 @@ Follow-ups this phase deliberately left open:
 ### Cross-cutting debt
 - [ ] Split the shared Prisma schema into per-service schemas
 - [ ] Replace Redis Pub/Sub with NATS when fanout volume needs it
-- [ ] Custom named roles with a colour and an ordering, instead of the five
-      built-ins plus per-member overrides phase 12 ships
+- [x] Custom named roles with a colour and an ordering, alongside the five
+      built-ins plus per-member overrides phase 12 shipped. The permission
+      editor in the clients still does not draw them
 - [ ] `user-service` (profiles, avatars, friends): those routes are served by
       chat-service today

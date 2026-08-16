@@ -246,8 +246,42 @@ export interface ServerMember {
   grantedPermissions: string[];
   /** Withheld despite the role. Deny wins over grant. */
   deniedPermissions: string[];
+  /** Ids of the custom roles this member holds, highest rank first. */
+  roleIds: string[];
+  /** From the highest-ranked custom role that has one; null if none does. */
+  colour: string | null;
   joinedAt: string;
 }
+
+/**
+ * A role a server invented for itself.
+ *
+ * Additive on top of the five built-in `ServerRole` rungs rather than replacing
+ * them: the built-ins are the hierarchy - who may edit whom, who may hand out
+ * what - and a hierarchy anyone can extend is a hierarchy anyone can climb.
+ */
+export interface ServerCustomRole {
+  id: string;
+  serverId: string;
+  name: string;
+  /** `#rrggbb`, or null for the default colour. */
+  colour: string | null;
+  /** Higher is further up the list. Ordering only; it grants nothing. */
+  rank: number;
+  permissions: string[];
+  /** How many members hold it. */
+  memberCount: number;
+}
+
+export interface CreateServerRoleRequest {
+  name: string;
+  colour?: string | null;
+  rank?: number;
+  permissions?: string[];
+}
+
+/** Every field is optional; only what is sent is changed. */
+export type UpdateServerRoleRequest = Partial<CreateServerRoleRequest>;
 
 /**
  * Adds someone to a server directly, by the username they can be told. The
@@ -263,6 +297,8 @@ export interface UpdateServerMemberRequest {
   role?: ServerRole;
   grantedPermissions?: string[];
   deniedPermissions?: string[];
+  /** Replaces the whole set of custom roles this member holds. */
+  roleIds?: string[];
 }
 
 // --- Channels ---

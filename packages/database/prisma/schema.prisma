@@ -278,9 +278,58 @@ model Server {
   members  ServerMember[]
   channels Channel[]
   invites  ServerInvite[]
+  roles    ServerCustomRole[]
 
   @@index([ownerId])
   @@map("servers")
+}
+
+/// A role a server invented for itself: a name, a colour, a place in the list,
+/// and a bundle of permissions.
+///
+/// It does not replace `ServerRole`. The five built-ins are the hierarchy - who
+/// may edit whom, who may hand out what - and that stays a ladder with a fixed
+/// number of rungs, because a hierarchy anyone can extend is a hierarchy anyone
+/// can climb. A custom role is additive: it grants permissions on top, and a
+/// member's denials still win over it, so taking a capability away from one
+/// person never depends on which roles they happen to hold.
+model ServerCustomRole {
+  id       String @id @default(uuid())
+  serverId String
+  name     String
+  /// `#rrggbb`, or null for a role that takes the default colour. A member
+  /// shows the colour of the highest-ranked role they hold that has one.
+  colour String?
+  /// Higher is further up the list. Display order, and the tie-break for whose
+  /// colour a member wears; it grants nothing by itself.
+  rank        Int      @default(0)
+  /// Names from the assignable set. Unknown strings are ignored when resolving,
+  /// so a role written by a newer build cannot break an older one.
+  permissions String[] @default([])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  server  Server             @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  members ServerMemberRole[]
+
+  /// Two roles with the same name in one server are a support ticket.
+  @@unique([serverId, name])
+  @@index([serverId, rank])
+  @@map("server_custom_roles")
+}
+
+/// One member holding one custom role. A member may hold any number.
+model ServerMemberRole {
+  memberId   String
+  roleId     String
+  assignedAt DateTime @default(now())
+
+  member ServerMember     @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  role   ServerCustomRole @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([memberId, roleId])
+  @@index([roleId])
+  @@map("server_member_roles")
 }
 
 /// A way in that can be taken away again.
@@ -329,6 +378,7 @@ model ServerMember {
 
   server Server @relation(fields: [serverId], references: [id], onDelete: Cascade)
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  roles  ServerMemberRole[]
 
   @@unique([serverId, userId])
   @@index([userId])

@@ -12,6 +12,8 @@ import type {
   ChannelMember as ChannelMemberDto,
   CreateChannelRequest,
   CreateServerInviteRequest,
+  CreateServerRoleRequest,
+  ServerCustomRole as ServerCustomRoleDto,
   ServerInvite as ServerInviteDto,
   UpdateChannelRequest,
   Server,
@@ -20,6 +22,7 @@ import type {
   ServerWithRole,
   UpdateServerMemberRequest,
   UpdateServerRequest,
+  UpdateServerRoleRequest,
 } from '@nexora/shared-types';
 import {
   ASSIGNABLE_PERMISSIONS,
@@ -38,10 +41,28 @@ const ROLE_RANK: Record<ServerRole, number> = {
   GUEST: 0,
 };
 
+/** The custom roles a member holds, ordered as they are drawn: senior first. */
+const HELD_ROLES = {
+  select: {
+    role: { select: { id: true, name: true, colour: true, rank: true, permissions: true } },
+  },
+  orderBy: { role: { rank: 'desc' } },
+} as const;
+
+interface HeldRole {
+  role: { id: string; colour: string | null; rank: number; permissions: string[] };
+}
+
+/**
+ * Required rather than optional on purpose: a lookup that forgot to fetch the
+ * custom roles would silently resolve fewer permissions than the member has,
+ * which reads as a bug in the role rather than in the query that missed it.
+ */
 interface MembershipRow {
   role: string;
   grantedPermissions: string[];
   deniedPermissions: string[];
+  roles: HeldRole[];
 }
 
 @Injectable()
@@ -51,7 +72,7 @@ export class ServersService {
   async listForUser(userId: string): Promise<ServerWithRole[]> {
     const memberships = await prisma.serverMember.findMany({
       where: { userId },
-      include: { server: true },
+      include: { server: true, roles: HELD_ROLES },
       orderBy: { joinedAt: 'asc' },
     });
 
@@ -99,7 +120,7 @@ export class ServersService {
 
     const members = await prisma.serverMember.findMany({
       where: { serverId },
-      include: { user: true },
+      include: { user: true, roles: HELD_ROLES },
       orderBy: { joinedAt: 'asc' },
     });
 
@@ -126,7 +147,7 @@ export class ServersService {
 
     const target = await prisma.serverMember.findUnique({
       where: { serverId_userId: { serverId, userId: targetUserId } },
-      include: { user: true },
+      include: { user: true, roles: HELD_ROLES },
     });
     if (!target) {
       throw new NotFoundException({ code: 'MEMBER_NOT_FOUND', message: 'Member not found' });
@@ -187,10 +208,43 @@ export class ServersService {
       data.deniedPermissions = sanitizeAssignable(dto.deniedPermissions);
     }
 
+    // Handing somebody a custom role is handing them its permissions, so it
+    // goes through the same two gates a direct grant does: MANAGE_ROLE, and
+    // nothing the actor does not hold themselves. Without the second, a
+    // moderator could park every permission in a role and then wear it.
+    if (dto.roleIds !== undefined) {
+      this.require(actorPermissions, PERMISSIONS.MANAGE_ROLE);
+      const roles = await prisma.serverCustomRole.findMany({
+        where: { serverId, id: { in: [...new Set(dto.roleIds)] } },
+        select: { id: true, permissions: true },
+      });
+      const beyondActor = roles
+        .flatMap((role) => role.permissions.filter(isPermission))
+        .filter((permission) => !actorPermissions.includes(permission));
+      if (beyondActor.length > 0) {
+        throw new ForbiddenException({
+          code: 'PERMISSION_ABOVE_OWN',
+          message: `You do not hold ${[...new Set(beyondActor)].join(', ')}`,
+        });
+      }
+
+      // Replaced wholesale, so the request says what the member holds rather
+      // than what changed - there is no way to leave a role behind by accident.
+      await prisma.$transaction([
+        prisma.serverMemberRole.deleteMany({
+          where: { memberId: target.id, roleId: { notIn: roles.map((role) => role.id) } },
+        }),
+        prisma.serverMemberRole.createMany({
+          data: roles.map((role) => ({ memberId: target.id, roleId: role.id })),
+          skipDuplicates: true,
+        }),
+      ]);
+    }
+
     const updated = await prisma.serverMember.update({
       where: { id: target.id },
       data,
-      include: { user: true },
+      include: { user: true, roles: HELD_ROLES },
     });
 
     // The member whose permissions these are is usually somebody else, on
@@ -226,13 +280,13 @@ export class ServersService {
 
     const existing = await prisma.serverMember.findUnique({
       where: { serverId_userId: { serverId, userId: user.id } },
-      include: { user: true },
+      include: { user: true, roles: HELD_ROLES },
     });
     if (existing) return toMember(existing);
 
     const member = await prisma.serverMember.create({
       data: { serverId, userId: user.id, role: 'MEMBER' },
-      include: { user: true },
+      include: { user: true, roles: HELD_ROLES },
     });
     await this.events.publish(EVENTS.SERVER_MEMBER_ADDED, { serverId, userId: user.id });
     return toMember(member);
@@ -318,6 +372,145 @@ export class ServersService {
       });
     }
     await prisma.server.delete({ where: { id: serverId } });
+  }
+
+  // --- Custom roles ---------------------------------------------------------
+
+  /** Every member can see the roles: they are on the member list already. */
+  async roles(userId: string, serverId: string): Promise<ServerCustomRoleDto[]> {
+    await this.requireMembership(userId, serverId);
+    const rows = await prisma.serverCustomRole.findMany({
+      where: { serverId },
+      orderBy: [{ rank: 'desc' }, { name: 'asc' }],
+      include: { _count: { select: { members: true } } },
+    });
+    return rows.map(toCustomRole);
+  }
+
+  async createRole(
+    userId: string,
+    serverId: string,
+    dto: CreateServerRoleRequest,
+  ): Promise<ServerCustomRoleDto> {
+    await this.requireRoleManagement(userId, serverId, dto.permissions);
+
+    const name = dto.name.trim();
+    const existing = await prisma.serverCustomRole.findUnique({
+      where: { serverId_name: { serverId, name } },
+      select: { id: true },
+    });
+    if (existing) {
+      throw new BadRequestException({
+        code: 'ROLE_NAME_TAKEN',
+        message: 'This server already has a role with that name',
+      });
+    }
+
+    const role = await prisma.serverCustomRole.create({
+      data: {
+        serverId,
+        name,
+        colour: normalizeColour(dto.colour),
+        rank: dto.rank ?? 0,
+        permissions: sanitizeAssignable(dto.permissions ?? []),
+      },
+      include: { _count: { select: { members: true } } },
+    });
+    return toCustomRole(role);
+  }
+
+  async updateRole(
+    userId: string,
+    serverId: string,
+    roleId: string,
+    dto: UpdateServerRoleRequest,
+  ): Promise<ServerCustomRoleDto> {
+    await this.requireRoleManagement(userId, serverId, dto.permissions);
+    const role = await this.requireRole(serverId, roleId);
+
+    const updated = await prisma.serverCustomRole.update({
+      where: { id: role.id },
+      data: {
+        ...(dto.name !== undefined ? { name: dto.name.trim() } : {}),
+        ...(dto.colour !== undefined ? { colour: normalizeColour(dto.colour) } : {}),
+        ...(dto.rank !== undefined ? { rank: dto.rank } : {}),
+        ...(dto.permissions !== undefined
+          ? { permissions: sanitizeAssignable(dto.permissions) }
+          : {}),
+      },
+      include: { _count: { select: { members: true } } },
+    });
+
+    // Everyone holding it just had their permissions change, and each of them
+    // is on a machine somewhere holding a server list fetched at sign-in.
+    await this.announceRoleHolders(serverId, role.id);
+    return toCustomRole(updated);
+  }
+
+  async deleteRole(userId: string, serverId: string, roleId: string): Promise<void> {
+    await this.requireRoleManagement(userId, serverId);
+    const role = await this.requireRole(serverId, roleId);
+
+    // Collected before the delete: the join rows go with it, so afterwards
+    // there is nothing left to say who has to be told.
+    await this.announceRoleHolders(serverId, role.id);
+    await prisma.serverCustomRole.delete({ where: { id: role.id } });
+  }
+
+  /**
+   * `MANAGE_ROLE`, and - when permissions are being written - nothing the actor
+   * does not hold. A role is a container for permissions, so letting somebody
+   * put a capability into one they do not have is letting them grant it to
+   * themselves with one extra step.
+   */
+  private async requireRoleManagement(
+    userId: string,
+    serverId: string,
+    permissions?: string[],
+  ): Promise<Permission[]> {
+    const membership = await this.requireMembershipRow(userId, serverId);
+    const held = permissionsOf(membership);
+    this.require(held, PERMISSIONS.MANAGE_ROLE);
+
+    if (permissions !== undefined) {
+      const beyondActor = sanitizeAssignable(permissions).filter(
+        (permission) => !held.includes(permission),
+      );
+      if (beyondActor.length > 0) {
+        throw new ForbiddenException({
+          code: 'PERMISSION_ABOVE_OWN',
+          message: `You do not hold ${beyondActor.join(', ')}`,
+        });
+      }
+    }
+    return held;
+  }
+
+  private async requireRole(serverId: string, roleId: string): Promise<{ id: string }> {
+    const role = await prisma.serverCustomRole.findUnique({
+      where: { id: roleId },
+      select: { id: true, serverId: true },
+    });
+    // A role id from another server is not found here, the same as one that
+    // never existed.
+    if (!role || role.serverId !== serverId) {
+      throw new NotFoundException({ code: 'ROLE_NOT_FOUND', message: 'Role not found' });
+    }
+    return { id: role.id };
+  }
+
+  /** Tells everybody holding a role that what they may do has changed. */
+  private async announceRoleHolders(serverId: string, roleId: string): Promise<void> {
+    const holders = await prisma.serverMemberRole.findMany({
+      where: { roleId },
+      select: { member: { select: { userId: true } } },
+    });
+    for (const holder of holders) {
+      await this.events.publish(EVENTS.SERVER_MEMBER_UPDATED, {
+        serverId,
+        userId: holder.member.userId,
+      });
+    }
   }
 
   // --- Invites --------------------------------------------------------------
@@ -430,7 +623,12 @@ export class ServersService {
 
     const existing = await prisma.serverMember.findUnique({
       where: { serverId_userId: { serverId: server.id, userId } },
-      select: { role: true, grantedPermissions: true, deniedPermissions: true },
+      select: {
+        role: true,
+        grantedPermissions: true,
+        deniedPermissions: true,
+        roles: HELD_ROLES,
+      },
     });
     if (existing) {
       return {
@@ -452,10 +650,11 @@ export class ServersService {
       userId,
     });
 
+    // A brand-new membership holds no custom roles yet.
     return {
       ...toServer(server),
       role: membership.role as ServerRole,
-      permissions: permissionsOf(membership),
+      permissions: permissionsOf({ ...membership, roles: [] }),
     };
   }
 
@@ -622,7 +821,12 @@ export class ServersService {
   private async requireMembershipRow(userId: string, serverId: string): Promise<MembershipRow> {
     const membership = await prisma.serverMember.findUnique({
       where: { serverId_userId: { serverId, userId } },
-      select: { role: true, grantedPermissions: true, deniedPermissions: true },
+      select: {
+        role: true,
+        grantedPermissions: true,
+        deniedPermissions: true,
+        roles: HELD_ROLES,
+      },
     });
     if (!membership) {
       // 404 rather than 403: a non-member should not learn the server exists.
@@ -671,7 +875,17 @@ function permissionsOf(membership: MembershipRow): Permission[] {
     membership.role as ServerRole,
     membership.grantedPermissions,
     membership.deniedPermissions,
+    membership.roles.flatMap((held) => held.role.permissions),
   );
+}
+
+/**
+ * A member wears the colour of the most senior custom role that has one, so a
+ * decorative role low in the list cannot overrule the one that means something.
+ * `HELD_ROLES` already orders senior first.
+ */
+function colourOf(roles: HeldRole[]): string | null {
+  return roles.find((held) => held.role.colour !== null)?.role.colour ?? null;
 }
 
 /**
@@ -684,15 +898,14 @@ function sanitizeAssignable(values: string[]): Permission[] {
   return ASSIGNABLE_PERMISSIONS.filter((permission) => unique.has(permission));
 }
 
-function toMember(row: {
-  id: string;
-  userId: string;
-  role: string;
-  grantedPermissions: string[];
-  deniedPermissions: string[];
-  joinedAt: Date;
-  user: { username: string; displayName: string; avatarUrl: string | null };
-}): ServerMember {
+function toMember(
+  row: MembershipRow & {
+    id: string;
+    userId: string;
+    joinedAt: Date;
+    user: { username: string; displayName: string; avatarUrl: string | null };
+  },
+): ServerMember {
   return {
     id: row.id,
     userId: row.userId,
@@ -703,8 +916,41 @@ function toMember(row: {
     permissions: permissionsOf(row),
     grantedPermissions: row.grantedPermissions,
     deniedPermissions: row.deniedPermissions,
+    roleIds: row.roles.map((held) => held.role.id),
+    colour: colourOf(row.roles),
     joinedAt: row.joinedAt.toISOString(),
   };
+}
+
+function toCustomRole(row: {
+  id: string;
+  serverId: string;
+  name: string;
+  colour: string | null;
+  rank: number;
+  permissions: string[];
+  _count: { members: number };
+}): ServerCustomRoleDto {
+  return {
+    id: row.id,
+    serverId: row.serverId,
+    name: row.name,
+    colour: row.colour,
+    rank: row.rank,
+    permissions: row.permissions,
+    memberCount: row._count.members,
+  };
+}
+
+/**
+ * A colour is `#rrggbb` or nothing at all. Anything else becomes nothing rather
+ * than being stored: the value goes straight into a stylesheet on every client,
+ * and a string that is not a colour is a string that is something else.
+ */
+function normalizeColour(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const trimmed = value.trim().toLowerCase();
+  return /^#[0-9a-f]{6}$/.test(trimmed) ? trimmed : null;
 }
 
 /** Channel names follow the Discord convention: lowercase, dashes, no spaces. */

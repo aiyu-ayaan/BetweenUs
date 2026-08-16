@@ -44,6 +44,11 @@ Backend:
       year, abandoned multipart uploads every six hours.
 - [x] **Agent-token lookup.** A unique index instead of a full table scan on
       every agent reconnect.
+- [x] **Custom named roles with a colour and an ordering** - the backend half.
+      A table, a rank, a colour, and a permission bundle, additive on top of the
+      five built-ins rather than replacing them. A member's denials still beat
+      every role they hold. The permission editor in the clients does not draw
+      them yet, so this half is on the desktop list rather than done.
 - [x] **Remote sessions over Redis Pub/Sub.** The agent and the controller no
       longer have to be on the same replica. One pair of methods carries every
       message - local socket when this instance holds it, Pub/Sub when it does
@@ -78,9 +83,6 @@ blocked by anything outside this document.
 
 ### Backend
 
-- [ ] **Custom named roles with a colour and an ordering.** The five built-ins
-      plus per-member overrides are what exists; this is a table, a rank, and
-      the permission editor learning to read it.
 - [ ] **Attachment blobs swept when their message is deleted.** Needs an
       attachment row per upload first: the manifest naming the blobs is inside
       the encrypted body, so no service can tell which blob belongs to which
@@ -100,6 +102,9 @@ blocked by anything outside this document.
 
 ### Desktop and web
 
+- [ ] **The permission editor learning to read custom roles.** The backend has
+      them - name, colour, rank, permission bundle, and `roleIds` on the member
+      editor - and no client draws any of it.
 - [ ] **Modifier chords.** Keys travel one at a time on both the remote path and
       the give-control-in-a-call path, so Ctrl+Alt+Del is not delivered as a
       chord. One change, two callers.

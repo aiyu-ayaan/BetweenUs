@@ -16,6 +16,7 @@ import { CurrentUser, JwtAuthGuard, type AuthenticatedUser } from '@nexora/auth'
 import type {
   Channel,
   ChannelMember,
+  ServerCustomRole,
   ServerInvite,
   ServerMember,
   ServerWithRole,
@@ -26,11 +27,13 @@ import {
   CreateChannelDto,
   CreateServerDto,
   CreateServerInviteDto,
+  CreateServerRoleDto,
   JoinServerDto,
   SetChannelMembersDto,
   UpdateChannelDto,
   UpdateServerDto,
   UpdateServerMemberDto,
+  UpdateServerRoleDto,
 } from './dto';
 
 @Controller('servers')
@@ -148,6 +151,43 @@ export class ServersController {
     @Param('userId', ParseUUIDPipe) targetUserId: string,
   ): Promise<void> {
     return this.servers.removeMember(user.id, serverId, targetUserId);
+  }
+
+  @Get(':serverId/roles')
+  roles(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('serverId', ParseUUIDPipe) serverId: string,
+  ): Promise<ServerCustomRole[]> {
+    return this.servers.roles(user.id, serverId);
+  }
+
+  @Post(':serverId/roles')
+  createRole(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('serverId', ParseUUIDPipe) serverId: string,
+    @Body() dto: CreateServerRoleDto,
+  ): Promise<ServerCustomRole> {
+    return this.servers.createRole(user.id, serverId, dto);
+  }
+
+  @Patch(':serverId/roles/:roleId')
+  updateRole(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('serverId', ParseUUIDPipe) serverId: string,
+    @Param('roleId', ParseUUIDPipe) roleId: string,
+    @Body() dto: UpdateServerRoleDto,
+  ): Promise<ServerCustomRole> {
+    return this.servers.updateRole(user.id, serverId, roleId, dto);
+  }
+
+  @Delete(':serverId/roles/:roleId')
+  @HttpCode(204)
+  deleteRole(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('serverId', ParseUUIDPipe) serverId: string,
+    @Param('roleId', ParseUUIDPipe) roleId: string,
+  ): Promise<void> {
+    return this.servers.deleteRole(user.id, serverId, roleId);
   }
 
   @Get(':serverId/channels')

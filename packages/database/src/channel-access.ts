@@ -68,7 +68,14 @@ export async function resolveChannelAccess(
 
   const membership = await prisma.serverMember.findUnique({
     where: { serverId_userId: { serverId: channel.serverId, userId } },
-    select: { role: true, grantedPermissions: true, deniedPermissions: true },
+    select: {
+      role: true,
+      grantedPermissions: true,
+      deniedPermissions: true,
+      // The custom roles this member holds. Fetched here rather than left to
+      // the caller so there is still exactly one answer to "what may they do".
+      roles: { select: { role: { select: { permissions: true } } } },
+    },
   });
   if (!membership) return null;
 
@@ -84,6 +91,7 @@ export async function resolveChannelAccess(
       role,
       membership.grantedPermissions,
       membership.deniedPermissions,
+      membership.roles.flatMap((held) => held.role.permissions),
     ),
   };
 }
