@@ -17,8 +17,65 @@ process.env.JWT_REFRESH_TTL = '30d';
 process.env.DATABASE_URL ??= 'postgresql://check:check@127.0.0.1:5432/check';
 process.env.LOG_LEVEL = 'error';
 
+import { rateLimitBuckets } from '@nexora/nest-common';
 import { AuthService } from './modules/auth/auth.service';
 import type { AuthDb } from './modules/auth/auth.db';
+import { CREDENTIALS_RATE_LIMIT, LOGIN_RATE_LIMIT } from './modules/auth/rate-limits';
+
+/**
+ * The per-account half of the login limit.
+ *
+ * What is worth asserting is not the arithmetic - Redis does the counting - but
+ * that one login request lands in *two* counters, and that the second one is
+ * the same counter whichever address and whichever spelling of the email the
+ * request arrived with. That is the whole point of it: a botnet spread over a
+ * thousand addresses has to share one budget aimed at the account.
+ */
+function checkLoginBuckets(): void {
+  const at = (address: string, body: unknown) =>
+    rateLimitBuckets(LOGIN_RATE_LIMIT, { path: '/auth/login', address, body }, 42);
+
+  const first = at('203.0.113.9', { email: 'Ayaan@Nexora.local', password: 'x' });
+  assert.equal(first.length, 2, 'a login with an email is counted twice');
+  assert.equal(first[0]!.limit, 20);
+  assert.equal(first[1]!.limit, 10);
+
+  // Another address, the same account, the email spelled differently: the
+  // address bucket differs and the account bucket does not.
+  const second = at('198.51.100.4', { email: '  ayaan@nexora.local  ', password: 'x' });
+  assert.notEqual(second[0]!.key, first[0]!.key);
+  assert.equal(second[1]!.key, first[1]!.key);
+
+  // A different account is a different bucket, so hammering one cannot lock
+  // anybody else out.
+  const other = at('203.0.113.9', { email: 'someone@nexora.local', password: 'x' });
+  assert.notEqual(other[1]!.key, first[1]!.key);
+
+  // A request with no email to count against still has an address limit.
+  assert.equal(at('203.0.113.9', { password: 'x' }).length, 1);
+  assert.equal(at('203.0.113.9', { email: '   ' }).length, 1);
+  assert.equal(at('203.0.113.9', null).length, 1);
+
+  // Register keeps the address budget and grows no second bucket: an account
+  // that does not exist yet is not a thing to be attacked.
+  const registering = rateLimitBuckets(
+    CREDENTIALS_RATE_LIMIT,
+    { path: '/auth/register', address: '203.0.113.9', body: { email: 'ayaan@nexora.local' } },
+    42,
+  );
+  assert.equal(registering.length, 1);
+  // ...and it is the same address bucket login uses, so alternating between the
+  // two endpoints buys no extra attempts.
+  assert.equal(registering[0]!.key, first[0]!.key);
+
+  // A window boundary is a new key, which is what makes the budget refill.
+  const nextWindow = rateLimitBuckets(
+    LOGIN_RATE_LIMIT,
+    { path: '/auth/login', address: '203.0.113.9', body: { email: 'ayaan@nexora.local' } },
+    43,
+  );
+  assert.notEqual(nextWindow[1]!.key, first[1]!.key);
+}
 
 interface UserRow {
   id: string;
@@ -229,6 +286,8 @@ async function main(): Promise<void> {
   const me = await auth.me(registered.user.id);
   assert.equal(me.username, 'ayaan');
   await rejects(auth.me(randomUUID()), 'UNKNOWN_USER');
+
+  checkLoginBuckets();
 
   console.log('auth-service check ok');
 }

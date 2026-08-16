@@ -4,17 +4,10 @@ import type { AuthResponse, AuthTokens, PublicUser } from '@nexora/shared-types'
 import { rateLimit } from '@nexora/nest-common';
 import { AuthService } from './auth.service';
 import { ChangePasswordDto, LoginDto, RefreshDto, RegisterDto, UpdateAccountDto } from './dto';
+import { CREDENTIALS_RATE_LIMIT, LOGIN_RATE_LIMIT } from './rate-limits';
 
-/**
- * Login and register share one budget per client address: a credential-stuffing
- * run that alternates between them gets no extra room. Generous enough that a
- * person typo-ing their password never sees it.
- */
-const CredentialsRateLimit = rateLimit({
-  limit: 20,
-  windowSeconds: 60,
-  name: 'auth-credentials',
-});
+const CredentialsRateLimit = rateLimit(CREDENTIALS_RATE_LIMIT);
+const LoginRateLimit = rateLimit(LOGIN_RATE_LIMIT);
 
 @Controller('auth')
 export class AuthController {
@@ -28,7 +21,7 @@ export class AuthController {
 
   @Post('login')
   @HttpCode(200)
-  @UseGuards(CredentialsRateLimit)
+  @UseGuards(LoginRateLimit)
   login(@Body() dto: LoginDto): Promise<AuthResponse> {
     return this.auth.login(dto);
   }

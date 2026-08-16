@@ -171,6 +171,63 @@ export interface RateLimitOptions {
   windowSeconds: number;
   /** Bucket name; defaults to the request path. Share it to pool two routes. */
   name?: string;
+  /**
+   * A second bucket, counted against what is being *attacked* rather than who
+   * is attacking it - the account named in the request body.
+   *
+   * An address budget alone says nothing about one account under attack from
+   * many addresses, which is the shape credential stuffing actually has: a
+   * botnet of a thousand hosts gets the full per-address budget each, all of it
+   * aimed at one password. This is the other half, and the two are checked
+   * together because either one alone has a hole the other covers.
+   *
+   * Returns null when the request carries no subject, in which case only the
+   * address bucket applies.
+   */
+  subject?: (body: Record<string, unknown>) => string | null;
+  /** Budget for the subject bucket per window; defaults to `limit`. */
+  subjectLimit?: number;
+}
+
+/** One counter to check: its Redis key and the budget it is allowed. */
+export interface RateLimitBucket {
+  key: string;
+  limit: number;
+}
+
+/**
+ * Which counters a request falls into. Pure, so the interesting part - that a
+ * subject is normalised and that one request is counted in two places - is
+ * checkable without a Redis or an HTTP server.
+ */
+export function rateLimitBuckets(
+  options: RateLimitOptions,
+  request: { path: string; address: string; body: unknown },
+  window: number,
+): RateLimitBucket[] {
+  const name = options.name ?? request.path;
+  const buckets: RateLimitBucket[] = [
+    { key: `ratelimit:${name}:addr:${request.address}:${window}`, limit: options.limit },
+  ];
+
+  if (!options.subject) return buckets;
+
+  const body = (typeof request.body === 'object' && request.body !== null ? request.body : {}) as Record<
+    string,
+    unknown
+  >;
+  // Normalised here rather than in every caller: `Alice@example.com` and
+  // `alice@example.com ` are one account, and a bucket per spelling is no
+  // bucket at all.
+  const raw = options.subject(body);
+  const subject = typeof raw === 'string' ? raw.trim().toLowerCase() : '';
+  if (subject.length === 0) return buckets;
+
+  buckets.push({
+    key: `ratelimit:${name}:subject:${subject}:${window}`,
+    limit: options.subjectLimit ?? options.limit,
+  });
+  return buckets;
 }
 
 export function rateLimit(options: RateLimitOptions): Type<CanActivate> {
@@ -179,18 +236,28 @@ export function rateLimit(options: RateLimitOptions): Type<CanActivate> {
     async canActivate(context: ExecutionContext): Promise<boolean> {
       const request = context.switchToHttp().getRequest<Request>();
       const window = Math.floor(Date.now() / (options.windowSeconds * 1000));
-      const key = `ratelimit:${options.name ?? request.path}:${clientAddress(request)}:${window}`;
+      const buckets = rateLimitBuckets(
+        options,
+        { path: request.path, address: clientAddress(request), body: request.body },
+        window,
+      );
 
-      let hits: number;
+      let exceeded = false;
       try {
-        hits = await redisForRateLimit().incr(key);
-        if (hits === 1) await redisForRateLimit().expire(key, options.windowSeconds);
+        for (const bucket of buckets) {
+          const hits = await redisForRateLimit().incr(bucket.key);
+          if (hits === 1) await redisForRateLimit().expire(bucket.key, options.windowSeconds);
+          // Every bucket is incremented before any of them refuses: stopping at
+          // the first one over budget would leave the others under-counting a
+          // request that really was made.
+          if (hits > bucket.limit) exceeded = true;
+        }
       } catch {
         // Redis down: fail open. Locking everyone out of login is the worse outage.
         return true;
       }
 
-      if (hits > options.limit) {
+      if (exceeded) {
         throw new HttpException(
           { code: 'RATE_LIMITED', message: 'Too many requests, try again later' },
           HttpStatus.TOO_MANY_REQUESTS,

@@ -55,7 +55,10 @@ why each area looks the way it does.
 
 Backend:
 
-- [ ] Per-user login rate limit, not only per client address
+- [x] Per-user login rate limit, not only per client address: `rateLimit` grew
+      a second bucket keyed on the account named in the body (10/min, normalised
+      so one spelling of an email is one bucket), covered by
+      `auth-service`'s check
 - [ ] Idle status set automatically after a period of no input
 - [ ] Presence broadcasts scoped to a server instead of every connected socket
 - [ ] Voice roster cross-checked against `call-service`'s own peer list
@@ -1024,8 +1027,10 @@ Phase 12 opened these, and left them open on purpose:
       (both clients hold a mesh connection per peer and send opus over
       DTLS-SRTP; nothing about it has been heard by a person)
 - [ ] Watch a typing indicator land in the UI
-- [ ] Per-user rate limit on login, not only per client address (a botnet spread
-      across addresses still gets 20/min each against one account)
+- [x] Per-user rate limit on login, not only per client address. A botnet spread
+      across addresses used to get 20/min each against one account; login is now
+      counted in two buckets, and the account's is 10/min however many addresses
+      the attempts arrive from
 - [ ] Sign in with Google or GitHub end to end against real provider apps
       (the flow is wired and the panel stores credentials; nobody has run it
       through a real Google or GitHub client yet)
