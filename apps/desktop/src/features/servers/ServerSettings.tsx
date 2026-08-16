@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import type {
   Channel,
+  ServerCustomRole,
+  UpdateServerRoleRequest,
   ServerInvite,
   ServerMember,
   ServerRole,
@@ -265,10 +267,15 @@ function Overview(): JSX.Element {
 }
 
 /**
- * Roles and permissions in one screen: pick a member, set their role, then
- * switch individual capabilities on or off over the top of it. The toggles show
- * three states, because "the role already gives this" and "granted to this one
- * person" are different facts and hiding the difference makes the screen lie.
+ * Roles and permissions in one screen.
+ *
+ * Two halves, in the order they are decided. First the roles this server
+ * invented for itself - a name, a colour, and the capabilities that come with
+ * holding it. Then a member: which built-in rung they are on, which custom
+ * roles they hold, and finally the per-person switches over the top of all of
+ * it. The switches show three states, because "the role already gives this"
+ * and "granted to this one person" are different facts and hiding the
+ * difference makes the screen lie.
  */
 function Roles(): JSX.Element {
   const members = useChatStore((state) => state.members);
@@ -287,6 +294,21 @@ function Roles(): JSX.Element {
 
   const canManageRoles = server?.permissions.includes(PERMISSIONS.MANAGE_ROLE) ?? false;
   const canManageMembers = server?.permissions.includes(PERMISSIONS.MANAGE_MEMBER) ?? false;
+
+  const [roles, setRoles] = useState<ServerCustomRole[]>([]);
+  useEffect(() => {
+    if (!activeServerId) return;
+    let live = true;
+    void api
+      .serverRoles(activeServerId)
+      .then((next) => {
+        if (live) setRoles(next);
+      })
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, [activeServerId]);
 
   const apply = async (change: Parameters<typeof updateMember>[1]): Promise<void> => {
     if (!selected) return;
@@ -316,6 +338,13 @@ function Roles(): JSX.Element {
         A role sets the defaults. The switches below grant or withhold one capability for one
         person, without inventing a role for them.
       </p>
+
+      <CustomRoles
+        serverId={activeServerId}
+        roles={roles}
+        onChange={setRoles}
+        canManage={canManageRoles}
+      />
 
       <div className="mt-6 flex gap-6">
         <ul className="w-56 shrink-0 space-y-0.5 rounded-lg bg-surface-800 p-2">
@@ -367,6 +396,43 @@ function Roles(): JSX.Element {
             </select>
           </label>
 
+          {roles.length > 0 && (
+            <>
+              <p className="mt-6 text-xs font-bold uppercase tracking-wide text-slate-400">
+                Roles
+              </p>
+              <ul className="mt-2 flex flex-wrap gap-2">
+                {roles.map((role) => {
+                  const held = selected.roleIds.includes(role.id);
+                  return (
+                    <li key={role.id}>
+                      <button
+                        type="button"
+                        disabled={!canManageRoles}
+                        aria-pressed={held}
+                        onClick={() =>
+                          void apply({
+                            roleIds: held
+                              ? selected.roleIds.filter((id) => id !== role.id)
+                              : [...selected.roleIds, role.id],
+                          })
+                        }
+                        className={`flex cursor-pointer items-center gap-2 rounded-full border px-3 py-1 text-sm transition-colors duration-200 disabled:cursor-not-allowed disabled:opacity-40 ${
+                          held
+                            ? 'border-accent bg-accent/15 text-slate-100'
+                            : 'border-edge bg-surface-950 text-slate-400 hover:bg-white/[0.06]'
+                        }`}
+                      >
+                        <RoleDot colour={role.colour} />
+                        {role.name}
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </>
+          )}
+
           <p className="mt-6 text-xs font-bold uppercase tracking-wide text-slate-400">
             Permissions
           </p>
@@ -390,6 +456,246 @@ function Roles(): JSX.Element {
         </div>
       </div>
     </>
+  );
+}
+
+/** The colour a role is drawn in, or the default when it has none. */
+function RoleDot({ colour }: { colour: string | null }): JSX.Element {
+  return (
+    <span
+      aria-hidden="true"
+      className="h-2.5 w-2.5 shrink-0 rounded-full"
+      style={{ backgroundColor: colour ?? '#8b98a5' }}
+    />
+  );
+}
+
+/**
+ * The roles a server invented for itself.
+ *
+ * Additive, and deliberately not a second hierarchy: a custom role carries
+ * capabilities and a colour, and it is the built-in rung - OWNER through GUEST -
+ * that still decides who may edit whom. `rank` only orders the list and chooses
+ * whose colour a member wears.
+ *
+ * Everything saves as it is changed, like the rest of this screen. The name and
+ * the rank are the exceptions and save on blur, because writing a name per
+ * keystroke would create a role called "M" on the way to "Moderator".
+ */
+function CustomRoles({
+  serverId,
+  roles,
+  onChange,
+  canManage,
+}: {
+  serverId: string | null;
+  roles: ServerCustomRole[];
+  onChange: (roles: ServerCustomRole[]) => void;
+  canManage: boolean;
+}): JSX.Element {
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [name, setName] = useState('');
+  const [note, setNote] = useState<string | null>(null);
+
+  const selected = roles.find((role) => role.id === selectedId) ?? null;
+
+  const save = async (change: UpdateServerRoleRequest): Promise<void> => {
+    if (!serverId || !selected) return;
+    setNote(null);
+    try {
+      const updated = await api.updateServerRole(serverId, selected.id, change);
+      onChange(roles.map((role) => (role.id === updated.id ? updated : role)));
+    } catch (error) {
+      setNote(error instanceof Error ? error.message : 'That change was refused');
+    }
+  };
+
+  const create = async (): Promise<void> => {
+    if (!serverId || name.trim().length === 0) return;
+    setNote(null);
+    try {
+      const role = await api.createServerRole(serverId, { name: name.trim() });
+      onChange([...roles, role]);
+      setSelectedId(role.id);
+      setName('');
+    } catch (error) {
+      setNote(error instanceof Error ? error.message : 'That role could not be created');
+    }
+  };
+
+  const remove = async (): Promise<void> => {
+    if (!serverId || !selected) return;
+    setNote(null);
+    try {
+      await api.deleteServerRole(serverId, selected.id);
+      onChange(roles.filter((role) => role.id !== selected.id));
+      setSelectedId(null);
+    } catch (error) {
+      setNote(error instanceof Error ? error.message : 'That role could not be deleted');
+    }
+  };
+
+  return (
+    <section className="mt-6 rounded-lg bg-surface-800 p-4">
+      <h2 className="text-xs font-bold uppercase tracking-wide text-slate-400">
+        Roles this server invented
+      </h2>
+
+      {roles.length === 0 && (
+        <p className="mt-2 text-sm text-slate-400">
+          None yet. A role is a bundle of capabilities with a name and a colour, handed to as many
+          people as you like.
+        </p>
+      )}
+
+      <ul className="mt-3 flex flex-wrap gap-2">
+        {roles.map((role) => (
+          <li key={role.id}>
+            <button
+              type="button"
+              onClick={() => setSelectedId(role.id === selectedId ? null : role.id)}
+              aria-pressed={role.id === selectedId}
+              className={`flex cursor-pointer items-center gap-2 rounded-full border px-3 py-1 text-sm transition-colors duration-200 ${
+                role.id === selectedId
+                  ? 'border-accent bg-accent/15 text-slate-100'
+                  : 'border-edge bg-surface-950 text-slate-300 hover:bg-white/[0.06]'
+              }`}
+            >
+              <RoleDot colour={role.colour} />
+              {role.name}
+              <span className="text-xs text-slate-500">{role.memberCount}</span>
+            </button>
+          </li>
+        ))}
+      </ul>
+
+      {canManage && (
+        <div className="mt-3 flex gap-2">
+          <input
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') void create();
+            }}
+            placeholder="New role name"
+            aria-label="New role name"
+            className="w-56 rounded-lg border border-edge bg-surface-950 px-3 py-2 text-sm text-slate-100 placeholder-slate-500 outline-none transition-colors focus:border-accent/60"
+          />
+          <button
+            type="button"
+            onClick={() => void create()}
+            disabled={name.trim().length === 0}
+            className="cursor-pointer rounded bg-accent px-4 py-2 text-sm font-medium text-white transition-colors duration-200 hover:bg-accent-hover active:scale-[0.98] disabled:opacity-50"
+          >
+            Create
+          </button>
+        </div>
+      )}
+
+      {selected && (
+        <div className="mt-4 rounded-lg bg-surface-950 p-4">
+          <div className="flex flex-wrap items-end gap-4">
+            <label className="block">
+              <span className="block text-xs font-bold uppercase tracking-wide text-slate-400">
+                Name
+              </span>
+              <input
+                key={selected.id}
+                defaultValue={selected.name}
+                disabled={!canManage}
+                onBlur={(event) => {
+                  const next = event.target.value.trim();
+                  if (next && next !== selected.name) void save({ name: next });
+                }}
+                className="mt-2 w-56 rounded-lg border border-edge bg-surface-900 px-3 py-2 text-sm text-slate-100 outline-none transition-colors focus:border-accent/60 disabled:opacity-50"
+              />
+            </label>
+
+            <label className="block">
+              <span className="block text-xs font-bold uppercase tracking-wide text-slate-400">
+                Colour
+              </span>
+              <input
+                type="color"
+                value={selected.colour ?? '#8b98a5'}
+                disabled={!canManage}
+                onChange={(event) => void save({ colour: event.target.value })}
+                className="mt-2 h-9 w-16 cursor-pointer rounded border border-edge bg-surface-900 disabled:opacity-50"
+              />
+            </label>
+
+            <label className="block">
+              <span className="block text-xs font-bold uppercase tracking-wide text-slate-400">
+                Rank
+              </span>
+              <input
+                key={`${selected.id}-rank`}
+                type="number"
+                defaultValue={selected.rank}
+                disabled={!canManage}
+                onBlur={(event) => {
+                  const next = Number(event.target.value);
+                  if (Number.isFinite(next) && next !== selected.rank) void save({ rank: next });
+                }}
+                className="mt-2 w-24 rounded-lg border border-edge bg-surface-900 px-3 py-2 text-sm text-slate-100 outline-none transition-colors focus:border-accent/60 disabled:opacity-50"
+              />
+            </label>
+
+            {canManage && (
+              <button
+                type="button"
+                onClick={() => void remove()}
+                className="ml-auto cursor-pointer rounded border border-danger px-3 py-1.5 text-sm text-danger transition-colors duration-200 hover:bg-danger hover:text-white"
+              >
+                Delete role
+              </button>
+            )}
+          </div>
+
+          <p className="mt-4 text-xs font-bold uppercase tracking-wide text-slate-400">
+            What holding it allows
+          </p>
+          <ul className="mt-2 flex flex-wrap gap-2">
+            {ASSIGNABLE_PERMISSIONS.map((permission) => {
+              const on = selected.permissions.includes(permission);
+              return (
+                <li key={permission}>
+                  <button
+                    type="button"
+                    disabled={!canManage}
+                    aria-pressed={on}
+                    onClick={() =>
+                      void save({
+                        permissions: on
+                          ? selected.permissions.filter((value) => value !== permission)
+                          : [...selected.permissions, permission],
+                      })
+                    }
+                    className={`cursor-pointer rounded px-2.5 py-1 text-xs font-medium transition-colors duration-200 disabled:cursor-not-allowed disabled:opacity-40 ${
+                      on
+                        ? 'bg-status-online text-white'
+                        : 'bg-surface-800 text-slate-400 hover:bg-white/[0.06]'
+                    }`}
+                  >
+                    {PERMISSION_LABELS[permission] ?? permission}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+          <p className="mt-3 text-xs text-slate-500">
+            A capability you do not hold yourself cannot be put into a role - that would be granting
+            it to yourself with one extra step.
+          </p>
+        </div>
+      )}
+
+      {note && (
+        <p role="alert" className="mt-3 text-sm text-danger">
+          {note}
+        </p>
+      )}
+    </section>
   );
 }
 

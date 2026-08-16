@@ -5,8 +5,11 @@ import { Avatar } from '../../components/Avatar';
 
 /**
  * The right-hand column in a server: who is here, online first. Members are
- * grouped by role the way Discord groups by hoisted role - a server this size
- * does not need a section per custom role, and there are no custom roles yet.
+ * grouped by built-in role the way Discord groups by hoisted role - a server
+ * this size does not need a section per custom role. A custom role does show
+ * here, though, in the one place it is worth a whole column: the name is drawn
+ * in the colour of the highest-ranked role its holder has, which is the answer
+ * the server already works out and sends as `colour`.
  */
 export function MemberList(): JSX.Element {
   const members = useChatStore((state) => state.members);
@@ -65,7 +68,10 @@ function Group({
                 ringColour="border-surface-800"
               />
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-[15px] text-slate-200">
+                <span
+                  className="block truncate text-[15px] text-slate-200"
+                  style={member.colour ? { color: member.colour } : undefined}
+                >
                   {member.displayName}
                 </span>
                 {isStaff(member.role) && (

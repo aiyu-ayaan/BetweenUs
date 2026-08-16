@@ -26,6 +26,8 @@ import type {
   RemoteMachineSummary,
   RemotePermission,
   RemoteSessionResponse,
+  CreateServerRoleRequest,
+  ServerCustomRole,
   ServerMember,
   ServerInvite,
   ServerWithRole,
@@ -37,6 +39,7 @@ import type {
   UpdateNotificationPreferencesRequest,
   UpdateServerMemberRequest,
   UpdateServerRequest,
+  UpdateServerRoleRequest,
   UserSummary,
 } from '@nexora/shared-types';
 
@@ -317,6 +320,31 @@ export const api = {
 
   removeMember: (serverId: string, userId: string): Promise<void> =>
     request(`/api/v1/servers/${serverId}/members/${userId}`, { method: 'DELETE' }),
+
+  // --- Custom roles ---
+  //
+  // Additive on top of the five built-in rungs: a role here carries a name, a
+  // colour and a bundle of permissions, and the built-in role is still what
+  // decides who may edit whom.
+
+  serverRoles: (serverId: string): Promise<ServerCustomRole[]> =>
+    request(`/api/v1/servers/${serverId}/roles`),
+
+  createServerRole: (serverId: string, body: CreateServerRoleRequest): Promise<ServerCustomRole> =>
+    request(`/api/v1/servers/${serverId}/roles`, { method: 'POST', body: JSON.stringify(body) }),
+
+  updateServerRole: (
+    serverId: string,
+    roleId: string,
+    body: UpdateServerRoleRequest,
+  ): Promise<ServerCustomRole> =>
+    request(`/api/v1/servers/${serverId}/roles/${roleId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    }),
+
+  deleteServerRole: (serverId: string, roleId: string): Promise<void> =>
+    request(`/api/v1/servers/${serverId}/roles/${roleId}`, { method: 'DELETE' }),
 
   channels: (serverId: string): Promise<Channel[]> =>
     request(`/api/v1/channels?serverId=${encodeURIComponent(serverId)}`),

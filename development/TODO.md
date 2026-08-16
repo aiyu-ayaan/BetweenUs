@@ -1008,8 +1008,10 @@ Phase 12 opened these, and left them open on purpose:
       `roleIds` on the member editor. Additive on top of the five built-ins
       rather than replacing them - the built-ins are the hierarchy, and a
       hierarchy anyone can extend is a hierarchy anyone can climb - and a
-      member's denials still beat every role they hold. No client UI yet: the
-      permission editor does not draw them
+      member's denials still beat every role they hold. The permission editor
+      draws them too: a server's roles are created, coloured, ranked and given
+      their capabilities on the Roles screen, held roles are toggled per member,
+      and the member list wears the colour of the highest-ranked one
 - [x] Idle status set automatically after a period of no input, rather than only
       by hand. Ten minutes, from the operating system's own idle clock on the
       desktop and from the tab's events in a browser; Android still only sets a
@@ -1260,7 +1262,7 @@ Follow-ups this phase deliberately left open:
 - [ ] Split the shared Prisma schema into per-service schemas
 - [ ] Replace Redis Pub/Sub with NATS when fanout volume needs it
 - [x] Custom named roles with a colour and an ordering, alongside the five
-      built-ins plus per-member overrides phase 12 shipped. The permission
-      editor in the clients still does not draw them
+      built-ins plus per-member overrides phase 12 shipped. The desktop and web
+      permission editor draws and assigns them; the Android one does not yet
 - [ ] `user-service` (profiles, avatars, friends): those routes are served by
       chat-service today

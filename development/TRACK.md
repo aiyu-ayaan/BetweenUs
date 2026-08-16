@@ -48,7 +48,8 @@ Backend:
       A table, a rank, a colour, and a permission bundle, additive on top of the
       five built-ins rather than replacing them. A member's denials still beat
       every role they hold. The permission editor in the clients does not draw
-      them yet, so this half is on the desktop list rather than done.
+      them yet, so this half is on the desktop list rather than done. Since
+      landed on desktop and web - see below.
 - [x] **Remote sessions over Redis Pub/Sub.** The agent and the controller no
       longer have to be on the same replica. One pair of methods carries every
       message - local socket when this instance holds it, Pub/Sub when it does
@@ -77,6 +78,11 @@ Desktop and web:
       inferring a chord from the order three events arrived in. One module, two
       callers - a remote session and control handed over in a call - and a
       modifier released off-focus is let go on the next key instead of sticking.
+- [x] **The permission editor reading custom roles.** The Roles screen creates
+      a role, names it, colours it, ranks it and sets what holding it allows;
+      each member's held roles are toggles beside their per-person overrides;
+      and the member list wears the colour of the highest-ranked role somebody
+      holds. Android's editor still does not draw them.
 - [x] **Per-session input targets.** A remote session and control handed out in
       a call carry their own display target and their own held modifiers, so a
       machine doing both at once no longer points both at whichever was set
@@ -111,9 +117,6 @@ blocked by anything outside this document.
 
 ### Desktop and web
 
-- [ ] **The permission editor learning to read custom roles.** The backend has
-      them - name, colour, rank, permission bundle, and `roleIds` on the member
-      editor - and no client draws any of it.
 - [ ] **Manual quality override** for a share and for a remote session. There is
       no "use 20 Mbps" and no way to force a codec, so a LAN cannot be told it
       is a LAN - everything is inferred from congestion control.
