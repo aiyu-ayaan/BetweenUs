@@ -23,6 +23,7 @@ import { useAuthStore } from './auth';
 import { useChatStore } from './chat';
 import { useShareControlStore } from './shareControl';
 import { useAudioSettings } from './audioSettings';
+import { startPushToTalk, stopPushToTalk } from '../services/push-to-talk';
 import { NoiseGate } from '../services/mic-gate';
 import { micCapture, micEncoding, micProcessing, type VoiceSettings } from '../services/voice-quality';
 import { shareOptions, type ShareIntent, type ShareSize } from '../services/share-quality';
@@ -83,6 +84,14 @@ interface VoiceState {
   /** Identity whose shared screen fills the stage, or null for the grid. */
   watching: string | null;
   micEnabled: boolean;
+  /**
+   * Push to talk: whether the key is down right now.
+   *
+   * Kept apart from `micEnabled`, which is the button and means "I intend to be
+   * heard in this call at all". A muted microphone stays muted however long the
+   * key is held, and letting the key go does not mute anybody.
+   */
+  talking: boolean;
   cameraEnabled: boolean;
   screenEnabled: boolean;
   /**
@@ -108,6 +117,8 @@ interface VoiceState {
    */
   leave: (reason?: string) => Promise<void>;
   toggleMic: () => Promise<void>;
+  /** The push-to-talk key going down or coming up. */
+  setTalking: (talking: boolean) => void;
   toggleCamera: () => Promise<void>;
   shareScreen: (
     source: ScreenSource | null,
@@ -172,6 +183,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
   shares: [],
   watching: null,
   micEnabled: false,
+  talking: false,
   cameraEnabled: false,
   screenEnabled: false,
   sharedDisplayId: null,
@@ -288,6 +300,10 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
       }
 
       presenceSocket.send({ type: 'voice.join', channelId });
+      // Only while there is a call to talk into: a key that silences a
+      // microphone nobody is listening to is a key that does nothing, and one
+      // listened for all day is a listener for nothing.
+      startPushToTalk();
       // Pointers and "give me the mouse" ride the peers' data channels, so they
       // exist for exactly as long as the mesh does.
       useShareControlStore.getState().attach(next);
@@ -318,6 +334,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
 
   leave: async (reason) => {
     joinCounter++;
+    stopPushToTalk();
     const { channelId } = get();
     if (channelId) presenceSocket.send({ type: 'voice.leave', channelId });
     useShareControlStore.getState().detach();
@@ -333,6 +350,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
       shares: [],
       watching: null,
       micEnabled: false,
+      talking: false,
       cameraEnabled: false,
       screenEnabled: false,
       sharedDisplayId: null,
@@ -360,6 +378,20 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
       set({ error: `Microphone: ${messageOf(error)}` });
       refresh();
     }
+  },
+
+  /**
+   * Opens or closes the captured microphone without republishing anything.
+   *
+   * `enabled` on the raw capture rather than a track swap: the gate downstream
+   * of it keeps running and keeps its worklet, so a key held for a syllable
+   * costs nothing and letting go is silent within a block. Republishing per
+   * keypress would renegotiate the call several times a sentence.
+   */
+  setTalking: (talking) => {
+    if (get().talking === talking) return;
+    set({ talking });
+    applyTalking();
   },
 
   toggleCamera: async () => {
@@ -651,6 +683,40 @@ async function openMicrophone(settings: VoiceSettings): Promise<void> {
   localTracks.mic = raw;
   await mesh.setMicEncoding(micEncoding(settings));
   await mesh.setTrack('mic', (await attachGate(raw, settings)) ?? raw);
+  // A microphone opened while push to talk is on starts closed, which is what
+  // push to talk means. Opening it live for the instant between capture and the
+  // first key press is the bug this line exists to prevent.
+  applyTalking();
+}
+
+/**
+ * Whether the microphone should be passing audio right now.
+ *
+ * Two conditions, and they are different questions: the button says whether
+ * this client means to be heard in the call at all, and push to talk says
+ * whether the key is down at this instant. An open mic (push to talk off) is
+ * the first alone.
+ */
+function shouldPassAudio(): boolean {
+  const { micEnabled, talking } = useVoiceStore.getState();
+  if (!micEnabled) return false;
+  return useAudioSettings.getState().settings.pushToTalk ? talking : true;
+}
+
+/**
+ * Applies that to the capture, and to what everyone else sees.
+ *
+ * The raw track is the one switched, not the gate's output: the gate keeps
+ * running either way, so nothing is renegotiated and nothing has to be rebuilt
+ * when the key comes back down. The speaking ring is cleared in the same
+ * breath, or a released key leaves the last "talking" state on screen.
+ */
+function applyTalking(): void {
+  const raw = localTracks.mic;
+  const pass = shouldPassAudio();
+  if (raw) raw.enabled = pass;
+  if (!pass) mesh?.setLocalSpeaking(false);
+  refresh();
 }
 
 async function closeMicrophone(): Promise<void> {
@@ -765,6 +831,11 @@ async function applyAudioSettings(next: VoiceSettings, previous: VoiceSettings):
 
   // Output device is the sink's business, not the mesh's - see MediaSink.
   if (!micEnabled) return;
+
+  // Turning push to talk off has to reopen the microphone there and then.
+  // Without this it stays shut until the next time the key is pressed, which
+  // is a setting that appears not to work.
+  if (next.pushToTalk !== previous.pushToTalk) applyTalking();
 
   if (next.mode !== previous.mode || next.inputDeviceId !== previous.inputDeviceId) {
     await closeMicrophone();

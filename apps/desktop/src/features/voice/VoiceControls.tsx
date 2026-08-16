@@ -6,6 +6,8 @@
  */
 import { useState, type ReactNode } from 'react';
 import { useVoiceStore } from '../../stores/voice';
+import { useAudioSettings } from '../../stores/audioSettings';
+import { describeKey } from '../../services/talk-key';
 import { ScreenSharePicker } from './ScreenSharePicker';
 import { DevicePicker } from './DevicePicker';
 import {
@@ -24,6 +26,9 @@ export function VoiceControls({ size = 'sm' }: { size?: 'sm' | 'lg' }): JSX.Elem
   const cameraEnabled = useVoiceStore((state) => state.cameraEnabled);
   const screenEnabled = useVoiceStore((state) => state.screenEnabled);
   const toggleMic = useVoiceStore((state) => state.toggleMic);
+  const talking = useVoiceStore((state) => state.talking);
+  const pushToTalk = useAudioSettings((state) => state.settings.pushToTalk);
+  const pushToTalkKey = useAudioSettings((state) => state.settings.pushToTalkKey);
   const toggleCamera = useVoiceStore((state) => state.toggleCamera);
   const stopScreenShare = useVoiceStore((state) => state.stopScreenShare);
   const leave = useVoiceStore((state) => state.leave);
@@ -40,11 +45,21 @@ export function VoiceControls({ size = 'sm' }: { size?: 'sm' | 'lg' }): JSX.Elem
 
   return (
     <div className={`flex items-center ${size === 'lg' ? 'gap-2' : 'gap-1'}`}>
+      {/* Under push to talk the button still means "am I in this call at all",
+          and the key means "right now". A muted microphone stays muted however
+          long the key is held, so the label has to say which of the two is
+          being changed. */}
       <ControlButton
-        active={micEnabled}
+        active={micEnabled && (!pushToTalk || talking)}
         disabled={disabled}
         pad={pad}
-        label={micEnabled ? 'Mute microphone' : 'Unmute microphone'}
+        label={
+          !micEnabled
+            ? 'Unmute microphone'
+            : pushToTalk
+              ? `Hold ${describeKey(pushToTalkKey)} to talk - click to mute`
+              : 'Mute microphone'
+        }
         onClick={() => void toggleMic()}
       >
         {micEnabled ? <MicIcon className={icon} /> : <MicOffIcon className={icon} />}

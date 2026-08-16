@@ -15,7 +15,7 @@
     "package:win": "pnpm build && electron-builder --config electron-builder.yml --win nsis",
     "package:win-packaged": "pnpm build && electron-builder --config electron-builder.yml --win nsis",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "check": "tsx src/services/api.check.ts && tsx src/services/e2ee-crypto.check.ts && tsx src/services/e2ee.check.ts && tsx src/services/message-body.check.ts && tsx src/services/endpoint.check.ts && tsx src/features/voice/stage-geometry.check.ts && tsx src/services/share-quality.check.ts && tsx src/services/voice-quality.check.ts && tsx src/services/mesh.check.ts && tsx src/services/idle.check.ts && tsx src/services/mentions.check.ts && tsx src/stores/peerAudio.check.ts"
+    "check": "tsx src/services/api.check.ts && tsx src/services/e2ee-crypto.check.ts && tsx src/services/e2ee.check.ts && tsx src/services/message-body.check.ts && tsx src/services/endpoint.check.ts && tsx src/features/voice/stage-geometry.check.ts && tsx src/services/share-quality.check.ts && tsx src/services/voice-quality.check.ts && tsx src/services/mesh.check.ts && tsx src/services/idle.check.ts && tsx src/services/mentions.check.ts && tsx src/stores/peerAudio.check.ts && tsx src/services/push-to-talk.check.ts"
   },
   "dependencies": {
     "@nexora/permissions": "workspace:*",

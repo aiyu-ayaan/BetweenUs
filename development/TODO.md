@@ -111,7 +111,10 @@ Backend:
 
 Desktop and web:
 
-- [ ] Push to talk
+- [x] Push to talk: a key held opens the microphone, the mute button still says
+      whether you are in the call at all, and losing window focus closes it so a
+      key released elsewhere cannot leave it open. Window-scoped rather than
+      global - `globalShortcut` delivers a press and never a release
 - [x] Per-person volume and mute, stored per machine and keyed by user id so a
       reconnect does not reset it. A muted person is played at zero rather than
       dropped, so unmuting is instant and their speaking ring still moves
@@ -628,8 +631,13 @@ in `mic-gate.ts`.
 
 Left open on purpose:
 
-- [ ] No push to talk. The gate is voice activity only, and a key held down is
-      a main-process shortcut plus a message to the same worklet
+- [x] Push to talk, in `services/push-to-talk.ts`. It switches `enabled` on the
+      raw capture rather than republishing, so a key held for a syllable costs
+      nothing and the gate downstream keeps its worklet. Still open: it only
+      works while the window has focus. Electron's `globalShortcut` cannot fix
+      that - it reports a press and never a release, and a microphone that
+      cannot be told the key came up is worse than no push to talk at all. A
+      native keyboard hook per platform is the whole of the remaining work
 - [x] Per-person volume and mute, in the voice panel. Not sent anywhere and not
       shown to them: it is this machine's opinion of how loud somebody is.
       Capped at their original level, because that is `HTMLMediaElement.volume`'s

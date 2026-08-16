@@ -94,6 +94,17 @@ export interface VoiceSettings {
    * Discord calls this input sensitivity.
    */
   gateThresholdDb: number | null;
+  /**
+   * Talk only while a key is held. The gate answers "is somebody speaking";
+   * this answers "do you mean to be heard", which is the question a shared room,
+   * a mechanical keyboard and a phone call in the background all raise.
+   */
+  pushToTalk: boolean;
+  /**
+   * `KeyboardEvent.code` of the key that opens the microphone. A code rather
+   * than a key, so it is the same physical key on every layout.
+   */
+  pushToTalkKey: string;
 }
 
 export const DEFAULT_VOICE_SETTINGS: VoiceSettings = {
@@ -106,6 +117,10 @@ export const DEFAULT_VOICE_SETTINGS: VoiceSettings = {
   // Quiet enough that a normal voice is nowhere near it, loud enough to sit
   // above room tone on a cheap microphone.
   gateThresholdDb: -50,
+  pushToTalk: false,
+  // Not Space: the composer is one keystroke away at all times, and a
+  // push-to-talk key that also types is a key nobody can use.
+  pushToTalkKey: 'AltRight',
 };
 
 /**

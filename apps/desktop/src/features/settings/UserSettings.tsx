@@ -6,6 +6,7 @@ import { usePresenceStore } from '../../stores/presence';
 import { useVoiceStore } from '../../stores/voice';
 import { useAudioSettings } from '../../stores/audioSettings';
 import { monitorMic, type MicLevel } from '../../services/mic-gate';
+import { describeKey } from '../../services/talk-key';
 import { DeviceSelect, useDevices } from '../../components/DeviceSelect';
 import { DEFAULT_VOICE_SETTINGS, GATE_RANGE } from '../../services/voice-quality';
 import { api } from '../../services/api';
@@ -492,6 +493,34 @@ function VoiceSection(): JSX.Element {
         </div>
       </div>
 
+      <h2 className="mt-8 text-base font-semibold text-slate-50">Push to talk</h2>
+      <p className="mt-1 text-sm text-slate-400">
+        The sensitivity above answers &quot;is somebody making a noise&quot;. This answers a
+        different question - whether you mean to be heard - which no threshold gets to, because a
+        shared room and a keyboard are both louder than a quiet voice.
+      </p>
+      <div className="mt-3 space-y-3 rounded-lg bg-surface-800 p-4">
+        <Switch
+          label="Talk only while a key is held"
+          hint="Your microphone button still decides whether you are in the call at all: muted stays muted however long the key is down."
+          checked={settings.pushToTalk}
+          onChange={(pushToTalk) => update({ pushToTalk })}
+        />
+        {settings.pushToTalk && (
+          <>
+            <PushToTalkKey
+              code={settings.pushToTalkKey}
+              onChange={(pushToTalkKey) => update({ pushToTalkKey })}
+            />
+            <p className="text-xs text-slate-500">
+              It works while Nexora has focus, and not while another window does - a global key
+              needs a keyboard hook this app does not install. Letting go is never missed: losing
+              focus closes the microphone too, so alt-tabbing mid-sentence cannot leave it open.
+            </p>
+          </>
+        )}
+      </div>
+
       <h2 className="mt-8 text-base font-semibold text-slate-50">Processing</h2>
       <div className="mt-3 space-y-1 rounded-lg bg-surface-800 p-4">
         <Switch
@@ -546,6 +575,54 @@ function VoiceSection(): JSX.Element {
  * the gate is closed and accent while it is open, so "am I being heard" is
  * answered by a colour rather than by arithmetic.
  */
+/**
+ * Records the next key pressed.
+ *
+ * A code rather than a key, so it is the same physical key whatever the layout
+ * says it types - and so a key that types nothing, which is the sort you want
+ * for this, is still recordable.
+ */
+function PushToTalkKey({
+  code,
+  onChange,
+}: {
+  code: string;
+  onChange: (code: string) => void;
+}): JSX.Element {
+  const [listening, setListening] = useState(false);
+
+  useEffect(() => {
+    if (!listening) return;
+    const capture = (event: KeyboardEvent): void => {
+      event.preventDefault();
+      // Escape leaves it as it was rather than binding Escape, which would be a
+      // key nobody can unbind without pressing it.
+      if (event.code !== 'Escape') onChange(event.code);
+      setListening(false);
+    };
+    window.addEventListener('keydown', capture, { capture: true });
+    return () => window.removeEventListener('keydown', capture, { capture: true });
+  }, [listening, onChange]);
+
+  return (
+    <div className="flex items-center gap-3">
+      <span className="text-sm text-slate-300">Key</span>
+      <button
+        type="button"
+        onClick={() => setListening((on) => !on)}
+        className={`cursor-pointer rounded px-4 py-2 font-mono text-sm transition-colors duration-200 ${
+          listening
+            ? 'bg-accent text-white'
+            : 'bg-surface-950 text-slate-100 hover:bg-white/[0.06]'
+        }`}
+      >
+        {listening ? 'Press a key…' : describeKey(code)}
+      </button>
+      {listening && <span className="text-xs text-slate-500">Escape to keep the current one</span>}
+    </div>
+  );
+}
+
 function LevelMeter({
   db,
   thresholdDb,
