@@ -6,6 +6,7 @@ import { create } from 'zustand';
 import type { ActiveStatus, PresenceStatus } from '@nexora/shared-types';
 import { presenceSocket } from '../services/socket';
 import { notifyVoiceJoin } from '../services/notifications';
+import { startIdleWatch, stopIdleWatch } from '../services/idle';
 import { useAuthStore } from './auth';
 import { useChatStore } from './chat';
 import { useVoiceStore } from './voice';
@@ -26,6 +27,13 @@ interface PresenceState {
   statuses: Map<string, PresenceStatus>;
   /** This user's own status, which is the only place `invisible` shows up. */
   selfStatus: ActiveStatus;
+  /**
+   * What this user *picked*, which is not always what they appear as: the idle
+   * watcher reports `idle` over a chosen `online` and puts it back afterwards.
+   * Kept apart so an automatic idle cannot swallow a deliberate choice - a
+   * person who set do-not-disturb and walked away comes back to do-not-disturb.
+   */
+  chosenStatus: ActiveStatus;
   /** channelId -> userId -> entry */
   typing: Map<string, Map<string, TypingEntry>>;
   /** channelId -> user ids currently in that voice channel */
@@ -37,6 +45,11 @@ interface PresenceState {
   voiceMembers: (channelId: string) => string[];
   notifyTyping: (channelId: string) => void;
   setStatus: (status: ActiveStatus) => void;
+  /**
+   * The idle watcher's way in. Sends only when the reported status actually
+   * changes, so a poll every half minute is not a message every half minute.
+   */
+  reportAutoStatus: (status: ActiveStatus) => void;
   reset: () => void;
 }
 
@@ -46,6 +59,7 @@ export const usePresenceStore = create<PresenceState>((set, get) => ({
   online: new Set(),
   statuses: new Map(),
   selfStatus: 'online',
+  chosenStatus: 'online',
   typing: new Map(),
   voice: new Map(),
 
@@ -74,6 +88,12 @@ export const usePresenceStore = create<PresenceState>((set, get) => ({
    * server's `status.self` confirms it a moment later.
    */
   setStatus: (status) => {
+    set({ selfStatus: status, chosenStatus: status });
+    presenceSocket.send({ type: 'status.set', status });
+  },
+
+  reportAutoStatus: (status) => {
+    if (get().selfStatus === status) return;
     set({ selfStatus: status });
     presenceSocket.send({ type: 'status.set', status });
   },
@@ -83,6 +103,7 @@ export const usePresenceStore = create<PresenceState>((set, get) => ({
       online: new Set(),
       statuses: new Map(),
       selfStatus: 'online',
+      chosenStatus: 'online',
       typing: new Map(),
       voice: new Map(),
     }),
@@ -167,6 +188,29 @@ presenceSocket.on((event) => {
     default:
       return;
   }
+});
+
+/**
+ * The idle watch runs for exactly as long as somebody is signed in.
+ *
+ * Driven from here rather than from the auth store, which would have to import
+ * this one and the voice one to do it and would make a cycle out of three
+ * modules that currently only point one way.
+ */
+useAuthStore.subscribe((state, previous) => {
+  if (state.status === previous.status) return;
+
+  if (state.status === 'authenticated') {
+    startIdleWatch(
+      (status) => usePresenceStore.getState().reportAutoStatus(status),
+      () => usePresenceStore.getState().chosenStatus,
+      // Being in a call is being present, whatever the keyboard has been doing.
+      () => useVoiceStore.getState().channelId !== null,
+    );
+    return;
+  }
+
+  stopIdleWatch();
 });
 
 // Indicators expire on a timer, not on the next event, so a stale "typing…"

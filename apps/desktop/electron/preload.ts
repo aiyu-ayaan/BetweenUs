@@ -106,6 +106,12 @@ const api = {
     running: boolean;
     error: string | null;
   }> => ipcRenderer.invoke('remote:diagnostics'),
+  /**
+   * Seconds since the last input anywhere on this machine. A browser tab can
+   * only know whether *it* was touched, which reads as away the moment somebody
+   * switches to another window; this is the whole desktop's answer.
+   */
+  systemIdleSeconds: (): Promise<number> => ipcRenderer.invoke('power:idle'),
   /** The OS clipboard, for syncing it across a remote session. */
   clipboardRead: (): Promise<string> => ipcRenderer.invoke('clipboard:read'),
   clipboardWrite: (text: string): void => {

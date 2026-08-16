@@ -59,7 +59,11 @@ Backend:
       a second bucket keyed on the account named in the body (10/min, normalised
       so one spelling of an email is one bucket), covered by
       `auth-service`'s check
-- [ ] Idle status set automatically after a period of no input
+- [x] Idle status set automatically after ten minutes with no input, and back
+      to online the moment there is some. The desktop asks the OS for the whole
+      machine's idle time; a browser tab has no such thing and watches its own
+      events. A call counts as being present, and a chosen status is never
+      overwritten (`services/idle.ts`, with a self-check)
 - [ ] Presence broadcasts scoped to a server instead of every connected socket
 - [ ] Voice roster cross-checked against `call-service`'s own peer list
 - [ ] Mentions told apart from ordinary messages, and a "mentions only" mute
@@ -1018,8 +1022,10 @@ Phase 12 opened these, and left them open on purpose:
       only the create dialog uses it)
 - [ ] Invite codes with an expiry, instead of a permanent server slug
 - [ ] Custom named roles with a colour and an ordering
-- [ ] Idle status set automatically after a period of no input, rather than only
-      by hand
+- [x] Idle status set automatically after a period of no input, rather than only
+      by hand. Ten minutes, from the operating system's own idle clock on the
+      desktop and from the tab's events in a browser; Android still only sets a
+      status by hand
 
 ### Carried over
 
@@ -1210,7 +1216,7 @@ Follow-ups this phase deliberately left open:
 ## Backlog (later phases)
 
 ### Presence follow-ups
-- [ ] Idle status (currently only online/offline)
+- [x] Idle status, automatic as well as chosen
 - [ ] Scope presence broadcasts to a server instead of every connected socket
 - [ ] Server-authoritative voice rosters. There is no media server to ask any
       more, so the authority is `call-service`'s own `/ws/call` roster: a client

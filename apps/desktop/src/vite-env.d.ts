@@ -82,6 +82,12 @@ interface Window {
       running: boolean;
       error: string | null;
     }>;
+    /**
+     * Seconds since the last input anywhere on this machine, which is a
+     * stronger answer than the renderer's own idea of activity: a person
+     * working in another window is not away.
+     */
+    systemIdleSeconds: () => Promise<number>;
     clipboardRead: () => Promise<string>;
     clipboardWrite: (text: string) => void;
     remoteMouse: (input: {

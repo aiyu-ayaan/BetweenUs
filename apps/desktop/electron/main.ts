@@ -8,6 +8,7 @@ import {
   desktopCapturer,
   ipcMain,
   nativeImage,
+  powerMonitor,
   safeStorage,
   screen,
   session,
@@ -905,6 +906,19 @@ ipcMain.handle('screen:release', (): void => releaseDesktopComposition());
 ipcMain.handle('remote:supported', (): boolean => inputSupported());
 
 ipcMain.handle('remote:diagnostics', () => inputDiagnostics());
+
+// How long since anybody touched this machine, for the automatic idle status.
+// The renderer polls rather than being pushed at: there is no "went idle"
+// event, only a number that grows, and a poll every half minute costs nothing.
+ipcMain.handle('power:idle', (): number => {
+  try {
+    return powerMonitor.getSystemIdleTime();
+  } catch {
+    // Some Linux sessions have no idle source at all. Zero reads as "active",
+    // which leaves the status where the person put it.
+    return 0;
+  }
+});
 
 // Clipboard sync goes through Electron's own clipboard rather than the
 // renderer's `navigator.clipboard`: reading in a renderer needs a permission
