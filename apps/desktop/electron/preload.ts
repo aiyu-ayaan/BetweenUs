@@ -80,6 +80,16 @@ const api = {
   remoteTarget: (displayId: string | null, source: 'session' | 'call' = 'session'): void => {
     ipcRenderer.send('remote:target', displayId, source);
   },
+  /**
+   * Fires when a monitor is added, removed, or changes resolution. Returns an
+   * unsubscribe function. A remote session listens so its screen list, and the
+   * screen it is sending, survive somebody plugging a monitor in.
+   */
+  onDisplaysChanged: (handler: () => void): (() => void) => {
+    const listener = (): void => handler();
+    ipcRenderer.on('screen:displays-changed', listener);
+    return () => ipcRenderer.removeListener('screen:displays-changed', listener);
+  },
   /** Records the picked surface; the next display capture gets exactly it. */
   selectScreenSource: (id: string, audio: boolean): Promise<void> =>
     ipcRenderer.invoke('screen:select', id, audio),

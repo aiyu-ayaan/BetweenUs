@@ -465,9 +465,11 @@ Left open on purpose:
       server introduces the peers, so a malicious gateway could try to sit in
       the middle - which is exactly what the call path's fingerprint check
       defends against and the remote path does not do yet (`E2EE.md`, limit 10)
-- [ ] The display list is read once when the session opens, so a monitor
-      plugged in - or one that changes resolution - part way through a session
-      is not noticed until the next one
+- [x] The display list follows the machine for the whole session: Electron's
+      own `display-added` / `display-removed` / `display-metrics-changed` are
+      broadcast to the renderer (coalesced by half a second), the agent re-reads
+      its displays and re-sends `screens`, and a monitor unplugged while it was
+      the one being sent falls back to the primary display
 - [x] Sessions are relayed through Redis Pub/Sub, so the agent and the
       controller need not land on the same instance. Every message goes out
       through one pair of methods that deliver to a local socket when this

@@ -83,6 +83,10 @@ Desktop and web:
       each member's held roles are toggles beside their per-person overrides;
       and the member list wears the colour of the highest-ranked role somebody
       holds. Android's editor still does not draw them.
+- [x] **Display hot-plug noticed mid-session.** A monitor added, removed or
+      resized reaches the renderer as an event, the agent re-reads its displays
+      and re-sends the list, and one unplugged while it was the screen on the
+      wire falls back to the primary display rather than freezing.
 - [x] **Per-session input targets.** A remote session and control handed out in
       a call carry their own display target and their own held modifiers, so a
       machine doing both at once no longer points both at whichever was set
@@ -120,9 +124,6 @@ blocked by anything outside this document.
 - [ ] **Manual quality override** for a share and for a remote session. There is
       no "use 20 Mbps" and no way to force a codec, so a LAN cannot be told it
       is a LAN - everything is inferred from congestion control.
-- [ ] **Display hot-plug noticed mid-session.** The display list is read once
-      when a session opens; a monitor plugged in - or one that changes
-      resolution - is not noticed until the next session.
 - [ ] **An unread line that survives a restart, and a jump to it.** The read
       marker survives; the line is only placed when a channel is opened in this
       session.

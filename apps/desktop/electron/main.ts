@@ -803,6 +803,39 @@ ipcMain.handle('screen:displays', async () => {
     .filter((entry): entry is NonNullable<typeof entry> => entry !== null);
 });
 
+/**
+ * A monitor plugged in, unplugged, or resized while the app is running.
+ *
+ * The display list used to be read once, when a remote session opened, so a
+ * monitor that appeared after that was invisible for the rest of the session -
+ * and one that was unplugged left the controller looking at a screen that no
+ * longer existed. Electron already knows; the renderer only had no way to hear
+ * about it.
+ *
+ * `display-metrics-changed` fires for a resolution or scale change as well as
+ * for a move, which matters because a capture is sized from the display it was
+ * started on.
+ */
+let displayChangeTimer: NodeJS.Timeout | null = null;
+
+function broadcastDisplays(): void {
+  // Coalesced: dragging a window between monitors, or Windows settling after a
+  // mode change, fires `display-metrics-changed` several times in a row, and
+  // each one costs the renderer a fresh source enumeration.
+  if (displayChangeTimer) clearTimeout(displayChangeTimer);
+  displayChangeTimer = setTimeout(() => {
+    displayChangeTimer = null;
+    for (const window of BrowserWindow.getAllWindows()) {
+      if (!window.isDestroyed()) window.webContents.send('screen:displays-changed');
+    }
+  }, 500);
+  displayChangeTimer.unref?.();
+}
+
+screen.on('display-added', broadcastDisplays);
+screen.on('display-removed', broadcastDisplays);
+screen.on('display-metrics-changed', broadcastDisplays);
+
 ipcMain.handle('screen:select', (_event, id: unknown, audio: unknown): void => {
   pendingShare = typeof id === 'string' ? { id, audio: audio === true } : null;
 });

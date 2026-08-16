@@ -71,6 +71,8 @@ interface Window {
     screenSources: () => Promise<ScreenSource[]>;
     screenDisplays: () => Promise<DisplayInfo[]>;
     remoteTarget: (displayId: string | null, source?: 'session' | 'call') => void;
+    /** A monitor added, removed or resized. Returns an unsubscribe function. */
+    onDisplaysChanged: (handler: () => void) => () => void;
     selectScreenSource: (id: string, audio: boolean) => Promise<void>;
     /** One call per capture that started, when its track stops. */
     releaseScreenCapture: () => Promise<void>;

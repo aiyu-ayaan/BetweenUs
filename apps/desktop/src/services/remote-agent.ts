@@ -78,6 +78,8 @@ interface AgentState {
 }
 
 let socket: WebSocket | null = null;
+/** Unsubscribes the display watcher while a session is running. */
+let unwatchDisplays: (() => void) | null = null;
 /** The connection carrying this machine's screen to whoever is watching it. */
 let link: ScreenLink | null = null;
 /** The capture behind it, so switching monitors can stop the old one. */
@@ -400,6 +402,7 @@ async function startPublishing(pending: PendingSession): Promise<void> {
     });
     send({ type: 'session.accepted', sessionId: pending.sessionId });
     sendScreens(pending.sessionId);
+    watchDisplays(pending.sessionId);
     startClipboardSync(pending.sessionId);
   } catch (error) {
     send({
@@ -488,6 +491,56 @@ async function switchScreen(sessionId: string, screenId: string): Promise<void> 
   sendScreens(sessionId);
 }
 
+/**
+ * Keeps the screen list, and the screen being sent, true for the whole session.
+ *
+ * The list used to be read once when the session opened: a monitor plugged in
+ * afterwards never appeared, and one unplugged left the controller with a
+ * chooser full of screens that no longer existed - and, if it was the screen
+ * being sent, a picture that had stopped.
+ *
+ * A display that goes while it is the one on the wire is the case that has to
+ * do something rather than just re-announce: the session falls back to the
+ * primary display, which is what somebody sitting at the machine would now be
+ * looking at.
+ */
+function watchDisplays(sessionId: string): void {
+  stopWatchingDisplays();
+  unwatchDisplays =
+    window.nexora?.onDisplaysChanged(() => {
+      void refreshDisplays(sessionId);
+    }) ?? null;
+}
+
+function stopWatchingDisplays(): void {
+  unwatchDisplays?.();
+  unwatchDisplays = null;
+}
+
+async function refreshDisplays(sessionId: string): Promise<void> {
+  const current = link;
+  if (!current) return;
+
+  displays = (await window.nexora?.screenDisplays()) ?? [];
+  if (displays.length === 0) return;
+
+  const stillThere = displays.some((entry) => entry.id === activeDisplayId);
+  if (!stillThere) {
+    const fallback = displays.find((entry) => entry.primary) ?? displays[0];
+    if (fallback) {
+      try {
+        await publishDisplay(current, fallback);
+      } catch {
+        // Nothing to send. The controller is told what is true rather than
+        // being left with a label for a monitor that has gone.
+        activeDisplayId = null;
+      }
+    }
+  }
+
+  sendScreens(sessionId);
+}
+
 function sendScreens(sessionId: string): void {
   if (displays.length === 0) return;
   send({
@@ -542,6 +595,7 @@ function stopClipboardSync(): void {
 async function teardown(_reason: string): Promise<void> {
   clearConsentTimer();
   stopClipboardSync();
+  stopWatchingDisplays();
   link?.close();
   link = null;
   stopCapture();
