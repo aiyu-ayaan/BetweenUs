@@ -129,6 +129,15 @@ export const SpeakerIcon = (props: IconProps): JSX.Element => (
   </Base>
 );
 
+/** A speaker with the sound crossed out: this person is silenced for me. */
+export const SpeakerOffIcon = (props: IconProps): JSX.Element => (
+  <Base {...props}>
+    <path d="M11 5 6 9H2v6h4l5 4V5Z" />
+    <line x1="23" y1="9" x2="17" y2="15" />
+    <line x1="17" y1="9" x2="23" y2="15" />
+  </Base>
+);
+
 export const LockIcon = (props: IconProps): JSX.Element => (
   <Base {...props}>
     <rect x="3" y="11" width="18" height="11" rx="2" />

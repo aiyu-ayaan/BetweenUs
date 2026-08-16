@@ -112,7 +112,9 @@ Backend:
 Desktop and web:
 
 - [ ] Push to talk
-- [ ] Per-person volume and mute
+- [x] Per-person volume and mute, stored per machine and keyed by user id so a
+      reconnect does not reset it. A muted person is played at zero rather than
+      dropped, so unmuting is instant and their speaking ring still moves
 - [ ] Call and share statistics in the UI - bitrate, loss, "you are not being
       heard"
 - [ ] A manual quality override for a share and for a remote session
@@ -628,8 +630,10 @@ Left open on purpose:
 
 - [ ] No push to talk. The gate is voice activity only, and a key held down is
       a main-process shortcut plus a message to the same worklet
-- [ ] No per-person volume or mute in the client, which is the other half of
-      what Discord's audio settings are for
+- [x] Per-person volume and mute, in the voice panel. Not sent anywhere and not
+      shown to them: it is this machine's opinion of how loud somebody is.
+      Capped at their original level, because that is `HTMLMediaElement.volume`'s
+      ceiling - boosting past it needs a WebAudio gain node in the path
 - [ ] Nothing measures the result: no bitrate, no packet loss, no "your
       microphone is not being heard" warning, the same gap phase 21 left
 - [ ] The gate is level-based, not a voice-activity model. A door slamming

@@ -1,6 +1,8 @@
-import { useVoiceStore } from '../../stores/voice';
+import { useState } from 'react';
+import { useVoiceStore, type VoiceTile } from '../../stores/voice';
+import { usePeerAudio } from '../../stores/peerAudio';
 import { VoiceControls } from './VoiceControls';
-import { LockIcon, MicOffIcon } from '../../components/icons';
+import { LockIcon, MicOffIcon, SpeakerIcon, SpeakerOffIcon } from '../../components/icons';
 
 /**
  * Sits at the bottom of whichever sidebar is on screen while connected to a
@@ -54,25 +56,102 @@ export function VoicePanel(): JSX.Element | null {
 
       <ul className="mb-2 space-y-1">
         {tiles.map((tile) => (
-          <li key={tile.identity} className="flex items-center gap-2 px-1 text-sm">
-            <span
-              className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${
-                tile.speaking ? 'bg-status-online text-slate-950' : 'bg-surface-700 text-slate-200'
-              }`}
-              aria-hidden="true"
-            >
-              {tile.name.charAt(0).toUpperCase()}
-            </span>
-            <span className="truncate text-slate-300">
-              {tile.name}
-              {tile.isLocal && ' (you)'}
-            </span>
-            {!tile.micEnabled && <MicOffIcon className="ml-auto h-3.5 w-3.5 text-danger" />}
-          </li>
+          <Participant key={tile.identity} tile={tile} />
         ))}
       </ul>
 
       <VoiceControls />
     </section>
+  );
+}
+
+/**
+ * One person in the call, and how loud they are here.
+ *
+ * The volume is this machine's opinion of them and nobody else's: it is not
+ * sent anywhere, the other person is not told, and turning somebody down does
+ * not quieten them for the rest of the call. Clicking the speaker silences
+ * them outright; the slider is for the more common case, which is somebody
+ * whose gain is set far too high.
+ */
+function Participant({ tile }: { tile: VoiceTile }): JSX.Element {
+  const settingFor = usePeerAudio((state) => state.settingFor);
+  const people = usePeerAudio((state) => state.people);
+  const setVolume = usePeerAudio((state) => state.setVolume);
+  const toggleMuted = usePeerAudio((state) => state.toggleMuted);
+  const [open, setOpen] = useState(false);
+
+  // `people` is read only to re-render on a change; the value comes from the
+  // getter, which knows the default.
+  void people;
+  const setting = settingFor(tile.userId);
+  const adjusted = !tile.isLocal && (setting.muted || setting.volume !== 1);
+
+  return (
+    <li className="px-1 text-sm">
+      <div className="flex items-center gap-2">
+        <span
+          className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${
+            tile.speaking ? 'bg-status-online text-slate-950' : 'bg-surface-700 text-slate-200'
+          }`}
+          aria-hidden="true"
+        >
+          {tile.name.charAt(0).toUpperCase()}
+        </span>
+
+        <span className={`truncate ${setting.muted && !tile.isLocal ? 'text-slate-500' : 'text-slate-300'}`}>
+          {tile.name}
+          {tile.isLocal && ' (you)'}
+        </span>
+
+        {!tile.micEnabled && <MicOffIcon className="ml-auto h-3.5 w-3.5 shrink-0 text-danger" />}
+
+        {/* Your own volume is the one thing this cannot change: you hear
+            yourself through the room, not through the call. */}
+        {!tile.isLocal && (
+          <button
+            type="button"
+            onClick={() => setOpen((current) => !current)}
+            aria-expanded={open}
+            aria-label={`Volume for ${tile.name}`}
+            title={setting.muted ? `${tile.name} is silenced for you` : `Volume for ${tile.name}`}
+            className={`${tile.micEnabled ? 'ml-auto' : ''} cursor-pointer rounded p-1 transition-colors duration-150 hover:bg-white/[0.07] ${
+              adjusted ? 'text-accent' : 'text-slate-500 hover:text-slate-200'
+            }`}
+          >
+            {setting.muted ? (
+              <SpeakerOffIcon className="h-3.5 w-3.5" />
+            ) : (
+              <SpeakerIcon className="h-3.5 w-3.5" />
+            )}
+          </button>
+        )}
+      </div>
+
+      {open && !tile.isLocal && (
+        <div className="mt-1 flex items-center gap-2 pl-8 pr-1">
+          <button
+            type="button"
+            onClick={() => toggleMuted(tile.userId)}
+            className="cursor-pointer rounded px-1.5 py-0.5 text-xs text-slate-400 transition-colors duration-150 hover:bg-white/[0.07] hover:text-slate-100"
+          >
+            {setting.muted ? 'Unmute' : 'Mute'}
+          </button>
+          <input
+            type="range"
+            min={0}
+            max={100}
+            value={Math.round(setting.volume * 100)}
+            disabled={setting.muted}
+            onChange={(event) => setVolume(tile.userId, Number(event.target.value) / 100)}
+            aria-label={`How loud ${tile.name} is`}
+            className="h-1 flex-1 cursor-pointer accent-accent disabled:opacity-40"
+          />
+          <span className="w-8 shrink-0 text-right text-xs tabular-nums text-slate-500">
+            {Math.round(setting.volume * 100)}
+          </span>
+        </div>
+      )}
+    </li>
   );
 }

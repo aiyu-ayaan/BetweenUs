@@ -23,10 +23,12 @@ export function CallAudio(): JSX.Element | null {
     <>
       {tiles.map((tile) => (
         <span key={tile.identity}>
-          {tile.audioTrack && <AudioSink track={tile.audioTrack} />}
-          {/* A shared screen brings its sound only to whoever is watching it. */}
+          {tile.audioTrack && <AudioSink track={tile.audioTrack} userId={tile.userId} />}
+          {/* A shared screen brings its sound only to whoever is watching it,
+              and at whatever volume that person is set to: turning somebody
+              down and then being blasted by their film would be a lie. */}
           {tile.screenAudioTrack && watching === tile.identity && (
-            <AudioSink track={tile.screenAudioTrack} />
+            <AudioSink track={tile.screenAudioTrack} userId={tile.userId} />
           )}
         </span>
       ))}

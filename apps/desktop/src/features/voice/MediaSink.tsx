@@ -8,6 +8,7 @@
  */
 import { useEffect, useRef } from 'react';
 import { useAudioSettings } from '../../stores/audioSettings';
+import { elementVolume, usePeerAudio } from '../../stores/peerAudio';
 
 export function VideoSink({
   track,
@@ -39,9 +40,23 @@ export function VideoSink({
   );
 }
 
-export function AudioSink({ track }: { track: MediaStreamTrack }): JSX.Element {
+/**
+ * `userId` is whose voice this is, so the per-person volume can be applied.
+ * Absent for anything that belongs to nobody in particular.
+ */
+export function AudioSink({
+  track,
+  userId,
+}: {
+  track: MediaStreamTrack;
+  userId?: string;
+}): JSX.Element {
   const ref = useRef<HTMLAudioElement>(null);
   const outputDeviceId = useAudioSettings((state) => state.settings.outputDeviceId);
+  // Subscribed to the map rather than to one entry: a person with no entry is
+  // at the default, and there is nothing to subscribe to until they are not.
+  const people = usePeerAudio((state) => state.people);
+  const volume = elementVolume(userId ? people[userId] : undefined);
 
   useEffect(() => {
     const element = ref.current;
@@ -54,6 +69,13 @@ export function AudioSink({ track }: { track: MediaStreamTrack }): JSX.Element {
       element.srcObject = null;
     };
   }, [track]);
+
+  // Applied to the element rather than to the track: muting a track would stop
+  // it being decoded, and then unmuting waits for the next keyframe of somebody
+  // already mid-sentence.
+  useEffect(() => {
+    if (ref.current) ref.current.volume = volume;
+  }, [volume]);
 
   // Which speakers to use. There is no room object to ask any more, so the sink
   // that owns the element is the thing that can answer it.
