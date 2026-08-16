@@ -79,7 +79,11 @@ Backend:
       Detection is the client's, because a body is sealed with the channel key
       and no service can read one (`services/mentions.ts`, with a check for the
       prefix case that would make a quiet channel loud again)
-- [ ] Channel-key rotation when somebody is dropped from a private channel
+- [x] Channel-key rotation when somebody is dropped from a private channel (or
+      from the server, or the channel is made private around them). The keys
+      endpoint answers `rekeyNeeded` - derived by comparing who holds the epoch
+      with who is a member now - and the first holder to sync mints the next
+      epoch for the members who remain. Covered in `e2ee.check.ts`
 - [ ] Multi-device E2EE: a key per device, so one can be revoked alone
 - [ ] Identity rotation after a lost device, re-sealing current channel keys
 - [ ] Safety numbers, so a lying server is detectable
@@ -1030,8 +1034,10 @@ Left open on purpose:
 
 Phase 12 opened these, and left them open on purpose:
 
-- [ ] Rotate the channel key when someone is dropped from a private channel's
-      allowlist, so removal takes future messages away and not only the listing
+- [x] Rotate the channel key when someone is dropped from a private channel's
+      allowlist, so removal takes future messages away and not only the listing.
+      Their key still opens what was sent before - a key on somebody's machine
+      cannot be taken back - and opens nothing after
 - [ ] Editing a private channel's allowlist from the UI (the endpoint exists;
       only the create dialog uses it)
 - [ ] Invite codes with an expiry, instead of a permanent server slug
@@ -1134,7 +1140,7 @@ Phase 12 opened these, and left them open on purpose:
 
 Follow-ups this phase deliberately left open:
 
-- [ ] Rotate the channel key (epoch + 1) when a member is removed
+- [x] Rotate the channel key (epoch + 1) when a member is removed
 - [x] Account portability: the identity key is sealed with PBKDF2 over the
       account password (or a recovery passphrase) and stored in
       `identity_backups`, so a reinstall or a second machine restores the same

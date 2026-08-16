@@ -302,8 +302,43 @@ export async function syncChannelKeys(channelId: string): Promise<void> {
   if (!key) return;
 
   const latest = await api.channelKeys(channelId);
-  if (latest.epoch !== state.epoch || latest.missingRecipients.length === 0) return;
+  if (latest.epoch !== state.epoch) return;
+
+  // Somebody who is no longer a member holds this key, so everything sent from
+  // now on has to be sealed with a different one. Rotating is a job for a
+  // holder, which is us: the server has no key and could not mint one that
+  // meant anything.
+  if (latest.rekeyNeeded) {
+    await rekeyChannel(channelId, state.epoch);
+    return;
+  }
+
+  if (latest.missingRecipients.length === 0) return;
   await shareKey(channelId, state.epoch, key, latest.missingRecipients);
+}
+
+/**
+ * Mints the next epoch and seals it for the people who are members *now*.
+ *
+ * This is what makes removing somebody from a private channel mean anything.
+ * Their key still opens every message sent before this moment - there is no
+ * taking a key back off a machine, and any design that claims otherwise is
+ * lying - but it opens nothing after it.
+ *
+ * The local state is dropped rather than extended, so the next send goes out
+ * under the new epoch even if the publish raced somebody else's: whoever won,
+ * the re-read finds the epoch that counts.
+ */
+export async function rekeyChannel(channelId: string, currentEpoch: number): Promise<void> {
+  try {
+    await createChannelKey(channelId, currentEpoch + 1);
+  } finally {
+    channels.delete(channelId);
+    for (const seen of [...missedEpochs]) {
+      if (seen.startsWith(`${channelId}#`)) missedEpochs.delete(seen);
+    }
+  }
+  await ensureChannelKey(channelId);
 }
 
 /**

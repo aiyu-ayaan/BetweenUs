@@ -18,12 +18,18 @@ import {
   encryptForChannel,
   initIdentity,
   resetE2ee,
+  syncChannelKeys,
 } from './e2ee';
 
 const CHANNEL = 'channel-general';
 
-/** Members of the channel, whether or not they have signed in anywhere yet. */
-const MEMBERS = ['alice', 'bob'];
+/**
+ * Members of the channel, whether or not they have signed in anywhere yet.
+ *
+ * Mutable, because losing a member is half of what is checked here: the server
+ * decides who a key may be wrapped for by asking who is a member *now*.
+ */
+let MEMBERS = ['alice', 'bob'];
 
 type StoredKey = ChannelKeyEntry & { epoch: number };
 
@@ -112,6 +118,11 @@ function stubDirectory(): void {
           keys: stored.filter((row) => row.recipientUserId === caller),
           missingRecipients:
             epoch === 0 ? [] : knownDevices().filter((device) => !covered.has(device.userId)),
+          // The same derivation the service does: is this key wrapped for
+          // anybody who is not a member any more?
+          rekeyNeeded: stored.some(
+            (row) => row.epoch === epoch && !MEMBERS.includes(row.recipientUserId),
+          ),
         }),
       );
     }
@@ -188,6 +199,43 @@ async function main(): Promise<void> {
   await signIn('alice');
   assert.equal(await decryptForChannel(CHANNEL, fromBob), 'hi');
   assert.equal(await decryptForChannel(CHANNEL, beforeBob), 'before bob arrived');
+
+  // Bob is dropped from the channel. His key still opens everything sent up to
+  // now - a key on somebody's machine cannot be taken back - but the channel
+  // has to stop using it, and only a holder can arrange that.
+  MEMBERS = ['alice'];
+  await syncChannelKeys(CHANNEL);
+  assert.deepEqual(published, [1, 2, 3], 'a stale holder must produce exactly one re-key');
+  assert.deepEqual(
+    stored
+      .filter((row) => row.epoch === 3)
+      .map((row) => row.recipientUserId)
+      .sort(),
+    ['alice'],
+    'the new epoch is wrapped for the members who remain, and nobody else',
+  );
+
+  const afterBob = await encryptForChannel(CHANNEL, 'after bob left');
+  assert.ok(
+    JSON.parse(afterBob).epoch === 3,
+    'the next message must be sealed under the new epoch',
+  );
+
+  // Nothing to re-key now, so opening the channel again is quiet.
+  await syncChannelKeys(CHANNEL);
+  assert.deepEqual(published, [1, 2, 3], 'a channel with no stale holder must not re-key');
+
+  // And bob gets nothing newer. A device that signs in again after being
+  // removed cannot even reach the directory in the real service - the keys
+  // endpoint checks channel access first - so what is asserted here is the part
+  // that survives either way: the message written after he left does not open
+  // with anything he has.
+  await signIn('bob');
+  assert.equal(
+    await decryptForChannel(CHANNEL, afterBob),
+    UNDECRYPTABLE,
+    'what was sent after he left must not open',
+  );
 
   console.log('e2ee.check.ts: ok');
 }

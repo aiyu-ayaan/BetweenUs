@@ -474,6 +474,20 @@ export interface ChannelKeysResponse {
   keys: Array<ChannelKeyEntry & { epoch: number }>;
   /** Channel members with a device key but no entry at `epoch` - they need a re-wrap. */
   missingRecipients: DeviceKey[];
+  /**
+   * True when somebody who is no longer a member holds the current epoch's key.
+   *
+   * Removing somebody from a private channel's allowlist takes away the listing
+   * and the history endpoint, and takes away nothing at all from the key they
+   * already have: every future message would still be sealed with a key sitting
+   * on their machine. Whoever holds the key rotates it when they see this, which
+   * is the only place it can happen - the server cannot mint a key it must not
+   * be able to read.
+   *
+   * It says nothing about *who*: a client re-wraps for the current membership,
+   * which it has to fetch anyway.
+   */
+  rekeyNeeded: boolean;
 }
 
 /**

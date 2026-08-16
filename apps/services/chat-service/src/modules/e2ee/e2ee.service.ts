@@ -120,7 +120,31 @@ export class E2eeService {
         iv: row.iv,
       })),
       missingRecipients: epoch === 0 ? [] : await this.missingAtEpoch(channelId, epoch),
+      rekeyNeeded: epoch === 0 ? false : await this.staleAtEpoch(channelId, epoch),
     };
+  }
+
+  /**
+   * Does anybody outside the channel hold the current key?
+   *
+   * Derived rather than recorded, which is what makes it right without a
+   * bookkeeping step somebody can forget: the answer is a comparison between
+   * who was wrapped for and who is a member now, so every way of losing access -
+   * dropped from a private channel's allowlist, kicked from the server, the
+   * channel made private around them - produces it, including the ones added
+   * later.
+   */
+  private async staleAtEpoch(channelId: string, epoch: number): Promise<boolean> {
+    const [memberIds, holders] = await Promise.all([
+      this.memberIds(channelId),
+      prisma.channelKey.findMany({
+        where: { channelId, epoch },
+        select: { recipientUserId: true },
+      }),
+    ]);
+
+    const members = new Set(memberIds);
+    return holders.some((holder) => !members.has(holder.recipientUserId));
   }
 
   /**
