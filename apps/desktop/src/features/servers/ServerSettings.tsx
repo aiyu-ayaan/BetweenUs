@@ -8,6 +8,7 @@ import type {
 } from '@nexora/shared-types';
 import { ASSIGNABLE_PERMISSIONS, PERMISSIONS, SERVER_ROLES } from '@nexora/permissions';
 import { api } from '../../services/api';
+import { syncChannelKeys } from '../../services/e2ee';
 import { useAuthStore } from '../../stores/auth';
 import { PicturePicker } from '../../components/PicturePicker';
 import { ServerIcon } from '../../components/ServerIcon';
@@ -669,6 +670,7 @@ function Channels(): JSX.Element {
 
   const canManage = server?.permissions.includes(PERMISSIONS.MANAGE_CHANNEL) ?? false;
   const [note, setNote] = useState<string | null>(null);
+  const [editing, setEditing] = useState<Channel | null>(null);
 
   const remove = async (channel: Channel): Promise<void> => {
     setNote(null);
@@ -709,6 +711,15 @@ function Channels(): JSX.Element {
                 {channel.isPrivate ? 'Private' : 'Open to the server'}
               </span>
             </span>
+            {canManage && channel.isPrivate && (
+              <button
+                type="button"
+                onClick={() => setEditing(channel)}
+                className="cursor-pointer rounded bg-white/[0.07] px-3 py-1.5 text-sm text-slate-100 transition-colors duration-200 hover:bg-white/[0.1]"
+              >
+                Who is on it
+              </button>
+            )}
             {canManage && (
               <button
                 type="button"
@@ -722,7 +733,135 @@ function Channels(): JSX.Element {
           </li>
         ))}
       </ul>
+
+      {editing && <ChannelAccess channel={editing} onClose={() => setEditing(null)} />}
     </>
+  );
+}
+
+/**
+ * Who may see a private channel.
+ *
+ * The endpoint has always existed and only the create dialog used it, so a
+ * private channel's allowlist was decided once and never again - somebody left
+ * off it stayed off it, and somebody who should not have been on it stayed on.
+ *
+ * Removing somebody takes the future away as well as the listing: the channel's
+ * key rotates the next time a holder syncs it, so what is sent after this is
+ * sealed with a key they do not have. What they already downloaded is theirs
+ * and no design takes that back.
+ */
+function ChannelAccess({
+  channel,
+  onClose,
+}: {
+  channel: Channel;
+  onClose: () => void;
+}): JSX.Element {
+  const members = useChatStore((state) => state.members);
+  const [allowed, setAllowed] = useState<string[] | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+
+  useEffect(() => {
+    let live = true;
+    void api
+      .channelMembers(channel.id)
+      .then((rows) => {
+        if (live) setAllowed(rows.map((row) => row.userId));
+      })
+      .catch((error: unknown) =>
+        setNote(error instanceof Error ? error.message : 'Could not read who is on it'),
+      );
+    return () => {
+      live = false;
+    };
+  }, [channel.id]);
+
+  const toggle = (userId: string): void =>
+    setAllowed((current) =>
+      current === null
+        ? current
+        : current.includes(userId)
+          ? current.filter((id) => id !== userId)
+          : [...current, userId],
+    );
+
+  const save = async (): Promise<void> => {
+    if (allowed === null) return;
+    setBusy(true);
+    setNote(null);
+    try {
+      await api.setChannelMembers(channel.id, allowed);
+      // Re-key now rather than whenever somebody next opens the channel. This
+      // client is a holder - it is in the channel - and the person who just
+      // removed somebody is the person least willing to wait for it.
+      await syncChannelKeys(channel.id).catch(() => undefined);
+      onClose();
+    } catch (error) {
+      setNote(error instanceof Error ? error.message : 'That could not be saved');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label={`Who is on ${channel.name}`}
+      className="fixed inset-0 z-[60] flex animate-fade items-center justify-center bg-black/70 px-4"
+    >
+      <div className="w-full max-w-md animate-pop rounded-xl border border-edge bg-surface-900 p-6 shadow-pop">
+        <h2 className="text-lg font-semibold text-slate-50">Who is on #{channel.name}</h2>
+        <p className="mt-2 text-sm text-slate-400">
+          Only these people see the channel at all. Taking somebody off re-keys it, so what is
+          said afterwards is sealed with a key they do not have - what they already read stays
+          read.
+        </p>
+
+        {note && <p className="mt-3 text-sm text-danger">{note}</p>}
+
+        {allowed === null ? (
+          <p className="mt-4 text-sm text-slate-400">Reading the list…</p>
+        ) : (
+          <ul className="mt-4 max-h-[320px] space-y-1 overflow-y-auto">
+            {members.map((member) => (
+              <li key={member.userId}>
+                <label className="flex cursor-pointer items-center gap-3 rounded px-2 py-1.5 hover:bg-white/[0.05]">
+                  <input
+                    type="checkbox"
+                    checked={allowed.includes(member.userId)}
+                    onChange={() => toggle(member.userId)}
+                    className="h-4 w-4 cursor-pointer accent-accent"
+                  />
+                  <span className="truncate text-slate-100">{member.displayName}</span>
+                  <span className="ml-auto shrink-0 text-xs text-slate-500">{member.role}</span>
+                </label>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        <div className="mt-5 flex gap-3">
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex-1 cursor-pointer rounded-md bg-white/[0.07] px-4 py-2.5 font-medium text-slate-100 transition-colors duration-150 hover:bg-white/[0.12]"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={() => void save()}
+            disabled={busy || allowed === null}
+            className="flex-1 cursor-pointer rounded-md bg-accent px-4 py-2.5 font-medium text-white transition-colors duration-200 hover:bg-accent-hover active:scale-[0.98] disabled:opacity-50"
+          >
+            {busy ? 'Saving…' : 'Save'}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 

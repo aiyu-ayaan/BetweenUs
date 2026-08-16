@@ -134,7 +134,9 @@ Desktop and web:
       pinned panel that pages
 - [ ] An unread line that survives a restart, and a jump to it
 - [ ] Decrypted history persisted under a device key
-- [ ] Private-channel allowlist editing in the UI
+- [x] Private-channel allowlist editing in the UI - "Who is on it" in server
+      settings, next to each private channel. Saving re-keys the channel there
+      and then rather than waiting for somebody to open it
 - [ ] Chunked AEAD attachments, and a video transcode
 - [ ] A recent-servers list, and a client/server version check
 - [ ] Whether the shared UI moves to `packages/ui`
@@ -1070,8 +1072,10 @@ Phase 12 opened these, and left them open on purpose:
       allowlist, so removal takes future messages away and not only the listing.
       Their key still opens what was sent before - a key on somebody's machine
       cannot be taken back - and opens nothing after
-- [ ] Editing a private channel's allowlist from the UI (the endpoint exists;
-      only the create dialog uses it)
+- [x] Editing a private channel's allowlist from the UI. Server settings →
+      Channels → "Who is on it" on any private channel; removing somebody
+      rotates the key immediately, so what is said afterwards is sealed with a
+      key they do not have
 - [x] Invite codes with an expiry, a use limit and a revoke, instead of a
       permanent server slug. `POST/GET/DELETE /api/v1/servers/:id/invites`,
       `MANAGE_MEMBER` to mint one, and `POST /servers/join` takes a code - the
