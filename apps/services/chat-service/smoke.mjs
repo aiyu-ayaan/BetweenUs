@@ -370,6 +370,36 @@ const grantedChannel = await json(`${SERVER}/api/v1/channels`, {
 });
 ok('granted permission takes effect', grantedChannel.name === `granted-${suffix}`);
 
+// A hierarchy nobody checks is not a hierarchy. The permission answers "may
+// you manage members at all" and the role check answers "may you hand out that
+// role"; neither asks *who the member is*, so a moderator with MANAGE_MEMBER
+// could deny an administrator their permissions or kick them outright.
+await json(`${SERVER}/api/v1/servers/${server.id}/members/${otherId}`, {
+  method: 'PATCH',
+  headers: authed,
+  body: JSON.stringify({ role: 'MODERATOR', grantedPermissions: ['MANAGE_MEMBER'] }),
+});
+
+const senior = await fetch(`${SERVER}/api/v1/servers/${server.id}/members/${me.id}`, {
+  method: 'PATCH',
+  headers: { ...other, 'Content-Type': 'application/json' },
+  body: JSON.stringify({ deniedPermissions: ['MANAGE_SERVER'] }),
+});
+ok('a moderator cannot edit the owner', senior.status === 403, String(senior.status));
+
+const kickSenior = await fetch(`${SERVER}/api/v1/servers/${server.id}/members/${me.id}`, {
+  method: 'DELETE',
+  headers: other,
+});
+ok('a moderator cannot kick the owner', kickSenior.status === 403, String(kickSenior.status));
+
+// Back to where the rest of the script expects them.
+await json(`${SERVER}/api/v1/servers/${server.id}/members/${otherId}`, {
+  method: 'PATCH',
+  headers: authed,
+  body: JSON.stringify({ role: 'MEMBER', grantedPermissions: ['MANAGE_CHANNEL'] }),
+});
+
 // A denial beats the role, so taking the grant back with one closes the door.
 const denied = await json(`${SERVER}/api/v1/servers/${server.id}/members/${otherId}`, {
   method: 'PATCH',

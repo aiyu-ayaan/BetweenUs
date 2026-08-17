@@ -164,6 +164,7 @@ export class ServersService {
         message: 'You cannot change your own role or permissions',
       });
     }
+    this.requireOutranks(actor.role as ServerRole, target.role as ServerRole);
 
     const data: {
       role?: ServerRole;
@@ -325,6 +326,7 @@ export class ServersService {
     if (!target) {
       throw new NotFoundException({ code: 'MEMBER_NOT_FOUND', message: 'Member not found' });
     }
+    this.requireOutranks(actor.role as ServerRole, target.role as ServerRole);
     if (target.role === 'OWNER') {
       throw new ForbiddenException({
         code: 'CANNOT_REMOVE_OWNER',
@@ -848,6 +850,27 @@ export class ServersService {
       throw new NotFoundException({ code: 'SERVER_NOT_FOUND', message: 'Server not found' });
     }
     return membership;
+  }
+
+  /**
+   * Somebody may only act on a member below their own rank.
+   *
+   * The permission checks answer "may you manage members at all" and the role
+   * check answers "may you hand out *that* role"; neither of them asks who the
+   * member is. So a moderator holding MANAGE_MEMBER could deny an
+   * administrator their permissions, or kick them - which is the whole of a
+   * hierarchy, undone by the one question nobody was asking.
+   *
+   * Equal ranks are refused as well as higher ones. Two administrators editing
+   * each other is a fight, not a hierarchy, and the deployment's answer to a
+   * bad administrator is the owner rather than a race.
+   */
+  private requireOutranks(actor: ServerRole, target: ServerRole): void {
+    if (ROLE_RANK[actor] > ROLE_RANK[target]) return;
+    throw new ForbiddenException({
+      code: 'MEMBER_OUTRANKS_YOU',
+      message: 'You cannot act on somebody at or above your own role',
+    });
   }
 
   private async requirePermission(
