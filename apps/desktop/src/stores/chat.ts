@@ -72,6 +72,14 @@ interface ChatState {
    */
   history: Record<string, DecryptedMessage[]>;
   loadingMessages: boolean;
+  /**
+   * channelId -> the id to ask for the next page before, null once the channel
+   * has been read back to its first message. A channel with no entry has not
+   * been opened yet.
+   */
+  cursors: Record<string, string | null>;
+  /** True while an older page is in flight, so the scroll does not ask twice. */
+  loadingOlder: boolean;
   error: string | null;
   /** What the right-hand column shows, if anything. */
   rightPanel: 'members' | 'pins' | 'search' | 'none';
@@ -110,6 +118,11 @@ interface ChatState {
     isPrivate?: boolean;
     memberIds?: string[];
   }) => Promise<void>;
+  /**
+   * The page before the oldest message on screen. Called by the message list
+   * when it is scrolled near the top; a no-op once the channel is exhausted.
+   */
+  loadOlder: () => Promise<void>;
   sendMessage: (
     content: string,
     attachments?: MessageAttachment[],
@@ -169,6 +182,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
   divider: {},
   history: {},
   loadingMessages: false,
+  cursors: {},
+  loadingOlder: false,
   error: null,
   rightPanel: 'members',
   pins: [],
@@ -332,7 +347,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
       if (firstUnread) clearDividerSoon(channelId);
       // The cache is written even when the user has already moved on - the
       // fetch was paid for, and the next visit gets it for free.
-      set({ history: { ...get().history, [channelId]: items } });
+      set({
+        history: { ...get().history, [channelId]: items },
+        cursors: { ...get().cursors, [channelId]: page.nextCursor },
+      });
       if (get().activeChannelId !== channelId) return;
       set({ messages: items, loadingMessages: false });
     } catch (error) {
@@ -372,6 +390,40 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const channelId = get().activeChannelId;
     if (!channelId) return;
     set({ replyingTo: { ...get().replyingTo, [channelId]: reply } });
+  },
+
+  loadOlder: async () => {
+    const channelId = get().activeChannelId;
+    if (!channelId || get().loadingOlder) return;
+    const cursor = get().cursors[channelId];
+    // Undefined is a channel whose first page has not landed yet; null is one
+    // that has been read back to its first message. Neither has a page to ask
+    // for, and both would otherwise be asked for on every scroll event.
+    if (!cursor) return;
+
+    set({ loadingOlder: true });
+    try {
+      const page = await api.messages(channelId, cursor);
+      const older = await Promise.all(page.items.map(decrypt));
+
+      // Re-read: decryption is async and the channel may have changed. The
+      // cursor is still stored either way, so the fetch is not wasted.
+      const state = useChatStore.getState();
+      const known = new Set((state.history[channelId] ?? []).map((message) => message.id));
+      const fresh = older.filter((message) => !known.has(message.id));
+      const merged = [...fresh, ...(state.history[channelId] ?? [])];
+
+      set({
+        history: { ...state.history, [channelId]: merged },
+        cursors: { ...state.cursors, [channelId]: page.nextCursor },
+        ...(state.activeChannelId === channelId ? { messages: merged } : {}),
+      });
+    } catch {
+      // Nothing to say: the history on screen is still the history on screen,
+      // and an error banner over a scroll gesture is worse than a short list.
+    } finally {
+      set({ loadingOlder: false });
+    }
   },
 
   sendMessage: async (content, attachments = [], replyTo) => {
@@ -565,6 +617,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
       activeServerId: null,
       activeChannelId: null,
       history: {},
+      cursors: {},
+      loadingOlder: false,
       error: null,
       pins: [],
       jumpTo: null,

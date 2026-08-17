@@ -190,6 +190,9 @@ export function ChatView({ onToggleMembers }: { onToggleMembers?: () => void }):
 /** How far off the bottom still counts as reading the newest message. */
 const FOLLOW_SLACK_PX = 120;
 
+/** How near the top the reader gets before the previous page is fetched. */
+const PAGE_TRIGGER_PX = 400;
+
 function MessageList({
   messages,
   loading,
@@ -209,6 +212,13 @@ function MessageList({
    * down every time a message arrives is worse than not following at all.
    */
   const following = useRef(true);
+  /**
+   * Distance from the bottom, recorded before an older page is asked for.
+   * Prepending fifty messages moves everything on screen down by however tall
+   * they turn out to be; measuring from the bottom is the one anchor that does
+   * not need to know that height in advance.
+   */
+  const anchor = useRef<number | null>(null);
   const me = useAuthStore((state) => state.user);
   // Own messages anywhere; anyone else's only with the moderator permission,
   // which no direct message ever carries.
@@ -218,6 +228,9 @@ function MessageList({
   const togglePin = useChatStore((state) => state.togglePin);
   const react = useChatStore((state) => state.react);
   const setReplyTo = useChatStore((state) => state.setReplyTo);
+  const loadOlder = useChatStore((state) => state.loadOlder);
+  const loadingOlder = useChatStore((state) => state.loadingOlder);
+  const exhausted = useChatStore((state) => state.cursors[channel.id] === null);
   const jumpTo = useChatStore((state) => state.jumpTo);
   const clearJump = useChatStore((state) => state.clearJump);
   const dividerId = useChatStore((state) => state.divider[channel.id] ?? null);
@@ -256,6 +269,24 @@ function MessageList({
   }, [channel.id, loading]);
 
   const newest = messages[messages.length - 1]?.id ?? null;
+  const oldest = messages[0]?.id ?? null;
+
+  /**
+   * An older page landed: put the reader back where they were reading rather
+   * than fifty messages further down.
+   */
+  useLayoutEffect(() => {
+    const box = viewport.current;
+    if (!box || anchor.current === null) return;
+    box.scrollTop = box.scrollHeight - anchor.current;
+    anchor.current = null;
+  }, [oldest]);
+
+  // A page that failed, or one the store refused, leaves an anchor nothing is
+  // ever going to consume - and a stuck anchor stops every later page.
+  useEffect(() => {
+    if (!loadingOlder) anchor.current = null;
+  }, [loadingOlder]);
 
   /**
    * A message arrived. Keyed on the newest id rather than the count, because
@@ -329,6 +360,18 @@ function MessageList({
       ref={viewport}
       onScroll={(event) => {
         const box = event.currentTarget;
+        // Near the top: fetch the page before this one. The store refuses when
+        // a fetch is already running or the channel has been read to its start,
+        // so firing this on every scroll event is free.
+        if (
+          !loadingOlder &&
+          !exhausted &&
+          box.scrollTop < PAGE_TRIGGER_PX &&
+          anchor.current === null
+        ) {
+          anchor.current = box.scrollHeight - box.scrollTop;
+          void loadOlder();
+        }
         // "Near enough the bottom" rather than exactly at it: a smooth scroll
         // that is still finishing, or a row that grew by a pixel, must not
         // count as somebody scrolling away.
@@ -347,7 +390,19 @@ function MessageList({
         </p>
       )}
 
-      {messages.length === 0 && <EmptyChannel channel={channel} />}
+      {/* Only once the channel has been read back to its first message is the
+          "this is the beginning" block true. Before that the top of the list is
+          just the top of a page. An empty channel is exhausted by definition,
+          but says so before the first fetch has answered. */}
+      {(exhausted || (messages.length === 0 && !loadingOlder)) && (
+        <EmptyChannel channel={channel} />
+      )}
+
+      {loadingOlder && (
+        <p className="py-2 text-center text-xs text-slate-500" aria-live="polite">
+          Loading earlier messages…
+        </p>
+      )}
 
       <ul ref={list}>
         {messages.map((message, index) => {
