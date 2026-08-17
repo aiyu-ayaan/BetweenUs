@@ -34,6 +34,8 @@ export function VoiceControls({ size = 'sm' }: { size?: 'sm' | 'lg' }): JSX.Elem
   const pushToTalkKey = useAudioSettings((state) => state.settings.pushToTalkKey);
   const toggleCamera = useVoiceStore((state) => state.toggleCamera);
   const stopScreenShare = useVoiceStore((state) => state.stopScreenShare);
+  const screenHolder = useVoiceStore((state) => state.screenHolder);
+  const tiles = useVoiceStore((state) => state.tiles);
   const leave = useVoiceStore((state) => state.leave);
   const stats = useVoiceStore((state) => state.stats);
 
@@ -44,6 +46,13 @@ export function VoiceControls({ size = 'sm' }: { size?: 'sm' | 'lg' }): JSX.Elem
   const [choosingDevices, setChoosingDevices] = useState(false);
   const [showingStats, setShowingStats] = useState(false);
   const warning = healthWarning(stats);
+  // Whose screen it is, when it is not ours. The holder is a peer id; the name
+  // comes from the tiles, and is absent for the instant between somebody
+  // claiming the screen and their tile arriving.
+  const otherSharer =
+    screenHolder && !screenEnabled
+      ? (tiles.find((tile) => tile.identity === screenHolder)?.name ?? 'them')
+      : null;
 
   const disabled = status !== 'connected';
   const icon = size === 'lg' ? 'h-5 w-5' : 'h-4 w-4';
@@ -81,11 +90,20 @@ export function VoiceControls({ size = 'sm' }: { size?: 'sm' | 'lg' }): JSX.Elem
         {cameraEnabled ? <VideoIcon className={icon} /> : <VideoOffIcon className={icon} />}
       </ControlButton>
 
+      {/* One share at a time. Sharing while somebody else is takes it from
+          them, which is what every other product does - so the button says so
+          rather than letting it be a surprise. */}
       <ControlButton
         active={screenEnabled}
         disabled={disabled}
         pad={pad}
-        label={screenEnabled ? 'Stop sharing screen' : 'Share screen'}
+        label={
+          screenEnabled
+            ? 'Stop sharing screen'
+            : otherSharer
+              ? `Take over from ${otherSharer}`
+              : 'Share screen'
+        }
         onClick={() => (screenEnabled ? void stopScreenShare() : setPicking(true))}
       >
         <ScreenShareIcon className={icon} />

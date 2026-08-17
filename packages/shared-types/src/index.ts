@@ -759,6 +759,17 @@ export type ClientCallEvent =
   | { type: 'join'; channelId: string }
   | { type: 'leave' }
   | { type: 'signal'; to: string; data: CallSignal }
+  /**
+   * "I am about to share my screen" / "I have stopped".
+   *
+   * One share at a time in a call, and the claim is what decides whose. It is
+   * arbitrated here rather than between clients because two people pressing the
+   * button at the same moment need a single answer, and a mesh has no ordering
+   * to give one - the gateway holds the sockets, so it is the thing that can
+   * say "this one, and the other one stops".
+   */
+  | { type: 'screen.claim' }
+  | { type: 'screen.release' }
   | { type: 'ping' };
 
 export type ServerCallEvent =
@@ -774,6 +785,15 @@ export type ServerCallEvent =
    * makes joining on a second device feel like moving rather than duplicating.
    */
   | { type: 'superseded'; channelId: string }
+  /**
+   * Who is sharing their screen in this call, or null when nobody is.
+   *
+   * Sent to everybody on every change, including to the peer that just took it.
+   * A client that sees somebody else here while it is sharing stops: taking
+   * over is what the button does, the way Teams does it, rather than two
+   * screens on one stage and no way to tell which is which.
+   */
+  | { type: 'screen.holder'; peerId: string | null; userId: string | null }
   | { type: 'pong' }
   | { type: 'error'; code: string; message: string };
 

@@ -71,6 +71,18 @@ export class CallGateway implements OnModuleDestroy {
    */
   private readonly calls = new Map<string, Set<WebSocket>>();
 
+  /**
+   * channelId -> the socket currently sharing its screen, if any.
+   *
+   * One share per call. Two of them is a stage with two pictures on it and no
+   * way to say which one anybody means; every product that has tried it ended
+   * up here. Held beside the roster rather than derived from the peer data
+   * channels, because arbitration needs one answer and the mesh has no ordering
+   * to produce one - the last claim wins, and "last" is only a thing the
+   * gateway can decide.
+   */
+  private readonly sharing = new Map<string, WebSocket>();
+
   constructor(
     private readonly logger: Logger,
     private readonly events: EventBus,
@@ -191,6 +203,14 @@ export class CallGateway implements OnModuleDestroy {
         this.relay(state, event.to, event.data);
         return;
 
+      case 'screen.claim':
+        this.claimScreen(socket, state);
+        return;
+
+      case 'screen.release':
+        this.releaseScreen(socket, state);
+        return;
+
       case 'ping':
         this.send(socket, { type: 'pong' });
         return;
@@ -285,6 +305,46 @@ export class CallGateway implements OnModuleDestroy {
   }
 
   /**
+   * Hands the screen to whoever asked for it last.
+   *
+   * The previous holder is told the same thing everybody else is - who holds it
+   * now - and stops on its own. It is not sent a private "stop": every client
+   * needs the new holder anyway, and one message that says the whole truth
+   * cannot be applied by half the room and missed by the rest.
+   */
+  private claimScreen(socket: WebSocket, state: SocketState): void {
+    const channelId = state.channelId;
+    if (!channelId) return;
+    if (this.sharing.get(channelId) === socket) return;
+
+    this.sharing.set(channelId, socket);
+    this.announceScreen(channelId);
+    this.logger.info('Screen share taken over', { userId: state.userId, channelId });
+  }
+
+  /** Gives it up, if this socket is the one holding it. */
+  private releaseScreen(socket: WebSocket, state: SocketState): void {
+    const channelId = state.channelId;
+    if (!channelId) return;
+    // Only the holder may release: a late "I stopped" from whoever was replaced
+    // would otherwise take the screen away from the person who just took it.
+    if (this.sharing.get(channelId) !== socket) return;
+
+    this.sharing.delete(channelId);
+    this.announceScreen(channelId);
+  }
+
+  private announceScreen(channelId: string): void {
+    const holder = this.sharing.get(channelId);
+    const peer = holder ? this.state.get(holder) : undefined;
+    this.broadcast(channelId, {
+      type: 'screen.holder',
+      peerId: peer?.peerId ?? null,
+      userId: peer?.userId ?? null,
+    });
+  }
+
+  /**
    * Forwards one signal to one peer in the same call.
    *
    * Same-call is the check that matters: without it, a peer id learned anywhere
@@ -324,6 +384,14 @@ export class CallGateway implements OnModuleDestroy {
     if (!members) return;
     members.delete(socket);
     if (members.size === 0) this.calls.delete(channelId);
+
+    // Somebody who left is not still sharing. Without this the screen stays
+    // claimed by a socket that has gone, and the next person to press the
+    // button is the only one who ever finds out.
+    if (this.sharing.get(channelId) === socket) {
+      this.sharing.delete(channelId);
+      this.announceScreen(channelId);
+    }
 
     // Everyone still in the call has a peer connection to this peer that will
     // never produce another frame. Saying so is what closes it; waiting for ICE

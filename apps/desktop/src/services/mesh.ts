@@ -123,6 +123,15 @@ export interface MeshEvents {
   onProblem: (message: string) => void;
   /** The call cannot continue - the socket died, or the server refused. */
   onFatal: (message: string) => void;
+  /**
+   * Who is sharing their screen, as the gateway sees it, or null for nobody.
+   *
+   * One share per call: a second one replaces the first rather than joining it,
+   * so the peer that was sharing hears this with somebody else's id in it and
+   * stops. Arbitrated at the gateway because two people pressing the button at
+   * the same moment need one answer, and a mesh has no ordering to give one.
+   */
+  onScreenHolder?: (peerId: string | null) => void;
 }
 
 interface MeshOptions extends MeshEvents {
@@ -955,6 +964,10 @@ export class Mesh {
         return;
       }
 
+      case 'screen.holder':
+        this.options.onScreenHolder?.(event.peerId);
+        return;
+
       case 'superseded':
         // The same account joined this call somewhere else, so the server has
         // already taken this connection off the roster. Marking the mesh closed
@@ -973,6 +986,21 @@ export class Mesh {
       default:
         return;
     }
+  }
+
+  /** This client's own peer id, once the gateway has issued one. */
+  peerId(): string | null {
+    return this.selfPeerId;
+  }
+
+  /** "I am about to share." The gateway decides, and tells everybody. */
+  claimScreen(): void {
+    this.send({ type: 'screen.claim' });
+  }
+
+  /** "I have stopped." Ignored by the gateway unless this peer is the holder. */
+  releaseScreen(): void {
+    this.send({ type: 'screen.release' });
   }
 
   private link(peer: CallPeer): PeerLink {

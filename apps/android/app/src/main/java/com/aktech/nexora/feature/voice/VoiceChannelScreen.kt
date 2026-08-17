@@ -90,6 +90,9 @@ fun VoiceChannelScreen(
     val muted by engine.muted.collectAsState()
     val cameraOn by engine.cameraOn.collectAsState()
     val sharing by engine.sharing.collectAsState()
+    // Who holds the one screen this call has. Sharing while somebody else does
+    // takes it from them, so the button says so rather than being a surprise.
+    val screenHolder by engine.screenHolder.collectAsState()
     val localVideo by engine.localVideo.collectAsState()
     val problem by engine.problem.collectAsState()
 
@@ -290,7 +293,11 @@ fun VoiceChannelScreen(
                 )
                 IconAction(
                     icon = NexoraIcons.ScreenShare,
-                    contentDescription = if (sharing) "Stop sharing" else "Share the screen",
+                    contentDescription = when {
+                        sharing -> "Stop sharing"
+                        screenHolder != null -> "Take over the screen"
+                        else -> "Share the screen"
+                    },
                     tint = if (sharing) Accent else Slate400,
                     onClick = {
                         if (sharing) {

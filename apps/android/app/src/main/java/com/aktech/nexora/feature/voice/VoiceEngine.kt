@@ -202,6 +202,16 @@ class VoiceEngine(private val context: Context) {
     private val _sharing = MutableStateFlow(false)
     val sharing: StateFlow<Boolean> = _sharing.asStateFlow()
 
+    /**
+     * Who the call says is sharing their screen, or null for nobody.
+     *
+     * One share at a time, arbitrated by the gateway - see `screen.claim`. A
+     * second share replaces the first rather than joining it, which is what
+     * every other product does and the only shape a single stage can have.
+     */
+    private val _screenHolder = MutableStateFlow<String?>(null)
+    val screenHolder: StateFlow<String?> = _screenHolder.asStateFlow()
+
     private val _localVideo = MutableStateFlow<VideoTrack?>(null)
     val localVideo: StateFlow<VideoTrack?> = _localVideo.asStateFlow()
 
@@ -294,6 +304,7 @@ class VoiceEngine(private val context: Context) {
         // The state goes first, and it matters. See `teardown`.
         _state.value = CallState.Idle
         channelId = null
+        _screenHolder.value = null
         teardown()
     }
 
@@ -486,6 +497,12 @@ class VoiceEngine(private val context: Context) {
         val size = ShareQuality.captureSize(context)
         shareSize = size
 
+        // Claimed before the capture starts, so whoever is sharing stops while
+        // this one is still starting - the alternative is a moment with two
+        // live captures, which is the moment somebody's screen is on somebody
+        // else's stage without either of them meaning it.
+        CallSocket.claimScreen()
+
         val track = beginCapture(
             ScreenCapturerAndroid(
                 permission,
@@ -529,8 +546,15 @@ class VoiceEngine(private val context: Context) {
         return track
     }
 
-    /** Stops whichever of the camera and the share is running. */
-    fun stopVideo() {
+    /**
+     * Stops whichever of the camera and the share is running.
+     *
+     * [replaced] is set when somebody else took the screen rather than the user
+     * stopping: releasing a claim that has already moved would take the screen
+     * away from whoever just took it.
+     */
+    fun stopVideo(replaced: Boolean = false) {
+        if (_sharing.value && !replaced) CallSocket.releaseScreen()
         runCatching { videoCapturer?.stopCapture() }
         videoCapturer?.dispose()
         videoCapturer = null
@@ -606,6 +630,19 @@ class VoiceEngine(private val context: Context) {
             "peer.joined" -> event.optJSONObject("peer")?.let {
                 addPeer(CallPeer.from(it))
                 CallTones.play(CallTones.Tone.JOIN)
+            }
+
+            "screen.holder" -> {
+                // `optString` turns a JSON null into "", and "" is not a peer.
+                val holder = event.optString("peerId").takeIf { it.isNotEmpty() }
+                _screenHolder.value = holder
+                // Somebody else took it. The capture is torn down rather than
+                // left running unpublished: a screen still being read is still
+                // a privacy question, whatever is being done with the frames.
+                if (_sharing.value && holder != null && holder != selfPeerId) {
+                    _problem.value = "Somebody else started sharing, so your share stopped."
+                    stopVideo(replaced = true)
+                }
             }
 
             "peer.left" -> {

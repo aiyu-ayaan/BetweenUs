@@ -122,6 +122,15 @@ interface VoiceState {
   stats: LinkStats[];
   /** Set when this client is sending no audio while believing it is. */
   notHeard: boolean;
+  /**
+   * Who the call says is sharing their screen, or null for nobody.
+   *
+   * One share at a time, decided by the gateway. Kept even though the tiles
+   * already carry a screen track each, because this is the *authority* and they
+   * are the consequence: a peer that has taken over is holding it a moment
+   * before its first frame arrives, and the button has to say so immediately.
+   */
+  screenHolder: string | null;
 
   join: (channelId: string) => Promise<void>;
   /**
@@ -140,7 +149,8 @@ interface VoiceState {
     withAudio: boolean,
     intent: ShareIntent,
   ) => Promise<void>;
-  stopScreenShare: () => Promise<void>;
+  /** `replaced` is set when somebody else took the screen, not the user. */
+  stopScreenShare: (replaced?: boolean) => Promise<void>;
   watch: (identity: string | null) => void;
   /** Opens the channel the call is in, from wherever the client has wandered. */
   openCallChannel: () => Promise<void>;
@@ -206,6 +216,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
   error: null,
   stats: [],
   notHeard: false,
+  screenHolder: null,
 
   join: async (channelId) => {
     if (get().channelId === channelId && get().status !== 'idle') return;
@@ -227,6 +238,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
       tiles: [],
       shares: [],
       watching: null,
+      screenHolder: null,
     });
 
     try {
@@ -299,6 +311,27 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
         onFatal: (message) => {
           if (get().channelId !== channelId) return;
           void get().leave(message);
+        },
+        onScreenHolder: (peerId) => {
+          if (useVoiceStore.getState().channelId !== channelId) return;
+          set({ screenHolder: peerId });
+
+          // Somebody else took it. Teams does this and it is the right way
+          // round: the person who just pressed the button gets what they asked
+          // for, and the previous share stops rather than the two of them
+          // fighting over one stage. The capture is torn down here rather than
+          // left running muted - a screen that is still being captured is still
+          // a privacy question, whatever is being done with the frames.
+          const local = useVoiceStore.getState();
+          if (local.screenEnabled && peerId !== null && peerId !== mesh?.peerId()) {
+            void get()
+              .stopScreenShare(true)
+              .then(() =>
+                useVoiceStore.setState({
+                  error: 'Somebody else started sharing, so your share stopped.',
+                }),
+              );
+          }
         },
       });
 
@@ -390,6 +423,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
       cameraEnabled: false,
       screenEnabled: false,
       sharedDisplayId: null,
+      screenHolder: null,
       error: reason ?? null,
     });
   },
@@ -476,6 +510,12 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
     const { status } = get();
     if (!mesh || status !== 'connected') return;
 
+    // Claimed before the picker's answer is turned into a capture, so the
+    // person already sharing stops while this one is still starting. Claiming
+    // afterwards would mean a moment with two live captures, which is the
+    // moment somebody's private window is on somebody else's screen.
+    mesh.claimScreen();
+
     try {
       await window.nexora?.selectScreenSource(source?.id ?? '', withAudio);
       const options = shareOptions(
@@ -547,9 +587,15 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
     }
   },
 
-  stopScreenShare: async () => {
+  stopScreenShare: async (replaced = false) => {
     const { status, watching } = get();
     if (!mesh || status !== 'connected') return;
+
+    // Releasing a claim somebody else already took would take the screen away
+    // from them, so a share that stopped *because* it was replaced says
+    // nothing. The gateway ignores it either way; not sending it keeps the two
+    // ends telling the same story.
+    if (!replaced) mesh.releaseScreen();
 
     try {
       stopLocal('screen');

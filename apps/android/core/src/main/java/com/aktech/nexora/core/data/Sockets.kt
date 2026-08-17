@@ -283,6 +283,18 @@ object CallSocket : JsonSocket("/ws/call") {
         channelId = null
         send(JSONObject().put("type", "leave"))
     }
+
+    /**
+     * "I am about to share my screen" and "I have stopped".
+     *
+     * One share at a time in a call, and the gateway is what decides whose: two
+     * people pressing the button at the same moment need one answer, and a mesh
+     * has no ordering to give one. Everybody is then told who holds it, and
+     * whoever was sharing before stops.
+     */
+    fun claimScreen() = send(JSONObject().put("type", "screen.claim"))
+
+    fun releaseScreen() = send(JSONObject().put("type", "screen.release"))
 }
 
 /** `/ws/remote`: remote-session handshake, input and signalling. Never the screen. */
