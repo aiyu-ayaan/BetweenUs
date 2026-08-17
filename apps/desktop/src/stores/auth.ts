@@ -3,6 +3,7 @@ import type { PublicUser } from '@nexora/shared-types';
 import { ApiError, api, apiBaseUrl, configureApi } from '../services/api';
 import { chatSocket, presenceSocket } from '../services/socket';
 import { initIdentity, resetE2ee, type BackupSecret } from '../services/e2ee';
+import { cache } from '../services/cache';
 
 /** Both realtime sockets carry the same access token and reconnect together. */
 function connectSockets(accessToken: string): void {
@@ -144,6 +145,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
     try {
       const user = await api.me();
+      // Before anything reads from it: a cache belonging to another account has
+      // to be gone, not merely about to be.
+      await cache.claim(user.id).catch(() => undefined);
       set({ user, status: 'authenticated', error: null });
       void initIdentity(user.id).catch(() => undefined);
     } catch {
@@ -157,6 +161,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     presenceSocket.disconnect();
     resetE2ee();
     localStorage.removeItem(STORAGE_KEY);
+    // Only a deliberate sign-out empties the cache. A session that expired on
+    // its own is coming back, and should come back instantly.
+    void cache.clear().catch(() => undefined);
     set({ user: null, accessToken: null, status: 'idle' });
     if (stored) await api.logout(stored).catch(() => undefined);
   },
@@ -172,6 +179,7 @@ function applySession(
   secret?: BackupSecret,
 ): void {
   localStorage.setItem(STORAGE_KEY, refreshToken);
+  void cache.claim(user.id).catch(() => undefined);
   set({ user, accessToken, status: 'authenticated', error: null });
   connectSockets(accessToken);
   // Device key setup runs alongside the first server load; everything that

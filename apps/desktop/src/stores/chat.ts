@@ -24,6 +24,7 @@ import {
 import { decodeBody, encodeBody } from '../services/message-body';
 import { notifyMessage, publishUnreadCount, windowIsFocused } from '../services/notifications';
 import { mentionsMe } from '../services/mentions';
+import { cache } from '../services/cache';
 import { useAuthStore } from './auth';
 
 /**
@@ -190,8 +191,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
   jumpTo: null,
 
   loadServers: async () => {
+    // What was on screen last time, before anything is asked of the network.
+    if (get().servers.length === 0) {
+      const cached = await cache.servers().catch(() => null);
+      if (cached && get().servers.length === 0) set({ servers: cached });
+    }
+
     const servers = await api.servers();
     set({ servers });
+    void cache.putServers(servers).catch(() => undefined);
     // Watch every server, not only the open one: being added to or removed
     // from one has to reach this client wherever it happens to be looking.
     chatSocket.syncServers(servers.map((server) => server.id));
@@ -248,7 +256,17 @@ export const useChatStore = create<ChatState>((set, get) => ({
    * notified about while the user is somewhere else entirely.
    */
   loadDirects: async () => {
-    const directs = (await api.directChannels().catch(() => [])).map(toDirectChannel);
+    if (get().directs.length === 0) {
+      const cached = await cache.directs().catch(() => null);
+      if (cached && get().directs.length === 0) {
+        set({ directs: cached.map(toDirectChannel) });
+      }
+    }
+
+    const rows = await api.directChannels().catch(() => null);
+    if (rows === null) return;
+    void cache.putDirects(rows).catch(() => undefined);
+    const directs = rows.map(toDirectChannel);
     set({ directs });
     chatSocket.syncSubscriptions(subscribable(get().channels, directs));
   },
@@ -264,12 +282,21 @@ export const useChatStore = create<ChatState>((set, get) => ({
   selectServer: async (serverId) => {
     set({ view: 'server', activeServerId: serverId, channels: [], members: [], messages: [] });
 
+    // The channel list this server had last time, painted while the fresh one
+    // is fetched. A sidebar that appears instantly and corrects itself beats
+    // an empty column and a spinner.
+    const cachedChannels = await cache.channels(serverId).catch(() => null);
+    if (cachedChannels && get().activeServerId === serverId && get().channels.length === 0) {
+      set({ channels: cachedChannels });
+    }
+
     const [channels, members] = await Promise.all([
       api.channels(serverId),
       // Members carry the display names presence attaches status to.
       api.members(serverId).catch(() => []),
     ]);
     set({ channels, members });
+    void cache.putChannels(serverId, channels).catch(() => undefined);
 
     // Subscribed to every readable channel, not only the open one: a message in
     // another channel has to arrive for it to be counted or notified about.
@@ -321,12 +348,31 @@ export const useChatStore = create<ChatState>((set, get) => ({
     chatSocket.subscribe(channelId);
     if (get().rightPanel === 'pins') void get().loadPins();
 
+    // Nothing in memory: what this device has on disk, decrypted here rather
+    // than waiting for the round trip. It is the same fifty messages the fetch
+    // below is about to return, and on a slow connection - or none at all -
+    // it is the difference between a conversation and a spinner.
+    if (cached === undefined) {
+      const stored = await cache.messages(channelId).catch(() => []);
+      if (stored.length > 0 && get().activeChannelId === channelId) {
+        const items = await Promise.all(stored.map(decrypt));
+        if (get().activeChannelId === channelId && get().history[channelId] === undefined) {
+          set({
+            messages: items,
+            history: { ...get().history, [channelId]: items },
+            loadingMessages: false,
+          });
+        }
+      }
+    }
+
     // Members who joined after this channel was keyed need the key wrapped for
     // them; opening the channel is the natural moment to do it.
     void syncChannelKeys(channelId).catch(() => undefined);
 
     try {
       const page = await api.messages(channelId);
+      void cache.putMessages(page.items).catch(() => undefined);
       const items = await Promise.all(page.items.map(decrypt));
 
       // Where the line goes: the first message somebody else wrote after this
@@ -404,6 +450,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set({ loadingOlder: true });
     try {
       const page = await api.messages(channelId, cursor);
+      void cache.putMessages(page.items).catch(() => undefined);
       const older = await Promise.all(page.items.map(decrypt));
 
       // Re-read: decryption is async and the channel may have changed. The
@@ -756,6 +803,9 @@ function replaceMessage(message: DecryptedMessage): void {
 // every subscribed channel - not only the one on screen.
 chatSocket.on((event) => {
   if (event.type === 'message.updated') {
+    // An edit, a deletion, a pin and a reaction all replace the stored row, so
+    // the cache does not hand back a message that was taken down an hour ago.
+    void cache.putMessages([event.message]).catch(() => undefined);
     void decrypt(event.message).then(replaceMessage);
     return;
   }
@@ -788,6 +838,10 @@ chatSocket.on((event) => {
 
   if (event.type !== 'message.created') return;
   const incoming = event.message;
+  // Cached whether or not the channel is open: a conversation nobody has looked
+  // at this session is exactly the one that should not be a spinner when the
+  // badge is finally clicked.
+  void cache.putMessages([incoming]).catch(() => undefined);
 
   void decryptForChannel(incoming.channelId, incoming.content).then((plaintext) => {
     const message = toDecrypted(incoming, plaintext);
