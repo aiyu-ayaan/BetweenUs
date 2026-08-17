@@ -1,8 +1,5 @@
 package com.aktech.nexora.feature.voice
 
-import android.app.Activity
-import android.content.Context
-import android.content.ContextWrapper
 import android.content.pm.ActivityInfo
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
@@ -56,6 +53,7 @@ import com.aktech.nexora.ui.components.Avatar
 import com.aktech.nexora.ui.components.IconAction
 import com.aktech.nexora.ui.components.NexoraIcon
 import com.aktech.nexora.ui.components.NexoraIcons
+import com.aktech.nexora.ui.components.findActivity
 import com.aktech.nexora.ui.theme.Accent
 import com.aktech.nexora.ui.theme.Danger
 import com.aktech.nexora.ui.theme.Slate100
@@ -444,20 +442,6 @@ private fun FilmstripTile(
             )
         }
     }
-}
-
-/**
- * The activity behind a composable's context.
- *
- * `LocalContext.current as? Activity` is the obvious line and it is wrong: the
- * context Compose hands out is wrapped - by the theme, by the view tree - so
- * the cast quietly produces null and every orientation request goes nowhere.
- * A silent null is why the landscape button appeared to do nothing at all.
- */
-private tailrec fun Context.findActivity(): Activity? = when (this) {
-    is Activity -> this
-    is ContextWrapper -> baseContext.findActivity()
-    else -> null
 }
 
 /**

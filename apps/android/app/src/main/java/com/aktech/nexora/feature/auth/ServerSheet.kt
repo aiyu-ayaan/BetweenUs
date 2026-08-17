@@ -24,7 +24,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import android.app.Activity
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -35,6 +34,7 @@ import com.aktech.nexora.core.data.Session
 import com.aktech.nexora.ui.components.GlobeIcon
 import com.aktech.nexora.ui.components.NexoraButton
 import com.aktech.nexora.ui.components.NexoraField
+import com.aktech.nexora.ui.components.findActivity
 import com.aktech.nexora.ui.components.Notice
 import com.aktech.nexora.ui.theme.Accent
 import com.aktech.nexora.ui.theme.Danger
@@ -63,7 +63,9 @@ import kotlinx.coroutines.launch
 fun ServerSheet(onDismiss: () -> Unit) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val scope = rememberCoroutineScope()
-    val activity = LocalContext.current as? Activity
+    // Not a cast: a modal bottom sheet composes into its own window, so the
+    // context here is wrapped and `as? Activity` is null. See findActivity.
+    val activity = LocalContext.current.findActivity()
 
     var address by remember { mutableStateOf(Endpoint.current()) }
     var note by remember { mutableStateOf<String?>(null) }
