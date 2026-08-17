@@ -29,12 +29,34 @@ apps/desktop
 !apps/desktop/public
 !apps/desktop/tailwind.theme.mjs
 
-# Claude Code keeps full worktree copies under here; they would be uploaded as
-# part of the context and rebuilt into every image.
-.claude
+# No image builds the Android client either, and it is the largest directory in
+# the tree - half a gigabyte of Gradle output, a build cache and the AAR
+# dependencies it unpacked. None of it is a workspace package (there is no
+# package.json; it is Gradle), so nothing in a service image can reference it
+# and nothing breaks by its absence.
+#
+# Unlike apps/desktop above, none of it comes back: the web client mounts the
+# desktop's React source, and there is no equivalent share with the phone.
+apps/android
 
-# Documentation is not part of any image.
+# Build output anywhere, not only at the root. `build` on its own matches the
+# top-level directory and nothing else, which left every nested one - a Gradle
+# module's `build/`, a package's - in the context.
+**/build
+**/.gradle
+**/out
+
+# Claude Code keeps full worktree copies under here; they would be uploaded as
+# part of the context and rebuilt into every image. `.agent` and `.agents` are
+# the same kind of thing from other tools.
+.claude
+.agent
+.agents
+
+# Documentation, and the screenshots it links to, are not part of any image.
 development
+docs
+pictures
 *.md
 
 # Secrets never belong in an image layer; compose injects them at run time.
