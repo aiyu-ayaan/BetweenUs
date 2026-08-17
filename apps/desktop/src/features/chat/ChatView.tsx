@@ -275,6 +275,7 @@ function MessageList({
   const jumpTo = useChatStore((state) => state.jumpTo);
   const clearJump = useChatStore((state) => state.clearJump);
   const dividerId = useChatStore((state) => state.divider[channel.id] ?? null);
+  const unreadCount = useChatStore((state) => state.unread[channel.id] ?? 0);
 
   const [menu, setMenu] = useState<{ id: string; at: { x: number; y: number } } | null>(null);
   const [armedDelete, setArmedDelete] = useState<string | null>(null);
@@ -443,6 +444,30 @@ function MessageList({
         <p className="py-2 text-center text-xs text-slate-500" aria-live="polite">
           Loading earlier messages…
         </p>
+      )}
+
+      {/* The line is a place, and a place is no use if you cannot get to it.
+          Discord puts this bar at the top of the channel for the same reason:
+          the unread messages are usually above the fold, and scrolling for them
+          by hand is how people give up and mark everything read. */}
+      {dividerId && (
+        <button
+          type="button"
+          onClick={() => {
+            const row = document.getElementById(`message-${dividerId}`);
+            row?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            setHighlighted(dividerId);
+            window.setTimeout(() => setHighlighted(null), 2000);
+          }}
+          className="sticky top-0 z-10 mb-2 flex w-full cursor-pointer items-center gap-2 rounded-md bg-danger/90 px-3 py-1.5 text-left text-xs font-medium text-white transition-colors duration-150 hover:bg-danger"
+        >
+          <span>
+            {unreadCount > 0
+              ? `${unreadCount} new message${unreadCount === 1 ? '' : 's'}`
+              : 'New messages'}
+          </span>
+          <span className="ml-auto underline underline-offset-2">Jump to the first</span>
+        </button>
       )}
 
       <ul ref={list}>

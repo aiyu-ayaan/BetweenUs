@@ -206,6 +206,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   loadUnread: async () => {
+    // Whatever this device last knew, first. The markers decide where the
+    // unread line goes, and a channel opened before the network answers used to
+    // get no line at all - which is the whole of "the line does not survive a
+    // restart": it was a race, not a missing feature.
+    const stored = await cache.readMarkers().catch(() => null);
+    if (stored && Object.keys(get().readMarkers).length === 0) set({ readMarkers: stored });
+
     const counts = await api.unread().catch(() => []);
     const unread: Record<string, number> = {};
     const readMarkers: Record<string, string | null> = {};
@@ -214,7 +221,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
       readMarkers[entry.channelId] = entry.lastReadAt;
     }
     set({ readMarkers });
+    void cache.putReadMarkers(readMarkers).catch(() => undefined);
     setUnread(unread);
+    markersKnown();
   },
 
   markActiveRead: () => {
@@ -226,14 +235,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
       delete unread[channelId];
       setUnread(unread);
     }
-
-    // The line goes with the badge, a few seconds behind it. Discord keeps it
-    // until the channel is opened again, which leaves it sitting there long
-    // after everything below it has been read; here it marks unread messages
-    // and nothing else, so it clears itself once they are read. The delay is so
-    // it can still be seen on the way in - a line that vanishes the instant the
-    // window is focused never did its job.
-    if (get().divider[channelId]) clearDividerSoon(channelId);
 
     void api
       .markChannelRead(channelId)
@@ -307,6 +308,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   selectChannel: async (channelId) => {
+    // The markers have to be in hand before the line can be placed at all. On a
+    // cold start this is a race the channel used to win: the first channel
+    // opens while `loadUnread` is still in flight, so there was no marker to
+    // draw from and the line was simply absent until the next visit.
+    await whenMarkersKnown();
+
     // Read before it is advanced: the "new messages" line is drawn from where
     // the marker stood when the channel was opened, and marking it read below
     // is what moves it.
@@ -387,10 +394,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
               new Date(message.createdAt).getTime() > new Date(previousMarker).getTime(),
           )
         : undefined;
+      // It stays for as long as the channel is open. It used to be taken away
+      // five seconds later, which made it a notification rather than a place -
+      // and a place is what it is for: the point of the line is to still be
+      // there when you have finished reading and want to know what was new.
+      // Opening the channel again, with everything read, is what clears it.
       set({ divider: { ...get().divider, [channelId]: firstUnread?.id ?? null } });
-      // Opening the channel is reading it, so the line it was just given is
-      // already on borrowed time - long enough to be seen, then gone.
-      if (firstUnread) clearDividerSoon(channelId);
       // The cache is written even when the user has already moved on - the
       // fetch was paid for, and the next visit gets it for free.
       set({
@@ -654,6 +663,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   reset: () => {
     setUnread({});
+    forgetMarkers();
     set({
       view: 'home',
       servers: [],
@@ -683,23 +693,30 @@ export const useChatStore = create<ChatState>((set, get) => ({
  * marker only has to be roughly current - it is a "you have seen up to here",
  * not an audit trail.
  */
-/** How long the unread line stays after its messages have been read. */
-const DIVIDER_LINGER_MS = 5000;
-const dividerTimers = new Map<string, number>();
+/**
+ * Resolves once the read markers are in hand.
+ *
+ * They arrive from `notification-service` a moment after sign-in, and the first
+ * channel opens before that - so the unread line was being placed against an
+ * empty marker table and came out as "nothing is new". That is not a line that
+ * fails to survive a restart; it is a line that loses a race on every cold
+ * start. The channel waits for the answer instead, and the cached markers make
+ * that wait a disk read rather than a round trip.
+ */
+let markersKnown: () => void = () => undefined;
+let markersReady: Promise<void> = new Promise<void>((resolve) => {
+  markersKnown = resolve;
+});
 
-function clearDividerSoon(channelId: string): void {
-  if (dividerTimers.has(channelId)) return;
-  dividerTimers.set(
-    channelId,
-    window.setTimeout(() => {
-      dividerTimers.delete(channelId);
-      const state = useChatStore.getState();
-      // Something new may have arrived and re-placed it while we waited; only
-      // clear it if this channel is still the one being read.
-      if (state.activeChannelId !== channelId || state.unread[channelId]) return;
-      useChatStore.setState({ divider: { ...state.divider, [channelId]: null } });
-    }, DIVIDER_LINGER_MS),
-  );
+function whenMarkersKnown(): Promise<void> {
+  return markersReady;
+}
+
+/** A new session asks again: the markers belong to whoever just signed in. */
+function forgetMarkers(): void {
+  markersReady = new Promise<void>((resolve) => {
+    markersKnown = resolve;
+  });
 }
 
 let readTimer: number | null = null;

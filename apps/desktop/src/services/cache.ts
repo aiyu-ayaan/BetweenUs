@@ -124,6 +124,16 @@ export const cache = {
   directs: (): Promise<DirectChannel[] | null> => readList('directs'),
   putDirects: (directs: DirectChannel[]): Promise<void> => writeList('directs', directs),
 
+  /**
+   * Where each channel had been read up to. Cached because the unread line is
+   * drawn from it the moment a channel opens, and on a cold start that is well
+   * before the network has answered - which is how a restart used to lose the
+   * line entirely.
+   */
+  readMarkers: (): Promise<Record<string, string | null> | null> => readList('readMarkers'),
+  putReadMarkers: (markers: Record<string, string | null>): Promise<void> =>
+    writeList('readMarkers', markers),
+
   // --- Messages -------------------------------------------------------------
 
   /** The newest page of a channel, oldest first, as the screen wants it. */
