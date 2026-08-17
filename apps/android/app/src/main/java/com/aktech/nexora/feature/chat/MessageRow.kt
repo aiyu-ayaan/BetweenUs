@@ -355,6 +355,9 @@ private fun AttachmentCard(
     var bytes by remember(attachment.key) { mutableStateOf<ByteArray?>(null) }
     var failed by remember(attachment.key) { mutableStateOf(false) }
     var decrypting by remember(attachment.key) { mutableStateOf(false) }
+    /** Where the decrypted video landed, so the poster and the player share it. */
+    var mediaUri by remember(attachment.key) { mutableStateOf<Uri?>(null) }
+    var poster by remember(attachment.key) { mutableStateOf<Bitmap?>(null) }
 
     // Automatically decrypt images and videos so they preview immediately
     LaunchedEffect(attachment.key) {
@@ -364,6 +367,18 @@ private fun AttachmentCard(
                 .onSuccess { bytes = it }
                 .onFailure { failed = true }
             decrypting = false
+        }
+    }
+
+    // A decrypted video used to stay a grey card with a play button on it, so
+    // "the video has arrived" and "the video has not arrived" looked the same.
+    LaunchedEffect(bytes) {
+        val fetched = bytes ?: return@LaunchedEffect
+        if (!attachment.isVideo || mediaUri != null) return@LaunchedEffect
+        runCatching {
+            val uri = cacheDecryptedMedia(context, fetched, attachment.name)
+            mediaUri = uri
+            poster = videoPoster(uri, context)
         }
     }
 
@@ -470,9 +485,13 @@ private fun AttachmentCard(
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(12.dp))
                         .clickable {
+                            val ready = mediaUri
                             val currentBytes = bytes
-                            if (currentBytes != null) {
+                            if (ready != null) {
+                                onPlayVideo(ready, attachment.name)
+                            } else if (currentBytes != null) {
                                 val uri = cacheDecryptedMedia(context, currentBytes, attachment.name)
+                                mediaUri = uri
                                 onPlayVideo(uri, attachment.name)
                             } else {
                                 scope.launch {
@@ -488,10 +507,25 @@ private fun AttachmentCard(
                             }
                         },
                 ) {
+                    poster?.let { frame ->
+                        Image(
+                            bitmap = frame.asImageBitmap(),
+                            contentDescription = attachment.name,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 160.dp, max = 300.dp),
+                        )
+                    }
+
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .background(Color(0xFF14121E))
+                            .align(if (poster != null) Alignment.BottomCenter else Alignment.Center)
+                            .background(
+                                if (poster != null) Color.Black.copy(alpha = 0.55f)
+                                else Color(0xFF14121E),
+                            )
                             .padding(14.dp),
                     ) {
                         Row(

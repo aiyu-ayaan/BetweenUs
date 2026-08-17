@@ -99,6 +99,26 @@ suspend fun readPicked(context: Context, uri: Uri): PickedFile = withContext(Dis
     PickedFile(name, type, bytes)
 }
 
+/**
+ * Name and kind without reading the file.
+ *
+ * The send preview needs to label what was picked and decide whether to draw a
+ * player or a picture; reading a 200 MB video into memory to answer that would
+ * be absurd, and the content resolver answers both from the index.
+ */
+suspend fun describePicked(context: Context, uri: Uri): PickedPreview = withContext(Dispatchers.IO) {
+    val resolver = context.contentResolver
+    val type = resolver.getType(uri) ?: "application/octet-stream"
+    val name = runCatching {
+        resolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
+            val column = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+            if (column >= 0 && cursor.moveToFirst()) cursor.getString(column) else null
+        }
+    }.getOrNull()?.takeIf { it.isNotBlank() } ?: "attachment${extensionFor(type)}"
+
+    PickedPreview(uri = uri, name = name, contentType = type)
+}
+
 /** Somewhere for the camera app to put a photo, and a URI it may write to. */
 fun cameraTarget(context: Context): Uri {
     val directory = File(context.cacheDir, "camera").apply { mkdirs() }

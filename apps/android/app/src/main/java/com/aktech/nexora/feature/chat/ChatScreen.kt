@@ -105,6 +105,13 @@ fun ChatScreen(
     var pending by remember { mutableStateOf<List<MessageAttachment>>(emptyList()) }
     var uploading by remember { mutableStateOf(false) }
     var showAttachmentSheet by remember { mutableStateOf(false) }
+    /**
+     * Media that has been picked but not yet looked at. Nothing is read off
+     * disk, encrypted or uploaded until the preview is sent from - which is the
+     * whole point of it.
+     */
+    var previewing by remember { mutableStateOf<List<PickedPreview>>(emptyList()) }
+    var previewCaption by remember { mutableStateOf("") }
 
     // Media Viewer dialog states
     var viewingImage by remember { mutableStateOf<Pair<Bitmap, String>?>(null) }
@@ -116,21 +123,9 @@ fun ChatScreen(
         androidx.activity.result.contract.ActivityResultContracts.TakePicture(),
     ) { taken ->
         if (taken && photoUri != null) {
-            scope.launch {
-                uploading = true
-                failure = runCatching {
-                    val picked = readPicked(context, photoUri!!)
-                    val uploaded = Conversation.uploadAttachment(
-                        channelId = channelId,
-                        name = picked.name,
-                        contentType = picked.contentType,
-                        bytes = picked.bytes,
-                    )
-                    pending = pending + uploaded
-                    null
-                }.exceptionOrNull()?.message
-                uploading = false
-            }
+            // Straight to the preview: a photo just taken is the one most worth
+            // looking at before it goes anywhere.
+            scope.launch { previewing = previewing + describePicked(context, photoUri!!) }
         }
     }
 
@@ -165,6 +160,36 @@ fun ChatScreen(
     LaunchedEffect(listState.firstVisibleItemIndex) {
         if (listState.firstVisibleItemIndex <= 1 && messages.isNotEmpty()) {
             Conversation.loadOlder(channelId)
+        }
+    }
+
+    /** Reads, seals, uploads and sends whatever the preview is holding. */
+    fun sendPreviewed() {
+        val chosen = previewing
+        if (chosen.isEmpty() || uploading) return
+        scope.launch {
+            uploading = true
+            failure = runCatching {
+                val uploaded = chosen.map { item ->
+                    val picked = readPicked(context, item.uri)
+                    require(picked.bytes.size <= MAX_ATTACHMENT_BYTES) {
+                        "${picked.name} is larger than 25 MB"
+                    }
+                    Conversation.uploadAttachment(
+                        channelId = channelId,
+                        name = picked.name,
+                        contentType = picked.contentType,
+                        bytes = picked.bytes,
+                    )
+                }
+                Conversation.send(channelId, previewCaption.trim(), pending + uploaded, replyingTo)
+                pending = emptyList()
+                replyingTo = null
+                previewing = emptyList()
+                previewCaption = ""
+                null
+            }.exceptionOrNull()?.message
+            uploading = false
         }
     }
 
@@ -366,28 +391,50 @@ fun ChatScreen(
             onDismiss = { showAttachmentSheet = false },
             onPicked = { uris ->
                 scope.launch {
-                    uploading = true
-                    failure = runCatching {
-                        uris.forEach { uri ->
-                            val picked = readPicked(context, uri)
-                            require(picked.bytes.size <= MAX_ATTACHMENT_BYTES) {
-                                "${picked.name} is larger than 25 MB"
+                    val described = uris.map { describePicked(context, it) }
+                    // Photos and video are looked at first; a spreadsheet has
+                    // nothing to look at, so it uploads as it always did.
+                    val (media, documents) = described.partition { it.isPreviewable }
+                    previewing = previewing + media
+                    if (documents.isNotEmpty()) {
+                        uploading = true
+                        failure = runCatching {
+                            documents.forEach { item ->
+                                val picked = readPicked(context, item.uri)
+                                require(picked.bytes.size <= MAX_ATTACHMENT_BYTES) {
+                                    "${picked.name} is larger than 25 MB"
+                                }
+                                pending = pending + Conversation.uploadAttachment(
+                                    channelId = channelId,
+                                    name = picked.name,
+                                    contentType = picked.contentType,
+                                    bytes = picked.bytes,
+                                )
                             }
-                            val uploaded = Conversation.uploadAttachment(
-                                channelId = channelId,
-                                name = picked.name,
-                                contentType = picked.contentType,
-                                bytes = picked.bytes,
-                            )
-                            pending = pending + uploaded
-                        }
-                        null
-                    }.exceptionOrNull()?.message
-                    uploading = false
+                            null
+                        }.exceptionOrNull()?.message
+                        uploading = false
+                    }
                 }
             },
         )
     }
+
+    // --- What is about to be sent ---
+    SendPreviewDialog(
+        items = previewing,
+        caption = previewCaption,
+        busy = uploading,
+        note = if (uploading) "Encrypting and uploading…" else null,
+        onCaption = { previewCaption = it },
+        onRemove = { previewing = previewing - it },
+        onAdd = { showAttachmentSheet = true },
+        onCancel = {
+            previewing = emptyList()
+            previewCaption = ""
+        },
+        onSend = { sendPreviewed() },
+    )
 
     // --- Fullscreen Interactive Image Viewer ---
     viewingImage?.let { (bitmap, title) ->

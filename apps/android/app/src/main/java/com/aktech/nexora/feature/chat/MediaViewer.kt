@@ -4,6 +4,7 @@ import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
+import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
@@ -523,6 +524,25 @@ fun cacheDecryptedMedia(context: Context, bytes: ByteArray, fileName: String): U
     val file = File(directory, "${System.currentTimeMillis()}_$safeName")
     FileOutputStream(file).use { it.write(bytes) }
     return FileProvider.getUriForFile(context, "${context.packageName}.files", file)
+}
+
+/**
+ * The first frame of a video, for the card in the message list.
+ *
+ * A decrypted video used to be a grey rectangle with a play button: the bytes
+ * were already on the device and the picture was still a tap away. The
+ * retriever wants a file rather than a byte array, which is the same file the
+ * player is handed when the tap does come.
+ */
+suspend fun videoPoster(uri: Uri, context: Context): Bitmap? = withContext(Dispatchers.IO) {
+    runCatching {
+        MediaMetadataRetriever().use { retriever ->
+            retriever.setDataSource(context, uri)
+            // A frame a moment in, not frame zero: a video that fades in from
+            // black has a first frame that is black.
+            retriever.getFrameAtTime(500_000) ?: retriever.frameAtTime
+        }
+    }.getOrNull()
 }
 
 private fun shareBitmap(context: Context, bitmap: Bitmap, title: String) {
