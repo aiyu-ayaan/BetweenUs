@@ -16,6 +16,8 @@ import { AttachmentList } from './Attachments';
 import { EmojiPicker } from './EmojiPicker';
 import { MessageMenu } from './MessageMenu';
 import { SendPreview, isPreviewable } from './SendPreview';
+import { EmojiSuggest } from './EmojiSuggest';
+import { emojiQueryAt } from './emoji-names';
 import { formatBytes, uploadAttachment } from '../../services/attachments';
 import { OVERFLOW_CHARS, overflowFile, replyPreview } from '../../services/message-body';
 import { reactorNames } from '../../services/reactions';
@@ -872,6 +874,12 @@ function MessageComposer({
   const [uploading, setUploading] = useState<{ name: string; percent: number } | null>(null);
   const [previewing, setPreviewing] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
+  /**
+   * The `:shortcode` being typed at the caret, if there is one. Held rather
+   * than derived on render because it depends on where the caret is, which is a
+   * property of the element and not of the value.
+   */
+  const [emojiQuery, setEmojiQuery] = useState<{ term: string; start: number } | null>(null);
   const [emoji, setEmoji] = useState<{ x: number; y: number } | null>(null);
   const picker = useRef<HTMLInputElement>(null);
   const box = useRef<HTMLTextAreaElement>(null);
@@ -961,7 +969,7 @@ function MessageComposer({
     /* Dropping is handled by the panel, not by this box: a file aimed at the
        conversation is aimed at the conversation, and a two-centimetre target at
        the bottom of it was never the intent. */
-    <form onSubmit={(event) => void submit(event)} className="shrink-0 px-3.5 pb-4">
+    <form onSubmit={(event) => void submit(event)} className="relative shrink-0 px-3.5 pb-4">
       {failure && (
         <p role="alert" className="mb-2 text-sm text-danger">
           {failure}
@@ -1079,8 +1087,16 @@ function MessageComposer({
             value={content}
             onChange={(event) => {
               setContent(event.target.value);
+              setEmojiQuery(emojiQueryAt(event.target.value, event.target.selectionStart ?? 0));
               if (event.target.value.length > 0) notifyTyping(channel.id);
             }}
+            onSelect={(event) => {
+              // Moving the caret in or out of a shortcode changes the answer as
+              // much as typing does - clicking behind a `:word` should offer it.
+              const box = event.currentTarget;
+              setEmojiQuery(emojiQueryAt(box.value, box.selectionStart ?? 0));
+            }}
+            onBlur={() => setEmojiQuery(null)}
             onKeyDown={onKeyDown}
             onPaste={(event) => {
               // A screenshot on the clipboard is a file, and pasting it is how
@@ -1108,6 +1124,27 @@ function MessageComposer({
         <p className="mt-1.5 text-xs text-slate-400">
           That is longer than {OVERFLOW_CHARS} characters — it will be sent as a text file.
         </p>
+      )}
+
+      {emojiQuery && (
+        <EmojiSuggest
+          term={emojiQuery.term}
+          onClose={() => setEmojiQuery(null)}
+          onPick={(emoji) => {
+            // The shortcode is replaced, not appended to: what is on screen is
+            // `:fir`, and leaving that behind next to a 🔥 is the bug every
+            // half-finished version of this feature ships with.
+            const end = emojiQuery.start + emojiQuery.term.length + 1;
+            const next = `${content.slice(0, emojiQuery.start)}${emoji}${content.slice(end)}`;
+            const caret = emojiQuery.start + emoji.length;
+            setContent(next);
+            setEmojiQuery(null);
+            window.setTimeout(() => {
+              box.current?.focus();
+              box.current?.setSelectionRange(caret, caret);
+            }, 0);
+          }}
+        />
       )}
 
       {previewing && files.length > 0 && (
