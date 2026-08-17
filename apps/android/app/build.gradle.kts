@@ -49,16 +49,10 @@ android {
                 "proguard-rules.pro",
             )
 
-            /**
-             * Debug-signed on purpose, and this is not a release configuration.
-             *
-             * Without it `assembleRelease` produces an unsigned APK that no
-             * device will install, which makes the shrunk build impossible to
-             * actually try. A real signing config needs a keystore that is not
-             * in this repository and must never be - it is the hardening item
-             * in development/ANDROID_TODO.md.
-             */
-            signingConfig = signingConfigs.getByName("debug")
+            // No signing config. `assembleRelease` produces an unsigned APK
+            // until a real keystore is configured - which is deliberate: a
+            // keystore belongs to whoever ships the app and must never be in
+            // this repository. See development/ANDROID_TODO.md.
         }
     }
     compileOptions {

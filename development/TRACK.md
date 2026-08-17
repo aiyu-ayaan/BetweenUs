@@ -320,8 +320,9 @@ blocked by anything outside this document.
       `SharedPreferences` into the Keystore and keyed per deployment;
       private-CA certificate handling; a real signing config, which needs a
       keystore that is not in this repository. R8 and resource shrinking are on
-      - 54.8 MB to 43.1 MB - and the release build is debug-signed until that
-      keystore exists, so it can be installed and tried at all.
+      - 54.8 MB to 43.1 MB - and `assembleRelease` produces an unsigned APK
+      until that keystore is configured, which is the correct default: a
+      signing key belongs to whoever ships the app.
 - [ ] **Instrumented tests and CI**, opt-in crash reporting, and a light theme.
 
 ---
