@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type {
   Channel,
   ServerCustomRole,
+  ServerEmoji,
   UpdateServerRoleRequest,
   ServerInvite,
   ServerMember,
@@ -9,7 +10,19 @@ import type {
   UserSummary,
 } from '@nexora/shared-types';
 import { ASSIGNABLE_PERMISSIONS, PERMISSIONS, SERVER_ROLES } from '@nexora/permissions';
+import { EMOJI_NAME_PATTERN, MAX_SERVER_EMOJI } from '@nexora/shared-types';
 import { api } from '../../services/api';
+import { preparePicture } from '../../services/attachments';
+import {
+  MAX_EMOJI_BYTES,
+  addEmoji,
+  emojiFor,
+  isAnimatedType,
+  loadEmoji,
+  onEmojiChanged,
+  removeEmoji,
+} from '../../services/server-emoji';
+import { absoluteUrl } from '../../services/endpoint';
 import { inviteLink } from '../../services/invite-link';
 import { serverUrl } from '../../services/endpoint';
 import { syncChannelKeys } from '../../services/e2ee';
@@ -25,10 +38,11 @@ import {
   SpeakerIcon,
   TrashIcon,
   UsersIcon,
+  SmileIcon,
   XIcon,
 } from '../../components/icons';
 
-type Section = 'overview' | 'roles' | 'members' | 'channels' | 'invites';
+type Section = 'overview' | 'roles' | 'members' | 'channels' | 'invites' | 'emoji';
 
 const SECTIONS: Array<{ id: Section; label: string; icon: typeof UsersIcon }> = [
   { id: 'overview', label: 'Overview', icon: ShieldIcon },
@@ -36,6 +50,7 @@ const SECTIONS: Array<{ id: Section; label: string; icon: typeof UsersIcon }> = 
   { id: 'members', label: 'Members', icon: UsersIcon },
   { id: 'channels', label: 'Channels', icon: HashIcon },
   { id: 'invites', label: 'Invites', icon: UsersIcon },
+  { id: 'emoji', label: 'Emoji', icon: SmileIcon },
 ];
 
 /**
@@ -108,6 +123,7 @@ export function ServerSettings({ onClose }: { onClose: () => void }): JSX.Elemen
           {section === 'members' && <Members />}
           {section === 'channels' && <Channels />}
           {section === 'invites' && <Invites />}
+          {section === 'emoji' && <EmojiSection />}
         </div>
 
         <button
@@ -1380,4 +1396,170 @@ function describeInvite(invite: ServerInvite): string {
     ? `expires ${new Date(invite.expiresAt).toLocaleString()}`
     : 'never expires';
   return `${used}, ${until}`;
+}
+
+/**
+ * A server's own emoji: upload a picture, give it a name, type `:name:`.
+ *
+ * The picture goes through the ordinary picture route, which is where the image
+ * allowlist and the size cap already live. Two things it does *not* do to an
+ * animated file, and both matter: it does not re-encode it, because that is how
+ * an animated GIF becomes a still frame, and it does not square it off in a
+ * canvas for the same reason. A still picture is downscaled, since a 4000px PNG
+ * drawn at 22 is bytes nobody asked for.
+ */
+function EmojiSection(): JSX.Element {
+  const server = useChatStore((state) => state.servers.find((item) => item.id === state.activeServerId));
+  const mayManage = server?.permissions.includes(PERMISSIONS.MANAGE_EMOJI) ?? false;
+
+  const [emoji, setEmoji] = useState<ServerEmoji[]>([]);
+  const [name, setName] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+  const picker = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!server) return;
+    void loadEmoji(server.id).then(() => setEmoji(emojiFor(server.id)));
+    return onEmojiChanged(() => setEmoji(emojiFor(server.id)));
+  }, [server?.id]);
+
+  const upload = async (file: File | undefined): Promise<void> => {
+    if (!file || !server) return;
+    setBusy(true);
+    setNote(null);
+    try {
+      const suggested = name.trim() || fileStem(file.name);
+      if (!EMOJI_NAME_PATTERN.test(suggested)) {
+        throw new Error('A name is two to thirty-two lowercase letters, digits or underscores');
+      }
+
+      const animated = isAnimatedType(file.type);
+      // Animated files are uploaded exactly as they are - re-encoding one
+      // through a canvas keeps the first frame and throws the rest away, which
+      // is the whole of what people are asking for when they ask for this.
+      const picture = animated ? file : await preparePicture(file);
+      if (picture.size > MAX_EMOJI_BYTES) {
+        throw new Error(
+          `That is ${Math.round(picture.size / 1024)} KB. An emoji has to be under ` +
+            `${Math.round(MAX_EMOJI_BYTES / 1024)} KB - it is drawn at 22 pixels.`,
+        );
+      }
+
+      const stored = await api.uploadPicture(picture, file.name);
+      await addEmoji(server.id, suggested, stored.url, animated);
+      setName('');
+      setNote(`:${suggested}: is ready to type.`);
+    } catch (error) {
+      setNote(error instanceof Error ? error.message : 'That could not be uploaded');
+    } finally {
+      setBusy(false);
+      if (picker.current) picker.current.value = '';
+    }
+  };
+
+  if (!server) return <p className="text-sm text-slate-400">No server open.</p>;
+
+  return (
+    <>
+      <h1 className="text-xl font-semibold text-slate-50">Emoji</h1>
+      <p className="mt-2 text-sm text-slate-400">
+        Pictures this server can type by name. A GIF or an animated WebP stays animated - it is
+        stored exactly as uploaded. They are public, like avatars: an emoji is drawn by an image
+        tag a hundred times a screen, and an image tag cannot carry a password.
+      </p>
+
+      {mayManage ? (
+        <div className="mt-5 space-y-3 rounded-lg bg-surface-800 p-4">
+          <label className="block text-sm text-slate-300">
+            Name
+            <input
+              value={name}
+              onChange={(event) => setName(event.target.value.toLowerCase())}
+              placeholder="party_parrot"
+              className="mt-1 block w-full max-w-xs rounded-md border border-edge bg-surface-950 px-3 py-2 text-slate-100 placeholder-slate-500 outline-none focus:border-accent/60"
+            />
+            <span className="mt-1 block text-xs text-slate-500">
+              Two to thirty-two lowercase letters, digits or underscores. Left empty, the file
+              name is used.
+            </span>
+          </label>
+
+          <input
+            ref={picker}
+            type="file"
+            hidden
+            accept="image/png,image/jpeg,image/gif,image/webp"
+            onChange={(event) => void upload(event.target.files?.[0])}
+          />
+          <button
+            type="button"
+            disabled={busy || emoji.length >= MAX_SERVER_EMOJI}
+            onClick={() => picker.current?.click()}
+            className="cursor-pointer rounded-md bg-accent px-4 py-2 text-sm font-medium text-white transition-colors duration-200 hover:bg-accent-hover active:scale-[0.98] disabled:opacity-50"
+          >
+            {busy ? 'Uploading…' : 'Upload a picture'}
+          </button>
+          <p className="text-xs text-slate-500">
+            {emoji.length} of {MAX_SERVER_EMOJI} used · under {Math.round(MAX_EMOJI_BYTES / 1024)} KB
+            each
+          </p>
+        </div>
+      ) : (
+        <p className="mt-5 text-sm text-slate-400">
+          You can use these; adding one needs the “Manage emoji” permission.
+        </p>
+      )}
+
+      {note && <p className="mt-3 text-sm text-slate-300">{note}</p>}
+
+      {emoji.length === 0 ? (
+        <p className="mt-5 text-sm text-slate-400">None yet.</p>
+      ) : (
+        <ul className="mt-5 grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-2">
+          {emoji.map((item) => (
+            <li
+              key={item.id}
+              className="flex items-center gap-3 rounded-lg bg-surface-800 px-3 py-2"
+            >
+              <img
+                src={absoluteUrl(item.url)}
+                alt={`:${item.name}:`}
+                className="h-8 w-8 shrink-0 object-contain"
+              />
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm text-slate-100">:{item.name}:</span>
+                {item.animated && <span className="block text-xs text-slate-500">animated</span>}
+              </span>
+              {mayManage && (
+                <button
+                  type="button"
+                  aria-label={`Remove :${item.name}:`}
+                  title="Remove. Messages that used it keep their picture."
+                  onClick={() => {
+                    void removeEmoji(server.id, item.id).catch(() =>
+                      setNote('That could not be removed'),
+                    );
+                  }}
+                  className="cursor-pointer rounded p-1 text-slate-500 transition-colors duration-150 hover:text-danger"
+                >
+                  <XIcon className="h-4 w-4" />
+                </button>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </>
+  );
+}
+
+/** A file name with its extension and anything unusable taken off. */
+function fileStem(fileName: string): string {
+  return fileName
+    .replace(/\.[^.]+$/, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9_]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .slice(0, 32);
 }

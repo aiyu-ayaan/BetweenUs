@@ -16,6 +16,15 @@ export const PERMISSIONS = {
   MANAGE_MEMBER: 'MANAGE_MEMBER',
   MANAGE_ROLE: 'MANAGE_ROLE',
   MANAGE_SERVER: 'MANAGE_SERVER',
+  /**
+   * Uploading and removing a server's own emoji.
+   *
+   * Its own permission rather than a corner of MANAGE_SERVER, because the
+   * people a server actually wants doing this - whoever makes the pictures -
+   * are rarely the people it wants renaming it or deleting channels. Discord
+   * split it for the same reason.
+   */
+  MANAGE_EMOJI: 'MANAGE_EMOJI',
   START_CALL: 'START_CALL',
   MANAGE_CALL: 'MANAGE_CALL',
   REMOTE_VIEW: 'REMOTE_VIEW',
@@ -47,6 +56,7 @@ const ADMIN_PERMISSIONS: Permission[] = [
   PERMISSIONS.MANAGE_CHANNEL,
   PERMISSIONS.MANAGE_MEMBER,
   PERMISSIONS.MANAGE_ROLE,
+  PERMISSIONS.MANAGE_EMOJI,
 ];
 
 /** Role -> permission map. Remote permissions are granted per machine, never by role. */
@@ -119,6 +129,7 @@ export const ASSIGNABLE_PERMISSIONS: Permission[] = [
   PERMISSIONS.MANAGE_CHANNEL,
   PERMISSIONS.MANAGE_MEMBER,
   PERMISSIONS.MANAGE_ROLE,
+  PERMISSIONS.MANAGE_EMOJI,
   PERMISSIONS.START_CALL,
   PERMISSIONS.MANAGE_CALL,
 ];

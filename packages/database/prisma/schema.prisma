@@ -314,6 +314,7 @@ model Server {
   channels Channel[]
   invites  ServerInvite[]
   roles    ServerCustomRole[]
+  emoji    ServerEmoji[]
 
   @@index([ownerId])
   @@map("servers")
@@ -480,6 +481,39 @@ model Friendship {
   @@unique([userAId, userBId])
   @@index([userBId])
   @@map("friendships")
+}
+
+/// A server's own emoji: a picture and a name people type between colons.
+///
+/// The picture is an ordinary upload under `pictures/`, which is the one thing
+/// this deployment serves without authentication - it has to be, because an
+/// `<img>` tag cannot carry a header, and an emoji is drawn a hundred times a
+/// screen. So an emoji is public by construction, and nothing about it is
+/// secret: the name and the image are exactly what everybody in the server is
+/// meant to see.
+///
+/// What is *not* here is any link to a message. A message body is sealed, so
+/// which emoji a message uses is not a question this table could answer even
+/// if it wanted to - the client carries the manifest inside the envelope.
+model ServerEmoji {
+  id       String @id @default(uuid())
+  serverId String
+  /// Lowercase letters, digits and underscores - what fits between two colons.
+  name     String
+  /// Storage URL of the picture, rooted at `/api/v1/uploads/pictures/...`.
+  url      String
+  /// True for a GIF or an animated WebP. Stored rather than sniffed so a client
+  /// can decide whether to draw it still until it is hovered.
+  animated Boolean @default(false)
+  /// Null once the uploader's account is gone; the emoji outlives them.
+  createdById String?
+  createdAt   DateTime @default(now())
+
+  server Server @relation(fields: [serverId], references: [id], onDelete: Cascade)
+
+  @@unique([serverId, name])
+  @@index([serverId])
+  @@map("server_emoji")
 }
 
 model Message {

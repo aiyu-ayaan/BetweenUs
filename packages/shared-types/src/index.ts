@@ -233,6 +233,44 @@ export interface JoinServerRequest {
   code: string;
 }
 
+/**
+ * One of a server's own emoji.
+ *
+ * The name is what people type between colons and the URL is an ordinary
+ * picture upload - public, like every avatar, because an `<img>` cannot carry
+ * an Authorization header and an emoji is drawn a hundred times a screen.
+ */
+export interface ServerEmoji {
+  id: string;
+  serverId: string;
+  /** Lowercase letters, digits and underscores. `:name:` is how it is written. */
+  name: string;
+  url: string;
+  /** A GIF or an animated WebP. Recorded rather than sniffed by every client. */
+  animated: boolean;
+  createdById: string | null;
+  createdAt: string;
+}
+
+/** What the name and picture rules are, so a client can say no before the server does. */
+export const EMOJI_NAME_PATTERN = /^[a-z0-9_]{2,32}$/;
+
+/**
+ * How many a server may hold.
+ *
+ * Not a licensing tier - a picker is a grid somebody has to look through, and
+ * past a couple of hundred it stops being one. Raise it here if a deployment
+ * disagrees; nothing else depends on the number.
+ */
+export const MAX_SERVER_EMOJI = 200;
+
+export interface CreateServerEmojiRequest {
+  name: string;
+  /** Storage URL of a picture already uploaded through `/api/v1/uploads/picture`. */
+  url: string;
+  animated?: boolean;
+}
+
 export interface ServerMember {
   id: string;
   userId: string;
@@ -547,10 +585,33 @@ export interface MessageReply {
  * text. A message that is only text is still encoded as bare text, so
  * everything written before this existed keeps rendering.
  */
+/**
+ * A custom emoji carried inside a message.
+ *
+ * The text keeps the literal `:name:`, and this says what to draw for it. Both,
+ * on purpose:
+ *
+ * - The picture travels with the message, so a reader who is not in the server
+ *   that owns the emoji still sees it - a shortcode forwarded into a direct
+ *   message would otherwise render as a word.
+ * - The text stays readable. A client that has never heard of custom emoji
+ *   shows `:party_parrot:`, which is what it meant, rather than a marker.
+ *
+ * Nothing is leaked by carrying it: the URL is public and the server already
+ * holds the row. What the server still cannot see is which message used it.
+ */
+export interface MessageCustomEmoji {
+  name: string;
+  url: string;
+  animated: boolean;
+}
+
 export interface MessageBody {
   text: string;
   attachments: MessageAttachment[];
   replyTo?: MessageReply;
+  /** Custom emoji appearing in `text`, by the name written between colons. */
+  emoji?: MessageCustomEmoji[];
 }
 
 // --- End-to-end encryption ---

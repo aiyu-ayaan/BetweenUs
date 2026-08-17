@@ -7,6 +7,7 @@ import com.aktech.nexora.core.data.ChatSocket
 import com.aktech.nexora.core.data.DirectChannel
 import com.aktech.nexora.core.data.Friend
 import com.aktech.nexora.core.data.NexoraApi
+import com.aktech.nexora.core.data.ServerEmoji
 import com.aktech.nexora.core.data.ServerMember
 import com.aktech.nexora.core.data.ServerWithRole
 import com.aktech.nexora.core.data.Session
@@ -49,6 +50,10 @@ object Workspace {
 
     private val _unread = MutableStateFlow<Map<String, Int>>(emptyMap())
     val unread: StateFlow<Map<String, Int>> = _unread.asStateFlow()
+
+    /** serverId -> that server's own emoji. */
+    private val _emoji = MutableStateFlow<Map<String, List<ServerEmoji>>>(emptyMap())
+    val emoji: StateFlow<Map<String, List<ServerEmoji>>> = _emoji.asStateFlow()
 
     private val _loading = MutableStateFlow(false)
     val loading: StateFlow<Boolean> = _loading.asStateFlow()
@@ -130,6 +135,7 @@ object Workspace {
             // has to be subscribed to all of them or a message in another
             // channel never arrives and there is nothing to badge.
             servers.forEach { loadChannels(it.id) }
+            servers.forEach { loadEmoji(it.id) }
             loadDirectChannels()
             loadFriends()
             loadUnread()
@@ -164,6 +170,23 @@ object Workspace {
             Cache.putFriends(it)
         }
     }
+
+    /**
+     * A server's own emoji, kept per server.
+     *
+     * Fetched with the channels rather than lazily: the list decides what a
+     * `:name:` in an arriving message means, so it has to be in hand before the
+     * first message renders rather than after it.
+     */
+    suspend fun loadEmoji(serverId: String) {
+        runCatching { NexoraApi.serverEmoji(serverId) }.onSuccess { list ->
+            _emoji.value = _emoji.value + (serverId to list)
+        }
+    }
+
+    /** What this phone knows for a server. Empty until it has been fetched. */
+    fun emojiFor(serverId: String?): List<ServerEmoji> =
+        serverId?.let { _emoji.value[it] }.orEmpty()
 
     suspend fun loadUnread() {
         runCatching { NexoraApi.unread() }.onSuccess { list ->

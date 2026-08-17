@@ -13,29 +13,72 @@
  * the box is where the composer's other popovers already are.
  */
 import { useEffect, useState } from 'react';
+import type { ServerEmoji } from '@nexora/shared-types';
 import { EMOJI_SUGGESTION_LIMIT, searchEmoji, type NamedEmoji } from './emoji-names';
+import { absoluteUrl } from '../../services/endpoint';
+
+/**
+ * One row of the menu: a Unicode emoji from the table, or one of this server's
+ * own. They are the same choice to whoever is typing, so they are the same
+ * list - the server's come first, because a server that has invented `:shipit:`
+ * has invented it for a reason.
+ */
+type Suggestion =
+  | { kind: 'unicode'; entry: NamedEmoji }
+  | { kind: 'custom'; emoji: ServerEmoji };
+
+function suggestionsFor(term: string, custom: readonly ServerEmoji[]): Suggestion[] {
+  const needle = term.trim().toLowerCase().replace(/^:+/, '');
+
+  const mine = custom
+    .filter((emoji) => emoji.name.includes(needle))
+    // Exact first, then a prefix, then anything containing it - the same
+    // ranking the Unicode table uses, for the same reason.
+    .sort((left, right) => rank(left.name, needle) - rank(right.name, needle))
+    .map((emoji): Suggestion => ({ kind: 'custom', emoji }));
+
+  const rest = searchEmoji(term, EMOJI_SUGGESTION_LIMIT).map(
+    (entry): Suggestion => ({ kind: 'unicode', entry }),
+  );
+
+  return [...mine, ...rest].slice(0, EMOJI_SUGGESTION_LIMIT);
+}
+
+function rank(name: string, needle: string): number {
+  if (name === needle) return 0;
+  if (name.startsWith(needle)) return 1;
+  return 2;
+}
 
 export function EmojiSuggest({
   term,
+  custom,
   onPick,
   onClose,
 }: {
   /** What has been typed after the colon. */
   term: string;
-  onPick: (emoji: string) => void;
+  /** This server's own emoji, offered above the Unicode ones. */
+  custom: readonly ServerEmoji[];
+  /**
+   * What to put in the box. A Unicode emoji is the character itself; a custom
+   * one is its `:name:`, because the shortcode is what the message carries and
+   * the picture is resolved from the manifest at render time.
+   */
+  onPick: (text: string) => void;
   onClose: () => void;
 }): JSX.Element | null {
-  const [matches, setMatches] = useState<NamedEmoji[]>([]);
+  const [matches, setMatches] = useState<Suggestion[]>([]);
   const [active, setActive] = useState(0);
 
   useEffect(() => {
-    const found = searchEmoji(term, EMOJI_SUGGESTION_LIMIT);
+    const found = suggestionsFor(term, custom);
     setMatches(found);
     // Back to the top whenever the term changes: keeping the index would leave
     // the highlight on whatever happens to be in that row now, which is how a
     // menu sends the wrong emoji.
     setActive(0);
-  }, [term]);
+  }, [term, custom]);
 
   /**
    * The keys are caught here rather than in the composer.
@@ -60,7 +103,7 @@ export function EmojiSuggest({
         event.preventDefault();
         event.stopPropagation();
         const chosen = matches[active];
-        if (chosen) onPick(chosen.emoji);
+        if (chosen) onPick(textFor(chosen));
       } else if (event.key === 'Escape') {
         event.preventDefault();
         event.stopPropagation();
@@ -85,7 +128,7 @@ export function EmojiSuggest({
       </p>
       <ul>
         {matches.map((match, index) => (
-          <li key={match.emoji}>
+          <li key={match.kind === 'custom' ? match.emoji.id : match.entry.emoji}>
             <button
               type="button"
               role="option"
@@ -95,17 +138,33 @@ export function EmojiSuggest({
               // half-typed shortcode still in it.
               onMouseDown={(event) => event.preventDefault()}
               onMouseEnter={() => setActive(index)}
-              onClick={() => onPick(match.emoji)}
+              onClick={() => onPick(textFor(match))}
               className={`flex w-full items-center gap-3 px-3 py-1.5 text-left transition-colors duration-100 ${
                 index === active ? 'bg-white/[0.07]' : ''
               }`}
             >
-              <span className="text-lg leading-none">{match.emoji}</span>
-              <span className="text-sm text-slate-200">:{match.names[0]}:</span>
-              {match.names.length > 1 && (
-                <span className="ml-auto truncate text-xs text-slate-500">
-                  {match.names.slice(1).map((alias) => `:${alias}:`).join(' ')}
-                </span>
+              {match.kind === 'custom' ? (
+                <>
+                  <img
+                    src={absoluteUrl(match.emoji.url)}
+                    alt=""
+                    className="h-[22px] w-[22px] object-contain"
+                  />
+                  <span className="text-sm text-slate-200">:{match.emoji.name}:</span>
+                  <span className="ml-auto text-xs text-slate-500">
+                    {match.emoji.animated ? 'this server · animated' : 'this server'}
+                  </span>
+                </>
+              ) : (
+                <>
+                  <span className="text-lg leading-none">{match.entry.emoji}</span>
+                  <span className="text-sm text-slate-200">:{match.entry.names[0]}:</span>
+                  {match.entry.names.length > 1 && (
+                    <span className="ml-auto truncate text-xs text-slate-500">
+                      {match.entry.names.slice(1).map((alias) => `:${alias}:`).join(' ')}
+                    </span>
+                  )}
+                </>
               )}
             </button>
           </li>
@@ -113,4 +172,15 @@ export function EmojiSuggest({
       </ul>
     </div>
   );
+}
+
+/**
+ * What choosing one puts in the box.
+ *
+ * A Unicode emoji is the character. A custom one stays `:name:` - the message
+ * carries the shortcode and a manifest of pictures, so what goes in the
+ * textarea is the thing that will still make sense if the emoji is deleted.
+ */
+function textFor(suggestion: Suggestion): string {
+  return suggestion.kind === 'custom' ? `:${suggestion.emoji.name}:` : suggestion.entry.emoji;
 }

@@ -44,6 +44,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.aktech.nexora.core.crypto.E2ee
+import androidx.compose.foundation.text.InlineTextContent
+import androidx.compose.foundation.text.appendInlineContent
+import androidx.compose.ui.text.Placeholder
+import androidx.compose.ui.text.PlaceholderVerticalAlign
+import androidx.compose.ui.text.buildAnnotatedString
+import coil.compose.AsyncImage
+import com.aktech.nexora.core.data.CustomEmoji
 import com.aktech.nexora.core.data.Endpoint
 import com.aktech.nexora.core.data.MessageAttachment
 import com.aktech.nexora.core.data.PublicUser
@@ -268,12 +275,7 @@ fun MessageRow(
 
                             else -> {
                                 if (readable.text.isNotBlank()) {
-                                    Text(
-                                        text = readable.text,
-                                        style = MaterialTheme.typography.bodyLarge,
-                                        color = Slate100,
-                                        lineHeight = 22.sp,
-                                    )
+                                    MessageText(readable)
                                 }
 
                                 readable.attachments.forEach { attachment ->
@@ -665,3 +667,72 @@ private fun shortTime(iso: String): String = runCatching {
 private fun withinFiveMinutes(earlier: String, later: String): Boolean = runCatching {
     Instant.parse(later).toEpochMilli() - Instant.parse(earlier).toEpochMilli() < 5 * 60 * 1000
 }.getOrDefault(false)
+
+/**
+ * A message's words, with its custom emoji drawn in line.
+ *
+ * Compose's `InlineTextContent` is what makes this one paragraph rather than a
+ * row of alternating text and images: the emoji wrap with the words, which is
+ * the whole point of an emoji being in a sentence. Each one is keyed by its
+ * position, because the same emoji twice in a message needs two slots.
+ *
+ * The pictures come from the message rather than from this phone's copy of the
+ * server's list - see `CustomEmoji`.
+ *
+ * ponytail: a GIF shows its first frame. Animating one needs Coil's
+ * `coil-gif` artifact and its decoder registered, which is one dependency line
+ * and is on the open list; the desktop animates because a browser `<img>` does
+ * it for free.
+ */
+@Composable
+private fun MessageText(readable: ReadableMessage) {
+    val pieces = remember(readable.id, readable.text) {
+        CustomEmoji.split(readable.text, readable.body.emoji)
+    }
+
+    if (pieces.none { it is CustomEmoji.Piece.Emoji }) {
+        Text(
+            text = readable.text,
+            style = MaterialTheme.typography.bodyLarge,
+            color = Slate100,
+            lineHeight = 22.sp,
+        )
+        return
+    }
+
+    val large = CustomEmoji.isOnlyEmoji(pieces)
+    val size = if (large) 40.sp else 22.sp
+    val inline = mutableMapOf<String, InlineTextContent>()
+
+    val annotated = buildAnnotatedString {
+        pieces.forEachIndexed { index, piece ->
+            when (piece) {
+                is CustomEmoji.Piece.Text -> append(piece.text)
+                is CustomEmoji.Piece.Emoji -> {
+                    val id = "emoji-$index"
+                    inline[id] = InlineTextContent(
+                        Placeholder(size, size, PlaceholderVerticalAlign.TextCenter),
+                    ) {
+                        AsyncImage(
+                            model = Endpoint.absolute(piece.emoji.url),
+                            contentDescription = ":${piece.emoji.name}:",
+                            contentScale = ContentScale.Fit,
+                            modifier = Modifier.fillMaxSize(),
+                        )
+                    }
+                    // The alternative text is the shortcode, so copying the
+                    // message copies what was typed rather than a blank.
+                    appendInlineContent(id, ":${piece.emoji.name}:")
+                }
+            }
+        }
+    }
+
+    Text(
+        text = annotated,
+        inlineContent = inline,
+        style = MaterialTheme.typography.bodyLarge,
+        color = Slate100,
+        lineHeight = if (large) 44.sp else 22.sp,
+    )
+}

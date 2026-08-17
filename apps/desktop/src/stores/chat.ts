@@ -5,6 +5,7 @@ import type {
   DirectChannel,
   Message,
   MessageAttachment,
+  MessageCustomEmoji,
   MessageReply,
   ServerMember,
   ServerWithRole,
@@ -25,6 +26,7 @@ import { decodeBody, encodeBody } from '../services/message-body';
 import { notifyMessage, publishUnreadCount, windowIsFocused } from '../services/notifications';
 import { mentionsMe } from '../services/mentions';
 import { cache } from '../services/cache';
+import { emojiFor, forgetEmoji, loadEmoji, usedEmoji } from '../services/server-emoji';
 import { useAuthStore } from './auth';
 
 /**
@@ -36,6 +38,8 @@ export interface DecryptedMessage extends Message {
   attachments: MessageAttachment[];
   /** What this message answers, quoted inside the envelope. */
   replyTo?: MessageReply;
+  /** Pictures for the `:name:` shortcodes in `content`, carried with it. */
+  emoji?: MessageCustomEmoji[];
 }
 
 interface ChatState {
@@ -291,6 +295,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
       set({ channels: cachedChannels });
     }
 
+    // The emoji are needed before the first message renders, and they are a
+    // small public list - so they are fetched alongside the channels rather
+    // than lazily when a shortcode first appears.
+    void loadEmoji(serverId);
+
     const [channels, members] = await Promise.all([
       api.channels(serverId),
       // Members carry the display names presence attaches status to.
@@ -487,9 +496,19 @@ export const useChatStore = create<ChatState>((set, get) => ({
     if (!channelId) return;
     // The server stores and forwards ciphertext only - and the attachment
     // manifest is inside it, so the names and types are encrypted too.
+    // The pictures for whatever custom emoji the text uses, taken from the
+    // server this channel belongs to. They travel inside the envelope so a
+    // reader who is not in that server still sees them - see `server-emoji.ts`.
+    const emoji = usedEmoji(content, emojiFor(get().activeServerId));
+
     const envelope = await encryptForChannel(
       channelId,
-      encodeBody({ text: content, attachments, ...(replyTo ? { replyTo } : {}) }),
+      encodeBody({
+        text: content,
+        attachments,
+        ...(replyTo ? { replyTo } : {}),
+        ...(emoji.length > 0 ? { emoji } : {}),
+      }),
     );
     // No optimistic insert: the message arrives over the socket, so an
     // optimistic copy would have to be de-duplicated for no real gain.
@@ -524,6 +543,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
       encodeBody({
         text: content,
         attachments: existing?.attachments ?? [],
+        // An edit may introduce a shortcode that was not there before, so the
+        // manifest is recomputed rather than carried over.
+        ...(() => {
+          const emoji = usedEmoji(content, emojiFor(get().activeServerId));
+          return emoji.length > 0 ? { emoji } : {};
+        })(),
         // An edit changes the words. What the message was answering is not one
         // of them, so the quote rides along untouched.
         ...(existing?.replyTo ? { replyTo: existing.replyTo } : {}),
@@ -664,6 +689,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   reset: () => {
     setUnread({});
     forgetMarkers();
+    forgetEmoji();
     set({
       view: 'home',
       servers: [],
@@ -757,6 +783,7 @@ function toDecrypted(message: Message, plaintext: string): DecryptedMessage {
     content: body.text,
     attachments: body.attachments,
     ...(body.replyTo ? { replyTo: body.replyTo } : {}),
+    ...(body.emoji ? { emoji: body.emoji } : {}),
   };
 }
 

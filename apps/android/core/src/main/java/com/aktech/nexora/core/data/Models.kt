@@ -448,19 +448,67 @@ data class MessageReply(val id: String, val author: String, val preview: String)
     }
 }
 
+/** One of a server's own emoji, as the directory lists it. */
+data class ServerEmoji(
+    val id: String,
+    val serverId: String,
+    val name: String,
+    val url: String,
+    val animated: Boolean,
+) {
+    companion object {
+        fun from(json: JSONObject) = ServerEmoji(
+            id = json.optString("id"),
+            serverId = json.optString("serverId"),
+            name = json.optString("name"),
+            url = json.optString("url"),
+            animated = json.optBoolean("animated"),
+        )
+    }
+}
+
+/**
+ * A custom emoji carried inside a message.
+ *
+ * The text keeps the literal `:name:` and this says what to draw for it, so a
+ * client that has never heard of custom emoji shows the word somebody meant,
+ * and a reader who is not in the server that owns the emoji still sees the
+ * picture. Byte for byte the desktop's `MessageCustomEmoji`.
+ */
+data class MessageCustomEmoji(val name: String, val url: String, val animated: Boolean) {
+    fun toJson(): JSONObject = JSONObject()
+        .put("name", name)
+        .put("url", url)
+        .put("animated", animated)
+
+    companion object {
+        fun from(json: JSONObject) = MessageCustomEmoji(
+            name = json.optString("name"),
+            url = json.optString("url"),
+            animated = json.optBoolean("animated"),
+        )
+    }
+}
+
 data class MessageBody(
     val text: String,
     val attachments: List<MessageAttachment> = emptyList(),
     val replyTo: MessageReply? = null,
+    val emoji: List<MessageCustomEmoji> = emptyList(),
 ) {
     fun encode(): String =
-        if (attachments.isEmpty() && replyTo == null) {
+        if (attachments.isEmpty() && replyTo == null && emoji.isEmpty()) {
             text
         } else {
             BODY_MARKER + JSONObject()
                 .put("text", text)
                 .put("attachments", JSONArray().also { a -> attachments.forEach { a.put(it.toJson()) } })
                 .apply { replyTo?.let { put("replyTo", it.toJson()) } }
+                .apply {
+                    if (emoji.isNotEmpty()) {
+                        put("emoji", JSONArray().also { a -> emoji.forEach { a.put(it.toJson()) } })
+                    }
+                }
                 .toString()
         }
 
@@ -478,6 +526,9 @@ data class MessageBody(
                         ?.map { MessageAttachment.from(it) }
                         .orEmpty(),
                     replyTo = json.optJSONObject("replyTo")?.let { MessageReply.from(it) },
+                    emoji = json.optJSONArray("emoji")
+                        ?.map { MessageCustomEmoji.from(it) }
+                        .orEmpty(),
                 )
             }
                 // A body we cannot read is still a message; show it rather than

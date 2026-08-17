@@ -17,6 +17,7 @@ import type {
   Channel,
   ChannelMember,
   ServerCustomRole,
+  ServerEmoji,
   ServerInvite,
   ServerMember,
   ServerWithRole,
@@ -26,6 +27,7 @@ import {
   AddServerMemberDto,
   CreateChannelDto,
   CreateServerDto,
+  CreateServerEmojiDto,
   CreateServerInviteDto,
   CreateServerRoleDto,
   JoinServerDto,
@@ -188,6 +190,36 @@ export class ServersController {
     @Param('roleId', ParseUUIDPipe) roleId: string,
   ): Promise<void> {
     return this.servers.deleteRole(user.id, serverId, roleId);
+  }
+
+  // --- Emoji ------------------------------------------------------------------
+
+  @Get(':serverId/emoji')
+  emoji(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('serverId', ParseUUIDPipe) serverId: string,
+  ): Promise<ServerEmoji[]> {
+    return this.servers.emoji(user.id, serverId);
+  }
+
+  /** The picture goes to `/api/v1/uploads/picture` first; this names it. */
+  @Post(':serverId/emoji')
+  addEmoji(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('serverId', ParseUUIDPipe) serverId: string,
+    @Body() dto: CreateServerEmojiDto,
+  ): Promise<ServerEmoji> {
+    return this.servers.addEmoji(user.id, serverId, dto);
+  }
+
+  @Delete(':serverId/emoji/:emojiId')
+  @HttpCode(204)
+  removeEmoji(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('serverId', ParseUUIDPipe) serverId: string,
+    @Param('emojiId', ParseUUIDPipe) emojiId: string,
+  ): Promise<void> {
+    return this.servers.removeEmoji(user.id, serverId, emojiId);
   }
 
   @Get(':serverId/channels')

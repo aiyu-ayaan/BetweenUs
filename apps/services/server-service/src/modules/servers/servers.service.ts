@@ -7,6 +7,13 @@ import {
 } from '@nestjs/common';
 import { areFriends, prisma, resolveChannelAccess } from '@nexora/database';
 import { EVENTS, EventBus } from '@nexora/events';
+import {
+  EMOJI_NAME_PATTERN,
+  MAX_SERVER_EMOJI,
+  UPLOADED_PICTURE_URL,
+  type ServerEmoji as ServerEmojiRow,
+  type CreateServerEmojiRequest,
+} from '@nexora/shared-types';
 import type {
   Channel,
   ChannelMember as ChannelMemberDto,
@@ -306,6 +313,101 @@ export class ServersService {
     });
     await this.events.publish(EVENTS.SERVER_MEMBER_ADDED, { serverId, userId: user.id });
     return toMember(member);
+  }
+
+  // --- Emoji ------------------------------------------------------------------
+
+  /** A server's own emoji. Every member sees them; they are what a name means. */
+  async emoji(userId: string, serverId: string): Promise<ServerEmojiRow[]> {
+    await this.requireMembership(userId, serverId);
+    const rows = await prisma.serverEmoji.findMany({
+      where: { serverId },
+      orderBy: { name: 'asc' },
+    });
+    return rows.map(toEmoji);
+  }
+
+  /**
+   * Adds one, from a picture already uploaded.
+   *
+   * The upload happens first and separately, through `/api/v1/uploads/picture`,
+   * which is where the image allowlist and the size cap live. This route takes
+   * the URL that came back - and checks it is one of ours rather than trusting
+   * the string, because a client that could name any URL here could hang a
+   * tracking pixel in front of every member of the server.
+   */
+  async addEmoji(
+    userId: string,
+    serverId: string,
+    dto: CreateServerEmojiRequest,
+  ): Promise<ServerEmojiRow> {
+    await this.requirePermission(userId, serverId, PERMISSIONS.MANAGE_EMOJI);
+
+    const name = dto.name.trim().toLowerCase();
+    if (!EMOJI_NAME_PATTERN.test(name)) {
+      throw new ForbiddenException({
+        code: 'INVALID_EMOJI_NAME',
+        message: 'Two to thirty-two lowercase letters, digits or underscores',
+      });
+    }
+
+    // The same check an avatar goes through, and for the same reason: anything
+    // else is a URL somebody else controls, rendered by every client in the
+    // server on every message. `UPLOADED_PICTURE_URL` is that rule, already
+    // written down once.
+    if (!UPLOADED_PICTURE_URL.test(dto.url)) {
+      throw new ForbiddenException({
+        code: 'INVALID_EMOJI_URL',
+        message: 'Upload the picture first',
+      });
+    }
+
+    const count = await prisma.serverEmoji.count({ where: { serverId } });
+    if (count >= MAX_SERVER_EMOJI) {
+      throw new ForbiddenException({
+        code: 'EMOJI_LIMIT',
+        message: `A server can hold ${MAX_SERVER_EMOJI} emoji`,
+      });
+    }
+
+    const existing = await prisma.serverEmoji.findUnique({
+      where: { serverId_name: { serverId, name } },
+    });
+    if (existing) {
+      throw new ForbiddenException({
+        code: 'EMOJI_NAME_TAKEN',
+        message: `:${name}: is already something else here`,
+      });
+    }
+
+    const row = await prisma.serverEmoji.create({
+      data: {
+        serverId,
+        name,
+        url: dto.url,
+        animated: dto.animated ?? /\.gif$/i.test(dto.url),
+        createdById: userId,
+      },
+    });
+    return toEmoji(row);
+  }
+
+  /**
+   * Removes one.
+   *
+   * Messages that used it keep working: the picture travels inside the message
+   * body, so deleting the emoji stops it being *offered* rather than breaking
+   * everything anybody ever sent with it. That is the whole reason the manifest
+   * carries a URL instead of an id.
+   */
+  async removeEmoji(userId: string, serverId: string, emojiId: string): Promise<void> {
+    await this.requirePermission(userId, serverId, PERMISSIONS.MANAGE_EMOJI);
+
+    const row = await prisma.serverEmoji.findUnique({ where: { id: emojiId } });
+    if (!row || row.serverId !== serverId) {
+      throw new NotFoundException({ code: 'EMOJI_NOT_FOUND', message: 'No such emoji' });
+    }
+    await prisma.serverEmoji.delete({ where: { id: emojiId } });
   }
 
   /** Removes someone else from the server. Leaving is `leave`, below. */
@@ -1076,5 +1178,26 @@ function toInvite(row: InviteRow): ServerInviteDto {
     revokedAt: row.revokedAt?.toISOString() ?? null,
     createdAt: row.createdAt.toISOString(),
     active: isInviteActive(row),
+  };
+}
+
+/** One emoji row, as the contract has it. */
+function toEmoji(row: {
+  id: string;
+  serverId: string;
+  name: string;
+  url: string;
+  animated: boolean;
+  createdById: string | null;
+  createdAt: Date;
+}): ServerEmojiRow {
+  return {
+    id: row.id,
+    serverId: row.serverId,
+    name: row.name,
+    url: row.url,
+    animated: row.animated,
+    createdById: row.createdById,
+    createdAt: row.createdAt.toISOString(),
   };
 }

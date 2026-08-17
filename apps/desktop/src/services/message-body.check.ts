@@ -68,6 +68,17 @@ async function main(): Promise<void> {
   assert.equal(replyPreview('x'.repeat(500)).length, REPLY_PREVIEW_CHARS);
   assert.equal(replyPreview('x'.repeat(500)).endsWith('…'), true);
 
+  // Custom emoji: no files, no quote, and still a document, because the
+  // pictures have to travel with the text.
+  const withEmoji = {
+    text: 'ship it :shipit:',
+    attachments: [],
+    emoji: [
+      { name: 'shipit', url: '/api/v1/uploads/pictures/u1/2026-08/a.webp', animated: false },
+    ],
+  };
+  assert.deepEqual(decodeBody(encodeBody(withEmoji)), withEmoji);
+
   // An over-long message becomes a text file that keeps every character.
   const long = 'x'.repeat(OVERFLOW_CHARS + 500);
   const overflow = overflowFile(long);

@@ -17,6 +17,13 @@ import { EmojiPicker } from './EmojiPicker';
 import { MessageMenu } from './MessageMenu';
 import { SendPreview, isPreviewable } from './SendPreview';
 import { EmojiSuggest } from './EmojiSuggest';
+import {
+  emojiFor,
+  isOnlyEmoji,
+  onEmojiChanged,
+  splitMessage,
+} from '../../services/server-emoji';
+import { absoluteUrl } from '../../services/endpoint';
 import { emojiQueryAt } from './emoji-names';
 import { formatBytes, uploadAttachment } from '../../services/attachments';
 import { OVERFLOW_CHARS, overflowFile, replyPreview } from '../../services/message-body';
@@ -546,7 +553,7 @@ function MessageList({
                     {/* A message that is only files has no text line at all. */}
                     {message.content.length > 0 && (
                       <p className="whitespace-pre-wrap break-words leading-relaxed text-slate-200">
-                        {message.content}
+                        <MessageText message={message} />
                         {message.editedAt && (
                           <span className="ml-1.5 align-baseline text-xs text-slate-500">
                             (edited)
@@ -812,6 +819,47 @@ function QuotedMessage({ reply }: { reply: MessageReply }): JSX.Element {
   );
 }
 
+
+/**
+ * A message's words, with its custom emoji drawn.
+ *
+ * The pictures come from the message rather than from the server it was sent
+ * in - they are in the envelope - so a shortcode forwarded into a direct
+ * message still renders, and one whose emoji has since been deleted degrades to
+ * the word somebody typed rather than to a broken image.
+ *
+ * A message that is nothing but emoji is drawn large, which every chat app
+ * does and is not decoration: a reaction sent as a message is the whole
+ * message, and at 22 pixels it reads as a typo.
+ */
+function MessageText({ message }: { message: DecryptedMessage }): JSX.Element {
+  const pieces = splitMessage(message.content, message.emoji ?? []);
+  const large = isOnlyEmoji(pieces);
+
+  return (
+    <>
+      {pieces.map((piece, index) =>
+        piece.kind === 'text' ? (
+          <Fragment key={index}>{piece.text}</Fragment>
+        ) : (
+          <img
+            key={index}
+            src={absoluteUrl(piece.emoji.url)}
+            alt={`:${piece.emoji.name}:`}
+            title={`:${piece.emoji.name}:`}
+            // Animated ones animate because the file does - a GIF or an
+            // animated WebP in an `<img>` needs nothing else, which is the
+            // whole reason the upload keeps the original bytes.
+            className={`inline-block object-contain align-text-bottom ${
+              large ? 'h-11 w-11' : 'h-[22px] w-[22px]'
+            }`}
+          />
+        ),
+      )}
+    </>
+  );
+}
+
 /** Discord puts the "this is the beginning" block here; so does this. */
 function EmptyChannel({ channel }: { channel: Channel }): JSX.Element {
   const direct = channel.type === 'DM';
@@ -880,6 +928,17 @@ function MessageComposer({
    * property of the element and not of the value.
    */
   const [emojiQuery, setEmojiQuery] = useState<{ term: string; start: number } | null>(null);
+  /**
+   * This server's own emoji, for the `:` menu. Read through a subscription
+   * rather than a store because the list belongs to the server rather than to
+   * any one screen - see `services/server-emoji.ts`.
+   */
+  const serverId = useChatStore((state) => state.activeServerId);
+  const [customEmoji, setCustomEmoji] = useState(() => emojiFor(serverId));
+  useEffect(() => {
+    setCustomEmoji(emojiFor(serverId));
+    return onEmojiChanged(() => setCustomEmoji(emojiFor(serverId)));
+  }, [serverId]);
   const [emoji, setEmoji] = useState<{ x: number; y: number } | null>(null);
   const picker = useRef<HTMLInputElement>(null);
   const box = useRef<HTMLTextAreaElement>(null);
@@ -1129,6 +1188,7 @@ function MessageComposer({
       {emojiQuery && (
         <EmojiSuggest
           term={emojiQuery.term}
+          custom={customEmoji}
           onClose={() => setEmojiQuery(null)}
           onPick={(emoji) => {
             // The shortcode is replaced, not appended to: what is on screen is

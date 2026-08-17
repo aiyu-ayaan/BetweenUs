@@ -343,6 +343,11 @@ object NexoraApi {
         DirectChannel.from(authed("POST", "/api/v1/dm", obj("userId" to userId)))
     }
 
+    /** A server's own emoji. Public within the server, and read on every render. */
+    suspend fun serverEmoji(serverId: String): List<ServerEmoji> = io {
+        authedArray("GET", "/api/v1/servers/${enc(serverId)}/emoji").map { ServerEmoji.from(it) }
+    }
+
     // --- end-to-end encryption key directory ---
 
     suspend fun registerDeviceKey(

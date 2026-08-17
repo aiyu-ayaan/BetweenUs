@@ -19,7 +19,9 @@ export const OVERFLOW_CHARS = 2000;
 const BODY_MARKER = '\u0000nexora-body:1\n';
 
 export function encodeBody(body: MessageBody): string {
-  if (body.attachments.length === 0 && !body.replyTo) return body.text;
+  const plain =
+    body.attachments.length === 0 && !body.replyTo && (body.emoji?.length ?? 0) === 0;
+  if (plain) return body.text;
   return BODY_MARKER + JSON.stringify(body);
 }
 
@@ -32,6 +34,10 @@ export function decodeBody(content: string): MessageBody {
     return {
       text: typeof parsed.text === 'string' ? parsed.text : '',
       attachments: Array.isArray(parsed.attachments) ? parsed.attachments : [],
+      // The pictures for whatever `:name:` the text contains. A body without
+      // them renders the shortcodes as the words they are, which is what every
+      // client written before this did.
+      ...(Array.isArray(parsed.emoji) ? { emoji: parsed.emoji } : {}),
       // A quote with no id is not a quote: it would render as a block nothing
       // can be clicked through to.
       ...(reply && typeof reply.id === 'string' && reply.id.length > 0

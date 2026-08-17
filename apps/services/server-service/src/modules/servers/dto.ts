@@ -20,6 +20,7 @@ import type {
   AddServerMemberRequest,
   ChannelType,
   CreateChannelRequest,
+  CreateServerEmojiRequest,
   CreateServerRequest,
   CreateServerRoleRequest,
   ServerRole,
@@ -65,6 +66,28 @@ export class AddServerMemberDto implements AddServerMemberRequest {
   @IsString()
   @Length(2, 32)
   username!: string;
+}
+
+/**
+ * Naming a picture that is already uploaded.
+ *
+ * The shape is checked here and the *content* is checked in the service: that
+ * the URL is one this deployment stored, that the name is free, and that the
+ * server has room. A URL somebody else controls, rendered by every client in
+ * the server, is the thing worth refusing rather than validating.
+ */
+export class CreateServerEmojiDto implements CreateServerEmojiRequest {
+  @IsString()
+  @Length(2, 32)
+  name!: string;
+
+  @IsString()
+  @Length(1, 512)
+  url!: string;
+
+  @IsOptional()
+  @IsBoolean()
+  animated?: boolean;
 }
 
 export class CreateChannelDto implements CreateChannelRequest {

@@ -19,7 +19,9 @@ import type {
   OAuthProviderSummary,
   Paginated,
   PublicUser,
+  CreateServerEmojiRequest,
   PublishChannelKeysRequest,
+  ServerEmoji,
   RegisterDeviceKeyRequest,
   PutIdentityBackupRequest,
   RemoteAuditEntry,
@@ -313,6 +315,20 @@ export const api = {
     }),
 
   /** Adds someone to the server by username, from the members screen. */
+  // --- A server's own emoji ---
+
+  serverEmoji: (serverId: string): Promise<ServerEmoji[]> =>
+    request(`/api/v1/servers/${serverId}/emoji`),
+
+  addServerEmoji: (serverId: string, body: CreateServerEmojiRequest): Promise<ServerEmoji> =>
+    request(`/api/v1/servers/${serverId}/emoji`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
+  removeServerEmoji: (serverId: string, emojiId: string): Promise<void> =>
+    request(`/api/v1/servers/${serverId}/emoji/${emojiId}`, { method: 'DELETE' }),
+
   addMember: (serverId: string, username: string): Promise<ServerMember> =>
     request(`/api/v1/servers/${serverId}/members`, {
       method: 'POST',

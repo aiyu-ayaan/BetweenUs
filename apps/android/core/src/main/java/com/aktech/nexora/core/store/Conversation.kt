@@ -5,6 +5,7 @@ import com.aktech.nexora.core.data.ChatSocket
 import com.aktech.nexora.core.data.Message
 import com.aktech.nexora.core.data.MessageAttachment
 import com.aktech.nexora.core.data.MessageBody
+import com.aktech.nexora.core.data.MessageCustomEmoji
 import com.aktech.nexora.core.data.MessageReply
 import com.aktech.nexora.core.data.NexoraApi
 import com.aktech.nexora.core.data.Session
@@ -188,7 +189,10 @@ object Conversation {
         attachments: List<MessageAttachment>,
         replyTo: MessageReply? = null,
     ) {
-        val body = MessageBody(text, attachments, replyTo).encode()
+        // The pictures for whatever custom emoji the text uses, taken from the
+        // server this channel belongs to. They travel inside the envelope, so a
+        // reader who is not in that server still sees them.
+        val body = MessageBody(text, attachments, replyTo, usedEmoji(channelId, text)).encode()
         val sealed = E2ee.encryptForChannel(channelId, body)
         // The keys go outside the envelope as well as inside it: the server
         // cannot read the manifest, and without them nothing could ever sweep
@@ -201,7 +205,14 @@ object Conversation {
         val existing = _messages.value[message.channelId]?.firstOrNull { it.id == message.id }
         // An edit changes the words. What the message was answering is not one
         // of them, so the quote rides along untouched.
-        val body = MessageBody(text, existing?.attachments.orEmpty(), existing?.body?.replyTo).encode()
+        val body = MessageBody(
+            text,
+            existing?.attachments.orEmpty(),
+            existing?.body?.replyTo,
+            // An edit may introduce a shortcode that was not there before, so
+            // the manifest is recomputed rather than carried over.
+            usedEmoji(message.channelId, text),
+        ).encode()
         val sealed = E2ee.encryptForChannel(message.channelId, body)
         replace(read(NexoraApi.editMessage(message.id, sealed)))
     }
@@ -249,6 +260,27 @@ object Conversation {
             attachment.iv,
             attachment.epoch,
         )
+
+    /**
+     * The emoji a message actually uses, and nothing else.
+     *
+     * A server with two hundred of them must not put two hundred URLs into
+     * every "ok". Deduplicated, because the same one three times is one
+     * picture. The port of `usedEmoji` in `services/server-emoji.ts`.
+     */
+    private fun usedEmoji(channelId: String, text: String): List<MessageCustomEmoji> {
+        val serverId = Workspace.channel(channelId)?.serverId ?: return emptyList()
+        val available = Workspace.emojiFor(serverId)
+        if (available.isEmpty()) return emptyList()
+
+        val byName = available.associateBy { it.name }
+        return Regex(":([a-z0-9_]{2,32}):")
+            .findAll(text)
+            .mapNotNull { byName[it.groupValues[1]] }
+            .distinctBy { it.name }
+            .map { MessageCustomEmoji(it.name, it.url, it.animated) }
+            .toList()
+    }
 
     // --- plumbing ---
 
