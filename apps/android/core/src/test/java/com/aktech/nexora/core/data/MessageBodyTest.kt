@@ -59,6 +59,27 @@ class MessageBodyTest {
     }
 
     @Test
+    fun `a reply carries no files and is still a document`() {
+        val body = MessageBody("agreed", replyTo = MessageReply("m-1", "Ada", "shall we ship it"))
+        val decoded = MessageBody.decode(body.encode())
+
+        assertEquals("agreed", decoded.text)
+        assertEquals(MessageReply("m-1", "Ada", "shall we ship it"), decoded.replyTo)
+    }
+
+    @Test
+    fun `a quote with no id is dropped rather than drawn unclickable`() {
+        val encoded = "\u0000nexora-body:1\n{\"text\":\"hi\",\"replyTo\":{\"author\":\"Ada\"}}"
+        assertEquals(null, MessageBody.decode(encoded).replyTo)
+    }
+
+    @Test
+    fun `a quote is one line however many the original had`() {
+        assertEquals("two lines", MessageReply.preview("  two\n\nlines  "))
+        assertEquals(MessageReply.PREVIEW_CHARS, MessageReply.preview("x".repeat(500)).length)
+    }
+
+    @Test
     fun `a marked body that will not parse is shown rather than swallowed`() {
         val broken = "\u0000nexora-body:1\nnot json at all"
         assertEquals(broken, MessageBody.decode(broken).text)

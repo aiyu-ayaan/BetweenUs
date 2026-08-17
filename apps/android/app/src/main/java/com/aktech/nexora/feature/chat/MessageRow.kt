@@ -89,7 +89,9 @@ fun MessageRow(
     previous: ReadableMessage?,
     self: PublicUser,
     channelId: String,
+    highlighted: Boolean = false,
     onLongPress: () -> Unit,
+    onOpenQuoted: (String) -> Unit = {},
     onReact: (String) -> Unit,
     onViewImage: (Bitmap, String) -> Unit = { _, _ -> },
     onPlayVideo: (Uri, String) -> Unit = { _, _ -> },
@@ -105,6 +107,7 @@ fun MessageRow(
     Column(
         Modifier
             .fillMaxWidth()
+            .background(if (highlighted) Accent.copy(alpha = 0.14f) else Color.Transparent)
             .combinedClickable(
                 onClick = {},
                 onLongClick = { if (!message.deleted) onLongPress() },
@@ -205,6 +208,37 @@ fun MessageRow(
                         .padding(horizontal = 12.dp, vertical = 8.dp),
                 ) {
                     Column {
+                        // The quote belongs to the message, so it sits inside
+                        // the bubble and above everything the message says.
+                        readable.replyTo?.takeIf { !message.deleted }?.let { reply ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(bottom = 6.dp)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(Accent.copy(alpha = 0.08f))
+                                    .clickable { onOpenQuoted(reply.id) }
+                                    .padding(horizontal = 8.dp, vertical = 5.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            ) {
+                                NexoraIcon(NexoraIcons.Reply, tint = Slate500, size = 12.dp)
+                                Text(
+                                    text = reply.author,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = Accent,
+                                )
+                                Text(
+                                    text = reply.preview.ifBlank { "Sent an attachment" },
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = Slate400,
+                                    maxLines = 1,
+                                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                                )
+                            }
+                        }
+
                         when {
                             message.deleted -> Row(
                                 verticalAlignment = Alignment.CenterVertically,

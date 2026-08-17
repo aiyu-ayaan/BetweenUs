@@ -59,6 +59,7 @@ object NexoraIcons {
     val Pip = R.drawable.ic_pip
     val Play = R.drawable.ic_play
     val Plus = R.drawable.ic_plus
+    val Reply = R.drawable.ic_reply
     val ScreenShare = R.drawable.ic_screen_share
     val Search = R.drawable.ic_search
     val Send = R.drawable.ic_send

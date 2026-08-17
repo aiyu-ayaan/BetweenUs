@@ -50,6 +50,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.aktech.nexora.core.data.MessageAttachment
+import com.aktech.nexora.core.data.MessageReply
 import com.aktech.nexora.core.store.Presence
 import com.aktech.nexora.core.store.ReadableMessage
 import com.aktech.nexora.ui.components.IconAction
@@ -81,9 +82,11 @@ import com.aktech.nexora.ui.theme.Surface950
 fun Composer(
     channelId: String,
     editing: ReadableMessage?,
+    replyingTo: MessageReply?,
     attachments: List<MessageAttachment>,
     uploading: Boolean,
     onCancelEdit: () -> Unit,
+    onCancelReply: () -> Unit,
     onRemoveAttachment: (MessageAttachment) -> Unit,
     onPickFile: () -> Unit,
     onCameraClick: () -> Unit,
@@ -141,6 +144,47 @@ fun Composer(
                     icon = NexoraIcons.X,
                     contentDescription = "Cancel editing",
                     onClick = onCancelEdit,
+                    tint = Slate400,
+                )
+            }
+        }
+
+        // Replying banner. Same shape as the editing one above, and the two
+        // never appear together: an edit rewrites a message that already chose
+        // what it was answering.
+        AnimatedVisibility(
+            visible = editing == null && replyingTo != null,
+            enter = fadeIn() + expandVertically(),
+            exit = fadeOut() + shrinkVertically(),
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Surface900)
+                    .padding(horizontal = 16.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                NexoraIcon(NexoraIcons.Reply, tint = Accent, size = 16.dp)
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        text = "Replying to ${replyingTo?.author.orEmpty()}",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = Accent,
+                    )
+                    Text(
+                        text = replyingTo?.preview?.ifBlank { "Sent an attachment" }.orEmpty(),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Slate400,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                IconAction(
+                    icon = NexoraIcons.X,
+                    contentDescription = "Cancel reply",
+                    onClick = onCancelReply,
                     tint = Slate400,
                 )
             }

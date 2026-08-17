@@ -19,7 +19,7 @@ export const OVERFLOW_CHARS = 2000;
 const BODY_MARKER = '\u0000nexora-body:1\n';
 
 export function encodeBody(body: MessageBody): string {
-  if (body.attachments.length === 0) return body.text;
+  if (body.attachments.length === 0 && !body.replyTo) return body.text;
   return BODY_MARKER + JSON.stringify(body);
 }
 
@@ -28,14 +28,40 @@ export function decodeBody(content: string): MessageBody {
 
   try {
     const parsed = JSON.parse(content.slice(BODY_MARKER.length)) as MessageBody;
+    const reply = parsed.replyTo;
     return {
       text: typeof parsed.text === 'string' ? parsed.text : '',
       attachments: Array.isArray(parsed.attachments) ? parsed.attachments : [],
+      // A quote with no id is not a quote: it would render as a block nothing
+      // can be clicked through to.
+      ...(reply && typeof reply.id === 'string' && reply.id.length > 0
+        ? {
+            replyTo: {
+              id: reply.id,
+              author: typeof reply.author === 'string' ? reply.author : '',
+              preview: typeof reply.preview === 'string' ? reply.preview : '',
+            },
+          }
+        : {}),
     };
   } catch {
     // A body we cannot read is still a message; show it rather than nothing.
     return { text: content, attachments: [] };
   }
+}
+
+/** How much of the quoted message a reply carries with it. */
+export const REPLY_PREVIEW_CHARS = 140;
+
+/**
+ * The snippet a reply quotes. One line: a quote that reflows to six defeats
+ * the point of a quote.
+ */
+export function replyPreview(text: string): string {
+  const line = text.replace(/\s+/g, ' ').trim();
+  return line.length > REPLY_PREVIEW_CHARS
+    ? `${line.slice(0, REPLY_PREVIEW_CHARS - 1)}…`
+    : line;
 }
 
 /**

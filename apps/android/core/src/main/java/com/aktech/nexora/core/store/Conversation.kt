@@ -5,6 +5,7 @@ import com.aktech.nexora.core.data.ChatSocket
 import com.aktech.nexora.core.data.Message
 import com.aktech.nexora.core.data.MessageAttachment
 import com.aktech.nexora.core.data.MessageBody
+import com.aktech.nexora.core.data.MessageReply
 import com.aktech.nexora.core.data.NexoraApi
 import com.aktech.nexora.core.data.Session
 import kotlinx.coroutines.CoroutineScope
@@ -30,6 +31,19 @@ data class ReadableMessage(
     val id: String get() = message.id
     val text: String get() = body.text
     val attachments: List<MessageAttachment> get() = body.attachments
+    val replyTo: MessageReply? get() = body.replyTo
+
+    /** What a reply to this message quotes. */
+    fun quote(): MessageReply = MessageReply(
+        id = message.id,
+        author = message.author.label,
+        preview = when {
+            text.isNotBlank() -> MessageReply.preview(text)
+            attachments.isNotEmpty() -> "${attachments.size} file" +
+                if (attachments.size == 1) "" else "s"
+            else -> ""
+        },
+    )
 }
 
 /**
@@ -168,8 +182,13 @@ object Conversation {
 
     // --- sending ---
 
-    suspend fun send(channelId: String, text: String, attachments: List<MessageAttachment>) {
-        val body = MessageBody(text, attachments).encode()
+    suspend fun send(
+        channelId: String,
+        text: String,
+        attachments: List<MessageAttachment>,
+        replyTo: MessageReply? = null,
+    ) {
+        val body = MessageBody(text, attachments, replyTo).encode()
         val sealed = E2ee.encryptForChannel(channelId, body)
         // The keys go outside the envelope as well as inside it: the server
         // cannot read the manifest, and without them nothing could ever sweep
@@ -180,7 +199,9 @@ object Conversation {
 
     suspend fun edit(message: Message, text: String) {
         val existing = _messages.value[message.channelId]?.firstOrNull { it.id == message.id }
-        val body = MessageBody(text, existing?.attachments.orEmpty()).encode()
+        // An edit changes the words. What the message was answering is not one
+        // of them, so the quote rides along untouched.
+        val body = MessageBody(text, existing?.attachments.orEmpty(), existing?.body?.replyTo).encode()
         val sealed = E2ee.encryptForChannel(message.channelId, body)
         replace(read(NexoraApi.editMessage(message.id, sealed)))
     }

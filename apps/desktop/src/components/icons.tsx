@@ -308,6 +308,14 @@ export const PlayIcon = (props: IconProps): JSX.Element => (
   </Base>
 );
 
+/** Lucide's corner-up-left: the arrow every chat app uses for a reply. */
+export const ReplyIcon = (props: IconProps): JSX.Element => (
+  <Base {...props}>
+    <polyline points="9 14 4 9 9 4" />
+    <path d="M20 20v-7a4 4 0 0 0-4-4H4" />
+  </Base>
+);
+
 export const PinIcon = (props: IconProps): JSX.Element => (
   <Base {...props}>
     <line x1="12" y1="17" x2="12" y2="22" />

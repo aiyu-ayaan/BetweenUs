@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { QUICK_REACTIONS } from './emoji';
 import {
   CopyIcon,
+  ReplyIcon,
   PencilIcon,
   PinIcon,
   SmileIcon,
@@ -10,6 +11,8 @@ import {
 
 export interface MessageMenuActions {
   onReact: (emoji: string) => void;
+  /** Answers this message. Absent on a tombstone, which has nothing to quote. */
+  onReply?: () => void;
   /** Opens the full picker at the position the menu was standing in. */
   onMoreEmoji: (at: { x: number; y: number }) => void;
   onEdit?: () => void;
@@ -66,7 +69,11 @@ export function MessageMenu({
   }, [onClose]);
 
   const width = 208;
-  const rows = 1 + [actions.onEdit, actions.onPin, actions.onCopy, actions.onDelete].filter(Boolean).length;
+  const rows =
+    1 +
+    [actions.onReply, actions.onEdit, actions.onPin, actions.onCopy, actions.onDelete].filter(
+      Boolean,
+    ).length;
   const height = 52 + rows * 34;
   const left = Math.min(at.x, window.innerWidth - width - 8);
   const top = Math.min(at.y, window.innerHeight - height - 8);
@@ -110,6 +117,16 @@ export function MessageMenu({
         </button>
       </div>
 
+      {actions.onReply && (
+        <Item
+          icon={<ReplyIcon className="h-4 w-4" />}
+          label="Reply"
+          onClick={() => {
+            actions.onReply?.();
+            onClose();
+          }}
+        />
+      )}
       {actions.onEdit && (
         <Item icon={<PencilIcon className="h-4 w-4" />} label="Edit message" onClick={() => {
           actions.onEdit?.();

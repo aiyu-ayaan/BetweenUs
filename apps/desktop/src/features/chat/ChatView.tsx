@@ -7,7 +7,7 @@ import {
   type FormEvent,
   type KeyboardEvent,
 } from 'react';
-import type { Channel, MessageAttachment } from '@nexora/shared-types';
+import type { Channel, MessageAttachment, MessageReply } from '@nexora/shared-types';
 import { useChatStore, type DecryptedMessage } from '../../stores/chat';
 import { useAuthStore } from '../../stores/auth';
 import { usePresenceStore } from '../../stores/presence';
@@ -16,7 +16,7 @@ import { AttachmentList } from './Attachments';
 import { EmojiPicker } from './EmojiPicker';
 import { MessageMenu } from './MessageMenu';
 import { formatBytes, uploadAttachment } from '../../services/attachments';
-import { OVERFLOW_CHARS, overflowFile } from '../../services/message-body';
+import { OVERFLOW_CHARS, overflowFile, replyPreview } from '../../services/message-body';
 import {
   CHANNEL_LEVELS,
   channelLevel,
@@ -33,6 +33,7 @@ import {
   MessageIcon,
   PaperclipIcon,
   PinIcon,
+  ReplyIcon,
   SearchIcon,
   SendIcon,
   SmileIcon,
@@ -216,6 +217,7 @@ function MessageList({
   const deleteMessage = useChatStore((state) => state.deleteMessage);
   const togglePin = useChatStore((state) => state.togglePin);
   const react = useChatStore((state) => state.react);
+  const setReplyTo = useChatStore((state) => state.setReplyTo);
   const jumpTo = useChatStore((state) => state.jumpTo);
   const clearJump = useChatStore((state) => state.clearJump);
   const dividerId = useChatStore((state) => state.divider[channel.id] ?? null);
@@ -407,6 +409,10 @@ function MessageList({
                   </p>
                 )}
 
+                {/* Above the author line would put it above the avatar; it
+                    belongs to the message, so it sits on top of the body. */}
+                {!deleted && message.replyTo && <QuotedMessage reply={message.replyTo} />}
+
                 {deleted ? (
                   <Tombstone message={message} />
                 ) : editing === message.id ? (
@@ -452,6 +458,10 @@ function MessageList({
           actions={{
             pinned: messages.find((item) => item.id === menu.id)?.pinnedAt != null,
             onReact: (emoji) => report(react(menu.id, emoji)),
+            onReply: () => {
+              const target = messages.find((item) => item.id === menu.id);
+              if (target) setReplyTo(quoteOf(target));
+            },
             onMoreEmoji: (at) => setPicker({ id: menu.id, at }),
             onEdit:
               messages.find((item) => item.id === menu.id)?.author.id === me?.id
@@ -627,6 +637,48 @@ function ReactionRow({
   );
 }
 
+/**
+ * What a reply carries about the message it answers.
+ *
+ * Copied rather than referenced: the quoted message may be a thousand messages
+ * back and not on this device at all, and the whole thing lives inside the
+ * encrypted body - so the server never learns who is answering whom.
+ */
+function quoteOf(message: DecryptedMessage): MessageReply {
+  return {
+    id: message.id,
+    author: message.author.displayName || message.author.username,
+    preview: message.content.trim()
+      ? replyPreview(message.content)
+      : message.attachments.length > 0
+        ? `${message.attachments.length} file${message.attachments.length === 1 ? '' : 's'}`
+        : '',
+  };
+}
+
+/**
+ * The quote above a reply. Clicking it goes to what was answered, which is the
+ * only reason a quote is worth drawing rather than only naming.
+ */
+function QuotedMessage({ reply }: { reply: MessageReply }): JSX.Element {
+  const jumpToMessage = useChatStore((state) => state.jumpToMessage);
+
+  return (
+    <button
+      type="button"
+      onClick={() => jumpToMessage(reply.id)}
+      title={`Go to ${reply.author}'s message`}
+      className="mb-0.5 flex w-full min-w-0 cursor-pointer items-center gap-1.5 rounded border-l-2 border-accent/50 bg-white/[0.02] py-0.5 pl-2 pr-1 text-left transition-colors duration-150 hover:bg-white/[0.05]"
+    >
+      <ReplyIcon className="h-3 w-3 shrink-0 text-slate-500" />
+      <span className="shrink-0 text-xs font-medium text-accent">{reply.author}</span>
+      <span className="truncate text-xs text-slate-400">
+        {reply.preview || 'Sent an attachment'}
+      </span>
+    </button>
+  );
+}
+
 /** Discord puts the "this is the beginning" block here; so does this. */
 function EmptyChannel({ channel }: { channel: Channel }): JSX.Element {
   const direct = channel.type === 'DM';
@@ -673,6 +725,8 @@ const MAX_FILES = 10;
 
 function MessageComposer({ channel }: { channel: Channel }): JSX.Element {
   const sendMessage = useChatStore((state) => state.sendMessage);
+  const replyTo = useChatStore((state) => state.replyingTo[channel.id] ?? null);
+  const setReplyTo = useChatStore((state) => state.setReplyTo);
   const notifyTyping = usePresenceStore((state) => state.notifyTyping);
   const [content, setContent] = useState('');
   const [files, setFiles] = useState<File[]>([]);
@@ -686,6 +740,12 @@ function MessageComposer({ channel }: { channel: Channel }): JSX.Element {
 
   const placeholder =
     channel.type === 'DM' ? `Message @${channel.name}` : `Message #${channel.name}`;
+
+  // Choosing "Reply" in the menu is choosing to type, so the caret goes to the
+  // box rather than leaving one more click between the two.
+  useEffect(() => {
+    if (replyTo) box.current?.focus();
+  }, [replyTo]);
 
   const addFiles = (incoming: File[]): void => {
     if (incoming.length === 0) return;
@@ -726,9 +786,10 @@ function MessageComposer({ channel }: { channel: Channel }): JSX.Element {
         );
       }
 
-      await sendMessage(overflowing ? '' : trimmed, attachments);
+      await sendMessage(overflowing ? '' : trimmed, attachments, replyTo ?? undefined);
       setContent('');
       setFiles([]);
+      setReplyTo(null);
     } catch (error) {
       // Keep the text and the files in the box; nothing the user chose is lost.
       setFailure(error instanceof Error ? error.message : 'Message failed to send');
@@ -742,6 +803,12 @@ function MessageComposer({ channel }: { channel: Channel }): JSX.Element {
     if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault();
       void submit();
+    }
+    // Escape drops the reply rather than the draft: the text is the expensive
+    // thing in the box and nothing else here throws it away.
+    if (event.key === 'Escape' && replyTo) {
+      event.preventDefault();
+      setReplyTo(null);
     }
   };
 
@@ -779,6 +846,27 @@ function MessageComposer({ channel }: { channel: Channel }): JSX.Element {
             : 'border-edge bg-surface-800 focus-within:border-white/[0.14]'
         }`}
       >
+        {replyTo && (
+          <div className="flex items-center gap-2 border-b border-edge px-4 py-2">
+            <ReplyIcon className="h-3.5 w-3.5 shrink-0 text-slate-500" />
+            <span className="shrink-0 text-xs text-slate-400">
+              Replying to <span className="font-medium text-accent">{replyTo.author}</span>
+            </span>
+            <span className="truncate text-xs text-slate-500">
+              {replyTo.preview || 'Sent an attachment'}
+            </span>
+            <button
+              type="button"
+              onClick={() => setReplyTo(null)}
+              aria-label="Cancel reply"
+              title="Cancel reply"
+              className="ml-auto cursor-pointer text-slate-400 transition-colors duration-200 hover:text-danger"
+            >
+              <XIcon className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        )}
+
         {files.length > 0 && (
           <ul className="flex flex-wrap gap-2 border-b border-edge px-4 py-2.5">
             {files.map((file, index) => (

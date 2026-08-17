@@ -57,6 +57,7 @@ fun MessageActionsSheet(
     self: PublicUser,
     canModerate: Boolean,
     onDismiss: () -> Unit,
+    onReply: () -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
     onPin: () -> Unit,
@@ -85,6 +86,11 @@ fun MessageActionsSheet(
                 }
             }
 
+            ListRow(
+                title = "Reply",
+                leading = { NexoraIcon(NexoraIcons.Reply, tint = Slate400) },
+                onClick = onReply,
+            )
             ListRow(
                 title = "Copy text",
                 leading = { NexoraIcon(NexoraIcons.Copy, tint = Slate400) },

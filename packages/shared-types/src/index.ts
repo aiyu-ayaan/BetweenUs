@@ -521,13 +521,36 @@ export interface MessageAttachment {
 }
 
 /**
- * The plaintext inside `Message.content` once a message carries files. A
- * message with no attachments is still encoded as bare text, so everything
- * written before attachments existed keeps rendering.
+ * What a message is a reply to.
+ *
+ * The author and a snippet are copied in rather than looked up, and that is
+ * deliberate on two counts. The quoted message may be a thousand messages back
+ * and not on this device at all - a reply has to render without fetching
+ * anything. And it lives inside the encrypted body, so the server learns
+ * nothing about who is answering whom: a reply is an ordinary message to it.
+ *
+ * The consequence is that a quote is a snapshot. Editing the quoted message
+ * does not rewrite the quotes of it, which is the same thing every chat app
+ * does and is honest about what was being answered at the time.
+ */
+export interface MessageReply {
+  /** The message being replied to, for the jump-to-it click. */
+  id: string;
+  /** Who wrote it, as they were named when the reply was sent. */
+  author: string;
+  /** The first line or so of it. Empty for a message that was only files. */
+  preview: string;
+}
+
+/**
+ * The plaintext inside `Message.content` once a message carries more than
+ * text. A message that is only text is still encoded as bare text, so
+ * everything written before this existed keeps rendering.
  */
 export interface MessageBody {
   text: string;
   attachments: MessageAttachment[];
+  replyTo?: MessageReply;
 }
 
 // --- End-to-end encryption ---

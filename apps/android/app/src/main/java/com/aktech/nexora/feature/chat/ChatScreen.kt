@@ -44,6 +44,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.aktech.nexora.core.data.MessageAttachment
+import com.aktech.nexora.core.data.MessageReply
 import com.aktech.nexora.core.data.PublicUser
 import com.aktech.nexora.core.store.Conversation
 import com.aktech.nexora.core.store.Presence
@@ -96,6 +97,9 @@ fun ChatScreen(
 
     var acting by remember { mutableStateOf<ReadableMessage?>(null) }
     var editing by remember { mutableStateOf<ReadableMessage?>(null) }
+    var replyingTo by remember(channelId) { mutableStateOf<MessageReply?>(null) }
+    /** A quoted message that has just been jumped to, flashed so it is findable. */
+    var highlighted by remember { mutableStateOf<String?>(null) }
     var showPins by remember { mutableStateOf(false) }
     var failure by remember { mutableStateOf<String?>(null) }
     var pending by remember { mutableStateOf<List<MessageAttachment>>(emptyList()) }
@@ -148,6 +152,14 @@ fun ChatScreen(
     }
     LaunchedEffect(messages.size) {
         if (messages.isNotEmpty() && atBottom) listState.animateScrollToItem(messages.lastIndex)
+    }
+
+    // The flash marks where the jump landed, then gets out of the way.
+    LaunchedEffect(highlighted) {
+        if (highlighted != null) {
+            kotlinx.coroutines.delay(2000)
+            highlighted = null
+        }
     }
 
     LaunchedEffect(listState.firstVisibleItemIndex) {
@@ -257,7 +269,17 @@ fun ChatScreen(
                         previous = previous,
                         self = self,
                         channelId = channelId,
+                        highlighted = highlighted == readable.id,
                         onLongPress = { acting = readable },
+                        onOpenQuoted = { quotedId ->
+                            val at = messages.indexOfFirst { it.id == quotedId }
+                            // Not on this device yet: the quote carries enough
+                            // to read, which is why it carries it at all.
+                            if (at >= 0) {
+                                scope.launch { listState.animateScrollToItem(at) }
+                                highlighted = quotedId
+                            }
+                        },
                         onReact = { emoji ->
                             scope.launch {
                                 failure = runCatching { Conversation.react(readable.message, emoji) }
@@ -311,9 +333,11 @@ fun ChatScreen(
         Composer(
             channelId = channelId,
             editing = editing,
+            replyingTo = replyingTo,
             attachments = pending,
             uploading = uploading,
             onCancelEdit = { editing = null },
+            onCancelReply = { replyingTo = null },
             onRemoveAttachment = { pending = pending - it },
             onPickFile = { showAttachmentSheet = true },
             onCameraClick = { cameraPermission.request() },
@@ -325,8 +349,9 @@ fun ChatScreen(
                             Conversation.edit(target.message, text)
                             editing = null
                         } else {
-                            Conversation.send(channelId, text, pending)
+                            Conversation.send(channelId, text, pending, replyingTo)
                             pending = emptyList()
+                            replyingTo = null
                         }
                         null
                     }.exceptionOrNull()?.message
@@ -389,6 +414,7 @@ fun ChatScreen(
             self = self,
             canModerate = Workspace.server(channel?.serverId)?.can("DELETE_MESSAGE") == true,
             onDismiss = { acting = null },
+            onReply = { replyingTo = readable.quote(); acting = null },
             onEdit = { editing = readable; acting = null },
             onDelete = {
                 scope.launch {

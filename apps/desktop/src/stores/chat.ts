@@ -5,6 +5,7 @@ import type {
   DirectChannel,
   Message,
   MessageAttachment,
+  MessageReply,
   ServerMember,
   ServerWithRole,
   UpdateServerMemberRequest,
@@ -32,6 +33,8 @@ import { useAuthStore } from './auth';
  */
 export interface DecryptedMessage extends Message {
   attachments: MessageAttachment[];
+  /** What this message answers, quoted inside the envelope. */
+  replyTo?: MessageReply;
 }
 
 interface ChatState {
@@ -107,7 +110,18 @@ interface ChatState {
     isPrivate?: boolean;
     memberIds?: string[];
   }) => Promise<void>;
-  sendMessage: (content: string, attachments?: MessageAttachment[]) => Promise<void>;
+  sendMessage: (
+    content: string,
+    attachments?: MessageAttachment[],
+    replyTo?: MessageReply,
+  ) => Promise<void>;
+  /**
+   * The message the composer is answering, per channel, so switching away and
+   * back does not silently drop what was being replied to.
+   */
+  replyingTo: Record<string, MessageReply | null>;
+  /** Starts a reply to a message in the open channel, or clears one with null. */
+  setReplyTo: (reply: MessageReply | null) => void;
   /** Own message always; anyone else's with DELETE_MESSAGE in that server. */
   deleteMessage: (messageId: string) => Promise<void>;
   /** Rewrites the body of your own message, re-encrypted for the channel. */
@@ -352,14 +366,22 @@ export const useChatStore = create<ChatState>((set, get) => ({
     if (channel.type === 'TEXT') await get().selectChannel(channel.id);
   },
 
-  sendMessage: async (content, attachments = []) => {
+  replyingTo: {},
+
+  setReplyTo: (reply) => {
+    const channelId = get().activeChannelId;
+    if (!channelId) return;
+    set({ replyingTo: { ...get().replyingTo, [channelId]: reply } });
+  },
+
+  sendMessage: async (content, attachments = [], replyTo) => {
     const channelId = get().activeChannelId;
     if (!channelId) return;
     // The server stores and forwards ciphertext only - and the attachment
     // manifest is inside it, so the names and types are encrypted too.
     const envelope = await encryptForChannel(
       channelId,
-      encodeBody({ text: content, attachments }),
+      encodeBody({ text: content, attachments, ...(replyTo ? { replyTo } : {}) }),
     );
     // No optimistic insert: the message arrives over the socket, so an
     // optimistic copy would have to be de-duplicated for no real gain.
@@ -391,7 +413,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const existing = get().messages.find((message) => message.id === messageId);
     const envelope = await encryptForChannel(
       channelId,
-      encodeBody({ text: content, attachments: existing?.attachments ?? [] }),
+      encodeBody({
+        text: content,
+        attachments: existing?.attachments ?? [],
+        // An edit changes the words. What the message was answering is not one
+        // of them, so the quote rides along untouched.
+        ...(existing?.replyTo ? { replyTo: existing.replyTo } : {}),
+      }),
     );
     await api.editMessage(messageId, envelope);
   },
@@ -542,6 +570,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       jumpTo: null,
       readMarkers: {},
       divider: {},
+      replyingTo: {},
     });
   },
 }));
@@ -605,7 +634,12 @@ function toDecrypted(message: Message, plaintext: string): DecryptedMessage {
   // an attachment manifest out of it.
   if (plaintext === UNDECRYPTABLE) return { ...message, content: plaintext, attachments: [] };
   const body = decodeBody(plaintext);
-  return { ...message, content: body.text, attachments: body.attachments };
+  return {
+    ...message,
+    content: body.text,
+    attachments: body.attachments,
+    ...(body.replyTo ? { replyTo: body.replyTo } : {}),
+  };
 }
 
 function notificationText(message: DecryptedMessage): string | null {

@@ -413,14 +413,54 @@ data class MessageAttachment(
  * can type a message that pretends to be one. Sniffing for a leading `{`,
  * which is what this used to do, is exactly the hole the marker closes.
  */
-data class MessageBody(val text: String, val attachments: List<MessageAttachment> = emptyList()) {
+/**
+ * What a message is a reply to.
+ *
+ * The author and a snippet are copied in rather than looked up: the quoted
+ * message may be a thousand messages back and not on this device at all, and a
+ * reply has to render without fetching anything. It lives inside the encrypted
+ * body, so the server learns nothing about who is answering whom.
+ *
+ * Byte for byte the desktop's `MessageReply`. Changing one changes both.
+ */
+data class MessageReply(val id: String, val author: String, val preview: String) {
+    fun toJson(): JSONObject = JSONObject()
+        .put("id", id)
+        .put("author", author)
+        .put("preview", preview)
+
+    companion object {
+        /** How much of the quoted message a reply carries with it. */
+        const val PREVIEW_CHARS = 140
+
+        /** Null for a quote with no id: it would be a block nothing can open. */
+        fun from(json: JSONObject): MessageReply? {
+            val id = json.optString("id")
+            if (id.isEmpty()) return null
+            return MessageReply(id, json.optString("author"), json.optString("preview"))
+        }
+
+        /** One line, however many the original had. */
+        fun preview(text: String): String {
+            val line = text.replace(Regex("\\s+"), " ").trim()
+            return if (line.length > PREVIEW_CHARS) line.take(PREVIEW_CHARS - 1) + "…" else line
+        }
+    }
+}
+
+data class MessageBody(
+    val text: String,
+    val attachments: List<MessageAttachment> = emptyList(),
+    val replyTo: MessageReply? = null,
+) {
     fun encode(): String =
-        if (attachments.isEmpty()) {
+        if (attachments.isEmpty() && replyTo == null) {
             text
         } else {
             BODY_MARKER + JSONObject()
                 .put("text", text)
                 .put("attachments", JSONArray().also { a -> attachments.forEach { a.put(it.toJson()) } })
+                .apply { replyTo?.let { put("replyTo", it.toJson()) } }
                 .toString()
         }
 
@@ -437,6 +477,7 @@ data class MessageBody(val text: String, val attachments: List<MessageAttachment
                     attachments = json.optJSONArray("attachments")
                         ?.map { MessageAttachment.from(it) }
                         .orEmpty(),
+                    replyTo = json.optJSONObject("replyTo")?.let { MessageReply.from(it) },
                 )
             }
                 // A body we cannot read is still a message; show it rather than

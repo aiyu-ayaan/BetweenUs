@@ -1,7 +1,14 @@
 /** Self-check: `pnpm --filter @nexora/desktop check`. Message body encoding. */
 import assert from 'node:assert/strict';
 import type { MessageAttachment } from '@nexora/shared-types';
-import { OVERFLOW_CHARS, decodeBody, encodeBody, overflowFile } from './message-body';
+import {
+  OVERFLOW_CHARS,
+  REPLY_PREVIEW_CHARS,
+  decodeBody,
+  encodeBody,
+  overflowFile,
+  replyPreview,
+} from './message-body';
 
 const file: MessageAttachment = {
   key: 'attachments/u1/2026-08/abc',
@@ -40,6 +47,26 @@ async function main(): Promise<void> {
     text: '\u0000nexora-body:1\nnot json',
     attachments: [],
   });
+
+  // A reply carries no files and is still a document, because the quote has to
+  // survive the round trip.
+  const reply = {
+    text: 'agreed',
+    attachments: [],
+    replyTo: { id: 'm-1', author: 'Ada', preview: 'shall we ship it' },
+  };
+  assert.deepEqual(decodeBody(encodeBody(reply)), reply);
+
+  // A quote with no id is dropped rather than rendered as an unclickable block.
+  assert.deepEqual(
+    decodeBody('\u0000nexora-body:1\n{"text":"hi","attachments":[],"replyTo":{"author":"Ada"}}'),
+    { text: 'hi', attachments: [] },
+  );
+
+  // Quotes are one line, however many the original had.
+  assert.equal(replyPreview('  two\n\nlines  '), 'two lines');
+  assert.equal(replyPreview('x'.repeat(500)).length, REPLY_PREVIEW_CHARS);
+  assert.equal(replyPreview('x'.repeat(500)).endsWith('…'), true);
 
   // An over-long message becomes a text file that keeps every character.
   const long = 'x'.repeat(OVERFLOW_CHARS + 500);
