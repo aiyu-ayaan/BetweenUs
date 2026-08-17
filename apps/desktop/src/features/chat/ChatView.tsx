@@ -1,4 +1,12 @@
-import { Fragment, useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
+import {
+  Fragment,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type FormEvent,
+  type KeyboardEvent,
+} from 'react';
 import type { Channel, MessageAttachment } from '@nexora/shared-types';
 import { useChatStore, type DecryptedMessage } from '../../stores/chat';
 import { useAuthStore } from '../../stores/auth';
@@ -178,6 +186,9 @@ export function ChatView({ onToggleMembers }: { onToggleMembers?: () => void }):
   );
 }
 
+/** How far off the bottom still counts as reading the newest message. */
+const FOLLOW_SLACK_PX = 120;
+
 function MessageList({
   messages,
   loading,
@@ -189,7 +200,14 @@ function MessageList({
   error: string | null;
   channel: Channel;
 }): JSX.Element {
-  const bottom = useRef<HTMLDivElement>(null);
+  const viewport = useRef<HTMLDivElement>(null);
+  const list = useRef<HTMLUListElement>(null);
+  /**
+   * Whether the view is pinned to the newest message. It stops being pinned the
+   * moment somebody scrolls up to read something, because dragging them back
+   * down every time a message arrives is worse than not following at all.
+   */
+  const following = useRef(true);
   const me = useAuthStore((state) => state.user);
   // Own messages anywhere; anyone else's only with the moderator permission,
   // which no direct message ever carries.
@@ -221,9 +239,49 @@ function MessageList({
     });
   };
 
+  /**
+   * Opening a channel starts at the newest message, without an animation - a
+   * conversation you have just walked into has no "before" to scroll from.
+   *
+   * `loading` is in the dependencies because the skeleton renders a different
+   * element: the viewport this scrolls does not exist until history is on
+   * screen, and the effect that ran while it was missing scrolled nothing.
+   */
+  useLayoutEffect(() => {
+    following.current = true;
+    const box = viewport.current;
+    if (box) box.scrollTop = box.scrollHeight;
+  }, [channel.id, loading]);
+
+  const newest = messages[messages.length - 1]?.id ?? null;
+
+  /**
+   * A message arrived. Keyed on the newest id rather than the count, because
+   * switching between two channels that hold the same number of messages
+   * changes neither the length nor the scroll position - which is why the list
+   * used to open somewhere in the middle of a conversation.
+   */
   useEffect(() => {
-    bottom.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages.length]);
+    const box = viewport.current;
+    if (!box || !following.current) return;
+    box.scrollTo({ top: box.scrollHeight, behavior: 'smooth' });
+  }, [newest]);
+
+  /**
+   * Attachments decrypt after their row is drawn, so the list grows under a
+   * scroll that had already finished. While the view is pinned to the bottom,
+   * every one of those growths takes it back down.
+   */
+  useEffect(() => {
+    const box = viewport.current;
+    const items = list.current;
+    if (!box || !items || typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(() => {
+      if (following.current) box.scrollTop = box.scrollHeight;
+    });
+    observer.observe(items);
+    return () => observer.disconnect();
+  }, [loading]);
 
   // A pin or a search result asked for a message: scroll to it and flash it, so
   // it is findable in a wall of text that otherwise looks the same.
@@ -265,7 +323,19 @@ function MessageList({
   }
 
   return (
-    <div className="relative flex-1 overflow-y-auto px-4 py-4" role="log" aria-live="polite">
+    <div
+      ref={viewport}
+      onScroll={(event) => {
+        const box = event.currentTarget;
+        // "Near enough the bottom" rather than exactly at it: a smooth scroll
+        // that is still finishing, or a row that grew by a pixel, must not
+        // count as somebody scrolling away.
+        following.current = box.scrollHeight - box.scrollTop - box.clientHeight < FOLLOW_SLACK_PX;
+      }}
+      className="relative flex-1 overflow-y-auto px-4 py-4"
+      role="log"
+      aria-live="polite"
+    >
       {failure && (
         <p
           role="alert"
@@ -277,7 +347,7 @@ function MessageList({
 
       {messages.length === 0 && <EmptyChannel channel={channel} />}
 
-      <ul>
+      <ul ref={list}>
         {messages.map((message, index) => {
           // Consecutive messages from one author collapse into a group.
           const previous = messages[index - 1];
@@ -369,7 +439,6 @@ function MessageList({
           );
         })}
       </ul>
-      <div ref={bottom} />
 
       {menu && (
         <MessageMenu
