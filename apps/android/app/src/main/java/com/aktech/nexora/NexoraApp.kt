@@ -3,6 +3,7 @@ package com.aktech.nexora
 import android.app.Application
 import com.aktech.nexora.core.crypto.E2ee
 import com.aktech.nexora.core.data.Endpoint
+import com.aktech.nexora.core.data.NetworkWatch
 import com.aktech.nexora.core.data.Session
 import com.aktech.nexora.core.store.Cache
 import com.aktech.nexora.core.store.LastPlace
@@ -18,6 +19,7 @@ class NexoraApp : Application() {
     override fun onCreate() {
         super.onCreate()
         Endpoint.init(this)
+        NetworkWatch.init(this)
         Session.init(this)
         E2ee.init(this)
         LastPlace.init(this)

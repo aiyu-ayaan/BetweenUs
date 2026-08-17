@@ -109,6 +109,29 @@ open class JsonSocket(private val path: String) {
         }.apply { isDaemon = true }.start()
     }
 
+    /**
+     * The phone has a connection again, so stop waiting out a timer that was
+     * measuring a problem which no longer exists.
+     *
+     * The backoff still handles the other case - a server that is refusing
+     * connections, where hammering it is exactly wrong. This is only ever
+     * called when the *phone* changed, and `open()` is a no-op on a socket that
+     * is already up, so a handover firing it twice costs nothing.
+     */
+    @Synchronized
+    private fun networkReturned() {
+        if (closedByUs || token == null || socket != null) return
+        // The next failure starts the ladder from the bottom: whatever the
+        // count had climbed to belonged to a network that has been replaced.
+        attempt = 0
+        log("network returned")
+        open()
+    }
+
+    init {
+        NetworkWatch.onAvailable { networkReturned() }
+    }
+
     /** Overridden to re-subscribe: the server keeps nothing across connections. */
     protected open fun onConnected() = Unit
 
