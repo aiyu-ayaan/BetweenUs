@@ -30,6 +30,7 @@ const DEFAULTS: NotificationPreferences = {
   quietEndMinute: null,
   mutedChannelIds: [],
   mentionOnlyChannelIds: [],
+  mutedUserIds: [],
 };
 
 // Held in a module rather than a store: the decision is taken inside a socket
@@ -73,6 +74,27 @@ export async function updateNotificationPreferences(
 
 export function resetNotificationPreferences(): void {
   publish(DEFAULTS);
+}
+
+/** True when this account has muted that person, wherever they write. */
+export function isUserMuted(userId: string): boolean {
+  return preferences.mutedUserIds.includes(userId);
+}
+
+/**
+ * Mutes or unmutes one person.
+ *
+ * A person rather than a place: muting five channels because one of them is
+ * loud takes four channels away that were not the problem, and leaving is not
+ * an option for a colleague. It follows the account, like every other
+ * preference here, so it holds on the next machine.
+ */
+export async function setUserMuted(userId: string, muted: boolean): Promise<void> {
+  const next = muted
+    ? [...new Set([...preferences.mutedUserIds, userId])]
+    : preferences.mutedUserIds.filter((id) => id !== userId);
+
+  publish(await api.updateNotificationPreferences({ mutedUserIds: next }));
 }
 
 export function isChannelMuted(channelId: string): boolean {
@@ -157,6 +179,8 @@ interface MessageNotification {
   channelId: string;
   channelName: string;
   author: string;
+  /** Who wrote it, for the per-person mute. The envelope carries this. */
+  authorId?: string;
   /** Decrypted body, or null when this device holds no key for the channel. */
   text: string | null;
   /** Is this the channel currently open? */
@@ -166,6 +190,10 @@ interface MessageNotification {
 }
 
 export function notifyMessage(message: MessageNotification): void {
+  // A muted person is silent even when they mention you: "wherever they write"
+  // includes writing your name, and a mute that any mention could bypass would
+  // be a mute the loud person controls.
+  if (message.authorId && isUserMuted(message.authorId)) return;
   if (silenced(message.channelId, message.mentioned ?? false)) return;
 
   // Whether the window is really focused is the main process's answer, not

@@ -48,6 +48,13 @@ export class UpdatePreferencesDto {
   @ArrayMaxSize(500)
   @IsString({ each: true })
   mentionOnlyChannelIds?: string[];
+
+  /** People rather than channels, same shape and same cap. */
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(500)
+  @IsString({ each: true })
+  mutedUserIds?: string[];
 }
 
 export class MarkReadDto {

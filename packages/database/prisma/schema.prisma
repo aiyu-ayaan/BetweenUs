@@ -136,6 +136,14 @@ model NotificationSetting {
   /// server cannot read it: bodies are sealed with the channel key and this
   /// service stores a preference, not a message.
   mentionOnlyChannelIds String[] @default([])
+  /// People this account never wants raised, wherever they write.
+  ///
+  /// A channel mute is the wrong tool for one loud person in five channels, and
+  /// leaving is the wrong tool for a colleague. Same shape and same reasoning
+  /// as the two lists above: small, read whole, and applied on the client -
+  /// which is the only side that knows who wrote a sealed message, since the
+  /// author is on the envelope but the decision to raise anything is not.
+  mutedUserIds String[] @default([])
   updatedAt       DateTime @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)

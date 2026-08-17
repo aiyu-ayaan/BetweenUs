@@ -1,7 +1,15 @@
+import { useEffect, useState } from 'react';
 import type { PresenceStatus, ServerMember, ServerRole } from '@nexora/shared-types';
 import { useChatStore } from '../../stores/chat';
+import { useFriendsStore } from '../../stores/friends';
 import { usePresenceStore } from '../../stores/presence';
+import { useAuthStore } from '../../stores/auth';
 import { Avatar } from '../../components/Avatar';
+import {
+  isUserMuted,
+  onPreferencesChanged,
+  setUserMuted,
+} from '../../services/notifications';
 
 /**
  * The right-hand column in a server: who is here, online first. Members are
@@ -15,6 +23,9 @@ export function MemberList(): JSX.Element {
   const members = useChatStore((state) => state.members);
   const online = usePresenceStore((state) => state.online);
   const statusOf = usePresenceStore((state) => state.statusOf);
+  const [menu, setMenu] = useState<{ member: ServerMember; at: { x: number; y: number } } | null>(
+    null,
+  );
 
   const here = members.filter((member) => online.has(member.userId));
   const away = members.filter((member) => !online.has(member.userId));
@@ -27,9 +38,19 @@ export function MemberList(): JSX.Element {
       aria-label="Members"
       className="panel hidden w-60 shrink-0 flex-col overflow-y-auto bg-surface-800 px-2 py-4 lg:flex"
     >
-      <Group label={`Admins — ${staff.length}`} members={staff} statusOf={statusOf} />
-      <Group label={`Online — ${rest.length}`} members={rest} statusOf={statusOf} />
-      <Group label={`Offline — ${away.length}`} members={away} statusOf={statusOf} muted />
+      <Group label={`Admins — ${staff.length}`} members={staff} statusOf={statusOf} onOpen={setMenu} />
+      <Group label={`Online — ${rest.length}`} members={rest} statusOf={statusOf} onOpen={setMenu} />
+      <Group
+        label={`Offline — ${away.length}`}
+        members={away}
+        statusOf={statusOf}
+        muted
+        onOpen={setMenu}
+      />
+
+      {menu && (
+        <MemberMenu member={menu.member} at={menu.at} onClose={() => setMenu(null)} />
+      )}
     </aside>
   );
 }
@@ -39,11 +60,13 @@ function Group({
   members,
   statusOf,
   muted = false,
+  onOpen,
 }: {
   label: string;
   members: ServerMember[];
   statusOf: (userId: string) => PresenceStatus;
   muted?: boolean;
+  onOpen: (menu: { member: ServerMember; at: { x: number; y: number } }) => void;
 }): JSX.Element | null {
   if (members.length === 0) return null;
 
@@ -56,7 +79,14 @@ function Group({
         {members.map((member) => (
           <li key={member.userId}>
             <div
-              className={`flex items-center gap-3 rounded-md px-2 py-1.5 transition-colors duration-200 hover:bg-white/[0.05] ${
+              onContextMenu={(event) => {
+                event.preventDefault();
+                onOpen({ member, at: { x: event.clientX, y: event.clientY } });
+              }}
+              onClick={(event) =>
+                onOpen({ member, at: { x: event.clientX, y: event.clientY } })
+              }
+              className={`flex cursor-pointer items-center gap-3 rounded-md px-2 py-1.5 transition-colors duration-200 hover:bg-white/[0.05] ${
                 muted ? 'opacity-40' : ''
               }`}
             >
@@ -90,4 +120,150 @@ function Group({
 
 function isStaff(role: ServerRole): boolean {
   return role === 'OWNER' || role === 'ADMIN' || role === 'MODERATOR';
+}
+
+/**
+ * What you can do about one person, from the column that lists them.
+ *
+ * A member list that only draws names is a member list you have to leave to act
+ * on: a direct message is on the friends screen, a friend request is on the
+ * search, and muting one loud person was not anywhere at all. Everything here
+ * is about the person rather than the server - moderation stays in server
+ * settings, where the permission that allows it is also explained.
+ */
+function MemberMenu({
+  member,
+  at,
+  onClose,
+}: {
+  member: ServerMember;
+  at: { x: number; y: number };
+  onClose: () => void;
+}): JSX.Element | null {
+  const me = useAuthStore((state) => state.user);
+  const friends = useFriendsStore((state) => state.friends);
+  const addFriend = useFriendsStore((state) => state.add);
+  const openDirect = useFriendsStore((state) => state.openDirect);
+  const [muted, setMuted] = useState(() => isUserMuted(member.userId));
+  const [note, setNote] = useState<string | null>(null);
+
+  useEffect(() => onPreferencesChanged(() => setMuted(isUserMuted(member.userId))), [member.userId]);
+
+  useEffect(() => {
+    const away = (event: MouseEvent): void => {
+      if (!(event.target as HTMLElement).closest('[data-member-menu]')) onClose();
+    };
+    const escape = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape') onClose();
+    };
+    const timer = window.setTimeout(() => document.addEventListener('mousedown', away), 0);
+    document.addEventListener('keydown', escape);
+    return () => {
+      window.clearTimeout(timer);
+      document.removeEventListener('mousedown', away);
+      document.removeEventListener('keydown', escape);
+    };
+  }, [onClose]);
+
+  // Nothing here applies to yourself: you cannot befriend, mute or message you.
+  if (member.userId === me?.id) return null;
+
+  const relationship = friends.find((friend) => friend.user.id === member.userId);
+  const width = 224;
+  const left = Math.min(at.x, window.innerWidth - width - 8);
+  const top = Math.min(at.y, window.innerHeight - 200);
+
+  const act = (work: Promise<unknown>, said: string): void => {
+    void work
+      .then(() => {
+        setNote(said);
+        window.setTimeout(onClose, 700);
+      })
+      .catch((error: unknown) => {
+        setNote(error instanceof Error ? error.message : 'That did not work');
+      });
+  };
+
+  return (
+    <div
+      data-member-menu
+      role="menu"
+      aria-label={`Actions for ${member.displayName}`}
+      style={{ left, top, width }}
+      className="fixed z-50 animate-pop overflow-hidden rounded-xl border border-edge bg-surface-900 py-1 shadow-pop"
+    >
+      <p className="truncate px-3 py-1.5 text-xs text-slate-500">@{member.username}</p>
+
+      {/* A direct message needs a friendship, and the service says so - which
+          is why this reports rather than assuming it worked. */}
+      <Item
+        label="Message"
+        onClick={() =>
+          act(openDirect(member.userId), 'Opening the conversation')
+        }
+      />
+
+      {/* A friendship is what a direct message needs, so it is offered right
+          beside it. Somebody already asked, or already accepted, is told which
+          rather than offered a button that does nothing. */}
+      {!relationship && (
+        <Item
+          label="Add friend"
+          onClick={() => act(addFriend(member.username), 'Request sent')}
+        />
+      )}
+      {relationship?.direction === 'outgoing' && <Item label="Friend request sent" disabled />}
+      {relationship?.direction === 'incoming' && (
+        <Item
+          label="Accept friend request"
+          onClick={() => act(addFriend(member.username), 'Friends')}
+        />
+      )}
+
+      <Item
+        label={muted ? 'Unmute notifications' : 'Mute notifications'}
+        hint={muted ? undefined : 'Silences them wherever they write, including mentions'}
+        onClick={() => act(setUserMuted(member.userId, !muted), muted ? 'Unmuted' : 'Muted')}
+      />
+
+      <Item
+        label="Copy user ID"
+        onClick={() => {
+          void navigator.clipboard?.writeText(member.userId);
+          onClose();
+        }}
+      />
+
+      {note && <p className="px-3 py-1.5 text-xs text-slate-400">{note}</p>}
+    </div>
+  );
+}
+
+function Item({
+  label,
+  hint,
+  onClick,
+  disabled = false,
+}: {
+  label: string;
+  hint?: string;
+  onClick?: () => void;
+  disabled?: boolean;
+}): JSX.Element {
+  return (
+    <button
+      type="button"
+      role="menuitem"
+      disabled={disabled}
+      onClick={onClick}
+      title={hint}
+      className={`block w-full px-3 py-1.5 text-left text-sm transition-colors duration-150 ${
+        disabled
+          ? 'cursor-not-allowed text-slate-500'
+          : 'cursor-pointer text-slate-200 hover:bg-white/[0.07] hover:text-slate-100'
+      }`}
+    >
+      {label}
+    </button>
+  );
 }

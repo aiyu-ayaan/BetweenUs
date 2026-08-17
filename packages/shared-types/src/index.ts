@@ -866,6 +866,15 @@ export interface NotificationPreferences {
    * silent - the stronger setting wins.
    */
   mentionOnlyChannelIds: string[];
+  /**
+   * People this account never wants raised, wherever they write.
+   *
+   * A channel mute is the wrong tool for one loud person in five channels, and
+   * leaving is the wrong tool for a colleague. Applied on the client for the
+   * same reason mentions are: the author is on the envelope, but nothing else
+   * about the message is legible to a service.
+   */
+  mutedUserIds: string[];
 }
 
 /** What a channel's bell is set to. Three states, in order of loudness. */
@@ -873,6 +882,7 @@ export type ChannelNotificationLevel = 'all' | 'mentions' | 'none';
 
 export interface UpdateNotificationPreferencesRequest {
   enabled?: boolean;
+  mutedUserIds?: string[];
   quietStartMinute?: number | null;
   quietEndMinute?: number | null;
   /** Replaces the whole list; send the list you want, not a delta. */

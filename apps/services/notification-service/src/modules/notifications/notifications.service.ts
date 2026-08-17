@@ -26,6 +26,7 @@ const DEFAULTS: NotificationPreferences = {
   quietEndMinute: null,
   mutedChannelIds: [],
   mentionOnlyChannelIds: [],
+  mutedUserIds: [],
 };
 
 @Injectable()
@@ -39,6 +40,7 @@ export class NotificationsService {
       quietEndMinute: row.quietEndMinute,
       mutedChannelIds: row.mutedChannelIds,
       mentionOnlyChannelIds: row.mentionOnlyChannelIds,
+      mutedUserIds: row.mutedUserIds,
     };
   }
 
@@ -58,6 +60,9 @@ export class NotificationsService {
       ...(patch.mentionOnlyChannelIds !== undefined
         ? { mentionOnlyChannelIds: [...new Set(patch.mentionOnlyChannelIds)] }
         : {}),
+      ...(patch.mutedUserIds !== undefined
+        ? { mutedUserIds: [...new Set(patch.mutedUserIds)] }
+        : {}),
     };
 
     const row = await prisma.notificationSetting.upsert({
@@ -72,6 +77,7 @@ export class NotificationsService {
       quietEndMinute: row.quietEndMinute,
       mutedChannelIds: row.mutedChannelIds,
       mentionOnlyChannelIds: row.mentionOnlyChannelIds,
+      mutedUserIds: row.mutedUserIds,
     };
   }
 

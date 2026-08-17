@@ -907,6 +907,7 @@ chatSocket.on((event) => {
           (channel) => channel.id === incoming.channelId,
         )?.name ?? 'a channel',
       author: incoming.author.displayName || incoming.author.username,
+      authorId: incoming.author.id,
       // A message this device cannot read still deserves a notification, just
       // without quoting the placeholder into it. Nor is a file's name quoted:
       // the notification goes to the OS, which is outside the encrypted path.
