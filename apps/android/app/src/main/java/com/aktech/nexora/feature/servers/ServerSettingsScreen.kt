@@ -15,6 +15,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -23,10 +24,16 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.layout.width
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
+import android.content.Intent
 import com.aktech.nexora.core.data.ChannelType
 import com.aktech.nexora.core.data.NexoraApi
+import com.aktech.nexora.core.data.ServerInvite
 import com.aktech.nexora.core.store.Workspace
 import com.aktech.nexora.ui.components.Chip
 import com.aktech.nexora.ui.components.EmptyState
@@ -44,6 +51,7 @@ import com.aktech.nexora.ui.theme.Ground
 import com.aktech.nexora.ui.theme.Slate100
 import com.aktech.nexora.ui.theme.Slate50
 import com.aktech.nexora.ui.theme.Slate500
+import com.aktech.nexora.ui.theme.StatusOnline
 import com.aktech.nexora.ui.theme.Surface950
 import kotlinx.coroutines.launch
 
@@ -112,7 +120,9 @@ fun ServerSettingsScreen(serverId: String?, onBack: () -> Unit) {
                 )
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    text = "Invite people with the slug ${server.slug}",
+                    // Not the slug. A slug is a name and stopped opening doors
+                    // when invites landed; this line still said otherwise.
+                    text = "People join with an invite code - see below.",
                     style = MaterialTheme.typography.bodySmall,
                     color = Slate500,
                 )
@@ -162,6 +172,10 @@ fun ServerSettingsScreen(serverId: String?, onBack: () -> Unit) {
                 Notice(it, Danger, Modifier.padding(horizontal = 16.dp))
             }
 
+            if (server.can("MANAGE_SERVER")) {
+                InviteSection(serverId = server.id, busy = busy, onNote = { note = it })
+            }
+
             SectionLabel("Leaving")
             Column(Modifier.padding(horizontal = 16.dp)) {
                 Text(
@@ -206,3 +220,177 @@ fun ServerSettingsScreen(serverId: String?, onBack: () -> Unit) {
         }
     }
 }
+
+/**
+ * The codes that let somebody in, and the two ways to stop one working.
+ *
+ * The desktop has had this since invites landed; the phone had the three API
+ * calls and no screen, so a server created on a phone could not be joined by
+ * anybody at all. An invite is the only way in now - the slug is a name and
+ * opens nothing - which makes this the difference between a server and a
+ * private diary.
+ *
+ * Loaded when the section is first drawn rather than with the rest of the
+ * screen: most visits here are to rename a channel, and a list of codes is not
+ * worth a request on every one of them.
+ */
+@Composable
+private fun InviteSection(serverId: String, busy: Boolean, onNote: (String?) -> Unit) {
+    val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    val clipboard = LocalClipboardManager.current
+
+    var invites by remember(serverId) { mutableStateOf<List<ServerInvite>?>(null) }
+    var working by remember { mutableStateOf(false) }
+    /** Hours until a new invite expires, or null for one that never does. */
+    var expiresIn by remember { mutableStateOf<Int?>(24) }
+    /** Uses a new invite allows, or null for unlimited. */
+    var maxUses by remember { mutableStateOf<Int?>(null) }
+
+    fun act(block: suspend () -> Unit) {
+        scope.launch {
+            working = true
+            onNote(runCatching { block() }.exceptionOrNull()?.message)
+            working = false
+        }
+    }
+
+    LaunchedEffect(serverId) {
+        invites = runCatching { NexoraApi.serverInvites(serverId) }.getOrNull().orEmpty()
+    }
+
+    SectionLabel("Invites")
+
+    Column(Modifier.padding(horizontal = 16.dp)) {
+        Text(
+            text = "A code is the only way in. Give one an expiry, a use limit, both or neither.",
+            style = MaterialTheme.typography.bodySmall,
+            color = Slate500,
+        )
+        Spacer(Modifier.height(10.dp))
+
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Chip(
+                text = when (expiresIn) {
+                    null -> "Never expires"
+                    1 -> "1 hour"
+                    24 -> "1 day"
+                    else -> "7 days"
+                },
+                onClick = {
+                    // A short cycle beats a date picker for four options.
+                    expiresIn = when (expiresIn) {
+                        1 -> 24
+                        24 -> 24 * 7
+                        24 * 7 -> null
+                        else -> 1
+                    }
+                },
+            )
+            Spacer(Modifier.width(8.dp))
+            Chip(
+                text = maxUses?.let { count -> "$count uses" } ?: "Unlimited uses",
+                onClick = {
+                    maxUses = when (maxUses) {
+                        null -> 1
+                        1 -> 5
+                        5 -> 25
+                        else -> null
+                    }
+                },
+            )
+        }
+
+        Spacer(Modifier.height(10.dp))
+        NexoraButton(
+            text = "Create an invite",
+            busy = working || busy,
+            onClick = {
+                act {
+                    val created = NexoraApi.createServerInvite(serverId, expiresIn, maxUses)
+                    invites = listOf(created) + invites.orEmpty()
+                    // Straight to the clipboard: the only reason to mint one is
+                    // to send it to somebody, and the next thing anybody does is
+                    // go looking for a copy button.
+                    clipboard.setText(AnnotatedString(created.code))
+                }
+            },
+        )
+    }
+
+    val list = invites
+    if (list == null) {
+        ListRow(title = "Loading invites", leading = { NexoraIcon(NexoraIcons.UserPlus) })
+    } else if (list.isEmpty()) {
+        ListRow(
+            title = "No invites yet",
+            subtitle = "Nobody can join until there is one",
+            leading = { NexoraIcon(NexoraIcons.UserPlus) },
+        )
+    } else {
+        list.forEach { invite ->
+            ListRow(
+                title = invite.code,
+                subtitle = inviteState(invite),
+                titleColor = if (invite.active) Slate100 else Slate500,
+                leading = {
+                    NexoraIcon(
+                        icon = NexoraIcons.UserPlus,
+                        tint = if (invite.active) StatusOnline else Slate500,
+                    )
+                },
+                trailing = {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (invite.active) {
+                            IconAction(NexoraIcons.Copy, "Copy the code", onClick = {
+                                clipboard.setText(AnnotatedString(invite.code))
+                            })
+                            IconAction(NexoraIcons.Send, "Send this code", onClick = {
+                                val share = Intent(Intent.ACTION_SEND).apply {
+                                    type = "text/plain"
+                                    putExtra(
+                                        Intent.EXTRA_TEXT,
+                                        "Join me on Nexora with the code " + invite.code,
+                                    )
+                                }
+                                context.startActivity(
+                                    Intent.createChooser(share, "Send the invite"),
+                                )
+                            })
+                            IconAction(NexoraIcons.X, "Revoke", tint = Danger, onClick = {
+                                act {
+                                    val revoked = NexoraApi.revokeServerInvite(serverId, invite.code)
+                                    invites = invites.orEmpty().map { existing ->
+                                        if (existing.code == revoked.code) revoked else existing
+                                    }
+                                }
+                            })
+                        }
+                    }
+                },
+            )
+        }
+    }
+}
+
+/**
+ * Why an invite does or does not work, in one line.
+ *
+ * Three separate reasons an invite is dead, and a screen that said only
+ * "inactive" would leave whoever minted it guessing which.
+ */
+private fun inviteState(invite: ServerInvite): String {
+    val limit = invite.maxUses
+    val expires = invite.expiresAt
+    val used = if (limit == null) "${invite.uses} used" else "${invite.uses}/$limit used"
+    return when {
+        invite.revokedAt != null -> "Revoked - $used"
+        !invite.active && limit != null && invite.uses >= limit -> "Spent - $used"
+        !invite.active -> "Expired - $used"
+        expires != null -> "$used - expires ${shortDate(expires)}"
+        else -> "$used - never expires"
+    }
+}
+
+/** The date part of an ISO timestamp. A time to the second is not news here. */
+private fun shortDate(iso: String): String = iso.take(10)
