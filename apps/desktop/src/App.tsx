@@ -1,6 +1,11 @@
 import { useEffect, useState } from 'react';
 import { useAuthStore } from './stores/auth';
 import { useChatStore } from './stores/chat';
+import {
+  captureInviteFromUrl,
+  clearPendingInvite,
+  pendingInvite,
+} from './services/invite-link';
 import { useFriendsStore } from './stores/friends';
 import { usePresenceStore } from './stores/presence';
 import {
@@ -65,6 +70,13 @@ function Session(): JSX.Element {
   // session never flashes the login form on the way in.
   const [booting, setBooting] = useState(true);
 
+  // Before anything else, and before the first render: a window opened by an
+  // invite link has the code in its address bar, and the sign-in that may
+  // follow reloads the page. Taking it now means it survives that.
+  useEffect(() => {
+    captureInviteFromUrl();
+  }, []);
+
   useEffect(() => {
     void (async () => {
       try {
@@ -82,6 +94,30 @@ function Session(): JSX.Element {
   }, [restore, login]);
 
   const resetPresence = usePresenceStore((state) => state.reset);
+
+  /**
+   * Joins the server an invite link pointed at, once there is a session to join
+   * it with.
+   *
+   * The invite is cleared whatever happens. A code that was refused - expired,
+   * spent, revoked, or for a deployment this client is not on - is not going to
+   * start working, and one that is retried on every launch is a link that
+   * rejoins a server somebody deliberately left.
+   */
+  const redeemInvite = async (): Promise<void> => {
+    const code = pendingInvite();
+    if (!code) return;
+    clearPendingInvite();
+
+    const chat = useChatStore.getState();
+    try {
+      await chat.joinServer(code);
+    } catch {
+      // Said where it can be seen rather than thrown into a boot sequence:
+      // there is no screen up yet to put an error on.
+      console.warn('[invite] that invite could not be used');
+    }
+  };
 
   /**
    * Coming back to the window means the channel on screen has been read.
@@ -260,6 +296,7 @@ function Session(): JSX.Element {
       // Preferences before unread: the badge is harmless either way, but a
       // notification raised in the half-second between them would ignore a mute.
       void loadNotificationPreferences().then(() => loadUnread());
+      void redeemInvite();
       return;
     }
     reset();

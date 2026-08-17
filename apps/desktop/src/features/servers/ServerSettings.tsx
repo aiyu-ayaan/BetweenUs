@@ -10,6 +10,8 @@ import type {
 } from '@nexora/shared-types';
 import { ASSIGNABLE_PERMISSIONS, PERMISSIONS, SERVER_ROLES } from '@nexora/permissions';
 import { api } from '../../services/api';
+import { inviteLink } from '../../services/invite-link';
+import { serverUrl } from '../../services/endpoint';
 import { syncChannelKeys } from '../../services/e2ee';
 import { useAuthStore } from '../../stores/auth';
 import { PicturePicker } from '../../components/PicturePicker';
@@ -1233,10 +1235,20 @@ function Invites(): JSX.Element {
     }
   };
 
-  const copy = (code: string): void => {
-    void navigator.clipboard?.writeText(code).then(() => {
-      setCopied(code);
-      window.setTimeout(() => setCopied((current) => (current === code ? null : current)), 2000);
+  /**
+   * Copies the link rather than the code by default.
+   *
+   * A code is eight characters that look like a typo when they arrive in
+   * somebody's chat, and it does not say which deployment it belongs to - two
+   * Nexora servers can both have `k3m9x2qp` and neither is wrong. The code
+   * itself is still one click away for anywhere a link will not travel.
+   */
+  const copy = (code: string, what: 'link' | 'code'): void => {
+    const text = what === 'link' ? inviteLink(serverUrl(), code) : code;
+    void navigator.clipboard?.writeText(text).then(() => {
+      const mark = `${code}:${what}`;
+      setCopied(mark);
+      window.setTimeout(() => setCopied((current) => (current === mark ? null : current)), 2000);
     });
   };
 
@@ -1244,8 +1256,10 @@ function Invites(): JSX.Element {
     <>
       <h1 className="text-xl font-semibold text-slate-50">Invites</h1>
       <p className="mt-2 text-sm text-slate-400">
-        An invite is how somebody gets in. Each one can expire, can be limited to a number of
-        people, and can be taken back - which is what the server&apos;s name never could be.
+        An invite is how somebody gets in - anybody, friend or not: they follow the link and
+        choose to join, which is why adding a stranger from the members screen is refused and
+        this is not. Each one can expire, can be limited to a number of people, and can be taken
+        back - which is what the server&apos;s name never could be.
       </p>
 
       <div className="mt-5 rounded-lg bg-surface-800 p-4">
@@ -1320,10 +1334,19 @@ function Invites(): JSX.Element {
               <div className="flex shrink-0 gap-2">
                 <button
                   type="button"
-                  onClick={() => copy(invite.code)}
+                  onClick={() => copy(invite.code, 'link')}
+                  title={inviteLink(serverUrl(), invite.code)}
                   className="cursor-pointer rounded bg-white/[0.07] px-3 py-1.5 text-sm text-slate-100 transition-colors duration-200 hover:bg-white/[0.1]"
                 >
-                  {copied === invite.code ? 'Copied' : 'Copy'}
+                  {copied === `${invite.code}:link` ? 'Copied' : 'Copy link'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => copy(invite.code, 'code')}
+                  title="The code on its own, for anywhere a link will not travel"
+                  className="cursor-pointer rounded bg-white/[0.07] px-3 py-1.5 text-sm text-slate-300 transition-colors duration-200 hover:bg-white/[0.1]"
+                >
+                  {copied === `${invite.code}:code` ? 'Copied' : 'Code'}
                 </button>
                 {invite.active && (
                   <button

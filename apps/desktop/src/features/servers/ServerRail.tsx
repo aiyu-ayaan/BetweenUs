@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useChatStore } from '../../stores/chat';
+import { inviteCodeFrom } from '../../services/invite-link';
 import { CompassIcon, MessageIcon, PlusIcon } from '../../components/icons';
 import { ServerIcon } from '../../components/ServerIcon';
 
@@ -27,8 +28,16 @@ export function ServerRail(): JSX.Element {
     setBusy(true);
     setFailure(null);
     try {
-      if (dialog === 'create') await createServer(trimmed);
-      else await joinServer(trimmed);
+      if (dialog === 'create') {
+        await createServer(trimmed);
+      } else {
+        // A link or a bare code: what somebody pastes is a link about half the
+        // time, and a field that silently ignores one of the two is a field
+        // people report as broken.
+        const code = inviteCodeFrom(trimmed);
+        if (!code) throw new Error('That is not an invite link or code');
+        await joinServer(code);
+      }
       setDialog('none');
       setValue('');
     } catch (error) {
