@@ -64,6 +64,49 @@ Backend:
       is a cursor, so a registration between two requests cannot repeat a row;
       the panel's own login now offers whichever providers are switched on.
 
+Backlog worked down, this pass:
+
+- [x] **Multi-device E2EE.** A key list per user, one wrap per device, and a
+      revocation that means something. Two holes the self-check found before
+      either shipped: revoking deletes the wraps, so the staleness rule could
+      not see the revoked device at all and is now derived from the clock -
+      an epoch is stale when a device of a current member was revoked after it
+      was minted; and re-registering a revoked device id used to clear the flag,
+      which made revocation a suggestion. The migration carries existing rows
+      over as a device called `legacy` rather than dropping them, which would
+      have made every message written so far unreadable. `API_CONTRACT_VERSION`
+      moves to 2.
+- [x] **An unread line that survives a restart, and a jump to it.** It was a
+      race, not a missing feature: the first channel opened before the read
+      markers landed, so the line was placed against an empty table and decided
+      nothing was new. The channel waits for them, the markers are cached, and
+      the line stops vanishing five seconds after it appears.
+- [x] **Manual quality override** for a share and for a remote session - a
+      bitrate, a frame rate and a codec, applied inside `shareOptions` so one
+      change covers both. This is how a LAN gets told it is a LAN.
+- [x] **A recent-servers list, and a client/server version check.** Six
+      addresses, newest first; `withRecent` is pure and self-checked because the
+      ordering is the part with a bug in it. `GET /api/v1/auth/version` answers
+      the contract number, and a deployment that has never heard of the route
+      says nothing rather than something alarming.
+- [x] **Who-reacted names.** The ids were already in the summary; the joining
+      is in `services/reactions.ts` with a self-check, because an empty list, a
+      list of one, and the position of "You" are the three cases a
+      sentence-builder gets wrong.
+- [x] **One screen share at a time**, replacing the one before it the way Teams
+      does. Arbitrated at the gateway, because two people pressing the button at
+      the same moment need one answer and a mesh has no ordering to give one.
+- [x] **Android: reconnect on a network-change callback.** The backoff still
+      handles a server that is refusing connections; this makes the other wait
+      nothing rather than shorter.
+- [x] **Android: microphone processing, a hi-fi mode, and an output route**,
+      including the Opus `fmtp` patch that carries bitrate, channels and DTX.
+      Input sensitivity is still open and the reason is written down.
+- [x] **Android: invite management.** The three API calls existed and no screen
+      did, so a server created on a phone could not be joined by anybody.
+- [x] **Android: the share quality ladder** was already landed with tests; this
+      pass only found that this document still had it open.
+
 Chat and media, across all three clients:
 
 - [x] **Replies, on all three clients.** A quote - the author and one line of
@@ -168,11 +211,11 @@ blocked by anything outside this document.
 
 ### Backend
 
-- [ ] **Multi-device E2EE.** A key list per user, one wrap per device, so a
-      device can be revoked without rotating the account identity. What exists
-      copies one identity to every machine.
 - [ ] **Identity rotation after a lost device**, re-sealing current channel keys
-      for the new identity. Depends on the item above being the shape it wants.
+      for the new identity. The device list it depended on now exists, and
+      revoking a device already re-keys every channel it could read - what is
+      left is rotating the *account* identity when the backup itself is
+      suspect.
 - [ ] **Safety numbers**, so a lying key directory is detectable. The last of
       the E2EE three and the one with the most UI in it.
 - [ ] **Split the shared Prisma schema per service, and stand up
@@ -182,15 +225,9 @@ blocked by anything outside this document.
 
 ### Desktop and web
 
-- [ ] **Manual quality override** for a share and for a remote session. There is
-      no "use 20 Mbps" and no way to force a codec, so a LAN cannot be told it
-      is a LAN - everything is inferred from congestion control.
-- [ ] **An unread line that survives a restart, and a jump to it.** The read
-      marker survives; the line is only placed when a channel is opened in this
-      session.
-- [ ] **Edit history, encrypted reactions, paged search, who-reacted names, a
-      pinned panel that pages.** Five separate message-side gaps, listed
-      together because they are one screen's worth of work each.
+- [ ] **Edit history, encrypted reactions, paged search, a pinned panel that
+      pages.** Four separate message-side gaps, listed together because they are
+      one screen's worth of work each. (Who-reacted names landed.)
 - [ ] **A light theme.** The ramp is defined once, which is what makes one
       possible; nothing else about it has been designed.
 - [ ] **Decrypted history persisted under a device key.** The ciphertext is on
@@ -200,9 +237,6 @@ blocked by anything outside this document.
       device key is what would close this.
 - [ ] **Chunked AEAD attachments, and a video transcode.** The first lifts the
       100 MB ceiling; the second means ffmpeg in the client.
-- [ ] **A recent-servers list, and a client/server version check.** One address
-      is remembered, not a history; a client too old for a deployment finds out
-      through a failing request.
 - [ ] **Input injection on macOS and Linux.** CGEventPost and XTEST/uinput, one
       backend each behind the same three-function interface.
 - [ ] **`REMOTE_FILE_TRANSFER` and `REMOTE_AUDIO`.** Both exist in the
@@ -216,17 +250,17 @@ blocked by anything outside this document.
 
 - [ ] **Markdown-ish body rendering.** `message-body.ts` is the contract.
       (Replies landed, on all three clients.)
-- [ ] **Reconnect driven by a network-change callback**, rather than waiting for
-      the backoff timer to come round.
-- [ ] **Audio device and input-sensitivity settings.** The desktop's two modes,
-      device pickers and gate threshold, on a phone.
-- [ ] **Ducking, an incoming phone call, and headset routing** - including a
-      route picker. Three parts of the same audio-focus problem.
-- [ ] **The share quality ladder**, mirroring `share-quality.ts`.
-- [ ] **Invite management on the phone.** Minting one with an expiry and a use
-      limit, revoking it, and a link that opens the app. The API client already
-      has the three calls; there is no screen. (Joining with a code and creating
-      a server both landed with the invites work.)
+- [ ] **Input sensitivity on the phone.** The two modes, the processing switches
+      and an output route landed; the gate did not. The desktop gates the
+      captured track in a Web Audio worklet, and Android's WebRTC has no
+      insertion point on the capture path short of a custom audio device module.
+      A level meter driving a mute toggle would be a different thing wearing the
+      same name.
+- [ ] **Ducking and an incoming phone call.** Two parts of the audio-focus
+      problem; the third, headset routing, landed with the route picker.
+- [ ] **An invite link that opens the app.** Minting, revoking and sharing a
+      code landed; a deep link that joins on a tap did not, and it needs an
+      app-link and a host to claim.
 - [ ] **Remote clipboard and file transfer**, each gated on its own permission.
 - [ ] **OAuth through Custom Tabs**, with an app-link callback, offering only
       the providers the server reports.
@@ -245,7 +279,7 @@ changed along the way - presence scoping in `presence-service/smoke.mjs`,
 invites in `chat-service/smoke.mjs` and `notification-service/smoke.mjs` - have
 been syntax-checked and not executed.
 
-**Two migrations are waiting, and their names sort backwards.**
+**Three migrations are waiting, and two of their names sort backwards.**
 `20260810100000_custom_roles` and `20260810110000_attachments` exist as SQL and
 have to be applied - `pnpm db:migrate` - before the roles screen or any
 attachment upload can work at all. Both are stamped 10 August while migrations
@@ -254,6 +288,11 @@ running database has. `migrate deploy` applies them anyway; `migrate dev` may
 call it drift and offer a reset, which on a database with anything in it is the
 wrong answer. Renaming both to a stamp after `20260816140000_server_invites`,
 before either reaches a deployment, is the cheap fix.
+
+The third is `20260818120000_multi_device_keys`, which sorts correctly and has
+to be applied before any client on contract 2 can publish a key. It rewrites
+`device_keys` and `channel_keys` in place and carries every existing row over -
+see the file, which says why each step is what it is. It has never been run.
 
 The cases most worth putting a person in front of, in order:
 
@@ -299,7 +338,19 @@ The cases most worth putting a person in front of, in order:
 14. Android's server picker, which is the fix least visible from the code: from
     Settings, switch deployments and confirm the app actually restarts into the
     other one.
-15. The join and leave tones with three people in a call, which is where the
+15. Multi-device keys, which is the change with the most that can go silently
+    wrong: sign in on a second machine and confirm it reads the channel without
+    the first one being open, then revoke it from the first and confirm the
+    channel re-keys, the revoked machine reads nothing sent afterwards, and
+    signing in on it again is refused rather than quietly re-admitting it. The
+    migration wants a database with real rows in it, not an empty one - the
+    whole point of it is what happens to the keys that already exist.
+16. Two people sharing a screen: press the button on the second machine while
+    the first is sharing. The first must stop, both must agree who holds it, and
+    the one that was replaced must say why rather than appearing to have
+    crashed. Then have the holder leave the call and confirm the screen is free
+    rather than held by a socket that has gone.
+17. The join and leave tones with three people in a call, which is where the
     two failure modes live: joining a channel that already has two people in it
     must play one tone and not two, and nobody should hear a tone for a peer
     connection that merely reconnected. Worth listening to on a headset plugged
