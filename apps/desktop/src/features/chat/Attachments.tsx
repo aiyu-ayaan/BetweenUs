@@ -83,6 +83,13 @@ function isPlayable(attachment: MessageAttachment): boolean {
   );
 }
 
+/**
+ * Video and audio up to this size fetch themselves when scrolled to. A phone
+ * clip is a few megabytes; a screen recording is not, and that is the one worth
+ * asking about first.
+ */
+const AUTO_LOAD_BYTES = 40 * 1024 * 1024;
+
 // --- Images -----------------------------------------------------------------
 
 /**
@@ -152,11 +159,18 @@ function ImageAttachment({
 // --- Video and audio --------------------------------------------------------
 
 /**
- * A player, not a download link. The source is an object URL over the
- * decrypted bytes, so the whole file has to arrive before playback starts -
- * there is no range request to make against a blob, and the ciphertext is one
- * sealed unit anyway. That is why it waits for a click rather than fetching
- * 36 MB the moment the message scrolls past.
+ * A player, not a download link.
+ *
+ * The source is an object URL over the decrypted bytes, so the whole file has
+ * to arrive before playback starts - there is no range request to make against
+ * a blob, and the ciphertext is one sealed unit anyway.
+ *
+ * It used to wait for a click before fetching anything, which meant every video
+ * in a channel was a grey card that had to be poked before it would even show
+ * its first frame. Now anything small enough fetches itself as soon as it is
+ * scrolled to, and only the genuinely large files still ask first - the point
+ * of the click was never the click, it was not spending 200 MB of somebody's
+ * connection on a message they scrolled past.
  */
 function MediaAttachment({
   channelId,
@@ -165,53 +179,61 @@ function MediaAttachment({
   channelId: string;
   attachment: MessageAttachment;
 }): JSX.Element {
-  const [wanted, setWanted] = useState(false);
+  const [asked, setAsked] = useState(false);
+  const box = useRef<HTMLDivElement>(null);
+  const onScreen = useOnScreen(box);
+  const wanted = asked || (attachment.size <= AUTO_LOAD_BYTES && onScreen);
   const { url, error } = useDecrypted(channelId, wanted ? attachment : null);
   const isVideo = attachment.contentType.startsWith('video/');
 
   if (error) return <FileCard channelId={channelId} attachment={attachment} note={error} />;
 
-  if (!wanted) {
-    return (
-      <FileCard
-        channelId={channelId}
-        attachment={attachment}
-        onPlay={() => setWanted(true)}
-      />
-    );
-  }
-
   return (
-    <div className="overflow-hidden rounded-lg border border-edge bg-surface-850">
-      {url ? (
-        isVideo ? (
-          <video
-            src={url}
-            controls
-            autoPlay
-            className="block max-h-[320px] w-full bg-black"
-            style={{ maxWidth: PREVIEW_WIDTH * 1.4 }}
-          />
-        ) : (
-          <audio src={url} controls autoPlay className="block w-full" />
-        )
+    <div ref={box}>
+      {!wanted ? (
+        <FileCard
+          channelId={channelId}
+          attachment={attachment}
+          note={`${formatBytes(attachment.size)} - click to load`}
+          onPlay={() => setAsked(true)}
+        />
       ) : (
-        <p className="px-3 py-6 text-center text-sm text-slate-400">
-          Decrypting {attachment.name}…
-        </p>
-      )}
-      <div className="flex items-center gap-2 border-t border-edge px-3 py-1.5">
-        <span className="truncate text-xs text-slate-400">
-          {attachment.name} · {formatBytes(attachment.size)}
-        </span>
-        <div className="ml-auto">
-          <IconButton
-            label="Download"
-            onClick={() => void saveAttachment(channelId, attachment)}
-            icon={<DownloadIcon className="h-4 w-4" />}
-          />
+        <div className="overflow-hidden rounded-lg border border-edge bg-surface-850">
+          {url ? (
+            isVideo ? (
+              <video
+                src={url}
+                controls
+                // Only a deliberate click starts playback. A video that fetched
+                // itself on the way past and then started talking is worse than
+                // the grey card this replaced.
+                autoPlay={asked}
+                preload="auto"
+                className="block max-h-[320px] w-full bg-black"
+                style={{ maxWidth: PREVIEW_WIDTH * 1.4 }}
+              />
+            ) : (
+              <audio src={url} controls autoPlay={asked} className="block w-full" />
+            )
+          ) : (
+            <p className="px-3 py-6 text-center text-sm text-slate-400">
+              Decrypting {attachment.name}…
+            </p>
+          )}
+          <div className="flex items-center gap-2 border-t border-edge px-3 py-1.5">
+            <span className="truncate text-xs text-slate-400">
+              {attachment.name} · {formatBytes(attachment.size)}
+            </span>
+            <div className="ml-auto">
+              <IconButton
+                label="Download"
+                onClick={() => void saveAttachment(channelId, attachment)}
+                icon={<DownloadIcon className="h-4 w-4" />}
+              />
+            </div>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
@@ -433,6 +455,37 @@ function useDecrypted(
   }, [channelId, attachment]);
 
   return { url, error };
+}
+
+/**
+ * Whether an element is on screen. Used to decide when a video is worth
+ * fetching: "in the channel" is not the same question as "being looked at",
+ * and a channel of forty clips would otherwise download all forty at once.
+ */
+function useOnScreen(ref: { current: Element | null }): boolean {
+  const [seen, setSeen] = useState(false);
+
+  useEffect(() => {
+    const element = ref.current;
+    // No observer (or no element yet) means fetch rather than never fetch.
+    if (!element || typeof IntersectionObserver === 'undefined') {
+      setSeen(true);
+      return;
+    }
+    const observer = new IntersectionObserver(
+      (entries) => {
+        // One way only: a video that has been scrolled past has already been
+        // fetched, and un-setting this would tear down the player mid-frame.
+        if (entries.some((entry) => entry.isIntersecting)) setSeen(true);
+      },
+      // A little ahead of the viewport, so it is ready by the time it arrives.
+      { rootMargin: '300px' },
+    );
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [ref]);
+
+  return seen;
 }
 
 function IconButton({

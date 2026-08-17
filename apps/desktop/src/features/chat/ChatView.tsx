@@ -15,6 +15,7 @@ import { Avatar } from '../../components/Avatar';
 import { AttachmentList } from './Attachments';
 import { EmojiPicker } from './EmojiPicker';
 import { MessageMenu } from './MessageMenu';
+import { SendPreview, isPreviewable } from './SendPreview';
 import { formatBytes, uploadAttachment } from '../../services/attachments';
 import { OVERFLOW_CHARS, overflowFile, replyPreview } from '../../services/message-body';
 import {
@@ -119,6 +120,14 @@ function PanelButton({
 export function ChatView({ onToggleMembers }: { onToggleMembers?: () => void }): JSX.Element {
   const { messages, loadingMessages, error } = useChatStore();
   const channel = useChatStore((state) => state.activeChannel());
+  /**
+   * How a file dropped anywhere in the conversation reaches the composer that
+   * owns the pending list. A ref rather than lifted state on purpose: the drop
+   * target is the whole panel, the files belong to the composer, and moving
+   * that list up here would re-render every message on every keystroke.
+   */
+  const takeFiles = useRef<((files: File[]) => void) | null>(null);
+  const [dropping, setDropping] = useState(false);
 
   if (!channel) {
     return (
@@ -134,7 +143,39 @@ export function ChatView({ onToggleMembers }: { onToggleMembers?: () => void }):
   const isDirect = channel.type === 'DM';
 
   return (
-    <section className="panel flex min-w-0 flex-1 flex-col bg-surface-900">
+    <section
+      onDragOver={(event) => {
+        // Only a file drag. Dragging selected text across the panel is not an
+        // attachment, and lighting the whole screen up for it is alarming.
+        if (!event.dataTransfer.types.includes('Files')) return;
+        event.preventDefault();
+        setDropping(true);
+      }}
+      onDragLeave={(event) => {
+        // Moving between children fires dragleave on the way out of each one;
+        // only leaving the panel itself counts.
+        if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
+        setDropping(false);
+      }}
+      onDrop={(event) => {
+        if (!event.dataTransfer.types.includes('Files')) return;
+        event.preventDefault();
+        setDropping(false);
+        takeFiles.current?.([...event.dataTransfer.files]);
+      }}
+      className="panel relative flex min-w-0 flex-1 flex-col bg-surface-900"
+    >
+      {dropping && (
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-2 z-40 flex items-center justify-center rounded-xl border-2 border-dashed border-accent bg-accent/[0.07]"
+        >
+          <p className="rounded-lg bg-surface-900/90 px-4 py-2 text-sm font-medium text-slate-100">
+            Drop to attach to {channel.type === 'DM' ? `@${channel.name}` : `#${channel.name}`}
+          </p>
+        </div>
+      )}
+
       <header className="flex h-11 shrink-0 items-center gap-2 border-b border-edge px-3.5">
         {isDirect ? (
           <Avatar name={channel.name} size="sm" ringColour="border-surface-900" />
@@ -182,7 +223,7 @@ export function ChatView({ onToggleMembers }: { onToggleMembers?: () => void }):
         channel={channel}
       />
       <TypingIndicator channelId={channel.id} />
-      <MessageComposer channel={channel} />
+      <MessageComposer channel={channel} takeFiles={takeFiles} />
     </section>
   );
 }
@@ -778,7 +819,14 @@ function TypingIndicator({ channelId }: { channelId: string }): JSX.Element {
 /** More than this in one message and the point is a folder, not a chat. */
 const MAX_FILES = 10;
 
-function MessageComposer({ channel }: { channel: Channel }): JSX.Element {
+function MessageComposer({
+  channel,
+  takeFiles,
+}: {
+  channel: Channel;
+  /** Filled in here so a drop anywhere in the panel lands in this box. */
+  takeFiles: { current: ((files: File[]) => void) | null };
+}): JSX.Element {
   const sendMessage = useChatStore((state) => state.sendMessage);
   const replyTo = useChatStore((state) => state.replyingTo[channel.id] ?? null);
   const setReplyTo = useChatStore((state) => state.setReplyTo);
@@ -787,7 +835,7 @@ function MessageComposer({ channel }: { channel: Channel }): JSX.Element {
   const [files, setFiles] = useState<File[]>([]);
   const [sending, setSending] = useState(false);
   const [uploading, setUploading] = useState<{ name: string; percent: number } | null>(null);
-  const [dropping, setDropping] = useState(false);
+  const [previewing, setPreviewing] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
   const [emoji, setEmoji] = useState<{ x: number; y: number } | null>(null);
   const picker = useRef<HTMLInputElement>(null);
@@ -813,7 +861,13 @@ function MessageComposer({ channel }: { channel: Channel }): JSX.Element {
       }
       return [...current, ...incoming.slice(0, room)];
     });
+    // Pictures and video get looked at before they are sent; a spreadsheet has
+    // nothing to look at, so it stays a chip on the composer.
+    if (incoming.some(isPreviewable)) setPreviewing(true);
   };
+
+  // The drop target is the whole conversation panel, which is a component up.
+  takeFiles.current = addFiles;
 
   const submit = async (event?: FormEvent): Promise<void> => {
     event?.preventDefault();
@@ -845,6 +899,7 @@ function MessageComposer({ channel }: { channel: Channel }): JSX.Element {
       setContent('');
       setFiles([]);
       setReplyTo(null);
+      setPreviewing(false);
     } catch (error) {
       // Keep the text and the files in the box; nothing the user chose is lost.
       setFailure(error instanceof Error ? error.message : 'Message failed to send');
@@ -868,20 +923,10 @@ function MessageComposer({ channel }: { channel: Channel }): JSX.Element {
   };
 
   return (
-    <form
-      onSubmit={(event) => void submit(event)}
-      onDragOver={(event) => {
-        event.preventDefault();
-        setDropping(true);
-      }}
-      onDragLeave={() => setDropping(false)}
-      onDrop={(event) => {
-        event.preventDefault();
-        setDropping(false);
-        addFiles([...event.dataTransfer.files]);
-      }}
-      className="shrink-0 px-3.5 pb-4"
-    >
+    /* Dropping is handled by the panel, not by this box: a file aimed at the
+       conversation is aimed at the conversation, and a two-centimetre target at
+       the bottom of it was never the intent. */
+    <form onSubmit={(event) => void submit(event)} className="shrink-0 px-3.5 pb-4">
       {failure && (
         <p role="alert" className="mb-2 text-sm text-danger">
           {failure}
@@ -894,13 +939,7 @@ function MessageComposer({ channel }: { channel: Channel }): JSX.Element {
         </p>
       )}
 
-      <div
-        className={`rounded-xl border transition-colors duration-150 ${
-          dropping
-            ? 'border-accent bg-accent/[0.06]'
-            : 'border-edge bg-surface-800 focus-within:border-white/[0.14]'
-        }`}
-      >
+      <div className="rounded-xl border border-edge bg-surface-800 transition-colors duration-150 focus-within:border-white/[0.14]">
         {replyTo && (
           <div className="flex items-center gap-2 border-b border-edge px-4 py-2">
             <ReplyIcon className="h-3.5 w-3.5 shrink-0 text-slate-500" />
@@ -934,7 +973,18 @@ function MessageComposer({ channel }: { channel: Channel }): JSX.Element {
                 ) : (
                   <FileIcon className="h-4 w-4 shrink-0 text-slate-400" />
                 )}
-                <span className="max-w-[14rem] truncate text-xs text-slate-200">{file.name}</span>
+                {isPreviewable(file) ? (
+                  <button
+                    type="button"
+                    onClick={() => setPreviewing(true)}
+                    title={`Look at ${file.name} before sending`}
+                    className="max-w-[14rem] cursor-pointer truncate text-xs text-slate-200 underline-offset-2 hover:underline"
+                  >
+                    {file.name}
+                  </button>
+                ) : (
+                  <span className="max-w-[14rem] truncate text-xs text-slate-200">{file.name}</span>
+                )}
                 <span className="text-xs text-slate-500">{formatBytes(file.size)}</span>
                 <button
                   type="button"
@@ -1023,6 +1073,26 @@ function MessageComposer({ channel }: { channel: Channel }): JSX.Element {
         <p className="mt-1.5 text-xs text-slate-400">
           That is longer than {OVERFLOW_CHARS} characters — it will be sent as a text file.
         </p>
+      )}
+
+      {previewing && files.length > 0 && (
+        <SendPreview
+          files={files}
+          caption={content}
+          placeholder={`Add a caption${channel.type === 'DM' ? '' : ` for #${channel.name}`}`}
+          sending={sending}
+          uploading={uploading}
+          failure={failure}
+          onCaption={setContent}
+          onAdd={() => picker.current?.click()}
+          onRemove={(index) => {
+            const left = files.filter((_, at) => at !== index);
+            setFiles(left);
+            if (left.length === 0) setPreviewing(false);
+          }}
+          onSend={() => void submit()}
+          onClose={() => setPreviewing(false)}
+        />
       )}
 
       {emoji && (
