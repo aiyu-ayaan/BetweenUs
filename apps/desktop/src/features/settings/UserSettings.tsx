@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { ActiveStatus } from '@nexora/shared-types';
+import type { ActiveStatus, DeviceKey } from '@nexora/shared-types';
 import { useAuthStore } from '../../stores/auth';
 import { useChatStore } from '../../stores/chat';
 import { usePresenceStore } from '../../stores/presence';
@@ -21,7 +21,7 @@ import {
   updateNotificationPreferences,
 } from '../../services/notifications';
 import { serverUrl } from '../../services/endpoint';
-import { backupIdentity, rewrapBackupForPassword } from '../../services/e2ee';
+import { backupIdentity, deviceId, rewrapBackupForPassword } from '../../services/e2ee';
 import { useIdentityStore } from '../../stores/identity';
 import { useAgentStore } from '../../services/remote-agent';
 import { isDesktopRuntime } from '../../services/platform';
@@ -385,8 +385,106 @@ function EncryptionSection(): JSX.Element {
         </p>
         {note && <p className="text-sm text-slate-300">{note}</p>}
       </div>
+
+      <DeviceList />
     </>
   );
+}
+
+/**
+ * The machines this account has published a key from, and the button that stops
+ * one being trusted.
+ *
+ * The list is the point of the per-device directory: an account key that was
+ * copied everywhere could be revoked only by rotating it for every machine at
+ * once, which nobody was ever going to do. One row per machine makes "that
+ * laptop is not mine any more" a thing somebody can actually say.
+ */
+function DeviceList(): JSX.Element {
+  const [devices, setDevices] = useState<DeviceKey[] | null>(null);
+  const [note, setNote] = useState<string | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const mine = deviceId();
+
+  useEffect(() => {
+    void api
+      .myDevices()
+      .then(setDevices)
+      .catch(() => setDevices([]));
+  }, []);
+
+  const revoke = async (device: DeviceKey): Promise<void> => {
+    setBusy(device.deviceId);
+    setNote(null);
+    try {
+      const updated = await api.revokeDevice(device.deviceId);
+      setDevices((list) =>
+        (list ?? []).map((item) => (item.deviceId === updated.deviceId ? updated : item)),
+      );
+      setNote(
+        'Revoked. Nothing new will be encrypted for it, and every channel it was in gets a new key.',
+      );
+    } catch (error) {
+      setNote(error instanceof Error ? error.message : 'That could not be revoked');
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  return (
+    <>
+      <h2 className="mt-8 text-base font-semibold text-slate-50">Your machines</h2>
+      <p className="mt-1 text-sm text-slate-400">
+        Every machine you sign in on publishes a key of its own, and messages are encrypted for
+        each of them separately. Revoking one stops it being encrypted for and re-keys the
+        channels it could read. It cannot take back what that machine has already decrypted, and
+        it is not a substitute for signing it out.
+      </p>
+
+      <ul className="mt-3 space-y-2">
+        {devices === null && <li className="text-sm text-slate-500">Loading…</li>}
+        {devices?.length === 0 && (
+          <li className="text-sm text-slate-500">No keys published yet.</li>
+        )}
+        {devices?.map((device) => (
+          <li
+            key={device.deviceId}
+            className="flex items-center gap-3 rounded-lg bg-surface-800 px-4 py-3"
+          >
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm text-slate-100">
+                {device.label ?? 'Unnamed machine'}
+                {device.deviceId === mine && (
+                  <span className="ml-2 text-xs text-accent">this one</span>
+                )}
+              </p>
+              <p className="truncate text-xs text-slate-500">
+                {device.revokedAt
+                  ? `Revoked ${formatDay(device.revokedAt)}`
+                  : `Last seen ${formatDay(device.lastSeenAt)}`}
+              </p>
+            </div>
+            {!device.revokedAt && device.deviceId !== mine && (
+              <button
+                type="button"
+                disabled={busy === device.deviceId}
+                onClick={() => void revoke(device)}
+                className="cursor-pointer rounded px-3 py-1.5 text-xs font-medium text-danger transition-colors duration-150 hover:bg-danger hover:text-white disabled:opacity-50"
+              >
+                {busy === device.deviceId ? 'Revoking…' : 'Revoke'}
+              </button>
+            )}
+          </li>
+        ))}
+      </ul>
+      {note && <p className="mt-2 text-sm text-slate-300">{note}</p>}
+    </>
+  );
+}
+
+/** A date without a time: "last seen at 14:03" is precision nobody asked for. */
+function formatDay(iso: string): string {
+  return new Date(iso).toLocaleDateString();
 }
 
 function VoiceSection(): JSX.Element {

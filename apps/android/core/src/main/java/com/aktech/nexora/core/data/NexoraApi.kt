@@ -339,8 +339,27 @@ object NexoraApi {
 
     // --- end-to-end encryption key directory ---
 
-    suspend fun registerDeviceKey(publicKey: String): DeviceKey = io {
-        DeviceKey.from(authed("POST", "/api/v1/e2ee/devices", obj("publicKey" to publicKey)))
+    suspend fun registerDeviceKey(
+        deviceId: String,
+        publicKey: String,
+        label: String,
+    ): DeviceKey = io {
+        DeviceKey.from(
+            authed(
+                "POST",
+                "/api/v1/e2ee/devices",
+                obj("deviceId" to deviceId, "publicKey" to publicKey, "label" to label),
+            ),
+        )
+    }
+
+    /** This account's own machines, for the list that can revoke one. */
+    suspend fun myDevices(): List<DeviceKey> = io {
+        authedArray("GET", "/api/v1/e2ee/devices/mine").map { DeviceKey.from(it) }
+    }
+
+    suspend fun revokeDevice(deviceId: String): DeviceKey = io {
+        DeviceKey.from(authed("DELETE", "/api/v1/e2ee/devices/${enc(deviceId)}"))
     }
 
     suspend fun identityBackup(): IdentityBackup? = io {
@@ -364,6 +383,7 @@ object NexoraApi {
     suspend fun publishChannelKeys(
         channelId: String,
         epoch: Int,
+        senderDeviceId: String,
         entries: List<ChannelKeyEntry>,
     ): Unit = io {
         val array = JSONArray()
@@ -371,6 +391,7 @@ object NexoraApi {
             array.put(
                 JSONObject()
                     .put("recipientUserId", it.recipientUserId)
+                    .put("recipientDeviceId", it.recipientDeviceId)
                     .put("senderPublicKey", it.senderPublicKey)
                     .put("wrappedKey", it.wrappedKey)
                     .put("iv", it.iv),

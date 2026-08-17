@@ -26,14 +26,86 @@ import { MessagesService } from '../messages/messages.service';
 export class E2eeService {
   constructor(private readonly messages: MessagesService) {}
 
-  /** Publishes (or rotates) the caller's public identity key. */
-  async registerDevice(userId: string, publicKey: string): Promise<DeviceKey> {
-    const row = await prisma.deviceKey.upsert({
-      where: { userId },
-      update: { publicKey },
-      create: { userId, publicKey },
+  /**
+   * Publishes (or rotates) one machine's public identity key.
+   *
+   * A revoked id stays revoked, and re-registering it is refused rather than
+   * quietly clearing the flag. Allowing the machine to un-revoke itself would
+   * make revocation a suggestion: the case it exists for is a laptop somebody
+   * else is holding, and that laptop is running this same code.
+   *
+   * What revocation cannot do is stop a machine that still holds a valid
+   * session from starting again as a *new* device - the app would have to be
+   * reinstalled, but nothing here can tell that apart from a genuinely new
+   * laptop. Ending the session is what answers that, and this is not a
+   * substitute for it. See development/E2EE.md.
+   */
+  async registerDevice(
+    userId: string,
+    deviceId: string,
+    publicKey: string,
+    label?: string,
+  ): Promise<DeviceKey> {
+    const existing = await prisma.deviceKey.findUnique({
+      where: { userId_deviceId: { userId, deviceId } },
+      select: { revokedAt: true },
     });
-    return { userId: row.userId, publicKey: row.publicKey };
+    if (existing?.revokedAt) {
+      throw new ForbiddenException({
+        code: 'DEVICE_REVOKED',
+        message: 'This device was revoked',
+      });
+    }
+
+    const row = await prisma.deviceKey.upsert({
+      where: { userId_deviceId: { userId, deviceId } },
+      update: { publicKey, lastSeenAt: new Date(), ...(label ? { label } : {}) },
+      create: { userId, deviceId, publicKey, label: label ?? null },
+    });
+    return toDeviceKey(row);
+  }
+
+  /** This account's own machines, newest first. Nobody else's. */
+  async myDevices(userId: string): Promise<DeviceKey[]> {
+    const rows = await prisma.deviceKey.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
+    });
+    return rows.map(toDeviceKey);
+  }
+
+  /**
+   * Stops a machine being wrapped for, and takes away what it was already
+   * given.
+   *
+   * The wraps go because leaving them is leaving the key: a revoked laptop
+   * still holds its private half, and a row it can open is a row it can keep
+   * opening. What it decrypted before this is gone - it was decrypted on a
+   * machine somebody has decided not to trust, and no server-side deletion
+   * reaches that.
+   *
+   * The row itself stays. When a device stopped being trusted is the only thing
+   * anybody can audit afterwards, and a deleted row says nothing.
+   */
+  async revokeDevice(userId: string, deviceId: string): Promise<DeviceKey> {
+    const row = await prisma.deviceKey.findUnique({
+      where: { userId_deviceId: { userId, deviceId } },
+    });
+    if (!row) {
+      throw new ForbiddenException({ code: 'DEVICE_NOT_FOUND', message: 'No such device' });
+    }
+
+    const [updated] = await prisma.$transaction([
+      prisma.deviceKey.update({
+        where: { id: row.id },
+        data: { revokedAt: new Date() },
+      }),
+      prisma.channelKey.deleteMany({
+        where: { recipientUserId: userId, recipientDeviceId: deviceId },
+      }),
+    ]);
+
+    return toDeviceKey(updated);
   }
 
   /**
@@ -82,16 +154,23 @@ export class E2eeService {
     await prisma.identityBackup.upsert({ where: { userId }, update: data, create: { userId, ...data } });
   }
 
-  /** Public keys of every channel member that has registered a device. */
+  /**
+   * Every device of every channel member, minus the revoked ones.
+   *
+   * Revoked devices are filtered here rather than left to the client, because
+   * this is the list a client wraps the channel key against and "do not seal
+   * anything for that laptop again" has to be enforced where the answer is
+   * produced, not where it is used.
+   */
   async devicesForChannel(userId: string, channelId: string): Promise<DeviceKey[]> {
     await this.messages.requireChannelAccess(userId, channelId, PERMISSIONS.VIEW_CHANNEL);
     const memberIds = await this.memberIds(channelId);
 
     const rows = await prisma.deviceKey.findMany({
-      where: { userId: { in: memberIds } },
+      where: { userId: { in: memberIds }, revokedAt: null },
       orderBy: { createdAt: 'asc' },
     });
-    return rows.map((row) => ({ userId: row.userId, publicKey: row.publicKey }));
+    return rows.map(toDeviceKey);
   }
 
   /** Wrapped keys addressed to the caller, plus who still needs a re-wrap. */
@@ -100,6 +179,10 @@ export class E2eeService {
 
     const [rows, latest] = await Promise.all([
       prisma.channelKey.findMany({
+        // Every device of the caller, not only the one asking: a client holds
+        // one private key, tries each row against it, and keeps what opens.
+        // Filtering by device here would mean trusting a device id the caller
+        // supplied, which is a claim rather than a fact.
         where: { channelId, recipientUserId: userId },
         orderBy: { epoch: 'asc' },
       }),
@@ -114,7 +197,9 @@ export class E2eeService {
       keys: rows.map((row) => ({
         epoch: row.epoch,
         recipientUserId: row.recipientUserId,
+        recipientDeviceId: row.recipientDeviceId,
         senderUserId: row.senderUserId,
+        senderDeviceId: row.senderDeviceId,
         senderPublicKey: row.senderPublicKey,
         wrappedKey: row.wrappedKey,
         iv: row.iv,
@@ -139,12 +224,35 @@ export class E2eeService {
       this.memberIds(channelId),
       prisma.channelKey.findMany({
         where: { channelId, epoch },
-        select: { recipientUserId: true },
+        select: { recipientUserId: true, createdAt: true },
       }),
     ]);
 
     const members = new Set(memberIds);
-    return holders.some((holder) => !members.has(holder.recipientUserId));
+    if (holders.some((holder) => !members.has(holder.recipientUserId))) return true;
+
+    // The second way to hold a key you should not: a machine that was trusted
+    // when the epoch was minted and has been revoked since.
+    //
+    // It cannot be derived by looking for its wraps, because revoking deletes
+    // them - that is most of what revoking *is*. What is left is the timing: a
+    // device revoked after this epoch was created was a device this epoch was
+    // wrapped for, so the epoch is on a machine nobody trusts any more.
+    //
+    // Over-rotating is a re-wrap nobody notices. Under-rotating is a lost
+    // laptop reading the channel for as long as it stays on the same key, so
+    // where the two answers differ this takes the expensive one.
+    if (holders.length === 0) return false;
+    const mintedAt = holders.reduce(
+      (earliest, holder) => (holder.createdAt < earliest ? holder.createdAt : earliest),
+      holders[0]!.createdAt,
+    );
+
+    const revokedSince = await prisma.deviceKey.findFirst({
+      where: { userId: { in: memberIds }, revokedAt: { gt: mintedAt } },
+      select: { id: true },
+    });
+    return revokedSince !== null;
   }
 
   /**
@@ -180,14 +288,10 @@ export class E2eeService {
         });
       }
     } else {
-      const holdsKey = await prisma.channelKey.findUnique({
-        where: {
-          channelId_epoch_recipientUserId: {
-            channelId: dto.channelId,
-            epoch: dto.epoch,
-            recipientUserId: userId,
-          },
-        },
+      // Any of the caller's devices holding this epoch is enough: the check is
+      // "do you already have this key", and the person is the one who has it.
+      const holdsKey = await prisma.channelKey.findFirst({
+        where: { channelId: dto.channelId, epoch: dto.epoch, recipientUserId: userId },
         select: { id: true },
       });
       if (!holdsKey) {
@@ -209,12 +313,35 @@ export class E2eeService {
       }
     }
 
+    // And nothing is sealed for a device its owner has revoked. The client
+    // fetches a filtered directory, so this only catches a stale bundle or a
+    // client that decided to improvise - but it is the difference between a
+    // revocation and a suggestion.
+    const revoked = await prisma.deviceKey.findMany({
+      where: {
+        revokedAt: { not: null },
+        OR: dto.entries.map((entry) => ({
+          userId: entry.recipientUserId,
+          deviceId: entry.recipientDeviceId,
+        })),
+      },
+      select: { id: true },
+    });
+    if (revoked.length > 0) {
+      throw new ForbiddenException({
+        code: 'DEVICE_REVOKED',
+        message: 'One of those devices has been revoked',
+      });
+    }
+
     const result = await prisma.channelKey.createMany({
       data: dto.entries.map((entry) => ({
         channelId: dto.channelId,
         epoch: dto.epoch,
         recipientUserId: entry.recipientUserId,
+        recipientDeviceId: entry.recipientDeviceId,
         senderUserId: userId,
+        senderDeviceId: dto.senderDeviceId,
         senderPublicKey: entry.senderPublicKey,
         wrappedKey: entry.wrappedKey,
         iv: entry.iv,
@@ -234,17 +361,50 @@ export class E2eeService {
     return channelAudience(channelId);
   }
 
+  /**
+   * Devices that should hold this epoch and do not - one entry per machine.
+   *
+   * Per device rather than per person, which is the whole change: somebody who
+   * signed in on a second laptop yesterday is not "covered" because their first
+   * laptop was wrapped for. The comparison is against every unrevoked device of
+   * every member.
+   */
   private async missingAtEpoch(channelId: string, epoch: number): Promise<DeviceKey[]> {
     const memberIds = await this.memberIds(channelId);
-    const covered = await prisma.channelKey.findMany({
-      where: { channelId, epoch },
-      select: { recipientUserId: true },
-    });
-    const has = new Set(covered.map((row) => row.recipientUserId));
+    const [covered, devices] = await Promise.all([
+      prisma.channelKey.findMany({
+        where: { channelId, epoch },
+        select: { recipientUserId: true, recipientDeviceId: true },
+      }),
+      prisma.deviceKey.findMany({
+        where: { userId: { in: memberIds }, revokedAt: null },
+      }),
+    ]);
 
-    const rows = await prisma.deviceKey.findMany({
-      where: { userId: { in: memberIds.filter((id) => !has.has(id)) } },
-    });
-    return rows.map((row) => ({ userId: row.userId, publicKey: row.publicKey }));
+    const has = new Set(covered.map((row) => `${row.recipientUserId}:${row.recipientDeviceId}`));
+    return devices
+      .filter((device) => !has.has(`${device.userId}:${device.deviceId}`))
+      .map(toDeviceKey);
   }
+}
+
+/** One row of the directory, as the contract has it. */
+function toDeviceKey(row: {
+  userId: string;
+  deviceId: string;
+  publicKey: string;
+  label: string | null;
+  revokedAt: Date | null;
+  lastSeenAt: Date;
+  createdAt: Date;
+}): DeviceKey {
+  return {
+    userId: row.userId,
+    deviceId: row.deviceId,
+    publicKey: row.publicKey,
+    label: row.label,
+    revokedAt: row.revokedAt?.toISOString() ?? null,
+    lastSeenAt: row.lastSeenAt.toISOString(),
+    createdAt: row.createdAt.toISOString(),
+  };
 }

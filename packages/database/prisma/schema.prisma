@@ -66,7 +66,8 @@ model User {
   deletedMessages Message[]         @relation("MessageDeletedBy")
   pinnedMessages  Message[]         @relation("MessagePinnedBy")
   reactions       MessageReaction[]
-  deviceKey     DeviceKey?
+  /// One per machine this account has signed in on - see DeviceKey.
+  deviceKeys    DeviceKey[]
   identityBackup IdentityBackup?
   identities    UserIdentity[]
   notifications NotificationSetting?
@@ -189,18 +190,38 @@ model OAuthProvider {
   @@map("oauth_providers")
 }
 
-/// Public half of a user's end-to-end encryption identity key (ECDH P-256, JWK).
-/// The private half never leaves the device in the clear; the server publishes
-/// this only so members can wrap channel keys for each other. The same identity
-/// is restored on every machine the account signs in on - see IdentityBackup.
+/// One machine's end-to-end encryption identity key (ECDH P-256, JWK, public
+/// half only). The private half never leaves that machine in the clear.
+///
+/// A list per user rather than one row per user, which is the difference
+/// between "this account has a key" and "this laptop has a key". It buys two
+/// things the single row could not: a device can be revoked on its own, without
+/// rotating an identity every other machine is also using, and a channel key is
+/// wrapped for the devices that should have it rather than for an identity that
+/// has been copied to who-knows-where.
+///
+/// `deviceId` is minted by the client and is stable for an installation. A
+/// revoked row is kept rather than deleted: the wraps addressed to it go, but
+/// the record of what was trusted and when it stopped being trusted is the only
+/// thing anybody can audit afterwards.
 model DeviceKey {
-  userId    String   @id
-  publicKey String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id         String    @id @default(uuid())
+  userId     String
+  /// Client-minted, stable per installation.
+  deviceId   String
+  publicKey  String
+  /// What to call it in a list: "Ada's laptop", "Pixel 8". Client-supplied.
+  label      String?
+  /// Set when the owner revoked it. Nothing is wrapped for a revoked device.
+  revokedAt  DateTime?
+  lastSeenAt DateTime  @default(now())
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@unique([userId, deviceId])
+  @@index([userId])
   @@map("device_keys")
 }
 
@@ -234,19 +255,24 @@ model IdentityBackup {
 /// stores only ciphertext it cannot open: `wrappedKey` is sealed with the ECDH
 /// secret between `senderPublicKey` and the recipient's device key.
 model ChannelKey {
-  id              String   @id @default(uuid())
-  channelId       String
-  epoch           Int
-  recipientUserId String
-  senderUserId    String
-  senderPublicKey String
-  wrappedKey      String
-  iv              String
-  createdAt       DateTime @default(now())
+  id                String   @id @default(uuid())
+  channelId         String
+  epoch             Int
+  recipientUserId   String
+  /// Which of that user's devices this copy is sealed for. One row per device,
+  /// because a wrap is to a key and a key belongs to a machine.
+  recipientDeviceId String
+  senderUserId      String
+  /// Which machine did the sealing, so a wrap can be attributed after the fact.
+  senderDeviceId    String
+  senderPublicKey   String
+  wrappedKey        String
+  iv                String
+  createdAt         DateTime @default(now())
 
   channel Channel @relation(fields: [channelId], references: [id], onDelete: Cascade)
 
-  @@unique([channelId, epoch, recipientUserId])
+  @@unique([channelId, epoch, recipientUserId, recipientDeviceId])
   @@index([channelId, recipientUserId])
   @@map("channel_keys")
 }

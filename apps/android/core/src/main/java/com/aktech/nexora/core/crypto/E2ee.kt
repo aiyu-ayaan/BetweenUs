@@ -32,6 +32,13 @@ sealed interface IdentityStatus {
     data object Absent : IdentityStatus
     data class Locked(val kind: String) : IdentityStatus
     data class Ready(val backedUp: Boolean) : IdentityStatus
+
+    /**
+     * The owner revoked this machine from another one. Nothing new is wrapped
+     * for it, so it reads what it already had and nothing since - saying so
+     * beats a screen full of "no key on this device yet".
+     */
+    data object Revoked : IdentityStatus
 }
 
 /**
@@ -172,8 +179,19 @@ object E2ee {
 
     private suspend fun adopt(pair: Crypto.KeyPairJwk, backedUp: Boolean = false) {
         identity = pair
-        // Idempotent: re-publishing keeps the directory correct if the row was lost.
-        NexoraApi.registerDeviceKey(pair.publicKey)
+        try {
+            // Idempotent: re-publishing keeps the directory correct if the row
+            // was lost, and refreshes when this phone was last seen.
+            NexoraApi.registerDeviceKey(DeviceIdentity.id(), pair.publicKey, DeviceIdentity.label())
+        } catch (error: ApiError) {
+            // Revoked from another machine. Not a thing to retry, and not a
+            // reason to mint a new id - minting one is how a revoked phone
+            // would walk straight back into the directory.
+            if (error.code == "DEVICE_REVOKED") {
+                _status.value = IdentityStatus.Revoked
+            }
+            throw error
+        }
         _status.value = IdentityStatus.Ready(backedUp)
     }
 
@@ -460,7 +478,8 @@ object E2ee {
                     entry.senderPublicKey,
                 )
             }
-            // A key sealed for a previous identity of ours; skip it, keep the rest.
+            // A key sealed for another of our machines, or for an identity we
+            // have since replaced. Both are rows this private half cannot open.
         }
         return keys
     }
@@ -478,10 +497,13 @@ object E2ee {
         // a moment ago. Minting a key we cannot open - or, with an empty
         // directory, publishing nothing at all - leaves the channel unkeyed and
         // the sender told there is no key, so always seal one for ourselves.
-        val recipients = if (devices.any { it.userId == userId }) {
+        // Being listed under our user id is no longer enough: the directory is a
+        // row per machine, and that row may be the other laptop.
+        val mine = DeviceIdentity.id()
+        val recipients = if (devices.any { it.userId == userId && it.deviceId == mine }) {
             devices
         } else {
-            devices + DeviceKey(userId.orEmpty(), self.publicKey)
+            devices + DeviceKey(userId.orEmpty(), mine, self.publicKey)
         }
 
         try {
@@ -509,7 +531,9 @@ object E2ee {
                 val wrapped = Crypto.wrapChannelKey(key, self.privateKey, recipient.publicKey)
                 ChannelKeyEntry(
                     recipientUserId = recipient.userId,
+                    recipientDeviceId = recipient.deviceId,
                     senderUserId = userId.orEmpty(),
+                    senderDeviceId = DeviceIdentity.id(),
                     senderPublicKey = self.publicKey,
                     wrappedKey = wrapped.wrappedKey,
                     iv = wrapped.iv,
@@ -520,6 +544,6 @@ object E2ee {
             // channel being keyed for everybody else.
         }
         if (entries.isEmpty()) return
-        NexoraApi.publishChannelKeys(channelId, epoch, entries)
+        NexoraApi.publishChannelKeys(channelId, epoch, DeviceIdentity.id(), entries)
     }
 }

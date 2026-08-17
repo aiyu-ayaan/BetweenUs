@@ -1,6 +1,7 @@
 package com.aktech.nexora
 
 import android.app.Application
+import com.aktech.nexora.core.crypto.DeviceIdentity
 import com.aktech.nexora.core.crypto.E2ee
 import com.aktech.nexora.core.data.Endpoint
 import com.aktech.nexora.core.data.NetworkWatch
@@ -22,6 +23,7 @@ class NexoraApp : Application() {
         Endpoint.init(this)
         NetworkWatch.init(this)
         Session.init(this)
+        DeviceIdentity.init(this)
         E2ee.init(this)
         LastPlace.init(this)
         Cache.init(this)

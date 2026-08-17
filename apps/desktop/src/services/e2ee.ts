@@ -156,9 +156,71 @@ async function openBackup(backup: IdentityBackup, secret: BackupSecret): Promise
 /** Publishes the public half and marks this machine ready. */
 async function adopt(pair: IdentityKeyPair, backedUp = false): Promise<void> {
   identity = pair;
-  // Idempotent: re-publishing keeps the directory correct if the row was lost.
-  await api.registerDeviceKey(pair.publicKey);
+  try {
+    // Idempotent: re-publishing keeps the directory correct if the row was
+    // lost, and refreshes when this machine was last seen.
+    await api.registerDeviceKey({
+      deviceId: deviceId(),
+      publicKey: pair.publicKey,
+      label: deviceLabel(),
+    });
+  } catch (error) {
+    // Revoked from another machine. Not an error to retry and not a reason to
+    // mint a new id - minting one is how a revoked machine would walk straight
+    // back into the directory, which would make revoking it meaningless.
+    if (error instanceof ApiError && error.code === 'DEVICE_REVOKED') {
+      setIdentityStatus({ status: 'revoked' });
+      throw error;
+    }
+    throw error;
+  }
   setIdentityStatus({ status: 'ready', backedUp });
+}
+
+const DEVICE_ID_KEY = 'nexora.deviceId';
+
+/**
+ * Which machine this is, as far as the key directory is concerned.
+ *
+ * Minted here and never by the server: it identifies an installation, and an
+ * installation is the only thing that knows it is one. It survives sign-out and
+ * a change of account on purpose - the machine has not changed - and it is not
+ * a secret: it is published beside a public key.
+ *
+ * Losing it (a cleared profile, a fresh container) means the next launch looks
+ * like a new device and gets wrapped for as one, which is the correct answer
+ * rather than a failure.
+ */
+export function deviceId(): string {
+  try {
+    const stored = localStorage.getItem(DEVICE_ID_KEY);
+    if (stored) return stored;
+    const minted = crypto.randomUUID();
+    localStorage.setItem(DEVICE_ID_KEY, minted);
+    return minted;
+  } catch {
+    // No storage at all: a per-session id, which is worse than a stable one and
+    // far better than refusing to publish a key.
+    return `session-${crypto.randomUUID()}`;
+  }
+}
+
+/**
+ * What to call this machine in a list of them. A guess from the user agent, and
+ * deliberately a rough one: it is a label to recognise a row by, not identity,
+ * and the server treats it as the untrusted string it is.
+ */
+function deviceLabel(): string {
+  const agent = typeof navigator === 'undefined' ? '' : navigator.userAgent;
+  const platform =
+    /Windows/i.test(agent) ? 'Windows'
+    : /Mac OS X|Macintosh/i.test(agent) ? 'macOS'
+    : /Android/i.test(agent) ? 'Android'
+    : /Linux/i.test(agent) ? 'Linux'
+    : 'Unknown';
+  // Electron's user agent says Chrome too, so the runtime is asked separately.
+  const shell = typeof window !== 'undefined' && window.nexora ? 'Nexora' : 'Browser';
+  return `${shell} on ${platform}`;
 }
 
 /**
@@ -460,7 +522,9 @@ async function openKeys(
         ),
       );
     } catch {
-      // A key sealed for a previous identity of ours; skip it, keep the rest.
+      // A key sealed for another of our machines, or for an identity we have
+      // since replaced. Both are rows this private half cannot open, and both
+      // are ordinary: skip it, keep the rest.
     }
   }
   return keys;
@@ -483,9 +547,18 @@ async function createChannelKey(channelId: string, epoch: number): Promise<void>
   // moment ago. Minting a key we cannot open (or, with an empty directory,
   // publishing nothing at all) leaves the channel unkeyed and the sender told
   // there is no key - so we always seal one for ourselves.
-  const recipients = devices.some((device) => device.userId === identityUserId)
+  // Our own row may not be in the directory yet on a machine that signed in a
+  // moment ago, and it is now a row per *device* - being listed under our user
+  // id is no longer enough, because that may be the other laptop.
+  const mine = deviceId();
+  const recipients = devices.some(
+    (device) => device.userId === identityUserId && device.deviceId === mine,
+  )
     ? devices
-    : [...devices, { userId: identityUserId ?? '', publicKey: self.publicKey }];
+    : [
+        ...devices,
+        { userId: identityUserId ?? '', deviceId: mine, publicKey: self.publicKey },
+      ];
 
   try {
     await shareKey(channelId, epoch, key, recipients);
@@ -501,11 +574,19 @@ async function createChannelKey(channelId: string, epoch: number): Promise<void>
   }
 }
 
+/**
+ * Seals one channel key for every device that should hold it.
+ *
+ * One wrap per machine rather than per person. Somebody signed in on a laptop
+ * and a phone gets two entries, each sealed to that machine's own key, which is
+ * what makes revoking one of them mean anything: the wraps addressed to it are
+ * deleted, and it is never sealed for again.
+ */
 async function shareKey(
   channelId: string,
   epoch: number,
   key: string,
-  recipients: Array<{ userId: string; publicKey: string }>,
+  recipients: Array<{ userId: string; deviceId: string; publicKey: string }>,
 ): Promise<void> {
   const self = await currentIdentity();
 
@@ -514,6 +595,7 @@ async function shareKey(
       const wrapped = await wrapChannelKey(key, self.privateKey, recipient.publicKey);
       return {
         recipientUserId: recipient.userId,
+        recipientDeviceId: recipient.deviceId,
         senderPublicKey: self.publicKey,
         wrappedKey: wrapped.wrappedKey,
         iv: wrapped.iv,
@@ -522,7 +604,7 @@ async function shareKey(
   );
 
   if (entries.length === 0) return;
-  await api.publishChannelKeys({ channelId, epoch, entries });
+  await api.publishChannelKeys({ channelId, epoch, senderDeviceId: deviceId(), entries });
 }
 
 /** Waits for sign-in key setup instead of racing it, and retries a failed one. */

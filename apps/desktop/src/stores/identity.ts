@@ -12,11 +12,15 @@ import type { BackupSecretKind } from '@nexora/shared-types';
  *  - `locked`  a backup exists but nothing here can open it: the app must ask
  *              for the secret rather than mint a new identity, because a new
  *              identity silently orphans every key already sealed for the old
+ *  - `revoked` the owner revoked this machine from another one. Nothing new is
+ *              wrapped for it, so it can read what it already had and nothing
+ *              since; saying so beats a screen of "no key on this device yet"
  */
 export type IdentityStatus =
   | { status: 'absent' }
   | { status: 'ready'; backedUp: boolean }
-  | { status: 'locked'; kind: BackupSecretKind };
+  | { status: 'locked'; kind: BackupSecretKind }
+  | { status: 'revoked' };
 
 interface IdentityState {
   identity: IdentityStatus;

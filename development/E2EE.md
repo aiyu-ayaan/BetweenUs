@@ -25,12 +25,42 @@ password as it is used and open that user's backup from then on. Anyone whose
 threat model includes the running deployment should set a recovery passphrase in
 settings instead; it is never sent anywhere in any form.
 
+## One key per machine, not one per account
+
+The directory used to hold one key per account, restored onto every machine
+that signed in. Two things followed and both were bad. A machine could not be
+revoked - there was nothing to revoke but the identity every other machine was
+also using - and a channel key was wrapped for an *identity*, so "who can open
+this" was a question the directory could not answer.
+
+It is a list now: one row per installation, with a client-minted device id, a
+label, and a revocation stamp. A channel key is wrapped once per device.
+
+**Revoking** deletes the wraps addressed to that device and stops it being
+sealed for again; the row stays, because when a machine stopped being trusted is
+the only thing anybody can audit afterwards. Every channel it could read then
+re-keys, and that staleness is derived rather than recorded: an epoch is stale
+when a device of a current member was revoked *after* the epoch was minted. It
+cannot be derived from the wraps, because revoking deletes them - which is most
+of what revoking is.
+
+Registering a revoked device id again is refused rather than quietly clearing
+the flag. A machine that can un-revoke itself makes revocation a suggestion, and
+the machine in question is running this same code.
+
+**What revocation does not do.** It does not reach what that machine already
+decrypted - nothing server-side can - and it does not stop a machine that still
+holds a valid session from starting again as a *new* device: it would have to be
+reinstalled, and nothing here can tell that apart from a genuinely new laptop.
+Ending the session is what answers that. Revoking a key and revoking a session
+are two different actions and both are needed.
+
 ## Pieces
 
 | Piece | Where it lives | Who can read it |
 | --- | --- | --- |
-| Account identity key (ECDH P-256) | private half on each signed-in machine, sealed by the OS keychain | that machine |
-| Identity public key | `device_keys` table | everyone in the server |
+| Device identity key (ECDH P-256) | private half on each signed-in machine, sealed by the OS keychain | that machine |
+| Device public keys, one row per machine | `device_keys` table | everyone in the server |
 | Sealed identity backup | `identity_backups` table | whoever knows the account password or recovery passphrase |
 | Channel key (AES-256-GCM) | in memory on member devices | channel members |
 | Wrapped channel key | `channel_keys` table | only the recipient it was sealed for |
@@ -52,7 +82,8 @@ sign-in
    |               backup exists, no secret      -> ask (never mint a new one)
    |               no backup                     -> generate, PUT /api/v1/e2ee/backup
    |
-   +-- publish the public half            POST /api/v1/e2ee/devices
+   +-- publish this machine's public half POST /api/v1/e2ee/devices
+   |      (device id minted by the client, stable per installation)
    |
 open a channel
    |

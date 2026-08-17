@@ -20,6 +20,7 @@ import type {
   Paginated,
   PublicUser,
   PublishChannelKeysRequest,
+  RegisterDeviceKeyRequest,
   PutIdentityBackupRequest,
   RemoteAuditEntry,
   RemoteGrantSummary,
@@ -483,8 +484,14 @@ export const api = {
 
   // --- End-to-end encryption key directory ---
 
-  registerDeviceKey: (publicKey: string): Promise<DeviceKey> =>
-    request('/api/v1/e2ee/devices', { method: 'POST', body: JSON.stringify({ publicKey }) }),
+  registerDeviceKey: (body: RegisterDeviceKeyRequest): Promise<DeviceKey> =>
+    request('/api/v1/e2ee/devices', { method: 'POST', body: JSON.stringify(body) }),
+
+  /** This account's own machines, for the list that can revoke one. */
+  myDevices: (): Promise<DeviceKey[]> => request('/api/v1/e2ee/devices/mine'),
+
+  revokeDevice: (deviceId: string): Promise<DeviceKey> =>
+    request(`/api/v1/e2ee/devices/${encodeURIComponent(deviceId)}`, { method: 'DELETE' }),
 
   /** This account's sealed identity key, for a machine that holds none. */
   identityBackup: (): Promise<IdentityBackupResponse> => request('/api/v1/e2ee/backup'),

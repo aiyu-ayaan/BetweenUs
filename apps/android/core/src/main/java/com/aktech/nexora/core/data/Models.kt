@@ -500,17 +500,43 @@ data class UploadedObject(val key: String, val url: String, val size: Long) {
 // --- end-to-end encryption ---
 
 /** A user's published ECDH P-256 public key, JWK-serialised. */
-data class DeviceKey(val userId: String, val publicKey: String) {
+/**
+ * One machine's published identity key.
+ *
+ * A list per user rather than one key per account: the single key was copied to
+ * every machine the account signed in on, so revoking a phone meant rotating
+ * the identity the laptop was also using. Byte for byte the desktop's
+ * `DeviceKey`.
+ */
+data class DeviceKey(
+    val userId: String,
+    val deviceId: String,
+    val publicKey: String,
+    val label: String? = null,
+    val revokedAt: String? = null,
+    val lastSeenAt: String = "",
+    val createdAt: String = "",
+) {
     companion object {
-        fun from(json: JSONObject) =
-            DeviceKey(json.optString("userId"), json.optString("publicKey"))
+        fun from(json: JSONObject) = DeviceKey(
+            userId = json.optString("userId"),
+            deviceId = json.optString("deviceId"),
+            publicKey = json.optString("publicKey"),
+            label = json.stringOrNull("label"),
+            revokedAt = json.stringOrNull("revokedAt"),
+            lastSeenAt = json.optString("lastSeenAt"),
+            createdAt = json.optString("createdAt"),
+        )
     }
 }
 
 /** One channel key sealed for one recipient. */
 data class ChannelKeyEntry(
     val recipientUserId: String,
+    /** Which of that user's machines this copy is sealed for. */
+    val recipientDeviceId: String,
     val senderUserId: String,
+    val senderDeviceId: String,
     val senderPublicKey: String,
     val wrappedKey: String,
     val iv: String,
@@ -519,7 +545,9 @@ data class ChannelKeyEntry(
     companion object {
         fun from(json: JSONObject) = ChannelKeyEntry(
             recipientUserId = json.optString("recipientUserId"),
+            recipientDeviceId = json.optString("recipientDeviceId"),
             senderUserId = json.optString("senderUserId"),
+            senderDeviceId = json.optString("senderDeviceId"),
             senderPublicKey = json.optString("senderPublicKey"),
             wrappedKey = json.optString("wrappedKey"),
             iv = json.optString("iv"),

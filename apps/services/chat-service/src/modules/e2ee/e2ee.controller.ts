@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   ParseUUIDPipe,
@@ -28,7 +29,26 @@ export class E2eeController {
     @CurrentUser() user: AuthenticatedUser,
     @Body() dto: RegisterDeviceKeyDto,
   ): Promise<DeviceKey> {
-    return this.e2ee.registerDevice(user.id, dto.publicKey);
+    return this.e2ee.registerDevice(user.id, dto.deviceId, dto.publicKey, dto.label);
+  }
+
+  /**
+   * This account's own machines. Separate from `GET devices?channelId=`, which
+   * answers "whose keys do I wrap for" - this one answers "what is signed in as
+   * me", which is a question only the owner gets to ask.
+   */
+  @Get('devices/mine')
+  myDevices(@CurrentUser() user: AuthenticatedUser): Promise<DeviceKey[]> {
+    return this.e2ee.myDevices(user.id);
+  }
+
+  /** Stops a machine being wrapped for, and deletes what it was already given. */
+  @Delete('devices/:deviceId')
+  revokeDevice(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('deviceId') deviceId: string,
+  ): Promise<DeviceKey> {
+    return this.e2ee.revokeDevice(user.id, deviceId);
   }
 
   /** The caller's sealed identity key, for a machine that has none of its own. */

@@ -213,6 +213,10 @@ fun SettingsScreen(user: PublicUser, onBack: () -> Unit, onServerSettings: () ->
                         is IdentityStatus.Locked ->
                             "Your messages are locked until this device can open the account backup."
 
+                        IdentityStatus.Revoked ->
+                            "This device was revoked from another one. It can still read what it " +
+                                "already had; nothing sent since is encrypted for it."
+
                         IdentityStatus.Absent -> "No identity key on this device yet."
                     },
                     style = MaterialTheme.typography.bodyMedium,

@@ -5,6 +5,7 @@ import {
   IsArray,
   IsIn,
   IsInt,
+  IsOptional,
   IsString,
   IsUUID,
   Length,
@@ -22,10 +23,28 @@ import type {
 /** A serialised ECDH P-256 JWK is ~200 chars; the cap is slack, not a guess. */
 const MAX_PUBLIC_KEY_LENGTH = 1024;
 
+/**
+ * A device id is minted by the client and is opaque here. Not a UUID pipe: the
+ * one thing the server must never do with it is assume a shape it did not
+ * issue, and the rows carried over from the single-key directory are called
+ * `legacy`.
+ */
+const MAX_DEVICE_ID_LENGTH = 128;
+
 export class RegisterDeviceKeyDto implements RegisterDeviceKeyRequest {
+  @IsString()
+  @Length(1, MAX_DEVICE_ID_LENGTH)
+  deviceId!: string;
+
   @IsString()
   @Length(1, MAX_PUBLIC_KEY_LENGTH)
   publicKey!: string;
+
+  /** Shown in a list of this account's machines, so it is short and optional. */
+  @IsOptional()
+  @IsString()
+  @Length(1, 64)
+  label?: string;
 }
 
 /**
@@ -73,6 +92,10 @@ export class ChannelKeyEntryDto {
   recipientUserId!: string;
 
   @IsString()
+  @Length(1, MAX_DEVICE_ID_LENGTH)
+  recipientDeviceId!: string;
+
+  @IsString()
   @Length(1, MAX_PUBLIC_KEY_LENGTH)
   senderPublicKey!: string;
 
@@ -94,10 +117,15 @@ export class PublishChannelKeysDto implements PublishChannelKeysRequest {
   @Max(1_000_000)
   epoch!: number;
 
+  @IsString()
+  @Length(1, MAX_DEVICE_ID_LENGTH)
+  senderDeviceId!: string;
+
   @IsArray()
-  // One entry per server member; a bigger bundle than this is not a real
-  // server, it is someone probing the endpoint.
-  @ArrayMaxSize(500)
+  // One entry per member *device* now rather than per member, so the ceiling
+  // rises with it. Still small enough that a bigger bundle is not a real server,
+  // it is someone probing the endpoint.
+  @ArrayMaxSize(2000)
   @ValidateNested({ each: true })
   @Type(() => ChannelKeyEntryDto)
   entries!: ChannelKeyEntryDto[];

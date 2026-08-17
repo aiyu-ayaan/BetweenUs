@@ -571,19 +571,40 @@ export interface EncryptedEnvelope {
 }
 
 /** A user's published ECDH P-256 public key, JWK-serialised. */
+/**
+ * One machine's public identity key.
+ *
+ * A list per user rather than one key per account. The single key was copied to
+ * every machine the account signed in on, which made "revoke this laptop" mean
+ * "rotate the identity every other machine is also using" - so nobody could,
+ * and a key that cannot be revoked is a key that is trusted forever.
+ */
 export interface DeviceKey {
   userId: string;
+  /** Client-minted and stable for an installation. */
+  deviceId: string;
   publicKey: string;
+  /** What to call it in a list. Client-supplied, and not to be trusted as identity. */
+  label: string | null;
+  /** Set once the owner revoked it. Nothing is ever wrapped for a revoked device. */
+  revokedAt: string | null;
+  lastSeenAt: string;
+  createdAt: string;
 }
 
 export interface RegisterDeviceKeyRequest {
+  deviceId: string;
   publicKey: string;
+  label?: string;
 }
 
-/** One channel key sealed for one recipient. */
+/** One channel key sealed for one device. */
 export interface ChannelKeyEntry {
   recipientUserId: string;
+  /** Which of that user's devices this copy is for. */
+  recipientDeviceId: string;
   senderUserId: string;
+  senderDeviceId: string;
   /** Sender's ECDH public key (JWK) - the recipient needs it to derive the secret. */
   senderPublicKey: string;
   wrappedKey: string;
@@ -593,7 +614,9 @@ export interface ChannelKeyEntry {
 export interface PublishChannelKeysRequest {
   channelId: string;
   epoch: number;
-  entries: Array<Omit<ChannelKeyEntry, 'senderUserId'>>;
+  /** Which device did the sealing. Every entry in the bundle came from it. */
+  senderDeviceId: string;
+  entries: Array<Omit<ChannelKeyEntry, 'senderUserId' | 'senderDeviceId'>>;
 }
 
 export interface ChannelKeysResponse {
@@ -602,7 +625,11 @@ export interface ChannelKeysResponse {
   epoch: number;
   /** Entries addressed to the caller, oldest epoch first. */
   keys: Array<ChannelKeyEntry & { epoch: number }>;
-  /** Channel members with a device key but no entry at `epoch` - they need a re-wrap. */
+  /**
+   * Devices with a published key and no entry at `epoch` - each needs a
+   * re-wrap. One entry per device, not per person: somebody who signed in on a
+   * second machine yesterday is missing exactly one of their two.
+   */
   missingRecipients: DeviceKey[];
   /**
    * True when somebody who is no longer a member holds the current epoch's key.
@@ -1100,8 +1127,12 @@ export type ServerRemoteEvent =
  * every release trains people to ignore the warning it raises.
  *
  * 1: the contract as of the first deployment anyone runs.
+ * 2: the key directory is per device rather than per account, and channel keys
+ *    are wrapped per device. A client from before this cannot read the
+ *    directory it is handed, and a server from before it cannot store what a
+ *    new client sends.
  */
-export const API_CONTRACT_VERSION = 1;
+export const API_CONTRACT_VERSION = 2;
 
 /** What `GET /api/v1/auth/version` answers. Public: it is asked before sign-in. */
 export interface ServerVersion {
