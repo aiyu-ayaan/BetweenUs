@@ -109,10 +109,14 @@ fun MembersScreen(
                 item {
                     Column(Modifier.padding(horizontal = 12.dp, vertical = 12.dp)) {
                         NexoraField(
-                            label = "Add a member",
+                            label = "Add a friend to this server",
                             value = adding,
                             onValueChange = { adding = it; note = null },
-                            placeholder = "Their username",
+                            // Friends only, and the server enforces it: adding
+                            // somebody puts them in the server without asking
+                            // them. An invite link is how a stranger gets in,
+                            // by choosing to.
+                            placeholder = "A friend's username",
                             imeAction = ImeAction.Done,
                             onImeAction = {
                                 scope.launch {

@@ -594,12 +594,59 @@ const thirdAuth = await json(`${AUTH}/api/v1/auth/register`, {
 });
 const third = { Authorization: `Bearer ${thirdAuth.accessToken}` };
 
+// A stranger cannot be conscripted. Managing members is permission to bring in
+// your own people, not to drop any account on the deployment into a room it has
+// never heard of - which is what this endpoint used to do for any username.
+const stranger = await fetch(`${SERVER}/api/v1/servers/${server.id}/members`, {
+  method: 'POST',
+  headers: { ...authed, 'Content-Type': 'application/json' },
+  body: JSON.stringify({ username: thirdAuth.user.username }),
+});
+ok('adding a non-friend is refused', stranger.status === 403);
+
+// A pending request is not a friendship, or "ask and add anyway" would be the
+// way straight past the check.
+await json(`${CHAT}/api/v1/friends`, {
+  method: 'POST',
+  headers: authed,
+  body: JSON.stringify({ username: thirdAuth.user.username }),
+});
+const pending = await fetch(`${SERVER}/api/v1/servers/${server.id}/members`, {
+  method: 'POST',
+  headers: { ...authed, 'Content-Type': 'application/json' },
+  body: JSON.stringify({ username: thirdAuth.user.username }),
+});
+ok('a pending friend request is not a friendship', pending.status === 403);
+
+await json(`${CHAT}/api/v1/friends/${me.id}/accept`, { method: 'POST', headers: third });
+
 const added = await json(`${SERVER}/api/v1/servers/${server.id}/members`, {
   method: 'POST',
   headers: authed,
   body: JSON.stringify({ username: thirdAuth.user.username }),
 });
-ok('member added by username', added.userId === thirdAuth.user.id && added.role === 'MEMBER');
+ok('a friend can be added by username', added.userId === thirdAuth.user.id && added.role === 'MEMBER');
+
+// And the picker that offers candidates is narrowed the same way, so nobody is
+// offered a person the add would refuse.
+const everybody = await json(
+  `${CHAT}/api/v1/users/search?q=smoke`,
+  { headers: authed },
+);
+const friendsOnly = await json(
+  `${CHAT}/api/v1/users/search?q=smoke&friendsOnly=true`,
+  { headers: authed },
+);
+ok(
+  'friendsOnly search is a subset of the directory',
+  friendsOnly.length < everybody.length &&
+    friendsOnly.every((person) => everybody.some((row) => row.id === person.id)),
+  `${friendsOnly.length} of ${everybody.length}`,
+);
+ok(
+  'friendsOnly search lists the friend',
+  friendsOnly.some((person) => person.id === thirdAuth.user.id),
+);
 
 const theirServers = await json(`${SERVER}/api/v1/servers`, { headers: third });
 ok('the added member sees the server', theirServers.some((item) => item.id === server.id));

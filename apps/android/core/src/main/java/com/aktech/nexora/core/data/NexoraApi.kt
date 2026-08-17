@@ -309,8 +309,14 @@ object NexoraApi {
 
     // --- friends and direct messages ---
 
-    suspend fun searchUsers(query: String): List<UserSummary> = io {
-        authedArray("GET", "/api/v1/users/search?q=${enc(query)}").map { UserSummary.from(it) }
+    /**
+     * Finds people by name. [friendsOnly] is for anywhere that offers to add
+     * somebody to a server: the service refuses to add a non-friend, so
+     * offering one is offering a refusal.
+     */
+    suspend fun searchUsers(query: String, friendsOnly: Boolean = false): List<UserSummary> = io {
+        val suffix = if (friendsOnly) "&friendsOnly=true" else ""
+        authedArray("GET", "/api/v1/users/search?q=${enc(query)}$suffix").map { UserSummary.from(it) }
     }
 
     suspend fun friends(): List<Friend> = io {

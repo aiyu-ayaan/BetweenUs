@@ -41,8 +41,10 @@ export class UserSearchController {
   search(
     @CurrentUser() user: AuthenticatedUser,
     @Query('q') query = '',
+    /** `true` narrows the answer to this account's friends - see the service. */
+    @Query('friendsOnly') friendsOnly = '',
   ): Promise<UserSummary[]> {
-    return this.friends.search(user.id, query);
+    return this.friends.search(user.id, query, friendsOnly === 'true');
   }
 }
 

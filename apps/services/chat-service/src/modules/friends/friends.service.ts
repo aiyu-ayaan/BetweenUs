@@ -7,7 +7,7 @@
  * a channel and chat-service already owns everything downstream of a channel id.
  */
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import { prisma } from '@nexora/database';
+import { friendIdsOf, prisma } from '@nexora/database';
 import { EVENTS, EventBus } from '@nexora/events';
 import type {
   DirectChannel,
@@ -34,13 +34,30 @@ export class FriendsService {
    * request cannot be sent to someone who cannot be found; what is gated is the
    * conversation, not the search.
    */
-  async search(userId: string, query: string): Promise<UserSummary[]> {
+  /**
+   * Finds people by name.
+   *
+   * Two questions wear this one endpoint, and they want different answers.
+   * "Who can I send a friend request to" is the whole directory, because a
+   * stranger is exactly who you are looking for. "Who can I add to this
+   * server" is only your friends - adding somebody to a server puts them in a
+   * room and notifies them, so it is not a thing to do to a stranger, and
+   * `server-service` refuses it either way. `friendsOnly` is which question is
+   * being asked; the refusal is the rule and this is the courtesy of not
+   * offering what will be refused.
+   */
+  async search(userId: string, query: string, friendsOnly = false): Promise<UserSummary[]> {
     const term = query.trim();
     if (term.length < 2) return [];
 
+    const friendIds = friendsOnly ? await friendIdsOf(userId) : null;
+    // Nobody to search: an empty `in` matches everything on some backends, so
+    // it is answered here rather than handed to the query.
+    if (friendIds?.length === 0) return [];
+
     const rows = await prisma.user.findMany({
       where: {
-        id: { not: userId },
+        id: friendIds ? { in: friendIds } : { not: userId },
         disabledAt: null,
         OR: [
           { username: { contains: term, mode: 'insensitive' } },

@@ -5,7 +5,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { prisma, resolveChannelAccess } from '@nexora/database';
+import { areFriends, prisma, resolveChannelAccess } from '@nexora/database';
 import { EVENTS, EventBus } from '@nexora/events';
 import type {
   Channel,
@@ -276,6 +276,21 @@ export class ServersService {
     });
     if (!user || user.disabledAt !== null) {
       throw new NotFoundException({ code: 'USER_NOT_FOUND', message: 'No such user' });
+    }
+
+    // Being able to manage members is permission to bring in *your people*, not
+    // permission to conscript the directory. Without this, one moderator plus
+    // one username was enough to drop any account on the deployment into a
+    // server it had never heard of - which is a notification, a member list
+    // entry and a readable channel, all without the person being asked.
+    //
+    // The way to let a stranger in is an invite: they follow a link and choose
+    // to join, which is consent rather than an administrative act.
+    if (!(await areFriends(actorId, user.id))) {
+      throw new ForbiddenException({
+        code: 'NOT_FRIENDS',
+        message: 'You can only add people you are friends with. Send them an invite link instead.',
+      });
     }
 
     const existing = await prisma.serverMember.findUnique({

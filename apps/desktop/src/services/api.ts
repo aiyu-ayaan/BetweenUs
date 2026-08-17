@@ -463,8 +463,16 @@ export const api = {
 
   // --- Friends and direct messages ---
 
-  searchUsers: (query: string): Promise<UserSummary[]> =>
-    request(`/api/v1/users/search?q=${encodeURIComponent(query)}`),
+  /**
+   * Finds people by name. `friendsOnly` is for the add-to-server picker: the
+   * server refuses to add somebody you are not friends with, so offering them
+   * would be offering a refusal.
+   */
+  searchUsers: (query: string, friendsOnly = false): Promise<UserSummary[]> =>
+    request(
+      `/api/v1/users/search?q=${encodeURIComponent(query)}` +
+        (friendsOnly ? '&friendsOnly=true' : ''),
+    ),
 
   friends: (): Promise<Friend[]> => request('/api/v1/friends'),
 

@@ -856,9 +856,17 @@ function Members(): JSX.Element {
 }
 
 /**
- * Adds someone straight from the members screen. It searches the directory the
- * friends screen searches - the same endpoint, because "find a person by name"
- * is one question - and adding is by username, which is what the server takes.
+ * Adds someone straight from the members screen.
+ *
+ * Friends only, and that is not a nicety: `server-service` refuses to add
+ * anybody else, because being able to manage members is permission to bring in
+ * your people rather than permission to conscript the directory. This searched
+ * the whole of it and offered every stranger in it - each of which was a
+ * refusal waiting to be clicked, and before the refusal existed, an account
+ * dropped into a server it had never heard of.
+ *
+ * Letting a stranger in is what an invite link is for: they follow it and
+ * choose to join.
  */
 function AddMember(): JSX.Element {
   const members = useChatStore((state) => state.members);
@@ -883,7 +891,7 @@ function AddMember(): JSX.Element {
       return;
     }
     void api
-      .searchUsers(value.trim())
+      .searchUsers(value.trim(), true)
       .then(setResults)
       .catch(() => setResults([]));
   };
@@ -907,7 +915,9 @@ function AddMember(): JSX.Element {
     <section className="mt-5 rounded-lg bg-surface-800 p-4">
       <h2 className="text-xs font-bold uppercase tracking-wide text-slate-400">Add a member</h2>
       <p className="mt-1 text-sm text-slate-400">
-        They join as a member. Give them a role afterwards on Roles &amp; Permissions.
+        Your friends only - adding somebody puts them in the server without asking them, so it is
+        not a thing to do to a stranger. For anybody else, share an invite link and let them
+        choose to join.
       </p>
 
       <div className="mt-3 flex items-center gap-2">
@@ -917,8 +927,8 @@ function AddMember(): JSX.Element {
           onKeyDown={(event) => {
             if (event.key === 'Enter' && query.trim() && !busy) void add(query.trim());
           }}
-          placeholder="Search by username"
-          aria-label="Search for someone to add"
+          placeholder="Search your friends"
+          aria-label="Search your friends for someone to add"
           className="w-full max-w-sm rounded-lg border border-edge bg-surface-950 px-3 py-2 text-slate-100 placeholder-slate-500 outline-none transition-colors focus:border-accent/60"
         />
         <button
