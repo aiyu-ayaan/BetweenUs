@@ -89,6 +89,16 @@ Security, and the scan that found the rest of it:
 
 Chat, on desktop and web:
 
+- [x] **Per-server custom emoji, animated ones included.** Upload a picture,
+      name it, type `:name:`. An animated file is stored exactly as uploaded,
+      which is the whole trick: re-encoding a GIF through a canvas keeps the
+      first frame. The pictures travel inside the encrypted body beside the
+      literal shortcode, so a reader outside the server still sees them, an
+      older client shows the word that was meant, and deleting an emoji stops
+      it being offered rather than breaking every message that used it.
+      `MANAGE_EMOJI` is its own permission. Android renders and sends them; a
+      GIF is a still frame there until `coil-gif` is added.
+
 - [x] **`:` emoji search.** Two letters and a name, ranked exact-prefix-
       substring, because `:fire` offering `fire_engine` above the flame is how
       people stop using a feature rather than report it. A shortcode table for
@@ -260,12 +270,6 @@ blocked by anything outside this document.
 
 ### Desktop and web
 
-- [ ] **Animated emoji.** Asked for, not built. It means one of two things and
-      they are different projects: custom per-server emoji anybody can upload -
-      a table, an upload path, a `:name:` that resolves per server, and a
-      render path in the message body - or a shipped animated set, which is a
-      sprite sheet and a licence. The `:` menu and its shortcode table are the
-      half that both of them need, and that half landed.
 - [ ] **Edit history, encrypted reactions, paged search, a pinned panel that
       pages.** Four separate message-side gaps, listed together because they are
       one screen's worth of work each. (Who-reacted names landed.)
@@ -289,8 +293,12 @@ blocked by anything outside this document.
 
 ### Android
 
-- [ ] **The `:` emoji menu and the member menu**, both of which landed on
-      desktop and web this pass. The shortcode table is a shared contract in
+- [ ] **An emoji picker and an upload screen on the phone.** It renders custom
+      emoji and sends them; what it has not got is the `:` menu, the picker, and
+      the settings screen that uploads one. Animating a GIF needs Coil's
+      `coil-gif` artifact - one dependency line, absent from the offline cache
+      when this landed.
+- [ ] **The member menu**, which landed on desktop and web this pass. The shortcode table is a shared contract in
       `emoji-names.ts`; the phone has neither.
 - [ ] **Markdown-ish body rendering.** `message-body.ts` is the contract.
       (Replies landed, on all three clients.)
@@ -308,9 +316,12 @@ blocked by anything outside this document.
 - [ ] **Remote clipboard and file transfer**, each gated on its own permission.
 - [ ] **OAuth through Custom Tabs**, with an app-link callback, offering only
       the providers the server reports.
-- [ ] **Phase 13 hardening.** The refresh token out of plain `SharedPreferences`
-      into the Keystore and keyed per deployment; private-CA certificate
-      handling; R8 and a release signing config.
+- [ ] **Phase 13 hardening, minus R8.** The refresh token out of plain
+      `SharedPreferences` into the Keystore and keyed per deployment;
+      private-CA certificate handling; a real signing config, which needs a
+      keystore that is not in this repository. R8 and resource shrinking are on
+      - 54.8 MB to 43.1 MB - and the release build is debug-signed until that
+      keystore exists, so it can be installed and tried at all.
 - [ ] **Instrumented tests and CI**, opt-in crash reporting, and a light theme.
 
 ---
@@ -323,7 +334,7 @@ changed along the way - presence scoping in `presence-service/smoke.mjs`,
 invites in `chat-service/smoke.mjs` and `notification-service/smoke.mjs` - have
 been syntax-checked and not executed.
 
-**Four migrations are waiting, and two of their names sort backwards.**
+**Five migrations are waiting, and two of their names sort backwards.**
 `20260810100000_custom_roles` and `20260810110000_attachments` exist as SQL and
 have to be applied - `pnpm db:migrate` - before the roles screen or any
 attachment upload can work at all. Both are stamped 10 August while migrations
@@ -345,6 +356,10 @@ that disagrees with what `prisma migrate` would generate is drift - which is
 what turns the next `migrate dev` into an offer to reset the database. The
 check that caught it is `prisma migrate diff --from-empty --to-schema-datamodel`,
 which needs no database and is worth running against any hand-written migration.
+
+The fifth is `20260818160000_server_emoji`, whose DDL was copied out of that
+same command rather than written by hand - which is why its index names and its
+cascade match what `migrate` expects without anybody checking.
 
 The cases most worth putting a person in front of, in order:
 
@@ -410,7 +425,15 @@ The cases most worth putting a person in front of, in order:
 18. An invite link end to end: mint one, open it in a signed-out window, sign
     in, and land in the server. Then open the same link again and confirm it
     does not rejoin after leaving.
-19. The join and leave tones with three people in a call, which is where the
+19. Custom emoji, end to end: upload a GIF, send `:name:` from the desktop,
+    read it on the phone, then delete the emoji and confirm the message still
+    draws it. The last part is the one the design is for - the picture is in
+    the message, not in the server's list.
+20. The shrunk Android APK on a real device. R8 is on now, and the one thing a
+    successful build does not prove is that no keep rule is missing: a class
+    reached by name from native code fails when a call starts, not when the app
+    does.
+21. The join and leave tones with three people in a call, which is where the
     two failure modes live: joining a channel that already has two people in it
     must play one tone and not two, and nobody should hear a tone for a peer
     connection that merely reconnected. Worth listening to on a headset plugged

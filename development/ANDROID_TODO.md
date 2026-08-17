@@ -47,7 +47,7 @@ in-app notification for a message arriving in a channel that is not on screen
 (phase 4), and the incoming-call UI for a dead app (phase 6).
 
 Everything else that was open here is tracked in `TRACK.md` and is being worked
-through: markdown bodies, network-change reconnect, audio
+through: markdown bodies, an emoji picker, audio
 routing and ducking, the share quality ladder, remote clipboard and file
 transfer, audio settings, server creation and invites, OAuth, and the whole of
 phase 13.

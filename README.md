@@ -36,13 +36,13 @@ Messages, attachments, and call media are end-to-end encrypted: the server store
 | Area | State |
 | --- | --- |
 | Accounts | Register, login, refresh-token rotation with reuse detection, Google and GitHub sign-in, admin panel |
-| Servers | Servers, roles, per-member permission overrides, invites by slug, server settings |
+| Servers | Servers, custom roles with colours, per-member permission overrides, invite links that expire and can be revoked, custom emoji, server settings |
 | Channels | Public and private text channels, private channels as an allowlist, direct messages between friends |
-| Messages & Chat | End-to-end encrypted, realtime over WebSocket, history paging, emoji reactions, WhatsApp-style attachment sheet & composer with quick camera auto-hide, full-screen zoomable image viewer, integrated video player, and local media album saving |
-| Voice and video | Peer-to-peer voice channels, camera, screen share with a source picker, end-to-end encrypted media, no media server |
+| Messages & Chat | End-to-end encrypted, realtime over WebSocket, history paging in both directions, replies, `:` emoji search, per-server custom emoji including animated, reactions with who-reacted names, drag-and-drop and a preview before sending, full-screen zoomable image viewer, integrated video player, and local media album saving |
+| Voice and video | Peer-to-peer voice channels, camera, one screen share at a time with takeover, join and leave tones, manual quality override, end-to-end encrypted media, no media server |
 | Android Client | Native Jetpack Compose + Material 3 app with E2EE messaging, WhatsApp-style media picker and composer, media viewers, and public gallery saving (`Pictures/Nexora`, `Movies/Nexora`) |
 | Presence | Online / idle / do not disturb / invisible, typing indicators, voice rosters |
-| Notifications | Desktop notifications, system tray, start with the system, per-channel mute, quiet hours, persisted unread |
+| Notifications | Desktop notifications, system tray, start with the system, per-channel and per-person mute, quiet hours, persisted unread with a line that survives a restart |
 | Remote desktop | Not built - `remote-gateway` and `remote-agent` are scaffolds |
 
 Known limits are written down rather than implied: see `development/E2EE.md`
@@ -590,6 +590,84 @@ Errors share one shape everywhere:
 ```json
 { "error": { "code": "CHANNEL_NOT_FOUND", "message": "Channel not found", "requestId": "..." } }
 ```
+
+---
+
+## Recently added
+
+Newest first. Every one of these is in `development/TRACK.md` with the reason it
+was built the way it was; this is the short version.
+
+### Security
+
+- **Adding a member is friends-only.** `POST /servers/:id/members` used to take
+  any username and add it - being added is a member list entry, a notification
+  and a set of readable channels, none of which the person was asked about.
+  Letting a stranger in is what an invite link is for.
+- **A moderator cannot edit or kick an administrator.** The permission check
+  answered "may you manage members at all" and the role check answered "may you
+  hand out that role"; neither asked who the member was.
+- **Attachments need a session to download.** They are ciphertext either way,
+  but the bytes and their size went to anybody who ever saw the URL. Avatars
+  stay public, because an `<img>` tag cannot carry a header.
+- **A key per machine, not per account.** The device directory is a list now,
+  a channel key is wrapped once per device, and revoking one deletes its wraps
+  and re-keys every channel it could read.
+
+### Chat
+
+- **Replies**, on all three clients - a quote inside the encrypted body, so the
+  server never learns who is answering whom.
+- **`:` emoji search**, ranked exact-then-prefix-then-substring, with a
+  shortcode table for every emoji the picker draws.
+- **Per-server custom emoji, animated included.** Upload a picture, name it,
+  type `:name:`. Animated files are stored exactly as uploaded, which is the
+  whole trick - re-encoding a GIF keeps the first frame and throws the rest
+  away. The pictures travel inside the encrypted message, so a shortcode
+  forwarded into a direct message still renders.
+- **Invite links.** `/invite/<code>`, redeemed after sign-in, surviving the
+  reload that sign-in causes.
+- **A member menu**: message, add friend, mute, copy id. Muting is per person
+  and follows the account; a muted person is silent even when they mention you.
+- **History that pages backwards** on desktop and web, anchored so the reader
+  stays where they were reading.
+- **A local cache** on desktop and web - servers, channels, conversations and
+  the last few hundred messages per channel, as the ciphertext the server sent.
+- **An unread line that survives a restart**, with a bar to jump to it.
+- **Media preview before sending**, drag-and-drop anywhere in the conversation,
+  and video that loads itself rather than waiting for a click.
+
+### Voice
+
+- **One screen share at a time**, replacing the one before it the way Teams
+  does, arbitrated by `call-service` because two simultaneous claims need one
+  answer.
+- **Join and leave tones**, synthesised at both ends at the same two
+  frequencies.
+- **A manual quality override** - bitrate, frame rate, codec - for a share and
+  for a remote session, which is how a LAN gets told it is a LAN.
+- **Devices that follow the hardware**: a headset plugged in mid-call is moved
+  to, and a chosen device that is missing says so.
+
+### Android
+
+- **Reconnect on a network-change callback** rather than waiting out a backoff
+  measuring a problem that has gone.
+- **Microphone processing, a hi-fi mode and an output route**, applied to a
+  call that is already up.
+- **Invite management**, and a fix to a line that still told people to share
+  the slug.
+- **R8 on the release build**, code and resources shrunk, with keep rules that
+  each say why they exist.
+
+### Known gaps
+
+- No backend has been run in the sessions that wrote most of the above; the
+  smoke scripts are the integration tests and they need a database and Redis.
+- Migrations are waiting to be applied - see the list at the bottom of
+  `development/TRACK.md`, including two whose names sort backwards.
+- On Android a GIF emoji shows its first frame: animating one needs Coil's
+  `coil-gif` artifact, which is one dependency line.
 
 ## Conventions
 
