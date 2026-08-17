@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useVoiceStore, type VoiceTile } from '../../stores/voice';
 import { usePeerAudio } from '../../stores/peerAudio';
 import { VoiceControls } from './VoiceControls';
+import { NotHeardNotice } from './NotHeardNotice';
 import { LockIcon, MicOffIcon, SpeakerIcon, SpeakerOffIcon } from '../../components/icons';
 
 /**
@@ -59,10 +60,9 @@ export function VoicePanel(): JSX.Element | null {
           about the connection waits behind a button; a microphone that is
           sending nothing while its owner talks into it cannot. */}
       {notHeard && (
-        <p role="alert" className="mb-2 rounded bg-danger/10 px-2 py-1 text-xs text-danger">
-          Nobody can hear you - your microphone is sending nothing. Try another device from the
-          controls below.
-        </p>
+        <div className="mb-2">
+          <NotHeardNotice compact />
+        </div>
       )}
 
       <ul className="mb-2 space-y-1">

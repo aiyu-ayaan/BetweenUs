@@ -1,4 +1,10 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
+import {
+  onDevicesChanged,
+  readDevices,
+  refreshDevices,
+  chosenIsMissing,
+} from '../services/audio-devices';
 
 /**
  * A microphone or speaker picker, used by Voice & Video in settings and by the
@@ -23,12 +29,17 @@ export function DeviceSelect({
   onChange: (deviceId: string | null) => void;
 }): JSX.Element {
   const options = devices.filter((device) => device.kind === kind && device.deviceId !== 'default');
+  // A chosen device that is no longer plugged in is not refused by the capture -
+  // the constraint is deliberately not `exact`, so it silently falls back to
+  // whatever the operating system calls the default. That fallback is the whole
+  // of "it picked the wrong microphone", so it is said out loud here.
+  const missing = chosenIsMissing(devices, kind, value);
 
   return (
     <label className="block">
       <span className="block text-xs font-bold uppercase tracking-wide text-slate-400">{label}</span>
       <select
-        value={value ?? ''}
+        value={missing ? '' : (value ?? '')}
         onChange={(event) => onChange(event.target.value || null)}
         className="mt-2 w-full cursor-pointer rounded-lg border border-edge bg-surface-950 px-3 py-2 text-slate-100 outline-none transition-colors focus:border-accent/60"
       >
@@ -39,6 +50,12 @@ export function DeviceSelect({
           </option>
         ))}
       </select>
+      {missing && (
+        <span className="mt-1.5 block text-xs text-amber-300">
+          The device you chose is not connected. The system default is being used instead - pick
+          another to make it stick.
+        </span>
+      )}
     </label>
   );
 }
@@ -47,22 +64,19 @@ export function DeviceSelect({
  * The device list, refreshed when the operating system's changes - plugging in
  * a headset mid-call is the moment somebody goes looking for this menu.
  *
- * The refresh function is for the other case: the labels are blank until the
- * microphone has been granted once, so whoever opens one wants the list read
- * again afterwards.
+ * One list for the whole window rather than one enumeration per picker: the
+ * settings screen and the in-call popover were reading the hardware separately
+ * and could disagree about what was plugged in. The refresh function is for the
+ * other case - the labels are blank until the microphone has been granted once,
+ * so whoever opens one wants the list read again afterwards.
  */
 export function useDevices(): [MediaDeviceInfo[], () => void] {
-  const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
-
-  const read = useCallback((): void => {
-    void navigator.mediaDevices.enumerateDevices().then(setDevices).catch(() => undefined);
-  }, []);
+  const [devices, setDevices] = useState<MediaDeviceInfo[]>(readDevices);
 
   useEffect(() => {
-    read();
-    navigator.mediaDevices.addEventListener('devicechange', read);
-    return () => navigator.mediaDevices.removeEventListener('devicechange', read);
-  }, [read]);
+    refreshDevices();
+    return onDevicesChanged(setDevices);
+  }, []);
 
-  return [devices, read];
+  return [devices, refreshDevices];
 }

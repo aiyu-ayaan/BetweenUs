@@ -29,6 +29,7 @@ import { isDesktopRuntime } from '../../services/platform';
 import { useShareControlStore } from '../../stores/shareControl';
 import { useVoiceStore, type VoiceShare, type VoiceTile } from '../../stores/voice';
 import { VoiceControls } from './VoiceControls';
+import { NotHeardNotice } from './NotHeardNotice';
 import { VideoSink } from './MediaSink';
 import { ShareStage } from './ShareStage';
 import {
@@ -121,10 +122,9 @@ export function VoiceChannelView({ channel }: { channel: Channel }): JSX.Element
         )}
 
         {notHeard && (
-          <p role="alert" className="rounded bg-danger/10 px-3 py-2 text-center text-sm text-danger">
-            Nobody can hear you - your microphone is sending nothing. Check the device picker in
-            the controls below.
-          </p>
+          <div className="mx-auto w-full max-w-sm">
+            <NotHeardNotice />
+          </div>
         )}
 
         <ShareBanners shares={shares} watching={watching} />

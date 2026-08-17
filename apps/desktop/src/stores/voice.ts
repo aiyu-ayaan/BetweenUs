@@ -27,6 +27,7 @@ import { startPushToTalk, stopPushToTalk } from '../services/push-to-talk';
 import { notBeingHeard, type LinkStats } from '../services/call-stats';
 import { visibleVideo } from '../services/media-presence';
 import { NoiseGate } from '../services/mic-gate';
+import { captureIsStale } from '../services/audio-devices';
 import { micCapture, micEncoding, micProcessing, type VoiceSettings } from '../services/voice-quality';
 import { shareOptions, type ShareIntent, type ShareSize } from '../services/share-quality';
 
@@ -927,6 +928,47 @@ useAudioSettings.subscribe((state, previous) => {
   if (state.settings === previous.settings) return;
   void applyAudioSettings(state.settings, previous.settings);
 });
+
+/**
+ * The hardware changed under a live call.
+ *
+ * Nothing used to happen here, and that is the whole of "it keeps picking the
+ * wrong microphone": a capture is bound to a device when it opens, so plugging
+ * in a headset moved the operating system's default and left this call on the
+ * webcam it started with. Unplugging and plugging the *chosen* device back in
+ * was worse - the capture had already fallen back and never came home.
+ *
+ * `captureIsStale` decides; the debounce is because one headset arriving is
+ * several `devicechange` events as its microphone, its speakers and its
+ * grouping are registered one after another.
+ */
+const DEVICE_SETTLE_MS = 400;
+let deviceSettleTimer: number | null = null;
+
+async function followDeviceChange(): Promise<void> {
+  const { status, micEnabled } = useVoiceStore.getState();
+  if (!mesh || status !== 'connected' || !micEnabled) return;
+
+  const settings = useAudioSettings.getState().settings;
+  const captured = localTracks.mic?.getSettings().deviceId ?? null;
+  // Enumerated here rather than read from the shared list: that list is
+  // refreshed by the same event and may not have answered yet.
+  const devices = await navigator.mediaDevices.enumerateDevices().catch(() => []);
+  if (!captureIsStale(settings.inputDeviceId, captured, devices)) return;
+
+  await closeMicrophone();
+  await openMicrophone(settings).catch(() => undefined);
+}
+
+if (typeof navigator !== 'undefined' && navigator.mediaDevices) {
+  navigator.mediaDevices.addEventListener('devicechange', () => {
+    if (deviceSettleTimer !== null) window.clearTimeout(deviceSettleTimer);
+    deviceSettleTimer = window.setTimeout(() => {
+      deviceSettleTimer = null;
+      void followDeviceChange();
+    }, DEVICE_SETTLE_MS);
+  });
+}
 
 // Taking control of a share changes what its latency should be: a pointer that
 // arrives two frames late is unusable, where two frames of cushion on something
