@@ -373,7 +373,15 @@ class VoiceEngine(private val context: Context) {
 
     private fun startMicrophone() {
         if (audioTrack != null) return
-        val source = factory.createAudioSource(MediaConstraints())
+        // What the room needs, not what the stack guesses - see AudioPrefs. A
+        // headset in a quiet flat and a phone held at arm's length on a train
+        // want opposite processing, and only the person holding it knows which.
+        val constraints = MediaConstraints().apply {
+            AudioPrefs.captureConstraints().forEach { (key, on) ->
+                mandatory.add(MediaConstraints.KeyValuePair(key, on.toString()))
+            }
+        }
+        val source = factory.createAudioSource(constraints)
         audioTrack = factory.createAudioTrack("nexora-audio", source)
         applyMute()
     }
@@ -1076,7 +1084,14 @@ class VoiceEngine(private val context: Context) {
          */
         private suspend fun setLocal(description: SessionDescription): Boolean {
             val patched = runCatching {
-                SdpQuality.patch(description.description, ShareQuality.screenBitrate(shareSize))
+                // Video first, then the microphone: bitrate, stereo and DTX are
+                // Opus payload parameters, so they are fixed when the
+                // connection is negotiated and cannot be set on a live sender
+                // the way a video bitrate can.
+                SdpQuality.patchAudio(
+                    SdpQuality.patch(description.description, ShareQuality.screenBitrate(shareSize)),
+                    AudioPrefs.micEncoding(),
+                )
             }.getOrNull()
 
             if (patched != null && patched != description.description) {

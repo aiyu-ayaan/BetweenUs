@@ -39,6 +39,8 @@ import com.aktech.nexora.core.data.NotificationPreferences
 import com.aktech.nexora.core.data.PresenceStatus
 import com.aktech.nexora.core.data.PublicUser
 import com.aktech.nexora.core.data.Session
+import com.aktech.nexora.feature.voice.AudioPrefs
+import com.aktech.nexora.feature.voice.CallAudio
 import com.aktech.nexora.feature.voice.CallTones
 import com.aktech.nexora.feature.voice.VoiceEngine
 import com.aktech.nexora.core.store.LastPlace
@@ -93,6 +95,14 @@ fun SettingsScreen(user: PublicUser, onBack: () -> Unit, onServerSettings: () ->
     // A machine setting, not an account one: which room you are sitting in is
     // what decides whether a sound is welcome.
     var callTones by remember { mutableStateOf(CallTones.enabled) }
+    // Machine settings, like the tones: the processing that suits a headset in
+    // a quiet room is the processing that ruins a call held on a train.
+    var mode by remember { mutableStateOf(AudioPrefs.mode) }
+    var route by remember { mutableStateOf(AudioPrefs.route) }
+    var echoCancellation by remember { mutableStateOf(AudioPrefs.echoCancellation) }
+    var noiseSuppression by remember { mutableStateOf(AudioPrefs.noiseSuppression) }
+    var autoGainControl by remember { mutableStateOf(AudioPrefs.autoGainControl) }
+    val routes = remember { CallAudio.availableRoutes(context) }
 
     LaunchedEffect(Unit) {
         preferences = runCatching { NexoraApi.notificationPreferences() }.getOrNull()
@@ -286,6 +296,83 @@ fun SettingsScreen(user: PublicUser, onBack: () -> Unit, onServerSettings: () ->
 
             // --- call sounds ---
             SectionLabel("Calls")
+
+            ListRow(
+                title = "Play through",
+                subtitle = when (route) {
+                    AudioPrefs.Route.AUTO -> "Whatever the phone chooses"
+                    AudioPrefs.Route.SPEAKER -> "Speaker"
+                    AudioPrefs.Route.EARPIECE -> "Earpiece"
+                    AudioPrefs.Route.WIRED -> "Wired headset"
+                    AudioPrefs.Route.BLUETOOTH -> "Bluetooth"
+                },
+                leading = { NexoraIcon(NexoraIcons.Speaker) },
+                trailing = {
+                    Chip(
+                        text = "Change",
+                        onClick = {
+                            // A cycle rather than a menu: there are at most
+                            // five of these and four of them are usually not
+                            // plugged in.
+                            val next = routes[(routes.indexOf(route) + 1).mod(routes.size)]
+                            route = next
+                            AudioPrefs.route = next
+                            // Now, on a call that is already up: the moment
+                            // somebody reaches for this is the moment they have
+                            // just put a headset on.
+                            CallAudio.applyRoute(context, next)
+                        },
+                    )
+                },
+            )
+
+            ListRow(
+                title = "High fidelity microphone",
+                subtitle = if (mode == AudioPrefs.Mode.HIFI) {
+                    "Stereo at twice the bitrate, with the speech processing off"
+                } else {
+                    "Speech: mono, denoised, and silent between sentences"
+                },
+                leading = { NexoraIcon(NexoraIcons.Mic) },
+                trailing = {
+                    Switch(
+                        checked = mode == AudioPrefs.Mode.HIFI,
+                        onCheckedChange = { on ->
+                            mode = if (on) AudioPrefs.Mode.HIFI else AudioPrefs.Mode.CLEAR
+                            AudioPrefs.mode = mode
+                        },
+                        colors = switchColours(),
+                    )
+                },
+            )
+
+            if (mode == AudioPrefs.Mode.CLEAR) {
+                AudioSwitch(
+                    title = "Noise suppression",
+                    subtitle = "Drops the fan, the keyboard and the room",
+                    checked = noiseSuppression,
+                ) {
+                    noiseSuppression = it
+                    AudioPrefs.noiseSuppression = it
+                }
+                AudioSwitch(
+                    title = "Echo cancellation",
+                    subtitle = "Without it, the speaker sends the call back into itself",
+                    checked = echoCancellation,
+                ) {
+                    echoCancellation = it
+                    AudioPrefs.echoCancellation = it
+                }
+                AudioSwitch(
+                    title = "Automatic gain control",
+                    subtitle = "Evens out a quiet or a loud voice",
+                    checked = autoGainControl,
+                ) {
+                    autoGainControl = it
+                    AudioPrefs.autoGainControl = it
+                }
+            }
+
             ListRow(
                 title = "Join and leave tones",
                 subtitle = "Two notes when somebody arrives or goes - up for one, down for the other",
@@ -300,13 +387,7 @@ fun SettingsScreen(user: PublicUser, onBack: () -> Unit, onServerSettings: () ->
                             // plays the sound it is turning on.
                             if (on) CallTones.play(CallTones.Tone.JOIN)
                         },
-                        colors = SwitchDefaults.colors(
-                            checkedThumbColor = Slate100,
-                            checkedTrackColor = Accent,
-                            uncheckedTrackColor = Surface700,
-                            uncheckedBorderColor = Surface700,
-                            uncheckedThumbColor = Slate400,
-                        ),
+                        colors = switchColours(),
                     )
                 },
             )
@@ -408,6 +489,34 @@ fun SettingsScreen(user: PublicUser, onBack: () -> Unit, onServerSettings: () ->
     if (pickingServer) {
         ServerSheet(onDismiss = { pickingServer = false })
     }
+}
+
+/** The one set of switch colours this screen uses, in one place. */
+@Composable
+private fun switchColours() = SwitchDefaults.colors(
+    checkedThumbColor = Slate100,
+    checkedTrackColor = Accent,
+    uncheckedTrackColor = Surface700,
+    uncheckedBorderColor = Surface700,
+    uncheckedThumbColor = Slate400,
+)
+
+/** One of the three microphone-processing switches. */
+@Composable
+private fun AudioSwitch(
+    title: String,
+    subtitle: String,
+    checked: Boolean,
+    onChange: (Boolean) -> Unit,
+) {
+    ListRow(
+        title = title,
+        subtitle = subtitle,
+        leading = { NexoraIcon(NexoraIcons.Settings, tint = Slate400) },
+        trailing = {
+            Switch(checked = checked, onCheckedChange = onChange, colors = switchColours())
+        },
+    )
 }
 
 @Composable

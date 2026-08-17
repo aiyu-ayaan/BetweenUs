@@ -2,6 +2,7 @@ package com.aktech.nexora.feature.voice
 
 import android.content.Context
 import android.media.AudioAttributes
+import android.media.AudioDeviceInfo
 import android.media.AudioFocusRequest
 import android.media.AudioManager
 import android.os.Build
@@ -18,9 +19,13 @@ import android.os.Build
  * So three things are asked for together, and all three are undone on the way
  * out: communication mode, audio focus, and the speaker.
  *
- * ponytail: no Bluetooth or wired-headset routing, and no route picker. The
- * speaker is the right default for a phone held in front of you, and
- * `setCommunicationDevice` is the upgrade path when somebody wants to choose.
+ * Where it comes out is a choice now - see [AudioPrefs.Route]. `AUTO` is what
+ * this did before there was one: the speaker, which is right for a phone held
+ * in front of you and wrong for every other way of holding one. Anything else
+ * goes through `setCommunicationDevice`, which is the API that can actually
+ * name a headset; below API 31 there is only the speakerphone flag, so those
+ * devices get the earpiece-or-speaker half of the choice and the system's own
+ * routing for the rest.
  */
 object CallAudio {
 
@@ -61,19 +66,76 @@ object CallAudio {
             )
         }
 
-        // Deprecated since API 31 in favour of setCommunicationDevice, which
-        // needs a device to pick from. This still works everywhere and is one
-        // line; the picker is the upgrade, not the fix.
-        @Suppress("DEPRECATION")
-        manager.isSpeakerphoneOn = true
+        applyRoute(manager, AudioPrefs.route)
 
         held = true
+    }
+
+    /**
+     * Sends the call to the chosen device, now, on a call that is already up.
+     *
+     * Changing this mid-call is the whole point: the moment somebody reaches
+     * for it is the moment they have put a headset on, or picked the phone up
+     * off the table and wants it against their ear.
+     */
+    fun applyRoute(context: Context, route: AudioPrefs.Route) {
+        val manager = context.getSystemService(AudioManager::class.java) ?: return
+        if (held) applyRoute(manager, route)
+    }
+
+    /** What the system says is available, in the order a picker should list it. */
+    fun availableRoutes(context: Context): List<AudioPrefs.Route> {
+        val fixed = listOf(AudioPrefs.Route.AUTO, AudioPrefs.Route.SPEAKER, AudioPrefs.Route.EARPIECE)
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return fixed
+
+        val manager = context.getSystemService(AudioManager::class.java) ?: return fixed
+        val present = manager.availableCommunicationDevices
+            .mapNotNull { routeOf(it.type) }
+            .toSet()
+        // Wired and Bluetooth are only offered when one is plugged in or
+        // paired: a menu entry that cannot be chosen is worse than no entry.
+        return fixed + listOf(AudioPrefs.Route.WIRED, AudioPrefs.Route.BLUETOOTH).filter {
+            it in present
+        }
+    }
+
+    private fun applyRoute(manager: AudioManager, route: AudioPrefs.Route) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && route != AudioPrefs.Route.AUTO) {
+            val device = manager.availableCommunicationDevices.firstOrNull {
+                routeOf(it.type) == route
+            }
+            if (device != null && manager.setCommunicationDevice(device)) return
+            // Asked for a headset that has since been unplugged: fall through
+            // to the speaker rather than leaving the call somewhere silent.
+        }
+
+        // Deprecated since API 31 in favour of setCommunicationDevice, which
+        // needs a device to pick from. It still works everywhere, and it is the
+        // only thing that does below 31.
+        @Suppress("DEPRECATION")
+        manager.isSpeakerphoneOn = route != AudioPrefs.Route.EARPIECE
+    }
+
+    private fun routeOf(type: Int): AudioPrefs.Route? = when (type) {
+        AudioDeviceInfo.TYPE_BUILTIN_SPEAKER -> AudioPrefs.Route.SPEAKER
+        AudioDeviceInfo.TYPE_BUILTIN_EARPIECE -> AudioPrefs.Route.EARPIECE
+        AudioDeviceInfo.TYPE_WIRED_HEADSET,
+        AudioDeviceInfo.TYPE_WIRED_HEADPHONES,
+        AudioDeviceInfo.TYPE_USB_HEADSET,
+        -> AudioPrefs.Route.WIRED
+        AudioDeviceInfo.TYPE_BLUETOOTH_SCO,
+        AudioDeviceInfo.TYPE_BLE_HEADSET,
+        -> AudioPrefs.Route.BLUETOOTH
+        else -> null
     }
 
     fun stop(context: Context) {
         if (!held) return
         val manager = context.getSystemService(AudioManager::class.java) ?: return
 
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            runCatching { manager.clearCommunicationDevice() }
+        }
         @Suppress("DEPRECATION")
         manager.isSpeakerphoneOn = previousSpeaker
         manager.mode = previousMode

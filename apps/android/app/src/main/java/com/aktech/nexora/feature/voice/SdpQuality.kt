@@ -64,6 +64,77 @@ object SdpQuality {
         }
     }
 
+    /**
+     * What the microphone is worth, said in the one place Opus listens.
+     *
+     * Bitrate, stereo and DTX are payload parameters: they live in the `fmtp`
+     * line of the audio section and are fixed when the connection is
+     * negotiated, which is why they cannot be set on a live sender the way a
+     * video bitrate can. The desktop writes the same three - see `micEncoding`
+     * in `voice-quality.ts` - and the two clients are talking to each other.
+     *
+     * `maxaveragebitrate` is in bits per second, and `sprop-stereo` is what
+     * tells the *far end* to send stereo; `stereo` is what this end will
+     * accept. Both, or a hi-fi call is mono in one direction.
+     */
+    fun patchAudio(sdp: String, encoding: MicEncoding): String =
+        sdp.split(Regex("(?=m=)")).joinToString("") { section ->
+            if (!section.startsWith("m=audio")) section else opusParameters(section, encoding)
+        }
+
+    internal fun opusParameters(section: String, encoding: MicEncoding): String {
+        val payloads = Regex("^a=rtpmap:(\\d+)\\s+opus/48000", RegexOption.MULTILINE)
+            .findAll(section)
+            .map { it.groupValues[1] }
+            .toList()
+
+        val wanted = mapOf(
+            "maxaveragebitrate" to encoding.maxBitrate.toString(),
+            "stereo" to if (encoding.stereo) "1" else "0",
+            "sprop-stereo" to if (encoding.stereo) "1" else "0",
+            "usedtx" to if (encoding.dtx) "1" else "0",
+            // Redundancy: a packet carries the previous one, so a single loss is
+            // inaudible. Cheap at these bitrates and worth it either way.
+            "useinbandfec" to "1",
+        )
+
+        var patched = section
+        for (payload in payloads) {
+            val fmtp = Regex("^a=fmtp:$payload (.+)$", RegexOption.MULTILINE)
+            val existing = fmtp.find(patched)?.groupValues?.get(1)
+            val merged = mergeParameters(existing, wanted)
+            patched = if (existing != null) {
+                fmtp.spliceFirst(patched) { "a=fmtp:$payload $merged" }
+            } else {
+                Regex("a=rtpmap:$payload[^\r\n]*\r?\n", RegexOption.MULTILINE)
+                    .spliceFirst(patched) { "${it.value}a=fmtp:$payload $merged\r\n" }
+            }
+        }
+        return patched
+    }
+
+    /**
+     * The parameters already there, with ours laid over them.
+     *
+     * Merged rather than appended: an `fmtp` line with `stereo=0;stereo=1` in
+     * it is a line whose meaning depends on which end reads it first, and the
+     * stack that wrote the first copy is not the one that has to agree with it.
+     */
+    internal fun mergeParameters(existing: String?, wanted: Map<String, String>): String {
+        val parameters = LinkedHashMap<String, String>()
+        existing
+            ?.split(';')
+            ?.mapNotNull { it.trim().takeIf(String::isNotEmpty) }
+            ?.forEach { entry ->
+                val key = entry.substringBefore('=')
+                parameters[key] = entry.substringAfter('=', "")
+            }
+        wanted.forEach { (key, value) -> parameters[key] = value }
+        return parameters.entries.joinToString(";") { (key, value) ->
+            if (value.isEmpty()) key else "$key=$value"
+        }
+    }
+
     /** `b=AS` in kbps and `b=TIAS` in bps, right after the connection line. */
     internal fun bandwidth(section: String, maxKbps: Int, maxBps: Int): String {
         val stripped = section

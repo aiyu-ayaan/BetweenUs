@@ -7,6 +7,7 @@ import com.aktech.nexora.core.data.NetworkWatch
 import com.aktech.nexora.core.data.Session
 import com.aktech.nexora.core.store.Cache
 import com.aktech.nexora.core.store.LastPlace
+import com.aktech.nexora.feature.voice.AudioPrefs
 import com.aktech.nexora.feature.voice.CallTones
 
 /**
@@ -25,5 +26,6 @@ class NexoraApp : Application() {
         LastPlace.init(this)
         Cache.init(this)
         CallTones.init(this)
+        AudioPrefs.init(this)
     }
 }

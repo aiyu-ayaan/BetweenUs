@@ -88,4 +88,63 @@ class SdpQualityTest {
         assertEquals(1, Regex("b=AS:").findAll(twice).count())
         assertEquals(1, Regex("b=TIAS:").findAll(twice).count())
     }
+
+    // --- The microphone half -------------------------------------------------
+
+    private val audioSdp = """v=0
+m=audio 9 UDP/TLS/RTP/SAVPF 111 63
+c=IN IP4 0.0.0.0
+a=rtpmap:111 opus/48000/2
+a=fmtp:111 minptime=10;useinbandfec=1
+m=video 9 UDP/TLS/RTP/SAVPF 96
+c=IN IP4 0.0.0.0
+a=rtpmap:96 H264/90000
+"""
+
+    @Test
+    fun `opus is told the bitrate, the channel count and whether to stop for silence`() {
+        val patched = SdpQuality.patchAudio(
+            audioSdp,
+            MicEncoding(maxBitrate = 128_000, stereo = true, dtx = false),
+        )
+        val fmtp = patched.lines().first { it.startsWith("a=fmtp:111") }
+
+        assertTrue(fmtp.contains("maxaveragebitrate=128000"))
+        // Both, or a hi-fi call is stereo in one direction only.
+        assertTrue(fmtp.contains("stereo=1"))
+        assertTrue(fmtp.contains("sprop-stereo=1"))
+        assertTrue(fmtp.contains("usedtx=0"))
+        // What was already there survives.
+        assertTrue(fmtp.contains("minptime=10"))
+    }
+
+    @Test
+    fun `an existing parameter is replaced rather than repeated`() {
+        val patched = SdpQuality.patchAudio(
+            """m=audio 9 x 111
+a=rtpmap:111 opus/48000/2
+a=fmtp:111 stereo=1;usedtx=1
+""",
+            MicEncoding(maxBitrate = 64_000, stereo = false, dtx = true),
+        )
+        val fmtp = patched.lines().first { it.startsWith("a=fmtp:111") }
+
+        // "stereo=1;stereo=0" is a line whose meaning depends on which end
+        // reads it first, which is not a thing to ship.
+        assertEquals(1, Regex("stereo=").findAll(fmtp).count() - Regex("sprop-stereo=").findAll(fmtp).count())
+        assertTrue(fmtp.contains("stereo=0"))
+        assertTrue(fmtp.contains("usedtx=1"))
+    }
+
+    @Test
+    fun `the video section is left alone by the audio patch`() {
+        val patched = SdpQuality.patchAudio(
+            audioSdp,
+            MicEncoding(maxBitrate = 64_000, stereo = false, dtx = true),
+        )
+        val video = patched.substringAfter("m=video")
+
+        assertTrue(video.contains("a=rtpmap:96 H264/90000"))
+        assertTrue(!video.contains("maxaveragebitrate"))
+    }
 }
