@@ -94,6 +94,15 @@ Chat and media, across all three clients:
       scrolled past was. An auto-loaded video shows its first frame rather than
       starting to talk. On Android the bytes were already being decrypted on
       arrival, so the card now draws the frame it already had.
+- [x] **Join and leave tones**, on desktop, web and Android. A rising pair of
+      notes for an arrival and a falling pair for a departure - a voice channel
+      is the one screen nobody is looking at, so who is in it has to be audible.
+      Synthesised at both ends rather than shipped as a file, at the same two
+      frequencies, so a call with a phone and a laptop in it has one vocabulary.
+      A whole roster is what the desktop is handed on every change, so who
+      arrived is a set difference there (`rosterChange`, self-checked); Android
+      is given real join and leave events and does not need one. Off with a
+      switch, stored per machine.
 
 Fixed in the same pass:
 
@@ -290,5 +299,12 @@ The cases most worth putting a person in front of, in order:
 14. Android's server picker, which is the fix least visible from the code: from
     Settings, switch deployments and confirm the app actually restarts into the
     other one.
+15. The join and leave tones with three people in a call, which is where the
+    two failure modes live: joining a channel that already has two people in it
+    must play one tone and not two, and nobody should hear a tone for a peer
+    connection that merely reconnected. Worth listening to on a headset plugged
+    in mid-call as well - on the phone the tone follows the call's route, and
+    an arrival in the earpiece while the call is elsewhere is the bug that
+    would show.
 
 `TESTING.md` is the fuller version of this list and predates it.
