@@ -24,9 +24,41 @@ android {
 
     buildTypes {
         release {
-            optimization {
-                enable = false
-            }
+            /**
+             * R8, doing all three of its jobs.
+             *
+             * `isMinifyEnabled` is the code half - dead code removed, names
+             * shortened, inlining done. `isShrinkResources` is the other half,
+             * and it needs the first: it works out which drawables and strings
+             * the *remaining* code can reach, so shrinking resources without
+             * shrinking code is not allowed and would not help much anyway.
+             *
+             * Together they take the bulk of what a Compose app plus WebRTC
+             * drags in and never calls. What they cannot do is guess which
+             * classes are reached by name from native code - see
+             * proguard-rules.pro, where every keep says why it is there.
+             *
+             * `proguard-android-optimize.txt` is the platform's own file rather
+             * than the plain one: the difference is that it lets R8 optimise
+             * rather than only shrink, which is the whole reason to run it.
+             */
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
+
+            /**
+             * Debug-signed on purpose, and this is not a release configuration.
+             *
+             * Without it `assembleRelease` produces an unsigned APK that no
+             * device will install, which makes the shrunk build impossible to
+             * actually try. A real signing config needs a keystore that is not
+             * in this repository and must never be - it is the hardening item
+             * in development/ANDROID_TODO.md.
+             */
+            signingConfig = signingConfigs.getByName("debug")
         }
     }
     compileOptions {
