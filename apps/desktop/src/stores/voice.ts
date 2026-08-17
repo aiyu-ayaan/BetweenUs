@@ -28,6 +28,7 @@ import { notBeingHeard, type LinkStats } from '../services/call-stats';
 import { visibleVideo } from '../services/media-presence';
 import { NoiseGate } from '../services/mic-gate';
 import { captureIsStale } from '../services/audio-devices';
+import { playCallTone, rosterChange, setToneOutput } from '../services/call-tones';
 import { micCapture, micEncoding, micProcessing, type VoiceSettings } from '../services/voice-quality';
 import { shareOptions, type ShareIntent, type ShareSize } from '../services/share-quality';
 
@@ -257,6 +258,17 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
           refresh();
         },
         onPeers: (next_) => {
+          // Before the list is replaced, and only once the call is up: the
+          // roster that arrives on the way in is everybody already there, and
+          // announcing them one by one is a fanfare nobody asked for.
+          if (useVoiceStore.getState().status === 'connected') {
+            const change = rosterChange(
+              peers.map((peer) => peer.peerId),
+              next_.map((peer) => peer.peerId),
+            );
+            if (change.joined) tone('join');
+            if (change.left) tone('leave');
+          }
           peers = next_;
           for (const peerId of [...remoteTracks.keys()]) {
             if (!peers.some((peer) => peer.peerId === peerId)) remoteTracks.delete(peerId);
@@ -336,6 +348,9 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
       });
       publishMediaState();
       refresh();
+      // Your own arrival, the way Discord marks it: the confirmation that the
+      // channel is live is the same sound everyone else in it just heard.
+      tone('join');
     } catch (error) {
       if (joinCounter !== currentJoinId) return;
       teardown();
@@ -350,6 +365,9 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
   },
 
   leave: async (reason) => {
+    // Only for a call that was actually up: leaving one that never connected
+    // has nothing to say goodbye to.
+    if (get().status === 'connected') tone('leave');
     joinCounter++;
     stopPushToTalk();
     stopStatsPoll();
@@ -569,6 +587,14 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
     await useChatStore.getState().selectChannel(channelId);
   },
 }));
+
+/** One tone, unless this machine has turned them off. */
+function tone(which: 'join' | 'leave'): void {
+  const settings = useAudioSettings.getState().settings;
+  if (!settings.callTones) return;
+  setToneOutput(settings.outputDeviceId);
+  playCallTone(which);
+}
 
 /** Re-derives the rendered view from the mesh. Cheap; called on every event. */
 function refresh(): void {

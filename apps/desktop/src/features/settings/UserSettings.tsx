@@ -7,6 +7,7 @@ import { useVoiceStore } from '../../stores/voice';
 import { useAudioSettings } from '../../stores/audioSettings';
 import { monitorMic, type MicLevel } from '../../services/mic-gate';
 import { describeKey } from '../../services/talk-key';
+import { playCallTone } from '../../services/call-tones';
 import { DeviceSelect, useDevices } from '../../components/DeviceSelect';
 import { DEFAULT_VOICE_SETTINGS, GATE_RANGE } from '../../services/voice-quality';
 import { api } from '../../services/api';
@@ -519,6 +520,21 @@ function VoiceSection(): JSX.Element {
             </p>
           </>
         )}
+      </div>
+
+      <h2 className="mt-8 text-base font-semibold text-slate-50">Sounds</h2>
+      <div className="mt-3 space-y-1 rounded-lg bg-surface-800 p-4">
+        <Switch
+          label="Play a tone when somebody joins or leaves the call"
+          hint="Two notes, up for an arrival and down for a departure. A voice channel is the one screen nobody is looking at, so who is in it has to be audible."
+          checked={settings.callTones}
+          onChange={(callTones) => {
+            update({ callTones });
+            // The toggle is the demonstration: turning it on plays the sound it
+            // is turning on, which is the only way to know what was chosen.
+            if (callTones) playCallTone('join');
+          }}
+        />
       </div>
 
       <h2 className="mt-8 text-base font-semibold text-slate-50">Processing</h2>

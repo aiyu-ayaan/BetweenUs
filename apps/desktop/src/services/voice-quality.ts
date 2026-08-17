@@ -105,6 +105,12 @@ export interface VoiceSettings {
    * than a key, so it is the same physical key on every layout.
    */
   pushToTalkKey: string;
+  /**
+   * The two notes when somebody arrives or leaves the call. On by default: a
+   * voice channel is the one screen nobody is looking at, so who is in it has
+   * to be audible or it is not knowable at all.
+   */
+  callTones: boolean;
 }
 
 export const DEFAULT_VOICE_SETTINGS: VoiceSettings = {
@@ -121,6 +127,7 @@ export const DEFAULT_VOICE_SETTINGS: VoiceSettings = {
   // Not Space: the composer is one keystroke away at all times, and a
   // push-to-talk key that also types is a key nobody can use.
   pushToTalkKey: 'AltRight',
+  callTones: true,
 };
 
 /**
