@@ -65,10 +65,10 @@ are two different actions and both are needed.
 | Channel key (AES-256-GCM) | in memory on member devices | channel members |
 | Wrapped channel key | `channel_keys` table | only the recipient it was sealed for |
 | Message body | `messages.content` | channel members |
-| Attachment bytes | object storage | channel members |
+| Attachment bytes | object storage | channel members (the bytes need a session to fetch and the channel key to read) |
 | Voice/video media | DTLS-SRTP, directly between the two peers | the two people on that connection |
 | DTLS fingerprint signature | in the offer/answer, HMAC'd with the channel key | verifiable by channel members only |
-| Avatars and server icons | object storage | **anyone with the URL** |
+| Avatars and server icons | object storage | **anyone with the URL** - they are served without authentication on purpose, because an `<img>` tag cannot carry one |
 
 ## Flow
 

@@ -64,6 +64,41 @@ Backend:
       is a cursor, so a registration between two requests cannot repeat a row;
       the panel's own login now offers whichever providers are switched on.
 
+Security, and the scan that found the rest of it:
+
+- [x] **Adding a member is friends-only.** `POST /servers/:id/members` looked a
+      username up and added it - any account on the deployment, by anybody
+      holding MANAGE_MEMBER, with no relationship required. Being added is not
+      passive: it is a member list entry, a notification and a set of readable
+      channels, none of which the person was asked about. A pending request is
+      not a friendship, or "ask and add anyway" would be the way past the check.
+- [x] **A moderator cannot edit or kick an administrator.** The permission
+      check answered "may you manage members at all" and the role check
+      answered "may you hand out that role"; neither asked who the member was.
+      Equal ranks are refused as well as higher: two administrators editing each
+      other is a fight, not a hierarchy.
+- [x] **An attachment is not served to a stranger.** The download route had no
+      authentication. Ciphertext, so nothing readable came out - but the bytes
+      and their size went to anybody who ever saw the URL, and an unguessable
+      key that never expires is one leak away from permanent. Pictures stay
+      public, because an `<img>` tag cannot carry a header.
+- [x] **An invite link**, which is the other half of the friends-only rule: a
+      way to let a stranger in that they consent to. `/invite/<code>` is
+      redeemed at boot, survives the sign-in it may trigger, and is cleared
+      whatever the outcome. The join box takes a pasted link or a bare code.
+
+Chat, on desktop and web:
+
+- [x] **`:` emoji search.** Two letters and a name, ranked exact-prefix-
+      substring, because `:fire` offering `fire_engine` above the flame is how
+      people stop using a feature rather than report it. A shortcode table for
+      the emoji this app already draws - six kilobytes against a dependency's
+      megabyte and a half.
+- [x] **A member menu**: message, add friend, mute, copy id. Muting is per
+      person and follows the account, and a muted person is silent even when
+      they mention you - a mute any mention could bypass is a mute the loud
+      person controls.
+
 Backlog worked down, this pass:
 
 - [x] **Multi-device E2EE.** A key list per user, one wrap per device, and a
@@ -225,6 +260,12 @@ blocked by anything outside this document.
 
 ### Desktop and web
 
+- [ ] **Animated emoji.** Asked for, not built. It means one of two things and
+      they are different projects: custom per-server emoji anybody can upload -
+      a table, an upload path, a `:name:` that resolves per server, and a
+      render path in the message body - or a shipped animated set, which is a
+      sprite sheet and a licence. The `:` menu and its shortcode table are the
+      half that both of them need, and that half landed.
 - [ ] **Edit history, encrypted reactions, paged search, a pinned panel that
       pages.** Four separate message-side gaps, listed together because they are
       one screen's worth of work each. (Who-reacted names landed.)
@@ -248,6 +289,9 @@ blocked by anything outside this document.
 
 ### Android
 
+- [ ] **The `:` emoji menu and the member menu**, both of which landed on
+      desktop and web this pass. The shortcode table is a shared contract in
+      `emoji-names.ts`; the phone has neither.
 - [ ] **Markdown-ish body rendering.** `message-body.ts` is the contract.
       (Replies landed, on all three clients.)
 - [ ] **Input sensitivity on the phone.** The two modes, the processing switches
@@ -279,7 +323,7 @@ changed along the way - presence scoping in `presence-service/smoke.mjs`,
 invites in `chat-service/smoke.mjs` and `notification-service/smoke.mjs` - have
 been syntax-checked and not executed.
 
-**Three migrations are waiting, and two of their names sort backwards.**
+**Four migrations are waiting, and two of their names sort backwards.**
 `20260810100000_custom_roles` and `20260810110000_attachments` exist as SQL and
 have to be applied - `pnpm db:migrate` - before the roles screen or any
 attachment upload can work at all. Both are stamped 10 August while migrations
@@ -293,6 +337,14 @@ The third is `20260818120000_multi_device_keys`, which sorts correctly and has
 to be applied before any client on contract 2 can publish a key. It rewrites
 `device_keys` and `channel_keys` in place and carries every existing row over -
 see the file, which says why each step is what it is. It has never been run.
+
+The fourth is `20260818140000_muted_users`, one array column on
+`notification_settings`. It was written with `NOT NULL` and corrected: Prisma
+emits a list column as a nullable array with an empty default, and a migration
+that disagrees with what `prisma migrate` would generate is drift - which is
+what turns the next `migrate dev` into an offer to reset the database. The
+check that caught it is `prisma migrate diff --from-empty --to-schema-datamodel`,
+which needs no database and is worth running against any hand-written migration.
 
 The cases most worth putting a person in front of, in order:
 
@@ -350,7 +402,15 @@ The cases most worth putting a person in front of, in order:
     the one that was replaced must say why rather than appearing to have
     crashed. Then have the holder leave the call and confirm the screen is free
     rather than held by a socket that has gone.
-17. The join and leave tones with three people in a call, which is where the
+17. The two authorization fixes, which are the ones worth a person: with two
+    accounts that are *not* friends, try to add one to a server from the members
+    screen - it must be refused, and the picker must not have offered them.
+    Then promote somebody to moderator with MANAGE_MEMBER and confirm they can
+    neither edit nor kick the owner.
+18. An invite link end to end: mint one, open it in a signed-out window, sign
+    in, and land in the server. Then open the same link again and confirm it
+    does not rejoin after leaving.
+19. The join and leave tones with three people in a call, which is where the
     two failure modes live: joining a channel that already has two people in it
     must play one tone and not two, and nobody should hear a tone for a peer
     connection that merely reconnected. Worth listening to on a headset plugged
