@@ -64,7 +64,58 @@ Backend:
       is a cursor, so a registration between two requests cannot repeat a row;
       the panel's own login now offers whichever providers are switched on.
 
-Desktop and web:
+Chat and media, across all three clients:
+
+- [x] **Replies, on all three clients.** A quote - the author and one line of
+      what was said - carried inside the encrypted body, so the server never
+      learns who is answering whom and nothing was added to the wire contract or
+      the schema. Copied rather than pointed at: the message being answered may
+      be a thousand messages back and not on the device at all, and a reply has
+      to render without fetching anything. An edit carries the quote through
+      untouched.
+- [x] **History that pages backwards on desktop and web.** The server has taken
+      a `before` since the first day and Android has walked it since its cache
+      landed; these two asked for the newest fifty and stopped. The reader is
+      put back where they were reading by anchoring on the distance from the
+      bottom, which is the one measurement fifty prepended messages of unknown
+      height do not change.
+- [x] **A cache on desktop and web**, the port of Android's `Cache.kt`: servers,
+      channels, direct conversations and the last few hundred messages per
+      channel, in IndexedDB, as the ciphertext the server sent. Everything
+      paints from it and corrects itself behind the fetch. Decrypted history is
+      still memory-only - see the open item below, which this does not close.
+- [x] **A preview before media is sent**, on all three clients. The file itself,
+      big, with the caption box under it and the batch along the bottom. A chip
+      reading `IMG_4821.jpg` is the one thing that cannot catch the wrong photo.
+- [x] **Drop a file anywhere in the conversation**, rather than onto the message
+      box. A text drag no longer lights the panel up.
+- [x] **Video and audio load themselves**, up to 40 MB, when scrolled to. The
+      click was never the point - not spending 200 MB on a message somebody
+      scrolled past was. An auto-loaded video shows its first frame rather than
+      starting to talk. On Android the bytes were already being decrypted on
+      arrival, so the card now draws the frame it already had.
+
+Fixed in the same pass:
+
+- [x] **Android could not change its server.** A modal bottom sheet composes
+      into its own window, so `LocalContext.current as? Activity` was null and
+      the `recreate()` after switching deployments went nowhere. `ShareStage.kt`
+      had already found this and kept a private helper for it; that helper is in
+      `ui-common` now and both callers use it.
+- [x] **The wrong microphone, three ways.** Nothing listened for `devicechange`
+      while a call was up, so a capture stayed bound to whatever device it
+      opened on; each picker enumerated the hardware separately and could
+      disagree; and a chosen device that had been unplugged fell back to the
+      system default silently, because the constraint is deliberately not
+      `exact`. The capture now follows, the list is shared, and the fallback
+      says so. The "nobody can hear you" banner carries the input list itself.
+- [x] **A channel opened wherever the last one was.** The list scrolled on
+      `messages.length`, and two channels holding the same number of messages
+      change neither the length nor the offset. It scrolls on the newest message
+      id now, jumps without animation on open, follows only from the bottom, and
+      stays pinned while attachments decrypt underneath it.
+
+Desktop and web, earlier passes:
 
 - [x] **Per-person volume and mute.** Per machine, keyed by user id; a muted
       person plays at zero so unmuting is instant.
@@ -133,9 +184,11 @@ blocked by anything outside this document.
       together because they are one screen's worth of work each.
 - [ ] **A light theme.** The ramp is defined once, which is what makes one
       possible; nothing else about it has been designed.
-- [ ] **Decrypted history persisted under a device key.** Cached in memory per
-      channel today, so it is gone after a restart. Persisting plaintext is what
-      the encryption is for, so it has to be sealed at rest.
+- [ ] **Decrypted history persisted under a device key.** The ciphertext is on
+      disk now - see the cache above - so a restart no longer means an empty
+      window. What is still memory-only is the *decrypted* copy, so every
+      message is opened again on launch. Sealing plaintext at rest under a
+      device key is what would close this.
 - [ ] **Chunked AEAD attachments, and a video transcode.** The first lifts the
       100 MB ceiling; the second means ffmpeg in the client.
 - [ ] **A recent-servers list, and a client/server version check.** One address
@@ -152,8 +205,8 @@ blocked by anything outside this document.
 
 ### Android
 
-- [ ] **Replies, and markdown-ish body rendering.** The desktop has both;
-      `message-body.ts` is the contract for the second.
+- [ ] **Markdown-ish body rendering.** `message-body.ts` is the contract.
+      (Replies landed, on all three clients.)
 - [ ] **Reconnect driven by a network-change callback**, rather than waiting for
       the backoff timer to come round.
 - [ ] **Audio device and input-sensitivity settings.** The desktop's two modes,
@@ -219,5 +272,23 @@ The cases most worth putting a person in front of, in order:
 8. Two monitors: open a remote session, unplug the one being watched, and
    confirm the picture falls back to the primary rather than freezing.
 9. The container stack end to end, which has still never been run.
+10. A reply, both ways round: send one from the phone and read it on the
+    desktop, then the reverse. The quote is written by the sender and read by
+    everyone else, so a mismatch in `MessageBody` shows up as a message that
+    renders as a paragraph of JSON - which is exactly how the last encoding
+    disagreement was found.
+11. A channel with more than fifty messages on the desktop: scroll to the top
+    and keep scrolling. The reader must stay where they were rather than being
+    thrown up or down as each page lands, and "this is the start of the
+    channel" must only appear at the actual start.
+12. The cache, with the network off: sign in, open a channel, quit, disconnect,
+    and launch again. Servers, channels and the last messages must be on
+    screen. Then sign out and confirm it is empty on the next launch.
+13. A headset plugged in mid-call, on desktop: with nothing chosen it must move
+    to the new default, and with a device chosen and then unplugged and
+    replugged, the capture must come back to it.
+14. Android's server picker, which is the fix least visible from the code: from
+    Settings, switch deployments and confirm the app actually restarts into the
+    other one.
 
 `TESTING.md` is the fuller version of this list and predates it.

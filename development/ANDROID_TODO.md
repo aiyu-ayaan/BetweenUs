@@ -47,7 +47,7 @@ in-app notification for a message arriving in a channel that is not on screen
 (phase 4), and the incoming-call UI for a dead app (phase 6).
 
 Everything else that was open here is tracked in `TRACK.md` and is being worked
-through: replies, markdown bodies, network-change reconnect, audio
+through: markdown bodies, network-change reconnect, audio
 routing and ducking, the share quality ladder, remote clipboard and file
 transfer, audio settings, server creation and invites, OAuth, and the whole of
 phase 13.
@@ -179,7 +179,11 @@ data is cleared.
 - [x] `GET /api/v1/servers` list, server rail as a Compose drawer.
 - [x] Channel list per server; text channels only for now.
 - [x] Message history, pagination, send, edit, delete, pin.
-- [ ] Replies. The desktop has them; nothing here threads a message yet.
+- [x] Replies. A quote inside the encrypted body - the author and one line of
+      what was said, copied rather than pointed at, so a reply renders without
+      fetching the message it answers. "Reply" in the long-press sheet, a
+      banner over the composer, and a quote that scrolls to the message and
+      flashes it.
 - [x] Direct messages and the DM list.
 - [x] Attachments: WhatsApp-style attachment sheet with inline recent photos/videos grid, Gallery (photos & videos picker), Camera capture via FileProvider, and Document picker (`OpenMultipleDocuments`), client-side encryption, upload to `/api/v1/uploads`, inline image and video rendering with fullscreen zoomable image viewer, integrated video player, and save to device gallery under `Pictures/Nexora` and `Movies/Nexora` media albums.
 - [ ] Markdown-ish message body rendering, matching
