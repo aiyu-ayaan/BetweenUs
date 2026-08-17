@@ -25,15 +25,25 @@ import {
   Get,
   Param,
   Post,
+  Req,
   Res,
+  UnauthorizedException,
   UploadedFile,
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import type { Response } from 'express';
+import type { Request, Response } from 'express';
 import { prisma } from '@nexora/database';
-import { CurrentUser, JwtAuthGuard, openSecret, sealSecret, type AuthenticatedUser } from '@nexora/auth';
+import {
+  CurrentUser,
+  JwtAuthGuard,
+  bearerToken,
+  openSecret,
+  sealSecret,
+  verifyAccessToken,
+  type AuthenticatedUser,
+} from '@nexora/auth';
 import {
   MAX_ATTACHMENT_BYTES,
   MAX_PICTURE_BYTES,
@@ -208,13 +218,39 @@ export class UploadsController {
    * Serves objects written by the local driver. With S3 configured the client
    * fetches the bucket URL directly and never reaches this route - it stays
    * mounted so the same message URLs keep working after a driver switch.
+   *
+   * Authentication is asked for on an attachment and not on a picture, and the
+   * split is deliberate rather than an oversight.
+   *
+   * An attachment is ciphertext, so an unauthenticated read leaked nothing
+   * readable - but "nothing readable" is not the same as "nothing". It leaked
+   * the bytes and their size to anybody who ever saw the URL: a proxy log, a
+   * browser history, a screenshot of a devtools panel. The key is an unguessable
+   * UUID, so this was a capability URL, and a capability URL that never expires
+   * is one leak away from permanent. The clients already send the header.
+   *
+   * A picture - an avatar, a server icon - is drawn by an `<img>` tag, which
+   * cannot carry an Authorization header. Requiring one there would mean every
+   * avatar in the app failing to load. It stays public, which
+   * development/E2EE.md has always said it is.
    */
   @Get(':key(*)')
-  async download(@Param('key') key: string, @Res() response: Response): Promise<void> {
+  async download(
+    @Param('key') key: string,
+    @Req() request: Request,
+    @Res() response: Response,
+  ): Promise<void> {
     try {
       assertSafeKey(key);
     } catch {
       throw new BadRequestException({ code: 'INVALID_KEY', message: 'Invalid object key' });
+    }
+
+    if (!key.startsWith('pictures/') && !signedIn(request)) {
+      throw new UnauthorizedException({
+        code: 'UNAUTHORIZED',
+        message: 'Sign in to fetch this object',
+      });
     }
 
     // Half-uploaded parts are scratch space, not objects anyone may read.
@@ -314,4 +350,24 @@ function contentTypeFor(key: string): string {
   const dot = key.lastIndexOf('.');
   const extension = dot >= 0 ? key.slice(dot).toLowerCase() : '';
   return EXTENSION_TYPES[extension] ?? OPAQUE;
+}
+
+/**
+ * Whether this request carries a valid access token.
+ *
+ * `JwtAuthGuard` is the usual answer and is the wrong shape here: the guard
+ * applies to a whole route, and this route serves two kinds of object with two
+ * different rules - a picture is public because an `<img>` tag cannot send a
+ * header, an attachment is not. So the check is a function rather than a
+ * decorator, and it is the same verification the guard performs.
+ */
+function signedIn(request: Request): boolean {
+  const token = bearerToken(request.headers.authorization);
+  if (!token) return false;
+  try {
+    verifyAccessToken(token);
+    return true;
+  } catch {
+    return false;
+  }
 }

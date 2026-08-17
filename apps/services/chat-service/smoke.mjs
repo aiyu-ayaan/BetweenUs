@@ -891,7 +891,13 @@ const stored = await post(
 );
 ok('attachment uploaded', stored.key.startsWith('attachments/'), stored.key);
 
-const fetched = await fetch(`${CHAT}${stored.url}`);
+// Ciphertext is not nothing: the bytes and their size are still a leak to
+// whoever finds the URL in a log or a history, and an unguessable key that
+// never expires is one leak away from permanent.
+const anonymous = await fetch(`${CHAT}${stored.url}`);
+ok('an attachment is not served to a stranger', anonymous.status === 401, String(anonymous.status));
+
+const fetched = await fetch(`${CHAT}${stored.url}`, { headers: authed });
 const fetchedBytes = Buffer.from(await fetched.arrayBuffer());
 ok('attachment round-trips', fetchedBytes.equals(attachmentBytes));
 ok(
@@ -942,7 +948,7 @@ const assembled = await json(`${CHAT}/api/v1/uploads/multipart/complete`, {
 ok('multipart assembled', assembled.size === 3072, String(assembled.size));
 
 const assembledBytes = Buffer.from(
-  await (await fetch(`${CHAT}${assembled.url}`)).arrayBuffer(),
+  await (await fetch(`${CHAT}${assembled.url}`, { headers: authed })).arrayBuffer(),
 );
 ok('multipart assembled in part order', assembledBytes.equals(Buffer.concat(chunks)));
 
