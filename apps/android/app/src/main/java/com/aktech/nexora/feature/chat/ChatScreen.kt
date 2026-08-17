@@ -35,6 +35,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -140,13 +141,59 @@ fun ChatScreen(
         onDispose { Conversation.close(channelId) }
     }
 
-    val atBottom by remember {
+    /**
+     * Whether the view is pinned to the newest message.
+     *
+     * It stops being pinned the moment somebody scrolls up to read something,
+     * because dragging them back down every time a message arrives is worse
+     * than not following at all. The slack is because "at the bottom" is never
+     * exact: a row that grew by a pixel, or a fling still settling, must not
+     * count as scrolling away.
+     */
+    val following by remember {
         derivedStateOf {
-            listState.firstVisibleItemIndex + listState.layoutInfo.visibleItemsInfo.size >= messages.size - 1
+            val info = listState.layoutInfo
+            val last = info.visibleItemsInfo.lastOrNull() ?: return@derivedStateOf true
+            last.index >= info.totalItemsCount - 1 &&
+                last.offset + last.size <= info.viewportEndOffset + FOLLOW_SLACK_PX
         }
     }
-    LaunchedEffect(messages.size) {
-        if (messages.isNotEmpty() && atBottom) listState.animateScrollToItem(messages.lastIndex)
+
+    // Opening a channel starts at the newest message, without an animation - a
+    // conversation you have just walked into has no "before" to scroll from.
+    // Keyed on whether there are messages at all, so the first page landing
+    // fires it once.
+    LaunchedEffect(channelId, messages.isNotEmpty()) {
+        if (messages.isNotEmpty()) listState.scrollToItem(messages.lastIndex, SCROLL_PAST_END)
+    }
+
+    // A message arrived. Keyed on the newest id rather than the count, because
+    // switching between two channels holding the same number of messages
+    // changes neither - which is why the list used to open somewhere in the
+    // middle of a conversation it had never shown before.
+    val newest = messages.lastOrNull()?.id
+    LaunchedEffect(newest) {
+        if (newest != null && following) {
+            listState.animateScrollToItem(messages.lastIndex, SCROLL_PAST_END)
+        }
+    }
+
+    /**
+     * Rows grow after they have been laid out.
+     *
+     * A picture decodes, a video's first frame arrives, and the row that was
+     * one line tall becomes three hundred - under a scroll that had already
+     * finished. The desktop answers this with a ResizeObserver; this is the
+     * same idea with the tools Compose has: watch the total height of what is
+     * on screen, and while the view is pinned, put it back on the bottom.
+     */
+    LaunchedEffect(listState) {
+        snapshotFlow { listState.layoutInfo.visibleItemsInfo.sumOf { it.size } }
+            .collect {
+                if (following && messages.isNotEmpty()) {
+                    listState.scrollToItem(messages.lastIndex, SCROLL_PAST_END)
+                }
+            }
     }
 
     // The flash marks where the jump landed, then gets out of the way.
@@ -494,3 +541,16 @@ fun ChatScreen(
 }
 
 const val MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024
+
+/** How far off the bottom still counts as reading the newest message, in pixels. */
+private const val FOLLOW_SLACK_PX = 120
+
+/**
+ * An offset far past the end of any row.
+ *
+ * `scrollToItem` puts the item's *start* at the top of the viewport, which for
+ * a tall last message leaves its bottom off screen. A huge offset is clamped to
+ * the maximum scroll instead, which is exactly "the bottom of the list" and
+ * needs no measuring.
+ */
+private const val SCROLL_PAST_END = 100_000

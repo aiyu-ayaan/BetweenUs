@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -75,6 +76,7 @@ import com.aktech.nexora.ui.theme.Surface900
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlin.math.max
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -377,16 +379,31 @@ private fun AttachmentCard(
     LaunchedEffect(bytes) {
         val fetched = bytes ?: return@LaunchedEffect
         if (!attachment.isVideo || mediaUri != null) return@LaunchedEffect
-        runCatching {
-            val uri = cacheDecryptedMedia(context, fetched, attachment.name)
-            mediaUri = uri
-            poster = videoPoster(uri, context)
-        }
+        // `LaunchedEffect` runs its body on the main dispatcher, so this used to
+        // write thirty megabytes of video to disk on the UI thread - which is a
+        // frozen list for as long as it takes, at exactly the moment the list is
+        // trying to scroll to the message that carried it.
+        val uri = withContext(Dispatchers.IO) {
+            runCatching { cacheDecryptedMedia(context, fetched, attachment.name) }.getOrNull()
+        } ?: return@LaunchedEffect
+        mediaUri = uri
+        poster = videoPoster(uri, context)
     }
 
-    val imageBitmap = remember(bytes) {
-        bytes?.takeIf { attachment.isImage }
-            ?.let { runCatching { BitmapFactory.decodeByteArray(it, 0, it.size) }.getOrNull() }
+    /**
+     * The decoded picture, once there is one.
+     *
+     * State rather than `remember { decode }`, and that is the whole point: a
+     * `remember` block runs during composition, on the UI thread. A photo from
+     * a phone is four thousand pixels wide, so every one of them was tens of
+     * milliseconds of decoding in the middle of a frame - which is what the
+     * list stuttering while pictures arrive actually was.
+     */
+    var imageBitmap by remember(attachment.key) { mutableStateOf<Bitmap?>(null) }
+
+    LaunchedEffect(bytes) {
+        val fetched = bytes?.takeIf { attachment.isImage } ?: return@LaunchedEffect
+        imageBitmap = decodeDownsampled(fetched, MAX_DECODE_EDGE_PX)
     }
 
     Box(
@@ -399,16 +416,19 @@ private fun AttachmentCard(
         when {
             // --- IMAGE ATTACHMENT ---
             attachment.isImage -> {
-                if (imageBitmap != null) {
+                // A local binding rather than the state itself: a delegated
+                // property cannot be smart-cast, and this is read three times.
+                val shown = imageBitmap
+                if (shown != null) {
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
                             .heightIn(max = 300.dp)
                             .clip(RoundedCornerShape(12.dp))
-                            .clickable { onViewImage(imageBitmap, attachment.name) },
+                            .clickable { onViewImage(shown, attachment.name) },
                     ) {
                         Image(
-                            bitmap = imageBitmap.asImageBitmap(),
+                            bitmap = shown.asImageBitmap(),
                             contentDescription = attachment.name,
                             contentScale = ContentScale.Crop,
                             modifier = Modifier
@@ -449,6 +469,15 @@ private fun AttachmentCard(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
+                            // The space the picture will take, taken now.
+                            //
+                            // The manifest carries the pixel size the sender
+                            // recorded, so the row can be its final height
+                            // before a single byte is decoded. Without it the
+                            // row is one line tall and then jumps to three
+                            // hundred, which moves every message below it -
+                            // under a scroll that had already finished.
+                            .then(reservedHeight(attachment))
                             .padding(14.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -735,4 +764,63 @@ private fun MessageText(readable: ReadableMessage) {
         color = Slate100,
         lineHeight = if (large) 44.sp else 22.sp,
     )
+}
+
+/**
+ * The longest edge a picture in the message list is decoded to.
+ *
+ * A card is at most 300dp tall and as wide as the screen, so anything past
+ * about a thousand pixels is memory and decode time spent on detail no phone
+ * shows. The full-size original is still what the viewer opens, decoded once
+ * when it is asked for rather than once per row on the way past.
+ */
+private const val MAX_DECODE_EDGE_PX = 1080
+
+/**
+ * How much to shrink a picture by while decoding it.
+ *
+ * `inSampleSize` has to be a power of two - the decoder rounds down to one
+ * anyway - and the answer is the largest that still leaves the longest edge at
+ * or above the target, so the result is never softer than what is drawn.
+ *
+ * Pure, and tested: an off-by-one here is either a blurry picture or a decode
+ * that saves nothing, and both look like somebody else's bug.
+ */
+internal fun sampleSizeFor(width: Int, height: Int, targetPx: Int): Int {
+    if (width <= 0 || height <= 0 || targetPx <= 0) return 1
+    var sample = 1
+    while (max(width, height) / (sample * 2) >= targetPx) sample *= 2
+    return sample
+}
+
+/** Decodes off the UI thread, at the size it will actually be drawn. */
+private suspend fun decodeDownsampled(bytes: ByteArray, targetPx: Int): Bitmap? =
+    withContext(Dispatchers.Default) {
+        runCatching {
+            // Bounds first: the size has to be known before the sample size
+            // can be chosen, and reading them decodes no pixels at all.
+            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+
+            val options = BitmapFactory.Options().apply {
+                inSampleSize = sampleSizeFor(bounds.outWidth, bounds.outHeight, targetPx)
+            }
+            BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options)
+        }.getOrNull()
+    }
+
+/**
+ * The height a picture is going to need, before it has been decoded.
+ *
+ * Nothing when the sender recorded no size - a GIF is never re-encoded, so it
+ * has none - and in that case the row grows as it always did. The ratio is
+ * clamped: a panorama would otherwise be a sliver and a phone screenshot would
+ * be taller than the screen.
+ */
+@Composable
+private fun reservedHeight(attachment: MessageAttachment): Modifier {
+    val width = attachment.width ?: return Modifier
+    val height = attachment.height ?: return Modifier
+    if (width <= 0 || height <= 0) return Modifier
+    return Modifier.aspectRatio((width.toFloat() / height).coerceIn(0.6f, 2.5f))
 }
