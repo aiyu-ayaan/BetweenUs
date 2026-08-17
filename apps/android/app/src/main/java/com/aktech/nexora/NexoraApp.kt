@@ -6,6 +6,7 @@ import com.aktech.nexora.core.data.Endpoint
 import com.aktech.nexora.core.data.Session
 import com.aktech.nexora.core.store.Cache
 import com.aktech.nexora.core.store.LastPlace
+import com.aktech.nexora.feature.voice.CallTones
 
 /**
  * A few prefs files and the local cache, and nothing else. There is no
@@ -21,5 +22,6 @@ class NexoraApp : Application() {
         E2ee.init(this)
         LastPlace.init(this)
         Cache.init(this)
+        CallTones.init(this)
     }
 }

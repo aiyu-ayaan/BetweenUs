@@ -286,6 +286,9 @@ class VoiceEngine(private val context: Context) {
     }
 
     fun leave() {
+        // Only for a call that was up: leaving one that never connected has
+        // nothing to say goodbye to.
+        if (_state.value is CallState.Live) CallTones.play(CallTones.Tone.LEAVE)
         CallSocket.leave()
         channelId?.let { PresenceSocket.leaveVoice(it) }
         // The state goes first, and it matters. See `teardown`.
@@ -587,14 +590,21 @@ class VoiceEngine(private val context: Context) {
                 for (index in 0 until (peers?.length() ?: 0)) {
                     addPeer(CallPeer.from(peers!!.getJSONObject(index)))
                 }
+                // Once, for arriving - not once per person already in the
+                // channel, which would be a fanfare rather than a confirmation.
+                CallTones.play(CallTones.Tone.JOIN)
             }
 
-            "peer.joined" -> event.optJSONObject("peer")?.let { addPeer(CallPeer.from(it)) }
+            "peer.joined" -> event.optJSONObject("peer")?.let {
+                addPeer(CallPeer.from(it))
+                CallTones.play(CallTones.Tone.JOIN)
+            }
 
             "peer.left" -> {
                 val peerId = event.optString("peerId")
                 connections.remove(peerId)?.close()
                 _participants.update { list -> list.filterNot { it.peer.peerId == peerId } }
+                CallTones.play(CallTones.Tone.LEAVE)
             }
 
             "signal" -> {

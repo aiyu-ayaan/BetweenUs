@@ -39,6 +39,7 @@ import com.aktech.nexora.core.data.NotificationPreferences
 import com.aktech.nexora.core.data.PresenceStatus
 import com.aktech.nexora.core.data.PublicUser
 import com.aktech.nexora.core.data.Session
+import com.aktech.nexora.feature.voice.CallTones
 import com.aktech.nexora.feature.voice.VoiceEngine
 import com.aktech.nexora.core.store.LastPlace
 import com.aktech.nexora.core.store.Presence
@@ -89,6 +90,9 @@ fun SettingsScreen(user: PublicUser, onBack: () -> Unit, onServerSettings: () ->
     var currentPassword by remember { mutableStateOf("") }
     var newPassword by remember { mutableStateOf("") }
     var preferences by remember { mutableStateOf<NotificationPreferences?>(null) }
+    // A machine setting, not an account one: which room you are sitting in is
+    // what decides whether a sound is welcome.
+    var callTones by remember { mutableStateOf(CallTones.enabled) }
 
     LaunchedEffect(Unit) {
         preferences = runCatching { NexoraApi.notificationPreferences() }.getOrNull()
@@ -279,6 +283,33 @@ fun SettingsScreen(user: PublicUser, onBack: () -> Unit, onServerSettings: () ->
                     },
                 )
             }
+
+            // --- call sounds ---
+            SectionLabel("Calls")
+            ListRow(
+                title = "Join and leave tones",
+                subtitle = "Two notes when somebody arrives or goes - up for one, down for the other",
+                leading = { NexoraIcon(NexoraIcons.Speaker) },
+                trailing = {
+                    Switch(
+                        checked = callTones,
+                        onCheckedChange = { on ->
+                            callTones = on
+                            CallTones.enabled = on
+                            // The toggle is the demonstration: turning it on
+                            // plays the sound it is turning on.
+                            if (on) CallTones.play(CallTones.Tone.JOIN)
+                        },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = Slate100,
+                            checkedTrackColor = Accent,
+                            uncheckedTrackColor = Surface700,
+                            uncheckedBorderColor = Surface700,
+                            uncheckedThumbColor = Slate400,
+                        ),
+                    )
+                },
+            )
 
             // --- notifications ---
             SectionLabel("Notifications")
