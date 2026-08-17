@@ -18,6 +18,7 @@ import { MessageMenu } from './MessageMenu';
 import { SendPreview, isPreviewable } from './SendPreview';
 import { formatBytes, uploadAttachment } from '../../services/attachments';
 import { OVERFLOW_CHARS, overflowFile, replyPreview } from '../../services/message-body';
+import { reactorNames } from '../../services/reactions';
 import {
   CHANNEL_LEVELS,
   channelLevel,
@@ -718,19 +719,28 @@ function ReactionRow({
   onToggle: (emoji: string) => void;
   onMore: (at: { x: number; y: number }) => void;
 }): JSX.Element | null {
+  const members = useChatStore((state) => state.members);
   if (message.reactions.length === 0) return null;
 
   return (
     <ul className="mt-1 flex flex-wrap items-center gap-1">
       {message.reactions.map((reaction) => {
         const mine = meId !== undefined && reaction.userIds.includes(meId);
+        // Who, not how many. A count answers "is this popular"; the question
+        // people actually have about a reaction is who left it.
+        const who = reactorNames(reaction.userIds, members, meId);
         return (
           <li key={reaction.emoji}>
             <button
               type="button"
               onClick={() => onToggle(reaction.emoji)}
               aria-pressed={mine}
-              aria-label={`${reaction.emoji} ${reaction.userIds.length}`}
+              title={who ? `${who} reacted with ${reaction.emoji}` : undefined}
+              aria-label={
+                who
+                  ? `${reaction.emoji}, ${who}`
+                  : `${reaction.emoji} ${reaction.userIds.length}`
+              }
               className={`flex cursor-pointer items-center gap-1 rounded-full border px-2 py-0.5 text-sm transition-colors duration-150 ${
                 mine
                   ? 'border-accent bg-accent/20 text-slate-100'
