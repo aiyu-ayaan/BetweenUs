@@ -97,6 +97,67 @@ export function setServerUrl(url: string | null): void {
   if (url === null) localStorage.removeItem(KEY);
   else localStorage.setItem(KEY, trimTrailingSlash(url));
   cached = null;
+  rememberServer(url ?? defaultServerUrl());
+}
+
+// --- Where this client has been ---------------------------------------------
+
+const RECENT_KEY = 'nexora.recentServers';
+
+/**
+ * How many addresses are worth keeping.
+ *
+ * Long enough for the machines somebody actually has - a home server, a work
+ * one, a laptop on the LAN, a staging box - and short enough that the list is
+ * still something you can point at rather than search.
+ */
+export const MAX_RECENT_SERVERS = 6;
+
+/**
+ * Addresses this client has connected to, most recent first.
+ *
+ * Only one address was ever remembered, which made every other deployment a
+ * thing to be typed from memory - and a self-hosted address is exactly the kind
+ * of string nobody has memorised. Nothing secret is in here: an address is
+ * public by the time anybody can connect to it.
+ */
+export function recentServers(): string[] {
+  try {
+    const stored: unknown = JSON.parse(localStorage.getItem(RECENT_KEY) ?? '[]');
+    if (!Array.isArray(stored)) return [];
+    return stored.filter((item): item is string => typeof item === 'string');
+  } catch {
+    return [];
+  }
+}
+
+/** Puts an address at the top of the list, without duplicating it. */
+export function rememberServer(url: string): void {
+  const next = withRecent(recentServers(), trimTrailingSlash(url));
+  try {
+    localStorage.setItem(RECENT_KEY, JSON.stringify(next));
+  } catch {
+    // A profile with no storage keeps working; it just has no history.
+  }
+}
+
+/** Drops one, for an address that has gone away or was a typo worth burying. */
+export function forgetServer(url: string): void {
+  const next = recentServers().filter((item) => item !== trimTrailingSlash(url));
+  try {
+    localStorage.setItem(RECENT_KEY, JSON.stringify(next));
+  } catch {
+    // As above.
+  }
+}
+
+/**
+ * The list with `url` at the front. Pure, because the ordering is the part with
+ * a bug in it: an address connected to twice must move rather than appear
+ * twice, and the list must not grow without bound.
+ */
+export function withRecent(existing: readonly string[], url: string): string[] {
+  return [url, ...existing.filter((item) => item !== url)].slice(0, MAX_RECENT_SERVERS);
 }
 
 /** Base for the two WebSockets. Same host, same path, ws scheme. */
@@ -135,6 +196,46 @@ const PROBE_PATH = '/api/v1/auth/oauth/providers';
 export function baseFromProbeUrl(probeUrl: string, fallback: string): string {
   if (!probeUrl.endsWith(PROBE_PATH)) return trimTrailingSlash(fallback);
   return trimTrailingSlash(probeUrl.slice(0, -PROBE_PATH.length));
+}
+
+// --- Whether this client and that deployment still agree ---------------------
+
+const VERSION_PATH = '/api/v1/auth/version';
+
+/**
+ * What a client should say about a deployment it does not match.
+ *
+ * Null for the ordinary case, which is both ends on the same contract, and for
+ * a deployment too old to answer at all - one that has never heard of the route
+ * is one from before this existed, and shouting about it would make every
+ * existing install look broken.
+ */
+export type VersionVerdict = 'client-too-old' | 'server-too-old' | null;
+
+export function versionVerdict(server: number | null, client: number): VersionVerdict {
+  if (server === null) return null;
+  if (server > client) return 'client-too-old';
+  if (server < client) return 'server-too-old';
+  return null;
+}
+
+/**
+ * Asks a deployment what it speaks. Null when it will not say - an older
+ * deployment, or one that is simply unreachable, and neither is a thing to
+ * refuse to start over.
+ */
+export async function fetchServerContract(base: string = serverUrl()): Promise<number | null> {
+  try {
+    const response = await fetch(`${base}${VERSION_PATH}`, {
+      headers: { Accept: 'application/json' },
+    });
+    if (!response.ok) return null;
+    const body: unknown = await response.json();
+    const contract = (body as { contract?: unknown } | null)?.contract;
+    return typeof contract === 'number' ? contract : null;
+  } catch {
+    return null;
+  }
 }
 
 /** Returns the address to store, which is where the probe ended up. */

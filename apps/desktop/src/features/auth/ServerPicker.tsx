@@ -1,9 +1,11 @@
 import { useState, type FormEvent } from 'react';
 import {
   defaultServerUrl,
+  forgetServer,
   isDefaultServer,
   normalizeServerUrl,
   probeServer,
+  recentServers,
   serverUrl,
   setServerUrl,
 } from '../../services/endpoint';
@@ -26,6 +28,11 @@ export function ServerPicker({ onClose }: { onClose: () => void }): JSX.Element 
   const [address, setAddress] = useState(serverUrl);
   const [note, setNote] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // Everywhere this client has been, minus wherever it is now - offering to
+  // connect to the address you are already on is a button that does nothing.
+  const [recent, setRecent] = useState(() =>
+    recentServers().filter((url) => url !== serverUrl()),
+  );
 
   const signedIn = useAuthStore((state) => state.status) === 'authenticated';
 
@@ -101,6 +108,47 @@ export function ServerPicker({ onClose }: { onClose: () => void }): JSX.Element 
             <span className="text-slate-300">{serverUrl()}</span>
             {isDefaultServer() && ', the default this app was built with'}.
           </p>
+
+          {recent.length > 0 && (
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                Recently connected
+              </p>
+              <ul className="mt-2 space-y-1">
+                {recent.map((url) => (
+                  <li key={url} className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => {
+                        // Filled in rather than connected to: one click away
+                        // from signing out of the server you are on is one
+                        // click too few.
+                        setAddress(url);
+                        setNote(null);
+                      }}
+                      className="min-w-0 flex-1 cursor-pointer truncate rounded-md bg-surface-800 px-3 py-1.5 text-left text-sm text-slate-300 transition-colors duration-150 hover:bg-white/[0.06] hover:text-slate-100 disabled:opacity-60"
+                    >
+                      {url}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={busy}
+                      aria-label={`Forget ${url}`}
+                      title="Forget this address"
+                      onClick={() => {
+                        forgetServer(url);
+                        setRecent((list) => list.filter((item) => item !== url));
+                      }}
+                      className="cursor-pointer rounded-md p-1.5 text-slate-500 transition-colors duration-150 hover:text-danger disabled:opacity-60"
+                    >
+                      <XIcon className="h-3.5 w-3.5" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
 
           {signedIn && (
             <p className="rounded-md bg-amber-500/10 px-3 py-2 text-sm text-amber-200">

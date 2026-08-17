@@ -13,7 +13,12 @@ import {
 } from '@nestjs/common';
 import type { Response } from 'express';
 import { rateLimit } from '@nexora/nest-common';
-import type { AuthResponse, OAuthProviderSummary } from '@nexora/shared-types';
+import {
+  API_CONTRACT_VERSION,
+  type AuthResponse,
+  type OAuthProviderSummary,
+  type ServerVersion,
+} from '@nexora/shared-types';
 import { isProviderName } from '../admin/oauth-providers';
 import { OAuthExchangeDto } from './dto';
 import { OAuthService } from './oauth.service';
@@ -24,6 +29,23 @@ const OAuthRateLimit = rateLimit({ limit: 30, windowSeconds: 60, name: 'oauth' }
 @Controller('auth/oauth')
 export class OAuthController {
   constructor(private readonly oauth: OAuthService) {}
+
+  /**
+   * What this deployment speaks, so a client can find out it is too old before
+   * a request fails in a way nobody can read.
+   *
+   * Public and unauthenticated, because the answer decides whether signing in
+   * is worth attempting at all. It lives on the OAuth controller because the
+   * client already probes `oauth/providers` on this exact path when it is
+   * pointed at a deployment, so this costs no new routing anywhere.
+   */
+  @Get('version')
+  version(): ServerVersion {
+    return {
+      contract: API_CONTRACT_VERSION,
+      release: process.env.NEXORA_RELEASE ?? 'dev',
+    };
+  }
 
   /** Public: the login screen asks this before drawing its buttons. */
   @Get('providers')

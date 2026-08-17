@@ -30,6 +30,7 @@ import { VoiceChannelView } from './features/voice/VoiceChannelView';
 import { CallAudio } from './features/voice/CallAudio';
 import { ShareControlConsent } from './features/voice/ShareControlConsent';
 import { TopBar } from './features/shell/TopBar';
+import { VersionNotice } from './components/VersionNotice';
 import { QuickSwitcher } from './features/shell/QuickSwitcher';
 import { useVoiceStore } from './stores/voice';
 import { NexoraLogoIcon } from './components/icons';
@@ -348,6 +349,7 @@ function Workbench(): JSX.Element {
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
+      <VersionNotice />
       <TopBar
         onOpenSwitcher={() => setSwitcher(true)}
         sidebarOpen={sidebarOpen}

@@ -5,7 +5,15 @@
  * exercised here: everything else in endpoint.ts is localStorage and fetch.
  */
 import assert from 'node:assert/strict';
-import { baseFromProbeUrl, defaultServerUrl, normalizeServerUrl, toWebSocketUrl } from './endpoint';
+import {
+  MAX_RECENT_SERVERS,
+  baseFromProbeUrl,
+  defaultServerUrl,
+  normalizeServerUrl,
+  toWebSocketUrl,
+  versionVerdict,
+  withRecent,
+} from './endpoint';
 
 // Served over http(s) - a dev server, or the web client behind Nginx - means the
 // origin is the gateway. A packaged renderer loads from file:// and falls back
@@ -56,3 +64,31 @@ assert.equal(
 assert.equal(baseFromProbeUrl('https://example.com/login', 'https://example.com/'), 'https://example.com');
 
 console.log('endpoint self-check passed');
+
+// --- The recent list --------------------------------------------------------
+
+const A = 'https://a.example.com';
+const B = 'https://b.example.com';
+
+assert.deepEqual(withRecent([], A), [A]);
+// Newest first, and connecting to one already in the list moves it rather than
+// adding a second copy of it.
+assert.deepEqual(withRecent([A], B), [B, A]);
+assert.deepEqual(withRecent([B, A], A), [A, B]);
+assert.deepEqual(withRecent([A, B], A), [A, B]);
+
+// It does not grow without bound: the oldest falls off the end.
+const many = Array.from({ length: MAX_RECENT_SERVERS }, (_, at) => `https://${at}.example.com`);
+const grown = withRecent(many, 'https://new.example.com');
+assert.equal(grown.length, MAX_RECENT_SERVERS);
+assert.equal(grown[0], 'https://new.example.com');
+assert.equal(grown.includes(many[MAX_RECENT_SERVERS - 1]!), false);
+
+// --- Contract mismatch ------------------------------------------------------
+
+assert.equal(versionVerdict(1, 1), null);
+assert.equal(versionVerdict(2, 1), 'client-too-old');
+assert.equal(versionVerdict(1, 2), 'server-too-old');
+// A deployment from before this route existed says nothing, and a client that
+// shouted about that would make every existing install look broken.
+assert.equal(versionVerdict(null, 1), null);

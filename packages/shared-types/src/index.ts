@@ -1090,6 +1090,27 @@ export type ServerRemoteEvent =
 
 // --- Health ---
 
+/**
+ * The client/server contract, bumped when a change lands that an older client
+ * cannot survive - a route that moved, an envelope shape that changed, a
+ * permission that means something new.
+ *
+ * Not the product version, and deliberately not derived from `package.json`:
+ * most releases change nothing a client can notice, and a number that moves
+ * every release trains people to ignore the warning it raises.
+ *
+ * 1: the contract as of the first deployment anyone runs.
+ */
+export const API_CONTRACT_VERSION = 1;
+
+/** What `GET /api/v1/auth/version` answers. Public: it is asked before sign-in. */
+export interface ServerVersion {
+  /** The deployment's `API_CONTRACT_VERSION`. */
+  contract: number;
+  /** Human-readable, for a support conversation. Never parsed by a client. */
+  release: string;
+}
+
 export interface HealthResponse {
   status: 'ok' | 'degraded';
   service: string;
