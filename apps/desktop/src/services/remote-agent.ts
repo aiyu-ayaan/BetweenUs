@@ -24,6 +24,7 @@ import { wsUrl } from './endpoint';
 import { secureGet, secureSet } from './e2ee';
 import { ScreenLink } from './remote-peer';
 import { shareOptions } from './share-quality';
+import { useAudioSettings } from '../stores/audioSettings';
 
 const TOKEN_KEY = 'remote.agentToken';
 const MACHINE_KEY = 'remote.machineId';
@@ -443,7 +444,14 @@ async function publishDisplay(target: ScreenLink, display: DisplayInfo): Promise
   // The same encoder settings a screen share in a call uses - a remote desktop
   // is the 'detail' case of the same problem, and there is no reason for two
   // sets of numbers. `share-quality.ts` says why they are what they are.
-  const options = shareOptions('detail', { width: display.width, height: display.height }, false);
+  const options = shareOptions(
+    'detail',
+    { width: display.width, height: display.height },
+    false,
+    // And the same manual override, for the same reason: a LAN that has been
+    // told it is a LAN is a LAN for a remote session too.
+    useAudioSettings.getState().settings.share,
+  );
 
   const stream = await navigator.mediaDevices.getDisplayMedia({
     video: {

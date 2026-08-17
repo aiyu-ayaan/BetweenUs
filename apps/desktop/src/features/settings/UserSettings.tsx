@@ -10,6 +10,10 @@ import { describeKey } from '../../services/talk-key';
 import { playCallTone } from '../../services/call-tones';
 import { DeviceSelect, useDevices } from '../../components/DeviceSelect';
 import { DEFAULT_VOICE_SETTINGS, GATE_RANGE } from '../../services/voice-quality';
+import { BITRATE_RANGE, FRAME_RATES, type CodecChoice } from '../../services/share-quality';
+
+/** Where the manual bitrate starts when it is switched on: a fast LAN's worth. */
+const DEFAULT_MANUAL_BITRATE = 25_000_000;
 import { api } from '../../services/api';
 import {
   notificationPreferences,
@@ -520,6 +524,101 @@ function VoiceSection(): JSX.Element {
             </p>
           </>
         )}
+      </div>
+
+      <h2 className="mt-8 text-base font-semibold text-slate-50">Screen share quality</h2>
+      <p className="mt-1 text-sm text-slate-400">
+        Everything about a share is inferred: the bitrate from the pixel count, the codec from
+        which one has a hardware encoder, and the rest from congestion control. That is right on a
+        link nobody can describe, and exactly wrong on the one link somebody can - a LAN has no
+        congestion to infer from, so the estimator finds the ceiling slowly and by degrading
+        first. This is where a LAN gets told it is a LAN. It covers a remote session too.
+      </p>
+      <div className="mt-3 space-y-3 rounded-lg bg-surface-800 p-4">
+        <Switch
+          label="Set the bitrate myself"
+          hint="A ceiling, not a target - a still desktop spends a fraction of it either way."
+          checked={settings.share.maxBitrate !== null}
+          onChange={(on) =>
+            update({
+              share: { ...settings.share, maxBitrate: on ? DEFAULT_MANUAL_BITRATE : null },
+            })
+          }
+        />
+        {settings.share.maxBitrate !== null && (
+          <label className="block">
+            <span className="flex items-baseline justify-between text-xs text-slate-400">
+              <span>Ceiling</span>
+              <span className="text-slate-300">
+                {Math.round(settings.share.maxBitrate / 1_000_000)} Mbps
+              </span>
+            </span>
+            <input
+              type="range"
+              min={BITRATE_RANGE.min}
+              max={BITRATE_RANGE.max}
+              step={1_000_000}
+              value={settings.share.maxBitrate}
+              onChange={(event) =>
+                update({
+                  share: { ...settings.share, maxBitrate: Number(event.target.value) },
+                })
+              }
+              className="mt-2 w-full accent-accent"
+            />
+          </label>
+        )}
+
+        <label className="block">
+          <span className="block text-xs font-bold uppercase tracking-wide text-slate-400">
+            Frame rate
+          </span>
+          <select
+            value={settings.share.frameRate ?? ''}
+            onChange={(event) =>
+              update({
+                share: {
+                  ...settings.share,
+                  frameRate: event.target.value ? Number(event.target.value) : null,
+                },
+              })
+            }
+            className="mt-2 w-full cursor-pointer rounded-lg border border-edge bg-surface-950 px-3 py-2 text-slate-100 outline-none transition-colors focus:border-accent/60"
+          >
+            <option value="">Whatever the content wants (60)</option>
+            {FRAME_RATES.map((rate) => (
+              <option key={rate} value={rate}>
+                {rate} fps
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="block">
+          <span className="block text-xs font-bold uppercase tracking-wide text-slate-400">
+            Video codec
+          </span>
+          <select
+            value={settings.share.videoCodec}
+            onChange={(event) =>
+              update({
+                share: { ...settings.share, videoCodec: event.target.value as CodecChoice },
+              })
+            }
+            className="mt-2 w-full cursor-pointer rounded-lg border border-edge bg-surface-950 px-3 py-2 text-slate-100 outline-none transition-colors focus:border-accent/60"
+          >
+            <option value="auto">Automatic (H.264, hardware where there is one)</option>
+            <option value="H264">H.264</option>
+            <option value="VP9">VP9</option>
+            <option value="VP8">VP8</option>
+            <option value="AV1">AV1</option>
+          </select>
+          <span className="mt-1.5 block text-xs text-slate-500">
+            A preference, not a promise: a machine with no encoder for the one you pick sends
+            what it does have rather than failing the share. VP9 and AV1 look better per bit and
+            are usually encoded in software, which costs the latency this is buying.
+          </span>
+        </label>
       </div>
 
       <h2 className="mt-8 text-base font-semibold text-slate-50">Sounds</h2>

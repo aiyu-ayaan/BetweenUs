@@ -12,6 +12,7 @@ import {
   patchVideoBandwidth,
   shareOptions,
   sortPreferredVideoCodecs,
+  BITRATE_RANGE,
 } from './share-quality';
 
 const HD = { width: 1920, height: 1080 };
@@ -78,6 +79,39 @@ assert.equal(desktop.publish.audio, false);
 // Silent shares ask for no audio track at all: handing back a track the page
 // never requested fails the whole capture.
 assert.equal(shareOptions('detail', HD, false).capture.audio, false);
+
+// --- A manual override, which is the only way to tell a LAN it is a LAN ------
+
+// Nothing said: the ladder still decides, byte for byte.
+assert.deepEqual(
+  shareOptions('detail', HD, false, { maxBitrate: null, frameRate: null, videoCodec: 'auto' }),
+  shareOptions('detail', HD, false),
+);
+
+const forced = shareOptions('motion', HD, false, {
+  maxBitrate: 40_000_000,
+  frameRate: 30,
+  videoCodec: 'AV1',
+});
+assert.equal(forced.publish.maxBitrate, 40_000_000);
+// The capture rate matters as much as the publish one: asking the encoder for
+// 30 while capturing 60 throws half the frames away for nothing.
+assert.equal(forced.capture.video.frameRate, 30);
+assert.equal(forced.publish.maxFramerate, 30);
+assert.equal(forced.publish.videoCodec, 'AV1');
+
+// A number typed into a box is the one input here that has been through no
+// arithmetic at all, so it is clamped rather than trusted.
+assert.equal(
+  shareOptions('detail', HD, false, { maxBitrate: 1, frameRate: null, videoCodec: 'auto' })
+    .publish.maxBitrate,
+  BITRATE_RANGE.min,
+);
+assert.equal(
+  shareOptions('detail', HD, false, { maxBitrate: 900_000_000, frameRate: null, videoCodec: 'auto' })
+    .publish.maxBitrate,
+  BITRATE_RANGE.max,
+);
 
 // Whoever is driving must not be watching the past.
 assert.equal(PLAYOUT_DELAY.driving, 0);

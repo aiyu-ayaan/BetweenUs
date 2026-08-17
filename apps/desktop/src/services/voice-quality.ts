@@ -36,6 +36,8 @@
  * is inaudible until somebody else is listening to it.
  */
 
+import { NO_OVERRIDE, type QualityOverride } from './share-quality';
+
 /**
  * Something that sits between a captured track and the one that is sent.
  *
@@ -111,6 +113,14 @@ export interface VoiceSettings {
    * to be audible or it is not knowable at all.
    */
   callTones: boolean;
+  /**
+   * What this machine says the share ladder got wrong - see `QualityOverride`
+   * in `share-quality.ts`. It lives here because it is a property of the
+   * machine and the network it is on, which is what everything else in this
+   * object is; it covers a screen share in a call and a remote session, since
+   * both are the same encoder being asked the same question.
+   */
+  share: QualityOverride;
 }
 
 export const DEFAULT_VOICE_SETTINGS: VoiceSettings = {
@@ -128,6 +138,7 @@ export const DEFAULT_VOICE_SETTINGS: VoiceSettings = {
   // push-to-talk key that also types is a key nobody can use.
   pushToTalkKey: 'AltRight',
   callTones: true,
+  share: NO_OVERRIDE,
 };
 
 /**

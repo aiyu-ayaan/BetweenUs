@@ -10,6 +10,7 @@
 import { useEffect, useState } from 'react';
 import { useVoiceStore } from '../../stores/voice';
 import { isDesktopRuntime } from '../../services/platform';
+import { useAudioSettings } from '../../stores/audioSettings';
 import type { ShareIntent } from '../../services/share-quality';
 import { ScreenShareIcon } from '../../components/icons';
 
@@ -37,6 +38,10 @@ export function ScreenSharePicker({ onClose }: { onClose: () => void }): JSX.Ele
   // things from the encoder and neither is the better one - see
   // `services/share-quality.ts`.
   const [intent, setIntent] = useState<ShareIntent>('detail');
+  // Said here rather than only in settings, because this is where somebody
+  // finds out the picture is soft - and a setting three screens away is one
+  // nobody knows is on.
+  const share = useAudioSettings((state) => state.settings.share);
 
   useEffect(() => {
     const bridge = window.nexora;
@@ -180,6 +185,23 @@ export function ScreenSharePicker({ onClose }: { onClose: () => void }): JSX.Ele
               />
               Share system audio
             </label>
+          )}
+
+          {/* Whether anything has been forced, and what. Automatic says
+              nothing: a line reading "automatic" on every share is noise, and
+              the only state worth reporting is the one somebody chose and may
+              have forgotten. */}
+          {(share.maxBitrate !== null || share.frameRate !== null || share.videoCodec !== 'auto') && (
+            <p className="text-xs text-amber-300/90" title="Settings → Voice & Video">
+              Forced:{' '}
+              {[
+                share.maxBitrate !== null && `${Math.round(share.maxBitrate / 1_000_000)} Mbps`,
+                share.frameRate !== null && `${share.frameRate} fps`,
+                share.videoCodec !== 'auto' && share.videoCodec,
+              ]
+                .filter(Boolean)
+                .join(' · ')}
+            </p>
           )}
 
           <button

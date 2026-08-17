@@ -478,12 +478,17 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
 
     try {
       await window.nexora?.selectScreenSource(source?.id ?? '', withAudio);
-      const options = shareOptions(intent, await captureSize(source), {
-        // A soundtrack only when the share is one: the processing that makes
-        // speech clear is the processing that ruins music, and a shared
-        // terminal's beeps are not worth stereo Opus.
-        music: intent === 'motion',
-      });
+      const options = shareOptions(
+        intent,
+        await captureSize(source),
+        {
+          // A soundtrack only when the share is one: the processing that makes
+          // speech clear is the processing that ruins music, and a shared
+          // terminal's beeps are not worth stereo Opus.
+          music: intent === 'motion',
+        },
+        useAudioSettings.getState().settings.share,
+      );
       if (!withAudio) options.capture.audio = false;
 
       const stream = await navigator.mediaDevices.getDisplayMedia({
@@ -507,6 +512,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
             intent,
             { width: settings.width, height: settings.height },
             { music: intent === 'motion' },
+            useAudioSettings.getState().settings.share,
           );
           options.publish = realOptions.publish;
         }

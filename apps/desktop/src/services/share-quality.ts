@@ -62,8 +62,12 @@ export interface SharePublish {
   /** A share is the call's primary visual media, not background video. */
   priority: RTCPriorityType;
   degradationPreference: RTCDegradationPreference;
-  /** Preferred video codec, by MIME subtype. Ignored when unavailable. */
-  videoCodec: 'H264';
+  /**
+   * Preferred video codec, by MIME subtype. Ignored when unavailable, which is
+   * why a forced one is a preference and not a promise: a machine with no AV1
+   * encoder gets whatever it does have rather than a failed share.
+   */
+  videoCodec: Exclude<CodecChoice, 'auto'>;
   audio: false | { maxBitrate: number; stereo: boolean; dtx: boolean; red: boolean };
 }
 
@@ -75,6 +79,51 @@ const MUSIC_BITRATE = 510_000;
  * and neither is "better".
  */
 export type ShareIntent = 'detail' | 'motion';
+
+/** Codecs worth offering by name. `auto` keeps the profile's own preference. */
+export type CodecChoice = 'auto' | 'H264' | 'VP9' | 'VP8' | 'AV1';
+
+/**
+ * What somebody has decided the ladder got wrong.
+ *
+ * Everything above this line is inferred: the bitrate is scaled from the pixel
+ * count, the codec is chosen for having a hardware encoder, and congestion
+ * control takes it from there. That is right on a link nobody can describe -
+ * and it is exactly wrong on the one link somebody *can*. A LAN has no
+ * congestion to infer from, so the estimator finds the ceiling slowly and by
+ * degrading first; a metered connection has the opposite problem, and there was
+ * no way to say either.
+ *
+ * Null means "let the ladder decide", which is what every field is until
+ * somebody says otherwise. Nothing here is remembered per call: it is a
+ * property of the machine and the network it is on.
+ */
+export interface QualityOverride {
+  /** Ceiling in bits per second. */
+  maxBitrate: number | null;
+  /** Capture and publish rate, in frames per second. */
+  frameRate: number | null;
+  videoCodec: CodecChoice;
+}
+
+export const NO_OVERRIDE: QualityOverride = {
+  maxBitrate: null,
+  frameRate: null,
+  videoCodec: 'auto',
+};
+
+/**
+ * The usable ends of a manual bitrate, in bits per second.
+ *
+ * Under a megabit a screen share is not a screen share, and over a hundred is
+ * past what any encoder on a consumer machine will produce - the number would
+ * be accepted, ignored by the encoder, and look like a setting that does
+ * nothing.
+ */
+export const BITRATE_RANGE = { min: 1_000_000, max: 100_000_000 } as const;
+
+/** Frame rates worth offering. Anything between them is a slider nobody needs. */
+export const FRAME_RATES = [15, 24, 30, 60] as const;
 
 export interface ShareSize {
   width: number;
@@ -144,12 +193,20 @@ export function shareOptions(
   intent: ShareIntent,
   size: ShareSize,
   audio: false | { music: boolean },
+  override: QualityOverride = NO_OVERRIDE,
 ): { capture: ShareCapture; publish: SharePublish } {
   const profile = PROFILES[intent];
+  // Clamped rather than trusted: a number typed into a box is the one input
+  // here that has not been through any arithmetic at all.
+  const frameRate = override.frameRate ?? profile.frameRate;
+  const maxBitrate =
+    override.maxBitrate === null
+      ? bitrateFor(intent, size)
+      : Math.min(BITRATE_RANGE.max, Math.max(BITRATE_RANGE.min, override.maxBitrate));
 
   return {
     capture: {
-      video: { width: size.width, height: size.height, frameRate: profile.frameRate },
+      video: { width: size.width, height: size.height, frameRate },
       contentHint: profile.contentHint,
       audio: audio
         ? {
@@ -174,8 +231,8 @@ export function shareOptions(
         : false,
     },
     publish: {
-      maxFramerate: profile.frameRate,
-      maxBitrate: bitrateFor(intent, size),
+      maxFramerate: frameRate,
+      maxBitrate,
       scaleResolutionDownBy: 1,
       priority: 'high',
       degradationPreference: profile.degradation,
@@ -183,7 +240,7 @@ export function shareOptions(
       // which is what makes 1080p60 possible without melting the CPU. VP9 looks
       // better per bit and is encoded in software; that trade is the wrong way
       // round when the point is latency.
-      videoCodec: 'H264',
+      videoCodec: override.videoCodec === 'auto' ? 'H264' : override.videoCodec,
       // Full-band stereo Opus for a soundtrack, and no discontinuous
       // transmission - DTX cuts the quiet passages of a film out entirely.
       audio:
