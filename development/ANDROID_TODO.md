@@ -436,6 +436,11 @@ says so too; both halves are needed.
       keeps working, which is what the desktop's links are.
 - [x] Member list with presence and roles.
 - [x] Role and permission editing for those who hold `MANAGE_ROLE`.
+- [x] Avatars and server icons set from the phone, squared and scaled in the
+      client the way the desktop does it. The upload call existed and nothing
+      called it. `Session.updateUser` came with it: the signed-in account was
+      written once at sign-in and never again, so a display name saved to the
+      server and left the old one on screen until the next launch.
 - [x] A server's own emoji: added from the photo picker and removed, with the
       name rules checked before anything is uploaded. An animated file is
       stored exactly as it came; everything else is squared and scaled to PNG

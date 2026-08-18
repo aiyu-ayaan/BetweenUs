@@ -81,6 +81,18 @@ object NexoraApi {
             PublicUser.from(authed("PATCH", "/api/v1/auth/account", body))
         }
 
+    /**
+     * Sets or clears this account's picture.
+     *
+     * Separate from [updateAccount] because null means two different things
+     * there: that call leaves out what it is not changing, so it can never send
+     * "no avatar". This one always sends the field, and null clears it.
+     */
+    suspend fun setAvatar(url: String?): PublicUser = io {
+        val body = JSONObject().put("avatarUrl", url ?: JSONObject.NULL)
+        PublicUser.from(authed("PATCH", "/api/v1/auth/account", body))
+    }
+
     /** Signs every other session out; this one keeps its tokens. */
     suspend fun changePassword(currentPassword: String, newPassword: String): Unit = io {
         authed(
@@ -134,6 +146,12 @@ object NexoraApi {
         val body = JSONObject()
         name?.let { body.put("name", it) }
         iconUrl?.let { body.put("iconUrl", it) }
+        ServerWithRole.from(authed("PATCH", "/api/v1/servers/$serverId", body))
+    }
+
+    /** Sets or clears a server's icon. Null clears it, as [setAvatar] does. */
+    suspend fun setServerIcon(serverId: String, url: String?): ServerWithRole = io {
+        val body = JSONObject().put("iconUrl", url ?: JSONObject.NULL)
         ServerWithRole.from(authed("PATCH", "/api/v1/servers/$serverId", body))
     }
 

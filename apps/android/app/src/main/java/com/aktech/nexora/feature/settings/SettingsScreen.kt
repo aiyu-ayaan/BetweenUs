@@ -170,6 +170,21 @@ fun SettingsScreen(
                 }
             }
 
+            PicturePicker(
+                label = "avatar",
+                canClear = user.avatarUrl != null,
+                onPicked = { url -> Session.updateUser(NexoraApi.setAvatar(url)) },
+                onClear = { Session.updateUser(NexoraApi.setAvatar(null)) },
+                preview = {
+                    Avatar(
+                        id = user.id,
+                        label = user.label,
+                        url = user.avatarUrl?.let { Endpoint.absolute(it) },
+                        size = 56.dp,
+                    )
+                },
+            )
+
             SectionLabel("Profile")
             Column(Modifier.padding(horizontal = 12.dp)) {
                 NexoraField(
@@ -185,7 +200,16 @@ fun SettingsScreen(
                     text = "Save",
                     busy = busy,
                     enabled = displayName.isNotBlank() && displayName != user.displayName,
-                    onClick = { act { NexoraApi.updateAccount(displayName.trim(), null, null) } },
+                    onClick = {
+                        act {
+                            // Fed back into the session: this name is drawn from
+                            // there, so saving it and not saying so left the old
+                            // one on screen until the next launch.
+                            Session.updateUser(
+                                NexoraApi.updateAccount(displayName.trim(), null, null),
+                            )
+                        }
+                    },
                 )
             }
 

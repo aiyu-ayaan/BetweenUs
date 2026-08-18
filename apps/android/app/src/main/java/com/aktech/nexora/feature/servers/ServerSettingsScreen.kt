@@ -32,6 +32,9 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import android.content.Intent
 import com.aktech.nexora.core.data.ChannelType
+import com.aktech.nexora.feature.settings.PicturePicker
+import com.aktech.nexora.ui.components.Avatar
+import androidx.compose.foundation.shape.RoundedCornerShape
 import com.aktech.nexora.core.data.Endpoint
 import com.aktech.nexora.core.data.InviteLink
 import com.aktech.nexora.core.data.NexoraApi
@@ -110,6 +113,28 @@ fun ServerSettingsScreen(serverId: String?, onBack: () -> Unit) {
         }
 
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = 32.dp)) {
+            PicturePicker(
+                label = "server icon",
+                canClear = server.iconUrl != null,
+                onPicked = { url ->
+                    NexoraApi.setServerIcon(server.id, url)
+                    Workspace.refresh()
+                },
+                onClear = {
+                    NexoraApi.setServerIcon(server.id, null)
+                    Workspace.refresh()
+                },
+                preview = {
+                    Avatar(
+                        id = server.id,
+                        label = server.name,
+                        url = server.iconUrl?.let { Endpoint.absolute(it) },
+                        size = 56.dp,
+                        shape = RoundedCornerShape(18.dp),
+                    )
+                },
+            )
+
             SectionLabel("Identity")
             Column(Modifier.padding(horizontal = 12.dp)) {
                 NexoraField(

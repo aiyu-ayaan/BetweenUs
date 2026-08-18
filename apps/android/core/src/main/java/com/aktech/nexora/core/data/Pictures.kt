@@ -34,13 +34,29 @@ object Pictures {
     fun isAnimated(contentType: String): Boolean =
         contentType == "image/gif" || contentType == "image/webp"
 
+    /** How big an avatar or a server icon is stored. The desktop's number. */
+    const val PICTURE_EDGE = 512
+
     /**
-     * A square, centre-cropped and scaled to [edge], as PNG.
+     * A square, centre-cropped and scaled to [edge].
+     *
+     * PNG by default, which is what an emoji wants: lossless at 128 pixels and
+     * alpha that nothing can argue with. An avatar is four times that edge and
+     * a photograph rather than a drawing, so it is asked for as WebP, which is
+     * what the desktop stores and is a quarter of the size at this scale.
      *
      * Returns null when the bytes are not a picture this device can decode, in
      * which case the caller has nothing to upload and should say so.
      */
-    fun square(bytes: ByteArray, edge: Int = 128): ByteArray? = try {
+    @Suppress("DEPRECATION")
+    fun square(
+        bytes: ByteArray,
+        edge: Int = 128,
+        // `WEBP` is deprecated in favour of `WEBP_LOSSY`, which arrived in API
+        // 30. This module still supports 24, and the deprecated constant is the
+        // same encoder.
+        format: Bitmap.CompressFormat = Bitmap.CompressFormat.PNG,
+    ): ByteArray? = try {
         val decoded = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
         if (decoded == null) {
             null
@@ -56,7 +72,7 @@ object Pictures {
             val scaled = Bitmap.createScaledBitmap(cropped, minOf(edge, side), minOf(edge, side), true)
 
             val out = ByteArrayOutputStream()
-            scaled.compress(Bitmap.CompressFormat.PNG, 100, out)
+            scaled.compress(format, if (format == Bitmap.CompressFormat.PNG) 100 else 90, out)
             if (scaled !== cropped) scaled.recycle()
             if (cropped !== decoded) cropped.recycle()
             decoded.recycle()

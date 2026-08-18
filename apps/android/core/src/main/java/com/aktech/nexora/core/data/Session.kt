@@ -179,6 +179,19 @@ object Session {
     }
 
     /**
+     * The account changed something about itself.
+     *
+     * A display name or an avatar is drawn from `AuthPhase.SignedIn`, which was
+     * written once at sign-in and never again - so changing either updated the
+     * server and nothing on screen until the next launch. Ignored while signed
+     * out, where there is nobody to update.
+     */
+    fun updateUser(user: PublicUser) {
+        if (_state.value !is AuthPhase.SignedIn) return
+        _state.value = AuthPhase.SignedIn(user)
+    }
+
+    /**
      * A sign-in that failed with no form on screen to put the error on.
      *
      * The provider hand-off comes back through an intent rather than through a

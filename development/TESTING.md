@@ -157,6 +157,10 @@ while everything under them changes size.
   left behind — the parts are aborted on the way out.
 
 **Profile pictures**
+- On Android: Settings → *Change avatar* picks one, and it appears in the header
+  above without a restart. *Remove* puts the initial back. Server settings →
+  *Change server icon* does the same for the rail tile. Both show up in the
+  other clients' member lists after they next read it.
 - User settings → My Account → *Upload avatar*. It shows up in Alice's own
   panel, and in the member list and message rows in Bob's window after his
   client next reads the member list. **Remove** puts the initial back.
