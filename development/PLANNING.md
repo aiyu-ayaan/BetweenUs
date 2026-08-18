@@ -623,11 +623,23 @@ that has to be right for every future deployment is one that will be wrong.
   changed shape.
 - **Compression is the client's job, and it happens before encryption.**
   Ciphertext does not compress, so there is no server-side option at all.
-  Oversized photos are redrawn to 1920px webp with a canvas, text-shaped files
+  Oversized photos are redrawn to 1920px JPEG with a canvas, text-shaped files
   go through `CompressionStream`, and everything already compressed - video,
   archives, anything under a few kilobytes - is left alone. Video transcoding is
   deliberately not attempted: doing it properly means ffmpeg in the client, and
   doing it badly is worse than sending the file.
+- **A photo is normalised to JPEG by whichever client sends it, and HEIC is the
+  reason.** A phone camera writes HEIC by default; Android decodes it natively,
+  so it looked fine on the client that sent it and arrived as a broken image on
+  every client that did not. Chromium has never shipped a HEIF decoder, so
+  there was nothing to fix on the receiving side alone. Both halves were fixed
+  instead: the sender converts, and the receiver can still decode a HEIC that
+  was sent before the sender learned to. On desktop and web that decode is
+  libheif compiled to WebAssembly, imported the first time a HEIC turns up and
+  never in a session that has none; on Android it is `BitmapFactory`, which the
+  platform has decoded HEIC with since API 28. JPEG rather than WebP because it
+  is the format nothing anywhere refuses, and a photo has no transparency to
+  lose - a picture that does gets a white ground rather than a black one.
 - **Large uploads are multipart, and the session is a sealed ticket rather than
   server state.** A session table or a Redis key would both work; a ticket the
   client holds needs neither, cannot be forged, and lets any replica accept the

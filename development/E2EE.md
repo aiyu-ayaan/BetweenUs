@@ -180,7 +180,7 @@ impersonate one:
 ```
 \u0000nexora-body:1
 { "text": "look at this", "attachments": [ { "key": "...", "iv": "...", "epoch": 1,
-  "name": "holiday.webp", "contentType": "image/webp", "size": 812345 } ] }
+  "name": "holiday.jpg", "contentType": "image/jpeg", "size": 812345 } ] }
 ```
 
 Because the manifest is inside the ciphertext, the server does not learn a
@@ -198,8 +198,12 @@ way a browser would execute. Attachments are always served as
 client fetches, decrypts and renders them itself.
 
 Compression happens before encryption, because ciphertext does not compress:
-an oversized photo is redrawn to 1920px webp and text-shaped files are gzipped,
-both in the client. A file too large for one request goes up in parts; the
+an oversized photo is redrawn to 1920px JPEG and text-shaped files are gzipped,
+both in the client. HEIC — what a phone camera writes by default — is decoded
+in the client by libheif compiled to WebAssembly and converted whatever its
+size, because no browser engine can draw one. Both ends run through that
+conversion: a HEIC picked on this machine becomes a JPEG before it is sent, and
+one already sent from a phone becomes a JPEG after it is decrypted. A file too large for one request goes up in parts; the
 parts are slices of the same single ciphertext, so a part on its own is not
 separately decryptable.
 

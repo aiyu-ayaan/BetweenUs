@@ -47,8 +47,8 @@ export async function uploadAttachment(
 
   const shrunk = await shrinkImage(file);
   const source = shrunk?.blob ?? file;
-  const name = shrunk ? withExtension(file.name, 'webp') : file.name;
-  const contentType = shrunk ? 'image/webp' : file.type || 'application/octet-stream';
+  const name = shrunk ? withExtension(file.name, 'jpg') : file.name;
+  const contentType = shrunk ? JPEG : file.type || 'application/octet-stream';
 
   const gzip = shouldGzip(contentType, source.size);
   const packed = gzip ? await gzipBlob(source) : source;
@@ -128,7 +128,13 @@ export async function openAttachment(
   );
 
   const sealed = new Blob([plaintext], { type: attachment.contentType });
-  const blob = attachment.gzip ? await gunzipBlob(sealed, attachment.contentType) : sealed;
+  const unpacked = attachment.gzip ? await gunzipBlob(sealed, attachment.contentType) : sealed;
+  // A HEIC sent from a phone before its client learned to convert them. The
+  // DOM cannot draw one, so it becomes a JPEG here, once, on the way into the
+  // cache - every screen that asks for this attachment gets the JPEG.
+  const blob = isHeic(attachment.name, attachment.contentType)
+    ? await heicToJpeg(unpacked)
+    : unpacked;
 
   // Bounded so a long scroll through an image channel does not grow forever.
   if (cache.size > 40) cache.delete(cache.keys().next().value as string);
@@ -156,7 +162,10 @@ export async function saveAttachment(
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
-  link.download = attachment.name;
+  // A converted HEIC is JPEG bytes now; saving them under a .heic name would
+  // hand the operating system a file that lies about itself.
+  link.download =
+    blob.type === attachment.contentType ? attachment.name : withExtension(attachment.name, 'jpg');
   link.click();
   // Revoked on the next tick: the click has to have read it first.
   setTimeout(() => URL.revokeObjectURL(url), 0);
@@ -170,7 +179,7 @@ export async function saveAttachment(
  * cropped from the centre, small enough that a member list of them is cheap.
  */
 export async function preparePicture(file: File, edge = 512): Promise<Blob> {
-  const bitmap = await createImageBitmap(file);
+  const bitmap = await decodeImage(file);
   try {
     const side = Math.min(bitmap.width, bitmap.height);
     const canvas = new OffscreenCanvas(Math.min(edge, side), Math.min(edge, side));
@@ -194,40 +203,43 @@ export async function preparePicture(file: File, edge = 512): Promise<Blob> {
   }
 }
 
-// --- Compression ------------------------------------------------------------
-
 /** Above this a photo is worth re-encoding; below it the saving is noise. */
 const SHRINK_ABOVE_BYTES = 512 * 1024;
 const MAX_IMAGE_EDGE = 1920;
+const JPEG = 'image/jpeg';
 
 /**
- * Downscales an oversized photo. Returns null when the file is not an image,
- * is already small, or came out no smaller - the original wins those.
+ * Downscales an oversized photo, and re-encodes every photo as JPEG. Returns
+ * null when the file is not an image, is already small, or came out no smaller
+ * - the original wins those.
  *
  * GIF and SVG are left alone: a canvas would flatten an animation to its first
  * frame, and would rasterise a drawing that was meant to scale.
+ *
+ * HEIC is the exception to every "already small" rule below. It is converted
+ * whatever its size, because the point of converting it is not its size - it is
+ * that no browser engine can draw one, so an unconverted HEIC is a broken
+ * image on every client except the phone it came from.
  */
 async function shrinkImage(
   file: File,
 ): Promise<{ blob: Blob; width: number; height: number } | null> {
   const type = file.type.toLowerCase();
-  if (!type.startsWith('image/') || type === 'image/gif' || type === 'image/svg+xml') return null;
+  const heic = isHeic(file.name, type);
+  if (!heic && (!type.startsWith('image/') || type === 'image/gif' || type === 'image/svg+xml')) {
+    return null;
+  }
 
   try {
-    const bitmap = await createImageBitmap(file);
+    const bitmap = await decodeImage(file);
     try {
       const scale = Math.min(1, MAX_IMAGE_EDGE / Math.max(bitmap.width, bitmap.height));
-      if (scale === 1 && file.size <= SHRINK_ABOVE_BYTES) return null;
+      if (!heic && scale === 1 && file.size <= SHRINK_ABOVE_BYTES) return null;
 
       const width = Math.max(1, Math.round(bitmap.width * scale));
       const height = Math.max(1, Math.round(bitmap.height * scale));
-      const canvas = new OffscreenCanvas(width, height);
-      const context = canvas.getContext('2d');
-      if (!context) return null;
-
-      context.drawImage(bitmap, 0, 0, width, height);
-      const blob = await canvas.convertToBlob({ type: 'image/webp', quality: 0.82 });
-      return blob.size < file.size ? { blob, width, height } : null;
+      const blob = await toJpeg(bitmap, width, height);
+      return !heic && blob.size >= file.size ? null : { blob, width, height };
     } finally {
       bitmap.close();
     }
@@ -236,6 +248,91 @@ async function shrinkImage(
     return null;
   }
 }
+
+/** Draws a bitmap at the given size and encodes it as JPEG. */
+async function toJpeg(bitmap: ImageBitmap, width: number, height: number): Promise<Blob> {
+  const canvas = new OffscreenCanvas(width, height);
+  const context = canvas.getContext('2d');
+  if (!context) throw new Error('This device cannot process images');
+
+  // JPEG has no alpha channel, and a canvas starts out transparent black. A
+  // screenshot with a transparent corner would come out with a black one, so
+  // the ground is painted white first - the same thing every other messenger
+  // does with a transparent picture.
+  context.fillStyle = '#ffffff';
+  context.fillRect(0, 0, width, height);
+  context.drawImage(bitmap, 0, 0, width, height);
+  return canvas.convertToBlob({ type: JPEG, quality: 0.85 });
+}
+
+// --- HEIC -------------------------------------------------------------------
+
+/**
+ * What a phone camera writes by default, and what no browser can read.
+ *
+ * Chromium has never shipped a HEIF decoder, so `<img>` and `createImageBitmap`
+ * both fail on one. That is the whole of the bug this exists for: a photo sent
+ * from the Android client - whose platform decodes HEIC natively, so it looked
+ * fine there - arrived on the desktop and the web as a broken image.
+ *
+ * So the format is decoded here instead, by libheif compiled to WebAssembly,
+ * and turned into a JPEG. Both ends run through this: a HEIC picked on this
+ * machine is converted before it is sent, and one that was already sent from a
+ * phone is converted after it is decrypted.
+ */
+function isHeic(name: string, contentType: string): boolean {
+  // The type can be missing or wrong - a file dragged in from a folder often
+  // has neither - so the name gets a vote.
+  return /^image\/hei[cf]/.test(contentType.toLowerCase()) || /\.hei[cf]$/i.test(name);
+}
+
+/** Anything the platform can decode, plus the one thing it cannot. */
+async function decodeImage(file: File): Promise<ImageBitmap> {
+  return isHeic(file.name, file.type) ? decodeHeic(file) : createImageBitmap(file);
+}
+
+/**
+ * A megabyte of WebAssembly, imported the first time a HEIC actually turns up
+ * and never in a session that has none. Held afterwards: a channel full of
+ * phone photos should instantiate one decoder, not one per picture.
+ */
+let libheif: Promise<typeof import('libheif-js/wasm-bundle')> | null = null;
+
+async function decodeHeic(blob: Blob): Promise<ImageBitmap> {
+  libheif ??= import('libheif-js/wasm-bundle');
+  const { HeifDecoder } = await libheif;
+
+  const images = new HeifDecoder().decode(new Uint8Array(await blob.arrayBuffer()));
+  const image = images[0];
+  if (!image) throw new Error('That HEIC file holds no picture');
+
+  const width = image.get_width();
+  const height = image.get_height();
+  const pixels = new ImageData(width, height);
+  await new Promise<void>((resolve, reject) => {
+    // libheif fills the buffer in place and reports success by handing it back.
+    image.display(pixels, (filled) =>
+      filled ? resolve() : reject(new Error('That HEIC file could not be read')),
+    );
+  });
+  return createImageBitmap(pixels);
+}
+
+/** A stored HEIC, made viewable. The original on failure: a file card beats nothing. */
+async function heicToJpeg(blob: Blob): Promise<Blob> {
+  try {
+    const bitmap = await decodeHeic(blob);
+    try {
+      return await toJpeg(bitmap, bitmap.width, bitmap.height);
+    } finally {
+      bitmap.close();
+    }
+  } catch {
+    return blob;
+  }
+}
+
+// --- Compression ------------------------------------------------------------
 
 const GZIP_TYPES = /^(text\/|application\/(json|xml|javascript|x-ndjson)|image\/svg\+xml)/;
 const GZIP_ABOVE_BYTES = 4 * 1024;

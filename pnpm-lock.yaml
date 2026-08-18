@@ -66,6 +66,9 @@ importers:
       '@nexora/shared-types':
         specifier: workspace:*
         version: link:../../packages/shared-types
+      libheif-js:
+        specifier: ^1.19.8
+        version: 1.19.8
       react:
         specifier: ^18.3.1
         version: 18.3.1
@@ -629,6 +632,9 @@ importers:
       '@nexora/shared-types':
         specifier: workspace:*
         version: link:../../packages/shared-types
+      libheif-js:
+        specifier: ^1.19.8
+        version: 1.19.8
       react:
         specifier: ^18.3.1
         version: 18.3.1
@@ -3087,6 +3093,10 @@ packages:
   lazystream@1.0.1:
     resolution: {integrity: sha512-b94GiNHQNy6JNTrt5w6zNyffMrNkXZb3KTkCZJb2V1xaEGCk093vkZ2jk3tpaeP33/OiXC+WvK9AxUebnf5nbw==}
     engines: {node: '>= 0.6.3'}
+
+  libheif-js@1.19.8:
+    resolution: {integrity: sha512-vQJWusIxO7wavpON1dusciL8Go9jsIQ+EUrckauFYAiSTjcmLAsuJh3SszLpvkwPci3JcL41ek2n+LUZGFpPIQ==}
+    engines: {node: '>=8.0.0'}
 
   libphonenumber-js@1.13.10:
     resolution: {integrity: sha512-xJxrdqvbl2rtn2MaUJrUejz8J7/uZNC0V77oks2LxYrO/+ZtVpRmz+fEQMuu6VusnEB1fmpByiLS1WXecOnAnw==}
@@ -6800,6 +6810,8 @@ snapshots:
   lazystream@1.0.1:
     dependencies:
       readable-stream: 2.3.8
+
+  libheif-js@1.19.8: {}
 
   libphonenumber-js@1.13.10: {}
 

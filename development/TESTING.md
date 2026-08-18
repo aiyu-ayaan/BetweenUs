@@ -97,6 +97,16 @@ while everything under them changes size.
   — on the phone that is `MediaCache`, on desktop and web the `Map` in
   `services/attachments.ts`.
 
+**HEIC photos**
+- Send a photo straight from an iPhone or an Android camera that writes HEIC
+  (`IMG….heic`). It must render as a picture in every client, not as a broken
+  image or a file card, and it must arrive named `.jpg` — the sender converts.
+- Drag a `.heic` file into the desktop or web composer. Same result: converted
+  on the way out, so what is stored is a JPEG.
+- Open a HEIC sent before this existed — one already in a channel's history.
+  Desktop and web decode it on the way out of the cache and draw it; saving it
+  lands a `.jpg`, because the bytes are JPEG bytes now.
+
 **Profile pictures**
 - User settings → My Account → *Upload avatar*. It shows up in Alice's own
   panel, and in the member list and message rows in Bob's window after his
