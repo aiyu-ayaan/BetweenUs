@@ -505,6 +505,33 @@ so leave a second account listening in the same voice channel.
    dropping close to nothing during silence in the first case and staying up in
    the second.
 
+### On the phone
+
+Needs a phone, a paired Bluetooth headset and a second account listening.
+
+1. **The permission screen.** On a fresh install, signing in lands on
+   **Permissions** before anything else. Skip it with **Continue** - nothing
+   should be blocked, and joining a call should still ask for the microphone.
+   Settings → This device → **App permissions** opens the same screen and
+   counts what is missing. Refuse one, tap **Open settings**, grant it there and
+   come back: the row must show it as granted without restarting the app.
+2. **The headset is found.** With the headset paired and connected, open the
+   call controls and tap the speaker button. **Bluetooth** must be in the
+   list - both while a call is running and, from settings, with no call at all.
+   If **Nearby devices** was refused, it will not be: that is the permission,
+   not the headset, and granting it should make the entry appear.
+3. **Automatic means the headset.** Leave the output on **Automatic** and join
+   a call with the headset connected: the call must come out of the headset, not
+   the speaker. Disconnect it mid-call and the call should fall back to the
+   speaker on its own; reconnect and it should return.
+4. **Both directions.** Choose **Bluetooth** under **Speak into** and confirm
+   the far end hears the headset's microphone rather than the phone's. Choosing
+   **Phone microphone** takes playback off the headset as well - that is
+   Android routing a call as one device, and the sheet says so.
+5. **On an old phone.** Below Android 12 there is no `setCommunicationDevice`
+   and no runtime Bluetooth permission; the same picker should still route to
+   the headset, through SCO.
+
 ## Giving control in a call
 
 Needs two accounts in the same voice channel, and the machine sharing has to

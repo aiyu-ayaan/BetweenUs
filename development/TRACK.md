@@ -206,6 +206,35 @@ Fixed in the same pass:
       system default silently, because the constraint is deliberately not
       `exact`. The capture now follows, the list is shared, and the fallback
       says so. The "nobody can hear you" banner carries the input list itself.
+- [x] **Android could not find a Bluetooth headset.** Four reasons at once, and
+      each on its own was enough: `BLUETOOTH_CONNECT` was in the manifest and
+      never requested, so from API 31 the platform reported no Bluetooth device
+      at all; the device-type mapping knew `TYPE_BLUETOOTH_SCO` but not
+      `TYPE_BLUETOOTH_A2DP`, which is what the same headset is called outside a
+      call, so the settings picker saw a phone with no Bluetooth on it; `AUTO`
+      was not automatic but a decision to use the speakerphone, which is the
+      wrong one for somebody wearing a headset; and below API 31 there was no
+      path to a headset at all, because the speakerphone flag cannot name one.
+      The permission is now asked for with the microphone when a call is joined,
+      both spellings map (with BLE headsets and hearing aids), `AUTO` picks the
+      headset over the speaker, and `startBluetoothSco` is the fallback wherever
+      `setCommunicationDevice` cannot see the device. The lists are live through
+      an `AudioDeviceCallback`, because a headset is put on during a call more
+      often than before one.
+- [x] **Output and input device pickers on the phone's call screen.** The
+      desktop has had both; the phone had an output cycle buried in settings and
+      no input choice at all, on the grounds that a phone has one microphone -
+      which stops being true the moment a headset is connected. Both are a sheet
+      off the call's control row now, and both are still in settings. Android
+      routes a call as one communication device rather than a pair, so choosing
+      a headset's microphone puts playback there too; the sheet says so.
+- [x] **A global permission screen**, shown once after signing in and in
+      settings afterwards: everything Android will be asked for, with what each
+      one buys and what refusing it costs. A disclosure, not a gate - nothing on
+      it blocks the app, and every permission is still requested at the moment it
+      means something, so anything skipped can be granted later by tapping the
+      thing that wanted it. What it buys is that the list is seen once, with
+      reasons, instead of each prompt arriving cold.
 - [x] **A channel opened wherever the last one was.** The list scrolled on
       `messages.length`, and two channels holding the same number of messages
       change neither the length nor the offset. It scrolls on the newest message
@@ -309,7 +338,8 @@ blocked by anything outside this document.
       A level meter driving a mute toggle would be a different thing wearing the
       same name.
 - [ ] **Ducking and an incoming phone call.** Two parts of the audio-focus
-      problem; the third, headset routing, landed with the route picker.
+      problem; the third, headset routing, landed - see the Bluetooth item
+      above.
 - [ ] **An invite link that opens the app.** Minting, revoking and sharing a
       code landed; a deep link that joins on a tap did not, and it needs an
       app-link and a host to claim.

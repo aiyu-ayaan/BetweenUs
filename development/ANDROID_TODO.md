@@ -256,7 +256,47 @@ fan-out do not, and building either one alone would build half of it twice.
       microphone — refusing it does not refuse the call.
 - [ ] Incoming-call UI, from an FCM push when the app is dead.
 - [ ] Ducking, and behaviour on an incoming phone call.
-- [ ] Bluetooth and wired-headset routing, and a route picker.
+- [x] Bluetooth and wired-headset routing, an output and an input picker in the
+      call's control row, and the same two in settings. `BLUETOOTH_CONNECT` is
+      asked for alongside the microphone: without the grant the platform reports
+      no Bluetooth device at all, which is what "the headset is not detected"
+      turned out to mean. See the note below.
+
+### Finding a Bluetooth headset
+
+Four separate reasons a paired headset was invisible, all of them fixed in
+`CallAudio.kt`:
+
+- `BLUETOOTH_CONNECT` - Android shows it as **Nearby devices** - is a runtime
+  permission from API 31, and declaring it in the manifest is not holding it.
+  Ungranted, `availableCommunicationDevices` reports no Bluetooth device, so the
+  headset never reached a picker. It is asked for with the microphone when a
+  call is joined, and is on the permission screen with the reason. Below 31 it
+  does not exist and the install-time `BLUETOOTH` and `BLUETOOTH_ADMIN` are what
+  the platform wants instead, both capped at `maxSdkVersion="30"`.
+  `BLUETOOTH_SCAN` is deliberately not asked for: it is for discovering devices
+  that are not paired yet, which is the system's settings app and not this
+  app's business.
+- Outside a call, a headset is an A2DP output; it becomes `TYPE_BLUETOOTH_SCO`
+  only once the audio mode is `MODE_IN_COMMUNICATION`. The device-type mapping
+  knew only the SCO spelling, so settings - which reads the list with no call
+  running - saw a phone with no Bluetooth on it. Both spellings map now, along
+  with BLE headsets and hearing aids.
+- `AUTO` was not automatic. It set the speakerphone flag, which is a decision,
+  and the wrong one for somebody wearing a headset. It now picks the headset
+  when there is one, wired next, speaker last.
+- Below API 31 `setCommunicationDevice` does not exist and the speakerphone flag
+  cannot name a headset; `startBluetoothSco` is the fallback, and it is also
+  what runs above 31 when the new API cannot see a device the old one can route
+  to.
+
+The device lists are live rather than read once, through an `AudioDeviceCallback`
+- a headset is put on *during* a call more often than before one, and a call on
+`AUTO` follows the change.
+
+Android routes a call as one communication device, not as a pair, so choosing a
+headset's microphone puts playback in that headset too. The sheet says so rather
+than pretending the two are independent.
 
 ### The slot contract
 
@@ -324,7 +364,15 @@ says so too; both halves are needed.
 - [x] Profile: display name, username, avatar upload.
 - [x] Password change, sessions/devices list, sign out everywhere.
 - [x] Notification preferences per server and per channel.
-- [ ] Audio device and input-sensitivity settings.
+- [x] Audio device settings: where a call plays and which microphone it uses,
+      both live-updating and both also on the call screen.
+- [x] A global permission screen, shown once after signing in and reachable from
+      settings afterwards: every permission the app can ask for, with what each
+      one buys. It is a disclosure and not a gate - each is still requested at
+      the moment it is needed, so anything skipped there can be granted by
+      tapping the thing that wanted it.
+- [ ] Input-sensitivity setting. Android's WebRTC has no insertion point on the
+      capture path short of a custom audio device module; see `TRACK.md`.
 - [ ] Theme: dark is the design; a light variant only if it is asked for.
 - [x] Server switcher reachable from settings, not just from the login screen.
 
