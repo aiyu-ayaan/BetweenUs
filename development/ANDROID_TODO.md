@@ -186,6 +186,14 @@ data is cleared.
       flashes it.
 - [x] Direct messages and the DM list.
 - [x] Attachments: WhatsApp-style attachment sheet with inline recent photos/videos grid, Gallery (photos & videos picker), Camera capture via FileProvider, and Document picker (`OpenMultipleDocuments`), client-side encryption, upload to `/api/v1/uploads`, inline image and video rendering with fullscreen zoomable image viewer, integrated video player, and save to device gallery under `Pictures/Nexora` and `Movies/Nexora` media albums.
+- [x] The list stays at the newest message while attachments arrive. Following
+      is a latch released only by the reader scrolling up (`Follow.kt`, tested),
+      because a row growing when its picture decrypts is not somebody scrolling
+      away - which is what the previous rule, derived from the layout, decided
+      it was. The desktop's `follow.ts` is the same rule, case for case.
+- [x] A picture sent from here records its pixel size, so every client can
+      reserve its space before the bytes arrive. It recorded none, which is why
+      a photo from a phone was the one attachment that made the list jump.
 - [ ] Markdown-ish message body rendering, matching
       `apps/desktop/src/services/message-body.ts`.
 
@@ -437,9 +445,18 @@ drew was fetched fresh on each launch and held only in memory.
       one device, paging back through cached history.
 - [ ] Presence is deliberately not cached. A stale "online" is worse than no
       answer, and it arrives on a socket within a second of connecting.
-- [ ] Attachments are still fetched every time they are opened. Caching the
-      ciphertext next to the message is the obvious next step and nothing here
-      blocks it.
+- [x] Attachments are no longer fetched every time they are *drawn*.
+      `MediaCache` in `:app` holds what a row has already paid for - the decoded
+      bitmap, a video's first frame, and the `Uri` of the plaintext file - keyed
+      on the attachment key, bitmaps bounded to an eighth of the heap and
+      evicted oldest-first. Without it a `LazyColumn` disposing a row threw all
+      of that away, so scrolling a picture off the screen and back downloaded
+      it, decrypted it and decoded it again, and a photo that had been on screen
+      a second ago was a spinner. Emptied on sign-out and on changing server.
+- [ ] It is a cache for this run of the app, not for the next one. Caching the
+      *ciphertext* next to the message, in the Room database the rest of the
+      cache already uses, is the version that survives a restart - and nothing
+      here blocks it.
 
 `android.disallowKotlinSourceSets=false` in `gradle.properties` is part of this
 phase: AGP 9's built-in Kotlin rejects source sets added through the `kotlin`

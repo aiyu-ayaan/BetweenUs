@@ -940,6 +940,30 @@ Left open on purpose:
       host path in `UPLOAD_DATA_PATH` is never seeded from an image and still
       has to be chowned once; the compose file says so where it is set
 
+- [x] Fixed: a channel of photos would not stay at the newest message, on any
+      client. Attachments are ciphertext until they have been fetched and
+      decrypted, so a row is laid out at one height and grows to its real one a
+      moment later - and "following the conversation" was defined as "the end of
+      the list is near the bottom of the screen", recomputed whenever anything
+      moved. Growth therefore *un-followed* the list, and the correction written
+      to handle growth read the flag growth had just cleared. It is a latch now,
+      released only by the reader scrolling up: `follow.ts` on desktop and web,
+      `Follow.kt` on Android, the same cases and a test on both sides. The
+      desktop also watched only the message list, so it survived a picture
+      arriving and not the viewport getting shorter underneath a composer that
+      had grown a preview
+
+- [x] Fixed: Android re-decrypted every picture it scrolled past. A
+      `LazyColumn` disposes a row as it leaves the screen, and the row was where
+      the decrypted bytes, the decoded bitmap and the video's file all lived -
+      so coming back to a photo downloaded, decrypted and decoded it again, and
+      a video wrote another copy of itself into the cache directory each time.
+      `MediaCache` is the phone's version of the blob `Map` the desktop has
+      always had in `services/attachments.ts`, bounded to an eighth of the heap
+      and emptied on sign-out. Android's uploader also recorded no pixel size,
+      which is what every client reserves an attachment's space from, so a photo
+      sent from a phone was the one attachment that jumped on every client
+
 Left open on purpose:
 
 - [x] An attachment's blob goes when its message does. Every upload writes an

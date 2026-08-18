@@ -69,6 +69,34 @@ Closing both windows stops the dev server. Ctrl+C does the same.
 - Something over 8 MB uploads in parts: the progress line moves in steps rather
   than jumping to 100.
 
+**A channel of photos, and staying at the bottom**
+
+Attachments are ciphertext until they have been fetched and decrypted, so every
+row is laid out before it knows how tall it is going to be. That is what makes
+this worth its own list: the message list has to stay where the reader put it
+while everything under them changes size.
+
+- Open a channel whose last few messages are pictures and videos, and watch it
+  while they arrive. It must end at the newest message, not somewhere above it.
+- Send a photo and stay at the bottom. When it decrypts and its row grows, the
+  view follows it down.
+- Attach a photo *without* sending it. The composer grows a preview, so the
+  message list gets shorter — and the newest message must not disappear behind
+  it. This one only shows on the desktop and the web, and it is the case the
+  ResizeObserver used to miss, because it watched the messages and not the
+  window they are in.
+- Have the other window type. The typing indicator appears under the list, which
+  is the same shrink by a smaller amount.
+- Scroll up to read something while pictures are still arriving below. The view
+  must stay exactly where it was left. Nothing growing underneath is allowed to
+  move it, and nothing is allowed to drag the reader back down.
+- Scroll back to the bottom by hand: following starts again, and the next
+  message arrives without a click.
+- Scroll a picture off the screen and back. It must come back as a picture. If
+  it comes back as a spinner, something has stopped caching the decrypted bytes
+  — on the phone that is `MediaCache`, on desktop and web the `Map` in
+  `services/attachments.ts`.
+
 **Profile pictures**
 - User settings → My Account → *Upload avatar*. It shows up in Alice's own
   panel, and in the member list and message rows in Bob's window after his

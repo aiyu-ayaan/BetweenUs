@@ -240,6 +240,37 @@ Fixed in the same pass:
       change neither the length nor the offset. It scrolls on the newest message
       id now, jumps without animation on open, follows only from the bottom, and
       stays pinned while attachments decrypt underneath it.
+- [x] **Following the conversation is a latch only the reader releases.** The
+      correction above did not hold, on any client, and the reason is that
+      "following" was answering the wrong question: it meant "is the end of the
+      list near the bottom of the screen", recomputed every time anything moved.
+      With end-to-end encryption something always moves - a picture is
+      ciphertext until it has been fetched and decrypted, so its row is laid out
+      at one height and becomes three hundred pixels taller a moment later - and
+      the flag that was supposed to put the view back had already turned itself
+      off by the time the correction read it. It is a latch now: off when the
+      reader scrolls *up*, which is the one thing growth underneath cannot do,
+      and on when they reach the end again. `follow.ts` on desktop and web,
+      `Follow.kt` on Android, the same cases in both, both tested.
+- [x] **The desktop watched the wrong box.** Its ResizeObserver watched the
+      message list, so it survived a picture arriving and not the viewport
+      getting *shorter* - a typing indicator appearing under it, or the composer
+      growing a preview of the photo about to be sent. Measured in a browser:
+      133px off the bottom with the latch already off, so nothing later could
+      recover it. It observes both boxes now, and lands back at 1px.
+- [x] **Android kept nothing it had decrypted.** A `LazyColumn` disposes a row
+      as it leaves the screen, and everything the row held went with it: the
+      download, the decryption and the decode were all done again when it came
+      back, and a photo that had been on screen a second ago was a spinner. For
+      a video it was worse - `cacheDecryptedMedia` names its file after the
+      clock, so every scroll past wrote another thirty megabytes into the cache
+      directory. `MediaCache` is the phone's answer to the `Map` of blobs the
+      desktop has always had: bitmaps under an eighth of the heap, video files
+      by the `Uri` already on disk, emptied on sign-out.
+- [x] **A picture sent from a phone says how big it is.** Every client reserves
+      an attachment's space from the pixel size in the manifest, and Android's
+      uploader recorded none - so a photo from a phone was the one attachment
+      with no reserved space anywhere, including on the phone that sent it.
 
 Desktop and web, earlier passes:
 
@@ -464,7 +495,18 @@ The cases most worth putting a person in front of, in order:
     successful build does not prove is that no keep rule is missing: a class
     reached by name from native code fails when a call starts, not when the app
     does.
-21. The join and leave tones with three people in a call, which is where the
+21. A channel of photos, on all three clients, which is the one this pass is
+    for: open one whose last few messages are pictures and videos, and watch it
+    while they decrypt. It must be at the newest message when they have all
+    arrived, not somewhere above it. Then scroll up into history and back down;
+    a picture that has been on screen once must come back as a picture and not
+    as a spinner, and the phone is where that was worst. Then attach a photo
+    without sending it - the composer grows a preview, the viewport gets
+    shorter, and the newest message must not end up behind it. Last, scroll up
+    to read something while pictures are still arriving below: the view must
+    stay where it was put, because the whole rule is that only the reader moves
+    it.
+22. The join and leave tones with three people in a call, which is where the
     two failure modes live: joining a channel that already has two people in it
     must play one tone and not two, and nobody should hear a tone for a peer
     connection that merely reconnected. Worth listening to on a headset plugged
