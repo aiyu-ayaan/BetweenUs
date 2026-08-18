@@ -443,6 +443,25 @@ object NexoraApi {
         authedArray("GET", "/api/v1/servers/${enc(serverId)}/emoji").map { ServerEmoji.from(it) }
     }
 
+    /**
+     * Adds one. [url] is a picture already uploaded through
+     * `/api/v1/uploads/picture` - emoji are stored in the clear, like avatars,
+     * because an image tag cannot carry a password.
+     */
+    suspend fun addServerEmoji(
+        serverId: String,
+        name: String,
+        url: String,
+        animated: Boolean,
+    ): ServerEmoji = io {
+        val body = obj("name" to name, "url" to url, "animated" to animated)
+        ServerEmoji.from(authed("POST", "/api/v1/servers/${enc(serverId)}/emoji", body))
+    }
+
+    suspend fun removeServerEmoji(serverId: String, emojiId: String): Unit = io {
+        authed("DELETE", "/api/v1/servers/${enc(serverId)}/emoji/${enc(emojiId)}")
+    }
+
     // --- end-to-end encryption key directory ---
 
     suspend fun registerDeviceKey(

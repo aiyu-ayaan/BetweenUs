@@ -431,6 +431,11 @@ says so too; both halves are needed.
       keeps working, which is what the desktop's links are.
 - [x] Member list with presence and roles.
 - [x] Role and permission editing for those who hold `MANAGE_ROLE`.
+- [x] A server's own emoji: added from the photo picker and removed, with the
+      name rules checked before anything is uploaded. An animated file is
+      stored exactly as it came; everything else is squared and scaled to PNG
+      by `Pictures.square`, which keeps the transparency an emoji is half made
+      of. Drawing them already worked - adding one did not.
 - [x] A server's own roles: made, edited, coloured and deleted from the phone,
       and handed to members from the member sheet. Only the handing out existed
       before, which meant the list to choose from could only ever have been

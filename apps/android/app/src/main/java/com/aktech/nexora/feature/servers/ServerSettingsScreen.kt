@@ -184,6 +184,12 @@ fun ServerSettingsScreen(serverId: String?, onBack: () -> Unit) {
                 onNote = { note = it },
             )
 
+            EmojiSection(
+                serverId = server.id,
+                mayManage = server.can("MANAGE_EMOJI"),
+                onNote = { note = it },
+            )
+
             SectionLabel("Leaving")
             Column(Modifier.padding(horizontal = 16.dp)) {
                 Text(
