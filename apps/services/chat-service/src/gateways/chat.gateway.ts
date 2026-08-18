@@ -12,6 +12,7 @@ import { prisma } from '@nexora/database';
 import { EVENTS, EventBus } from '@nexora/events';
 import { PERMISSIONS } from '@nexora/permissions';
 import {
+  CONTROL_MAX_PAYLOAD,
   RoomRegistry,
   authenticateHandshake,
   channelRoom,
@@ -45,7 +46,11 @@ export class ChatGateway implements OnModuleDestroy {
 
   /** Called from main.ts once Nest owns a listening HTTP server. */
   async attach(httpServer: HttpServer): Promise<void> {
-    this.server = new WebSocketServer({ server: httpServer, path: '/ws/chat' });
+    this.server = new WebSocketServer({
+      server: httpServer,
+      path: '/ws/chat',
+      maxPayload: CONTROL_MAX_PAYLOAD,
+    });
 
     this.server.on('connection', (socket, request) => {
       const user = authenticateHandshake(request);

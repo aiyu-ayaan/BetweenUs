@@ -31,7 +31,7 @@ import { envOr } from '@nexora/config';
 import { asRemotePermissions, prisma, recordRemoteAudit } from '@nexora/database';
 import { Logger } from '@nexora/logger';
 import { PERMISSIONS, type RemotePermission } from '@nexora/permissions';
-import { authenticateHandshake } from '@nexora/websocket';
+import { SIGNAL_MAX_PAYLOAD, authenticateHandshake } from '@nexora/websocket';
 import type {
   AgentRemoteEvent,
   ClientRemoteEvent,
@@ -106,7 +106,11 @@ export class RemoteGateway implements OnModuleDestroy {
 
     void this.relay.start((message) => this.deliverLocal(message.target, message.event, message.close));
 
-    this.server = new WebSocketServer({ server: httpServer, path: '/ws/remote' });
+    this.server = new WebSocketServer({
+      server: httpServer,
+      path: '/ws/remote',
+      maxPayload: SIGNAL_MAX_PAYLOAD,
+    });
 
     this.server.on('connection', (socket, request) => {
       void this.onConnection(socket, request);

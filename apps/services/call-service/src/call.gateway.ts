@@ -29,7 +29,7 @@ import { resolveChannelAccess } from '@nexora/database';
 import { EVENTS, EventBus } from '@nexora/events';
 import { Logger } from '@nexora/logger';
 import { PERMISSIONS } from '@nexora/permissions';
-import { authenticateHandshake } from '@nexora/websocket';
+import { SIGNAL_MAX_PAYLOAD, authenticateHandshake } from '@nexora/websocket';
 import type {
   CallPeer,
   ClientCallEvent,
@@ -121,7 +121,11 @@ export class CallGateway implements OnModuleDestroy {
   }
 
   attach(httpServer: HttpServer): void {
-    this.server = new WebSocketServer({ server: httpServer, path: '/ws/call' });
+    this.server = new WebSocketServer({
+      server: httpServer,
+      path: '/ws/call',
+      maxPayload: SIGNAL_MAX_PAYLOAD,
+    });
 
     this.server.on('connection', (socket, request) => {
       const user = authenticateHandshake(request);

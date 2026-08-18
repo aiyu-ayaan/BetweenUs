@@ -7,6 +7,22 @@ import { bearerToken, verifyAccessToken } from '@nexora/auth';
 import type { AuthenticatedUser } from '@nexora/auth';
 
 /**
+ * The largest frame a gateway will read before closing the socket.
+ *
+ * `ws` defaults to 100 MB, and a signed-in client that sends 100 MB of nothing
+ * has it buffered in the service's heap before a single line of gateway code
+ * runs. Nothing here carries a payload anywhere near these numbers - the ones
+ * that carry bulk carry it over a peer connection instead - so the cap is set
+ * to what the traffic actually is.
+ *
+ * `SIGNAL_MAX_PAYLOAD` is the roomier of the two because an SDP grows with the
+ * codecs and candidates a machine offers, and because a remote session's
+ * clipboard is a person's selection rather than a protocol field.
+ */
+export const CONTROL_MAX_PAYLOAD = 64 * 1024;
+export const SIGNAL_MAX_PAYLOAD = 256 * 1024;
+
+/**
  * Authenticates a WebSocket handshake.
  *
  * Accepts the token from `Authorization: Bearer`, the `token` query parameter,

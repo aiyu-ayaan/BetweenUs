@@ -13,7 +13,7 @@ import { EVENTS, EventBus } from '@nexora/events';
 import { resolveChannelAccess } from '@nexora/database';
 import { PERMISSIONS } from '@nexora/permissions';
 import { Logger } from '@nexora/logger';
-import { authenticateHandshake } from '@nexora/websocket';
+import { CONTROL_MAX_PAYLOAD, authenticateHandshake } from '@nexora/websocket';
 import type { ClientPresenceEvent, ServerPresenceEvent } from '@nexora/shared-types';
 import { PresenceStore, isActiveStatus } from './presence.store';
 import { audienceOfChannel, audienceOfUser } from './audience';
@@ -39,7 +39,11 @@ export class PresenceGateway implements OnModuleDestroy {
   ) {}
 
   async attach(httpServer: HttpServer): Promise<void> {
-    this.server = new WebSocketServer({ server: httpServer, path: '/ws/presence' });
+    this.server = new WebSocketServer({
+      server: httpServer,
+      path: '/ws/presence',
+      maxPayload: CONTROL_MAX_PAYLOAD,
+    });
 
     this.server.on('connection', (socket, request) => {
       const user = authenticateHandshake(request);
