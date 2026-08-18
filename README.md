@@ -43,7 +43,87 @@ Messages, attachments, and call media are end-to-end encrypted: the server store
 | Android Client | Native Jetpack Compose + Material 3 app with E2EE messaging, WhatsApp-style media picker and composer, media viewers, and public gallery saving (`Pictures/Nexora`, `Movies/Nexora`) |
 | Presence | Online / idle / do not disturb / invisible, typing indicators, voice rosters |
 | Notifications | Desktop notifications, system tray, start with the system, per-channel and per-person mute, quiet hours, persisted unread with a line that survives a restart |
-| Remote desktop | Not built - `remote-gateway` and `remote-agent` are scaffolds |
+| Remote desktop | A machine offers itself from Settings, dials out to the gateway, and is viewed and driven from another client; per-machine permissions with expiry, and an audit trail |
+
+## Features, and where each one works
+
+**Desktop** is the Electron app, **Web** is the same UI in a browser tab
+(`apps/web` mounts `apps/desktop/src`, so they are one codebase), and
+**Android** is the native Compose client.
+
+Where the three differ it is almost always for one reason: screen capture by
+source, synthetic mouse and keyboard input and the OS keychain live behind the
+Electron preload bridge, and a browser tab has none of them.
+
+| | Desktop | Web | Android |
+| --- | :---: | :---: | :---: |
+| **Accounts** | | | |
+| Register, sign in, refresh-token rotation | ✅ | ✅ | ✅ |
+| Google and GitHub sign-in | ✅ | ✅ | ✅ |
+| Display name, avatar, change password | ✅ | ✅ | ✅ |
+| Encryption identity: unlock, backup secret | ✅ | ✅ | ✅ |
+| Device list and revoking a device | ✅ | ✅ | — |
+| Point the client at another deployment | ✅ | ✅ | ✅ |
+| Admin panel | \* | \* | \* |
+| **Servers and channels** | | | |
+| Create a server, join one, leave or delete | ✅ | ✅ | ✅ |
+| Invite links: create, expiry, use limit, revoke | ✅ | ✅ | ✅ |
+| Invite preview card before joining | ✅ | ✅ | ✅ |
+| Server icon | ✅ | ✅ | ✅ |
+| Custom roles: create, colour, permissions, delete | ✅ | ✅ | ✅ |
+| Per-member permission overrides | ✅ | ✅ | ✅ |
+| Add a friend to a server, kick, change role | ✅ | ✅ | ✅ |
+| Text and voice channels, private channel allowlists | ✅ | ✅ | ✅ |
+| Custom emoji: add and remove | ✅ | ✅ | ✅ |
+| **Messaging** | | | |
+| End-to-end encrypted messages, realtime, history paging | ✅ | ✅ | ✅ |
+| Direct messages and friends | ✅ | ✅ | ✅ |
+| Replies, edit, delete, reactions | ✅ | ✅ | ✅ |
+| Pinned messages | ✅ | ✅ | ✅ |
+| Custom emoji in messages | ✅ | ✅ | ✅ |
+| `:` emoji suggestion menu while typing | ✅ | ✅ | — |
+| Emoji picker | ✅ | ✅ | ⚠️ Unicode only |
+| Search within a channel | ✅ | ✅ | — |
+| Quick switcher (Ctrl+K) | ✅ | ✅ | — |
+| Attachments of any type, up to 100 MB | ✅ | ✅ | ✅ |
+| HEIC photos converted, photos re-encoded on the way out | ✅ | ✅ | ✅ |
+| Preview before sending, multi-select, captions | ✅ | ✅ | ✅ |
+| Drag and drop into the composer | ✅ | ✅ | — |
+| Zoomable image viewer, video player | ✅ | ✅ | ✅ |
+| Save media to the device gallery | download | download | ✅ `Pictures/Nexora` |
+| **Voice, video and screen share** | | | |
+| Peer-to-peer voice channels | ✅ | ✅ | ✅ |
+| Camera | ✅ | ✅ | ✅ |
+| Screen share | ✅ | ✅ | ✅ |
+| Tiles shaped to the picture (portrait and landscape) | ✅ | ✅ | ✅ |
+| Ask to drive somebody's shared screen | ✅ | ✅ | — |
+| Be driven while sharing your screen | ✅ | — | — |
+| Manual quality override | ✅ | ✅ | ⚠️ automatic |
+| Push to talk | ✅ | ✅ | — |
+| Picture-in-picture while minimised | ✅ | — | — |
+| Join and leave tones | ✅ | ✅ | ✅ |
+| Ongoing-call notification | tray | — | ✅ foreground service |
+| **Presence and notifications** | | | |
+| Online, idle, do not disturb, invisible | ✅ | ✅ | ✅ |
+| Typing indicators, voice rosters | ✅ | ✅ | ✅ |
+| Unread counts and the unread line | ✅ | ✅ | ✅ |
+| Notifications for messages, mentions and calls | ✅ | ✅ | ⚠️ preferences only |
+| Per-channel and per-person mute, quiet hours | ✅ | ✅ | ⚠️ on or off |
+| System tray, start with the system | ✅ | — | — |
+| **Remote desktop** | | | |
+| Offer this machine to be controlled | ✅ | — | — |
+| View and control another machine | ✅ | — | ✅ |
+| Grants per person and permission, with expiry | ✅ | — | ✅ |
+| Rename, remove, read the audit trail | ✅ | — | ✅ |
+
+\* The admin panel is its own bundle at `/admin`, so it is a browser page
+whichever client you arrived from.
+
+⚠️ **Android notifications**: the preferences are there and sync with the other
+clients, but nothing is delivered while the app is closed - that needs Firebase
+Cloud Messaging, which is the next phase in `development/ANDROID_TODO.md`.
+
+---
 
 Known limits are written down rather than implied: see `development/E2EE.md`
 for what the encryption does and does not protect,
