@@ -194,6 +194,13 @@ data is cleared.
 - [x] A picture sent from here records its pixel size, so every client can
       reserve its space before the bytes arrive. It recorded none, which is why
       a photo from a phone was the one attachment that made the list jump.
+- [x] A photo sent from here is converted to JPEG, downscaled to 1920px, and
+      has its EXIF rotation baked into the pixels. HEIC is the reason: a phone
+      camera writes it by default, this platform decodes it natively so it
+      looked right *here*, and it arrived on desktop and web as a broken image
+      because Chromium has never shipped a HEIF decoder. Those clients can now
+      decode one, but a picture no browser can read has no business being sent,
+      so the sender converts (`Conversation.asJpeg`).
 - [ ] Markdown-ish message body rendering, matching
       `apps/desktop/src/services/message-body.ts`.
 
