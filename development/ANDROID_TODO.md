@@ -387,6 +387,11 @@ says so too; both halves are needed.
 - [x] `/ws/remote` session handshake and permission checks.
 - [x] Screen over WebRTC, direct to the agent.
 - [x] Touch → mouse mapping; a soft keyboard for key events.
+- [x] Machine management from the phone: rename, remove, who holds which
+      permission, and the audit trail. These were desktop-only, which put the
+      decisions about who may reach a machine on one device and the access
+      itself on every device - backwards for the one feature where taking
+      access back in a hurry is the point.
 - [ ] Clipboard and file transfer, each gated on its own permission.
 - [x] Audit trail is the gateway's job; the client only shows the state.
 - [x] No Android *agent* — a phone is a controller, not a target.

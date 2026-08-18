@@ -23,6 +23,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -32,7 +33,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import com.aktech.nexora.core.data.AuthPhase
 import com.aktech.nexora.core.data.NexoraApi
+import com.aktech.nexora.core.data.Session
 import com.aktech.nexora.core.data.RemoteMachine
 import com.aktech.nexora.ui.components.Chip
 import com.aktech.nexora.ui.components.EmptyState
@@ -52,19 +55,28 @@ import com.aktech.nexora.ui.theme.StatusOffline
 import com.aktech.nexora.ui.theme.StatusOnline
 import com.aktech.nexora.ui.theme.Surface950
 import org.webrtc.RendererCommon
+import kotlinx.coroutines.launch
 import org.webrtc.SurfaceViewRenderer
 
 /** Machines this account owns, plus the ones it holds a live grant on. */
 @Composable
 fun RemoteMachinesScreen(onBack: () -> Unit, onOpenSession: (String) -> Unit) {
+    val scope = rememberCoroutineScope()
     var machines by remember { mutableStateOf<List<RemoteMachine>?>(null) }
     var note by remember { mutableStateOf<String?>(null) }
+    /** The machine whose access and audit trail are being looked at. */
+    var managing by remember { mutableStateOf<RemoteMachine?>(null) }
 
-    LaunchedEffect(Unit) {
+    val phase by Session.state.collectAsState()
+    val selfId = (phase as? AuthPhase.SignedIn)?.user?.id
+
+    suspend fun reload() {
         runCatching { NexoraApi.machines() }
             .onSuccess { machines = it }
             .onFailure { note = it.message; machines = emptyList() }
     }
+
+    LaunchedEffect(Unit) { reload() }
 
     Column(Modifier.fillMaxSize().background(Ground).systemBarsPadding()) {
         Row(
@@ -119,6 +131,16 @@ fun RemoteMachinesScreen(onBack: () -> Unit, onOpenSession: (String) -> Unit) {
                             } else {
                                 Chip("connect")
                             }
+                            // Only the owner is offered this. The gateway
+                            // refuses everybody else anyway; a button that
+                            // exists to fail is not a button.
+                            if (machine.ownerId == selfId) {
+                                IconAction(
+                                    icon = NexoraIcons.Settings,
+                                    contentDescription = "Manage this machine",
+                                    onClick = { managing = machine },
+                                )
+                            }
                         },
                         onClick = {
                             if (machine.online && machine.may("REMOTE_VIEW")) onOpenSession(machine.id)
@@ -127,6 +149,14 @@ fun RemoteMachinesScreen(onBack: () -> Unit, onOpenSession: (String) -> Unit) {
                 }
             }
         }
+    }
+
+    managing?.let { machine ->
+        MachineSheet(
+            machine = machine,
+            onDismiss = { managing = null },
+            onChanged = { scope.launch { reload() } },
+        )
     }
 }
 

@@ -835,6 +835,68 @@ data class CallPeer(val peerId: String, val userId: String, val username: String
 
 // --- remote desktop ---
 
+/**
+ * Somebody's standing access to a machine.
+ *
+ * An empty [permissions] is how access is taken away - there is no separate
+ * delete, on the wire or here.
+ */
+data class RemoteGrant(
+    val userId: String,
+    val username: String,
+    val displayName: String,
+    val avatarUrl: String?,
+    val permissions: List<String>,
+    /** When it lapses. Null is open-ended, which is a decision, not a default. */
+    val expiresAt: String?,
+) {
+    val label: String get() = displayName.ifBlank { username }
+
+    companion object {
+        fun from(json: JSONObject) = RemoteGrant(
+            userId = json.optString("userId"),
+            username = json.optString("username"),
+            displayName = json.optString("displayName"),
+            avatarUrl = json.stringOrNull("avatarUrl"),
+            permissions = json.strings("permissions"),
+            expiresAt = json.stringOrNull("expiresAt"),
+        )
+    }
+}
+
+/**
+ * One line of a machine's audit trail.
+ *
+ * Remote access is the one part of this system where what happened matters as
+ * much as who may do it, which is why the trail exists at all and why it is
+ * readable from the phone rather than only from a desktop.
+ */
+data class RemoteAuditEntry(
+    val id: String,
+    val action: String,
+    val actorUsername: String?,
+    val createdAt: String,
+) {
+    companion object {
+        fun from(json: JSONObject) = RemoteAuditEntry(
+            id = json.optString("id"),
+            action = json.optString("action"),
+            actorUsername = json.stringOrNull("actorUsername"),
+            createdAt = json.optString("createdAt"),
+        )
+    }
+}
+
+/** Remote permissions, in the order every client lists them. */
+val REMOTE_PERMISSIONS = listOf(
+    "REMOTE_VIEW",
+    "REMOTE_CONTROL",
+    "REMOTE_FILE_TRANSFER",
+    "REMOTE_CLIPBOARD",
+    "REMOTE_AUDIO",
+    "REMOTE_ADMIN",
+)
+
 data class RemoteMachine(
     val id: String,
     val name: String,

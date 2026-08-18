@@ -575,6 +575,45 @@ object NexoraApi {
         authedArray("GET", "/api/v1/remote/machines").map { RemoteMachine.from(it) }
     }
 
+    suspend fun renameMachine(machineId: String, name: String): RemoteMachine = io {
+        RemoteMachine.from(
+            authed("PATCH", "/api/v1/remote/machines/${enc(machineId)}", obj("name" to name)),
+        )
+    }
+
+    /** Forgets the machine and every grant on it. Its agent has to enrol again. */
+    suspend fun removeMachine(machineId: String): Unit = io {
+        authed("DELETE", "/api/v1/remote/machines/${enc(machineId)}")
+    }
+
+    suspend fun machineGrants(machineId: String): List<RemoteGrant> = io {
+        authedArray("GET", "/api/v1/remote/machines/${enc(machineId)}/grants")
+            .map { RemoteGrant.from(it) }
+    }
+
+    /**
+     * Grants, changes or revokes one person's access. An empty [permissions]
+     * revokes: there is no separate delete.
+     */
+    suspend fun setMachineGrant(
+        machineId: String,
+        userId: String,
+        permissions: List<String>,
+        expiresAt: String? = null,
+    ): List<RemoteGrant> = io {
+        val body = JSONObject()
+            .put("userId", userId)
+            .put("permissions", jsonArrayOf(permissions))
+            .put("expiresAt", expiresAt ?: JSONObject.NULL)
+        authedArray("PUT", "/api/v1/remote/machines/${enc(machineId)}/grants", body)
+            .map { RemoteGrant.from(it) }
+    }
+
+    suspend fun machineAudit(machineId: String): List<RemoteAuditEntry> = io {
+        authedArray("GET", "/api/v1/remote/machines/${enc(machineId)}/audit")
+            .map { RemoteAuditEntry.from(it) }
+    }
+
     suspend fun startRemoteSession(machineId: String): RemoteSession = io {
         RemoteSession.from(
             authed("POST", "/api/v1/remote/sessions", obj("machineId" to machineId)),
