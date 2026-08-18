@@ -536,6 +536,8 @@ DEPLOYMENT.md             putting it on a server, end to end
 | `pnpm typecheck` | Type-check the whole monorepo |
 | `pnpm check` | Package self-checks - crypto, storage, logger, auth, permissions, websocket |
 | `pnpm db:migrate` / `db:seed` / `db:studio` | Schema, demo data, Prisma Studio |
+| `pnpm data:path <path>` | Configure single-point data root directory in `.env` and set up tree |
+| `pnpm db:backup` | Trigger pre-migration or manual database dump to `BACKUP_DATA_PATH` |
 | `pnpm admin:create` | Create the first administrator |
 | `pnpm --filter @nexora/chat-service smoke` | End-to-end check against running services |
 | `pnpm --filter @nexora/presence-service smoke` | Presence, typing and voice rosters |
@@ -601,6 +603,11 @@ Errors share one shape everywhere:
 
 Newest first. Every one of these is in `development/TRACK.md` with the reason it
 was built the way it was; this is the short version.
+
+### Deployment & Backups
+
+- **Single Point Datapath (`NEXORA_DATA_PATH`).** `pnpm data:path <path>` sets up a unified storage root for `data/postgres`, `data/redis`, `data/media` (`pictures/` and `attachments/`), and `backup/`. Derived path environment variables (`POSTGRES_DATA_PATH`, `REDIS_DATA_PATH`, `UPLOAD_DATA_PATH`, `BACKUP_DATA_PATH`) are written directly to `.env` while preserving fallback to Docker named volumes.
+- **Pre-Migration Database Backups & Write Pre-checks.** `db-backup-once` container automatically executes a `pg_dump` SQL archive before `prisma migrate deploy` runs. Write permissions on `BACKUP_DATA_PATH` are validated automatically by `backup.sh` and `data-path.mjs` to prevent silent output redirection errors.
 
 ### Security
 
