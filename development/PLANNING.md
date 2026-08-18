@@ -604,6 +604,28 @@ that has to be right for every future deployment is one that will be wrong.
   raises a notification goes through it, rather than each remembering the four
   rules for itself.
 
+### Invites are previewed before they are accepted
+
+- **A link no longer joins the server that sent it.** It used to: the window
+  came up and the server was already in the rail. That is wrong in both
+  directions - the person following the link had no idea whose server it was
+  until they were in it, and the server gained a member who was never asked. A
+  code is looked up first now (`GET /api/v1/servers/invites/:code`) and answered
+  with a card: the icon, the name, the member count and how many of those
+  members are online.
+- **The preview is deliberately thin.** Anyone holding a code can ask for it, so
+  it carries what the invite already promises and nothing else - no member list,
+  no channels, no ids. A code that never existed, has expired, has been revoked
+  or is spent all get the same 404 the join gets, for the same reason: telling
+  the three apart tells somebody guessing codes that they are close.
+- **The online count comes from `presence-service` over HTTP, not from Redis.**
+  Presence belongs to that service, and a second reader of `presence:online` is
+  a second thing to change the day that key does. The endpoint is internal -
+  Nginx forwards the paths it names, and `/api/v1/internal` is not one of them.
+  It is asked with a two-second timeout and answered with null on any failure,
+  and the card then omits the line: an invite that hangs because presence is
+  restarting is worse than an invite that cannot say who is awake.
+
 ### Media: attachments, pictures and uploads (phase 13)
 
 - **An attachment is encrypted before it is uploaded, and that is what lets a

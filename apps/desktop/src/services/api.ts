@@ -5,6 +5,7 @@ import type {
   AuthTokens,
   CallIceResponse,
   Channel,
+  InvitePreview,
   ChannelKeysResponse,
   ChannelMember,
   ChannelUnread,
@@ -274,6 +275,10 @@ export const api = {
 
   joinServer: (code: string): Promise<ServerWithRole> =>
     request('/api/v1/servers/join', { method: 'POST', body: JSON.stringify({ code }) }),
+
+  /** Whose server a code leads to, and how big it is, before joining it. */
+  invitePreview: (code: string): Promise<InvitePreview> =>
+    request(`/api/v1/servers/invites/${encodeURIComponent(code)}`),
 
   serverInvites: (serverId: string): Promise<ServerInvite[]> =>
     request(`/api/v1/servers/${serverId}/invites`),

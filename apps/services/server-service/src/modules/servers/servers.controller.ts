@@ -16,6 +16,7 @@ import { CurrentUser, JwtAuthGuard, type AuthenticatedUser } from '@nexora/auth'
 import type {
   Channel,
   ChannelMember,
+  InvitePreview,
   ServerCustomRole,
   ServerEmoji,
   ServerInvite,
@@ -62,6 +63,22 @@ export class ServersController {
     @Body() dto: JoinServerDto,
   ): Promise<ServerWithRole> {
     return this.servers.joinByInvite(user.id, dto.code);
+  }
+
+  /**
+   * What an invite leads to, without taking it. Any signed-in account may ask
+   * with a code in hand, which is the whole point: the person deciding whether
+   * to join is by definition not a member yet.
+   *
+   * Above the `:serverId` routes on purpose - `invites` is not a UUID, and this
+   * has to be matched before anything tries to parse it as one.
+   */
+  @Get('invites/:code')
+  invitePreview(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('code') code: string,
+  ): Promise<InvitePreview> {
+    return this.servers.invitePreview(user.id, code);
   }
 
   @Get(':serverId/invites')

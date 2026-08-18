@@ -1,6 +1,11 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useChatStore } from '../../stores/chat';
-import { inviteCodeFrom } from '../../services/invite-link';
+import {
+  clearPendingInvite,
+  inviteCodeFrom,
+  pendingInvite,
+} from '../../services/invite-link';
+import { InviteDialog } from './InviteDialog';
 import { CompassIcon, MessageIcon, PlusIcon } from '../../components/icons';
 import { ServerIcon } from '../../components/ServerIcon';
 
@@ -15,12 +20,32 @@ import { ServerIcon } from '../../components/ServerIcon';
  * horizontal space and it does not turn the tile into a different shape.
  */
 export function ServerRail(): JSX.Element {
-  const { servers, view, activeServerId, selectServer, showHome, createServer, joinServer } =
-    useChatStore();
+  const { servers, view, activeServerId, selectServer, showHome, createServer } = useChatStore();
   const [dialog, setDialog] = useState<'none' | 'create' | 'join'>('none');
   const [value, setValue] = useState('');
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
+  /** The code a card is being shown for, from a link or from the field below. */
+  const [invited, setInvited] = useState<string | null>(null);
+
+  /**
+   * A window opened by an invite link.
+   *
+   * The code was taken off the address bar before the first render, because a
+   * sign-in reloads the page and would otherwise lose it. It is picked up here,
+   * once there is a session to use it with - this rail only exists when there
+   * is one - and it opens the card rather than joining anything.
+   *
+   * Cleared on the way in whatever happens next. A code that is refused is not
+   * going to start working, and one retried on every launch is a link that
+   * rejoins a server somebody deliberately left.
+   */
+  useEffect(() => {
+    const code = pendingInvite();
+    if (!code) return;
+    clearPendingInvite();
+    setInvited(code);
+  }, []);
 
   const submit = async (): Promise<void> => {
     const trimmed = value.trim();
@@ -36,7 +61,9 @@ export function ServerRail(): JSX.Element {
         // people report as broken.
         const code = inviteCodeFrom(trimmed);
         if (!code) throw new Error('That is not an invite link or code');
-        await joinServer(code);
+        // Not joined here. The card says whose server this is first, and the
+        // pasted code deserves that answer as much as a clicked link does.
+        setInvited(code);
       }
       setDialog('none');
       setValue('');
@@ -97,6 +124,8 @@ export function ServerRail(): JSX.Element {
       >
         <CompassIcon className="h-6 w-6" />
       </RailButton>
+
+      {invited && <InviteDialog code={invited} onClose={() => setInvited(null)} />}
 
       {dialog !== 'none' && (
         <div

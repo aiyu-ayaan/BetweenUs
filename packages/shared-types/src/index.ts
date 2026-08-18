@@ -228,6 +228,36 @@ export interface CreateServerInviteRequest {
   maxUses?: number | null;
 }
 
+/**
+ * What an invite is worth accepting, before it is accepted.
+ *
+ * A link used to join the moment it was opened, which is the one thing an
+ * invite should never do: the person following it has no idea whose server it
+ * is until they are already in it. So a code is looked up first and answered
+ * with enough to decide - whose server, how big it is, and how much of it is
+ * awake.
+ *
+ * It is deliberately thin. Anyone holding a code can ask for this, so it says
+ * what the invite itself already promises and nothing more: no member list, no
+ * channels, no ids belonging to anyone.
+ */
+export interface InvitePreview {
+  code: string;
+  serverId: string;
+  name: string;
+  iconUrl: string | null;
+  memberCount: number;
+  /**
+   * How many of those members are online, or null when presence could not be
+   * reached. Null rather than 0: "nobody is here" and "nobody could be asked"
+   * are different things, and a card that shows the second as the first is
+   * lying about an empty server.
+   */
+  onlineCount: number | null;
+  /** Already in. The link then opens the server rather than joining it. */
+  member: boolean;
+}
+
 export interface JoinServerRequest {
   /** An invite code. The server's slug is not one, and no longer opens a door. */
   code: string;

@@ -6,6 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { areFriends, prisma, resolveChannelAccess } from '@nexora/database';
+import { envOr } from '@nexora/config';
 import { EVENTS, EventBus } from '@nexora/events';
 import {
   EMOJI_NAME_PATTERN,
@@ -20,6 +21,7 @@ import type {
   CreateChannelRequest,
   CreateServerInviteRequest,
   CreateServerRoleRequest,
+  InvitePreview,
   ServerCustomRole as ServerCustomRoleDto,
   ServerInvite as ServerInviteDto,
   UpdateChannelRequest,
@@ -712,6 +714,51 @@ export class ServersService {
   }
 
   /**
+   * What a code is worth, before it is spent.
+   *
+   * A link used to join the moment it was opened. That is quick and it is
+   * wrong: somebody following a link from a chat had no idea whose server it
+   * was until they were already a member of it. So this answers first, and the
+   * joining is a decision somebody makes with the answer in front of them.
+   *
+   * A member who already belongs gets the same card with `member: true`, and
+   * their link opens the server instead of joining it - which is what it always
+   * did, quietly.
+   */
+  async invitePreview(userId: string, code: string): Promise<InvitePreview> {
+    const invite = await prisma.serverInvite.findUnique({ where: { code } });
+    // The same answer for never-existed, expired, revoked and spent, for the
+    // same reason `joinByInvite` gives it: which one it is tells somebody
+    // guessing codes that they are close.
+    if (!invite || !isInviteActive(invite)) {
+      throw new NotFoundException({
+        code: 'INVITE_NOT_FOUND',
+        message: 'That invite is not valid',
+      });
+    }
+
+    const server = await prisma.server.findUnique({ where: { id: invite.serverId } });
+    if (!server) {
+      throw new NotFoundException({ code: 'SERVER_NOT_FOUND', message: 'Server not found' });
+    }
+
+    const members = await prisma.serverMember.findMany({
+      where: { serverId: server.id },
+      select: { userId: true },
+    });
+
+    return {
+      code: invite.code,
+      serverId: server.id,
+      name: server.name,
+      iconUrl: server.iconUrl,
+      memberCount: members.length,
+      onlineCount: await onlineAmong(members.map((member) => member.userId)),
+      member: members.some((member) => member.userId === userId),
+    };
+  }
+
+  /**
    * Joins with an invite code.
    *
    * The slug used to be the way in and is not any more. It is permanent, it is
@@ -1165,6 +1212,38 @@ export function isInviteActive(invite: InviteRow, now: Date = new Date()): boole
   if (invite.expiresAt !== null && invite.expiresAt.getTime() <= now.getTime()) return false;
   if (invite.maxUses !== null && invite.uses >= invite.maxUses) return false;
   return true;
+}
+
+/**
+ * How many of these people are online.
+ *
+ * Presence belongs to `presence-service` and lives in Redis under keys it owns,
+ * so this asks rather than reads: a second reader of `presence:online` is a
+ * second thing to change the day that key does. The call is internal - Nginx
+ * routes the paths it names and `/api/v1/internal` is not one of them.
+ *
+ * Null on any failure, and quickly. A card that cannot say how many people are
+ * awake is worth showing; an invite that hangs because presence is restarting
+ * is not.
+ */
+async function onlineAmong(userIds: string[]): Promise<number | null> {
+  if (userIds.length === 0) return 0;
+
+  try {
+    const base = envOr('PRESENCE_SERVICE_URL', 'http://presence-service:3005');
+    const response = await fetch(`${base.replace(/\/+$/, '')}/api/v1/internal/presence/online`, {
+      signal: AbortSignal.timeout(2000),
+    });
+    if (!response.ok) return null;
+
+    const body = (await response.json()) as { userIds?: unknown };
+    if (!Array.isArray(body.userIds)) return null;
+
+    const online = new Set(body.userIds.filter((id): id is string => typeof id === 'string'));
+    return userIds.filter((id) => online.has(id)).length;
+  } catch {
+    return null;
+  }
 }
 
 function toInvite(row: InviteRow): ServerInviteDto {

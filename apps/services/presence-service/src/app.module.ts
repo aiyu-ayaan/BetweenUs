@@ -3,13 +3,14 @@ import { envOr } from '@nexora/config';
 import { EventBus } from '@nexora/events';
 import { Logger, createLogger } from '@nexora/logger';
 import { createHealthController } from '@nexora/nest-common';
+import { PresenceController } from './presence.controller';
 import { PresenceGateway } from './presence.gateway';
 import { PresenceStore } from './presence.store';
 
 const SERVICE_NAME = 'presence-service';
 
 @Module({
-  controllers: [createHealthController(SERVICE_NAME)],
+  controllers: [createHealthController(SERVICE_NAME), PresenceController],
   providers: [
     PresenceStore,
     PresenceGateway,

@@ -107,6 +107,19 @@ while everything under them changes size.
   Desktop and web decode it on the way out of the cache and draw it; saving it
   lands a `.jpg`, because the bytes are JPEG bytes now.
 
+**Invites**
+- Open an invite link as somebody who is not a member. It must show a card —
+  the server's icon and name, how many members it has and how many are online —
+  and join nothing until *Accept invite* is pressed. Closing it joins nothing,
+  and reloading does not bring the invite back: the code is spent from the
+  address bar on the way in.
+- Paste the same link, or the bare code, into *Join a server* on the rail. The
+  same card, for the same decision.
+- Open a link to a server you are already in. The card says *Open server* and
+  no invite use is spent.
+- Stop `presence-service` and open a link. The card still appears, with the
+  online line missing rather than reading zero.
+
 **Profile pictures**
 - User settings → My Account → *Upload avatar*. It shows up in Alice's own
   panel, and in the member list and message rows in Bob's window after his
