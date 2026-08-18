@@ -1252,6 +1252,30 @@ Follow-ups this phase deliberately left open:
 
 ## Backlog (later phases)
 
+### Security follow-ups
+The API audit landed in phase 27 — see `SECURITY.md` for what it fixed. These
+are the gaps it left open deliberately, in the order they matter.
+
+- [ ] Revocation that reaches a live socket. Disabling an account stops new
+      sessions and stops a refresh being spent, but a chat or presence socket
+      already open keeps delivering until it disconnects. Expiring sockets at
+      the access token's expiry is the wrong fix — a call socket closing is a
+      call ending. Wanted: a revocation event on Redis the gateways subscribe
+      to, dropping the sockets of an account that was disabled or signed out
+- [ ] Refresh replay grace in Redis rather than a per-process map. Until then,
+      more than one auth-service instance reads a legitimate replay that landed
+      on the wrong one as theft and signs the account out
+- [ ] A sliding rate-limit window. Fixed windows let a burst straddle two of
+      them and take twice the budget for a moment; a sorted set is the upgrade
+- [ ] Sniff a picture's magic bytes rather than believing its declared content
+      type. Contained today — the download route derives the type from the key's
+      extension and sends `nosniff`, so a mislabelled file downloads rather than
+      renders — but the upload still stores whatever it was handed
+- [ ] Validate remote input events in the agent. The gateway checks the
+      permission an event type requires and forwards the event unread, which is
+      the right split; the agent is what has to decide a coordinate or a key
+      code is sane, and does not yet
+
 ### Presence follow-ups
 - [x] Idle status, automatic as well as chosen
 - [x] Scope presence broadcasts instead of sending every event to every socket.

@@ -38,6 +38,60 @@ the older shape.
 
 ## Architecture decisions made so far
 
+### The API's trust boundaries, audited (phase 27)
+
+A pass over every route, guard and gateway, asking one question of each: what
+does this believe, and who gets to tell it. Seven things were believing the
+wrong party, and the write-up now lives in `SECURITY.md` alongside the gaps that
+are still open on purpose.
+
+The two that were reachable from outside with nothing but a request:
+
+**A caller could choose which rate-limit bucket counted them.** The
+service-level limiter read the first entry of `x-forwarded-for`, and Nginx
+*appends* to that header rather than replacing it — so a request carrying
+`X-Forwarded-For: 1.2.3.4` arrived as `1.2.3.4, <real address>` and the first
+entry was whatever the caller wrote. A credential-stuffing run could pick a
+fresh one per request and never touch its budget. `x-real-ip` is set with
+`proxy_set_header`, which replaces what arrived, so it cannot be chosen; it is
+read first, and the *last* hop of `x-forwarded-for` is the fallback.
+
+**The OAuth redirect allow list was a `startsWith`.** An entry of
+`https://nexora.example` also matched `https://nexora.example.attacker.test/`,
+and that URL is where the one-time code that becomes a session travels. Origins
+are parsed and compared as origins now, with a path prefix allowed only once the
+origin already matches.
+
+The rest, in the order they matter:
+
+- **A token said how it should be checked.** `jwt.verify` without `algorithms`
+  accepts whatever the token's header asks for. Both verifiers pin HS256.
+- **Nothing checked that a signing secret existed in any meaningful sense.**
+  `.env.example` ships `JWT_SECRET="replace-me"` — a value in this repository —
+  and a deployment that never generated one would sign real sessions with it.
+  The placeholders are refused, the two secrets must differ, and production
+  requires 32 characters.
+- **An unverified provider email could find an account.** Google will hand out
+  an address it has not verified; `email_verified` says which kind it is and was
+  being ignored, so typing a victim's address into a fresh Google account was a
+  way into their Nexora account.
+- **A session was treated as an entitlement to every attachment.** The download
+  route asked only whether the caller was signed in, so any account that came by
+  a key could fetch the bytes behind it, private channels and direct messages
+  included. The attachment row and `resolveChannelAccess` answer it properly
+  now.
+- **Every socket took the `ws` default of a 100 MB frame**, buffered in the
+  service's heap before a line of gateway code ran. Capped at what the traffic
+  actually is: 64 KB for chat and presence, 256 KB for call and remote.
+- **`credentials: true` sat next to `origin: '*'`**, a pair no browser honours,
+  on an API whose clients attach a bearer token themselves. Credentials are
+  allowed only when `CORS_ORIGIN` names the sites they may come from.
+
+Each of the six with something checkable behind it got a runnable check rather
+than a note — `@nexora/nest-common` gained its first, `auth` and `auth-service`
+extended theirs — because a trust boundary nobody can run is a trust boundary
+that comes back.
+
 ### The workbench (phase 26)
 
 The client was Discord's, and not by resemblance: the palette was Discord's hex
@@ -1219,6 +1273,7 @@ is sitting at; `TESTING.md` says what to try.
 
 - `MVP.md` — what the first runnable version covers
 - `E2EE.md` — encryption design, threat model and its known limits
+- `SECURITY.md` — who the API believes, what it allows, and what it still does not defend against
 - `TESTING.md` — running two clients locally (`pnpm dev:duo`)
 - `TODO.md` — ordered backlog
 

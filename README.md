@@ -46,8 +46,10 @@ Messages, attachments, and call media are end-to-end encrypted: the server store
 | Remote desktop | Not built - `remote-gateway` and `remote-agent` are scaffolds |
 
 Known limits are written down rather than implied: see `development/E2EE.md`
-for what the encryption does and does not protect, and `development/TODO.md`
-for everything each phase left open on purpose.
+for what the encryption does and does not protect,
+`development/SECURITY.md` for who the API believes and what it still does not
+defend against, and `development/TODO.md` for everything each phase left open on
+purpose.
 
 ---
 
@@ -519,7 +521,7 @@ apps/
 packages/                 shared-types, database, auth, permissions, events,
                           nest-common, storage, websocket, logger, config
 infrastructure/           docker compose, nginx, cloudflare
-development/              planning, MVP, E2EE design, testing guide, TODO, Android roadmap
+development/              planning, MVP, E2EE design, API security, testing guide, TODO, Android roadmap
 DEPLOYMENT.md             putting it on a server, end to end
 ```
 
@@ -548,7 +550,9 @@ Three layers, all runnable locally:
 
 1. **Self-checks** (`pnpm check`) need no infrastructure: the crypto
    primitives, the storage drivers including a multipart round trip, the
-   permission arithmetic, the logger's redaction.
+   permission arithmetic, the logger's redaction, and the API's trust
+   boundaries - which address a request is counted against, which redirect a
+   finished sign-in may be sent to, which algorithm a token is verified with.
 2. **Smoke scripts** drive the real HTTP and WebSocket surface against running
    services and exit non-zero on a failed assertion.
 3. **Manual walkthroughs** for what only a human can judge - two people in a
@@ -695,6 +699,7 @@ Third-party dependencies keep their own licences.
 | `development/PLANNING.md` | Phase map, every architectural decision and why |
 | `development/MVP.md` | What the first runnable version covered |
 | `development/E2EE.md` | Encryption design, threat model, known limits |
+| `development/SECURITY.md` | API trust boundaries: identity, authorization, rate limits, known gaps |
 | `development/TESTING.md` | Running two clients locally, and what to try |
 | `development/TODO.md` | Ordered backlog, including what each phase left open |
 | `development/ANDROID_TODO.md` | Native Android client architecture, roadmap, and completed phases |
