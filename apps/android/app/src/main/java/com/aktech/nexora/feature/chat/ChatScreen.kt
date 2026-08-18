@@ -179,8 +179,20 @@ fun ChatScreen(
      * same idea with the tools Compose has: watch where the end of the
      * conversation is, and while the view is pinned, put it back on the bottom.
      *
+     * The keyboard opening is the same event wearing a different hat: the
+     * viewport gets shorter, so the end of the conversation ends up below it,
+     * and putting it back is what makes typing feel like every other messenger.
+     *
      * The same flow keeps the latch, because both answers come from one reading
      * of the layout: where the list is now, and where it was a moment ago.
+     *
+     * Everything it needs comes out of `layoutInfo` and nothing out of
+     * `messages`. This effect is launched once per channel and never restarted,
+     * so the list it closed over is the list as it was then - which, on a
+     * channel opened before its first page arrived, is empty. It read
+     * `messages.isNotEmpty()` off that and did nothing for the rest of the
+     * session: no re-anchoring when a picture decoded, and none when the
+     * keyboard came up.
      */
     LaunchedEffect(listState, channelId) {
         var previous = listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset
@@ -197,8 +209,9 @@ fun ChatScreen(
         }.collect { (position, gap) ->
             following = nextFollow(following, scrolledUp(previous, position), gap)
             previous = position
-            if (following && gap > 0 && messages.isNotEmpty()) {
-                listState.scrollToItem(messages.lastIndex, SCROLL_PAST_END)
+            val last = listState.layoutInfo.totalItemsCount - 1
+            if (following && gap > 0 && last >= 0) {
+                listState.scrollToItem(last, SCROLL_PAST_END)
             }
         }
     }

@@ -201,6 +201,11 @@ data is cleared.
       because Chromium has never shipped a HEIF decoder. Those clients can now
       decode one, but a picture no browser can read has no business being sent,
       so the sender converts (`Conversation.asJpeg`).
+- [x] The keyboard opening puts the list back on the newest message. The
+      re-anchoring flow closed over `messages`, which on a channel opened
+      before its first page arrived was empty for the life of the screen - so
+      neither the keyboard nor a picture growing its row moved the list. It
+      reads `layoutInfo.totalItemsCount` now.
 - [ ] Markdown-ish message body rendering, matching
       `apps/desktop/src/services/message-body.ts`.
 
