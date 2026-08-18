@@ -22,6 +22,45 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    androidResources {
+        localeFilters += listOf("en")
+    }
+
+    // ABI splits for standalone APK distribution (e.g. GitHub releases, direct download).
+    // Disabled automatically during bundle tasks because AAB handles ABI splitting natively
+    // and AGP does not allow APK splits during App Bundle creation.
+    val isBuildingBundle = gradle.startParameter.taskNames.any { it.contains("bundle", ignoreCase = true) }
+    splits {
+        abi {
+            isEnable = !isBuildingBundle
+            reset()
+            include("armeabi-v7a", "arm64-v8a", "x86", "x86_64")
+            isUniversalApk = true
+        }
+    }
+
+    bundle {
+        density {
+            enableSplit = true
+        }
+        abi {
+            enableSplit = true
+        }
+        language {
+            enableSplit = false
+        }
+    }
+
+    packaging {
+        resources {
+            excludes += listOf(
+                "/META-INF/{AL2.0,LGPL2.1}",
+                "/META-INF/INDEX.LIST",
+                "/META-INF/DEPENDENCIES"
+            )
+        }
+    }
+
     buildTypes {
         release {
             /**
