@@ -12,11 +12,8 @@ import android.content.SharedPreferences
  * ruins a call held at arm's length on a train, and which of those you are in
  * is a property of where you are sitting.
  *
- * Two of the desktop's controls are deliberately not here:
+ * One of the desktop's controls is deliberately not here:
  *
- * - **Input device.** A phone has one microphone that the platform routes for
- *   you; what a person actually wants to choose is where the sound comes *out*,
- *   which is [route].
  * - **Input sensitivity.** The desktop gates the captured track in a Web Audio
  *   worklet before it reaches the encoder. Android's WebRTC has no insertion
  *   point on the capture path short of a custom audio device module, so a gate
@@ -46,6 +43,15 @@ object AudioPrefs {
      */
     enum class Route { AUTO, EARPIECE, SPEAKER, WIRED, BLUETOOTH }
 
+    /**
+     * Which microphone the call is heard through.
+     *
+     * `PHONE` is the built-in one; a headset is the only thing that adds a
+     * second. Android routes a call as one device for both directions, so
+     * naming an input names the output too - see `CallAudio.wantedRoute`.
+     */
+    enum class Input { AUTO, PHONE, WIRED, BLUETOOTH }
+
     var mode: Mode
         get() = runCatching { Mode.valueOf(prefs.getString("mode", null) ?: "CLEAR") }
             .getOrDefault(Mode.CLEAR)
@@ -55,6 +61,11 @@ object AudioPrefs {
         get() = runCatching { Route.valueOf(prefs.getString("route", null) ?: "AUTO") }
             .getOrDefault(Route.AUTO)
         set(value) = prefs.edit().putString("route", value.name).apply()
+
+    var input: Input
+        get() = runCatching { Input.valueOf(prefs.getString("input", null) ?: "AUTO") }
+            .getOrDefault(Input.AUTO)
+        set(value) = prefs.edit().putString("input", value.name).apply()
 
     var echoCancellation: Boolean
         get() = prefs.getBoolean("aec", true)

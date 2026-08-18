@@ -83,6 +83,9 @@ dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
+    // LocalLifecycleOwner and LifecycleResumeEffect: the permission screen has
+    // to re-read what is granted on the way back from the system settings.
+    implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.navigation.compose)
     // Voice, video, screen share and the remote screen. A mesh, never an SFU.
     implementation(libs.webrtc)

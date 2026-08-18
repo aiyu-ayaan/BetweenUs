@@ -41,6 +41,9 @@ import com.aktech.nexora.core.data.PublicUser
 import com.aktech.nexora.core.data.Session
 import com.aktech.nexora.feature.voice.AudioPrefs
 import com.aktech.nexora.feature.voice.CallAudio
+import com.aktech.nexora.feature.voice.inputLabel
+import com.aktech.nexora.feature.voice.rememberCallDevices
+import com.aktech.nexora.feature.voice.routeLabel
 import com.aktech.nexora.feature.voice.CallTones
 import com.aktech.nexora.feature.voice.VoiceEngine
 import com.aktech.nexora.core.store.LastPlace
@@ -77,7 +80,12 @@ import kotlinx.coroutines.launch
  * asked for and what it said.
  */
 @Composable
-fun SettingsScreen(user: PublicUser, onBack: () -> Unit, onServerSettings: () -> Unit) {
+fun SettingsScreen(
+    user: PublicUser,
+    onBack: () -> Unit,
+    onServerSettings: () -> Unit,
+    onPermissions: () -> Unit,
+) {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
 
@@ -99,10 +107,13 @@ fun SettingsScreen(user: PublicUser, onBack: () -> Unit, onServerSettings: () ->
     // a quiet room is the processing that ruins a call held on a train.
     var mode by remember { mutableStateOf(AudioPrefs.mode) }
     var route by remember { mutableStateOf(AudioPrefs.route) }
+    var input by remember { mutableStateOf(AudioPrefs.input) }
     var echoCancellation by remember { mutableStateOf(AudioPrefs.echoCancellation) }
     var noiseSuppression by remember { mutableStateOf(AudioPrefs.noiseSuppression) }
     var autoGainControl by remember { mutableStateOf(AudioPrefs.autoGainControl) }
-    val routes = remember { CallAudio.availableRoutes(context) }
+    // Live, not read once: a headset connected while this screen is open used
+    // to leave a list saying there was none.
+    val devices by rememberCallDevices()
 
     LaunchedEffect(Unit) {
         preferences = runCatching { NexoraApi.notificationPreferences() }.getOrNull()
@@ -111,6 +122,7 @@ fun SettingsScreen(user: PublicUser, onBack: () -> Unit, onServerSettings: () ->
     val notifications = rememberPermission(NexoraPermissions.NOTIFICATIONS) {}
     val microphone = rememberPermission(NexoraPermissions.MICROPHONE) {}
     val camera = rememberPermission(NexoraPermissions.CAMERA) {}
+    val bluetooth = rememberPermission(NexoraPermissions.BLUETOOTH) {}
 
     fun act(block: suspend () -> Unit) {
         scope.launch {
@@ -303,13 +315,7 @@ fun SettingsScreen(user: PublicUser, onBack: () -> Unit, onServerSettings: () ->
 
             ListRow(
                 title = "Play through",
-                subtitle = when (route) {
-                    AudioPrefs.Route.AUTO -> "Whatever the phone chooses"
-                    AudioPrefs.Route.SPEAKER -> "Speaker"
-                    AudioPrefs.Route.EARPIECE -> "Earpiece"
-                    AudioPrefs.Route.WIRED -> "Wired headset"
-                    AudioPrefs.Route.BLUETOOTH -> "Bluetooth"
-                },
+                subtitle = routeLabel(route),
                 leading = { NexoraIcon(NexoraIcons.Speaker) },
                 trailing = {
                     Chip(
@@ -317,14 +323,34 @@ fun SettingsScreen(user: PublicUser, onBack: () -> Unit, onServerSettings: () ->
                         onClick = {
                             // A cycle rather than a menu: there are at most
                             // five of these and four of them are usually not
-                            // plugged in.
-                            val next = routes[(routes.indexOf(route) + 1).mod(routes.size)]
+                            // plugged in. The call screen has the full picker,
+                            // which is where somebody in a call reaches for it.
+                            val list = devices.routes
+                            val next = list[(list.indexOf(route) + 1).mod(list.size)]
                             route = next
                             AudioPrefs.route = next
                             // Now, on a call that is already up: the moment
                             // somebody reaches for this is the moment they have
                             // just put a headset on.
-                            CallAudio.applyRoute(context, next)
+                            CallAudio.apply(context)
+                        },
+                    )
+                },
+            )
+
+            ListRow(
+                title = "Speak into",
+                subtitle = inputLabel(input),
+                leading = { NexoraIcon(NexoraIcons.Mic) },
+                trailing = {
+                    Chip(
+                        text = "Change",
+                        onClick = {
+                            val list = devices.inputs
+                            val next = list[(list.indexOf(input) + 1).mod(list.size)]
+                            input = next
+                            AudioPrefs.input = next
+                            CallAudio.apply(context)
                         },
                     )
                 },
@@ -427,6 +453,7 @@ fun SettingsScreen(user: PublicUser, onBack: () -> Unit, onServerSettings: () ->
 
             // --- android permissions ---
             SectionLabel("This device")
+            PermissionsRow(onOpen = onPermissions)
             PermissionRow(
                 title = "Notifications",
                 detail = "So a message or a call can reach you when the app is closed.",
@@ -448,6 +475,15 @@ fun SettingsScreen(user: PublicUser, onBack: () -> Unit, onServerSettings: () ->
                 granted = NexoraPermissions.granted(context, NexoraPermissions.CAMERA),
                 request = camera,
             )
+            if (NexoraPermissions.BLUETOOTH != null) {
+                PermissionRow(
+                    title = "Nearby devices",
+                    detail = "Without it Android reports no Bluetooth headset, paired or not.",
+                    icon = NexoraIcons.Speaker,
+                    granted = NexoraPermissions.granted(context, NexoraPermissions.BLUETOOTH),
+                    request = bluetooth,
+                )
+            }
 
             // --- deployment ---
             SectionLabel("Deployment")

@@ -104,6 +104,11 @@ fun VoiceChannelScreen(
     // only a share that stops and starts again does that.
     val watching = participants.firstOrNull { it.visibleScreen != null }
     var dismissed by remember { mutableStateOf<String?>(null) }
+
+    // Where the call plays and which microphone it uses, from inside the call:
+    // the moment somebody wants that is the moment a headset is in their hand,
+    // and settings is three taps and a lost call screen away.
+    var pickingDevices by remember { mutableStateOf(false) }
     LaunchedEffect(watching?.peer?.peerId) {
         if (watching == null) dismissed = null
     }
@@ -112,8 +117,15 @@ fun VoiceChannelScreen(
     // Notifications are asked for in the same breath because a call runs as a
     // foreground service and the notification is how anyone gets back to it -
     // but refusing them is not a reason to refuse the call.
+    // Nearby devices goes with them: without it Android reports no Bluetooth
+    // headset at all, so one that is paired and on somebody's head is not in
+    // the list and the call cannot be sent to it.
     val microphone = rememberPermissions(
-        permissions = listOfNotNull(NexoraPermissions.MICROPHONE, NexoraPermissions.NOTIFICATIONS),
+        permissions = listOfNotNull(
+            NexoraPermissions.MICROPHONE,
+            NexoraPermissions.NOTIFICATIONS,
+            NexoraPermissions.BLUETOOTH,
+        ),
         required = NexoraPermissions.MICROPHONE,
     ) {
         channelId?.let { engine.join(it) }
@@ -161,9 +173,11 @@ fun VoiceChannelScreen(
                     projection.launch(manager.createScreenCaptureIntent())
                 }
             },
+            onAudioDevices = { pickingDevices = true },
             onLeave = { engine.leave(); onBack() },
             onClose = { dismissed = watching.peer.peerId },
         )
+        if (pickingDevices) CallDeviceSheet(onDismiss = { pickingDevices = false })
         return
     }
 
@@ -310,6 +324,11 @@ fun VoiceChannelScreen(
                     },
                 )
                 IconAction(
+                    icon = NexoraIcons.Speaker,
+                    contentDescription = "Where the call plays",
+                    onClick = { pickingDevices = true },
+                )
+                IconAction(
                     icon = NexoraIcons.Phone,
                     contentDescription = "Leave the call",
                     tint = Danger,
@@ -318,6 +337,8 @@ fun VoiceChannelScreen(
             }
         }
     }
+
+    if (pickingDevices) CallDeviceSheet(onDismiss = { pickingDevices = false })
 }
 
 /** One participant's tile: their video if they are sending any, else a face. */

@@ -109,6 +109,7 @@ fun ShareStage(
     onToggleMute: () -> Unit,
     onToggleCamera: () -> Unit,
     onToggleShare: () -> Unit,
+    onAudioDevices: () -> Unit,
     onLeave: () -> Unit,
     onClose: () -> Unit,
 ) {
@@ -269,6 +270,11 @@ fun ShareStage(
                         contentDescription = if (sharing) "Stop sharing" else "Share the screen",
                         tint = if (sharing) Accent else Slate400,
                         onClick = onToggleShare,
+                    )
+                    IconAction(
+                        icon = NexoraIcons.Speaker,
+                        contentDescription = "Where the call plays",
+                        onClick = onAudioDevices,
                     )
                     IconAction(
                         icon = NexoraIcons.Phone,

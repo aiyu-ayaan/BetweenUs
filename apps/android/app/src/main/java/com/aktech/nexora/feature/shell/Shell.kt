@@ -19,6 +19,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -36,6 +37,8 @@ import com.aktech.nexora.feature.members.MembersScreen
 import com.aktech.nexora.feature.remote.RemoteMachinesScreen
 import com.aktech.nexora.feature.remote.RemoteSessionScreen
 import com.aktech.nexora.feature.servers.ServerSettingsScreen
+import com.aktech.nexora.feature.settings.NexoraPermissions
+import com.aktech.nexora.feature.settings.PermissionsScreen
 import com.aktech.nexora.feature.settings.SettingsScreen
 import com.aktech.nexora.feature.voice.VoiceChannelScreen
 import com.aktech.nexora.ui.theme.Ground
@@ -52,6 +55,24 @@ import kotlinx.coroutines.launch
  */
 @Composable
 fun Shell(user: PublicUser) {
+    val context = LocalContext.current
+
+    /**
+     * The permission screen, once, on the way in.
+     *
+     * Not a gate - it can be walked past, and every permission on it is still
+     * asked for at the moment it is needed. What it buys is that the whole list
+     * is seen once with the reason beside each one, rather than each prompt
+     * arriving cold. It is reachable from settings afterwards.
+     */
+    var introducing by rememberSaveable {
+        mutableStateOf(!NexoraPermissions.introduced(context))
+    }
+    if (introducing) {
+        PermissionsScreen(onDone = { introducing = false })
+        return
+    }
+
     val drawer = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     val navigation = rememberNavController()
@@ -214,6 +235,13 @@ fun Shell(user: PublicUser) {
                         user = user,
                         onBack = { navigation.popBackStack() },
                         onServerSettings = { navigation.navigate(Route.ServerSettings) },
+                        onPermissions = { navigation.navigate(Route.Permissions) },
+                    )
+                }
+                composable(Route.Permissions) {
+                    PermissionsScreen(
+                        onDone = { navigation.popBackStack() },
+                        onBack = { navigation.popBackStack() },
                     )
                 }
                 composable(Route.ServerSettings) {
@@ -253,6 +281,7 @@ object Route {
     const val Voice = "voice"
     const val Settings = "settings"
     const val ServerSettings = "server-settings"
+    const val Permissions = "permissions"
     const val Remote = "remote"
     const val RemoteSession = "remote-session"
 }

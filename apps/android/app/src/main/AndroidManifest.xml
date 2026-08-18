@@ -38,12 +38,32 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
+    <!-- A call goes to a headset that is already paired, which needs one
+         permission on each side of the API 31 split. BLUETOOTH_CONNECT is the
+         runtime one and is asked for with the microphone; the two legacy ones
+         are install-time and stop at 30, where BLUETOOTH_CONNECT does not
+         exist. Without the right one for the platform, Android reports no
+         Bluetooth device at all and the headset cannot be chosen.
+
+         BLUETOOTH_SCAN is deliberately not here. It is for discovering devices
+         that are not paired yet, which is the system's Bluetooth settings and
+         not this app's business - and it is a dangerous permission, so asking
+         for it to route audio would be asking for more than the job needs. -->
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <uses-permission
+        android:name="android.permission.BLUETOOTH"
+        android:maxSdkVersion="30" />
+    <uses-permission
+        android:name="android.permission.BLUETOOTH_ADMIN"
+        android:maxSdkVersion="30" />
 
     <!-- Nexora runs on a phone without either; a tablet with no camera can
          still be in a call and listen. -->
     <uses-feature android:name="android.hardware.camera" android:required="false" />
     <uses-feature android:name="android.hardware.microphone" android:required="false" />
+    <!-- Declaring the permissions above implies this feature, and implying it
+         as required would keep Nexora off any device without a radio. -->
+    <uses-feature android:name="android.hardware.bluetooth" android:required="false" />
 
     <application
         android:name=".NexoraApp"

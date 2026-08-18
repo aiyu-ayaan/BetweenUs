@@ -40,6 +40,19 @@ object NexoraPermissions {
     const val MICROPHONE = Manifest.permission.RECORD_AUDIO
     const val CAMERA = Manifest.permission.CAMERA
 
+    /**
+     * Only exists from API 31, and declaring it in the manifest is not holding
+     * it: without the grant the platform reports no Bluetooth communication
+     * device at all, so a paired headset is not offered and cannot be chosen.
+     * See `CallAudio`.
+     */
+    val BLUETOOTH: String? =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            Manifest.permission.BLUETOOTH_CONNECT
+        } else {
+            null
+        }
+
     /** Only exists from API 33; before that a notification needs no permission. */
     val NOTIFICATIONS: String? =
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -81,6 +94,28 @@ object NexoraPermissions {
         else -> listOf(Manifest.permission.READ_EXTERNAL_STORAGE)
     }
 
+    /**
+     * Everything the app can ask for, in the order the global screen lists it.
+     *
+     * The list is what a person is shown up front; it is not a gate. Every one
+     * of these is still asked for again at the moment it is needed, because
+     * somebody who skipped the screen - or refused one thing on it - has to be
+     * able to change their mind by tapping the thing they wanted.
+     */
+    fun all(): List<String> = listOfNotNull(NOTIFICATIONS, MICROPHONE, CAMERA, BLUETOOTH) + MEDIA
+
+    /**
+     * How many of them are not held, with the photo permissions counted as the
+     * one thing they are: on API 34 holding "only these photos" is access, and
+     * counting the other two as missing would say two things are wrong when
+     * nothing is.
+     */
+    fun missing(context: Context): Int {
+        val singles = listOfNotNull(NOTIFICATIONS, MICROPHONE, CAMERA, BLUETOOTH)
+            .count { !granted(context, it) }
+        return singles + if (anyGranted(context, MEDIA)) 0 else 1
+    }
+
     fun granted(context: Context, permission: String?): Boolean =
         permission == null ||
             ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
@@ -88,6 +123,23 @@ object NexoraPermissions {
     /** True when at least one of [permissions] is held. See [MEDIA]. */
     fun anyGranted(context: Context, permissions: List<String>): Boolean =
         permissions.any { granted(context, it) }
+
+    /**
+     * Whether the global screen has been shown once.
+     *
+     * Once, and never again on its own: a screen full of prompts is worth
+     * showing on the way in and is nagging on the way back. It stays reachable
+     * from settings afterwards.
+     */
+    fun introduced(context: Context): Boolean =
+        prefs(context).getBoolean("introduced", false)
+
+    fun markIntroduced(context: Context) {
+        prefs(context).edit().putBoolean("introduced", true).apply()
+    }
+
+    private fun prefs(context: Context) =
+        context.applicationContext.getSharedPreferences("nexora.permissions", Context.MODE_PRIVATE)
 
     fun openSettings(context: Context) {
         context.startActivity(
