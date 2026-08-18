@@ -25,6 +25,7 @@ import {
 } from '../../services/server-emoji';
 import { absoluteUrl } from '../../services/endpoint';
 import { emojiQueryAt } from './emoji-names';
+import { nextFollow } from './follow';
 import { formatBytes, uploadAttachment } from '../../services/attachments';
 import { OVERFLOW_CHARS, overflowFile, replyPreview } from '../../services/message-body';
 import { reactorNames } from '../../services/reactions';
@@ -238,9 +239,6 @@ export function ChatView({ onToggleMembers }: { onToggleMembers?: () => void }):
   );
 }
 
-/** How far off the bottom still counts as reading the newest message. */
-const FOLLOW_SLACK_PX = 120;
-
 /** How near the top the reader gets before the previous page is fetched. */
 const PAGE_TRIGGER_PX = 400;
 
@@ -260,9 +258,12 @@ function MessageList({
   /**
    * Whether the view is pinned to the newest message. It stops being pinned the
    * moment somebody scrolls up to read something, because dragging them back
-   * down every time a message arrives is worse than not following at all.
+   * down every time a message arrives is worse than not following at all - and
+   * only that, never a row growing underneath them. See `follow.ts`.
    */
   const following = useRef(true);
+  /** The scroll position at the previous scroll event; see `nextFollow`. */
+  const lastTop = useRef(0);
   /**
    * Distance from the bottom, recorded before an older page is asked for.
    * Prepending fifty messages moves everything on screen down by however tall
@@ -317,7 +318,9 @@ function MessageList({
   useLayoutEffect(() => {
     following.current = true;
     const box = viewport.current;
-    if (box) box.scrollTop = box.scrollHeight;
+    if (!box) return;
+    box.scrollTop = box.scrollHeight;
+    lastTop.current = box.scrollTop;
   }, [channel.id, loading]);
 
   const newest = messages[messages.length - 1]?.id ?? null;
@@ -331,6 +334,7 @@ function MessageList({
     const box = viewport.current;
     if (!box || anchor.current === null) return;
     box.scrollTop = box.scrollHeight - anchor.current;
+    lastTop.current = box.scrollTop;
     anchor.current = null;
   }, [oldest]);
 
@@ -356,15 +360,25 @@ function MessageList({
    * Attachments decrypt after their row is drawn, so the list grows under a
    * scroll that had already finished. While the view is pinned to the bottom,
    * every one of those growths takes it back down.
+   *
+   * Both boxes, because the bottom of the list gets away in two different ways.
+   * The list grows when a picture arrives; the viewport *shrinks* when a typing
+   * indicator appears under it, or when the composer grows a preview of the
+   * photo about to be sent. Watching only the list left the second one - which
+   * is every time anybody attaches anything - putting the newest messages
+   * behind the composer.
    */
   useEffect(() => {
     const box = viewport.current;
     const items = list.current;
     if (!box || !items || typeof ResizeObserver === 'undefined') return;
     const observer = new ResizeObserver(() => {
-      if (following.current) box.scrollTop = box.scrollHeight;
+      if (!following.current) return;
+      box.scrollTop = box.scrollHeight;
+      lastTop.current = box.scrollTop;
     });
     observer.observe(items);
+    observer.observe(box);
     return () => observer.disconnect();
   }, [loading]);
 
@@ -424,10 +438,8 @@ function MessageList({
           anchor.current = box.scrollHeight - box.scrollTop;
           void loadOlder();
         }
-        // "Near enough the bottom" rather than exactly at it: a smooth scroll
-        // that is still finishing, or a row that grew by a pixel, must not
-        // count as somebody scrolling away.
-        following.current = box.scrollHeight - box.scrollTop - box.clientHeight < FOLLOW_SLACK_PX;
+        following.current = nextFollow(following.current, lastTop.current, box);
+        lastTop.current = box.scrollTop;
       }}
       className="relative flex-1 overflow-y-auto px-4 py-4"
       role="log"
