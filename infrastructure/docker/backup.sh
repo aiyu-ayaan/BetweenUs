@@ -20,6 +20,11 @@ log() { echo "[backup] $*"; }
 
 dump() {
   mkdir -p "$BACKUP_DIR"
+  if ! touch "$BACKUP_DIR/.write_test" 2>/dev/null; then
+    log "FAILED: $BACKUP_DIR is not writable (check directory permissions/ownership on BACKUP_DATA_PATH)"
+    return 1
+  fi
+  rm -f "$BACKUP_DIR/.write_test"
   target="$BACKUP_DIR/$PREFIX-$(date +%Y%m%d-%H%M%S).sql.gz"
   log "dumping $PGDATABASE to $target"
   # Dump to a partial name and rename, so a dump interrupted halfway is never

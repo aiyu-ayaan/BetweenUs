@@ -851,15 +851,15 @@ no argument.
 image, so it inherits the ownership the image ships. A **bind mount never is**:
 Docker creates it root-owned, and the services run as uid 1000. Postgres and
 Redis chown their own directory on start; the Node services do not, so the
-script chowns `data/media` (and both subdirectories) to `1000:1000`. Run it as
+script chowns `data/media` (and both subdirectories) to `1000:1000` and ensures `backup/` is writable by container users. Run it as
 root, or do it yourself afterwards:
 
 ```bash
 sudo chown -R 1000:1000 /srv/sd2345/docker/nexora/data/media
+sudo chmod 777 /srv/sd2345/docker/nexora/backup
 ```
 
-Get this wrong and every upload fails with `EACCES` while the rest of the
-service works perfectly.
+Get this wrong and uploads fail with `EACCES` or database pre-migration dumps fail with permission errors while the rest of the service works.
 
 **Moving a running deployment onto a path.** The volumes are not migrated for
 you. With the stack down, copy the contents out of each volume and into the

@@ -123,6 +123,7 @@ for (const name of MEDIA_SUBDIRS) mkdirSync(join(tree.UPLOAD_DATA_PATH, name), {
 // not, so uploads is the one that has to be handed over here.
 if (process.platform !== 'win32') {
   const media = tree.UPLOAD_DATA_PATH;
+  const backup = tree.BACKUP_DATA_PATH;
   try {
     for (const path of [media, ...MEDIA_SUBDIRS.map((name) => join(media, name))]) {
       if (statSync(path).uid !== SERVICE_UID) chownSync(path, SERVICE_UID, SERVICE_UID);
@@ -133,6 +134,12 @@ if (process.platform !== 'win32') {
         `  sudo chown -R ${SERVICE_UID}:${SERVICE_UID} ${media}\n` +
         'or every upload fails with EACCES while the rest of the service works.',
     );
+  }
+  try {
+    const { chmodSync } = await import('node:fs');
+    chmodSync(backup, 0o777);
+  } catch {
+    // Ignore chmod errors if permissions cannot be set directly
   }
 }
 
