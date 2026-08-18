@@ -87,6 +87,9 @@ fun ServerSheet(onDismiss: () -> Unit) {
                 // Ends the session on the server being left, while it can still
                 // be reached; a no-op when nobody is signed in.
                 Session.signOut()
+                // Another server is another account: the pictures decrypted
+                // for this one do not follow it there.
+                com.aktech.nexora.feature.chat.MediaCache.clear()
                 Endpoint.set(if (base == Endpoint.default()) null else base)
                 activity?.recreate()
             } catch (error: Exception) {

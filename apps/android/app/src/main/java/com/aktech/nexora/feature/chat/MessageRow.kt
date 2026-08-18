@@ -360,18 +360,41 @@ private fun AttachmentCard(
     var failed by remember(attachment.key) { mutableStateOf(false) }
     var decrypting by remember(attachment.key) { mutableStateOf(false) }
     /** Where the decrypted video landed, so the poster and the player share it. */
-    var mediaUri by remember(attachment.key) { mutableStateOf<Uri?>(null) }
-    var poster by remember(attachment.key) { mutableStateOf<Bitmap?>(null) }
+    var mediaUri by remember(attachment.key) { mutableStateOf(MediaCache.video(attachment.key)) }
+    var poster by remember(attachment.key) { mutableStateOf(MediaCache.poster(attachment.key)) }
 
-    // Automatically decrypt images and videos so they preview immediately
+    /**
+     * The decoded picture, once there is one.
+     *
+     * State rather than `remember { decode }`, and that is the whole point: a
+     * `remember` block runs during composition, on the UI thread. A photo from
+     * a phone is four thousand pixels wide, so every one of them was tens of
+     * milliseconds of decoding in the middle of a frame - which is what the
+     * list stuttering while pictures arrive actually was.
+     *
+     * Seeded from the cache, because a row that has been on screen before has
+     * already paid for all of this once. Reading a decoded bitmap out of a map
+     * is not a decode, so doing it during composition is free.
+     */
+    var imageBitmap by remember(attachment.key) { mutableStateOf(MediaCache.bitmap(attachment.key)) }
+
+    /**
+     * Images and videos decrypt themselves, so they preview without being asked.
+     *
+     * Only once, though. A `LazyColumn` disposes a row as it leaves the screen
+     * and composes a fresh one when it comes back, so without this check
+     * scrolling a picture off the top and back downloaded it, decrypted it and
+     * decoded it all over again - and the row that was a photo a second ago was
+     * a spinner again. Whatever the cache already holds is what this row draws.
+     */
     LaunchedEffect(attachment.key) {
-        if (attachment.isImage || attachment.isVideo) {
-            decrypting = true
-            runCatching { Conversation.openAttachment(channelId, attachment) }
-                .onSuccess { bytes = it }
-                .onFailure { failed = true }
-            decrypting = false
-        }
+        if (!attachment.isImage && !attachment.isVideo) return@LaunchedEffect
+        if (imageBitmap != null || mediaUri != null) return@LaunchedEffect
+        decrypting = true
+        runCatching { Conversation.openAttachment(channelId, attachment) }
+            .onSuccess { bytes = it }
+            .onFailure { failed = true }
+        decrypting = false
     }
 
     // A decrypted video used to stay a grey card with a play button on it, so
@@ -387,23 +410,17 @@ private fun AttachmentCard(
             runCatching { cacheDecryptedMedia(context, fetched, attachment.name) }.getOrNull()
         } ?: return@LaunchedEffect
         mediaUri = uri
-        poster = videoPoster(uri, context)
+        MediaCache.putVideo(attachment.key, uri)
+        // A new file every time it is written, so writing it once per scroll
+        // past was also thirty megabytes of cache directory per scroll past.
+        poster = videoPoster(uri, context)?.also { MediaCache.putPoster(attachment.key, it) }
     }
-
-    /**
-     * The decoded picture, once there is one.
-     *
-     * State rather than `remember { decode }`, and that is the whole point: a
-     * `remember` block runs during composition, on the UI thread. A photo from
-     * a phone is four thousand pixels wide, so every one of them was tens of
-     * milliseconds of decoding in the middle of a frame - which is what the
-     * list stuttering while pictures arrive actually was.
-     */
-    var imageBitmap by remember(attachment.key) { mutableStateOf<Bitmap?>(null) }
 
     LaunchedEffect(bytes) {
         val fetched = bytes?.takeIf { attachment.isImage } ?: return@LaunchedEffect
+        if (imageBitmap != null) return@LaunchedEffect
         imageBitmap = decodeDownsampled(fetched, MAX_DECODE_EDGE_PX)
+            ?.also { MediaCache.putBitmap(attachment.key, it) }
     }
 
     Box(
@@ -593,7 +610,11 @@ private fun AttachmentCard(
                                     text = when {
                                         failed -> "Decryption failed"
                                         decrypting -> "Decrypting video…"
-                                        bytes != null -> "Video ready · Tap to play (${readableSize(attachment.size)})"
+                                        // The cache may hold the file from an
+                                        // earlier scroll past, with no bytes in
+                                        // this row at all - it is still ready.
+                                        mediaUri != null || bytes != null ->
+                                            "Video ready · Tap to play (${readableSize(attachment.size)})"
                                         else -> "Video · ${readableSize(attachment.size)}"
                                     },
                                     style = MaterialTheme.typography.bodySmall,

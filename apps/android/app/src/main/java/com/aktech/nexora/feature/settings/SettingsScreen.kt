@@ -519,6 +519,8 @@ fun SettingsScreen(
                         // the app: the next person to sign in here must not
                         // land in the last one's conversation.
                         LastPlace.forget()
+                        // So does the plaintext of its pictures.
+                        com.aktech.nexora.feature.chat.MediaCache.clear()
                         Session.signOut()
                     }
                 },
