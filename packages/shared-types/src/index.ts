@@ -78,9 +78,26 @@ export interface OAuthProviderSummary {
 }
 
 export interface OAuthExchangeRequest {
-  /** One-time code handed to the loopback redirect after the provider callback. */
+  /** One-time code handed to the redirect after the provider callback. */
   code: string;
+  /**
+   * The secret behind the challenge this sign-in was started with, when it was
+   * started with one. Required for a flow that came back over a private-scheme
+   * redirect, because that redirect is not exclusively ours - see
+   * `APP_SCHEME` in the auth service.
+   */
+  verifier?: string;
 }
+
+/**
+ * The scheme the mobile client's redirect uses.
+ *
+ * A phone has no loopback server to come back to, so the finished sign-in comes
+ * back through a URL only the app is registered for. Android does not guarantee
+ * that registration is exclusive - another app can claim the same scheme - so
+ * this flow is bound to a secret the app keeps: see `OAuthExchangeRequest`.
+ */
+export const APP_REDIRECT_SCHEME = 'nexora:';
 
 // --- Admin panel ---
 

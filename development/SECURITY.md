@@ -75,6 +75,19 @@ provider account walks into the account behind it. An unverified address does
 not become a new account's address either, or it would sit there waiting for the
 real owner to arrive and be linked to it.
 
+**The mobile redirect is a private scheme, and a private scheme is not
+exclusively ours.** A phone has no loopback server to come back to, so the
+finished sign-in returns through `nexora://oauth` — and Android will not promise
+that only this app is registered for it. Another app can claim the same scheme
+and receive the one-time code. So the app scheme is accepted only for a sign-in
+that also carries a challenge: the client keeps a random verifier, sends its
+SHA-256 when it starts, and has to produce the verifier to exchange the code.
+An app that intercepted the redirect holds a code it cannot spend. This is
+RFC 7636's S256 exactly, so a client can use whatever PKCE code it already has,
+and it is checked in constant time because it is a secret being compared. The
+desktop's loopback redirect needs none of this — nothing else on the machine can
+bind to a port that is already listening — and still sends no challenge.
+
 ## Authorization
 
 **Channels** have one answer, in `packages/database/src/channel-access.ts`, and

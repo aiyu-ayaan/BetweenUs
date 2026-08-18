@@ -22,7 +22,12 @@ import { AuthService } from './modules/auth/auth.service';
 import type { AuthDb } from './modules/auth/auth.db';
 import { CREDENTIALS_RATE_LIMIT, LOGIN_RATE_LIMIT } from './modules/auth/rate-limits';
 import { pageSize, paginate } from './modules/admin/admin.service';
-import { isAllowedRedirect } from './modules/oauth/oauth.service';
+import {
+  challengeFor,
+  isAllowedRedirect,
+  isAppRedirect,
+  matchesChallenge,
+} from './modules/oauth/oauth.service';
 
 /**
  * The admin panel's cursor paging.
@@ -256,6 +261,37 @@ function checkOAuthRedirects(): void {
   assert.equal(isAllowedRedirect('not-a-url', allow), false);
 }
 
+/**
+ * The mobile redirect, and the secret that makes it safe to answer.
+ *
+ * A private scheme is not exclusively ours: another app on the phone can
+ * register `nexora://` and receive the one-time code. What it cannot have is
+ * the verifier, which never leaves the app that started the sign-in - so the
+ * code alone buys nothing. These are the two halves of that.
+ */
+function checkAppRedirect(): void {
+  assert.equal(isAppRedirect('nexora://oauth'), true);
+  assert.equal(isAppRedirect('nexora://oauth?code=x'), true);
+  // Not the scheme, however much of the string looks like it.
+  assert.equal(isAppRedirect('https://nexora.example/oauth'), false);
+  assert.equal(isAppRedirect('nexora-evil://oauth'), false);
+  assert.equal(isAppRedirect('not-a-url'), false);
+
+  // A challenge is the base64url SHA-256 of the verifier: 43 characters, the
+  // length the app scheme's guard insists on.
+  const verifier = 'a'.repeat(64);
+  const challenge = challengeFor(verifier);
+  assert.equal(challenge.length, 43);
+  assert.match(challenge, /^[A-Za-z0-9_-]+$/, 'base64url: no padding, no slashes');
+
+  assert.equal(matchesChallenge(verifier, challenge), true);
+  assert.equal(matchesChallenge('b'.repeat(64), challenge), false, 'another app cannot guess it');
+  assert.equal(matchesChallenge(undefined, challenge), false, 'a missing verifier is not a match');
+  assert.equal(matchesChallenge('', challenge), false);
+  // The digest itself is not the secret behind it.
+  assert.equal(matchesChallenge(challenge, challenge), false);
+}
+
 async function main(): Promise<void> {
   const db = fakeDb();
   const auth = new AuthService(noEvents, db);
@@ -360,6 +396,7 @@ async function main(): Promise<void> {
   checkPagination();
 
   checkOAuthRedirects();
+  checkAppRedirect();
 
   console.log('auth-service check ok');
 }

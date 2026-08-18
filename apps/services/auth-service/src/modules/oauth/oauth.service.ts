@@ -12,12 +12,12 @@
  * browser afterwards) and the one-time code (which session to hand over).
  */
 import { BadRequestException, Injectable, UnauthorizedException } from '@nestjs/common';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
 import Redis from 'ioredis';
 import { envOr } from '@nexora/config';
 import { prisma } from '@nexora/database';
 import { EVENTS, EventBus } from '@nexora/events';
-import type { AuthResponse, OAuthProviderSummary } from '@nexora/shared-types';
+import { APP_REDIRECT_SCHEME, type AuthResponse, type OAuthProviderSummary } from '@nexora/shared-types';
 import { AuthService, toPublicUser } from '../auth/auth.service';
 import {
   PROVIDERS,
@@ -52,8 +52,19 @@ export class OAuthService {
       .map((row) => ({ provider: row.provider, label: PROVIDERS[row.provider].label }));
   }
 
-  /** URL to send the browser to, with the return address remembered server-side. */
-  async authorizeUrl(provider: ProviderName, redirectUri: string): Promise<string> {
+  /**
+   * URL to send the browser to, with the return address remembered server-side.
+   *
+   * [challenge] is the SHA-256 of a secret the client keeps, and it is what
+   * makes a private-scheme redirect safe to answer: see [assertAllowedRedirect].
+   * Absent for the desktop's loopback redirect, which nothing else on the
+   * machine can bind to.
+   */
+  async authorizeUrl(
+    provider: ProviderName,
+    redirectUri: string,
+    challenge?: string,
+  ): Promise<string> {
     const credentials = await credentialsFor(provider);
     if (!credentials) {
       throw new BadRequestException({
@@ -62,10 +73,15 @@ export class OAuthService {
       });
     }
 
-    assertAllowedRedirect(redirectUri);
+    assertAllowedRedirect(redirectUri, challenge);
 
     const state = randomUUID();
-    await this.redis.set(stateKey(state), JSON.stringify({ provider, redirectUri }), 'EX', STATE_TTL_SECONDS);
+    await this.redis.set(
+      stateKey(state),
+      JSON.stringify({ provider, redirectUri, challenge }),
+      'EX',
+      STATE_TTL_SECONDS,
+    );
 
     const definition = PROVIDERS[provider];
     const url = new URL(definition.authorizeUrl);
@@ -92,7 +108,11 @@ export class OAuthService {
       });
     }
 
-    const request = JSON.parse(raw) as { provider: ProviderName; redirectUri: string };
+    const request = JSON.parse(raw) as {
+      provider: ProviderName;
+      redirectUri: string;
+      challenge?: string;
+    };
     if (request.provider !== provider) {
       throw new UnauthorizedException({
         code: 'OAUTH_STATE_INVALID',
@@ -104,16 +124,31 @@ export class OAuthService {
     const session = await this.signIn(provider, profile);
 
     const oneTimeCode = randomUUID();
-    await this.redis.set(codeKey(oneTimeCode), JSON.stringify(session), 'EX', CODE_TTL_SECONDS);
+    // The challenge rides with the session, so the code is only spendable by
+    // whoever started the sign-in - not by whoever the redirect reached.
+    await this.redis.set(
+      codeKey(oneTimeCode),
+      JSON.stringify({ session, challenge: request.challenge }),
+      'EX',
+      CODE_TTL_SECONDS,
+    );
 
     const destination = new URL(request.redirectUri);
     destination.searchParams.set('code', oneTimeCode);
     return destination.toString();
   }
 
-  /** The client trades the one-time code for the session. Single use. */
-  async exchange(code: string): Promise<AuthResponse> {
+  /**
+   * The client trades the one-time code for the session. Single use.
+   *
+   * When the sign-in was started with a challenge, the verifier behind it has
+   * to come back too. An app that intercepted the redirect holds the code and
+   * not the secret, and the code alone is worth nothing.
+   */
+  async exchange(code: string, verifier?: string): Promise<AuthResponse> {
     const raw = await this.redis.get(codeKey(code));
+    // Consumed whatever happens next: a code that has been offered once, right
+    // or wrong, must not be offered again.
     await this.redis.del(codeKey(code));
     if (!raw) {
       throw new UnauthorizedException({
@@ -121,7 +156,15 @@ export class OAuthService {
         message: 'This sign-in code is invalid or already used',
       });
     }
-    return JSON.parse(raw) as AuthResponse;
+
+    const stored = JSON.parse(raw) as { session: AuthResponse; challenge?: string };
+    if (stored.challenge && !matchesChallenge(verifier, stored.challenge)) {
+      throw new UnauthorizedException({
+        code: 'OAUTH_VERIFIER_INVALID',
+        message: 'This sign-in was started somewhere else',
+      });
+    }
+    return stored.session;
   }
 
   private async fetchProfile(provider: ProviderName, code: string): Promise<ProviderProfile> {
@@ -288,7 +331,55 @@ export function isAllowedRedirect(redirectUri: string, allowList: string): boole
   return false;
 }
 
-function assertAllowedRedirect(redirectUri: string): void {
+/**
+ * The base64url SHA-256 of [verifier], the way RFC 7636 computes an S256
+ * challenge - so a client can use any PKCE library it already has.
+ */
+export function challengeFor(verifier: string): string {
+  return createHash('sha256').update(verifier).digest('base64url');
+}
+
+/** Constant-time, because this is a secret being compared. */
+export function matchesChallenge(verifier: string | undefined, challenge: string): boolean {
+  if (!verifier) return false;
+  const expected = Buffer.from(challenge);
+  const actual = Buffer.from(challengeFor(verifier));
+  return expected.length === actual.length && timingSafeEqual(expected, actual);
+}
+
+/**
+ * The redirect a mobile client comes back on.
+ *
+ * A phone has no loopback server, so the sign-in returns through a URL only the
+ * app is registered for. Android will not promise that registration is
+ * exclusive - a second app can claim `nexora://` - so a private scheme is
+ * accepted only for a flow that also carries a challenge. The code that arrives
+ * at a hijacked redirect is then worth nothing without the secret behind it,
+ * which never leaves the app that started the sign-in.
+ *
+ * A challenge is a base64url digest and nothing else: length and alphabet are
+ * checked here so that an empty string, or something meant to be read as a
+ * path, cannot pass for one.
+ */
+const CHALLENGE_PATTERN = /^[A-Za-z0-9_-]{43}$/;
+
+export function isAppRedirect(redirectUri: string): boolean {
+  try {
+    return new URL(redirectUri).protocol === APP_REDIRECT_SCHEME;
+  } catch {
+    return false;
+  }
+}
+
+function assertAllowedRedirect(redirectUri: string, challenge?: string): void {
+  if (isAppRedirect(redirectUri)) {
+    if (challenge && CHALLENGE_PATTERN.test(challenge)) return;
+    throw new BadRequestException({
+      code: 'CHALLENGE_REQUIRED',
+      message: 'That redirect requires a sign-in challenge',
+    });
+  }
+
   if (isAllowedRedirect(redirectUri, envOr('OAUTH_ALLOWED_REDIRECTS', ''))) return;
 
   throw new BadRequestException({

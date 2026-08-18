@@ -604,6 +604,24 @@ that has to be right for every future deployment is one that will be wrong.
   raises a notification goes through it, rather than each remembering the four
   rules for itself.
 
+### Signing in from a phone
+
+- **An account created through a provider had no way into the Android client at
+  all.** OAuth registration stores `passwordHash: 'oauth-only'`, a value no
+  password can match, and the phone offered nothing but a password field. That
+  is a lockout, not a missing convenience, which is what moved it ahead of the
+  other parity gaps.
+- **The redirect had to be a private scheme, and that is the whole of the
+  security problem.** The desktop comes back to a loopback port, which nothing
+  else on the machine can steal because it is already listening. A phone has no
+  such thing, and `nexora://` can be registered by any app that fancies it. So
+  the flow is bound to a secret rather than to the redirect: the client sends a
+  challenge when it starts and the verifier when it exchanges, and the scheme is
+  refused outright without one. `SECURITY.md` has the shape of it.
+- **The one-time code is consumed on any attempt, right or wrong.** It was
+  already single-use; it is now spent even by an exchange that fails the
+  challenge, so a code that leaked cannot be tried twice.
+
 ### Invites are previewed before they are accepted
 
 - **A link no longer joins the server that sent it.** It used to: the window

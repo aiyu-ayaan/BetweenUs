@@ -62,6 +62,7 @@ export class OAuthController {
   async start(
     @Param('provider') provider: string,
     @Query('redirect') redirect: string,
+    @Query('challenge') challenge: string | undefined,
     @Res() response: Response,
   ): Promise<void> {
     if (!isProviderName(provider)) {
@@ -70,7 +71,7 @@ export class OAuthController {
     if (!redirect) {
       throw new BadRequestException({ code: 'BAD_REDIRECT', message: 'A redirect is required' });
     }
-    response.redirect(await this.oauth.authorizeUrl(provider, redirect));
+    response.redirect(await this.oauth.authorizeUrl(provider, redirect, challenge));
   }
 
   /** Where the provider sends the browser back to. Never called by a client. */
@@ -99,6 +100,6 @@ export class OAuthController {
   @HttpCode(200)
   @UseGuards(OAuthRateLimit)
   exchange(@Body() dto: OAuthExchangeDto): Promise<AuthResponse> {
-    return this.oauth.exchange(dto.code);
+    return this.oauth.exchange(dto.code, dto.verifier);
   }
 }
