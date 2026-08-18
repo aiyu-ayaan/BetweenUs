@@ -29,7 +29,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -146,18 +145,11 @@ fun ChatScreen(
      *
      * It stops being pinned the moment somebody scrolls up to read something,
      * because dragging them back down every time a message arrives is worse
-     * than not following at all. The slack is because "at the bottom" is never
-     * exact: a row that grew by a pixel, or a fling still settling, must not
-     * count as scrolling away.
+     * than not following at all - and only then. A row growing underneath them
+     * is not somebody scrolling away, however far it pushes the end of the
+     * conversation below the screen. See `Follow.kt`.
      */
-    val following by remember {
-        derivedStateOf {
-            val info = listState.layoutInfo
-            val last = info.visibleItemsInfo.lastOrNull() ?: return@derivedStateOf true
-            last.index >= info.totalItemsCount - 1 &&
-                last.offset + last.size <= info.viewportEndOffset + FOLLOW_SLACK_PX
-        }
-    }
+    var following by remember(channelId) { mutableStateOf(true) }
 
     // Opening a channel starts at the newest message, without an animation - a
     // conversation you have just walked into has no "before" to scroll from.
@@ -184,16 +176,31 @@ fun ChatScreen(
      * A picture decodes, a video's first frame arrives, and the row that was
      * one line tall becomes three hundred - under a scroll that had already
      * finished. The desktop answers this with a ResizeObserver; this is the
-     * same idea with the tools Compose has: watch the total height of what is
-     * on screen, and while the view is pinned, put it back on the bottom.
+     * same idea with the tools Compose has: watch where the end of the
+     * conversation is, and while the view is pinned, put it back on the bottom.
+     *
+     * The same flow keeps the latch, because both answers come from one reading
+     * of the layout: where the list is now, and where it was a moment ago.
      */
-    LaunchedEffect(listState) {
-        snapshotFlow { listState.layoutInfo.visibleItemsInfo.sumOf { it.size } }
-            .collect {
-                if (following && messages.isNotEmpty()) {
-                    listState.scrollToItem(messages.lastIndex, SCROLL_PAST_END)
-                }
+    LaunchedEffect(listState, channelId) {
+        var previous = listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset
+        snapshotFlow {
+            val info = listState.layoutInfo
+            val last = info.visibleItemsInfo.lastOrNull()
+            val gap = if (last == null) 0 else bottomGap(
+                lastVisibleIndex = last.index,
+                lastVisibleBottom = last.offset + last.size,
+                totalItems = info.totalItemsCount,
+                viewportEnd = info.viewportEndOffset,
+            )
+            (listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset) to gap
+        }.collect { (position, gap) ->
+            following = nextFollow(following, scrolledUp(previous, position), gap)
+            previous = position
+            if (following && gap > 0 && messages.isNotEmpty()) {
+                listState.scrollToItem(messages.lastIndex, SCROLL_PAST_END)
             }
+        }
     }
 
     // The flash marks where the jump landed, then gets out of the way.
@@ -541,9 +548,6 @@ fun ChatScreen(
 }
 
 const val MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024
-
-/** How far off the bottom still counts as reading the newest message, in pixels. */
-private const val FOLLOW_SLACK_PX = 120
 
 /**
  * An offset far past the end of any row.
