@@ -178,6 +178,12 @@ fun ServerSettingsScreen(serverId: String?, onBack: () -> Unit) {
                 InviteSection(serverId = server.id, busy = busy, onNote = { note = it })
             }
 
+            RoleSection(
+                serverId = server.id,
+                mayManage = server.can("MANAGE_ROLE"),
+                onNote = { note = it },
+            )
+
             SectionLabel("Leaving")
             Column(Modifier.padding(horizontal = 16.dp)) {
                 Text(

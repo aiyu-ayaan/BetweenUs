@@ -165,12 +165,54 @@ object NexoraApi {
         role: ServerRole? = null,
         granted: List<String>? = null,
         denied: List<String>? = null,
+        roleIds: List<String>? = null,
     ): ServerMember = io {
         val body = JSONObject()
         role?.let { body.put("role", it.name) }
         granted?.let { body.put("grantedPermissions", jsonArrayOf(it)) }
         denied?.let { body.put("deniedPermissions", jsonArrayOf(it)) }
+        // Replaces the whole set rather than adding to it, which is what the
+        // server does with it: an empty list takes every custom role away.
+        roleIds?.let { body.put("roleIds", jsonArrayOf(it)) }
         ServerMember.from(authed("PATCH", "/api/v1/servers/$serverId/members/$userId", body))
+    }
+
+    // --- custom roles ---
+
+    suspend fun serverRoles(serverId: String): List<ServerCustomRole> = io {
+        authedArray("GET", "/api/v1/servers/$serverId/roles").map { ServerCustomRole.from(it) }
+    }
+
+    suspend fun createServerRole(
+        serverId: String,
+        name: String,
+        colour: String?,
+        permissions: List<String>,
+    ): ServerCustomRole = io {
+        val body = JSONObject().put("name", name).put("permissions", jsonArrayOf(permissions))
+        colour?.let { body.put("colour", it) }
+        ServerCustomRole.from(authed("POST", "/api/v1/servers/$serverId/roles", body))
+    }
+
+    /** Only what is passed is changed; anything null is left as it was. */
+    suspend fun updateServerRole(
+        serverId: String,
+        roleId: String,
+        name: String? = null,
+        colour: String? = null,
+        permissions: List<String>? = null,
+        rank: Int? = null,
+    ): ServerCustomRole = io {
+        val body = JSONObject()
+        name?.let { body.put("name", it) }
+        colour?.let { body.put("colour", it) }
+        permissions?.let { body.put("permissions", jsonArrayOf(it)) }
+        rank?.let { body.put("rank", it) }
+        ServerCustomRole.from(authed("PATCH", "/api/v1/servers/$serverId/roles/$roleId", body))
+    }
+
+    suspend fun deleteServerRole(serverId: String, roleId: String): Unit = io {
+        authed("DELETE", "/api/v1/servers/$serverId/roles/$roleId")
     }
 
     // --- channels ---

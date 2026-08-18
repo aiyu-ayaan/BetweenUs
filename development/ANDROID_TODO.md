@@ -431,6 +431,13 @@ says so too; both halves are needed.
       keeps working, which is what the desktop's links are.
 - [x] Member list with presence and roles.
 - [x] Role and permission editing for those who hold `MANAGE_ROLE`.
+- [x] A server's own roles: made, edited, coloured and deleted from the phone,
+      and handed to members from the member sheet. Only the handing out existed
+      before, which meant the list to choose from could only ever have been
+      filled in from a desktop. The assignable permission list moved into
+      `core`; the copy beside the member sheet had drifted from
+      `packages/permissions` and was missing `MANAGE_MESSAGE` and
+      `MANAGE_EMOJI` entirely.
 - [x] Channel create/rename/delete.
 - [x] Every one of these is enforced server-side; the UI only hides what the
       backend would refuse anyway.

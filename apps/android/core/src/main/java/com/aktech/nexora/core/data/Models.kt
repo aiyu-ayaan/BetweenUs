@@ -228,6 +228,8 @@ data class ServerMember(
     val permissions: List<String>,
     val grantedPermissions: List<String>,
     val deniedPermissions: List<String>,
+    /** Ids of the custom roles this member holds, highest rank first. */
+    val roleIds: List<String>,
 ) {
     val label: String get() = displayName.ifBlank { username }
 
@@ -240,6 +242,7 @@ data class ServerMember(
         .put("permissions", jsonArrayOf(permissions))
         .put("grantedPermissions", jsonArrayOf(grantedPermissions))
         .put("deniedPermissions", jsonArrayOf(deniedPermissions))
+        .put("roleIds", jsonArrayOf(roleIds))
 
     companion object {
         fun from(json: JSONObject) = ServerMember(
@@ -251,6 +254,38 @@ data class ServerMember(
             permissions = json.strings("permissions"),
             grantedPermissions = json.strings("grantedPermissions"),
             deniedPermissions = json.strings("deniedPermissions"),
+            roleIds = json.strings("roleIds"),
+        )
+    }
+}
+
+/**
+ * A role a server invented for itself.
+ *
+ * Additive on top of the five built-in rungs rather than replacing them: the
+ * built-in role is still the hierarchy - who may edit whom - and this carries a
+ * name, a colour and a bundle of permissions. [rank] orders the list and grants
+ * nothing on its own.
+ */
+data class ServerCustomRole(
+    val id: String,
+    val serverId: String,
+    val name: String,
+    /** `#rrggbb`, or null for the default colour. */
+    val colour: String?,
+    val rank: Int,
+    val permissions: List<String>,
+    val memberCount: Int,
+) {
+    companion object {
+        fun from(json: JSONObject) = ServerCustomRole(
+            id = json.optString("id"),
+            serverId = json.optString("serverId"),
+            name = json.optString("name"),
+            colour = json.stringOrNull("colour"),
+            rank = json.optInt("rank"),
+            permissions = json.strings("permissions"),
+            memberCount = json.optInt("memberCount"),
         )
     }
 }

@@ -56,6 +56,7 @@ class CacheCodecTest {
             permissions = listOf("VIEW_CHANNEL"),
             grantedPermissions = listOf("DELETE_MESSAGE"),
             deniedPermissions = emptyList(),
+            roleIds = listOf("role-1", "role-2"),
         )
         roundTrip(member, ServerMember::toJson, ServerMember::from)
     }

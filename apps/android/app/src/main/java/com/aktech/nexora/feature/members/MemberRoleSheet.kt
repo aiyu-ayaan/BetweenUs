@@ -22,9 +22,13 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.compose.runtime.LaunchedEffect
+import com.aktech.nexora.core.data.ASSIGNABLE_PERMISSIONS
 import com.aktech.nexora.core.data.NexoraApi
+import com.aktech.nexora.core.data.ServerCustomRole
 import com.aktech.nexora.core.data.ServerMember
 import com.aktech.nexora.core.data.ServerRole
+import com.aktech.nexora.core.data.permissionLabel
 import com.aktech.nexora.ui.components.Chip
 import com.aktech.nexora.ui.components.NexoraButton
 import com.aktech.nexora.ui.components.Notice
@@ -56,6 +60,13 @@ fun MemberRoleSheet(
     var role by remember { mutableStateOf(member.role) }
     var granted by remember { mutableStateOf(member.grantedPermissions.toSet()) }
     var denied by remember { mutableStateOf(member.deniedPermissions.toSet()) }
+    var held by remember { mutableStateOf(member.roleIds.toSet()) }
+    /** The server's own roles, so they can be handed out from here. */
+    var roles by remember(serverId) { mutableStateOf<List<ServerCustomRole>>(emptyList()) }
+
+    LaunchedEffect(serverId) {
+        roles = runCatching { NexoraApi.serverRoles(serverId) }.getOrDefault(emptyList())
+    }
     var busy by remember { mutableStateOf(false) }
     var note by remember { mutableStateOf<String?>(null) }
 
@@ -85,11 +96,26 @@ fun MemberRoleSheet(
                 }
             }
 
+            if (roles.isNotEmpty()) {
+                SectionLabel("Roles this server made", Modifier.padding(horizontal = 0.dp))
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    roles.forEach { custom ->
+                        Chip(
+                            text = custom.name,
+                            selected = custom.id in held,
+                            onClick = {
+                                held = if (custom.id in held) held - custom.id else held + custom.id
+                            },
+                        )
+                    }
+                }
+            }
+
             SectionLabel("Granted beyond the role", Modifier.padding(horizontal = 0.dp))
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                PERMISSIONS.forEach { permission ->
+                ASSIGNABLE_PERMISSIONS.forEach { permission ->
                     Chip(
-                        text = permission.lowercase().replace('_', ' '),
+                        text = permissionLabel(permission),
                         selected = permission in granted,
                         onClick = {
                             granted = if (permission in granted) granted - permission else granted + permission
@@ -101,9 +127,9 @@ fun MemberRoleSheet(
 
             SectionLabel("Denied despite the role", Modifier.padding(horizontal = 0.dp))
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                PERMISSIONS.forEach { permission ->
+                ASSIGNABLE_PERMISSIONS.forEach { permission ->
                     Chip(
-                        text = permission.lowercase().replace('_', ' '),
+                        text = permissionLabel(permission),
                         selected = permission in denied,
                         tone = Danger,
                         onClick = {
@@ -133,6 +159,7 @@ fun MemberRoleSheet(
                                 role = role,
                                 granted = granted.toList(),
                                 denied = denied.toList(),
+                                roleIds = held.toList(),
                             )
                             onChanged()
                             onDismiss()
@@ -145,14 +172,6 @@ fun MemberRoleSheet(
     }
 }
 
-/** The set from section 19 of CLAUDE.md; the server is what enforces them. */
-private val PERMISSIONS = listOf(
-    "VIEW_CHANNEL",
-    "SEND_MESSAGE",
-    "DELETE_MESSAGE",
-    "MANAGE_CHANNEL",
-    "MANAGE_MEMBER",
-    "MANAGE_ROLE",
-    "START_CALL",
-    "MANAGE_CALL",
-)
+// The list of permissions lives in `core`, next to the rest of the contract.
+// The copy that used to be here had drifted from it - no MANAGE_MESSAGE, no
+// MANAGE_EMOJI - so neither could be granted from this client at all.
