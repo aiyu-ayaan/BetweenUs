@@ -73,6 +73,7 @@ fun WorkspaceDrawer(
     onSelectChannel: (Channel) -> Unit,
     onHome: () -> Unit,
     onSettings: () -> Unit,
+    onServerSettings: () -> Unit,
     onRemote: () -> Unit,
 ) {
     var addingServer by remember { mutableStateOf(false) }
@@ -162,6 +163,17 @@ fun WorkspaceDrawer(
                     color = Slate50,
                     modifier = Modifier.weight(1f),
                 )
+                // Invites used to live two screens away - the drawer, then
+                // account settings, then server settings - which is a long way
+                // to walk to answer "how do I add somebody". It is one tap from
+                // the server whose invite it would be.
+                if (server != null && server.can("MANAGE_MEMBER")) {
+                    IconAction(
+                        icon = NexoraIcons.UserPlus,
+                        contentDescription = "Invite people",
+                        onClick = onServerSettings,
+                    )
+                }
                 if (server != null && server.can("MANAGE_CHANNEL")) {
                     IconAction(
                         icon = NexoraIcons.Plus,

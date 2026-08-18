@@ -119,6 +119,10 @@ while everything under them changes size.
   no invite use is spent.
 - Stop `presence-service` and open a link. The card still appears, with the
   online line missing rather than reading zero.
+- On Android: the person icon beside the server's name in the drawer opens the
+  invite section directly. Creating an invite puts a full link on the clipboard,
+  and *send* shares the link, not the code. Pasting either into *Join a server*
+  shows the same card the desktop does before anything is joined.
 
 **Profile pictures**
 - User settings → My Account → *Upload avatar*. It shows up in Alice's own

@@ -6,8 +6,13 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -26,8 +31,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import com.aktech.nexora.core.data.ChannelType
+import com.aktech.nexora.core.data.InviteLink
+import com.aktech.nexora.core.data.InvitePreview
+import com.aktech.nexora.core.data.NexoraApi
 import com.aktech.nexora.core.data.ServerWithRole
 import com.aktech.nexora.core.store.Workspace
+import com.aktech.nexora.ui.components.Avatar
 import com.aktech.nexora.ui.components.Chip
 import com.aktech.nexora.ui.components.NexoraButton
 import com.aktech.nexora.ui.components.NexoraField
@@ -37,11 +46,21 @@ import com.aktech.nexora.ui.theme.Danger
 import com.aktech.nexora.ui.theme.Slate100
 import com.aktech.nexora.ui.theme.Slate400
 import com.aktech.nexora.ui.theme.Slate500
+import com.aktech.nexora.ui.theme.StatusOffline
+import com.aktech.nexora.ui.theme.StatusOnline
 import com.aktech.nexora.ui.theme.Surface700
 import com.aktech.nexora.ui.theme.Surface900
 import kotlinx.coroutines.launch
 
-/** Create a server, or join one with an invite code somebody sent you. */
+/**
+ * Create a server, or join one with an invite somebody sent you.
+ *
+ * A code is never spent on the strength of somebody having pasted it. The link
+ * or the code is looked up first and answered with a card - whose server, how
+ * many people are in it, how many of them are here - and joining is a decision
+ * made against that. The desktop's `InviteDialog` shows the same card for the
+ * same reason.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun JoinOrCreateServerSheet(onDismiss: () -> Unit, onDone: (ServerWithRole) -> Unit) {
@@ -52,11 +71,43 @@ fun JoinOrCreateServerSheet(onDismiss: () -> Unit, onDone: (ServerWithRole) -> U
     var value by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
     var note by remember { mutableStateOf<String?>(null) }
+    /** The invite being decided about. Null until a code has been looked up. */
+    var preview by remember { mutableStateOf<InvitePreview?>(null) }
 
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheet, containerColor = Surface900) {
         Column(
             Modifier.fillMaxWidth().navigationBarsPadding().padding(20.dp),
         ) {
+            val invite = preview
+            if (invite != null) {
+                InviteCard(
+                    invite = invite,
+                    busy = busy,
+                    note = note,
+                    onBack = { preview = null; note = null },
+                    onAccept = {
+                        scope.launch {
+                            busy = true
+                            note = runCatching {
+                                // Already a member: opening it is what the
+                                // server would have done anyway, without
+                                // spending a use of the invite.
+                                val server = if (invite.member) {
+                                    Workspace.server(invite.serverId)
+                                        ?: Workspace.joinServer(invite.code)
+                                } else {
+                                    Workspace.joinServer(invite.code)
+                                }
+                                onDone(server)
+                                onDismiss()
+                            }.exceptionOrNull()?.message
+                            busy = false
+                        }
+                    },
+                )
+                return@Column
+            }
+
             Text(
                 text = if (creating) "Create a server" else "Join a server",
                 style = MaterialTheme.typography.titleMedium,
@@ -67,7 +118,7 @@ fun JoinOrCreateServerSheet(onDismiss: () -> Unit, onDone: (ServerWithRole) -> U
                 text = if (creating) {
                     "You will be its owner. Everything else - channels, roles, who is in it - comes after."
                 } else {
-                    "Paste the invite code somebody sent you. It may expire or run out."
+                    "Paste the invite link or the code somebody sent you. Either works."
                 },
                 style = MaterialTheme.typography.bodyMedium,
                 color = Slate500,
@@ -81,10 +132,10 @@ fun JoinOrCreateServerSheet(onDismiss: () -> Unit, onDone: (ServerWithRole) -> U
 
             Spacer(Modifier.height(16.dp))
             NexoraField(
-                label = if (creating) "Name" else "Invite code",
+                label = if (creating) "Name" else "Invite link or code",
                 value = value,
                 onValueChange = { value = it; note = null },
-                placeholder = if (creating) "Weekend project" else "kJ3f9aQ2xR1p",
+                placeholder = if (creating) "Weekend project" else "https://nexora.example.com/invite/kJ3f9aQ2",
                 imeAction = ImeAction.Done,
                 enabled = !busy,
             )
@@ -96,20 +147,22 @@ fun JoinOrCreateServerSheet(onDismiss: () -> Unit, onDone: (ServerWithRole) -> U
 
             Spacer(Modifier.height(16.dp))
             NexoraButton(
-                text = if (creating) "Create" else "Join",
+                text = if (creating) "Create" else "Continue",
                 busy = busy,
                 enabled = value.isNotBlank(),
                 onClick = {
                     scope.launch {
                         busy = true
                         note = runCatching {
-                            val server = if (creating) {
-                                Workspace.createServer(value.trim())
+                            if (creating) {
+                                val server = Workspace.createServer(value.trim())
+                                onDone(server)
+                                onDismiss()
                             } else {
-                                Workspace.joinServer(value.trim())
+                                val code = InviteLink.codeIn(value)
+                                    ?: error("That is not an invite link or code")
+                                preview = NexoraApi.invitePreview(code)
                             }
-                            onDone(server)
-                            onDismiss()
                         }.exceptionOrNull()?.message
                         busy = false
                     }
@@ -117,6 +170,80 @@ fun JoinOrCreateServerSheet(onDismiss: () -> Unit, onDone: (ServerWithRole) -> U
             )
         }
     }
+}
+
+/** The card an invite is accepted from: whose server, and how busy it is. */
+@Composable
+private fun InviteCard(
+    invite: InvitePreview,
+    busy: Boolean,
+    note: String?,
+    onBack: () -> Unit,
+    onAccept: () -> Unit,
+) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text(
+            text = "You have been invited to join",
+            style = MaterialTheme.typography.bodySmall,
+            color = Slate500,
+        )
+        Spacer(Modifier.height(12.dp))
+        Avatar(
+            id = invite.serverId,
+            label = invite.name,
+            url = invite.iconUrl,
+            size = 72.dp,
+            shape = RoundedCornerShape(20.dp),
+        )
+        Spacer(Modifier.height(10.dp))
+        Text(
+            text = invite.name,
+            style = MaterialTheme.typography.titleMedium,
+            color = Slate100,
+        )
+        Spacer(Modifier.height(6.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            // The online half is left out entirely when presence could not be
+            // reached, rather than shown as zero: that would describe a busy
+            // server as an empty one because a service was restarting.
+            invite.onlineCount?.let { online ->
+                Dot(StatusOnline)
+                Spacer(Modifier.width(6.dp))
+                Text("$online online", style = MaterialTheme.typography.bodySmall, color = Slate400)
+                Spacer(Modifier.width(14.dp))
+            }
+            Dot(StatusOffline)
+            Spacer(Modifier.width(6.dp))
+            Text(
+                text = "${invite.memberCount} " +
+                    if (invite.memberCount == 1) "member" else "members",
+                style = MaterialTheme.typography.bodySmall,
+                color = Slate400,
+            )
+        }
+
+        note?.let {
+            Spacer(Modifier.height(12.dp))
+            Notice(it, Danger)
+        }
+
+        Spacer(Modifier.height(20.dp))
+        NexoraButton(
+            text = if (invite.member) "Open server" else "Accept invite",
+            busy = busy,
+            onClick = onAccept,
+        )
+        Spacer(Modifier.height(8.dp))
+        Chip(text = "Not now", onClick = onBack)
+    }
+}
+
+@Composable
+private fun Dot(colour: androidx.compose.ui.graphics.Color) {
+    Spacer(Modifier.size(8.dp).background(colour, CircleShape))
 }
 
 /**

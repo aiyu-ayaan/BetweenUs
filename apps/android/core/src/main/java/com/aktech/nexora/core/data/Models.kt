@@ -145,6 +145,37 @@ data class ServerInvite(
     }
 }
 
+/**
+ * What an invite leads to, before it is accepted.
+ *
+ * A link that joins the moment it is opened tells the person following it
+ * nothing about whose server it is until they are already in it. This is what
+ * the card asks for instead. `onlineCount` is null when presence could not be
+ * reached, which is not the same as nobody being there - so the card leaves the
+ * line out rather than reading zero.
+ */
+data class InvitePreview(
+    val code: String,
+    val serverId: String,
+    val name: String,
+    val iconUrl: String?,
+    val memberCount: Int,
+    val onlineCount: Int?,
+    val member: Boolean,
+) {
+    companion object {
+        fun from(json: JSONObject) = InvitePreview(
+            code = json.optString("code"),
+            serverId = json.optString("serverId"),
+            name = json.optString("name"),
+            iconUrl = json.stringOrNull("iconUrl"),
+            memberCount = json.optInt("memberCount"),
+            onlineCount = if (json.isNull("onlineCount")) null else json.optInt("onlineCount"),
+            member = json.optBoolean("member"),
+        )
+    }
+}
+
 data class ServerMember(
     val userId: String,
     val username: String,

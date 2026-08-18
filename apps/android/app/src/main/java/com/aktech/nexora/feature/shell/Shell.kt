@@ -168,6 +168,10 @@ fun Shell(user: PublicUser) {
                         scope.launch { drawer.close() }
                         navigation.navigate(Route.Settings)
                     },
+                    onServerSettings = {
+                        scope.launch { drawer.close() }
+                        navigation.navigate(Route.ServerSettings)
+                    },
                     onRemote = {
                         scope.launch { drawer.close() }
                         navigation.navigate(Route.Remote)

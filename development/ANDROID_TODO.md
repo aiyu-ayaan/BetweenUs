@@ -206,6 +206,18 @@ data is cleared.
       before its first page arrived was empty for the life of the screen - so
       neither the keyboard nor a picture growing its row moved the list. It
       reads `layoutInfo.totalItemsCount` now.
+- [x] Invites are links, and they are previewed before they are accepted.
+      Creating, copying or sending one hands over
+      `{deployment}/invite/{code}` rather than a bare code that looks like a
+      typo in a chat and says nothing about which deployment it belongs to
+      (`InviteLink`, the port of `services/invite-link.ts`, tested against the
+      same cases). The join field takes a link or a code, and either way the
+      code is looked up first and answered with a card - the server's name and
+      icon, its member count and how many are online - so nothing is joined
+      before somebody agrees to it.
+- [x] Invites are one tap from the server they belong to. They were three -
+      drawer, account settings, server settings - which is a long walk to
+      answer "how do I add somebody".
 - [ ] Markdown-ish message body rendering, matching
       `apps/desktop/src/services/message-body.ts`.
 

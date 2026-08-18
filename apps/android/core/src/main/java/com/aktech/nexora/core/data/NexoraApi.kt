@@ -105,6 +105,11 @@ object NexoraApi {
         ServerWithRole.from(authed("POST", "/api/v1/servers/join", obj("code" to code)))
     }
 
+    /** Whose server a code leads to, and how big it is, before joining it. */
+    suspend fun invitePreview(code: String): InvitePreview = io {
+        InvitePreview.from(authed("GET", "/api/v1/servers/invites/${enc(code)}"))
+    }
+
     suspend fun serverInvites(serverId: String): List<ServerInvite> = io {
         authedArray("GET", "/api/v1/servers/$serverId/invites").map { ServerInvite.from(it) }
     }

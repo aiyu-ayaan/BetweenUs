@@ -32,6 +32,8 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import android.content.Intent
 import com.aktech.nexora.core.data.ChannelType
+import com.aktech.nexora.core.data.Endpoint
+import com.aktech.nexora.core.data.InviteLink
 import com.aktech.nexora.core.data.NexoraApi
 import com.aktech.nexora.core.data.ServerInvite
 import com.aktech.nexora.core.store.Workspace
@@ -263,7 +265,8 @@ private fun InviteSection(serverId: String, busy: Boolean, onNote: (String?) -> 
 
     Column(Modifier.padding(horizontal = 16.dp)) {
         Text(
-            text = "A code is the only way in. Give one an expiry, a use limit, both or neither.",
+            text = "An invite is the only way a stranger gets in. Give one an expiry, " +
+                "a use limit, both or neither - copying or sending it hands over a link.",
             style = MaterialTheme.typography.bodySmall,
             color = Slate500,
         )
@@ -309,10 +312,13 @@ private fun InviteSection(serverId: String, busy: Boolean, onNote: (String?) -> 
                 act {
                     val created = NexoraApi.createServerInvite(serverId, expiresIn, maxUses)
                     invites = listOf(created) + invites.orEmpty()
-                    // Straight to the clipboard: the only reason to mint one is
-                    // to send it to somebody, and the next thing anybody does is
-                    // go looking for a copy button.
-                    clipboard.setText(AnnotatedString(created.code))
+                    // Straight to the clipboard, and as a link rather than a
+                    // code: the only reason to mint one is to send it to
+                    // somebody, and a bare code pasted into a chat looks like a
+                    // typo to whoever gets it. The link says which deployment
+                    // as well, which a code cannot - two Nexoras can both have
+                    // an invite `k3m9x2qp` and neither is wrong.
+                    clipboard.setText(AnnotatedString(InviteLink.of(Endpoint.current(), created.code)))
                 }
             },
         )
@@ -342,15 +348,18 @@ private fun InviteSection(serverId: String, busy: Boolean, onNote: (String?) -> 
                 trailing = {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         if (invite.active) {
-                            IconAction(NexoraIcons.Copy, "Copy the code", onClick = {
-                                clipboard.setText(AnnotatedString(invite.code))
+                            IconAction(NexoraIcons.Copy, "Copy the link", onClick = {
+                                clipboard.setText(
+                                    AnnotatedString(InviteLink.of(Endpoint.current(), invite.code)),
+                                )
                             })
-                            IconAction(NexoraIcons.Send, "Send this code", onClick = {
+                            IconAction(NexoraIcons.Send, "Send this link", onClick = {
                                 val share = Intent(Intent.ACTION_SEND).apply {
                                     type = "text/plain"
                                     putExtra(
                                         Intent.EXTRA_TEXT,
-                                        "Join me on Nexora with the code " + invite.code,
+                                        "Join me on Nexora: " +
+                                            InviteLink.of(Endpoint.current(), invite.code),
                                     )
                                 }
                                 context.startActivity(
