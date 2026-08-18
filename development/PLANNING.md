@@ -604,6 +604,30 @@ that has to be right for every future deployment is one that will be wrong.
   raises a notification goes through it, rather than each remembering the four
   rules for itself.
 
+### A tile is the shape of the picture in it
+
+- **A camera does not have one shape, and a call has both in it.** A phone
+  sends portrait, a laptop sends landscape, and the tile was 16:9 on the desktop
+  and square on Android with the picture cropped to fill it. So a phone arrived
+  on the desktop as a letterbox slice out of the middle of somebody - head and
+  chin outside the tile - and a laptop arrived on the phone as a strip.
+- **Letterboxing inside the wrong box is not the fix.** It trades the crop for
+  black bars, and the bars are the same missing space the crop was avoiding. The
+  box itself is what changes: every tile reports the aspect of what it is
+  actually receiving and takes that shape, and the picture is then drawn whole
+  inside a box it fits. The desktop grid aligns its rows to the top rather than
+  stretching them to equal heights, so a portrait tile is simply taller than the
+  landscape one beside it.
+- **The shape comes from the frames, not from the track.** Nothing in a track's
+  metadata says which way up a phone is being held, and WebRTC does not turn the
+  pixels when somebody rotates - it records the rotation in the frame. The web
+  learns it from the video element's `resize` event, which fires on the first
+  frame and again on every rotation; Android learns it from
+  `onFrameResolutionChanged`, and swaps width for height on a quarter turn,
+  because a frame that is rotated measures one thing and looks like another.
+- **The filmstrip thumbnails still crop.** At 96 by 64 the bars would be most of
+  the tile, and a thumbnail is for recognising who somebody is.
+
 ### Signing in from a phone
 
 - **An account created through a provider had no way into the Android client at

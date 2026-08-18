@@ -5,6 +5,8 @@ import android.content.Context
 import android.media.projection.MediaProjectionManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import android.os.Handler
+import android.os.Looper
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -341,7 +343,22 @@ fun VoiceChannelScreen(
     if (pickingDevices) CallDeviceSheet(onDismiss = { pickingDevices = false })
 }
 
-/** One participant's tile: their video if they are sending any, else a face. */
+/**
+ * One participant's tile: their video if they are sending any, else a face.
+ *
+ * The tile is the shape of what is arriving, not a shape the picture is cut to
+ * fit. A phone sends portrait and a desktop sends landscape, and the same call
+ * has both in it - a square tile filled by cropping showed a laptop's camera as
+ * a strip out of the middle of somebody, and hid the top and bottom of anybody
+ * on a phone.
+ *
+ * The frame's own rotation decides which way round it is. WebRTC does not turn
+ * the pixels when somebody turns their phone; it says so in the frame, and a
+ * renderer that ignores that draws a rotated picture into a box the wrong shape.
+ *
+ * Square until something arrives, because that is the shape of the face that
+ * stands in for a camera nobody has turned on.
+ */
 @Composable
 private fun Tile(
     label: String,
@@ -352,9 +369,14 @@ private fun Tile(
     speaking: Boolean = false,
     connected: Boolean = true,
 ) {
+    var aspect by remember(id) { mutableStateOf(1f) }
+    // The resolution callback arrives on a render thread; Compose state is
+    // written from the main one.
+    val main = remember { Handler(Looper.getMainLooper()) }
+
     Box(
         modifier = Modifier
-            .aspectRatio(1f)
+            .aspectRatio(if (track != null) aspect else 1f)
             .clip(RoundedCornerShape(14.dp))
             .background(Surface900)
             .then(
@@ -369,8 +391,34 @@ private fun Tile(
             AndroidView(
                 factory = { context ->
                     SurfaceViewRenderer(context).apply {
-                        init(eglContext, null)
-                        setScalingType(RendererCommon.ScalingType.SCALE_ASPECT_FILL)
+                        init(
+                            eglContext,
+                            object : RendererCommon.RendererEvents {
+                                override fun onFirstFrameRendered() = Unit
+
+                                override fun onFrameResolutionChanged(
+                                    width: Int,
+                                    height: Int,
+                                    rotation: Int,
+                                ) {
+                                    // A quarter turn swaps what the frame
+                                    // measures for what it looks like.
+                                    val turned = rotation % 180 != 0
+                                    val drawnWidth = if (turned) height else width
+                                    val drawnHeight = if (turned) width else height
+                                    if (drawnWidth > 0 && drawnHeight > 0) {
+                                        main.post {
+                                            aspect = drawnWidth.toFloat() / drawnHeight
+                                        }
+                                    }
+                                }
+                            },
+                        )
+                        // Fit, not fill: the box is already the right shape, so
+                        // there is nothing to crop - and this is what keeps the
+                        // picture whole in the moment between somebody turning
+                        // their phone and the box catching up.
+                        setScalingType(RendererCommon.ScalingType.SCALE_ASPECT_FIT)
                         setEnableHardwareScaler(true)
                         track.addSink(this)
                     }

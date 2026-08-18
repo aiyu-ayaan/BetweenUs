@@ -12,11 +12,22 @@ import { elementVolume, usePeerAudio } from '../../stores/peerAudio';
 
 export function VideoSink({
   track,
-  // A camera fills its tile; a shared screen must not be cropped.
   fit = 'cover',
+  onAspect,
 }: {
   track: MediaStreamTrack;
   fit?: 'cover' | 'contain';
+  /**
+   * The shape of the picture, width over height, as soon as there is one - and
+   * again whenever it changes.
+   *
+   * A tile that assumes 16:9 is a tile that crops a phone. A camera on a phone
+   * sends portrait, a camera on a laptop sends landscape, and the same call has
+   * both in it; the only side that knows which is the one holding the frames.
+   * `resize` is the event for it: it fires on the first frame and again when
+   * somebody turns their phone, which no track-level metadata reports.
+   */
+  onAspect?: (ratio: number) => void;
 }): JSX.Element {
   const ref = useRef<HTMLVideoElement>(null);
 
@@ -28,6 +39,24 @@ export function VideoSink({
       element.srcObject = null;
     };
   }, [track]);
+
+  useEffect(() => {
+    const element = ref.current;
+    if (!element || !onAspect) return;
+
+    const report = (): void => {
+      if (element.videoWidth > 0 && element.videoHeight > 0) {
+        onAspect(element.videoWidth / element.videoHeight);
+      }
+    };
+    report();
+    element.addEventListener('resize', report);
+    element.addEventListener('loadedmetadata', report);
+    return () => {
+      element.removeEventListener('resize', report);
+      element.removeEventListener('loadedmetadata', report);
+    };
+  }, [track, onAspect]);
 
   return (
     <video

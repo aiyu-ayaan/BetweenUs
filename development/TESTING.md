@@ -97,6 +97,17 @@ while everything under them changes size.
   — on the phone that is `MediaCache`, on desktop and web the `Map` in
   `services/attachments.ts`.
 
+**Portrait and landscape cameras**
+- Join a call from a phone and from a desktop, cameras on both. The phone's tile
+  on the desktop is portrait — taller than the desktop's tile beside it — and
+  nobody's head is cut off. The desktop's tile on the phone is landscape inside
+  the same grid.
+- Turn the phone while the call is running. The tile changes shape to follow it,
+  on every other client, without the picture ever being cropped or stretched.
+- A tile with no camera on is 16:9 on the desktop and square on the phone, and
+  becomes the shape of the picture when the camera is turned on.
+- A shared screen is unchanged: it was already drawn whole.
+
 **Signing in with a provider**
 - On a deployment with Google or GitHub configured, the Android login screen
   shows a button per provider and nothing when none is configured. The button

@@ -766,7 +766,10 @@ function PagedGrid({ tiles }: { tiles: Stage[] }): JSX.Element {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3">
-      <ul className="grid w-full max-w-5xl auto-rows-fr grid-cols-[repeat(auto-fit,minmax(220px,1fr))] gap-3">
+      {/* `items-start`, not the equal-height rows this had: a tile is now as
+          tall as the picture in it, and a portrait camera in row one must not
+          stretch the landscape one beside it to match. */}
+      <ul className="grid w-full max-w-5xl grid-cols-[repeat(auto-fit,minmax(220px,1fr))] items-start gap-3">
         {shown.map((tile) => (
           <li key={tile.key}>
             <StageTile tile={tile} />
@@ -823,15 +826,38 @@ function PagerButton({
   );
 }
 
+/**
+ * One person's tile, shaped like whatever they are actually sending.
+ *
+ * It used to be 16:9 with the picture cropped to fill it, which is fine until
+ * somebody joins from a phone: a portrait camera then arrived as a letterbox
+ * slice out of the middle of them, with their head and their chin outside the
+ * tile. The fix is not to letterbox inside a 16:9 box - that leaves the same
+ * black bars the crop was avoiding - it is to let the box be the shape of the
+ * picture. The grid aligns its rows to the top, so a portrait tile is simply
+ * taller than the landscape one beside it.
+ *
+ * 16:9 until the first frame says otherwise, because that is what a tile with
+ * no video is, and a tile that changes shape when the camera comes on is less
+ * jarring than one that changes shape a second later.
+ */
 function StageTile({ tile }: { tile: Stage }): JSX.Element {
+  const [aspect, setAspect] = useState(16 / 9);
+  // Identity is stable, so the sink is not re-subscribing on every render.
+  const onAspect = useCallback((ratio: number) => setAspect(ratio), []);
+
   return (
     <div
-      className={`relative flex aspect-video items-center justify-center overflow-hidden rounded-lg bg-surface-800 ring-2 transition-colors duration-200 ${
+      style={{ aspectRatio: tile.videoTrack ? aspect : 16 / 9 }}
+      className={`relative flex items-center justify-center overflow-hidden rounded-lg bg-surface-800 ring-2 transition-colors duration-200 ${
         tile.speaking ? 'ring-amber-400' : 'ring-transparent'
       }`}
     >
       {tile.videoTrack ? (
-        <VideoSink track={tile.videoTrack} />
+        // Contain rather than cover: the box is already the right shape, so
+        // there is nothing to crop, and this is what keeps it honest during
+        // the moment between a rotation and the box catching up.
+        <VideoSink track={tile.videoTrack} fit="contain" onAspect={onAspect} />
       ) : (
         <span
           aria-hidden="true"
