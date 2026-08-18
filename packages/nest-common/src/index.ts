@@ -158,11 +158,44 @@ function redisForRateLimit(): RedisClient {
   return rateLimitRedis;
 }
 
-/** Real client address: Nginx forwards the original in `x-forwarded-for`. */
-function clientAddress(request: Request): string {
-  const forwarded = request.headers['x-forwarded-for'];
-  const first = (Array.isArray(forwarded) ? forwarded[0] : forwarded)?.split(',')[0]?.trim();
-  return first || request.ip || request.socket.remoteAddress || 'unknown';
+/** Just the headers and peer address a client address can be derived from. */
+export interface AddressableRequest {
+  headers: Record<string, string | string[] | undefined>;
+  ip?: string;
+  socket?: { remoteAddress?: string };
+}
+
+function headerValue(request: AddressableRequest, name: string): string | undefined {
+  const raw = request.headers[name];
+  const value = Array.isArray(raw) ? raw[0] : raw;
+  return value?.trim() || undefined;
+}
+
+/**
+ * Which address a request is counted against.
+ *
+ * `x-forwarded-for` is the header everyone reaches for and it is the wrong one
+ * to read from the left: the gateway *appends* to it, so a caller that sends
+ * `X-Forwarded-For: 1.2.3.4` gets `1.2.3.4, <their real address>` and the first
+ * entry is a bucket they chose themselves. A credential-stuffing run then picks
+ * a new one per request and the service-level limit counts nothing at all.
+ *
+ * `x-real-ip` is set by the gateway with `proxy_set_header`, which *replaces*
+ * whatever arrived, so it cannot be chosen by the caller. It is read first, and
+ * the last hop of `x-forwarded-for` - the one the gateway added - is the
+ * fallback for a proxy that sets only that.
+ *
+ * Neither header means anything on a request that did not come through the
+ * gateway, which is why the services sit on internal Docker networks and
+ * nothing but Nginx can reach them.
+ */
+export function clientAddress(request: AddressableRequest): string {
+  const real = headerValue(request, 'x-real-ip');
+  if (real) return real;
+
+  const forwarded = headerValue(request, 'x-forwarded-for');
+  const hops = forwarded?.split(',').map((hop) => hop.trim()).filter(Boolean) ?? [];
+  return hops[hops.length - 1] || request.ip || request.socket?.remoteAddress || 'unknown';
 }
 
 export interface RateLimitOptions {
@@ -269,6 +302,29 @@ export function rateLimit(options: RateLimitOptions): Type<CanActivate> {
   return RateLimitGuard;
 }
 
+/**
+ * What `CORS_ORIGIN` means on the wire.
+ *
+ * `credentials: true` alongside a wildcard origin is a contradiction - no
+ * browser honours the pair - and it was asking for a cookie-bearing
+ * cross-origin request this API has no use for: every client authenticates with
+ * a bearer token it attaches itself. So credentials are allowed only when an
+ * explicit origin list says which sites they may come from, and a comma
+ * separates entries so a deployment can name its web client and its admin panel
+ * without opening the door to everything.
+ */
+export function corsOptions(origin: string): { origin: string | string[]; credentials: boolean } {
+  const list = origin
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+
+  if (list.length === 0 || list.includes('*')) {
+    return { origin: '*', credentials: false };
+  }
+  return { origin: list, credentials: true };
+}
+
 /** Every service mounts this at `/health`. Keep the payload free of infra detail. */
 export function createHealthController(serviceName: string, check?: () => Promise<boolean>) {
   @Controller('health')
@@ -307,10 +363,7 @@ export async function bootstrapService(options: BootstrapOptions): Promise<INest
 
   // `/health` stays unprefixed so orchestrators probe one stable path.
   app.setGlobalPrefix(options.globalPrefix ?? 'api/v1', { exclude: ['health'] });
-  app.enableCors({
-    origin: envOr('CORS_ORIGIN', '*'),
-    credentials: true,
-  });
+  app.enableCors(corsOptions(envOr('CORS_ORIGIN', '*')));
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
