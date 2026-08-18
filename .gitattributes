@@ -1,0 +1,5 @@
+# Shell scripts keep LF even when checked out on Windows with core.autocrlf=true.
+# infrastructure/docker/backup.sh is bind-mounted into a Linux container and run
+# by /bin/sh: with CRLF line endings that fails as `\r: not found`, on the host
+# where it is easiest to miss and hardest to explain.
+*.sh text eol=lf

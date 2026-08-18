@@ -272,6 +272,26 @@ Fixed in the same pass:
       uploader recorded none - so a photo from a phone was the one attachment
       with no reserved space anywhere, including on the phone that sent it.
 
+Infrastructure:
+
+- [x] **One data path for a deployment.** `pnpm data:path /srv/x/nexora` creates
+      `data/postgres`, `data/redis`, `data/media` (with `pictures/` and
+      `attachments/`) and `backup/`, chowns the uploads tree to the uid the
+      services run as, and writes the four bind paths into `.env`. Compose
+      cannot branch on whether a variable is set, so each mount interpolates one
+      variable that defaults to the named volume it always used - a deployment
+      that never runs the script is unchanged. Not `image/` and `video/` under
+      media: an attachment is encrypted in the renderer, so the server never
+      learns what it is, and only pictures are stored in the clear.
+- [x] **Scheduled database backups, and one before every migration.** A
+      `db-backup` container dumps gzipped plain SQL every
+      `BACKUP_INTERVAL_HOURS` (weekly by default) and keeps `BACKUP_KEEP` of
+      them; a `db-backup-once` one-shot runs before `prisma migrate deploy` and
+      `migrate` now waits for it to *succeed*, so a schema change on a deployed
+      database cannot go first. `pg_dump` runs from the postgres image so its
+      version matches the server's, dumps land under a `.partial` name until
+      complete, and plain SQL means a restore needs nothing but `psql`.
+
 Desktop and web, earlier passes:
 
 - [x] **Per-person volume and mute.** Per machine, keyed by user id; a muted

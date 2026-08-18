@@ -37,6 +37,31 @@ x-service-env: &service-env
   S3_SECRET_KEY: ${S3_SECRET_KEY:-}
   S3_PUBLIC_URL: ${S3_PUBLIC_URL:-}
 
+# Everything the backup script needs: it reaches Postgres over the data network
+# with the same credentials the services use, and writes where BACKUP_DATA_PATH
+# points. `pg_dump` comes from the postgres image so its version matches the
+# server's - a dump taken by a newer or older client is the classic way to find
+# out, during a restore, that the backup was never usable.
+x-backup: &backup
+  image: postgres:16-alpine
+  environment:
+    PGHOST: postgres
+    PGUSER: ${POSTGRES_USER:-postgres}
+    PGPASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    PGDATABASE: ${POSTGRES_DB:-nexora}
+    BACKUP_DIR: /backups
+    # Weekly, and eight kept - two months of history for a few megabytes of
+    # gzipped SQL. The interval is in hours: 24 is nightly, 1 is hourly.
+    BACKUP_INTERVAL_HOURS: ${BACKUP_INTERVAL_HOURS:-168}
+    BACKUP_KEEP: ${BACKUP_KEEP:-8}
+    BACKUP_ON_MIGRATE: ${BACKUP_ON_MIGRATE:-1}
+  entrypoint: ["/bin/sh", "/usr/local/bin/backup.sh"]
+  volumes:
+    - ./backup.sh:/usr/local/bin/backup.sh:ro
+    - ${BACKUP_DATA_PATH:-backup-data}:/backups
+  networks:
+    - data-network
+
 services:
   nginx:
     image: nginx:1.27-alpine
@@ -115,6 +140,29 @@ services:
     profiles:
       - public
 
+  # One dump, then exit - the safety net for the migration below, which is the
+  # one moment a schema change can lose data irreversibly. It runs before
+  # `migrate`, and a failed dump stops the migration rather than being logged
+  # and ignored; set BACKUP_ON_MIGRATE=0 if you would rather it did not.
+  db-backup-once:
+    <<: *backup
+    restart: "no"
+    command: ["once"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # The scheduled backup: one dump now, then one every BACKUP_INTERVAL_HOURS.
+  # Sleep-and-dump rather than cron because a container that only wakes up
+  # hourly is a container whose failures nobody sees in `docker compose logs`.
+  db-backup:
+    <<: *backup
+    restart: unless-stopped
+    command: ["loop"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   # One-shot: applies Prisma migrations before any service accepts traffic.
   # Reuses the auth-service image because it already carries the schema and the
   # Prisma CLI; nothing about it is auth-specific.
@@ -134,6 +182,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      db-backup-once:
+        condition: service_completed_successfully
     networks:
       - data-network
 
@@ -335,7 +385,10 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
       POSTGRES_DB: ${POSTGRES_DB:-nexora}
     volumes:
-      - postgres-data:/var/lib/postgresql/data
+      # POSTGRES_DATA_PATH is a Docker volume name by default and a host path
+      # when scripts/data-path.mjs has written one. Postgres chowns its own
+      # data directory on start, so a bind mount needs nothing done to it.
+      - ${POSTGRES_DATA_PATH:-postgres-data}:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
       interval: 5s
@@ -348,7 +401,7 @@ services:
     image: redis:7-alpine
     restart: unless-stopped
     volumes:
-      - redis-data:/data
+      - ${REDIS_DATA_PATH:-redis-data}:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -361,6 +414,7 @@ volumes:
   postgres-data:
   redis-data:
   upload-data:
+  backup-data:
 
 networks:
   cloudflare-network:

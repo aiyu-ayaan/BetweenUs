@@ -1313,6 +1313,23 @@ are the gaps it left open deliberately, in the order they matter.
       credentials and both `call-service` and `remote-gateway` hand them out;
       it is off until an operator configures a key, which is the intended
       default
+- [x] One data path per deployment. `pnpm data:path /srv/x/nexora` creates
+      `data/postgres`, `data/redis`, `data/media` (`pictures/`, `attachments/`)
+      and `backup/`, chowns the uploads tree to uid 1000, and writes the four
+      bind paths into `.env`. Compose interpolates one variable per mount, each
+      defaulting to the named volume it always used, so a deployment that never
+      runs the script is unchanged. Media is not split into `image/`/`video/`:
+      attachments are encrypted in the renderer, so the server never learns what
+      they are
+- [x] Automatic database backups. `db-backup` dumps gzipped plain SQL every
+      `BACKUP_INTERVAL_HOURS` (weekly by default, `BACKUP_KEEP` retained), and
+      `db-backup-once` dumps immediately before `prisma migrate deploy` with
+      `migrate` waiting for it to succeed - so a migration on a deployed
+      database cannot go first. `pg_dump` runs from the postgres image so client
+      and server versions match. Restore is `psql` and nothing else
+- [ ] Backups leave the host. The dumps sit next to the database they came from,
+      which covers a bad migration and not a dead disk; shipping them off-box is
+      the operator's own job today
 - [ ] Secret management beyond `.env`, and rotation
 - [ ] Something that actually deploys the images the pipeline pushes
 

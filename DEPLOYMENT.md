@@ -29,6 +29,7 @@ it states the gaps a deployment still has rather than implying there are none.
 15. [Day two - backups, upgrades, logs](#15-day-two---backups-upgrades-logs)
 16. [Known gaps](#16-known-gaps)
 17. [How the images are built, and why rebuilds are quick](#17-how-the-images-are-built-and-why-rebuilds-are-quick)
+18. [One data path, and automatic backups](#18-one-data-path-and-automatic-backups)
 
 ---
 
@@ -140,6 +141,8 @@ node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
 | `CLOUDFLARE_TUNNEL_TOKEN` | token, or empty | Only for the container tunnel (`--profile public`). Leave empty when the tunnel already runs on the host |
 | `LOG_LEVEL` | `info` | `debug` is noisy and logs more request detail than a public deployment wants |
 | `STORAGE_DRIVER` and the `S3_*` block | see §13 | Empty means uploads live on a Docker volume |
+| `NEXORA_DATA_PATH` | a path you choose, or empty | Where this deployment's data lives - `pnpm data:path /srv/x/nexora` creates the tree and writes the four bind paths Compose mounts. Empty keeps everything in Docker named volumes, as before. See §18 |
+| `BACKUP_INTERVAL_HOURS` / `BACKUP_KEEP` | `168` / `8` | Weekly dumps, eight kept. A dump also runs before every migration, and the migration will not start if it fails (§18) |
 
 > [!IMPORTANT]
 > **502 Bad Gateway / Upstream Connection Failures:** If `auth-service` fails to start because database migrations failed (due to a password or hostname mismatch in `DATABASE_URL`), Nginx will return a **502 Bad Gateway** when accessing `/admin` or signing in (`/api/v1/auth/login`). Ensure `DATABASE_URL` contains the exact same password as `POSTGRES_PASSWORD`.
@@ -231,15 +234,20 @@ docker compose --env-file .env -f infrastructure/docker/docker-compose.yml up -d
 What happens, in order:
 
 1. **`postgres` and `redis`** start and become healthy. Neither publishes a port.
-2. **`migrate`** runs once - `prisma migrate deploy` against the database, using
+2. **`db-backup-once`** takes one dump, because the next step is the only one
+   that can lose data irreversibly. If the dump fails, the migration does not
+   run (§18).
+3. **`migrate`** runs once - `prisma migrate deploy` against the database, using
    the auth-service image because it already carries the schema and the Prisma
    CLI. Nothing about it is auth-specific.
-3. **Every service** waits for `migrate` to complete successfully, so no service
+4. **Every service** waits for `migrate` to complete successfully, so no service
    ever serves traffic against an unmigrated schema.
-4. **`web`** and **`admin-web`** each serve a static bundle: the app itself at
+5. **`db-backup`** starts the schedule: another dump every
+   `BACKUP_INTERVAL_HOURS`.
+6. **`web`** and **`admin-web`** each serve a static bundle: the app itself at
    `/`, and the panel under `/admin`.
-5. **`nginx`** starts last and becomes healthy once `/health` answers.
-6. **`cloudflared`** starts only with `--profile public`, and only after Nginx is
+7. **`nginx`** starts last and becomes healthy once `/health` answers.
+8. **`cloudflared`** starts only with `--profile public`, and only after Nginx is
    *healthy* rather than merely present.
 
 Check it:
@@ -550,7 +558,8 @@ set at all.
 
 - **All `S3_*` empty (default).** Uploads land in `LOCAL_STORAGE_PATH`, which
   compose maps to the `upload-data` volume at `/data/uploads`, and chat-service
-  serves them from `/api/v1/uploads`. Nothing to configure; back the volume up.
+  serves them from `/api/v1/uploads`. Nothing to configure; back the volume up -
+  or give the deployment a data path (§18) and back up a directory instead.
 - **`S3_ENDPOINT`, `S3_BUCKET`, `S3_ACCESS_KEY`, `S3_SECRET_KEY` all set.** The
   S3 driver takes over. Partial configuration stays on local disk rather than
   half-working.
@@ -638,13 +647,22 @@ If Cloudflare or Nginx returns a **502 Bad Gateway** when navigating to `https:/
 
 ## 15. Day two - backups, upgrades, logs
 
-**Backups.** Two volumes hold everything that cannot be rebuilt:
-`postgres-data` and `upload-data`.
+**Backups.** Two places hold everything that cannot be rebuilt: the database and
+the uploads. Both are backed up for you - the database on a schedule and before
+every migration, the uploads by copying the directory §18 puts them in.
+
+The stack runs `db-backup` from the moment it comes up: one dump now, then one
+every `BACKUP_INTERVAL_HOURS` - weekly by default - keeping the newest
+`BACKUP_KEEP`. §18 is the whole of it, including where the dumps land and how to
+restore one. On demand:
 
 ```bash
-docker compose --env-file .env -f infrastructure/docker/docker-compose.yml \
-  exec postgres pg_dump -U postgres nexora > nexora-$(date +%F).sql
+pnpm db:backup
 ```
+
+The uploads are not dumped by anything; they are a directory. Point
+`NEXORA_DATA_PATH` at somewhere your host backup already covers, or copy
+`<root>/data/media` on the same schedule as everything else.
 
 Understand what a backup restores. Messages and attachments are stored as
 ciphertext, and the keys that open them live on users' devices, sealed with the
@@ -662,8 +680,10 @@ docker compose --env-file .env -f infrastructure/docker/docker-compose.yml \
 ```
 
 The `migrate` one-shot runs again before any service takes traffic, so schema
-changes apply in the right order. Take a database dump first; there is no
-automated rollback.
+changes apply in the right order - and `db-backup-once` runs before *it*, so the
+dump you would have wanted exists whether or not you remembered to take one. If
+that dump fails the migration does not start. There is still no automated
+rollback: recovery is restoring the dump (§18).
 
 **Logs.** Every service logs structured JSON with a request id, and the id
 survives a hop between services - the gateway emits the same shape, so gateway
@@ -708,6 +728,9 @@ than useless. All of these are tracked in `development/TODO.md`.
   per other participant. Comfortable to about five on video and eight on voice;
   past that a call degrades for everyone at once, and `call-service` refuses a
   ninth peer rather than letting it.
+- **Backups never leave the host.** The dumps §18 takes sit next to the database
+  they came from, which covers a bad migration and not a dead disk. Copying
+  `<root>/backup` somewhere else is the operator's own job.
 - **Secrets are `.env` files.** No Docker secrets, no external manager, no
   rotation.
 - **Nothing deploys.** Images are built and pushed by CI on a tag; putting them
@@ -767,3 +790,156 @@ required: it pulls the BuildKit frontend providing `COPY --parents`, which is
 what lets the dependency stage take the workspace manifests without the source
 behind them. BuildKit fetches it once and caches it, but the first build on a
 machine with no network access to Docker Hub will fail on that line.
+
+---
+
+## 18. One data path, and automatic backups
+
+By default every persistent thing lives in a Docker named volume, which is fine
+until you want to know where it is, put it on a particular disk, or include it
+in the backup the host already runs. Say where the data lives once instead:
+
+```bash
+pnpm data:path /srv/sd2345/docker/nexora
+```
+
+That creates the tree, hands the uploads directory to the uid the services run
+as, and writes the paths into `.env`:
+
+```text
+/srv/sd2345/docker/nexora/
+├── data/
+│   ├── postgres/          the database cluster
+│   ├── redis/             Redis' own AOF/RDB
+│   └── media/             uploads
+│       ├── pictures/      avatars and server icons
+│       └── attachments/   message attachments
+└── backup/                nexora-YYYYMMDD-HHMMSS.sql.gz
+```
+
+Then bring the stack up as usual (`pnpm prod:up`). Re-running the script is
+safe; it creates what is missing and rewrites the same four values.
+
+**Why the tree has these names and not `image/` and `video/`.** `pictures/` and
+`attachments/` are the prefixes chat-service actually writes, and an attachment
+arrives *already encrypted* from the renderer - the server stores an opaque blob
+and serves it as `application/octet-stream`. Splitting attachments by media type
+would mean either trusting a filename the client chose or decrypting them
+server-side, and the second is the property the whole design exists to keep.
+Pictures are the exception because they are not encrypted, which is why they get
+a directory of their own.
+
+**What Compose actually reads.** Not `NEXORA_DATA_PATH` - Compose cannot branch
+on whether a variable is set, so each mount interpolates one variable that falls
+back to the named volume it always used:
+
+| Variable | Mount | Default |
+| --- | --- | --- |
+| `POSTGRES_DATA_PATH` | `/var/lib/postgresql/data` | `postgres-data` volume |
+| `REDIS_DATA_PATH` | `/data` | `redis-data` volume |
+| `UPLOAD_DATA_PATH` | `/data/uploads` | `upload-data` volume |
+| `BACKUP_DATA_PATH` | `/backups` | `backup-data` volume |
+
+A deployment that never runs the script therefore behaves exactly as before, and
+one that does can still override a single path by hand - keep the database on the
+fast disk and the backups on the big one.
+
+`NEXORA_DATA_PATH` is recorded in `.env` only so the script can be re-run with
+no argument.
+
+**Permissions, the one thing that bites.** A named volume is seeded from the
+image, so it inherits the ownership the image ships. A **bind mount never is**:
+Docker creates it root-owned, and the services run as uid 1000. Postgres and
+Redis chown their own directory on start; the Node services do not, so the
+script chowns `data/media` (and both subdirectories) to `1000:1000`. Run it as
+root, or do it yourself afterwards:
+
+```bash
+sudo chown -R 1000:1000 /srv/sd2345/docker/nexora/data/media
+```
+
+Get this wrong and every upload fails with `EACCES` while the rest of the
+service works perfectly.
+
+**Moving a running deployment onto a path.** The volumes are not migrated for
+you. With the stack down, copy the contents out of each volume and into the
+matching directory:
+
+```bash
+docker compose --env-file .env -f infrastructure/docker/docker-compose.yml down
+docker run --rm -v nexora_postgres-data:/from -v /srv/sd2345/docker/nexora/data/postgres:/to \
+  alpine sh -c 'cp -a /from/. /to/'
+# ...the same for nexora_redis-data -> data/redis and nexora_upload-data -> data/media
+pnpm data:path /srv/sd2345/docker/nexora     # chowns media, writes .env
+pnpm prod:up
+```
+
+Take a dump first (`pnpm db:backup`), and keep the old volumes until the stack
+has come back up healthy. Copying *into* a live Postgres data directory
+corrupts it; the stack has to be down.
+
+### The backups
+
+Two containers, one script (`infrastructure/docker/backup.sh`), both running
+`pg_dump` from the postgres image so the client version always matches the
+server's:
+
+- **`db-backup`** - dumps once at start, then every `BACKUP_INTERVAL_HOURS`, and
+  deletes everything past the newest `BACKUP_KEEP`. Weekly and eight by default,
+  which is two months of history for a few megabytes.
+- **`db-backup-once`** - one dump, immediately before `prisma migrate deploy`.
+  `migrate` waits for it to *succeed*, so a schema change on a deployed database
+  cannot go first. `BACKUP_ON_MIGRATE=0` turns that off, which is a decision
+  rather than a default.
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `BACKUP_INTERVAL_HOURS` | `168` | Hours between scheduled dumps. `24` nightly, `1` hourly |
+| `BACKUP_KEEP` | `8` | Dumps retained. The oldest beyond this are deleted after each dump |
+| `BACKUP_ON_MIGRATE` | `1` | Dump before migrating, and refuse to migrate if it fails |
+| `BACKUP_DATA_PATH` | `backup-data` | Where the dumps land |
+
+A change to any of them takes effect on
+`docker compose ... up -d db-backup`.
+
+Dumps are gzipped plain SQL named `nexora-YYYYMMDD-HHMMSS.sql.gz`, written under
+a `.partial` name and renamed only when `pg_dump` finished - so a dump
+interrupted halfway is never mistaken for a backup, by the retention sweep or by
+you. Plain SQL rather than a custom-format archive because restoring it needs
+nothing but `psql`, and the moment you need a restore is the wrong moment to
+discover a version mismatch in `pg_restore`.
+
+**Restoring one.** Into an empty database, with the services stopped so nothing
+writes underneath it:
+
+```bash
+C=infrastructure/docker/docker-compose.yml
+docker compose --env-file .env -f $C stop auth-service server-service chat-service \
+  presence-service notification-service call-service remote-gateway
+
+# Fresh database, then the dump. Adjust the filename.
+docker compose --env-file .env -f $C exec -T postgres \
+  psql -U postgres -c 'DROP DATABASE nexora WITH (FORCE);' -c 'CREATE DATABASE nexora;'
+gunzip -c /srv/sd2345/docker/nexora/backup/nexora-20260818-030000.sql.gz \
+  | docker compose --env-file .env -f $C exec -T postgres psql -U postgres -d nexora
+
+docker compose --env-file .env -f $C up -d
+```
+
+> [!WARNING]
+> `DROP DATABASE ... WITH (FORCE)` destroys the current database. It is the
+> right thing when the dump is what you want back, and the wrong thing by
+> accident: take a dump of the *current* state first (`pnpm db:backup`) so a
+> mistaken restore is itself recoverable.
+
+The stack comes back up with `migrate` running against the restored schema, so a
+dump older than the code is brought forward rather than refused.
+
+**What a restored dump gives back, and what it does not.** Messages and
+attachments are ciphertext, and the keys live on users' devices. A restore
+returns everybody's history **because their devices still hold their keys** - a
+user who has lost every device does not get history back, and no server-side
+backup changes that. `development/E2EE.md` states the limits plainly. The dumps
+are also worth protecting for the opposite reason: they contain password hashes,
+sealed identity backups and every OAuth client secret, so they belong somewhere
+with the same access as the database itself.

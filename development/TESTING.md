@@ -678,6 +678,11 @@ that keeps one account in one call across every device it is signed in on, and
 `AuthService` against an in-memory database (register, login, refresh
 rotation, reuse detection, logout).
 
+One check lives outside the packages, because the script it covers does:
+`node scripts/data-path.mjs --check` asserts the `.env` rewriting in the data-path
+script - the one place in this repo that edits a file somebody else owns, where a
+missed key silently loses a value rather than failing.
+
 `.github/workflows/ci.yml` runs those on every pull request, then a second job
 that starts Postgres and Redis, applies migrations, boots auth-, server-,
 chat- and presence-service and runs both smoke scripts.
@@ -820,6 +825,34 @@ docker exec nexora-dev-redis redis-cli keys 'presence:voice:*'
 
 A published track logs `"encryption":1` — that is the end-to-end encrypted path.
 
+### The data path and the backups
+
+Worth exercising once, because both only run in the container stack:
+
+```bash
+pnpm data:path /tmp/nexora-test          # or D:/nexora-test on Windows
+```
+
+The tree it prints should exist (`data/postgres`, `data/redis`,
+`data/media/{pictures,attachments}`, `backup/`), and `.env` should now carry the
+four `*_DATA_PATH` values. Bring the stack up, then:
+
+```bash
+docker compose --env-file .env -f infrastructure/docker/docker-compose.yml \
+  logs db-backup-once db-backup
+ls -l /tmp/nexora-test/backup/           # nexora-<date>-<time>.sql.gz
+```
+
+Two things to confirm rather than assume: `db-backup-once` exited `0` **before**
+`migrate` ran (`docker compose ... ps -a` shows both), and a dump restores —
+`gunzip -c <dump> | head -40` should be readable SQL, not a truncated file. Set
+`BACKUP_INTERVAL_HOURS=1` and recreate `db-backup` if you want to watch the
+schedule tick rather than trust it.
+
+Upload an attachment afterwards. If it fails with `EACCES`, the media directory
+is still root-owned — the script says so when it cannot chown it (see the
+troubleshooting row below).
+
 ## Troubleshooting
 
 | Symptom | Cause |
@@ -827,6 +860,7 @@ A published track logs `"encryption":1` — that is the end-to-end encrypted pat
 | Calls work on the LAN but not from another network | The two peers cannot form a direct path - symmetric or carrier-grade NAT on one or both ends. Signalling is fine either way, which is why everything else works. Set `CLOUDFLARE_TURN_KEY_ID` and `CLOUDFLARE_TURN_KEY_API_TOKEN` (dashboard → Realtime → TURN) and recreate call-service: it mints a relay credential per call and a client uses it only when there is no direct path. Opens no ports at either end. A LAN call is unchanged - a direct path still wins the ICE race whenever there is one |
 | Calls still time out from outside after setting the TURN key | `docker logs nexora-call-service-1 \| grep -i turn`. "Minted Cloudflare TURN credentials" means the key works and the problem is elsewhere; "Could not mint" carries Cloudflare's own answer, usually a wrong key id or a revoked token. A join's `POST /api/v1/calls/token` response should carry a non-empty `iceServers`; if it is empty the service has no key configured, which a container keeps from when it was created |
 | Attachments fail only in the container stack, with `EACCES` in the chat-service log | The upload volume mounts at `/data/uploads` and the service runs as uid 1000, but Docker creates a mountpoint it invents itself as root - so nothing could be written. The image now ships that directory owned by `node`, which an *empty* named volume inherits. A volume that already has files in it, or a host path in `UPLOAD_DATA_PATH`, is never seeded from the image: `chown -R 1000:1000` it once |
+| `migrate` never starts, and `db-backup-once` exited non-zero | The pre-migration dump failed, and `migrate` waits for it to *succeed* on purpose — a schema change on a deployed database is the one step that cannot be undone. `docker compose ... logs db-backup-once` names it: usually a wrong `POSTGRES_PASSWORD`, or `/backups` not writable. `BACKUP_ON_MIGRATE=0` proceeds without a dump, which is a decision rather than a workaround |
 | `couldn't find env file: .../infrastructure/docker/.env` | `--env-file .env` is resolved against the shell's working directory, not against the compose file, and the only `.env` is at the repo root. Run `pnpm dev:infra`, which works from anywhere, or `cd` to the repo root first |
 | `Can't reach database server at localhost:5432`, while `Test-NetConnection 127.0.0.1 -Port 5432` says `True` | `localhost` resolves to `::1` first and the container publishes IPv4 only. Whether `::1` answers depends on a relay outside this repo: WSL's NAT networking provided one, mirrored networking does not, so switching modes breaks this without touching anything in the stack. Use `127.0.0.1` in `DATABASE_URL` and `REDIS_URL` - `.env.example` does |
 | Everything answers "Request failed", including sign-in | No services are up. `pnpm dev` tears down all ten persistent tasks when any one of them exits non-zero, so a single port clash reads as a dead backend. `curl 127.0.0.1:3001/health` first, and check the last lines of the `pnpm dev` output for which task failed |
