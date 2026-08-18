@@ -25,6 +25,7 @@ import {
   Get,
   Param,
   Post,
+  ForbiddenException,
   Req,
   Res,
   UnauthorizedException,
@@ -34,7 +35,7 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import type { Request, Response } from 'express';
-import { prisma } from '@nexora/database';
+import { prisma, resolveChannelAccess } from '@nexora/database';
 import {
   CurrentUser,
   JwtAuthGuard,
@@ -229,6 +230,13 @@ export class UploadsController {
    * UUID, so this was a capability URL, and a capability URL that never expires
    * is one leak away from permanent. The clients already send the header.
    *
+   * Holding *a* session is not the same as being entitled to this object,
+   * though, and for a while it was treated as if it were: any signed-in account
+   * that came by a key could fetch the bytes behind it. So the row is consulted
+   * as well - the uploader, or somebody who can see the channel the message
+   * carrying it was sent to. It is still ciphertext either way; this is the
+   * layer that stops a leaked key being a leaked file.
+   *
    * A picture - an avatar, a server icon - is drawn by an `<img>` tag, which
    * cannot carry an Authorization header. Requiring one there would mean every
    * avatar in the app failing to load. It stays public, which
@@ -246,11 +254,20 @@ export class UploadsController {
       throw new BadRequestException({ code: 'INVALID_KEY', message: 'Invalid object key' });
     }
 
-    if (!key.startsWith('pictures/') && !signedIn(request)) {
-      throw new UnauthorizedException({
-        code: 'UNAUTHORIZED',
-        message: 'Sign in to fetch this object',
-      });
+    if (!key.startsWith('pictures/')) {
+      const userId = callerId(request);
+      if (!userId) {
+        throw new UnauthorizedException({
+          code: 'UNAUTHORIZED',
+          message: 'Sign in to fetch this object',
+        });
+      }
+      if (!(await mayRead(userId, key))) {
+        throw new ForbiddenException({
+          code: 'FORBIDDEN',
+          message: 'This file is not yours to fetch',
+        });
+      }
     }
 
     // Half-uploaded parts are scratch space, not objects anyone may read.
@@ -353,7 +370,7 @@ function contentTypeFor(key: string): string {
 }
 
 /**
- * Whether this request carries a valid access token.
+ * Who this request is, or null when it is nobody.
  *
  * `JwtAuthGuard` is the usual answer and is the wrong shape here: the guard
  * applies to a whole route, and this route serves two kinds of object with two
@@ -361,13 +378,33 @@ function contentTypeFor(key: string): string {
  * header, an attachment is not. So the check is a function rather than a
  * decorator, and it is the same verification the guard performs.
  */
-function signedIn(request: Request): boolean {
+function callerId(request: Request): string | null {
   const token = bearerToken(request.headers.authorization);
-  if (!token) return false;
+  if (!token) return null;
   try {
-    verifyAccessToken(token);
-    return true;
+    return verifyAccessToken(token).sub;
   } catch {
-    return false;
+    return null;
   }
+}
+
+/**
+ * Whether this account is entitled to the object behind a key.
+ *
+ * Every attachment has a row - `record` makes sure of it, and undoes the upload
+ * rather than leave one without - so a key with no row is a key to nothing, and
+ * an unclaimed upload belongs to whoever made it and to nobody else. Once a
+ * message carries it, the question becomes the same one the message itself
+ * answers: can this account see that channel. `resolveChannelAccess` is where
+ * that already lives, private channels and direct messages included.
+ */
+async function mayRead(userId: string, key: string): Promise<boolean> {
+  const row = await prisma.attachment.findUnique({
+    where: { key },
+    select: { uploaderId: true, message: { select: { channelId: true } } },
+  });
+  if (!row) return false;
+  if (row.uploaderId === userId) return true;
+  if (!row.message) return false;
+  return (await resolveChannelAccess(userId, row.message.channelId)) !== null;
 }
