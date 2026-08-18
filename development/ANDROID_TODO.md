@@ -413,9 +413,14 @@ says so too; both halves are needed.
 - [x] Join a server with an invite code, and create one. The sheet asks for a
       code rather than a slug, because a slug is a name and no longer opens a
       door.
-- [ ] Managing invites from the phone: minting one with an expiry and a use
-      limit, revoking it, and a link that opens the app. The API client has the
-      three calls; there is no screen for them.
+- [x] Managing invites from the phone: minting one with an expiry and a use
+      limit, copying or sending it as a link, and revoking it.
+- [ ] A link that opens the app. The deployment's host is unknown at build
+      time - Nexora is self-hosted - so a manifest filter for
+      `https://…/invite/…` would either name a host that is wrong for everyone
+      or match every https link on the phone. A `nexora://` scheme is the way
+      in that does not need to know the host; until then a link is pasted into
+      *Join a server*, which takes one.
 - [x] Member list with presence and roles.
 - [x] Role and permission editing for those who hold `MANAGE_ROLE`.
 - [x] Channel create/rename/delete.
