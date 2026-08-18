@@ -218,6 +218,13 @@ data is cleared.
 - [x] Invites are one tap from the server they belong to. They were three -
       drawer, account settings, server settings - which is a long walk to
       answer "how do I add somebody".
+- [x] Large attachments go up in parts, so the phone's ceiling is the
+      deployment's - 100 MB - rather than 25 MB, which was never the file cap
+      at all: it is the *per request* cap, and this client only knew how to
+      send a file in one request. `Conversation.putBytes` is the port of the
+      desktop's, sequential for the same reason. The upload also survives an
+      access token expiring mid-file, which minutes of parts makes likely, and
+      reports its progress into the send preview.
 - [ ] Markdown-ish message body rendering, matching
       `apps/desktop/src/services/message-body.ts`.
 

@@ -124,6 +124,13 @@ while everything under them changes size.
   and *send* shares the link, not the code. Pasting either into *Join a server*
   shows the same card the desktop does before anything is joined.
 
+**Large attachments**
+- Send a 40 MB file from the phone. It used to be refused as "larger than 25
+  MB"; it now uploads in parts, with a percentage in the send preview, and
+  arrives whole. The desktop, which has always done this, is the control.
+- Kill the network mid-upload. The send fails and no half-finished object is
+  left behind — the parts are aborted on the way out.
+
 **Profile pictures**
 - User settings → My Account → *Upload avatar*. It shows up in Alice's own
   panel, and in the member list and message rows in Bob's window after his

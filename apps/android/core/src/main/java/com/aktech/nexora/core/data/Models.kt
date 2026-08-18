@@ -146,6 +146,33 @@ data class ServerInvite(
 }
 
 /**
+ * One part of a large upload, as the server acknowledged it.
+ *
+ * The etag is the server's word for "I have this part"; completion is the list
+ * of them handed back, which is what lets the storage driver - local disk or
+ * S3 - assemble the object without either end holding it whole.
+ */
+data class UploadedPart(val partNumber: Int, val etag: String) {
+    fun toJson(): JSONObject = JSONObject().put("partNumber", partNumber).put("etag", etag)
+
+    companion object {
+        fun from(json: JSONObject) = UploadedPart(
+            partNumber = json.optInt("partNumber"),
+            etag = json.optString("etag"),
+        )
+    }
+}
+
+/**
+ * A multipart upload the server has opened.
+ *
+ * The ticket is sealed server-side and carries the account it was opened by and
+ * an expiry, so it is state the client holds rather than state a replica has to
+ * remember - any of them can accept the next part.
+ */
+data class MultipartTicket(val ticket: String, val maxPartBytes: Int)
+
+/**
  * What an invite leads to, before it is accepted.
  *
  * A link that joins the moment it is opened tells the person following it

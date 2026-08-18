@@ -628,6 +628,14 @@ that has to be right for every future deployment is one that will be wrong.
 
 ### Media: attachments, pictures and uploads (phase 13)
 
+- **25 MB was never the attachment limit, and a client that treated it as one
+  was refusing files the deployment would have taken.** `MAX_UPLOAD_BYTES` is
+  what one request may carry; `MAX_ATTACHMENT_BYTES` is what a file may be, and
+  the gap between them is what multipart exists to cross. The Android client
+  only knew how to send a file in one request, so it enforced the smaller
+  number and called it the cap. It sends in parts now, like the desktop, and
+  both clients are bounded by the deployment rather than by themselves.
+
 - **An attachment is encrypted before it is uploaded, and that is what lets a
   channel carry anything.** The alternative was the MIME allowlist the upload
   route started with, which is a losing game: every type someone wants is one

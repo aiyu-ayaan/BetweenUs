@@ -65,9 +65,15 @@
          as required would keep Nexora off any device without a radio. -->
     <uses-feature android:name="android.hardware.bluetooth" android:required="false" />
 
+    <!-- largeHeap, for attachments. A file goes up sealed, so the plaintext and
+         the ciphertext exist at the same time - a hundred megabyte video is two
+         hundred megabytes of arrays, which the default heap on a mid-range
+         phone does not have. It is asked for because of what this app does with
+         one file, not as a way of not thinking about memory. -->
     <application
         android:name=".NexoraApp"
         android:allowBackup="true"
+        android:largeHeap="true"
         android:networkSecurityConfig="@xml/network_security_config"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules"

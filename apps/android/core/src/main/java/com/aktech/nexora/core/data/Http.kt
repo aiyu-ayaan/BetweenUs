@@ -46,13 +46,34 @@ object Http {
             builder.method(method, body?.toRequestBody(json) ?: emptyBodyFor(method))
         }
 
+    /**
+     * A client for bodies that take minutes rather than seconds.
+     *
+     * Twenty seconds is right for a JSON call and wrong for an upload: eight
+     * megabytes of ciphertext on a phone's uplink is a slow minute on a good
+     * day, and the timeout fired on the part rather than on anything being
+     * wrong. It shares the connection pool with [client] - a `newBuilder`
+     * client is the same client with different timeouts.
+     */
+    private val uploadClient: OkHttpClient by lazy {
+        client.newBuilder()
+            .writeTimeout(3, TimeUnit.MINUTES)
+            .readTimeout(3, TimeUnit.MINUTES)
+            .build()
+    }
+
     /** Multipart and other prepared bodies - the upload routes. */
-    fun post(url: String, body: RequestBody, bearer: String? = null): Result =
-        execute(url, bearer) { it.post(body) }
+    fun post(
+        url: String,
+        body: RequestBody,
+        bearer: String? = null,
+        slow: Boolean = false,
+    ): Result = execute(url, bearer, if (slow) uploadClient else client) { it.post(body) }
 
     private fun execute(
         url: String,
         bearer: String?,
+        using: OkHttpClient = client,
         configure: (Request.Builder) -> Request.Builder,
     ): Result {
         val builder = Request.Builder()
@@ -61,7 +82,7 @@ object Http {
         if (bearer != null) builder.header("Authorization", "Bearer $bearer")
 
         return try {
-            client.newCall(configure(builder).build()).execute().use { response ->
+            using.newCall(configure(builder).build()).execute().use { response ->
                 val bytes = response.body?.bytes() ?: ByteArray(0)
                 Result(
                     status = response.code,

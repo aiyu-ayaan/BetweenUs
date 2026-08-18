@@ -288,19 +288,49 @@ object NexoraApi {
             val form = MultipartBody.Builder().setType(MultipartBody.FORM)
                 .addFormDataPart("file", name, bytes.toRequestBody(contentType.toMediaTypeOrNull()))
                 .build()
-            UploadedObject.from(parse(Http.post(url("/api/v1/uploads/picture"), form, Session.accessToken)))
+            UploadedObject.from(authedForm("/api/v1/uploads/picture", form))
         }
+
+    /**
+     * Opens a large upload. [size] is the whole object, and is checked again
+     * when the parts are assembled - the declaration is a promise, not proof.
+     */
+    suspend fun startMultipart(size: Int): MultipartTicket = io {
+        val json = authed("POST", "/api/v1/uploads/multipart", obj("size" to size))
+        MultipartTicket(
+            ticket = json.getString("ticket"),
+            maxPartBytes = json.optInt("maxPartBytes", 8 * 1024 * 1024),
+        )
+    }
+
+    /** One slice of the ciphertext. Parts are numbered from 1, as S3 has it. */
+    suspend fun uploadPart(ticket: String, partNumber: Int, bytes: ByteArray): UploadedPart = io {
+        val form = MultipartBody.Builder().setType(MultipartBody.FORM)
+            .addFormDataPart("ticket", ticket)
+            .addFormDataPart("partNumber", partNumber.toString())
+            .addFormDataPart("file", "part", bytes.toRequestBody(OPAQUE))
+            .build()
+        UploadedPart.from(authedForm("/api/v1/uploads/multipart/part", form))
+    }
+
+    suspend fun completeMultipart(ticket: String, parts: List<UploadedPart>): UploadedObject = io {
+        val body = JSONObject()
+            .put("ticket", ticket)
+            .put("parts", JSONArray(parts.map { it.toJson() }))
+        UploadedObject.from(authed("POST", "/api/v1/uploads/multipart/complete", body))
+    }
+
+    /** Leaves no half-uploaded parts behind for a file nobody will ever send. */
+    suspend fun abortMultipart(ticket: String): Unit = io {
+        authed("DELETE", "/api/v1/uploads/multipart", obj("ticket" to ticket))
+    }
 
     /** Attachments go up already sealed, which is why nothing here is told what they are. */
     suspend fun uploadAttachment(ciphertext: ByteArray): UploadedObject = io {
         val form = MultipartBody.Builder().setType(MultipartBody.FORM)
-            .addFormDataPart(
-                "file",
-                "blob",
-                ciphertext.toRequestBody("application/octet-stream".toMediaTypeOrNull()),
-            )
+            .addFormDataPart("file", "blob", ciphertext.toRequestBody(OPAQUE))
             .build()
-        UploadedObject.from(parse(Http.post(url("/api/v1/uploads"), form, Session.accessToken)))
+        UploadedObject.from(authedForm("/api/v1/uploads", form))
     }
 
     /** Fetches a stored object's bytes. Attachments come back as ciphertext. */
@@ -479,6 +509,28 @@ object NexoraApi {
     // --- plumbing ---
 
     private suspend fun <T> io(block: suspend () -> T): T = withContext(Dispatchers.IO) { block() }
+
+    /** What a sealed blob is called on the wire: bytes, and nothing claimed about them. */
+    private val OPAQUE = "application/octet-stream".toMediaTypeOrNull()
+
+    /**
+     * A form post that survives a stale access token, the way every JSON call
+     * already does.
+     *
+     * It matters most here and was missing here. A hundred megabytes goes up in
+     * parts over minutes, and an access token that was fresh when the upload
+     * started is not necessarily fresh when part nine goes out - which failed
+     * the whole upload for a reason that had nothing to do with it. The body is
+     * a byte array, so replaying it costs nothing.
+     */
+    private suspend fun authedForm(path: String, form: MultipartBody): JSONObject {
+        val target = url(path)
+        val first = Http.post(target, form, Session.accessToken, slow = true)
+        if (first.status != 401) return parse(first)
+
+        val refreshed = Session.refreshAccessToken() ?: return parse(first)
+        return parse(Http.post(target, form, refreshed, slow = true))
+    }
 
     private fun enc(value: String): String = URLEncoder.encode(value, "UTF-8")
 

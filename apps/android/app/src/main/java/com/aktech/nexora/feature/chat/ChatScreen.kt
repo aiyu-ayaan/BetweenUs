@@ -104,6 +104,8 @@ fun ChatScreen(
     var failure by remember { mutableStateOf<String?>(null) }
     var pending by remember { mutableStateOf<List<MessageAttachment>>(emptyList()) }
     var uploading by remember { mutableStateOf(false) }
+    /** 0..1 across the file being uploaded, or null while nothing is going up. */
+    var uploadProgress by remember { mutableStateOf<Float?>(null) }
     var showAttachmentSheet by remember { mutableStateOf(false) }
     /**
      * Media that has been picked but not yet looked at. Nothing is read off
@@ -236,17 +238,24 @@ fun ChatScreen(
         if (chosen.isEmpty() || uploading) return
         scope.launch {
             uploading = true
+            uploadProgress = 0f
             failure = runCatching {
-                val uploaded = chosen.map { item ->
+                val uploaded = chosen.mapIndexed { index, item ->
                     val picked = readPicked(context, item.uri)
                     require(picked.bytes.size <= MAX_ATTACHMENT_BYTES) {
-                        "${picked.name} is larger than 25 MB"
+                        "${picked.name} is larger than ${MAX_ATTACHMENT_BYTES / (1024 * 1024)} MB"
                     }
                     Conversation.uploadAttachment(
                         channelId = channelId,
                         name = picked.name,
                         contentType = picked.contentType,
                         bytes = picked.bytes,
+                        // Across the whole batch, not per file: three files is
+                        // one wait, and a bar that restarts twice reads as a
+                        // send that has gone wrong.
+                        onProgress = { fraction ->
+                            uploadProgress = (index + fraction) / chosen.size
+                        },
                     )
                 }
                 Conversation.send(channelId, previewCaption.trim(), pending + uploaded, replyingTo)
@@ -257,6 +266,7 @@ fun ChatScreen(
                 null
             }.exceptionOrNull()?.message
             uploading = false
+            uploadProgress = null
         }
     }
 
@@ -465,22 +475,26 @@ fun ChatScreen(
                     previewing = previewing + media
                     if (documents.isNotEmpty()) {
                         uploading = true
+                        uploadProgress = 0f
                         failure = runCatching {
                             documents.forEach { item ->
                                 val picked = readPicked(context, item.uri)
                                 require(picked.bytes.size <= MAX_ATTACHMENT_BYTES) {
-                                    "${picked.name} is larger than 25 MB"
+                                    "${picked.name} is larger than " +
+                                        "${MAX_ATTACHMENT_BYTES / (1024 * 1024)} MB"
                                 }
                                 pending = pending + Conversation.uploadAttachment(
                                     channelId = channelId,
                                     name = picked.name,
                                     contentType = picked.contentType,
                                     bytes = picked.bytes,
+                                    onProgress = { uploadProgress = it },
                                 )
                             }
                             null
                         }.exceptionOrNull()?.message
                         uploading = false
+                        uploadProgress = null
                     }
                 }
             },
@@ -492,7 +506,14 @@ fun ChatScreen(
         items = previewing,
         caption = previewCaption,
         busy = uploading,
-        note = if (uploading) "Encrypting and uploading…" else null,
+        note = when {
+            !uploading -> null
+            // A percentage only once there is one worth reading: a small file
+            // is sealed and gone before a number would settle.
+            uploadProgress != null && uploadProgress!! > 0f ->
+                "Encrypting and uploading… ${(uploadProgress!! * 100).toInt()}%"
+            else -> "Encrypting and uploading…"
+        },
         onCaption = { previewCaption = it },
         onRemove = { previewing = previewing - it },
         onAdd = { showAttachmentSheet = true },
@@ -560,7 +581,15 @@ fun ChatScreen(
     }
 }
 
-const val MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024
+/**
+ * The same ceiling the server enforces and the desktop honours.
+ *
+ * It was 25 MB here, which is the *per request* cap and not the file cap: this
+ * client only knew how to send a file in one request, so it refused everything
+ * a single request could not carry. It sends anything larger in parts now, so
+ * the number that belongs here is the one the deployment actually enforces.
+ */
+const val MAX_ATTACHMENT_BYTES = 100 * 1024 * 1024
 
 /**
  * An offset far past the end of any row.

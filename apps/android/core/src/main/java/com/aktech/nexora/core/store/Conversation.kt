@@ -12,6 +12,8 @@ import com.aktech.nexora.core.data.MessageBody
 import com.aktech.nexora.core.data.MessageCustomEmoji
 import com.aktech.nexora.core.data.MessageReply
 import com.aktech.nexora.core.data.NexoraApi
+import com.aktech.nexora.core.data.UploadedObject
+import com.aktech.nexora.core.data.UploadedPart
 import com.aktech.nexora.core.data.Session
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -239,17 +241,24 @@ object Conversation {
     suspend fun pins(channelId: String): List<ReadableMessage> =
         NexoraApi.pins(channelId).map { read(it) }
 
-    /** Seals a file under the channel key and uploads the ciphertext. */
+    /**
+     * Seals a file under the channel key and uploads the ciphertext.
+     *
+     * [onProgress] is called with 0..1 across the upload, counted in parts. A
+     * hundred megabytes over a phone's uplink is minutes, and minutes with no
+     * sign of movement is a send that looks stuck.
+     */
     suspend fun uploadAttachment(
         channelId: String,
         name: String,
         contentType: String,
         bytes: ByteArray,
+        onProgress: ((Float) -> Unit)? = null,
     ): MessageAttachment {
         val photo = asJpeg(bytes, contentType)
         val payload = photo?.bytes ?: bytes
         val (sealed, epoch) = E2ee.encryptFileForChannel(channelId, payload)
-        val stored = NexoraApi.uploadAttachment(sealed.ciphertext)
+        val stored = putBytes(sealed.ciphertext, onProgress)
         val pixels = if (contentType.startsWith("image/")) pixelSize(payload) else null
         return MessageAttachment(
             key = stored.key,
@@ -264,6 +273,57 @@ object Conversation {
             width = pixels?.first,
             height = pixels?.second,
         )
+    }
+
+    /**
+     * One part of a large upload. Comfortably over S3's 5 MiB minimum and under
+     * the server's own per-request cap, with room for the multipart form
+     * framing. The same number the desktop uses.
+     */
+    private const val PART_BYTES = 8 * 1024 * 1024
+
+    /**
+     * One request when it fits in one; otherwise a part at a time.
+     *
+     * The phone used to only have the first branch, and a 25 MB ceiling to go
+     * with it - so a file the desktop sent happily was refused here, and the
+     * refusal was the client's, not the deployment's. The server has taken
+     * multipart uploads all along.
+     *
+     * Sequential on purpose, exactly as on the desktop: parts in parallel would
+     * multiply what this holds in memory, and a phone's uplink is the
+     * bottleneck either way.
+     */
+    private suspend fun putBytes(
+        ciphertext: ByteArray,
+        onProgress: ((Float) -> Unit)?,
+    ): UploadedObject {
+        if (ciphertext.size <= PART_BYTES) {
+            return NexoraApi.uploadAttachment(ciphertext).also { onProgress?.invoke(1f) }
+        }
+
+        val opened = NexoraApi.startMultipart(ciphertext.size)
+        val partSize = minOf(PART_BYTES, opened.maxPartBytes)
+        val total = (ciphertext.size + partSize - 1) / partSize
+
+        try {
+            val parts = ArrayList<UploadedPart>(total)
+            for (index in 0 until total) {
+                val from = index * partSize
+                val to = minOf(ciphertext.size, from + partSize)
+                parts += NexoraApi.uploadPart(
+                    ticket = opened.ticket,
+                    partNumber = index + 1,
+                    bytes = ciphertext.copyOfRange(from, to),
+                )
+                onProgress?.invoke((index + 1).toFloat() / total)
+            }
+            return NexoraApi.completeMultipart(opened.ticket, parts)
+        } catch (error: Throwable) {
+            // Leave no half-uploaded parts behind for a file nobody will send.
+            runCatching { NexoraApi.abortMultipart(opened.ticket) }
+            throw error
+        }
     }
 
     /** Matches MAX_IMAGE_EDGE in `apps/desktop/src/services/attachments.ts`. */
