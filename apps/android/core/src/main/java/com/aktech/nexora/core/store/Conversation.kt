@@ -1,5 +1,6 @@
 package com.aktech.nexora.core.store
 
+import android.graphics.BitmapFactory
 import com.aktech.nexora.core.crypto.E2ee
 import com.aktech.nexora.core.data.ChatSocket
 import com.aktech.nexora.core.data.Message
@@ -242,6 +243,7 @@ object Conversation {
     ): MessageAttachment {
         val (sealed, epoch) = E2ee.encryptFileForChannel(channelId, bytes)
         val stored = NexoraApi.uploadAttachment(sealed.ciphertext)
+        val pixels = if (contentType.startsWith("image/")) pixelSize(bytes) else null
         return MessageAttachment(
             key = stored.key,
             url = stored.url,
@@ -250,8 +252,36 @@ object Conversation {
             size = bytes.size.toLong(),
             iv = sealed.iv,
             epoch = epoch,
+            width = pixels?.first,
+            height = pixels?.second,
         )
     }
+
+    /**
+     * A picture's pixel size, recorded in the manifest so the receiver can
+     * reserve its space.
+     *
+     * Every client draws a placeholder while an attachment is still ciphertext,
+     * and without a size that placeholder is one line tall and then jumps to
+     * three hundred as the picture arrives - which moves every message below it
+     * under a scroll that had already finished. The desktop has recorded this
+     * since it started shrinking images on the way out; a picture sent from a
+     * phone carried nothing, so it was the one that always jumped, on every
+     * client including this one.
+     *
+     * `inJustDecodeBounds` reads the header alone: no pixels are decoded and no
+     * bitmap is allocated. It reports -1 for anything it cannot parse, and a
+     * size that is not a size is not recorded.
+     */
+    private fun pixelSize(bytes: ByteArray): Pair<Int, Int>? = runCatching {
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+        if (bounds.outWidth > 0 && bounds.outHeight > 0) {
+            bounds.outWidth to bounds.outHeight
+        } else {
+            null
+        }
+    }.getOrNull()
 
     suspend fun openAttachment(channelId: String, attachment: MessageAttachment): ByteArray =
         E2ee.decryptFileForChannel(
