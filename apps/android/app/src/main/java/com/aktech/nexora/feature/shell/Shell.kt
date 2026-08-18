@@ -36,6 +36,8 @@ import com.aktech.nexora.feature.home.FriendsScreen
 import com.aktech.nexora.feature.members.MembersScreen
 import com.aktech.nexora.feature.remote.RemoteMachinesScreen
 import com.aktech.nexora.feature.remote.RemoteSessionScreen
+import com.aktech.nexora.core.store.PendingInvite
+import com.aktech.nexora.feature.servers.InviteSheet
 import com.aktech.nexora.feature.servers.ServerSettingsScreen
 import com.aktech.nexora.feature.settings.NexoraPermissions
 import com.aktech.nexora.feature.settings.PermissionsScreen
@@ -102,6 +104,7 @@ fun Shell(user: PublicUser) {
 
     LaunchedEffect(serverId, channelId) { LastPlace.remember(serverId, channelId) }
 
+    val invited by PendingInvite.code.collectAsState()
     val identity by E2ee.status.collectAsState()
     var unlocking by remember { mutableStateOf(false) }
     LaunchedEffect(identity) {
@@ -272,6 +275,22 @@ fun Shell(user: PublicUser) {
                 IdentityUnlockSheet(
                     kind = (identity as? IdentityStatus.Locked)?.kind ?: "password",
                     onDismiss = { unlocking = false },
+                )
+            }
+
+            // An invite the app was opened by. The link left a code behind; the
+            // card is what asks, and nothing is joined until it is accepted.
+            invited?.let { code ->
+                InviteSheet(
+                    code = code,
+                    onDismiss = { PendingInvite.clear() },
+                    onDone = { server ->
+                        PendingInvite.clear()
+                        serverId = server.id
+                        val landing = Workspace.channelsOf(server.id)
+                            .firstOrNull { it.type == ChannelType.TEXT }
+                        if (landing != null) openChannel(landing.id, server.id)
+                    },
                 )
             }
         }

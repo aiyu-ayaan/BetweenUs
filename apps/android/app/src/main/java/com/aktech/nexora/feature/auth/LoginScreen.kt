@@ -36,6 +36,10 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.aktech.nexora.ui.components.GlobeIcon
+import androidx.browser.customtabs.CustomTabsIntent
+import androidx.compose.ui.platform.LocalContext
+import androidx.core.net.toUri
+import com.aktech.nexora.core.data.OAuthFlow
 import com.aktech.nexora.ui.components.NexoraButton
 import com.aktech.nexora.ui.components.NexoraField
 import com.aktech.nexora.ui.components.NexoraLogoTile
@@ -43,6 +47,7 @@ import com.aktech.nexora.ui.components.Notice
 import com.aktech.nexora.ui.theme.Danger
 import com.aktech.nexora.ui.theme.Edge
 import com.aktech.nexora.ui.theme.Ground
+import com.aktech.nexora.ui.theme.Slate100
 import com.aktech.nexora.ui.theme.Slate400
 import com.aktech.nexora.ui.theme.Slate50
 import com.aktech.nexora.ui.theme.Slate500
@@ -60,6 +65,7 @@ fun LoginScreen(
     viewModel: AuthViewModel = viewModel(),
 ) {
     val form by viewModel.state.collectAsState()
+    val context = LocalContext.current
     var pickingServer by rememberSaveable { mutableStateOf(false) }
     val registering = form.mode == AuthMode.REGISTER
 
@@ -166,6 +172,39 @@ fun LoginScreen(
                 busy = form.busy,
             )
 
+            if (form.providers.isNotEmpty()) {
+                Spacer(Modifier.height(16.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    HorizontalDivider(Modifier.weight(1f), color = Edge)
+                    Text(
+                        text = "or",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Slate500,
+                        modifier = Modifier.padding(horizontal = 12.dp),
+                    )
+                    HorizontalDivider(Modifier.weight(1f), color = Edge)
+                }
+                Spacer(Modifier.height(16.dp))
+
+                for (provider in form.providers) {
+                    ProviderButton(
+                        label = provider.label,
+                        enabled = !form.busy,
+                        onClick = {
+                            // A real browser, not a WebView: this is somebody's
+                            // Google account, they are probably already signed
+                            // in to it there, and Google refuses an embedded
+                            // WebView for exactly that reason.
+                            CustomTabsIntent.Builder()
+                                .setShowTitle(true)
+                                .build()
+                                .launchUrl(context, OAuthFlow.startUrl(provider.provider).toUri())
+                        },
+                    )
+                    Spacer(Modifier.height(8.dp))
+                }
+            }
+
             TextButton(
                 onClick = viewModel::toggleMode,
                 enabled = !form.busy,
@@ -217,5 +256,30 @@ fun LoginScreen(
 
     if (pickingServer) {
         ServerSheet(onDismiss = { pickingServer = false })
+    }
+}
+
+/**
+ * One provider's button.
+ *
+ * Deliberately not the accent colour: creating an account is the primary thing
+ * on this screen, and three filled buttons in a column say nothing about which
+ * to press.
+ */
+@Composable
+private fun ProviderButton(label: String, enabled: Boolean, onClick: () -> Unit) {
+    TextButton(
+        onClick = onClick,
+        enabled = enabled,
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 48.dp)
+            .border(1.dp, Edge, RoundedCornerShape(10.dp)),
+    ) {
+        Text(
+            text = "Continue with $label",
+            style = MaterialTheme.typography.bodyMedium,
+            color = Slate100,
+        )
     }
 }

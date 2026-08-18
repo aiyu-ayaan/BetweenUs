@@ -1,5 +1,7 @@
 package com.aktech.nexora
 
+import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -14,7 +16,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.lifecycleScope
 import com.aktech.nexora.core.data.AuthPhase
+import com.aktech.nexora.core.data.InviteLink
+import com.aktech.nexora.core.data.OAuthFlow
 import com.aktech.nexora.core.data.Session
+import com.aktech.nexora.core.store.PendingInvite
 import com.aktech.nexora.core.store.Workspace
 import com.aktech.nexora.feature.auth.LoginScreen
 import com.aktech.nexora.feature.shell.Shell
@@ -32,11 +37,50 @@ class MainActivity : ComponentActivity() {
         // by whichever screen happens to make the first request.
         lifecycleScope.launch { Session.restore() }
 
+        // A link may be what started this process at all.
+        handleLink(intent?.data)
+
         setContent {
             NexoraTheme {
                 NexoraRoot()
             }
         }
+    }
+
+    /**
+     * The app was already running when the link arrived.
+     *
+     * `singleTask` means a second launch is delivered here rather than building
+     * a second activity, so this is where a provider callback lands in every
+     * case that matters - the Custom Tab is in front of a live process.
+     */
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleLink(intent.data)
+    }
+
+    /**
+     * What a `nexora://` link means: a finished sign-in, or an invite.
+     *
+     * Neither is acted on blindly. The sign-in is only completed by trading the
+     * code for a session with the verifier this app kept, and the invite is
+     * only remembered - the card that shows what it leads to is the shell's,
+     * and nothing is joined until somebody accepts it.
+     */
+    private fun handleLink(uri: Uri?) {
+        if (uri == null) return
+
+        val code = OAuthFlow.codeIn(uri)
+        if (code != null) {
+            lifecycleScope.launch {
+                runCatching { OAuthFlow.complete(code) }
+                    .onFailure { Session.reportSignInFailure(Session.messageOf(it)) }
+            }
+            return
+        }
+
+        InviteLink.codeIn(uri.toString())?.let { PendingInvite.offer(it) }
     }
 
     /**

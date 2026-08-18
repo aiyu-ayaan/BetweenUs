@@ -21,6 +21,7 @@ import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -89,16 +90,7 @@ fun JoinOrCreateServerSheet(onDismiss: () -> Unit, onDone: (ServerWithRole) -> U
                         scope.launch {
                             busy = true
                             note = runCatching {
-                                // Already a member: opening it is what the
-                                // server would have done anyway, without
-                                // spending a use of the invite.
-                                val server = if (invite.member) {
-                                    Workspace.server(invite.serverId)
-                                        ?: Workspace.joinServer(invite.code)
-                                } else {
-                                    Workspace.joinServer(invite.code)
-                                }
-                                onDone(server)
+                                onDone(accept(invite))
                                 onDismiss()
                             }.exceptionOrNull()?.message
                             busy = false
@@ -171,6 +163,75 @@ fun JoinOrCreateServerSheet(onDismiss: () -> Unit, onDone: (ServerWithRole) -> U
         }
     }
 }
+
+/**
+ * An invite the app was opened by.
+ *
+ * A link cannot ask anybody anything, so it leaves its code in `PendingInvite`
+ * and this is what asks. Same card as the join sheet's, and the same rule: the
+ * server is looked up first and joined only if somebody says so.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun InviteSheet(code: String, onDismiss: () -> Unit, onDone: (ServerWithRole) -> Unit) {
+    val sheet = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val scope = rememberCoroutineScope()
+
+    var invite by remember(code) { mutableStateOf<InvitePreview?>(null) }
+    var busy by remember { mutableStateOf(false) }
+    var note by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(code) {
+        runCatching { NexoraApi.invitePreview(code) }
+            .onSuccess { invite = it }
+            .onFailure { note = it.message ?: "That invite is not valid" }
+    }
+
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheet, containerColor = Surface900) {
+        Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(20.dp)) {
+            val found = invite
+            if (found == null) {
+                Text(
+                    text = note ?: "Looking up that invite…",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = if (note == null) Slate500 else Danger,
+                )
+                return@Column
+            }
+
+            InviteCard(
+                invite = found,
+                busy = busy,
+                note = note,
+                onBack = onDismiss,
+                onAccept = {
+                    scope.launch {
+                        busy = true
+                        note = runCatching {
+                            onDone(accept(found))
+                            onDismiss()
+                        }.exceptionOrNull()?.message
+                        busy = false
+                    }
+                },
+            )
+        }
+    }
+}
+
+/**
+ * Taking an invite.
+ *
+ * Somebody already inside gets the server they are in rather than a second
+ * attempt at joining it - which is what the server would have answered anyway,
+ * except that this does not spend a use of a limited invite to hear it.
+ */
+private suspend fun accept(invite: InvitePreview): ServerWithRole =
+    if (invite.member) {
+        Workspace.server(invite.serverId) ?: Workspace.joinServer(invite.code)
+    } else {
+        Workspace.joinServer(invite.code)
+    }
 
 /** The card an invite is accepted from: whose server, and how busy it is. */
 @Composable

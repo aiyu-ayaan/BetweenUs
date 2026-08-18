@@ -146,6 +146,22 @@ data class ServerInvite(
 }
 
 /**
+ * A sign-in method this deployment has actually enabled.
+ *
+ * The login screen draws a button per entry and none of its own: a Google
+ * button on a deployment with no Google credentials configured is a button that
+ * ends in an error nobody watching can act on.
+ */
+data class OAuthProvider(val provider: String, val label: String) {
+    companion object {
+        fun from(json: JSONObject) = OAuthProvider(
+            provider = json.optString("provider"),
+            label = json.optString("label"),
+        )
+    }
+}
+
+/**
  * One part of a large upload, as the server acknowledged it.
  *
  * The etag is the server's word for "I have this part"; completion is the list

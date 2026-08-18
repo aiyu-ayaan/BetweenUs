@@ -5,6 +5,7 @@ import com.aktech.nexora.core.crypto.DeviceIdentity
 import com.aktech.nexora.core.crypto.E2ee
 import com.aktech.nexora.core.data.Endpoint
 import com.aktech.nexora.core.data.NetworkWatch
+import com.aktech.nexora.core.data.OAuthFlow
 import com.aktech.nexora.core.data.Session
 import com.aktech.nexora.core.store.Cache
 import com.aktech.nexora.core.store.LastPlace
@@ -23,6 +24,7 @@ class NexoraApp : Application() {
         Endpoint.init(this)
         NetworkWatch.init(this)
         Session.init(this)
+        OAuthFlow.init(this)
         DeviceIdentity.init(this)
         E2ee.init(this)
         LastPlace.init(this)

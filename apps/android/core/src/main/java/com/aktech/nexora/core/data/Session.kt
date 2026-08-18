@@ -178,6 +178,19 @@ object Session {
         Cache.clear()
     }
 
+    /**
+     * A sign-in that failed with no form on screen to put the error on.
+     *
+     * The provider hand-off comes back through an intent rather than through a
+     * button, so there is no view model holding the attempt when it goes wrong.
+     * Ignored while signed in: a stale callback must not throw somebody out of
+     * a session they already have.
+     */
+    fun reportSignInFailure(message: String) {
+        if (_state.value is AuthPhase.SignedIn) return
+        _state.value = AuthPhase.SignedOut(message)
+    }
+
     private fun clear() {
         accessToken = null
         refreshToken = null

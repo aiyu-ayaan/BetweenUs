@@ -120,6 +120,11 @@ dependencies {
     implementation(libs.androidx.compose.ui.graphics)
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.core.ktx)
+    // Custom Tabs, for the OAuth hand-off. A provider sign-in has to happen
+    // in the browser the person already trusts and is already signed in to -
+    // a WebView owned by this app is both worse for them and refused by
+    // Google outright.
+    implementation(libs.androidx.browser)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     // LocalLifecycleOwner and LifecycleResumeEffect: the permission screen has

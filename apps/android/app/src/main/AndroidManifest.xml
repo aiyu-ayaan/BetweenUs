@@ -105,6 +105,23 @@
 
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+
+            <!-- Where a provider sign-in comes back to, and where an invite
+                 link opens. A private scheme rather than an https app link,
+                 because Nexora is self-hosted: the deployment's host is not
+                 known when this is built, so an https filter would either name
+                 a host that is wrong for everybody or claim every https link on
+                 the phone. Android does not promise a scheme is ours alone,
+                 which is why the sign-in that comes back through it is bound to
+                 a secret this app keeps - see OAuthFlow. -->
+            <intent-filter android:autoVerify="false">
+                <action android:name="android.intent.action.VIEW" />
+
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+
+                <data android:scheme="nexora" />
+            </intent-filter>
         </activity>
 
         <!-- Where a photo taken from the attachment sheet lands. The camera app

@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.aktech.nexora.core.data.Endpoint
 import com.aktech.nexora.core.data.NexoraApi
+import com.aktech.nexora.core.data.OAuthProvider
 import com.aktech.nexora.core.data.Session
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -22,6 +23,12 @@ data class AuthFormState(
     val error: String? = null,
     /** The host this form is signing in to, for the line under it. */
     val serverLabel: String = "",
+    /**
+     * The providers this deployment actually has credentials for. Empty until
+     * they have been asked for, and on a deployment that enables none - which
+     * is most of them, and the reason nothing is drawn without an answer.
+     */
+    val providers: List<OAuthProvider> = emptyList(),
 )
 
 class AuthViewModel : ViewModel() {
@@ -30,9 +37,23 @@ class AuthViewModel : ViewModel() {
     )
     val state: StateFlow<AuthFormState> = _state.asStateFlow()
 
-    // No OAuth buttons yet: the provider hand-off needs a Custom Tab and an
-    // app-link callback, which is phase 12 in development/ANDROID_TODO.md. A
-    // button that does nothing is worse than no button.
+    init {
+        loadProviders()
+    }
+
+    /**
+     * Which sign-in buttons to draw.
+     *
+     * Failure is silence on purpose: the password form works either way, and an
+     * error about a list of buttons nobody asked for would be the first thing
+     * somebody saw on a deployment that offers none.
+     */
+    fun loadProviders() {
+        viewModelScope.launch {
+            val found = runCatching { NexoraApi.oauthProviders() }.getOrDefault(emptyList())
+            _state.update { it.copy(providers = found) }
+        }
+    }
 
     fun setEmail(value: String) = _state.update { it.copy(email = value, error = null) }
     fun setUsername(value: String) = _state.update { it.copy(username = value, error = null) }

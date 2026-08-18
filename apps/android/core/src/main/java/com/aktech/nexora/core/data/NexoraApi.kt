@@ -280,6 +280,24 @@ object NexoraApi {
         )
     }
 
+    // --- oauth ---
+
+    /** What this deployment offers. Public: it names no credentials. */
+    suspend fun oauthProviders(): List<OAuthProvider> = io {
+        JSONArray(checked(Http.get(url("/api/v1/auth/oauth/providers"))).ifEmpty { "[]" })
+            .map { OAuthProvider.from(it) }
+    }
+
+    /**
+     * Trades the one-time code from the callback for a session. The verifier is
+     * what proves this app is the one that started the sign-in - see
+     * [OAuthFlow].
+     */
+    suspend fun oauthExchange(code: String, verifier: String): AuthResponse = io {
+        val json = public("POST", "/api/v1/auth/oauth/exchange", obj("code" to code, "verifier" to verifier))
+        AuthResponse(PublicUser.from(json.getJSONObject("user")), tokensOf(json))
+    }
+
     // --- uploads ---
 
     /** Avatars and server icons go up as they are: a picture is not a secret. */

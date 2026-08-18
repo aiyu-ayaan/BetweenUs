@@ -422,23 +422,34 @@ says so too; both halves are needed.
       door.
 - [x] Managing invites from the phone: minting one with an expiry and a use
       limit, copying or sending it as a link, and revoking it.
-- [ ] A link that opens the app. The deployment's host is unknown at build
-      time - Nexora is self-hosted - so a manifest filter for
-      `https://…/invite/…` would either name a host that is wrong for everyone
-      or match every https link on the phone. A `nexora://` scheme is the way
-      in that does not need to know the host; until then a link is pasted into
-      *Join a server*, which takes one.
+- [x] A link that opens the app: `nexora://invite/{code}`. Not an https app
+      link - the deployment's host is unknown at build time, Nexora being
+      self-hosted, so an `https://…/invite/…` filter would either name a host
+      wrong for everybody or claim every https link on the phone. The code is
+      left in `PendingInvite` and the shell opens the card, so a link still
+      joins nothing on its own. An `https://` link pasted into *Join a server*
+      keeps working, which is what the desktop's links are.
 - [x] Member list with presence and roles.
 - [x] Role and permission editing for those who hold `MANAGE_ROLE`.
 - [x] Channel create/rename/delete.
 - [x] Every one of these is enforced server-side; the UI only hides what the
       backend would refuse anyway.
 
-## Phase 12 — OAuth sign-in
+## Phase 12 — OAuth sign-in ✅
 
-- [ ] Custom Tabs for the provider flow, matching the desktop's browser hand-off.
-- [ ] App-link callback back into the session.
-- [ ] Only offer providers the server actually reports.
+- [x] Custom Tabs for the provider flow, matching the desktop's browser
+      hand-off. Not a WebView: it is somebody's Google account, they are
+      already signed in to it in their own browser, and Google refuses an
+      embedded WebView anyway.
+- [x] Callback back into the session over `nexora://oauth`, bound to a
+      challenge this app keeps (`OAuthFlow`). A private scheme is not
+      exclusively ours - another app can register it - so the one-time code
+      that comes back is worthless without the verifier, which never leaves
+      here. `SECURITY.md` has the reasoning; the digest is pinned against the
+      server's in a unit test, because the two disagreeing would only show up
+      as a sign-in that fails after the browser round trip.
+- [x] Only offer providers the server actually reports, and draw nothing at all
+      when it reports none.
 
 ## Phase 13 — Hardening and release
 

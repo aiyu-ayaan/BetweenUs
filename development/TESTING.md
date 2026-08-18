@@ -97,6 +97,20 @@ while everything under them changes size.
   — on the phone that is `MediaCache`, on desktop and web the `Map` in
   `services/attachments.ts`.
 
+**Signing in with a provider**
+- On a deployment with Google or GitHub configured, the Android login screen
+  shows a button per provider and nothing when none is configured. The button
+  opens a Custom Tab, not a view inside the app.
+- Finish the sign-in. The browser comes back to `nexora://oauth` and the app is
+  signed in. An account created this way has no password, so the identity
+  unlock asks for the backup secret rather than a password — that is the E2EE
+  flow working, not a failure.
+- `adb shell am start -a android.intent.action.VIEW -d "nexora://oauth?code=made-up"`
+  must fail: the code was not one this app started. Same for a callback after
+  the app's data has been cleared.
+- `adb shell am start -a android.intent.action.VIEW -d "nexora://invite/CODE"`
+  opens the invite card. It joins nothing until accepted.
+
 **HEIC photos**
 - Send a photo straight from an iPhone or an Android camera that writes HEIC
   (`IMG….heic`). It must render as a picture in every client, not as a broken
