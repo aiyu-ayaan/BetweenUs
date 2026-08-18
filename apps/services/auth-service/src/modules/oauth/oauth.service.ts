@@ -169,7 +169,11 @@ export class OAuthService {
 
     let user = identity?.user ?? null;
 
-    if (!user && profile.email) {
+    // Only a verified address may find an account. An unverified one is a
+    // string the person signing in chose, so linking on it would mean anybody
+    // who can type a victim's email into a fresh Google account walks into the
+    // Nexora account behind it, password and all.
+    if (!user && profile.email && profile.emailVerified) {
       // Same person, first time through this provider: link rather than
       // creating a duplicate account for an address that already exists.
       const byEmail = await prisma.user.findUnique({ where: { email: profile.email.toLowerCase() } });
@@ -187,7 +191,11 @@ export class OAuthService {
     }
 
     if (!user) {
-      const email = profile.email?.toLowerCase() ?? `${provider}-${profile.id}@users.noreply.nexora`;
+      // An unverified address does not become this account's address either:
+      // it would sit there waiting for the person who really owns it to sign
+      // in and be linked to it by the branch above.
+      const verified = profile.emailVerified ? profile.email?.toLowerCase() : undefined;
+      const email = verified ?? `${provider}-${profile.id}@users.noreply.nexora`;
       user = await prisma.user.create({
         data: {
           email,
@@ -239,27 +247,49 @@ const codeKey = (code: string): string => `oauth:code:${code}`;
 /**
  * Where a completed sign-in may be sent back to.
  *
- * An open redirect here would hand a session to whoever asked, so the list is
- * exact: loopback (the desktop client's temporary server) and the configured
- * public origins.
+ * An open redirect here hands a session to whoever asked for it - the one-time
+ * code travels in the query string of exactly this URL - so the list is exact:
+ * loopback (the desktop client's temporary server) and the configured public
+ * origins.
+ *
+ * It used to be `redirectUri.startsWith(origin)`, and a prefix is not an
+ * origin: an allow list naming `https://nexora.example` also matched
+ * `https://nexora.example.attacker.test/`, which is a different site that would
+ * have been handed the code. Origins are parsed and compared as origins now,
+ * with a path prefix allowed only once the origin already matches.
  */
-function assertAllowedRedirect(redirectUri: string): void {
+export function isAllowedRedirect(redirectUri: string, allowList: string): boolean {
   let url: URL;
   try {
     url = new URL(redirectUri);
   } catch {
-    throw new BadRequestException({ code: 'BAD_REDIRECT', message: 'Invalid redirect' });
+    return false;
   }
 
-  const loopback =
-    url.protocol === 'http:' && (url.hostname === '127.0.0.1' || url.hostname === 'localhost');
+  if (url.protocol === 'http:' && (url.hostname === '127.0.0.1' || url.hostname === 'localhost')) {
+    return true;
+  }
 
-  const allowed = envOr('OAUTH_ALLOWED_REDIRECTS', '')
-    .split(',')
-    .map((entry) => entry.trim())
-    .filter(Boolean);
+  for (const entry of allowList.split(',').map((value) => value.trim()).filter(Boolean)) {
+    let allowed: URL;
+    try {
+      allowed = new URL(entry);
+    } catch {
+      // An entry that is not a URL cannot be compared as one, and comparing it
+      // as a string is what this function exists to stop doing.
+      continue;
+    }
+    if (url.origin !== allowed.origin) continue;
+    // Within the origin a prefix is fine and is how a deployment names one
+    // path of its own site; across origins it never was.
+    if (allowed.pathname === '/' || url.pathname.startsWith(allowed.pathname)) return true;
+  }
 
-  if (loopback || allowed.some((origin) => redirectUri.startsWith(origin))) return;
+  return false;
+}
+
+function assertAllowedRedirect(redirectUri: string): void {
+  if (isAllowedRedirect(redirectUri, envOr('OAUTH_ALLOWED_REDIRECTS', ''))) return;
 
   throw new BadRequestException({
     code: 'BAD_REDIRECT',

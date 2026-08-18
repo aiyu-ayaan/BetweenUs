@@ -15,6 +15,17 @@ export type ProviderName = 'google' | 'github';
 export interface ProviderProfile {
   id: string;
   email: string | null;
+  /**
+   * Whether the provider says it has proved this address belongs to whoever
+   * just signed in.
+   *
+   * It decides whether the address may be used to find an existing account, so
+   * a provider that does not say gets a `false` here rather than the benefit of
+   * the doubt: an unverified address is a claim, and linking on a claim is
+   * letting anybody who can type a victim's email into a new provider account
+   * walk into the account behind it.
+   */
+  emailVerified: boolean;
   username: string;
   displayName: string;
   avatarUrl: string | null;
@@ -52,6 +63,9 @@ export const PROVIDERS: Record<ProviderName, ProviderDefinition> = {
       return {
         id: String(me.sub),
         email,
+        // Google will hand out an address it has not verified; `email_verified`
+        // is the field that says which kind this is, and it was being ignored.
+        emailVerified: me.email_verified === true,
         username: email?.split('@')[0] ?? `google${String(me.sub).slice(0, 8)}`,
         displayName: typeof me.name === 'string' ? me.name : (email ?? 'Google user'),
         avatarUrl: typeof me.picture === 'string' ? me.picture : null,
@@ -69,6 +83,9 @@ export const PROVIDERS: Record<ProviderName, ProviderDefinition> = {
 
       // A GitHub account can keep its address private, in which case the
       // profile carries no email and the verified primary has to be asked for.
+      // GitHub only lets a *verified* address be made public, so the one on
+      // the profile is verified by construction, and the fallback below asks
+      // for the verified primary explicitly.
       let email = typeof me.email === 'string' ? me.email : null;
       if (!email) {
         const addresses = (await fetch('https://api.github.com/user/emails', { headers })
@@ -80,6 +97,7 @@ export const PROVIDERS: Record<ProviderName, ProviderDefinition> = {
       return {
         id: String(me.id),
         email,
+        emailVerified: email !== null,
         username: typeof me.login === 'string' ? me.login : `github${String(me.id)}`,
         displayName: typeof me.name === 'string' && me.name ? me.name : String(me.login),
         avatarUrl: typeof me.avatar_url === 'string' ? me.avatar_url : null,

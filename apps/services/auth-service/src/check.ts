@@ -22,6 +22,7 @@ import { AuthService } from './modules/auth/auth.service';
 import type { AuthDb } from './modules/auth/auth.db';
 import { CREDENTIALS_RATE_LIMIT, LOGIN_RATE_LIMIT } from './modules/auth/rate-limits';
 import { pageSize, paginate } from './modules/admin/admin.service';
+import { isAllowedRedirect } from './modules/oauth/oauth.service';
 
 /**
  * The admin panel's cursor paging.
@@ -224,6 +225,37 @@ async function rejects(promise: Promise<unknown>, code: string): Promise<void> {
   });
 }
 
+/**
+ * Where a finished OAuth sign-in may be sent.
+ *
+ * The one-time code that becomes a session travels in this URL's query string,
+ * so a target that should not have matched is a session handed to a stranger.
+ */
+function checkOAuthRedirects(): void {
+  const allow = 'https://nexora.example,https://panel.nexora.example/admin';
+
+  assert.equal(isAllowedRedirect('https://nexora.example/done', allow), true);
+  assert.equal(isAllowedRedirect('https://panel.nexora.example/admin/back', allow), true);
+
+  // The prefix match this replaced: a different site whose name starts with an
+  // allowed one, which is how the code used to leave the deployment.
+  assert.equal(isAllowedRedirect('https://nexora.example.attacker.test/', allow), false);
+  assert.equal(isAllowedRedirect('https://nexora.example@attacker.test/', allow), false);
+
+  // Right origin, wrong path; and right host, wrong scheme.
+  assert.equal(isAllowedRedirect('https://panel.nexora.example/elsewhere', allow), false);
+  assert.equal(isAllowedRedirect('http://nexora.example/done', allow), false);
+
+  // The desktop client's temporary loopback server, which has no origin to
+  // configure and is reachable only from the machine that opened it.
+  assert.equal(isAllowedRedirect('http://127.0.0.1:53123/callback', ''), true);
+  assert.equal(isAllowedRedirect('http://localhost:53123/callback', ''), true);
+
+  // Nothing configured means nothing but loopback.
+  assert.equal(isAllowedRedirect('https://nexora.example/done', ''), false);
+  assert.equal(isAllowedRedirect('not-a-url', allow), false);
+}
+
 async function main(): Promise<void> {
   const db = fakeDb();
   const auth = new AuthService(noEvents, db);
@@ -326,6 +358,8 @@ async function main(): Promise<void> {
 
   checkLoginBuckets();
   checkPagination();
+
+  checkOAuthRedirects();
 
   console.log('auth-service check ok');
 }
