@@ -94,7 +94,14 @@ export class RemoteController {
     @Param('machineId', ParseUUIDPipe) machineId: string,
     @Query('limit') limit?: string,
   ): Promise<RemoteAuditEntry[]> {
-    return this.remote.audit(user.id, machineId, limit ? Number(limit) : undefined);
+    // `?limit=abc` is NaN, and NaN survives the service's clamp all the way to
+    // the query. Anything that is not a number is no answer at all.
+    const parsed = limit === undefined ? undefined : Number(limit);
+    return this.remote.audit(
+      user.id,
+      machineId,
+      parsed !== undefined && Number.isFinite(parsed) ? parsed : undefined,
+    );
   }
 
   @Post('sessions')

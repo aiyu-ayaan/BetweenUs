@@ -4,10 +4,11 @@ import type { AuthResponse, AuthTokens, PublicUser } from '@nexora/shared-types'
 import { rateLimit } from '@nexora/nest-common';
 import { AuthService } from './auth.service';
 import { ChangePasswordDto, LoginDto, RefreshDto, RegisterDto, UpdateAccountDto } from './dto';
-import { CREDENTIALS_RATE_LIMIT, LOGIN_RATE_LIMIT } from './rate-limits';
+import { CREDENTIALS_RATE_LIMIT, LOGIN_RATE_LIMIT, SESSION_RATE_LIMIT } from './rate-limits';
 
 const CredentialsRateLimit = rateLimit(CREDENTIALS_RATE_LIMIT);
 const LoginRateLimit = rateLimit(LOGIN_RATE_LIMIT);
+const SessionRateLimit = rateLimit(SESSION_RATE_LIMIT);
 
 @Controller('auth')
 export class AuthController {
@@ -28,6 +29,7 @@ export class AuthController {
 
   @Post('refresh')
   @HttpCode(200)
+  @UseGuards(SessionRateLimit)
   refresh(@Body() dto: RefreshDto): Promise<AuthTokens> {
     return this.auth.refresh(dto.refreshToken);
   }
@@ -47,7 +49,7 @@ export class AuthController {
   /** Available to any signed-in account, not only admins. */
   @Post('account/password')
   @HttpCode(200)
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(SessionRateLimit, JwtAuthGuard)
   changePassword(
     @CurrentUser() user: AuthenticatedUser,
     @Body() dto: ChangePasswordDto,

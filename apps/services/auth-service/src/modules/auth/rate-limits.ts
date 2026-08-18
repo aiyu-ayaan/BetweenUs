@@ -40,3 +40,20 @@ export const LOGIN_RATE_LIMIT: RateLimitOptions = {
   subject: (body) => (typeof body.email === 'string' ? body.email : null),
   subjectLimit: 10,
 };
+
+/**
+ * Changing a password, and spending a refresh token.
+ *
+ * Both are behind a token already, so neither is a way in from nothing - but
+ * `POST account/password` checks the current password before it accepts a new
+ * one, which makes it an oracle for anybody holding a stolen access token, and
+ * a refresh is a database write anyone with a valid token can ask for as fast
+ * as they like. Its own bucket rather than the credentials one, so a shared
+ * address running out of login budget does not stop a person changing their
+ * password.
+ */
+export const SESSION_RATE_LIMIT: RateLimitOptions = {
+  limit: 20,
+  windowSeconds: 60,
+  name: 'auth-session',
+};
