@@ -3,7 +3,7 @@
  * `/ws/presence` socket.
  */
 import { create } from 'zustand';
-import type { ActiveStatus, PresenceStatus } from '@nexora/shared-types';
+import type { ActiveStatus, PresenceStatus } from '@betweenus/shared-types';
 import { presenceSocket } from '../services/socket';
 import { notifyVoiceJoin } from '../services/notifications';
 import { startIdleWatch, stopIdleWatch } from '../services/idle';

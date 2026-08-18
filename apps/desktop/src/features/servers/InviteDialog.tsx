@@ -13,7 +13,7 @@
  * against one screen.
  */
 import { useEffect, useState } from 'react';
-import type { InvitePreview } from '@nexora/shared-types';
+import type { InvitePreview } from '@betweenus/shared-types';
 import { api } from '../../services/api';
 import { useChatStore } from '../../stores/chat';
 import { ServerIcon } from '../../components/ServerIcon';

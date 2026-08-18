@@ -16,15 +16,15 @@ import {
   NotFoundException,
   ServiceUnavailableException,
 } from '@nestjs/common';
-import { iceServers } from '@nexora/config';
+import { iceServers } from '@betweenus/config';
 import {
   asRemotePermissions,
   prisma,
   recordRemoteAudit,
   resolveRemoteAccess,
   type RemoteAccess,
-} from '@nexora/database';
-import { PERMISSIONS, type RemotePermission } from '@nexora/permissions';
+} from '@betweenus/database';
+import { PERMISSIONS, type RemotePermission } from '@betweenus/permissions';
 import type {
   EnrolMachineResponse,
   IceServer,
@@ -32,7 +32,7 @@ import type {
   RemoteGrantSummary,
   RemoteMachineSummary,
   RemoteSessionResponse,
-} from '@nexora/shared-types';
+} from '@betweenus/shared-types';
 
 /**
  * Reported by the ws gateway, which is the only thing that knows who is dialled

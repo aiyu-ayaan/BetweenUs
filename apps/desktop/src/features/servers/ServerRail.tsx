@@ -79,7 +79,7 @@ export function ServerRail(): JSX.Element {
       aria-label="Servers"
       className="flex w-14 shrink-0 flex-col items-center gap-1 overflow-y-auto overflow-x-hidden py-0.5"
     >
-      {/* Not the Nexora mark: that is in the top bar, and a second copy of it
+      {/* Not the BetweenUs mark: that is in the top bar, and a second copy of it
           one row below reads as branding rather than as the button it is. A
           rail tile has to say where it goes. */}
       <RailButton
@@ -164,7 +164,7 @@ export function ServerRail(): JSX.Element {
                 if (event.key === 'Escape') setDialog('none');
               }}
               className="mt-2 w-full rounded-lg border border-edge bg-surface-950 px-3 py-2.5 text-slate-100 outline-none ring-0 transition-colors focus:border-accent/60"
-              placeholder={dialog === 'create' ? "Ayaan's server" : 'nexora-team'}
+              placeholder={dialog === 'create' ? "Ayaan's server" : 'betweenus-team'}
             />
 
             {failure && (

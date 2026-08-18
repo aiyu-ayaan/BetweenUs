@@ -66,8 +66,8 @@ finished session with a one-time code that is single use and lives two minutes.
 
 Two rules there are worth stating on their own, because both have teeth. The
 redirect allow list is matched as *origins*, not as text — a prefix comparison
-would let `https://nexora.example.attacker.test/` match an allow list naming
-`https://nexora.example`, and that URL is where the one-time code travels. And
+would let `https://betweenus.example.attacker.test/` match an allow list naming
+`https://betweenus.example`, and that URL is where the one-time code travels. And
 an existing account is found by email only when the provider says the address is
 verified; Google will hand out one it has not verified, and linking on an
 unverified address means anybody who can type a victim's email into a fresh
@@ -77,7 +77,7 @@ real owner to arrive and be linked to it.
 
 **The mobile redirect is a private scheme, and a private scheme is not
 exclusively ours.** A phone has no loopback server to come back to, so the
-finished sign-in returns through `nexora://oauth` — and Android will not promise
+finished sign-in returns through `betweenus://oauth` — and Android will not promise
 that only this app is registered for it. Another app can claim the same scheme
 and receive the one-time code. So the app scheme is accepted only for a sign-in
 that also carries a challenge: the client keeps a random verifier, sends its
@@ -127,7 +127,7 @@ allowlist that excludes SVG.
 
 Two layers, because they cover different failures. Nginx limits by address at
 the edge, tightly on `/api/v1/auth` and `/api/v1/admin`. The service-level guard
-in `@nexora/nest-common` is the backstop for traffic that reaches a service
+in `@betweenus/nest-common` is the backstop for traffic that reaches a service
 another way, and it counts in Redis so every replica shares one budget.
 
 Login carries two counters. An address budget alone is the wrong shape for the
@@ -249,11 +249,11 @@ when, how large each message was, and who is in a voice channel. See `E2EE.md`.
 ## What to run
 
 ```
-pnpm --filter @nexora/auth check          # tokens, secrets, algorithm pinning
-pnpm --filter @nexora/nest-common check   # client address, CORS, rate buckets
+pnpm --filter @betweenus/auth check          # tokens, secrets, algorithm pinning
+pnpm --filter @betweenus/nest-common check   # client address, CORS, rate buckets
 pnpm --filter auth-service check          # login, rotation, reuse, OAuth redirects
-pnpm --filter @nexora/permissions check   # role and grant resolution
-pnpm --filter @nexora/storage check       # keys, allowlists, inline safety
+pnpm --filter @betweenus/permissions check   # role and grant resolution
+pnpm --filter @betweenus/storage check       # keys, allowlists, inline safety
 ```
 
 Or `pnpm -r check` for all of them.

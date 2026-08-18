@@ -1,5 +1,5 @@
-appId: com.nexora.desktop
-productName: Nexora
+appId: com.betweenus.desktop
+productName: BetweenUs
 electronVersion: 31.3.1
 directories:
   output: release

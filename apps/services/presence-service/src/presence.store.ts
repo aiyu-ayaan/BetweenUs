@@ -10,13 +10,13 @@
  */
 import { Injectable, OnModuleDestroy } from '@nestjs/common';
 import Redis from 'ioredis';
-import { envOr } from '@nexora/config';
+import { envOr } from '@betweenus/config';
 import type {
   ActiveStatus,
   PresenceState,
   PresenceStatus,
   VoiceState,
-} from '@nexora/shared-types';
+} from '@betweenus/shared-types';
 
 const ONLINE_KEY = 'presence:online';
 const STATUS_KEY = 'presence:status';

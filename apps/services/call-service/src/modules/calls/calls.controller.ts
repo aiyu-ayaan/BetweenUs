@@ -1,6 +1,6 @@
 import { Body, Controller, Post, UseGuards } from '@nestjs/common';
-import { CurrentUser, JwtAuthGuard, type AuthenticatedUser } from '@nexora/auth';
-import type { CallIceResponse } from '@nexora/shared-types';
+import { CurrentUser, JwtAuthGuard, type AuthenticatedUser } from '@betweenus/auth';
+import type { CallIceResponse } from '@betweenus/shared-types';
 import { CallsService } from './calls.service';
 import { CallIceDto } from './dto';
 

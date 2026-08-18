@@ -26,11 +26,11 @@ const NOTIFICATION = process.env.NOTIFICATION_SERVICE_URL ?? 'http://127.0.0.1:3
 const REMOTE = process.env.REMOTE_GATEWAY_URL ?? 'http://127.0.0.1:3008';
 const RENDERER = 'http://localhost:5173';
 
-// Must satisfy the password policy in @nexora/auth: 8+ chars, a letter, a digit.
-const PASSWORD = 'nexora-dev-1';
+// Must satisfy the password policy in @betweenus/auth: 8+ chars, a letter, a digit.
+const PASSWORD = 'betweenus-dev-1';
 const USERS = [
-  { label: 'Alice', email: 'alice@nexora.local', username: 'alice', profile: 'duo-a', x: 40, y: 60 },
-  { label: 'Bob', email: 'bob@nexora.local', username: 'bob', profile: 'duo-b', x: 760, y: 60 },
+  { label: 'Alice', email: 'alice@betweenus.local', username: 'alice', profile: 'duo-a', x: 40, y: 60 },
+  { label: 'Bob', email: 'bob@betweenus.local', username: 'bob', profile: 'duo-b', x: 760, y: 60 },
 ];
 const SERVER_NAME = 'Duo Test';
 
@@ -210,14 +210,14 @@ function startVite() {
   const isWin = process.platform === 'win32';
   const command = isWin ? 'cmd.exe' : 'pnpm';
   const args = isWin
-    ? ['/c', 'pnpm', '--filter', '@nexora/desktop', 'dev']
-    : ['--filter', '@nexora/desktop', 'dev'];
+    ? ['/c', 'pnpm', '--filter', '@betweenus/desktop', 'dev']
+    : ['--filter', '@betweenus/desktop', 'dev'];
 
   return spawn(command, args, {
     cwd: repoRoot,
     stdio: 'inherit',
     // The plugin still builds main/preload; it just does not launch Electron.
-    env: { ...process.env, NEXORA_NO_ELECTRON: '1' },
+    env: { ...process.env, BETWEENUS_NO_ELECTRON: '1' },
   });
 }
 
@@ -231,12 +231,12 @@ function startWindow(user) {
     env: {
       ...process.env,
       VITE_DEV_SERVER_URL: RENDERER,
-      NEXORA_PROFILE: user.profile,
-      NEXORA_WINDOW_LABEL: user.label,
-      NEXORA_WINDOW_X: String(user.x),
-      NEXORA_WINDOW_Y: String(user.y),
-      NEXORA_DEV_EMAIL: user.email,
-      NEXORA_DEV_PASSWORD: PASSWORD,
+      BETWEENUS_PROFILE: user.profile,
+      BETWEENUS_WINDOW_LABEL: user.label,
+      BETWEENUS_WINDOW_X: String(user.x),
+      BETWEENUS_WINDOW_Y: String(user.y),
+      BETWEENUS_DEV_EMAIL: user.email,
+      BETWEENUS_DEV_PASSWORD: PASSWORD,
     },
   });
 }

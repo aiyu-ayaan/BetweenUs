@@ -12,8 +12,8 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
-import { CurrentUser, JwtAuthGuard, type AuthenticatedUser } from '@nexora/auth';
-import type { Message, Paginated } from '@nexora/shared-types';
+import { CurrentUser, JwtAuthGuard, type AuthenticatedUser } from '@betweenus/auth';
+import type { Message, Paginated } from '@betweenus/shared-types';
 import { MessagesService } from './messages.service';
 import {
   CreateMessageDto,

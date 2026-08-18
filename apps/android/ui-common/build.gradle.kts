@@ -4,7 +4,7 @@ plugins {
 }
 
 android {
-    namespace = "com.aktech.nexora.ui"
+    namespace = "com.aatech.betweenus.ui"
     // 37 because androidx.core 1.19 and lifecycle 2.11 refuse to be compiled
     // against anything older. targetSdk stays where it is: compiling against a
     // newer API is not the same as opting in to its runtime behaviour.

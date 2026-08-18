@@ -8,9 +8,9 @@ import type {
   ServerMember,
   ServerRole,
   UserSummary,
-} from '@nexora/shared-types';
-import { ASSIGNABLE_PERMISSIONS, PERMISSIONS, SERVER_ROLES } from '@nexora/permissions';
-import { EMOJI_NAME_PATTERN, MAX_SERVER_EMOJI } from '@nexora/shared-types';
+} from '@betweenus/shared-types';
+import { ASSIGNABLE_PERMISSIONS, PERMISSIONS, SERVER_ROLES } from '@betweenus/permissions';
+import { EMOJI_NAME_PATTERN, MAX_SERVER_EMOJI } from '@betweenus/shared-types';
 import { api } from '../../services/api';
 import { preparePicture } from '../../services/attachments';
 import {
@@ -1256,7 +1256,7 @@ function Invites(): JSX.Element {
    *
    * A code is eight characters that look like a typo when they arrive in
    * somebody's chat, and it does not say which deployment it belongs to - two
-   * Nexora servers can both have `k3m9x2qp` and neither is wrong. The code
+   * BetweenUs servers can both have `k3m9x2qp` and neither is wrong. The code
    * itself is still one click away for anywhere a link will not travel.
    */
   const copy = (code: string, what: 'link' | 'code'): void => {

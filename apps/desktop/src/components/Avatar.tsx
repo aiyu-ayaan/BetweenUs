@@ -1,4 +1,4 @@
-import type { PresenceStatus } from '@nexora/shared-types';
+import type { PresenceStatus } from '@betweenus/shared-types';
 import { absoluteUrl } from '../services/endpoint';
 
 const SIZES = {

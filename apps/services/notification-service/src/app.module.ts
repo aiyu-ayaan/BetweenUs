@@ -1,8 +1,8 @@
 import { Module } from '@nestjs/common';
-import { envOr } from '@nexora/config';
-import { pingDatabase } from '@nexora/database';
-import { Logger, createLogger } from '@nexora/logger';
-import { createHealthController } from '@nexora/nest-common';
+import { envOr } from '@betweenus/config';
+import { pingDatabase } from '@betweenus/database';
+import { Logger, createLogger } from '@betweenus/logger';
+import { createHealthController } from '@betweenus/nest-common';
 import { NotificationsController } from './modules/notifications/notifications.controller';
 import { NotificationsService } from './modules/notifications/notifications.service';
 

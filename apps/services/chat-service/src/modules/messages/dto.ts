@@ -10,7 +10,7 @@ import type {
   CreateMessageRequest,
   ReactToMessageRequest,
   UpdateMessageRequest,
-} from '@nexora/shared-types';
+} from '@betweenus/shared-types';
 
 export class CreateMessageDto implements CreateMessageRequest {
   @IsUUID()

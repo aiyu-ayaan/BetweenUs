@@ -45,7 +45,7 @@ import type {
   UpdateServerRequest,
   UpdateServerRoleRequest,
   UserSummary,
-} from '@nexora/shared-types';
+} from '@betweenus/shared-types';
 
 import { absoluteUrl, serverUrl } from './endpoint';
 

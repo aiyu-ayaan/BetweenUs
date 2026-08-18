@@ -1,7 +1,7 @@
 /**
  * What this device already knows, so opening the app is not a spinner.
  *
- * The port of `apps/android/core/src/main/java/com/aktech/nexora/core/store/Cache.kt`,
+ * The port of `apps/android/core/src/main/java/com/aatech/betweenus/core/store/Cache.kt`,
  * and it keeps that file's one rule: **nothing in here is plaintext**. Messages
  * are stored exactly as the server sent them - a sealed envelope this client
  * happens to hold the key for - and the lists are things the server would hand
@@ -12,9 +12,9 @@
  * A cache has nothing in it that cannot be fetched again, so every failure path
  * here is "carry on without it". Nothing throws into a caller.
  */
-import type { Channel, DirectChannel, Message, ServerWithRole } from '@nexora/shared-types';
+import type { Channel, DirectChannel, Message, ServerWithRole } from '@betweenus/shared-types';
 
-const DB_NAME = 'nexora-cache';
+const DB_NAME = 'betweenus-cache';
 const DB_VERSION = 1;
 const LISTS = 'lists';
 const MESSAGES = 'messages';

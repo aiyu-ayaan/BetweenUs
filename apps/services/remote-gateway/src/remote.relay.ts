@@ -23,7 +23,7 @@
  * teardown - small, textual, and already going over a WebSocket.
  */
 import Redis from 'ioredis';
-import type { ServerRemoteEvent } from '@nexora/shared-types';
+import type { ServerRemoteEvent } from '@betweenus/shared-types';
 
 /** The socket a message is for, named by what identifies it rather than by address. */
 export type RelayTarget =

@@ -14,8 +14,8 @@ import {
   Min,
   ValidateIf,
 } from 'class-validator';
-import { SERVER_ROLES } from '@nexora/permissions';
-import { UPLOADED_PICTURE_URL } from '@nexora/shared-types';
+import { SERVER_ROLES } from '@betweenus/permissions';
+import { UPLOADED_PICTURE_URL } from '@betweenus/shared-types';
 import type {
   AddServerMemberRequest,
   ChannelType,
@@ -29,7 +29,7 @@ import type {
   UpdateChannelRequest,
   UpdateServerMemberRequest,
   UpdateServerRequest,
-} from '@nexora/shared-types';
+} from '@betweenus/shared-types';
 
 export class CreateServerDto implements CreateServerRequest {
   @IsString()

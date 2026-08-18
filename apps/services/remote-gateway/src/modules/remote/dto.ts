@@ -12,7 +12,7 @@ import type {
   RemotePermission,
   SetRemoteGrantRequest,
   StartRemoteSessionRequest,
-} from '@nexora/shared-types';
+} from '@betweenus/shared-types';
 
 export class EnrolMachineDto implements EnrolMachineRequest {
   @IsString()

@@ -1,5 +1,5 @@
 import { useChatStore } from '../../stores/chat';
-import { LayoutSidebarIcon, NexoraLogoIcon, SearchIcon } from '../../components/icons';
+import { LayoutSidebarIcon, BetweenUsLogoIcon, SearchIcon } from '../../components/icons';
 
 /**
  * The bar across the top of the workbench: the mark on the left, one command
@@ -49,7 +49,7 @@ export function TopBar({
         : server.name
       : channel
         ? channel.name
-        : 'Nexora';
+        : 'BetweenUs';
 
   return (
     <header className="drag-region flex h-10 shrink-0 items-center gap-2 px-2.5">
@@ -57,9 +57,9 @@ export function TopBar({
           corner is what the layout controls in most apps look like, and it
           leaves you guessing which button hides which column. */}
       <div className="flex w-32 shrink-0 items-center gap-1.5 pl-1">
-        <NexoraLogoIcon className="h-[18px] w-[18px] shrink-0 text-accent" aria-hidden="true" />
+        <BetweenUsLogoIcon className="h-[18px] w-[18px] shrink-0 text-accent" aria-hidden="true" />
         <span className="truncate text-[13px] font-semibold tracking-tight text-slate-300">
-          Nexora
+          BetweenUs
         </span>
         <LayoutToggle
           label={sidebarOpen ? 'Hide sidebar' : 'Show sidebar'}

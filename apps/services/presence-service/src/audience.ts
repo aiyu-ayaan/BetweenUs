@@ -18,7 +18,7 @@
  * instantly, which is the same order of delay as the heartbeat that maintains
  * the online set in the first place.
  */
-import { prisma } from '@nexora/database';
+import { prisma } from '@betweenus/database';
 
 /** How long an answer is reused. Long enough to matter, short enough to be dull. */
 const TTL_MS = 30_000;

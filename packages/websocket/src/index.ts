@@ -3,8 +3,8 @@
  * No channel/presence business logic lives here.
  */
 import type { IncomingMessage } from 'node:http';
-import { bearerToken, verifyAccessToken } from '@nexora/auth';
-import type { AuthenticatedUser } from '@nexora/auth';
+import { bearerToken, verifyAccessToken } from '@betweenus/auth';
+import type { AuthenticatedUser } from '@betweenus/auth';
 
 /**
  * The largest frame a gateway will read before closing the socket.

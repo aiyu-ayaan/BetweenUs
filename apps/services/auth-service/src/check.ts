@@ -1,9 +1,9 @@
 /**
- * Self-check: `pnpm --filter @nexora/auth-service check`.
+ * Self-check: `pnpm --filter @betweenus/auth-service check`.
  *
  * Drives AuthService against an in-memory stand-in for the two Prisma models it
  * touches, so register / login / refresh rotation / reuse detection are covered
- * without Postgres. Env is set before the imports because `@nexora/auth` reads
+ * without Postgres. Env is set before the imports because `@betweenus/auth` reads
  * the signing secrets at module load, and constructing PrismaClient needs a URL
  * even though this check never opens a connection.
  */
@@ -17,7 +17,7 @@ process.env.JWT_REFRESH_TTL = '30d';
 process.env.DATABASE_URL ??= 'postgresql://check:check@127.0.0.1:5432/check';
 process.env.LOG_LEVEL = 'error';
 
-import { rateLimitBuckets } from '@nexora/nest-common';
+import { rateLimitBuckets } from '@betweenus/nest-common';
 import { AuthService } from './modules/auth/auth.service';
 import type { AuthDb } from './modules/auth/auth.db';
 import { CREDENTIALS_RATE_LIMIT, LOGIN_RATE_LIMIT } from './modules/auth/rate-limits';
@@ -78,20 +78,20 @@ function checkLoginBuckets(): void {
   const at = (address: string, body: unknown) =>
     rateLimitBuckets(LOGIN_RATE_LIMIT, { path: '/auth/login', address, body }, 42);
 
-  const first = at('203.0.113.9', { email: 'Ayaan@Nexora.local', password: 'x' });
+  const first = at('203.0.113.9', { email: 'Ayaan@BetweenUs.local', password: 'x' });
   assert.equal(first.length, 2, 'a login with an email is counted twice');
   assert.equal(first[0]!.limit, 20);
   assert.equal(first[1]!.limit, 10);
 
   // Another address, the same account, the email spelled differently: the
   // address bucket differs and the account bucket does not.
-  const second = at('198.51.100.4', { email: '  ayaan@nexora.local  ', password: 'x' });
+  const second = at('198.51.100.4', { email: '  ayaan@betweenus.local  ', password: 'x' });
   assert.notEqual(second[0]!.key, first[0]!.key);
   assert.equal(second[1]!.key, first[1]!.key);
 
   // A different account is a different bucket, so hammering one cannot lock
   // anybody else out.
-  const other = at('203.0.113.9', { email: 'someone@nexora.local', password: 'x' });
+  const other = at('203.0.113.9', { email: 'someone@betweenus.local', password: 'x' });
   assert.notEqual(other[1]!.key, first[1]!.key);
 
   // A request with no email to count against still has an address limit.
@@ -103,7 +103,7 @@ function checkLoginBuckets(): void {
   // that does not exist yet is not a thing to be attacked.
   const registering = rateLimitBuckets(
     CREDENTIALS_RATE_LIMIT,
-    { path: '/auth/register', address: '203.0.113.9', body: { email: 'ayaan@nexora.local' } },
+    { path: '/auth/register', address: '203.0.113.9', body: { email: 'ayaan@betweenus.local' } },
     42,
   );
   assert.equal(registering.length, 1);
@@ -114,7 +114,7 @@ function checkLoginBuckets(): void {
   // A window boundary is a new key, which is what makes the budget refill.
   const nextWindow = rateLimitBuckets(
     LOGIN_RATE_LIMIT,
-    { path: '/auth/login', address: '203.0.113.9', body: { email: 'ayaan@nexora.local' } },
+    { path: '/auth/login', address: '203.0.113.9', body: { email: 'ayaan@betweenus.local' } },
     43,
   );
   assert.notEqual(nextWindow[1]!.key, first[1]!.key);
@@ -237,19 +237,19 @@ async function rejects(promise: Promise<unknown>, code: string): Promise<void> {
  * so a target that should not have matched is a session handed to a stranger.
  */
 function checkOAuthRedirects(): void {
-  const allow = 'https://nexora.example,https://panel.nexora.example/admin';
+  const allow = 'https://betweenus.example,https://panel.betweenus.example/admin';
 
-  assert.equal(isAllowedRedirect('https://nexora.example/done', allow), true);
-  assert.equal(isAllowedRedirect('https://panel.nexora.example/admin/back', allow), true);
+  assert.equal(isAllowedRedirect('https://betweenus.example/done', allow), true);
+  assert.equal(isAllowedRedirect('https://panel.betweenus.example/admin/back', allow), true);
 
   // The prefix match this replaced: a different site whose name starts with an
   // allowed one, which is how the code used to leave the deployment.
-  assert.equal(isAllowedRedirect('https://nexora.example.attacker.test/', allow), false);
-  assert.equal(isAllowedRedirect('https://nexora.example@attacker.test/', allow), false);
+  assert.equal(isAllowedRedirect('https://betweenus.example.attacker.test/', allow), false);
+  assert.equal(isAllowedRedirect('https://betweenus.example@attacker.test/', allow), false);
 
   // Right origin, wrong path; and right host, wrong scheme.
-  assert.equal(isAllowedRedirect('https://panel.nexora.example/elsewhere', allow), false);
-  assert.equal(isAllowedRedirect('http://nexora.example/done', allow), false);
+  assert.equal(isAllowedRedirect('https://panel.betweenus.example/elsewhere', allow), false);
+  assert.equal(isAllowedRedirect('http://betweenus.example/done', allow), false);
 
   // The desktop client's temporary loopback server, which has no origin to
   // configure and is reachable only from the machine that opened it.
@@ -257,7 +257,7 @@ function checkOAuthRedirects(): void {
   assert.equal(isAllowedRedirect('http://localhost:53123/callback', ''), true);
 
   // Nothing configured means nothing but loopback.
-  assert.equal(isAllowedRedirect('https://nexora.example/done', ''), false);
+  assert.equal(isAllowedRedirect('https://betweenus.example/done', ''), false);
   assert.equal(isAllowedRedirect('not-a-url', allow), false);
 }
 
@@ -265,16 +265,16 @@ function checkOAuthRedirects(): void {
  * The mobile redirect, and the secret that makes it safe to answer.
  *
  * A private scheme is not exclusively ours: another app on the phone can
- * register `nexora://` and receive the one-time code. What it cannot have is
+ * register `betweenus://` and receive the one-time code. What it cannot have is
  * the verifier, which never leaves the app that started the sign-in - so the
  * code alone buys nothing. These are the two halves of that.
  */
 function checkAppRedirect(): void {
-  assert.equal(isAppRedirect('nexora://oauth'), true);
-  assert.equal(isAppRedirect('nexora://oauth?code=x'), true);
+  assert.equal(isAppRedirect('betweenus://oauth'), true);
+  assert.equal(isAppRedirect('betweenus://oauth?code=x'), true);
   // Not the scheme, however much of the string looks like it.
-  assert.equal(isAppRedirect('https://nexora.example/oauth'), false);
-  assert.equal(isAppRedirect('nexora-evil://oauth'), false);
+  assert.equal(isAppRedirect('https://betweenus.example/oauth'), false);
+  assert.equal(isAppRedirect('betweenus-evil://oauth'), false);
   assert.equal(isAppRedirect('not-a-url'), false);
 
   // A challenge is the base64url SHA-256 of the verifier: 43 characters, the
@@ -298,33 +298,33 @@ async function main(): Promise<void> {
 
   // Register issues a session and stores exactly one refresh token.
   const registered = await auth.register({
-    email: ' Ayaan@Nexora.local ',
+    email: ' Ayaan@BetweenUs.local ',
     username: 'ayaan',
     password: 'hunter2000',
   });
-  assert.equal(registered.user.email, 'ayaan@nexora.local', 'email is normalised');
+  assert.equal(registered.user.email, 'ayaan@betweenus.local', 'email is normalised');
   assert.ok(registered.accessToken && registered.refreshToken);
   assert.equal(db.tokens.length, 1);
   assert.notEqual(db.tokens[0]?.tokenHash, registered.refreshToken, 'token is stored hashed');
 
   await rejects(
-    auth.register({ email: 'ayaan@nexora.local', username: 'other', password: 'hunter2000' }),
+    auth.register({ email: 'ayaan@betweenus.local', username: 'other', password: 'hunter2000' }),
     'ACCOUNT_EXISTS',
   );
   await rejects(
-    auth.register({ email: 'weak@nexora.local', username: 'weak', password: 'short' }),
+    auth.register({ email: 'weak@betweenus.local', username: 'weak', password: 'short' }),
     'WEAK_PASSWORD',
   );
 
   // Login: right password in, wrong password and unknown account out - same code.
-  const loggedIn = await auth.login({ email: 'AYAAN@nexora.local', password: 'hunter2000' });
+  const loggedIn = await auth.login({ email: 'AYAAN@betweenus.local', password: 'hunter2000' });
   assert.equal(loggedIn.user.id, registered.user.id);
 
   // The same field takes a username, which is how the admin account signs in.
   const byUsername = await auth.login({ email: 'ayaan', password: 'hunter2000' });
   assert.equal(byUsername.user.id, registered.user.id);
-  await rejects(auth.login({ email: 'ayaan@nexora.local', password: 'wrong-pass1' }), 'INVALID_CREDENTIALS');
-  await rejects(auth.login({ email: 'nobody@nexora.local', password: 'hunter2000' }), 'INVALID_CREDENTIALS');
+  await rejects(auth.login({ email: 'ayaan@betweenus.local', password: 'wrong-pass1' }), 'INVALID_CREDENTIALS');
+  await rejects(auth.login({ email: 'nobody@betweenus.local', password: 'hunter2000' }), 'INVALID_CREDENTIALS');
 
   // Rotation: the presented token is revoked and a different one comes back.
   const rotated = await auth.refresh(loggedIn.refreshToken);
@@ -357,7 +357,7 @@ async function main(): Promise<void> {
   await rejects(auth.refresh('not-a-jwt'), 'INVALID_REFRESH_TOKEN');
 
   // Fresh session after the revocation, then logout revokes just that one.
-  const again = await auth.login({ email: 'ayaan@nexora.local', password: 'hunter2000' });
+  const again = await auth.login({ email: 'ayaan@betweenus.local', password: 'hunter2000' });
   await auth.logout(again.refreshToken);
   await rejects(auth.refresh(again.refreshToken), 'REFRESH_TOKEN_REUSED');
 
@@ -369,7 +369,7 @@ async function main(): Promise<void> {
   assert.equal(changed.user.mustChangePassword, false);
   assert.ok(changed.accessToken && changed.refreshToken);
   await rejects(
-    auth.login({ email: 'ayaan@nexora.local', password: 'hunter2000' }),
+    auth.login({ email: 'ayaan@betweenus.local', password: 'hunter2000' }),
     'INVALID_CREDENTIALS',
   );
   await rejects(
@@ -383,7 +383,7 @@ async function main(): Promise<void> {
   // A disabled account cannot log in, whatever the password is.
   db.users[0]!.disabledAt = new Date();
   await rejects(
-    auth.login({ email: 'ayaan@nexora.local', password: 'brand-new-pass9' }),
+    auth.login({ email: 'ayaan@betweenus.local', password: 'brand-new-pass9' }),
     'ACCOUNT_DISABLED',
   );
   db.users[0]!.disabledAt = null;

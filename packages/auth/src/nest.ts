@@ -12,7 +12,7 @@ import {
   createParamDecorator,
 } from '@nestjs/common';
 import type { Request } from 'express';
-import type { JwtAccessPayload } from '@nexora/shared-types';
+import type { JwtAccessPayload } from '@betweenus/shared-types';
 import { bearerToken, verifyAccessToken } from './tokens';
 
 export interface AuthenticatedUser {

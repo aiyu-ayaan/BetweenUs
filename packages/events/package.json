@@ -1,5 +1,5 @@
 {
-  "name": "@nexora/events",
+  "name": "@betweenus/events",
   "private": true,
   "version": "0.1.0",
   "main": "dist/index.js",
@@ -9,7 +9,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@nexora/shared-types": "workspace:*",
+    "@betweenus/shared-types": "workspace:*",
     "ioredis": "^5.4.1"
   },
   "devDependencies": {

@@ -1,7 +1,7 @@
 /**
  * Self-check for the microphone capture and encoder settings.
  *
- * Run with `pnpm --filter @nexora/desktop check`. Two things here are only
+ * Run with `pnpm --filter @betweenus/desktop check`. Two things here are only
  * audible to other people: a constraint object that quietly asks for the wrong
  * processing, and a gate that chatters or eats the start of a word.
  */

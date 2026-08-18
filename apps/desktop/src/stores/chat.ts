@@ -11,8 +11,8 @@ import type {
   ServerWithRole,
   UpdateServerMemberRequest,
   UpdateServerRequest,
-} from '@nexora/shared-types';
-import { PERMISSIONS } from '@nexora/permissions';
+} from '@betweenus/shared-types';
+import { PERMISSIONS } from '@betweenus/permissions';
 import { api } from '../services/api';
 import { chatSocket } from '../services/socket';
 import {

@@ -18,7 +18,7 @@ import type {
   PublishChannelKeysRequest,
   PutIdentityBackupRequest,
   RegisterDeviceKeyRequest,
-} from '@nexora/shared-types';
+} from '@betweenus/shared-types';
 
 /** A serialised ECDH P-256 JWK is ~200 chars; the cap is slack, not a guess. */
 const MAX_PUBLIC_KEY_LENGTH = 1024;

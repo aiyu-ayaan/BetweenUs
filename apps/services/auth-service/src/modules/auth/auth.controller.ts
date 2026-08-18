@@ -1,7 +1,7 @@
 import { Body, Controller, Get, HttpCode, Patch, Post, UseGuards } from '@nestjs/common';
-import { CurrentUser, JwtAuthGuard, type AuthenticatedUser } from '@nexora/auth';
-import type { AuthResponse, AuthTokens, PublicUser } from '@nexora/shared-types';
-import { rateLimit } from '@nexora/nest-common';
+import { CurrentUser, JwtAuthGuard, type AuthenticatedUser } from '@betweenus/auth';
+import type { AuthResponse, AuthTokens, PublicUser } from '@betweenus/shared-types';
+import { rateLimit } from '@betweenus/nest-common';
 import { AuthService } from './auth.service';
 import { ChangePasswordDto, LoginDto, RefreshDto, RegisterDto, UpdateAccountDto } from './dto';
 import { CREDENTIALS_RATE_LIMIT, LOGIN_RATE_LIMIT, SESSION_RATE_LIMIT } from './rate-limits';

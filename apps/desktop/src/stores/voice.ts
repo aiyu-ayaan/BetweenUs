@@ -13,7 +13,7 @@
  * connection - finding their machine in the remote-desktop list, mostly.
  */
 import { create } from 'zustand';
-import type { CallPeer } from '@nexora/shared-types';
+import type { CallPeer } from '@betweenus/shared-types';
 import { api } from '../services/api';
 import { callKeyForChannel } from '../services/e2ee';
 import { Mesh, SLOTS, type Slot } from '../services/mesh';
@@ -36,7 +36,7 @@ import { shareOptions, type ShareIntent, type ShareSize } from '../services/shar
 export const LOCAL = 'local';
 
 /** Application state sent over each encrypted peer data channel. */
-const VOICE_STATE_TOPIC = 'nexora.voice-state';
+const VOICE_STATE_TOPIC = 'betweenus.voice-state';
 type MediaState = Record<Slot, boolean>;
 
 interface MediaStateEnvelope {
@@ -409,7 +409,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
     useShareControlStore.getState().detach();
     teardown();
     // Close PiP overlay window if open
-    void window.nexora?.closePip();
+    void window.betweenus?.closePip();
     set({
       status: 'idle',
       channelId: null,
@@ -517,7 +517,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
     mesh.claimScreen();
 
     try {
-      await window.nexora?.selectScreenSource(source?.id ?? '', withAudio);
+      await window.betweenus?.selectScreenSource(source?.id ?? '', withAudio);
       const options = shareOptions(
         intent,
         await captureSize(source),
@@ -916,7 +916,7 @@ function stopLocal(slot: Slot): void {
   // Every path out of a share comes through here - the button, the OS bar, and
   // leaving the call - so this is the one place that can tell the main process
   // the desktop no longer has to be held in composed flip for it.
-  if (slot === 'screen' && track) void window.nexora?.releaseScreenCapture();
+  if (slot === 'screen' && track) void window.betweenus?.releaseScreenCapture();
 }
 
 /** Ends the call's machinery without touching rendered state. */
@@ -949,7 +949,7 @@ async function captureSize(source: ScreenSource | null): Promise<ShareSize> {
     width: Math.max(1920, Math.round(screenWidth * dpr)),
     height: Math.max(1080, Math.round(screenHeight * dpr)),
   };
-  const displays = (await window.nexora?.screenDisplays()) ?? [];
+  const displays = (await window.betweenus?.screenDisplays()) ?? [];
   if (displays.length === 0) return fallback;
 
   const exact = source?.displayId

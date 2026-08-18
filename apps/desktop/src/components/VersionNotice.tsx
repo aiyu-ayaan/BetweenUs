@@ -13,11 +13,11 @@
  * not have to read it again every launch.
  */
 import { useEffect, useState } from 'react';
-import { API_CONTRACT_VERSION } from '@nexora/shared-types';
+import { API_CONTRACT_VERSION } from '@betweenus/shared-types';
 import { fetchServerContract, serverUrl, versionVerdict } from '../services/endpoint';
 import { XIcon } from './icons';
 
-const DISMISSED_KEY = 'nexora.versionNoticeDismissed';
+const DISMISSED_KEY = 'betweenus.versionNoticeDismissed';
 
 const WORDING = {
   'client-too-old':

@@ -1,6 +1,6 @@
 /**
  * End-to-end encryption primitives. WebCrypto only, no app imports, so this
- * module also runs under Node for `pnpm --filter @nexora/desktop check`.
+ * module also runs under Node for `pnpm --filter @betweenus/desktop check`.
  *
  * Scheme (see development/E2EE.md):
  *   - identity: ECDH P-256 key pair per device, private half never leaves it
@@ -8,14 +8,14 @@
  *   - distribution: ECDH(sender, recipient) -> HKDF-SHA256 -> AES-GCM wrap
  *   - messages and call media: AES-256-GCM under the channel key
  */
-import type { BackupSecretKind, IdentityBackup, EncryptedEnvelope } from '@nexora/shared-types';
+import type { BackupSecretKind, IdentityBackup, EncryptedEnvelope } from '@betweenus/shared-types';
 
 const subtle = globalThis.crypto.subtle;
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
 const IDENTITY_ALGORITHM = { name: 'ECDH', namedCurve: 'P-256' } as const;
-const WRAP_INFO = 'nexora/e2ee/v1/channel-key-wrap';
+const WRAP_INFO = 'betweenus/e2ee/v1/channel-key-wrap';
 const IV_BYTES = 12;
 const CHANNEL_KEY_BYTES = 32;
 const BACKUP_SALT_BYTES = 16;

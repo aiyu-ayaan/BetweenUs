@@ -345,7 +345,7 @@ export const CopyIcon = (props: IconProps): JSX.Element => (
   </Base>
 );
 
-export const NexoraLogoIcon = (props: SVGProps<SVGSVGElement>): JSX.Element => (
+export const BetweenUsLogoIcon = (props: SVGProps<SVGSVGElement>): JSX.Element => (
   <svg
     viewBox="0 0 1024 1024"
     fill="none"

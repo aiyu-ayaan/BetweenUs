@@ -14,13 +14,13 @@ import {
   validatePasswordStrength,
   verifyPassword,
   verifyRefreshToken,
-} from '@nexora/auth';
-import { type User } from '@nexora/database';
+} from '@betweenus/auth';
+import { type User } from '@betweenus/database';
 import { AuthDatabase, type AuthDb } from './auth.db';
-import { EVENTS, EventBus } from '@nexora/events';
-import { envOr } from '@nexora/config';
-import { createLogger, type LogLevel } from '@nexora/logger';
-import type { AuthResponse, AuthTokens, PublicUser } from '@nexora/shared-types';
+import { EVENTS, EventBus } from '@betweenus/events';
+import { envOr } from '@betweenus/config';
+import { createLogger, type LogLevel } from '@betweenus/logger';
+import type { AuthResponse, AuthTokens, PublicUser } from '@betweenus/shared-types';
 import type { ChangePasswordDto, LoginDto, RegisterDto, UpdateAccountDto } from './dto';
 
 const logger = createLogger('auth-service', envOr('LOG_LEVEL', 'info') as LogLevel);

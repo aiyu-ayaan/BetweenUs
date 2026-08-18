@@ -1,4 +1,4 @@
-# Nexora TODO
+# BetweenUs TODO
 
 Ordered backlog. Check items off as they land; keep the "Next up" section at
 the top honest — it is what a new session reads first.
@@ -44,7 +44,7 @@ of the same accounts.
 
 Phase 26 is the client's own look, and it is only paint and layout: no store,
 no service and no protocol changed. It matters because the client was Discord's
-palette and Discord's layout, hex for hex, which left Nexora with no way to
+palette and Discord's layout, hex for hex, which left BetweenUs with no way to
 look like anything. Read the phase-26 section of `PLANNING.md` for the shape,
 and "The workbench" in `TESTING.md` for what to click.
 
@@ -64,7 +64,7 @@ carries the state.
 
 Every client today only raises a notification while it is running. A closed tab,
 a quit desktop app and a swiped-away phone are all unreachable, which is the one
-gap that makes Nexora feel unlike the thing it is copying. It is also the only
+gap that makes BetweenUs feel unlike the thing it is copying. It is also the only
 remaining item that needs a service to grow a new surface, which is why it is a
 phase of its own rather than a line in somebody else's.
 
@@ -119,7 +119,7 @@ message on Android, so an attachment opened twice is fetched once.
 
 ### Phase 26 — the workbench
 
-- [x] `tailwind.theme.mjs`: Nexora's own ramp - cool near-black ink, iris accent
+- [x] `tailwind.theme.mjs`: BetweenUs's own ramp - cool near-black ink, iris accent
       `#7c5cff`, a `ground` darker than every panel, and `gg sans` gone from the
       font stack
 - [x] `.panel` in `index.css`: one definition of a region, so rail, sidebar,
@@ -189,7 +189,7 @@ Signalling:
 The mesh:
 
 - [x] `services/mesh.ts`: one `RTCPeerConnection` per peer, perfect negotiation
-      with politeness decided by comparing peer ids, and a `nexora.share` data
+      with politeness decided by comparing peer ids, and a `betweenus.share` data
       channel per peer
 - [x] Senders for microphone, camera, screen and screen audio, added and
       replaced in place so toggling a device does not renegotiate the world
@@ -307,7 +307,7 @@ a human in front of the app, and so does most of phase 12.
 - [ ] Drive a call from a second network end to end, with the TURN key set. The
       code and its self-check have landed; nobody has yet joined one from off
       the LAN and heard the other side
-- [x] Remote sessions get a relay too. The minting moved to `@nexora/config`'s
+- [x] Remote sessions get a relay too. The minting moved to `@betweenus/config`'s
       `iceServers()` with its own self-check, and `remote-gateway` hands the
       same short-lived credentials to both sides of a session that `call-service`
       hands to a call. Neither service names a media server any more, because
@@ -331,7 +331,7 @@ a human in front of the app, and so does most of phase 12.
       call-service and remote-gateway now compare the address with the caller's
       own `Host` header and answer `LIVEKIT_UNREACHABLE_URL` with the fix in it
       rather than handing out something undialable; the comparison is one pure
-      function in `@nexora/config` with a self-check, because both services had
+      function in `@betweenus/config` with a self-check, because both services had
       the same trap and only one had been reported. A container keeps the
       environment it was created with, so the error says to recreate the service
 - [x] Watching a share from a browser. **Join stream** blanked the window - an
@@ -488,7 +488,7 @@ Left open on purpose:
       `REMOTE_SESSION_RETENTION_DAYS` (30) and `REMOTE_AUDIT_RETENTION_DAYS`
       (365). A session with no `endedAt` is never swept, whatever its age
 - [ ] `apps/services/remote-agent` is still a scaffold. A headless server has no
-      Nexora window to run the agent inside, and that is what it is for
+      BetweenUs window to run the agent inside, and that is what it is for
 - [x] The controller sends what it was holding with every key event, and the
       machine reconciles its modifiers to it, so a chord arrives as a chord.
       It also self-heals: a modifier released while the controller's window
@@ -997,7 +997,7 @@ Left open on purpose:
       every reference in the client, compose files, Nginx, CI and dev scripts
 - [x] Per-member permission overrides on `ServerMember` (granted / denied) on
       top of the role defaults, and one `resolveChannelAccess` in
-      `@nexora/database` replacing the copies in chat-, call- and
+      `@betweenus/database` replacing the copies in chat-, call- and
       presence-service
 - [x] Server settings API: change a member's role, grant and revoke individual
       permissions, kick a member, rename or delete the server
@@ -1086,13 +1086,13 @@ Phase 12 opened these, and left them open on purpose:
 - [x] `.env.example` covering every variable the MVP reads
 
 ### Phase 2 — shared packages
-- [x] `@nexora/shared-types` — DTOs, API contracts, WebSocket event types
-- [x] `@nexora/config` — typed env loading
-- [x] `@nexora/logger` — structured JSON logger with redaction
-- [x] `@nexora/auth` — JWT sign/verify, Nest `JwtAuthGuard`, `@CurrentUser()`
-- [x] `@nexora/permissions` — role and permission constants
-- [x] `@nexora/events` — event names and payload contracts, Redis publisher
-- [x] `@nexora/database` — Prisma schema + client singleton
+- [x] `@betweenus/shared-types` — DTOs, API contracts, WebSocket event types
+- [x] `@betweenus/config` — typed env loading
+- [x] `@betweenus/logger` — structured JSON logger with redaction
+- [x] `@betweenus/auth` — JWT sign/verify, Nest `JwtAuthGuard`, `@CurrentUser()`
+- [x] `@betweenus/permissions` — role and permission constants
+- [x] `@betweenus/events` — event names and payload contracts, Redis publisher
+- [x] `@betweenus/database` — Prisma schema + client singleton
 
 ### Phase 3 — auth service
 - [x] `POST /api/v1/auth/register`
@@ -1115,7 +1115,7 @@ Phase 12 opened these, and left them open on purpose:
 - [x] `GET /health`
 
 ### Storage
-- [x] `@nexora/storage` with local-disk and S3 drivers, chosen from env
+- [x] `@betweenus/storage` with local-disk and S3 drivers, chosen from env
 - [x] `POST /api/v1/uploads` and `GET /api/v1/uploads/:key` in chat-service
 - [x] Key generation, traversal guard, content-type allowlist, inline/attachment
       disposition rules
@@ -1139,7 +1139,7 @@ Phase 12 opened these, and left them open on purpose:
 - [x] Message list with realtime WebSocket updates
 
 ### Phase 8 — encrypted chat and voice
-- [x] `@nexora/shared-types` contracts for envelopes, device keys, channel keys
+- [x] `@betweenus/shared-types` contracts for envelopes, device keys, channel keys
       and call tokens
 - [x] `device_keys` + `channel_keys` Prisma models and migration
 - [x] `/api/v1/e2ee` in chat-service: device directory, channel-key publish and
@@ -1228,7 +1228,7 @@ Follow-ups this phase deliberately left open:
       and WSL2 do not route the host to. The client's own 15s race was the only
       thing that ever spoke up, as "Connection to voice server timed out". The
       dev compose file passes `--node-ip 127.0.0.1`, overridable with
-      `NEXORA_LIVEKIT_NODE_IP` for a second machine on the LAN
+      `BETWEENUS_LIVEKIT_NODE_IP` for a second machine on the LAN
 
 ### Phase 10 — hardening
 - [x] Move `livekit/livekit-server` to v1.13.5 in both compose files. v1.7
@@ -1238,7 +1238,7 @@ Follow-ups this phase deliberately left open:
 - [x] Refresh-token reuse detection (revoke whole token family on replay)
 - [x] Rate limit login/register at the service level, not only in Nginx
 - [x] Unit tests for `AuthService` (register/login/refresh) with a Prisma mock —
-      `pnpm --filter @nexora/auth-service check`, in-memory database
+      `pnpm --filter @betweenus/auth-service check`, in-memory database
 - [x] Presence smoke test: two sockets, sync/typing/voice/offline asserted
 - [x] Integration test: register → create server → create channel → send
       message (`chat-service/smoke.mjs`, now exits non-zero on a failed assert)
@@ -1309,11 +1309,11 @@ are the gaps it left open deliberately, in the order they matter.
 
 ### Phase 19 — what a deployment still needs
 - [x] TURN so voice, screen share and remote desktop survive a pair of networks
-      with no direct path. `@nexora/config` mints short-lived Cloudflare TURN
+      with no direct path. `@betweenus/config` mints short-lived Cloudflare TURN
       credentials and both `call-service` and `remote-gateway` hand them out;
       it is off until an operator configures a key, which is the intended
       default
-- [x] One data path per deployment. `pnpm data:path /srv/x/nexora` creates
+- [x] One data path per deployment. `pnpm data:path /srv/x/betweenus` creates
       `data/postgres`, `data/redis`, `data/media` (`pictures/`, `attachments/`)
       and `backup/`, chowns the uploads tree to uid 1000, and writes the four
       bind paths into `.env`. Compose interpolates one variable per mount, each

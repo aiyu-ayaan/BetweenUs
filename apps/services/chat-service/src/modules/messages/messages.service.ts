@@ -1,8 +1,8 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import { prisma, resolveChannelAccess, type ChannelAccess } from '@nexora/database';
-import { EVENTS, EventBus } from '@nexora/events';
-import { PERMISSIONS, type Permission } from '@nexora/permissions';
-import type { Message, MessageReactionSummary, Paginated } from '@nexora/shared-types';
+import { prisma, resolveChannelAccess, type ChannelAccess } from '@betweenus/database';
+import { EVENTS, EventBus } from '@betweenus/events';
+import { PERMISSIONS, type Permission } from '@betweenus/permissions';
+import type { Message, MessageReactionSummary, Paginated } from '@betweenus/shared-types';
 
 const PAGE_SIZE = 50;
 // Content is an encrypted envelope, so the limit covers base64 expansion of a
@@ -286,7 +286,7 @@ export class MessagesService {
   }
 
   /**
-   * Access is resolved by `@nexora/database`, which is also what call- and
+   * Access is resolved by `@betweenus/database`, which is also what call- and
    * presence-service ask; the three of them used to keep their own copy of this
    * check. A channel the caller cannot see answers 404, not 403, so channel ids
    * cannot be probed for.

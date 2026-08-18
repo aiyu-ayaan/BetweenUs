@@ -12,12 +12,12 @@
  * service is tracked in development/TODO.md.
  */
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { prisma, resolveChannelAccess } from '@nexora/database';
+import { prisma, resolveChannelAccess } from '@betweenus/database';
 import type {
   ChannelUnread,
   NotificationPreferences,
   UpdateNotificationPreferencesRequest,
-} from '@nexora/shared-types';
+} from '@betweenus/shared-types';
 
 /** An account with no row is an account with these. */
 const DEFAULTS: NotificationPreferences = {

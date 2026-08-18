@@ -8,9 +8,9 @@
 import { Injectable, OnModuleDestroy } from '@nestjs/common';
 import type { Server as HttpServer } from 'node:http';
 import { WebSocket, WebSocketServer } from 'ws';
-import { prisma } from '@nexora/database';
-import { EVENTS, EventBus } from '@nexora/events';
-import { PERMISSIONS } from '@nexora/permissions';
+import { prisma } from '@betweenus/database';
+import { EVENTS, EventBus } from '@betweenus/events';
+import { PERMISSIONS } from '@betweenus/permissions';
 import {
   CONTROL_MAX_PAYLOAD,
   RoomRegistry,
@@ -18,9 +18,9 @@ import {
   channelRoom,
   serverRoom,
   userRoom,
-} from '@nexora/websocket';
-import { Logger } from '@nexora/logger';
-import type { ClientChatEvent, ServerChatEvent } from '@nexora/shared-types';
+} from '@betweenus/websocket';
+import { Logger } from '@betweenus/logger';
+import type { ClientChatEvent, ServerChatEvent } from '@betweenus/shared-types';
 import { MessagesService } from '../modules/messages/messages.service';
 
 const HEARTBEAT_INTERVAL_MS = 30_000;

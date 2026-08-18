@@ -1,4 +1,4 @@
-/** Self-check: `pnpm --filter @nexora/websocket check`. Room bookkeeping + handshake parsing. */
+/** Self-check: `pnpm --filter @betweenus/websocket check`. Room bookkeeping + handshake parsing. */
 import assert from 'node:assert/strict';
 import type { IncomingMessage } from 'node:http';
 import { RoomRegistry, channelRoom, extractHandshakeToken } from './index';

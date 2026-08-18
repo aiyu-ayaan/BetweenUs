@@ -5,7 +5,7 @@
  * app is already on the machine and already has everything an agent needs -
  * screen capture, a WebRTC stack, and an OS keychain to keep a credential
  * in. `apps/services/remote-agent` stays reserved for a headless server that
- * has no Nexora window to run inside.
+ * has no BetweenUs window to run inside.
  *
  * Nothing here decides what a controller may do. The gateway checked the grant
  * before the session existed and refuses every event the session was not
@@ -18,7 +18,7 @@ import type {
   IceServer,
   RemotePermission,
   ServerRemoteEvent,
-} from '@nexora/shared-types';
+} from '@betweenus/shared-types';
 import { api } from './api';
 import { wsUrl } from './endpoint';
 import { secureGet, secureSet } from './e2ee';
@@ -29,7 +29,7 @@ import { useAudioSettings } from '../stores/audioSettings';
 const TOKEN_KEY = 'remote.agentToken';
 const MACHINE_KEY = 'remote.machineId';
 /** Machine-local, not per account: enabling remote access is a machine decision. */
-const ENABLED_KEY = 'nexora.remote.enabled';
+const ENABLED_KEY = 'betweenus.remote.enabled';
 
 /** A request from someone who is not the owner is refused if nobody answers. */
 const CONSENT_TIMEOUT_MS = 30_000;
@@ -166,8 +166,8 @@ export const useAgentStore = create<AgentState>((set, get) => ({
   restore: async (ownerId) => {
     selfUserId = ownerId;
     set({
-      machineName: (await window.nexora?.machineName()) ?? 'This machine',
-      controlSupported: (await window.nexora?.remoteInputSupported()) ?? false,
+      machineName: (await window.betweenus?.machineName()) ?? 'This machine',
+      controlSupported: (await window.betweenus?.remoteInputSupported()) ?? false,
       machineId: await secureGet(MACHINE_KEY),
     });
     if (get().enabled) await connect();
@@ -190,8 +190,8 @@ async function connect(): Promise<void> {
 
   if (!token) {
     try {
-      const name = (await window.nexora?.machineName()) ?? 'This machine';
-      const result = await api.enrolMachine(name, window.nexora?.platform ?? 'unknown', machineId ?? undefined);
+      const name = (await window.betweenus?.machineName()) ?? 'This machine';
+      const result = await api.enrolMachine(name, window.betweenus?.platform ?? 'unknown', machineId ?? undefined);
       token = result.agentToken;
       machineId = result.machine.id;
       await secureSet(TOKEN_KEY, token);
@@ -322,18 +322,18 @@ async function onEvent(event: ServerRemoteEvent): Promise<void> {
     // Input has already been checked against the session's permissions by the
     // gateway; this side only applies it.
     case 'input.mouse':
-      window.nexora?.remoteMouse({ ...event, source: 'session' });
+      window.betweenus?.remoteMouse({ ...event, source: 'session' });
       return;
 
     case 'input.key':
-      window.nexora?.remoteKey({ ...event, source: 'session' });
+      window.betweenus?.remoteKey({ ...event, source: 'session' });
       return;
 
     case 'clipboard.set':
       // Remembered before writing, so the poller below does not read it back
       // out and send it straight to the other end again.
       lastClipboard = event.text;
-      window.nexora?.clipboardWrite(event.text);
+      window.betweenus?.clipboardWrite(event.text);
       return;
 
     // The controller's answer, and its ICE candidates. Relayed by the gateway,
@@ -377,7 +377,7 @@ async function startPublishing(pending: PendingSession): Promise<void> {
   if (!credentials) return;
 
   try {
-    displays = (await window.nexora?.screenDisplays()) ?? [];
+    displays = (await window.betweenus?.screenDisplays()) ?? [];
     const display = displays.find((entry) => entry.primary) ?? displays[0];
     if (!display) throw new Error('no display to share');
 
@@ -429,7 +429,7 @@ function stopCapture(): void {
   if (!captured) return;
   captured.stop();
   captured = null;
-  void window.nexora?.releaseScreenCapture();
+  void window.betweenus?.releaseScreenCapture();
 }
 
 /**
@@ -440,7 +440,7 @@ function stopCapture(): void {
  * clicks land short on a scaled display.
  */
 async function publishDisplay(target: ScreenLink, display: DisplayInfo): Promise<void> {
-  await window.nexora?.selectScreenSource(display.sourceId, false);
+  await window.betweenus?.selectScreenSource(display.sourceId, false);
   // The same encoder settings a screen share in a call uses - a remote desktop
   // is the 'detail' case of the same problem, and there is no reason for two
   // sets of numbers. `share-quality.ts` says why they are what they are.
@@ -471,7 +471,7 @@ async function publishDisplay(target: ScreenLink, display: DisplayInfo): Promise
   await target.setDisplay(track, options.publish);
 
   activeDisplayId = display.id;
-  window.nexora?.remoteTarget(display.id, 'session');
+  window.betweenus?.remoteTarget(display.id, 'session');
 }
 
 /**
@@ -515,7 +515,7 @@ async function switchScreen(sessionId: string, screenId: string): Promise<void> 
 function watchDisplays(sessionId: string): void {
   stopWatchingDisplays();
   unwatchDisplays =
-    window.nexora?.onDisplaysChanged(() => {
+    window.betweenus?.onDisplaysChanged(() => {
       void refreshDisplays(sessionId);
     }) ?? null;
 }
@@ -529,7 +529,7 @@ async function refreshDisplays(sessionId: string): Promise<void> {
   const current = link;
   if (!current) return;
 
-  displays = (await window.nexora?.screenDisplays()) ?? [];
+  displays = (await window.betweenus?.screenDisplays()) ?? [];
   if (displays.length === 0) return;
 
   const stillThere = displays.some((entry) => entry.id === activeDisplayId);
@@ -580,7 +580,7 @@ let lastClipboard = '';
 
 function startClipboardSync(sessionId: string): void {
   stopClipboardSync();
-  const bridge = window.nexora;
+  const bridge = window.betweenus;
   if (!bridge) return;
 
   clipboardTimer = window.setInterval(() => {
@@ -610,7 +610,7 @@ async function teardown(_reason: string): Promise<void> {
   displays = [];
   activeDisplayId = null;
   useAgentStore.setState({ session: null });
-  window.nexora?.remoteInputStop();
+  window.betweenus?.remoteInputStop();
 }
 
 function clearConsentTimer(): void {

@@ -1,5 +1,5 @@
 {
-  "name": "@nexora/websocket",
+  "name": "@betweenus/websocket",
   "private": true,
   "version": "0.1.0",
   "main": "dist/index.js",
@@ -10,8 +10,8 @@
     "check": "tsc -p tsconfig.json && node dist/check.js"
   },
   "dependencies": {
-    "@nexora/auth": "workspace:*",
-    "@nexora/shared-types": "workspace:*"
+    "@betweenus/auth": "workspace:*",
+    "@betweenus/shared-types": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^20.14.10",

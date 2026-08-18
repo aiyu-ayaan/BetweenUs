@@ -9,13 +9,13 @@
  *
  * The OS half - the notification itself, the taskbar flash, the tray, restoring
  * the window on a click - belongs to the Electron main process. In a plain
- * browser (`pnpm --filter @nexora/desktop dev` in a tab) the bridge is absent
+ * browser (`pnpm --filter @betweenus/desktop dev` in a tab) the bridge is absent
  * and every call here is a no-op.
  */
 import type {
   ChannelNotificationLevel,
   NotificationPreferences,
-} from '@nexora/shared-types';
+} from '@betweenus/shared-types';
 import { api } from './api';
 import { usePresenceStore } from '../stores/presence';
 
@@ -225,7 +225,7 @@ const clickHandlers = new Set<(channelId: string) => void>();
  * message arrived in is exactly the case not worth interrupting.
  */
 function raise(title: string, body: string, channelId?: string, active = false): void {
-  const bridge = window.nexora;
+  const bridge = window.betweenus;
   if (bridge) {
     bridge.notify(title, body, channelId, active);
     return;
@@ -254,7 +254,7 @@ function raise(title: string, body: string, channelId?: string, active = false):
 
 /** Runs `handler` when the user clicks a notification. */
 export function onNotificationActivate(handler: (channelId: string) => void): () => void {
-  const unsubscribe = window.nexora?.onNotificationActivate(handler);
+  const unsubscribe = window.betweenus?.onNotificationActivate(handler);
   if (unsubscribe) return unsubscribe;
   clickHandlers.add(handler);
   return () => clickHandlers.delete(handler);
@@ -262,11 +262,11 @@ export function onNotificationActivate(handler: (channelId: string) => void): ()
 
 /** Total unread, for the tray tooltip and the dock badge. */
 export function publishUnreadCount(count: number): void {
-  const bridge = window.nexora;
+  const bridge = window.betweenus;
   if (bridge) {
     bridge.setUnreadCount(count);
     return;
   }
   // A tab has no tray and no dock; the title is the only badge it owns.
-  document.title = count > 0 ? `(${count}) Nexora` : 'Nexora';
+  document.title = count > 0 ? `(${count}) BetweenUs` : 'BetweenUs';
 }

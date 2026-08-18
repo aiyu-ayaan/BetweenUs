@@ -1,13 +1,13 @@
-# Nexora
+# BetweenUs
 
 <p align="center">
-  <img src="pictures/home.png" alt="Nexora Client Preview" width="100%" />
+  <img src="pictures/home.png" alt="BetweenUs Client Preview" width="100%" />
 </p>
 
 <p align="center">
-  <a href="https://github.com/aiyu-ayaan/Nexora"><img src="https://sloc.xyz/github/aiyu-ayaan/Nexora" alt="Total Lines of Code" /></a>
-  <a href="https://github.com/aiyu-ayaan/Nexora"><img src="https://img.shields.io/github/repo-size/aiyu-ayaan/Nexora?style=flat-square&logo=github&logoColor=white" alt="Repo Size" /></a>
-  <a href="https://github.com/aiyu-ayaan/Nexora/commits/master"><img src="https://img.shields.io/github/last-commit/aiyu-ayaan/Nexora?style=flat-square&logo=git&logoColor=white" alt="Last Commit" /></a>
+  <a href="https://github.com/aiyu-ayaan/BetweenUs"><img src="https://sloc.xyz/github/aiyu-ayaan/BetweenUs" alt="Total Lines of Code" /></a>
+  <a href="https://github.com/aiyu-ayaan/BetweenUs"><img src="https://img.shields.io/github/repo-size/aiyu-ayaan/BetweenUs?style=flat-square&logo=github&logoColor=white" alt="Repo Size" /></a>
+  <a href="https://github.com/aiyu-ayaan/BetweenUs/commits/master"><img src="https://img.shields.io/github/last-commit/aiyu-ayaan/BetweenUs?style=flat-square&logo=git&logoColor=white" alt="Last Commit" /></a>
   <img src="https://img.shields.io/badge/monorepo-pnpm%20%2B%20Turborepo-F69220?style=flat-square&logo=pnpm&logoColor=white" alt="Monorepo" />
   <img src="https://img.shields.io/badge/TypeScript-5.5+-3178C6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript" />
   <img src="https://img.shields.io/badge/Node.js-20+-339933?style=flat-square&logo=nodedotjs&logoColor=white" alt="Node.js" />
@@ -40,7 +40,7 @@ Messages, attachments, and call media are end-to-end encrypted: the server store
 | Channels | Public and private text channels, private channels as an allowlist, direct messages between friends |
 | Messages & Chat | End-to-end encrypted, realtime over WebSocket, history paging in both directions, replies, `:` emoji search, per-server custom emoji including animated, reactions with who-reacted names, drag-and-drop and a preview before sending, full-screen zoomable image viewer, integrated video player, and local media album saving |
 | Voice and video | Peer-to-peer voice channels, camera, one screen share at a time with takeover, join and leave tones, manual quality override, end-to-end encrypted media, no media server |
-| Android Client | Native Jetpack Compose + Material 3 app with E2EE messaging, WhatsApp-style media picker and composer, media viewers, and public gallery saving (`Pictures/Nexora`, `Movies/Nexora`) |
+| Android Client | Native Jetpack Compose + Material 3 app with E2EE messaging, WhatsApp-style media picker and composer, media viewers, and public gallery saving (`Pictures/BetweenUs`, `Movies/BetweenUs`) |
 | Presence | Online / idle / do not disturb / invisible, typing indicators, voice rosters |
 | Notifications | Desktop notifications, system tray, start with the system, per-channel and per-person mute, quiet hours, persisted unread with a line that survives a restart |
 | Remote desktop | A machine offers itself from Settings, dials out to the gateway, and is viewed and driven from another client; per-machine permissions with expiry, and an audit trail |
@@ -90,7 +90,7 @@ Electron preload bridge, and a browser tab has none of them.
 | Preview before sending, multi-select, captions | ✅ | ✅ | ✅ |
 | Drag and drop into the composer | ✅ | ✅ | — |
 | Zoomable image viewer, video player | ✅ | ✅ | ✅ |
-| Save media to the device gallery | download | download | ✅ `Pictures/Nexora` |
+| Save media to the device gallery | download | download | ✅ `Pictures/BetweenUs` |
 | **Voice, video and screen share** | | | |
 | Peer-to-peer voice channels | ✅ | ✅ | ✅ |
 | Camera | ✅ | ✅ | ✅ |
@@ -215,7 +215,7 @@ does one job, and the boundaries are where the security properties live.
 └───────────────────────────────┬──────────────────────────────────────┘
                                 │  typed Prisma calls
 ┌───────────────────────────────▼──────────────────────────────────────┐
-│ 4  Prisma (@nexora/database)                                         │
+│ 4  Prisma (@betweenus/database)                                         │
 │    One schema, one generated client, one connection pool.            │
 │    Typed queries in, rows out - the only thing that speaks SQL.      │
 └───────────────────────────────┬──────────────────────────────────────┘
@@ -284,16 +284,16 @@ Cross-cutting code only - no service's business logic lives here.
 
 | Package | Holds |
 | --- | --- |
-| `@nexora/shared-types` | DTOs, API contracts, WebSocket event unions. One source for client and server |
-| `@nexora/database` | Prisma schema and client, plus `resolveChannelAccess` and `resolveRemoteAccess` - the single answers to "may this user do this here" and "…to this machine" |
-| `@nexora/auth` | JWT sign and verify, `JwtAuthGuard`, `@CurrentUser()`, secret sealing |
-| `@nexora/permissions` | Role constants and the override arithmetic (deny beats grant beats role) |
-| `@nexora/events` | Event names, payload contracts, and the Redis pub/sub bus |
-| `@nexora/nest-common` | Bootstrap, request ids, the error contract, `/health`, Redis-backed rate limiting |
-| `@nexora/storage` | Local-disk and S3 drivers behind one interface, including multipart upload |
-| `@nexora/websocket` | Shared socket plumbing |
-| `@nexora/logger` | Structured JSON logging with redaction |
-| `@nexora/config` | Typed environment loading |
+| `@betweenus/shared-types` | DTOs, API contracts, WebSocket event unions. One source for client and server |
+| `@betweenus/database` | Prisma schema and client, plus `resolveChannelAccess` and `resolveRemoteAccess` - the single answers to "may this user do this here" and "…to this machine" |
+| `@betweenus/auth` | JWT sign and verify, `JwtAuthGuard`, `@CurrentUser()`, secret sealing |
+| `@betweenus/permissions` | Role constants and the override arithmetic (deny beats grant beats role) |
+| `@betweenus/events` | Event names, payload contracts, and the Redis pub/sub bus |
+| `@betweenus/nest-common` | Bootstrap, request ids, the error contract, `/health`, Redis-backed rate limiting |
+| `@betweenus/storage` | Local-disk and S3 drivers behind one interface, including multipart upload |
+| `@betweenus/websocket` | Shared socket plumbing |
+| `@betweenus/logger` | Structured JSON logging with redaction |
+| `@betweenus/config` | Typed environment loading |
 
 ### Realtime
 
@@ -367,7 +367,7 @@ pnpm dev:infra                  # Postgres and Redis in Docker
 pnpm install
 pnpm db:generate
 pnpm db:migrate                 # creates the schema
-pnpm db:seed                    # optional: demo@nexora.local / nexora123
+pnpm db:seed                    # optional: demo@betweenus.local / betweenus123
 pnpm dev:backend                # every service, no renderer (leave running)
 pnpm dev:duo                    # second terminal: two signed-in test windows
 ```
@@ -443,7 +443,7 @@ A deployment is **one URL**. REST, `/ws/chat`, `/ws/presence`, `/ws/call`,
 single variable to set:
 
 ```
-VITE_API_URL="https://nexora.example.com"
+VITE_API_URL="https://betweenus.example.com"
 ```
 
 Which URL that is:
@@ -453,7 +453,7 @@ Which URL that is:
 | `pnpm dev:backend` on this machine | nothing - `pnpm dev` proxies to the services itself |
 | Docker compose on this machine | `http://localhost:8080` (the built-in default) |
 | Docker compose on another machine on the LAN | `http://<its-ip>:8080` |
-| Behind a Cloudflare Tunnel | `https://nexora.example.com` |
+| Behind a Cloudflare Tunnel | `https://betweenus.example.com` |
 
 The port is `GATEWAY_PORT`, never a service port: `3001`, `3004` and the rest
 are internal to the Docker network and are not what a client talks to.
@@ -493,7 +493,7 @@ A native Android mobile application built with **Kotlin 2.2**, **Jetpack Compose
   - Responsive inline photo and video cards with client-side decryption.
   - **Fullscreen Zoomable Image Viewer**: Multi-touch pinch-to-zoom, pan gestures, reset zoom, and native system share sheet.
   - **Integrated Video Player**: Fullscreen playback with standard media playback controls.
-  - **Direct Gallery Storage Saving**: "Save to Gallery" action saves media directly into the device's public media albums under `Pictures/Nexora` and `Movies/Nexora` using modern Android Scoped Storage (`MediaStore`).
+  - **Direct Gallery Storage Saving**: "Save to Gallery" action saves media directly into the device's public media albums under `Pictures/BetweenUs` and `Movies/BetweenUs` using modern Android Scoped Storage (`MediaStore`).
 - **WebRTC Voice & Video**: Peer-to-peer audio and video calls.
 
 ```bash
@@ -530,15 +530,15 @@ is Windows-only for now - elsewhere a session can watch but not touch.
 
 ## Public ingress
 
-Nexora is one public hostname. If a `cloudflared` already runs on the server,
+BetweenUs is one public hostname. If a `cloudflared` already runs on the server,
 add one ingress entry:
 
 ```yaml
-- hostname: nexora.example.com
+- hostname: betweenus.example.com
   service: http://localhost:8080     # GATEWAY_PORT
 ```
 
-and reload it - no extra container. To let Nexora bring its own tunnel instead:
+and reload it - no extra container. To let BetweenUs bring its own tunnel instead:
 
 ```bash
 CLOUDFLARE_TUNNEL_TOKEN=... docker compose   -f infrastructure/docker/docker-compose.yml --profile public up -d
@@ -555,7 +555,7 @@ create the first administrator, and what each endpoint behind the tunnel is for.
 
 ## File storage
 
-`@nexora/storage` picks its driver from the environment:
+`@betweenus/storage` picks its driver from the environment:
 
 - **S3 variables empty (default):** files land in `LOCAL_STORAGE_PATH`
   (`./storage-data`) and chat-service serves them. Nothing to configure.
@@ -570,7 +570,7 @@ In Docker the local driver writes to `/data/uploads` inside chat-service, and
 volume (`upload-data`, the default), a path is a bind mount.
 
 ```bash
-UPLOAD_DATA_PATH=/mnt/disk2/nexora-uploads   # or D:/nexora-uploads on Windows
+UPLOAD_DATA_PATH=/mnt/disk2/betweenus-uploads   # or D:/betweenus-uploads on Windows
 ```
 
 Keys are UUID-based, so a client filename never decides where a file lands.
@@ -619,10 +619,10 @@ DEPLOYMENT.md             putting it on a server, end to end
 | `pnpm data:path <path>` | Configure single-point data root directory in `.env` and set up tree |
 | `pnpm db:backup` | Trigger pre-migration or manual database dump to `BACKUP_DATA_PATH` |
 | `pnpm admin:create` | Create the first administrator |
-| `pnpm --filter @nexora/chat-service smoke` | End-to-end check against running services |
-| `pnpm --filter @nexora/presence-service smoke` | Presence, typing and voice rosters |
-| `pnpm --filter @nexora/notification-service smoke` | Preferences, unread counting, read markers |
-| `pnpm --filter @nexora/remote-gateway smoke` | Enrolment, grants, and what the remote relay refuses |
+| `pnpm --filter @betweenus/chat-service smoke` | End-to-end check against running services |
+| `pnpm --filter @betweenus/presence-service smoke` | Presence, typing and voice rosters |
+| `pnpm --filter @betweenus/notification-service smoke` | Preferences, unread counting, read markers |
+| `pnpm --filter @betweenus/remote-gateway smoke` | Enrolment, grants, and what the remote relay refuses |
 | `cd apps/android && ./gradlew test` | Run Android core & UI unit test suite |
 | `cd apps/android && ./gradlew assembleDebug` | Build debug APK for Android |
 
@@ -686,7 +686,7 @@ was built the way it was; this is the short version.
 
 ### Deployment & Backups
 
-- **Single Point Datapath (`NEXORA_DATA_PATH`).** `pnpm data:path <path>` sets up a unified storage root for `data/postgres`, `data/redis`, `data/media` (`pictures/` and `attachments/`), and `backup/`. Derived path environment variables (`POSTGRES_DATA_PATH`, `REDIS_DATA_PATH`, `UPLOAD_DATA_PATH`, `BACKUP_DATA_PATH`) are written directly to `.env` while preserving fallback to Docker named volumes.
+- **Single Point Datapath (`BETWEENUS_DATA_PATH`).** `pnpm data:path <path>` sets up a unified storage root for `data/postgres`, `data/redis`, `data/media` (`pictures/` and `attachments/`), and `backup/`. Derived path environment variables (`POSTGRES_DATA_PATH`, `REDIS_DATA_PATH`, `UPLOAD_DATA_PATH`, `BACKUP_DATA_PATH`) are written directly to `.env` while preserving fallback to Docker named volumes.
 - **Pre-Migration Database Backups & Write Pre-checks.** `db-backup-once` container automatically executes a `pg_dump` SQL archive before `prisma migrate deploy` runs. Write permissions on `BACKUP_DATA_PATH` are validated automatically by `backup.sh` and `data-path.mjs` to prevent silent output redirection errors.
 
 ### Security

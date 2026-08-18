@@ -1,5 +1,5 @@
 import { IsOptional, IsString, Length, MaxLength } from 'class-validator';
-import type { OAuthExchangeRequest } from '@nexora/shared-types';
+import type { OAuthExchangeRequest } from '@betweenus/shared-types';
 
 export class OAuthExchangeDto implements OAuthExchangeRequest {
   @IsString()

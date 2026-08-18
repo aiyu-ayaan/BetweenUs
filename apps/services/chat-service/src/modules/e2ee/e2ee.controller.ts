@@ -10,12 +10,12 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
-import { CurrentUser, JwtAuthGuard, type AuthenticatedUser } from '@nexora/auth';
+import { CurrentUser, JwtAuthGuard, type AuthenticatedUser } from '@betweenus/auth';
 import type {
   ChannelKeysResponse,
   DeviceKey,
   IdentityBackupResponse,
-} from '@nexora/shared-types';
+} from '@betweenus/shared-types';
 import { E2eeService } from './e2ee.service';
 import { PublishChannelKeysDto, PutIdentityBackupDto, RegisterDeviceKeyDto } from './dto';
 

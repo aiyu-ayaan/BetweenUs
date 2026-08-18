@@ -27,16 +27,16 @@ import { Injectable, OnModuleDestroy } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import type { IncomingMessage, Server as HttpServer } from 'node:http';
 import { WebSocket, WebSocketServer } from 'ws';
-import { envOr } from '@nexora/config';
-import { asRemotePermissions, prisma, recordRemoteAudit } from '@nexora/database';
-import { Logger } from '@nexora/logger';
-import { PERMISSIONS, type RemotePermission } from '@nexora/permissions';
-import { SIGNAL_MAX_PAYLOAD, authenticateHandshake } from '@nexora/websocket';
+import { envOr } from '@betweenus/config';
+import { asRemotePermissions, prisma, recordRemoteAudit } from '@betweenus/database';
+import { Logger } from '@betweenus/logger';
+import { PERMISSIONS, type RemotePermission } from '@betweenus/permissions';
+import { SIGNAL_MAX_PAYLOAD, authenticateHandshake } from '@betweenus/websocket';
 import type {
   AgentRemoteEvent,
   ClientRemoteEvent,
   ServerRemoteEvent,
-} from '@nexora/shared-types';
+} from '@betweenus/shared-types';
 import { RemoteService } from './modules/remote/remote.service';
 import { RemoteRelay, type RelayTarget } from './remote.relay';
 

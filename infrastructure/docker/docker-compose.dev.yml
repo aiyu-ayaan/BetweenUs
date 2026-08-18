@@ -9,31 +9,31 @@
 # The `--env-file .env` matters: compose reads `.env` from *this* directory, not
 # from the repo root, so without it every `${VAR}` below comes up empty.
 
-name: nexora-dev
+name: betweenus-dev
 
 services:
   postgres:
     image: postgres:16-alpine
-    container_name: nexora-dev-postgres
+    container_name: betweenus-dev-postgres
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
-      POSTGRES_DB: ${POSTGRES_DB:-nexora}
+      POSTGRES_DB: ${POSTGRES_DB:-betweenus}
     ports:
       # Exposed on localhost only - never bind 0.0.0.0 for a database.
       - "127.0.0.1:5432:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-nexora}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-betweenus}"]
       interval: 5s
       timeout: 5s
       retries: 20
 
   redis:
     image: redis:7-alpine
-    container_name: nexora-dev-redis
+    container_name: betweenus-dev-redis
     restart: unless-stopped
     command: ["redis-server", "--appendonly", "no"]
     ports:

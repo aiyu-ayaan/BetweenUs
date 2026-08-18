@@ -48,7 +48,7 @@ interface DisplayInfo {
 
 /** Exposed by electron/preload.ts through contextBridge. */
 interface Window {
-  nexora?: {
+  betweenus?: {
     platform: string;
     notify: (title: string, body: string, channelId?: string, active?: boolean) => void;
     /** Returns an unsubscribe function. */

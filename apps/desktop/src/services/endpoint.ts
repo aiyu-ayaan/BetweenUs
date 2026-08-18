@@ -12,7 +12,7 @@
  * host: everything goes through `serverUrl`, `wsUrl` or `absoluteUrl`.
  */
 
-const KEY = 'nexora.serverUrl';
+const KEY = 'betweenus.serverUrl';
 
 /** Trailing slashes make `${base}${path}` produce `//api`, which Nginx 404s. */
 function trimTrailingSlash(url: string): string {
@@ -20,7 +20,7 @@ function trimTrailingSlash(url: string): string {
 }
 
 /**
- * Accepts what a person types - `nexora.example.com`, `http://192.168.1.4:8080`,
+ * Accepts what a person types - `betweenus.example.com`, `http://192.168.1.4:8080`,
  * a pasted URL with a path and a trailing slash - and returns the base every
  * request is built on. Throws when it is not an address at all.
  */
@@ -42,7 +42,7 @@ export function normalizeServerUrl(raw: string): string {
     throw new Error('The address must start with http:// or https://');
   }
 
-  // A path is kept - a deployment may live under /nexora behind someone's
+  // A path is kept - a deployment may live under /betweenus behind someone's
   // existing reverse proxy - but a query or a fragment is not part of a base.
   return trimTrailingSlash(`${url.origin}${url.pathname}`);
 }
@@ -102,7 +102,7 @@ export function setServerUrl(url: string | null): void {
 
 // --- Where this client has been ---------------------------------------------
 
-const RECENT_KEY = 'nexora.recentServers';
+const RECENT_KEY = 'betweenus.recentServers';
 
 /**
  * How many addresses are worth keeping.
@@ -180,7 +180,7 @@ export function absoluteUrl(url: string): string {
  * under the field rather than an app that no longer starts.
  *
  * The provider list is the probe because it is the one route that is public,
- * always present, and answers with something recognisably Nexora.
+ * always present, and answers with something recognisably BetweenUs.
  */
 const PROBE_PATH = '/api/v1/auth/oauth/providers';
 
@@ -252,7 +252,7 @@ export async function probeServer(base: string): Promise<string> {
   if (!response.ok) throw new Error(`That address answered ${response.status}`);
 
   const body: unknown = await response.json().catch(() => null);
-  if (!Array.isArray(body)) throw new Error('That address is not a Nexora server');
+  if (!Array.isArray(body)) throw new Error('That address is not a BetweenUs server');
 
   return baseFromProbeUrl(response.url, base);
 }

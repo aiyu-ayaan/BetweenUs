@@ -33,13 +33,13 @@ const rendererDevUrl = process.env.VITE_DEV_SERVER_URL;
 
 // Two test windows must not share one profile, or they share one login and one
 // key store. `pnpm dev:duo` sets this; a normal run leaves it unset.
-const profile = process.env.NEXORA_PROFILE;
-if (profile) app.setPath('userData', path.join(app.getPath('temp'), `nexora-${profile}`));
+const profile = process.env.BETWEENUS_PROFILE;
+if (profile) app.setPath('userData', path.join(app.getPath('temp'), `betweenus-${profile}`));
 
 /** `pnpm dev:duo` sets these so two windows are distinguishable and self-signing. */
-const devLoginEmail = process.env.NEXORA_DEV_EMAIL;
-const devLoginPassword = process.env.NEXORA_DEV_PASSWORD;
-const windowLabel = process.env.NEXORA_WINDOW_LABEL;
+const devLoginEmail = process.env.BETWEENUS_DEV_EMAIL;
+const devLoginPassword = process.env.BETWEENUS_DEV_PASSWORD;
+const windowLabel = process.env.BETWEENUS_WINDOW_LABEL;
 
 // --- Capture and throttling switches ----------------------------------------
 //
@@ -105,7 +105,7 @@ let quitting = false;
 // --- App settings -----------------------------------------------------------
 //
 // Two switches that belong to this machine rather than to the account: whether
-// Nexora starts with the session, and whether closing the window leaves it
+// BetweenUs starts with the session, and whether closing the window leaves it
 // running in the tray. Notification preferences proper live on the account, in
 // notification-service. Both default on, Discord-style, and both are in the
 // settings UI - an auto-start nobody can turn off is malware behaviour.
@@ -117,7 +117,7 @@ interface AppSettings {
 
 const DEFAULT_SETTINGS: AppSettings = { launchOnStartup: true, closeToTray: true };
 
-const settingsFile = (): string => path.join(app.getPath('userData'), 'nexora-settings.json');
+const settingsFile = (): string => path.join(app.getPath('userData'), 'betweenus-settings.json');
 
 function readSettings(): AppSettings {
   try {
@@ -146,7 +146,7 @@ function applyAutoStart(enabled: boolean): void {
   if (!managesAutoStart) return;
   app.setLoginItemSettings({
     openAtLogin: enabled,
-    // Started by the session manager, Nexora goes straight to the tray rather
+    // Started by the session manager, BetweenUs goes straight to the tray rather
     // than throwing a window in front of whatever the user is doing.
     args: ['--hidden'],
     openAsHidden: true,
@@ -187,9 +187,9 @@ function createWindow(hidden = false): BrowserWindow {
     minWidth: 940,
     minHeight: 600,
     icon: appIcon.isEmpty() ? undefined : appIcon,
-    x: numberFromEnv('NEXORA_WINDOW_X'),
-    y: numberFromEnv('NEXORA_WINDOW_Y'),
-    title: windowLabel ? `Nexora - ${windowLabel}` : 'Nexora',
+    x: numberFromEnv('BETWEENUS_WINDOW_X'),
+    y: numberFromEnv('BETWEENUS_WINDOW_Y'),
+    title: windowLabel ? `BetweenUs - ${windowLabel}` : 'BetweenUs',
     // The workbench ground, so the frame Windows paints before the renderer
     // does is the colour the app is about to be rather than a flash of navy.
     backgroundColor: '#06070a',
@@ -235,7 +235,7 @@ function createWindow(hidden = false): BrowserWindow {
     releaseDesktopComposition(true);
   });
 
-  // Closing the window puts Nexora in the tray instead of ending it, so the
+  // Closing the window puts BetweenUs in the tray instead of ending it, so the
   // sockets stay up and a message still raises a notification. Quit is on the
   // tray menu (and the settings switch turns this off).
   window.on('close', (event) => {
@@ -461,7 +461,7 @@ function createPipWindow(): void {
 </style>
 </head>
 <body>
-  <div id="mainStage" title="Click or double-click to open Nexora">
+  <div id="mainStage" title="Click or double-click to open BetweenUs">
     <div id="videoWrapper">
       <canvas id="videoCanvas"></canvas>
     </div>
@@ -484,7 +484,7 @@ function createPipWindow(): void {
       </div>
     </div>
     <div class="top-actions">
-      <button class="icon-btn" id="expandBtn" title="Open Nexora">
+      <button class="icon-btn" id="expandBtn" title="Open BetweenUs">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
       </button>
       <button class="icon-btn" id="closeBtn" title="Close PiP">
@@ -500,7 +500,7 @@ function createPipWindow(): void {
     <button class="control-btn" id="cameraBtn" title="Toggle Camera">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
     </button>
-    <button class="control-btn" id="returnBtn" title="Open Nexora">
+    <button class="control-btn" id="returnBtn" title="Open BetweenUs">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
     </button>
     <button class="control-btn hangup" id="leaveBtn" title="Disconnect">
@@ -605,15 +605,15 @@ function createPipWindow(): void {
       }
     });
 
-    const openNexora = () => ipcRenderer.send('pip:action', { type: 'restore' });
+    const openBetweenUs = () => ipcRenderer.send('pip:action', { type: 'restore' });
 
-    // Clicking or double clicking anywhere on the main stage opens Nexora
-    document.getElementById('mainStage').onclick = openNexora;
-    document.getElementById('mainStage').ondblclick = openNexora;
+    // Clicking or double clicking anywhere on the main stage opens BetweenUs
+    document.getElementById('mainStage').onclick = openBetweenUs;
+    document.getElementById('mainStage').ondblclick = openBetweenUs;
 
-    document.getElementById('expandBtn').onclick = (e) => { e.stopPropagation(); openNexora(); };
-    document.getElementById('closeBtn').onclick = (e) => { e.stopPropagation(); openNexora(); };
-    document.getElementById('returnBtn').onclick = (e) => { e.stopPropagation(); openNexora(); };
+    document.getElementById('expandBtn').onclick = (e) => { e.stopPropagation(); openBetweenUs(); };
+    document.getElementById('closeBtn').onclick = (e) => { e.stopPropagation(); openBetweenUs(); };
+    document.getElementById('returnBtn').onclick = (e) => { e.stopPropagation(); openBetweenUs(); };
     document.getElementById('micBtn').onclick = (e) => { e.stopPropagation(); ipcRenderer.send('pip:action', { type: 'toggleMic' }); };
     document.getElementById('cameraBtn').onclick = (e) => { e.stopPropagation(); ipcRenderer.send('pip:action', { type: 'toggleCamera' }); };
     document.getElementById('leaveBtn').onclick = (e) => { e.stopPropagation(); ipcRenderer.send('pip:action', { type: 'leave' }); };
@@ -688,7 +688,7 @@ function numberFromEnv(name: string): number | undefined {
 // the OS keychain when it is available; when it is not (a Linux box with no
 // keyring), they are stored as-is and the app says so rather than pretending.
 
-const secretsFile = (): string => path.join(app.getPath('userData'), 'nexora-secrets.json');
+const secretsFile = (): string => path.join(app.getPath('userData'), 'betweenus-secrets.json');
 
 function readSecrets(): Record<string, string> {
   try {
@@ -1066,7 +1066,7 @@ ipcMain.on(
 //
 // The tray is what makes the rest of this work: with it, closing the window
 // only hides it, so the chat socket stays connected and a message that arrives
-// while Nexora is "closed" still raises a notification.
+// while BetweenUs is "closed" still raises a notification.
 //
 // The icon is a data URI rather than a file because electron-builder packages
 // `dist/` and `dist-electron/` only; a 32px mark is not worth an asset pipeline
@@ -1092,7 +1092,7 @@ function showMainWindow(): void {
 }
 
 function trayTooltip(): string {
-  const name = windowLabel ? `Nexora - ${windowLabel}` : 'Nexora';
+  const name = windowLabel ? `BetweenUs - ${windowLabel}` : 'BetweenUs';
   return unreadCount > 0 ? `${name} (${unreadCount} unread)` : name;
 }
 
@@ -1101,7 +1101,7 @@ function refreshTray(): void {
   tray.setToolTip(trayTooltip());
   tray.setContextMenu(
     Menu.buildFromTemplate([
-      { label: 'Open Nexora', click: showMainWindow },
+      { label: 'Open BetweenUs', click: showMainWindow },
       { type: 'separator' },
       ...(managesAutoStart
         ? ([
@@ -1114,7 +1114,7 @@ function refreshTray(): void {
           ] as Electron.MenuItemConstructorOptions[])
         : []),
       {
-        label: 'Quit Nexora',
+        label: 'Quit BetweenUs',
         click: () => {
           quitting = true;
           app.quit();
@@ -1198,7 +1198,7 @@ ipcMain.handle('oauth:start', async (_event, startUrl: unknown): Promise<string 
 
       response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
       response.end(
-        `<!doctype html><meta charset="utf-8"><title>Nexora</title>` +
+        `<!doctype html><meta charset="utf-8"><title>BetweenUs</title>` +
           `<body style="font-family:system-ui;background:#0B1120;color:#e2e8f0;display:grid;place-items:center;height:100vh;margin:0">` +
           `<p>${code ? 'Signed in. You can close this tab.' : 'Sign-in failed. You can close this tab.'}</p>`,
       );
@@ -1226,7 +1226,7 @@ ipcMain.handle('oauth:start', async (_event, startUrl: unknown): Promise<string 
 });
 
 // One copy per machine: with a tray icon and auto-start, launching the shortcut
-// again means "come back", not "start a second Nexora". `pnpm dev:duo` is the
+// again means "come back", not "start a second BetweenUs". `pnpm dev:duo` is the
 // exception it exists for - two profiles, deliberately, side by side.
 if (!profile && !app.requestSingleInstanceLock()) {
   app.quit();
@@ -1236,7 +1236,7 @@ if (!profile && !app.requestSingleInstanceLock()) {
 
 void app.whenReady().then(() => {
   if (process.platform === 'win32') {
-    app.setAppUserModelId(profile ? `com.nexora.desktop.${profile}` : 'com.nexora.desktop');
+    app.setAppUserModelId(profile ? `com.betweenus.desktop.${profile}` : 'com.betweenus.desktop');
   }
 
   // No File / Edit / View / Window / Help bar: this is a chat app, not a

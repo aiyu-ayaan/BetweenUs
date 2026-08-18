@@ -27,14 +27,14 @@ WORKDIR /repo
 FROM base AS deps
 COPY pnpm-workspace.yaml package.json pnpm-lock.yaml ./
 COPY --parents packages/*/package.json apps/admin/package.json apps/web/package.json apps/services/*/package.json ./
-# @nexora/database runs `prisma generate` on postinstall, which needs the schema.
+# @betweenus/database runs `prisma generate` on postinstall, which needs the schema.
 COPY packages/database/prisma ./packages/database/prisma
 # The store survives between builds, so a lockfile change re-links rather than
 # re-downloads. apps/desktop's *manifest* is deliberately absent - its Electron
 # binary would dominate the install, and nothing here packages the desktop app.
 # Its source still arrives in the build stage below, because the web client
 # mounts it.
-RUN --mount=type=cache,id=nexora-pnpm-store,target=/pnpm/store \
+RUN --mount=type=cache,id=betweenus-pnpm-store,target=/pnpm/store \
     pnpm config set store-dir /pnpm/store && \
     pnpm install --frozen-lockfile
 
@@ -58,11 +58,11 @@ COPY apps/desktop/tailwind.theme.mjs ./apps/desktop/tailwind.theme.mjs
 # Having no manifest has a price: nothing installed anything for this directory,
 # so `react` and `zustand` resolve to nothing from inside it
 # and the web build stops on a screen of TS2307 before it reaches anything real.
-# It compiles as part of @nexora/web, which declares that exact set - the same
+# It compiles as part of @betweenus/web, which declares that exact set - the same
 # set, because it is the same UI - so lending it those is both correct and free.
 RUN ln -s ../web/node_modules apps/desktop/node_modules
 # Turbo skips any package whose inputs are unchanged since the last build.
-RUN --mount=type=cache,id=nexora-turbo,target=/repo/.turbo \
+RUN --mount=type=cache,id=betweenus-turbo,target=/repo/.turbo \
     pnpm build
 
 # ---------------------------------------------------------------------------

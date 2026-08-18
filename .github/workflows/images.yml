@@ -67,8 +67,8 @@ jobs:
           # One scope for every image, not one per service: they share the
           # install and compile stages, so a per-service scope would cache the
           # same layers seven times and hit none of them.
-          cache-from: type=gha,scope=nexora
-          cache-to: type=gha,mode=max,scope=nexora
+          cache-from: type=gha,scope=betweenus
+          cache-to: type=gha,mode=max,scope=betweenus
 
   # The two browser bundles: static files behind the same gateway as the
   # services, so they are built the same way and pushed alongside them. `web`
@@ -111,5 +111,5 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha,scope=nexora
-          cache-to: type=gha,mode=max,scope=nexora
+          cache-from: type=gha,scope=betweenus
+          cache-to: type=gha,mode=max,scope=betweenus

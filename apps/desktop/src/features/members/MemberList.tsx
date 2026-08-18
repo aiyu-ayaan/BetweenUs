@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { PresenceStatus, ServerMember, ServerRole } from '@nexora/shared-types';
+import type { PresenceStatus, ServerMember, ServerRole } from '@betweenus/shared-types';
 import { useChatStore } from '../../stores/chat';
 import { useFriendsStore } from '../../stores/friends';
 import { usePresenceStore } from '../../stores/presence';

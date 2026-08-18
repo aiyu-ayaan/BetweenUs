@@ -97,7 +97,7 @@ export interface OAuthExchangeRequest {
  * that registration is exclusive - another app can claim the same scheme - so
  * this flow is bound to a secret the app keeps: see `OAuthExchangeRequest`.
  */
-export const APP_REDIRECT_SCHEME = 'nexora:';
+export const APP_REDIRECT_SCHEME = 'betweenus:';
 
 // --- Admin panel ---
 

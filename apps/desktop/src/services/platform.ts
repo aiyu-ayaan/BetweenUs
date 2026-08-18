@@ -17,5 +17,5 @@
 
 /** True in the Electron app, false in a browser tab. */
 export function isDesktopRuntime(): boolean {
-  return typeof window !== 'undefined' && window.nexora !== undefined;
+  return typeof window !== 'undefined' && window.betweenus !== undefined;
 }

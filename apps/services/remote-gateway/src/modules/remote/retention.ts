@@ -18,9 +18,9 @@
  * nothing. A real job runner is the upgrade if that ever stops being true.
  */
 import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
-import { envNumber } from '@nexora/config';
-import { prisma } from '@nexora/database';
-import { Logger } from '@nexora/logger';
+import { envNumber } from '@betweenus/config';
+import { prisma } from '@betweenus/database';
+import { Logger } from '@betweenus/logger';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 

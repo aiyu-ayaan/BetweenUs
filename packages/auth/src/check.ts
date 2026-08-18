@@ -1,4 +1,4 @@
-/** Self-check: `pnpm --filter @nexora/auth check`. Token + password round-trips. */
+/** Self-check: `pnpm --filter @betweenus/auth check`. Token + password round-trips. */
 import assert from 'node:assert/strict';
 import jwt from 'jsonwebtoken';
 

@@ -3,7 +3,7 @@
  * on the server rail.
  */
 import { create } from 'zustand';
-import type { DirectChannel, Friend, UserSummary } from '@nexora/shared-types';
+import type { DirectChannel, Friend, UserSummary } from '@betweenus/shared-types';
 import { api } from '../services/api';
 import { chatSocket } from '../services/socket';
 import { useAuthStore } from './auth';

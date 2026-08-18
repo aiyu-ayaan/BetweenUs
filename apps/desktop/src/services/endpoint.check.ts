@@ -1,7 +1,7 @@
 /**
  * Self-check for the address parsing behind the server picker.
  *
- * Run with `pnpm --filter @nexora/desktop check`. Only the pure functions are
+ * Run with `pnpm --filter @betweenus/desktop check`. Only the pure functions are
  * exercised here: everything else in endpoint.ts is localStorage and fetch.
  */
 import assert from 'node:assert/strict';
@@ -21,8 +21,8 @@ import {
 const asWindow = (href: string): void => {
   (globalThis as { window?: unknown }).window = { location: { origin: new URL(href).origin } };
 };
-asWindow('https://nexora.example.com/');
-assert.equal(defaultServerUrl(), 'https://nexora.example.com');
+asWindow('https://betweenus.example.com/');
+assert.equal(defaultServerUrl(), 'https://betweenus.example.com');
 asWindow('http://localhost:5173/');
 assert.equal(defaultServerUrl(), 'http://localhost:5173');
 (globalThis as { window?: unknown }).window = { location: { origin: 'null' } };
@@ -32,19 +32,19 @@ assert.equal(defaultServerUrl(), 'http://localhost:8080');
 
 
 // What a person types, and what it has to become.
-assert.equal(normalizeServerUrl('nexora.example.com'), 'https://nexora.example.com');
-assert.equal(normalizeServerUrl('  nexora.example.com/  '), 'https://nexora.example.com');
+assert.equal(normalizeServerUrl('betweenus.example.com'), 'https://betweenus.example.com');
+assert.equal(normalizeServerUrl('  betweenus.example.com/  '), 'https://betweenus.example.com');
 assert.equal(normalizeServerUrl('http://192.168.1.4:8080'), 'http://192.168.1.4:8080');
 assert.equal(normalizeServerUrl('https://example.com:8443///'), 'https://example.com:8443');
 // A deployment under a path keeps it; a query or fragment is not part of a base.
-assert.equal(normalizeServerUrl('https://example.com/nexora'), 'https://example.com/nexora');
-assert.equal(normalizeServerUrl('https://example.com/nexora/?a=1#b'), 'https://example.com/nexora');
+assert.equal(normalizeServerUrl('https://example.com/betweenus'), 'https://example.com/betweenus');
+assert.equal(normalizeServerUrl('https://example.com/betweenus/?a=1#b'), 'https://example.com/betweenus');
 
 for (const bad of ['', '   ', 'ftp://example.com', 'https://']) {
   assert.throws(() => normalizeServerUrl(bad), Error, `should refuse ${JSON.stringify(bad)}`);
 }
 
-assert.equal(toWebSocketUrl('https://nexora.example.com'), 'wss://nexora.example.com');
+assert.equal(toWebSocketUrl('https://betweenus.example.com'), 'wss://betweenus.example.com');
 assert.equal(toWebSocketUrl('http://127.0.0.1:8080'), 'ws://127.0.0.1:8080');
 // Only the scheme changes - a host with "http" in its name is left alone.
 assert.equal(toWebSocketUrl('https://http-relay.example.com'), 'wss://http-relay.example.com');
@@ -53,12 +53,12 @@ assert.equal(toWebSocketUrl('https://http-relay.example.com'), 'wss://http-relay
 // otherwise strip the Authorization header off every authenticated request.
 const probe = '/api/v1/auth/oauth/providers';
 assert.equal(
-  baseFromProbeUrl(`https://nexora.example.com${probe}`, 'http://nexora.example.com'),
-  'https://nexora.example.com',
+  baseFromProbeUrl(`https://betweenus.example.com${probe}`, 'http://betweenus.example.com'),
+  'https://betweenus.example.com',
 );
 assert.equal(
-  baseFromProbeUrl(`https://example.com/nexora${probe}`, 'https://example.com/nexora'),
-  'https://example.com/nexora',
+  baseFromProbeUrl(`https://example.com/betweenus${probe}`, 'https://example.com/betweenus'),
+  'https://example.com/betweenus',
 );
 // Redirected somewhere that is not the probe path: keep what was asked for.
 assert.equal(baseFromProbeUrl('https://example.com/login', 'https://example.com/'), 'https://example.com');

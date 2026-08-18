@@ -1,5 +1,5 @@
 import { IsUUID } from 'class-validator';
-import type { CallIceRequest } from '@nexora/shared-types';
+import type { CallIceRequest } from '@betweenus/shared-types';
 
 export class CallIceDto implements CallIceRequest {
   @IsUUID()

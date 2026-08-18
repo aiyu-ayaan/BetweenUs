@@ -11,14 +11,14 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { IsString, IsUUID, Length } from 'class-validator';
-import { CurrentUser, JwtAuthGuard, type AuthenticatedUser } from '@nexora/auth';
+import { CurrentUser, JwtAuthGuard, type AuthenticatedUser } from '@betweenus/auth';
 import type {
   DirectChannel,
   Friend,
   OpenDirectChannelRequest,
   SendFriendRequestRequest,
   UserSummary,
-} from '@nexora/shared-types';
+} from '@betweenus/shared-types';
 import { FriendsService } from './friends.service';
 
 export class SendFriendRequestDto implements SendFriendRequestRequest {

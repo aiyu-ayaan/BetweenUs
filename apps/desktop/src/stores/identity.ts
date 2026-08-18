@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { BackupSecretKind } from '@nexora/shared-types';
+import type { BackupSecretKind } from '@betweenus/shared-types';
 
 /**
  * Where this machine stands on encryption keys, for the parts of the UI that

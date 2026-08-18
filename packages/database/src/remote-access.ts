@@ -6,7 +6,7 @@
  * are owning the machine and holding an unexpired grant on it, which is what
  * makes "who can see my desktop" answerable by reading one table.
  */
-import { REMOTE_PERMISSIONS, type RemotePermission } from '@nexora/permissions';
+import { REMOTE_PERMISSIONS, type RemotePermission } from '@betweenus/permissions';
 import { prisma } from './client';
 
 export interface RemoteAccess {

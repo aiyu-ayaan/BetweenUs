@@ -7,7 +7,7 @@ import {
   type FormEvent,
   type KeyboardEvent,
 } from 'react';
-import type { Channel, MessageAttachment, MessageReply } from '@nexora/shared-types';
+import type { Channel, MessageAttachment, MessageReply } from '@betweenus/shared-types';
 import { useChatStore, type DecryptedMessage } from '../../stores/chat';
 import { useAuthStore } from '../../stores/auth';
 import { usePresenceStore } from '../../stores/presence';

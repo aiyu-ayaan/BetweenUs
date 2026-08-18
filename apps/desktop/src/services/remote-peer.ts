@@ -21,7 +21,7 @@
  * middle. Closing that needs a key agreed between agent and controller without
  * the gateway learning it; see "Known limits" in development/E2EE.md.
  */
-import type { IceServer, RemoteSignal } from '@nexora/shared-types';
+import type { IceServer, RemoteSignal } from '@betweenus/shared-types';
 import {
   PLAYOUT_DELAY,
   patchVideoBandwidth,

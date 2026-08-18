@@ -1,5 +1,5 @@
 {
-  "name": "@nexora/nest-common",
+  "name": "@betweenus/nest-common",
   "private": true,
   "version": "0.1.0",
   "main": "dist/index.js",
@@ -10,9 +10,9 @@
     "check": "tsc -p tsconfig.json && node dist/check.js"
   },
   "dependencies": {
-    "@nexora/config": "workspace:*",
-    "@nexora/logger": "workspace:*",
-    "@nexora/shared-types": "workspace:*",
+    "@betweenus/config": "workspace:*",
+    "@betweenus/logger": "workspace:*",
+    "@betweenus/shared-types": "workspace:*",
     "ioredis": "^5.4.1"
   },
   "peerDependencies": {

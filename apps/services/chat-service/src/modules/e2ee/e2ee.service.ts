@@ -9,8 +9,8 @@
  * (recorded as a deliberate shortcut in development/PLANNING.md).
  */
 import { ForbiddenException, Injectable } from '@nestjs/common';
-import { channelAudience, prisma } from '@nexora/database';
-import { PERMISSIONS } from '@nexora/permissions';
+import { channelAudience, prisma } from '@betweenus/database';
+import { PERMISSIONS } from '@betweenus/permissions';
 import type {
   BackupSecretKind,
   ChannelKeysResponse,
@@ -19,7 +19,7 @@ import type {
   IdentityBackupResponse,
   PublishChannelKeysRequest,
   PutIdentityBackupRequest,
-} from '@nexora/shared-types';
+} from '@betweenus/shared-types';
 import { MessagesService } from '../messages/messages.service';
 
 @Injectable()

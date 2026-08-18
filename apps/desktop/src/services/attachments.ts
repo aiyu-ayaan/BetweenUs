@@ -11,7 +11,7 @@
  * has to be last, because ciphertext does not compress, and shrinking is
  * first because there is no point compressing pixels nobody will look at.
  */
-import type { MessageAttachment, UploadedPart } from '@nexora/shared-types';
+import type { MessageAttachment, UploadedPart } from '@betweenus/shared-types';
 import { api } from './api';
 import { decryptFileForChannel, encryptFileForChannel } from './e2ee';
 

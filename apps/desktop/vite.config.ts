@@ -13,7 +13,7 @@ const REMOTE = process.env.REMOTE_GATEWAY_URL ?? 'http://127.0.0.1:3008';
 
 // `pnpm dev:duo` starts Electron itself - twice, with separate profiles - so it
 // tells the plugin to build the main/preload bundles and stop there.
-const manageElectron = process.env.NEXORA_NO_ELECTRON !== '1';
+const manageElectron = process.env.BETWEENUS_NO_ELECTRON !== '1';
 
 export default defineConfig({
   // One .env for the whole repo. VITE_API_URL lives there next to the service
@@ -40,10 +40,10 @@ export default defineConfig({
       // The shared packages build to CommonJS for the Node services. Rollup
       // cannot see named exports through that, so the renderer is pointed at
       // the TypeScript source instead - which it can also tree-shake.
-      '@nexora/shared-types': fileURLToPath(
+      '@betweenus/shared-types': fileURLToPath(
         new URL('../../packages/shared-types/src/index.ts', import.meta.url),
       ),
-      '@nexora/permissions': fileURLToPath(
+      '@betweenus/permissions': fileURLToPath(
         new URL('../../packages/permissions/src/index.ts', import.meta.url),
       ),
     },

@@ -5,7 +5,7 @@
  * is touching decodes no frames, and answering "still sharing?" from frames
  * closed the stage under whoever was watching it.
  *
- * Run with `pnpm --filter @nexora/desktop check`.
+ * Run with `pnpm --filter @betweenus/desktop check`.
  */
 import assert from 'node:assert/strict';
 import { visibleVideo } from './media-presence';

@@ -1,6 +1,6 @@
 # End-to-end encryption
 
-How Nexora keeps message text and voice/video media out of the server's reach, what
+How BetweenUs keeps message text and voice/video media out of the server's reach, what
 that buys, and — just as important — what it does not.
 
 ## Threat model
@@ -117,7 +117,7 @@ used to seal the channel key with a fresh random IV. HKDF matters: the raw ECDH
 output is a curve point, not uniform key material.
 
 The salt is fixed and the `info` string domain-separates this use of the pair's
-shared secret (`nexora/e2ee/v1/channel-key-wrap`). That is safe here because the
+shared secret (`betweenus/e2ee/v1/channel-key-wrap`). That is safe here because the
 pair is static and every wrap uses its own IV.
 
 ### Identity backup
@@ -178,7 +178,7 @@ with a NUL — a character a textarea cannot produce, so no typed message can
 impersonate one:
 
 ```
-\u0000nexora-body:1
+\u0000betweenus-body:1
 { "text": "look at this", "attachments": [ { "key": "...", "iv": "...", "epoch": 1,
   "name": "holiday.jpg", "contentType": "image/jpeg", "size": 812345 } ] }
 ```
@@ -339,7 +339,7 @@ than a change to the server.
 | Identity | ECDH P-256, exported as JWK JSON | `{ publicKey, privateKey }`, both JWK strings |
 | Backup key | PBKDF2-HMAC-SHA256 | 600 000 iterations, 16-byte random salt, 256-bit output |
 | Backup seal | AES-256-GCM | 12-byte random IV, plaintext is the JSON above |
-| Channel-key wrap | ECDH → HKDF-SHA256 → AES-256-GCM | 32 zero bytes of salt, `info` = `nexora/e2ee/v1/channel-key-wrap` |
+| Channel-key wrap | ECDH → HKDF-SHA256 → AES-256-GCM | 32 zero bytes of salt, `info` = `betweenus/e2ee/v1/channel-key-wrap` |
 | Message / file seal | AES-256-GCM | 12-byte random IV, key is the channel key for that epoch |
 
 The server contract is six routes, all of them couriers:
@@ -355,7 +355,7 @@ PUT  /api/v1/e2ee/backup               replace it
 
 Two things a new client must get right, because the server cannot check either:
 the sign-in rules under "Identity backup" above (a failed fetch is not "no
-backup"), and the NUL-prefixed `nexora-body:1` marker for messages that carry
+backup"), and the NUL-prefixed `betweenus-body:1` marker for messages that carry
 attachments. Everything else is shape the DTOs already enforce.
 
 Private-key storage is the one platform-specific part: the Electron client

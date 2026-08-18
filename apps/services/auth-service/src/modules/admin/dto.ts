@@ -1,5 +1,5 @@
 import { IsBoolean, IsIn, IsOptional, IsString, MaxLength } from 'class-validator';
-import type { AdminOAuthProviderUpdate, AdminUserUpdate, GlobalRole } from '@nexora/shared-types';
+import type { AdminOAuthProviderUpdate, AdminUserUpdate, GlobalRole } from '@betweenus/shared-types';
 
 export class AdminUserUpdateDto implements AdminUserUpdate {
   @IsOptional()

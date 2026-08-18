@@ -1,4 +1,4 @@
-/** Self-check: `pnpm --filter @nexora/logger check`. Fails loudly if redaction breaks. */
+/** Self-check: `pnpm --filter @betweenus/logger check`. Fails loudly if redaction breaks. */
 import assert from 'node:assert/strict';
 import { Logger } from './index';
 

@@ -1,5 +1,5 @@
 /**
- * Self-check: `pnpm --filter @nexora/permissions check`.
+ * Self-check: `pnpm --filter @betweenus/permissions check`.
  *
  * The interesting part is the override arithmetic - a grant that adds, a deny
  * that wins, and unknown strings that are ignored rather than trusted.

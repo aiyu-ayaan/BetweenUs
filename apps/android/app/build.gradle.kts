@@ -4,7 +4,7 @@ plugins {
 }
 
 android {
-    namespace = "com.aktech.nexora"
+    namespace = "com.aatech.betweenus"
     // 37 because androidx.core 1.19 and lifecycle 2.11 refuse to be compiled
     // against anything older. targetSdk stays where it is: compiling against a
     // newer API is not the same as opting in to its runtime behaviour.
@@ -13,7 +13,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.aktech.nexora"
+        applicationId = "com.aatech.betweenus"
         minSdk = 24
         targetSdk = 36
         versionCode = 1

@@ -7,7 +7,7 @@
  * a modifier released while the window was not focused, and a modifier's own
  * key event, which must not be pressed twice.
  *
- * Run with `pnpm --filter @nexora/desktop check`.
+ * Run with `pnpm --filter @betweenus/desktop check`.
  */
 import assert from 'node:assert/strict';
 import { modifierOf, planModifiers, readModifiers, type Modifier } from './modifiers';

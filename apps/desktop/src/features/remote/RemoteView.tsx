@@ -5,7 +5,7 @@ import type {
   RemoteMachineSummary,
   RemotePermission,
   UserSummary,
-} from '@nexora/shared-types';
+} from '@betweenus/shared-types';
 import { useRemoteStore } from '../../stores/remote';
 import { useAuthStore } from '../../stores/auth';
 import { api } from '../../services/api';

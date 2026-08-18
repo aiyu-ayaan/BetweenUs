@@ -16,8 +16,8 @@
     "types": ["vite/client", "node"],
     "baseUrl": ".",
     "paths": {
-      "@nexora/shared-types": ["../../packages/shared-types/src/index.ts"],
-      "@nexora/permissions": ["../../packages/permissions/src/index.ts"]
+      "@betweenus/shared-types": ["../../packages/shared-types/src/index.ts"],
+      "@betweenus/permissions": ["../../packages/permissions/src/index.ts"]
     }
   },
   "include": ["src", "electron", "vite.config.ts"]

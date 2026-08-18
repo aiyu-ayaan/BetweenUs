@@ -1,21 +1,21 @@
-# Cloudflare Tunnel ingress for Nexora.
+# Cloudflare Tunnel ingress for BetweenUs.
 #
-# Nexora is one public hostname. Everything a client needs - REST, /ws/chat,
+# BetweenUs is one public hostname. Everything a client needs - REST, /ws/chat,
 # /ws/presence, /ws/call, /ws/remote and uploaded files - is behind the Nginx
 # gateway on 8080, so this file has one real rule in it.
 #
-# There are two ways to run the tunnel, and Nexora works with either.
+# There are two ways to run the tunnel, and BetweenUs works with either.
 #
 # ---------------------------------------------------------------------------
 # 1. A tunnel you already run on the host (the common case)
 # ---------------------------------------------------------------------------
 #
 # If cloudflared is already a service on this machine - one tunnel for the whole
-# server, with other things behind it - do not start the container. Add Nexora's
+# server, with other things behind it - do not start the container. Add BetweenUs's
 # hostname to the ingress list you already have; it is one entry:
 #
 #   ingress:
-#     - hostname: nexora.example.com
+#     - hostname: betweenus.example.com
 #       service: http://localhost:8080
 #     # ...your other hostnames...
 #     - service: http_status:404
@@ -69,13 +69,13 @@
 #
 # This file having one rule in it is the result, not a simplification of it.
 
-tunnel: nexora
-credentials-file: /etc/cloudflared/nexora.json
+tunnel: betweenus
+credentials-file: /etc/cloudflared/betweenus.json
 
 # Cloudflare terminates TLS. Nginx behind it speaks plain HTTP on 8080 and
 # trusts the X-Forwarded-* headers cloudflared sets.
 ingress:
-  - hostname: nexora.example.com
+  - hostname: betweenus.example.com
     # `nginx` inside the compose network; `localhost` for a host-run tunnel.
     service: http://nginx:8080
     originRequest:
@@ -86,5 +86,5 @@ ingress:
       # Uploads stream through; buffering a 100 MB attachment helps nobody.
       disableChunkedEncoding: false
 
-  # Everything that is not Nexora's hostname is not Nexora's problem.
+  # Everything that is not BetweenUs's hostname is not BetweenUs's problem.
   - service: http_status:404

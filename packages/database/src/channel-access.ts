@@ -8,8 +8,8 @@
  * service does; when the schema is split this becomes an RPC to server-service
  * with an unchanged signature.
  */
-import type { ServerRole } from '@nexora/shared-types';
-import { PERMISSIONS, effectivePermissions, type Permission } from '@nexora/permissions';
+import type { ServerRole } from '@betweenus/shared-types';
+import { PERMISSIONS, effectivePermissions, type Permission } from '@betweenus/permissions';
 import { prisma } from './client';
 
 export interface ChannelAccess {

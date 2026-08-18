@@ -24,10 +24,10 @@ the WSL shell, while `pnpm dev:backend` and `pnpm dev:duo` stay on Windows.
 
 | Window | Account | Role |
 | --- | --- | --- |
-| Alice | `alice@nexora.local` | server owner |
-| Bob | `bob@nexora.local` | member |
+| Alice | `alice@betweenus.local` | server owner |
+| Bob | `bob@betweenus.local` | member |
 
-Password for both: `nexora-dev-1`. They share the server **Duo Test**, its
+Password for both: `betweenus-dev-1`. They share the server **Duo Test**, its
 `#general` text channel and its **lounge** voice channel. Alice also owns
 `#owners-only`, a private channel Bob is deliberately not on, and the two of
 them start as friends with a direct message already open.
@@ -40,7 +40,7 @@ What the script does:
    server and joins Bob to it, creates the private channel, makes them friends
    and opens their conversation. Re-running is harmless.
 3. Starts the Vite dev server **once**.
-4. Launches two Electron processes with `NEXORA_PROFILE=duo-a` / `duo-b`, so
+4. Launches two Electron processes with `BETWEENUS_PROFILE=duo-a` / `duo-b`, so
    each window gets its own user-data directory — its own session, its own
    `localStorage`, and its own copy of that account's E2EE key. Sharing a
    profile would defeat
@@ -112,14 +112,14 @@ while everything under them changes size.
 - On a deployment with Google or GitHub configured, the Android login screen
   shows a button per provider and nothing when none is configured. The button
   opens a Custom Tab, not a view inside the app.
-- Finish the sign-in. The browser comes back to `nexora://oauth` and the app is
+- Finish the sign-in. The browser comes back to `betweenus://oauth` and the app is
   signed in. An account created this way has no password, so the identity
   unlock asks for the backup secret rather than a password — that is the E2EE
   flow working, not a failure.
-- `adb shell am start -a android.intent.action.VIEW -d "nexora://oauth?code=made-up"`
+- `adb shell am start -a android.intent.action.VIEW -d "betweenus://oauth?code=made-up"`
   must fail: the code was not one this app started. Same for a callback after
   the app's data has been cleared.
-- `adb shell am start -a android.intent.action.VIEW -d "nexora://invite/CODE"`
+- `adb shell am start -a android.intent.action.VIEW -d "betweenus://invite/CODE"`
   opens the invite card. It joins nothing until accepted.
 
 **HEIC photos**
@@ -179,7 +179,7 @@ while everything under them changes size.
   again in Server settings → Channels and it goes.
 
 **Direct messages and friends**
-- Click the Nexora button at the top of the rail in either window: the home
+- Click the BetweenUs button at the top of the rail in either window: the home
   screen opens, with **Friends** and the conversation with the other person.
 - Send from Alice's DM; it lands in Bob's, notification and unread count
   included, because a DM is a channel and nothing about it is special.
@@ -339,7 +339,7 @@ while everything under them changes size.
 **Key exchange**
 - The first window to open the channel mints the channel key and seals it for
   every member. The second unwraps it.
-- Delete the profile directory (`%TEMP%\nexora-duo-b`) and reopen: Bob's window
+- Delete the profile directory (`%TEMP%\betweenus-duo-b`) and reopen: Bob's window
   has no key of its own, so it restores the account's sealed identity and the
   history opens again. Sign in with the password and it happens without a
   prompt; resume from a stored session and the "Unlock your messages" dialog
@@ -386,8 +386,8 @@ by hand once.
    origin is the gateway.
 2. **A wrong address fails politely.** Open the dialog, type `nope.example.com`,
    Connect. It should say it could not reach that address, and the window should
-   still be where it was. Type a host that answers but is not Nexora (any web
-   site) - "That address is not a Nexora server".
+   still be where it was. Type a host that answers but is not BetweenUs (any web
+   site) - "That address is not a BetweenUs server".
 3. **A right one switches.** With the container stack up, type `localhost:8080`.
    The window signs out, reloads, and signs in against Nginx instead of the Vite
    proxy - including `/ws/call`, which is the path a real deployment takes. The
@@ -401,7 +401,7 @@ by hand once.
 
 ## Notifications, the tray and auto-start
 
-Most of this needs a packaged build (`pnpm --filter @nexora/desktop build`
+Most of this needs a packaged build (`pnpm --filter @betweenus/desktop build`
 then electron-builder), because a development window deliberately refuses to
 register itself to start with the system.
 
@@ -420,7 +420,7 @@ register itself to start with the system.
 5. **Close to tray.** Close the window. The process stays up, the tray icon
    stays there, and a message arriving now still raises a notification.
    Clicking the tray icon brings the window back; Quit on its menu ends it.
-6. **Start with the system.** On in settings by default. Reboot: Nexora comes
+6. **Start with the system.** On in settings by default. Reboot: BetweenUs comes
    back in the tray with no window in front of what you were doing. Turn it off
    and reboot again - it stays gone.
 
@@ -882,8 +882,8 @@ names which connection is the broken one.
 Server-side state is worth checking directly when something looks wrong:
 
 ```bash
-docker exec nexora-dev-redis redis-cli zrange presence:online 0 -1
-docker exec nexora-dev-redis redis-cli keys 'presence:voice:*'
+docker exec betweenus-dev-redis redis-cli zrange presence:online 0 -1
+docker exec betweenus-dev-redis redis-cli keys 'presence:voice:*'
 ```
 
 A published track logs `"encryption":1` — that is the end-to-end encrypted path.
@@ -893,7 +893,7 @@ A published track logs `"encryption":1` — that is the end-to-end encrypted pat
 Worth exercising once, because both only run in the container stack:
 
 ```bash
-pnpm data:path /tmp/nexora-test          # or D:/nexora-test on Windows
+pnpm data:path /tmp/betweenus-test          # or D:/betweenus-test on Windows
 ```
 
 The tree it prints should exist (`data/postgres`, `data/redis`,
@@ -903,7 +903,7 @@ four `*_DATA_PATH` values. Bring the stack up, then:
 ```bash
 docker compose --env-file .env -f infrastructure/docker/docker-compose.yml \
   logs db-backup-once db-backup
-ls -l /tmp/nexora-test/backup/           # nexora-<date>-<time>.sql.gz
+ls -l /tmp/betweenus-test/backup/           # betweenus-<date>-<time>.sql.gz
 ```
 
 Two things to confirm rather than assume: `db-backup-once` exited `0` **before**
@@ -921,7 +921,7 @@ troubleshooting row below).
 | Symptom | Cause |
 | --- | --- |
 | Calls work on the LAN but not from another network | The two peers cannot form a direct path - symmetric or carrier-grade NAT on one or both ends. Signalling is fine either way, which is why everything else works. Set `CLOUDFLARE_TURN_KEY_ID` and `CLOUDFLARE_TURN_KEY_API_TOKEN` (dashboard → Realtime → TURN) and recreate call-service: it mints a relay credential per call and a client uses it only when there is no direct path. Opens no ports at either end. A LAN call is unchanged - a direct path still wins the ICE race whenever there is one |
-| Calls still time out from outside after setting the TURN key | `docker logs nexora-call-service-1 \| grep -i turn`. "Minted Cloudflare TURN credentials" means the key works and the problem is elsewhere; "Could not mint" carries Cloudflare's own answer, usually a wrong key id or a revoked token. A join's `POST /api/v1/calls/token` response should carry a non-empty `iceServers`; if it is empty the service has no key configured, which a container keeps from when it was created |
+| Calls still time out from outside after setting the TURN key | `docker logs betweenus-call-service-1 \| grep -i turn`. "Minted Cloudflare TURN credentials" means the key works and the problem is elsewhere; "Could not mint" carries Cloudflare's own answer, usually a wrong key id or a revoked token. A join's `POST /api/v1/calls/token` response should carry a non-empty `iceServers`; if it is empty the service has no key configured, which a container keeps from when it was created |
 | Attachments fail only in the container stack, with `EACCES` in the chat-service log | The upload volume mounts at `/data/uploads` and the service runs as uid 1000, but Docker creates a mountpoint it invents itself as root - so nothing could be written. The image now ships that directory owned by `node`, which an *empty* named volume inherits. A volume that already has files in it, or a host path in `UPLOAD_DATA_PATH`, is never seeded from the image: `chown -R 1000:1000` it once |
 | `migrate` never starts, and `db-backup-once` exited non-zero | The pre-migration dump failed, and `migrate` waits for it to *succeed* on purpose — a schema change on a deployed database is the one step that cannot be undone. `docker compose ... logs db-backup-once` names it: usually a wrong `POSTGRES_PASSWORD`, or `/backups` not writable. `BACKUP_ON_MIGRATE=0` proceeds without a dump, which is a decision rather than a workaround |
 | `couldn't find env file: .../infrastructure/docker/.env` | `--env-file .env` is resolved against the shell's working directory, not against the compose file, and the only `.env` is at the repo root. Run `pnpm dev:infra`, which works from anywhere, or `cd` to the repo root first |
@@ -929,14 +929,14 @@ troubleshooting row below).
 | Everything answers "Request failed", including sign-in | No services are up. `pnpm dev` tears down all ten persistent tasks when any one of them exits non-zero, so a single port clash reads as a dead backend. `curl 127.0.0.1:3001/health` first, and check the last lines of the `pnpm dev` output for which task failed |
 | From another machine: `Cannot read properties of undefined (reading 'generateKey')`, or no mic/camera/screen at all | The origin is plain http and is not localhost, so the browser withholds `crypto.subtle` and `navigator.mediaDevices`. Use `pnpm dev:web:lan`, which serves the same app over TLS, and accept the self-signed certificate once |
 | `no media relay on <address>:7882 (EADDRINUSE)` at startup | Something else on this host holds 7882 — a second `dev:web:lan`, usually. Calls from *that* address will time out; the others are unaffected |
-| The web client goes blank — an empty dark page, no error, nothing to click | Fixed. React unmounts its entire tree when a render throws, so one bad value cost the whole window and said nothing about why. The value was the machine list: it had come back as `null`, and **Join stream** renders the buttons that search it (see the next row). There is an error boundary below `App` now, so the next such bug is a "Nexora hit a bug and stopped" screen carrying the message, with the component stack in the console |
+| The web client goes blank — an empty dark page, no error, nothing to click | Fixed. React unmounts its entire tree when a render throws, so one bad value cost the whole window and said nothing about why. The value was the machine list: it had come back as `null`, and **Join stream** renders the buttons that search it (see the next row). There is an error boundary below `App` now, so the next such bug is a "BetweenUs hit a bug and stopped" screen carrying the message, with the component stack in the console |
 | `/api/v1/remote/machines` answers with `index.html` in the web client | Fixed on both sides. `/api/v1/remote` is deliberately absent from the web dev server's proxy table — the web client has no remote-desktop section — and Vite answers an unproxied route with the app's own HTML. A 200 carrying HTML used to be swallowed into `null` and returned as whatever type the caller asked for; a successful reply that is not JSON is now an `INVALID_RESPONSE` error naming the path. A browser tab also no longer asks: **Open a session** on somebody's share is the remote-desktop path, and that is the one thing a tab does not get. **Request control** is unaffected — it rides the call's own data channel |
 | `pnpm prod:up` or `docker build` fails with a screen of `TS2307: Cannot find module 'zustand'` in `apps/desktop/src` | Fixed. The image deliberately copies `apps/desktop/src` without its manifest — nothing there should install Electron — but that also meant no `node_modules` for the directory, and the web client compiles that source. The build stage links it to `apps/web/node_modules`, which declares the same set because it is the same UI |
 | No online dots or typing indicators | presence-service is down; `curl 127.0.0.1:3005/health` |
 | Voice churns: join, leave, join again | Editing desktop source while connected. A hot reload disconnects the room on purpose; rejoin after the reload |
 | Messages show the lock placeholder | This device has no key for that epoch — a member holding it must open the channel once to re-wrap |
 | Every message shows the lock placeholder after a reinstall | The account identity was not restored: answer the "Unlock your messages" dialog, or sign in with the password rather than resuming a stored session |
-| The web client is not on `8080`, or something else answers there | `8080` only serves the app when the *container* stack is up; `pnpm dev:web` is `5175`. It is also a popular port - `{"error":"Cannot GET /"}` or any non-Nexora reply means another project owns it. `docker ps` will say which; set `GATEWAY_PORT` in `.env` to something free and `pnpm prod:up` again |
+| The web client is not on `8080`, or something else answers there | `8080` only serves the app when the *container* stack is up; `pnpm dev:web` is `5175`. It is also a popular port - `{"error":"Cannot GET /"}` or any non-BetweenUs reply means another project owns it. `docker ps` will say which; set `GATEWAY_PORT` in `.env` to something free and `pnpm prod:up` again |
 | Signed out on every start, without touching anything | The client used to delete its refresh token whenever the refresh call failed, including "backend not reachable" - fixed; it now keeps the token and the login screen says the server could not be reached. If it still happens, the token really is being rejected: check auth-service logs for `Refresh tokens revoked` |
 | "Refresh token was already used; all sessions have been signed out" | A spent token was replayed outside the grace window (`REFRESH_REPLAY_GRACE_MS`, 30s). Two clients sharing one token, or a token that leaked. Signing in again is the only cure - that is the point of the check |
 | Provider buttons missing on the login screen | Nobody enabled a provider in the admin panel, or its client id/secret is incomplete |

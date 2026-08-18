@@ -1,8 +1,8 @@
 import { Module } from '@nestjs/common';
-import { envOr } from '@nexora/config';
-import { EventBus } from '@nexora/events';
-import { Logger, createLogger } from '@nexora/logger';
-import { createHealthController } from '@nexora/nest-common';
+import { envOr } from '@betweenus/config';
+import { EventBus } from '@betweenus/events';
+import { Logger, createLogger } from '@betweenus/logger';
+import { createHealthController } from '@betweenus/nest-common';
 import { PresenceController } from './presence.controller';
 import { PresenceGateway } from './presence.gateway';
 import { PresenceStore } from './presence.store';

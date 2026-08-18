@@ -1,4 +1,4 @@
-/** Self-check: `pnpm --filter @nexora/nest-common check`. Trust boundaries. */
+/** Self-check: `pnpm --filter @betweenus/nest-common check`. Trust boundaries. */
 import assert from 'node:assert/strict';
 import { clientAddress, corsOptions, rateLimitBuckets } from './index';
 

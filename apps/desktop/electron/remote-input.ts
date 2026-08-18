@@ -82,7 +82,7 @@ $ErrorActionPreference = 'Stop'
 Add-Type @"
 using System;
 using System.Runtime.InteropServices;
-public static class NexoraInput {
+public static class BetweenUsInput {
   [DllImport("user32.dll")] static extern bool SetCursorPos(int X, int Y);
   [DllImport("user32.dll")] static extern void mouse_event(uint flags, uint dx, uint dy, uint data, IntPtr extra);
   [DllImport("user32.dll")] static extern void keybd_event(byte vk, byte scan, uint flags, IntPtr extra);
@@ -133,12 +133,12 @@ while ($true) {
   $p = $line.Split(' ')
   try {
     switch ($p[0]) {
-      'm' { [NexoraInput]::Move([int]$p[1], [int]$p[2]) }
-      'd' { [NexoraInput]::Move([int]$p[2], [int]$p[3]); [NexoraInput]::Button($p[1], $true) }
-      'u' { [NexoraInput]::Button($p[1], $false) }
-      'w' { [NexoraInput]::Wheel([int]$p[1]) }
-      'k' { [NexoraInput]::Key([int]$p[2], $p[1] -eq 'down') }
-      'c' { [NexoraInput]::Char([char][int]$p[2], $p[1] -eq 'down') }
+      'm' { [BetweenUsInput]::Move([int]$p[1], [int]$p[2]) }
+      'd' { [BetweenUsInput]::Move([int]$p[2], [int]$p[3]); [BetweenUsInput]::Button($p[1], $true) }
+      'u' { [BetweenUsInput]::Button($p[1], $false) }
+      'w' { [BetweenUsInput]::Wheel([int]$p[1]) }
+      'k' { [BetweenUsInput]::Key([int]$p[2], $p[1] -eq 'down') }
+      'c' { [BetweenUsInput]::Char([char][int]$p[2], $p[1] -eq 'down') }
     }
   } catch {
     # One malformed line must not end the session's input.
@@ -207,7 +207,7 @@ export function inputDiagnostics(): { supported: boolean; running: boolean; erro
 }
 
 function scriptPath(): string {
-  const file = path.join(app.getPath('userData'), 'nexora-remote-input.ps1');
+  const file = path.join(app.getPath('userData'), 'betweenus-remote-input.ps1');
   // Rewritten every start: an old copy from a previous version would be worse
   // than no copy at all.
   fs.writeFileSync(file, SCRIPT, 'utf8');

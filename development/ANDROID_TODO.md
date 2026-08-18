@@ -1,4 +1,4 @@
-# Nexora Android — TODO
+# BetweenUs Android — TODO
 
 The Android client at `apps/android` is a native Kotlin + Jetpack Compose app.
 It talks to the same backend as the desktop and web clients: no Android-only
@@ -59,7 +59,7 @@ servers each carry a Vite proxy table that stands in for Nginx, and Android
 cannot use either of them, so it has to reach something that is actually
 listening:
 
-| Backend you are running | `nexora.serverUrl` in `apps/android/local.properties` |
+| Backend you are running | `betweenus.serverUrl` in `apps/android/local.properties` |
 | --- | --- |
 | `pnpm dev` | `http://10.0.2.2:8090` — the development stand-in for Nginx, started as part of `pnpm dev`, and what everything past phase 2 needs |
 | `pnpm dev:infra` (gateway container) | `http://10.0.2.2:8080` — the real thing |
@@ -87,14 +87,14 @@ A phone needs three things instead, and no rebuild for any of them:
    down. Once, elevated:
 
    ```powershell
-   New-NetFirewallRule -DisplayName "Nexora dev gateway" -Direction Inbound `
+   New-NetFirewallRule -DisplayName "BetweenUs dev gateway" -Direction Inbound `
      -Protocol TCP -LocalPort 8090 -Action Allow -Profile Private
    ```
 
    `-Profile Private` on purpose: this opens the port on the home or office
    network the machine is on, and not on a public one.
 3. **The address typed into the app.** The login screen has a server picker;
-   `nexora.serverUrl` in `local.properties` is only the default a build ships
+   `betweenus.serverUrl` in `local.properties` is only the default a build ships
    with, and changing it for a phone would break the emulator.
 
 Both devices have to be on the same network. A host on Ethernet and a phone on
@@ -112,7 +112,7 @@ data is cleared.
   does not have, that is a signal to check the desktop again before touching a
   service.
 - **Server address is configurable at runtime.** The build only supplies a
-  default (`nexora.serverUrl` in `local.properties` →
+  default (`betweenus.serverUrl` in `local.properties` →
   `BuildConfig.DEFAULT_SERVER_URL`). Switching servers signs the account out,
   because tokens and ids belong to the deployment that issued them.
 - **No media server, ever.** Voice, video, screen share and the remote-desktop
@@ -147,10 +147,10 @@ data is cleared.
 
 - [x] Compose scaffold, `minSdk 24`, `compileSdk 37`, edge-to-edge.
 - [x] `:core` and `:ui-common` split out of `:app`.
-- [x] `Nexora` colour ramp, typography and shapes ported from
+- [x] `BetweenUs` colour ramp, typography and shapes ported from
       `apps/desktop/tailwind.theme.mjs` (ground, surface 500–950, accent, status,
       danger, hairline edge).
-- [x] `local.properties` key `nexora.serverUrl` read at build time into
+- [x] `local.properties` key `betweenus.serverUrl` read at build time into
       `:core`'s `BuildConfig.DEFAULT_SERVER_URL`, defaulting to the emulator
       loopback. See the table above for which port to point it at.
 - [x] `INTERNET` permission, and a network security config that permits
@@ -162,7 +162,7 @@ data is cleared.
 - [x] `Endpoint`: normalise a typed address, remember a chosen one, fall back to
       the build default, probe `/api/v1/auth/oauth/providers` before committing.
       Mirrors `apps/desktop/src/services/endpoint.ts`.
-- [x] `NexoraApi`: JSON over OkHttp, bearer access token, single refresh on a
+- [x] `BetweenUsApi`: JSON over OkHttp, bearer access token, single refresh on a
       401 with one retry. Mirrors `apps/desktop/src/services/api.ts`.
 - [x] `Session`: access token in memory, refresh token and last email in
       prefs, restore on cold start.
@@ -185,7 +185,7 @@ data is cleared.
       banner over the composer, and a quote that scrolls to the message and
       flashes it.
 - [x] Direct messages and the DM list.
-- [x] Attachments: WhatsApp-style attachment sheet with inline recent photos/videos grid, Gallery (photos & videos picker), Camera capture via FileProvider, and Document picker (`OpenMultipleDocuments`), client-side encryption, upload to `/api/v1/uploads`, inline image and video rendering with fullscreen zoomable image viewer, integrated video player, and save to device gallery under `Pictures/Nexora` and `Movies/Nexora` media albums.
+- [x] Attachments: WhatsApp-style attachment sheet with inline recent photos/videos grid, Gallery (photos & videos picker), Camera capture via FileProvider, and Document picker (`OpenMultipleDocuments`), client-side encryption, upload to `/api/v1/uploads`, inline image and video rendering with fullscreen zoomable image viewer, integrated video player, and save to device gallery under `Pictures/BetweenUs` and `Movies/BetweenUs` media albums.
 - [x] The list stays at the newest message while attachments arrive. Following
       is a latch released only by the reader scrolling up (`Follow.kt`, tested),
       because a row growing when its picture decrypts is not somebody scrolling
@@ -283,7 +283,7 @@ fan-out do not, and building either one alone would build half of it twice.
       see the note below.
 - [x] Perfect negotiation, and ICE candidates queued until there is a remote
       description to attach them to.
-- [x] Media state over the negotiated `nexora.share` data channel, so a muted
+- [x] Media state over the negotiated `betweenus.share` data channel, so a muted
       microphone is told apart from a quiet room.
 - [x] One `PeerConnection` per other participant; the same 2–5 comfortable /
       6–8 degraded ceiling the desktop has.
@@ -427,8 +427,8 @@ says so too; both halves are needed.
       door.
 - [x] Managing invites from the phone: minting one with an expiry and a use
       limit, copying or sending it as a link, and revoking it.
-- [x] A link that opens the app: `nexora://invite/{code}`. Not an https app
-      link - the deployment's host is unknown at build time, Nexora being
+- [x] A link that opens the app: `betweenus://invite/{code}`. Not an https app
+      link - the deployment's host is unknown at build time, BetweenUs being
       self-hosted, so an `https://…/invite/…` filter would either name a host
       wrong for everybody or claim every https link on the phone. The code is
       left in `PendingInvite` and the shell opens the card, so a link still
@@ -463,7 +463,7 @@ says so too; both halves are needed.
       hand-off. Not a WebView: it is somebody's Google account, they are
       already signed in to it in their own browser, and Google refuses an
       embedded WebView anyway.
-- [x] Callback back into the session over `nexora://oauth`, bound to a
+- [x] Callback back into the session over `betweenus://oauth`, bound to a
       challenge this app keeps (`OAuthFlow`). A private scheme is not
       exclusively ours - another app can register it - so the one-time code
       that comes back is worthless without the verifier, which never leaves

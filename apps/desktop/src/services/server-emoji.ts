@@ -16,7 +16,7 @@
  *
  * The splitting and the manifest are pure and checked; the fetching is not.
  */
-import type { MessageCustomEmoji, ServerEmoji } from '@nexora/shared-types';
+import type { MessageCustomEmoji, ServerEmoji } from '@betweenus/shared-types';
 import { api } from './api';
 
 /**

@@ -15,7 +15,7 @@ import { GlobeIcon, XIcon } from '../../components/icons';
 /**
  * Points this window at a different deployment.
  *
- * Nexora is meant to be self-hosted, so the address the build shipped with is a
+ * BetweenUs is meant to be self-hosted, so the address the build shipped with is a
  * default and not a decision. The address is checked before it is stored - a
  * typo should be a line under the field, not an app that no longer starts.
  *
@@ -68,7 +68,7 @@ export function ServerPicker({ onClose }: { onClose: () => void }): JSX.Element 
           <div className="min-w-0 flex-1">
             <h2 className="text-lg font-semibold text-slate-50">Connect to a server</h2>
             <p className="mt-1 text-sm text-slate-400">
-              The address of the Nexora deployment this app talks to. Everything else - chat,
+              The address of the BetweenUs deployment this app talks to. Everything else - chat,
               voice, files - is behind it.
             </p>
           </div>
@@ -101,7 +101,7 @@ export function ServerPicker({ onClose }: { onClose: () => void }): JSX.Element 
               setNote(null);
             }}
             className="w-full rounded-md border border-surface-700 bg-surface-900 px-3 py-2 text-slate-100 placeholder-slate-500 transition-colors duration-200 focus:border-accent"
-            placeholder="nexora.example.com"
+            placeholder="betweenus.example.com"
           />
           <p className="text-xs text-slate-500">
             No http:// means https://. This one is currently{' '}

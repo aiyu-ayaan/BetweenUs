@@ -21,7 +21,7 @@
  * the same bargain Teams makes. Speaking is marked in amber.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { Channel } from '@nexora/shared-types';
+import type { Channel } from '@betweenus/shared-types';
 import { useChatStore } from '../../stores/chat';
 import { usePresenceStore } from '../../stores/presence';
 import { useRemoteStore } from '../../stores/remote';

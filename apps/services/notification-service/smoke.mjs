@@ -41,7 +41,7 @@ const register = async (name) => {
   return json(`${AUTH}/api/v1/auth/register`, {
     method: 'POST',
     body: JSON.stringify({
-      email: `notify-${suffix}@nexora.local`,
+      email: `notify-${suffix}@betweenus.local`,
       username: `notify${suffix}`,
       password: 'hunter2000',
     }),

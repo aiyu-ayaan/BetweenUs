@@ -5,7 +5,7 @@
  * because a log an administrator can edit answers nothing.
  */
 import { useEffect, useState } from 'react';
-import type { AdminAuditEntry } from '@nexora/shared-types';
+import type { AdminAuditEntry } from '@betweenus/shared-types';
 import { api } from '../api';
 import { messageOf } from '../App';
 

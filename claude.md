@@ -1,8 +1,8 @@
-# Nexora
+# BetweenUs
 
 Initial monorepo scaffold for a Discord-like communication platform with secure remote desktop access.
 
-# Nexora Architecture
+# BetweenUs Architecture
 
 ## 1. Project Overview
 

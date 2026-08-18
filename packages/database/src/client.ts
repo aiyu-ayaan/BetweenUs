@@ -3,20 +3,20 @@
  * their own client so a service process holds exactly one connection pool.
  */
 import { PrismaClient } from '@prisma/client';
-import { loadEnv } from '@nexora/config';
+import { loadEnv } from '@betweenus/config';
 
 loadEnv();
 
-const globalForPrisma = globalThis as unknown as { nexoraPrisma?: PrismaClient };
+const globalForPrisma = globalThis as unknown as { betweenusPrisma?: PrismaClient };
 
 export const prisma: PrismaClient =
-  globalForPrisma.nexoraPrisma ??
+  globalForPrisma.betweenusPrisma ??
   new PrismaClient({
     log: process.env.NODE_ENV === 'production' ? ['warn', 'error'] : ['warn', 'error'],
   });
 
 if (process.env.NODE_ENV !== 'production') {
-  globalForPrisma.nexoraPrisma = prisma;
+  globalForPrisma.betweenusPrisma = prisma;
 }
 
 /** Used by `/health` to prove the database is reachable. */

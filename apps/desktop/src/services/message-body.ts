@@ -3,7 +3,7 @@
  *
  * No imports on purpose: the encoding is the contract between two clients, and
  * keeping it free of app wiring means it also runs under Node for
- * `pnpm --filter @nexora/desktop check`.
+ * `pnpm --filter @betweenus/desktop check`.
  *
  * A message with no files is still stored as the bare text a person typed, so
  * every row written before attachments existed keeps rendering exactly as it
@@ -11,12 +11,12 @@
  * hidden behind a marker starting with a NUL - a character a textarea cannot
  * produce, so nobody can type a message that pretends to be one.
  */
-import type { MessageBody } from '@nexora/shared-types';
+import type { MessageBody } from '@betweenus/shared-types';
 
 /** Longer than this and a message is sent as a text file, the way Discord does. */
 export const OVERFLOW_CHARS = 2000;
 
-const BODY_MARKER = '\u0000nexora-body:1\n';
+const BODY_MARKER = '\u0000betweenus-body:1\n';
 
 export function encodeBody(body: MessageBody): string {
   const plain =

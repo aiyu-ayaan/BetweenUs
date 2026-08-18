@@ -1,7 +1,7 @@
 /** Admin panel business logic: the user directory and the OAuth configuration. */
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { sealSecret } from '@nexora/auth';
-import { Prisma, prisma } from '@nexora/database';
+import { sealSecret } from '@betweenus/auth';
+import { Prisma, prisma } from '@betweenus/database';
 import type {
   AdminAuditEntry,
   AdminAuditPage,
@@ -10,7 +10,7 @@ import type {
   AdminUser,
   AdminUserPage,
   GlobalRole,
-} from '@nexora/shared-types';
+} from '@betweenus/shared-types';
 import { PROVIDERS, type ProviderName, callbackUrl } from './oauth-providers';
 import type { AdminOAuthProviderDto, AdminUserUpdateDto } from './dto';
 

@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import type { Channel, ChannelType } from '@nexora/shared-types';
-import { PERMISSIONS } from '@nexora/permissions';
+import type { Channel, ChannelType } from '@betweenus/shared-types';
+import { PERMISSIONS } from '@betweenus/permissions';
 import { useChatStore } from '../../stores/chat';
 import { usePresenceStore } from '../../stores/presence';
 import { useVoiceStore } from '../../stores/voice';

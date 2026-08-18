@@ -1,10 +1,10 @@
-# Deploying Nexora
+# Deploying BetweenUs
 
-This is the step-by-step for putting Nexora on a server: what to generate, what
+This is the step-by-step for putting BetweenUs on a server: what to generate, what
 to set, how to create the first administrator, how to publish it through a
 Cloudflare Tunnel, and why each endpoint has to be on that tunnel.
 
-`README.md` describes what Nexora is. `CLAUDE.md` is the target architecture.
+`README.md` describes what BetweenUs is. `CLAUDE.md` is the target architecture.
 This file is the operational path from a bare host to a working deployment, and
 it states the gaps a deployment still has rather than implying there are none.
 
@@ -85,8 +85,8 @@ Two things travel outside the gateway, and both are deliberate:
 
 **Accounts and names**
 
-- A domain on Cloudflare, and the hostname Nexora will answer on -
-  `nexora.example.com` throughout this document
+- A domain on Cloudflare, and the hostname BetweenUs will answer on -
+  `betweenus.example.com` throughout this document
 - A Cloudflare Tunnel: either one you already run on the host, or a new one
   whose token you can paste into `.env`
 
@@ -109,8 +109,8 @@ this repository deploys those images for you yet.
 ## 3. Step 1 - the code and the environment
 
 ```bash
-git clone <your-fork> nexora
-cd nexora
+git clone <your-fork> betweenus
+cd betweenus
 cp .env.example .env
 ```
 
@@ -127,21 +127,21 @@ node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
 | Variable | Production value | Why it matters |
 | --- | --- | --- |
 | `POSTGRES_PASSWORD` | generated | Postgres database password. If changed from `postgres`, `DATABASE_URL` password must match it |
-| `DATABASE_URL` | `postgresql://postgres:<PASSWORD>@postgres:5432/nexora?schema=public` | Must use the generated `POSTGRES_PASSWORD`. Inside Docker Compose, use `postgres:5432` container hostname |
+| `DATABASE_URL` | `postgresql://postgres:<PASSWORD>@postgres:5432/betweenus?schema=public` | Must use the generated `POSTGRES_PASSWORD`. Inside Docker Compose, use `postgres:5432` container hostname |
 | `JWT_SECRET` | generated | Signs access tokens. Changing it later signs everyone out |
 | `JWT_REFRESH_SECRET` | generated | Signs refresh tokens. Must differ from `JWT_SECRET` |
 | `SETTINGS_SECRET` | generated | Seals OAuth client secrets at rest. Falls back to `JWT_SECRET` when empty; changing either makes stored client secrets unreadable and they must be re-entered |
 | `REFRESH_REPLAY_GRACE_MS` | `30000` | How long a just-rotated refresh token still answers with the pair that rotation produced, so a refresh interrupted by a reload or a dropped connection is not read as a stolen token and does not sign every device out. A replay inside the window creates no new session. `0` disables it and restores strict single-use |
-| `PUBLIC_API_URL` | `https://nexora.example.com` | The OAuth callback URL is built from it, and it must match what Google and GitHub have registered |
-| `OAUTH_ALLOWED_REDIRECTS` | `https://nexora.example.com` | Extra origins a finished OAuth sign-in may return to. Loopback (the desktop client) is always allowed; **the web client needs the deployment's own origin here**, or provider sign-in in a browser is refused with `BAD_REDIRECT` |
-| `CORS_ORIGIN` | `https://nexora.example.com` | Compose defaults it to `*`. The web client and the admin panel are both same-origin, so neither needs it; set this when browsers on *other* origins will call the API |
+| `PUBLIC_API_URL` | `https://betweenus.example.com` | The OAuth callback URL is built from it, and it must match what Google and GitHub have registered |
+| `OAUTH_ALLOWED_REDIRECTS` | `https://betweenus.example.com` | Extra origins a finished OAuth sign-in may return to. Loopback (the desktop client) is always allowed; **the web client needs the deployment's own origin here**, or provider sign-in in a browser is refused with `BAD_REDIRECT` |
+| `CORS_ORIGIN` | `https://betweenus.example.com` | Compose defaults it to `*`. The web client and the admin panel are both same-origin, so neither needs it; set this when browsers on *other* origins will call the API |
 | `STUN_URLS` | the default is fine | Where a peer asks what its own public address looks like, so it can offer one. Not a relay: no media passes through it and no port is opened for it. Defaults to two public servers from different operators, because this is the one step of ICE with no fallback. Point it at your own coturn if you would rather not talk to them |
 | `CLOUDFLARE_TURN_KEY_ID` / `CLOUDFLARE_TURN_KEY_API_TOKEN` | empty, unless §4 says otherwise | A relay, for the pairs of networks that cannot form a direct path at all. Optional and off by default, so this deployment relays nothing unless you say so. Cloudflare dashboard → Realtime → TURN; call-service mints a short-lived credential per call and hands only that to a client, never the key |
 | `GATEWAY_PORT` | `127.0.0.1:8080` with a host tunnel | Keeps the gateway off the LAN while a host-run `cloudflared` still reaches it |
 | `CLOUDFLARE_TUNNEL_TOKEN` | token, or empty | Only for the container tunnel (`--profile public`). Leave empty when the tunnel already runs on the host |
 | `LOG_LEVEL` | `info` | `debug` is noisy and logs more request detail than a public deployment wants |
 | `STORAGE_DRIVER` and the `S3_*` block | see §13 | Empty means uploads live on a Docker volume |
-| `NEXORA_DATA_PATH` | a path you choose, or empty | Where this deployment's data lives - `pnpm data:path /srv/x/nexora` creates the tree and writes the four bind paths Compose mounts. Empty keeps everything in Docker named volumes, as before. See §18 |
+| `BETWEENUS_DATA_PATH` | a path you choose, or empty | Where this deployment's data lives - `pnpm data:path /srv/x/betweenus` creates the tree and writes the four bind paths Compose mounts. Empty keeps everything in Docker named volumes, as before. See §18 |
 | `BACKUP_INTERVAL_HOURS` / `BACKUP_KEEP` | `168` / `8` | Weekly dumps, eight kept. A dump also runs before every migration, and the migration will not start if it fails (§18) |
 
 > [!IMPORTANT]
@@ -216,7 +216,7 @@ away.
 
 > [!TIP]
 > **Zero Media Server / No LiveKit Infrastructure:**
-> Nexora uses a direct peer-to-peer (P2P) WebRTC mesh for voice, video, and screen sharing. There is no SFU (such as LiveKit), no extra media port ranges to open on your firewall (`7881/tcp` or UDP ranges), and no external IP binding required on the host. If upgrading from an older deployment that had media ports open, you can safely close them.
+> BetweenUs uses a direct peer-to-peer (P2P) WebRTC mesh for voice, video, and screen sharing. There is no SFU (such as LiveKit), no extra media port ranges to open on your firewall (`7881/tcp` or UDP ranges), and no external IP binding required on the host. If upgrading from an older deployment that had media ports open, you can safely close them.
 
 ---
 
@@ -297,7 +297,7 @@ Both print the same block, once:
 ```
 Admin account created.
 
-  username  nexoraadmin
+  username  betweenusadmin
   password  <24 characters, shown once>
 
 This password is shown once and cannot be recovered.
@@ -306,7 +306,7 @@ Sign in at the admin panel; it will ask you to choose a new one.
 
 What the script does:
 
-- Creates `nexoraadmin` / `admin@nexora.local` with the `ADMIN` global role and
+- Creates `betweenusadmin` / `admin@betweenus.local` with the `ADMIN` global role and
   `mustChangePassword` set, so the account cannot be used until its password is
   replaced.
 - Generates 24 characters from an unambiguous alphabet - no `l`/`1`/`O`/`0` to
@@ -333,7 +333,7 @@ reset also ends whatever sessions the old password left behind.
 
 ## 7. Step 5 - the admin panel
 
-Open `https://nexora.example.com/admin`, sign in as `nexoraadmin`, and set a
+Open `https://betweenus.example.com/admin`, sign in as `betweenusadmin`, and set a
 real password when it asks. Until you do, the account can do nothing else.
 
 The panel is a static bundle in its own container, proxied at `/admin`, talking
@@ -384,7 +384,7 @@ is empty), stored client secrets become unreadable and must be re-entered.
 
 ## 9. Step 7 - public ingress with Cloudflare Tunnel
 
-The tunnel is how Nexora is reachable without opening an inbound port.
+The tunnel is how BetweenUs is reachable without opening an inbound port.
 `cloudflared` makes an outbound connection to Cloudflare, Cloudflare terminates
 TLS, and the origin has no listening socket exposed to the internet. Nginx
 behind it speaks plain HTTP on 8080 and trusts the `X-Forwarded-*` headers the
@@ -397,7 +397,7 @@ ingress entry to the config you already have:
 
 ```yaml
 ingress:
-  - hostname: nexora.example.com
+  - hostname: betweenus.example.com
     service: http://localhost:8080      # GATEWAY_PORT
   # ...your other hostnames...
   - service: http_status:404
@@ -525,7 +525,7 @@ published nowhere in this stack.
 A deployment is one URL, and the client needs exactly one variable:
 
 ```
-VITE_API_URL="https://nexora.example.com"
+VITE_API_URL="https://betweenus.example.com"
 ```
 
 It is read from the repo-root `.env` at **build** time, so it is baked into a
@@ -534,7 +534,7 @@ packaged app:
 ```bash
 pnpm install
 pnpm build
-pnpm --filter @nexora/desktop package     # electron-builder
+pnpm --filter @betweenus/desktop package     # electron-builder
 ```
 
 It is only a default. **Connect to a self-hosted instance** on the login screen,
@@ -554,7 +554,7 @@ set at all.
 
 ## 13. File storage
 
-`@nexora/storage` picks a driver from the environment:
+`@betweenus/storage` picks a driver from the environment:
 
 - **All `S3_*` empty (default).** Uploads land in `LOCAL_STORAGE_PATH`, which
   compose maps to the `upload-data` volume at `/data/uploads`, and chat-service
@@ -594,10 +594,10 @@ Work outwards, so a failure names its own layer.
 curl -s http://localhost:8080/health
 
 # 2. Gateway is up through the tunnel
-curl -s https://nexora.example.com/health
+curl -s https://betweenus.example.com/health
 
 # 3. The admin API answers, and says an administrator exists
-curl -s https://nexora.example.com/api/v1/admin/status
+curl -s https://betweenus.example.com/api/v1/admin/status
 
 # 4. Nothing crashed on boot
 docker compose --env-file .env -f infrastructure/docker/docker-compose.yml \
@@ -621,12 +621,12 @@ Then, in a client pointed at the hostname:
 
 ### Troubleshooting 502 Bad Gateway Errors
 
-If Cloudflare or Nginx returns a **502 Bad Gateway** when navigating to `https://nexora.example.com/admin/` or making requests to `/api/v1/auth/login`:
+If Cloudflare or Nginx returns a **502 Bad Gateway** when navigating to `https://betweenus.example.com/admin/` or making requests to `/api/v1/auth/login`:
 
 1. **Check Database URL & Password Alignment**:
    Ensure `DATABASE_URL` in `.env` contains the exact same password as `POSTGRES_PASSWORD`.
    - **Correct Docker Compose Format**:
-     `DATABASE_URL="postgresql://postgres:<YOUR_POSTGRES_PASSWORD>@postgres:5432/nexora?schema=public"`
+     `DATABASE_URL="postgresql://postgres:<YOUR_POSTGRES_PASSWORD>@postgres:5432/betweenus?schema=public"`
    - If the passwords mismatch or `localhost` is used instead of `postgres` container hostname in `DATABASE_URL`, database migrations (`migrate` container) will fail, causing `auth-service` to not start.
 
 2. **Check Service Container Status**:
@@ -661,7 +661,7 @@ pnpm db:backup
 ```
 
 The uploads are not dumped by anything; they are a directory. Point
-`NEXORA_DATA_PATH` at somewhere your host backup already covers, or copy
+`BETWEENUS_DATA_PATH` at somewhere your host backup already covers, or copy
 `<root>/data/media` on the same schedule as everything else.
 
 Understand what a backup restores. Messages and attachments are stored as
@@ -800,21 +800,21 @@ until you want to know where it is, put it on a particular disk, or include it
 in the backup the host already runs. Say where the data lives once instead:
 
 ```bash
-pnpm data:path /srv/sd2345/docker/nexora
+pnpm data:path /srv/sd2345/docker/betweenus
 ```
 
 That creates the tree, hands the uploads directory to the uid the services run
 as, and writes the paths into `.env`:
 
 ```text
-/srv/sd2345/docker/nexora/
+/srv/sd2345/docker/betweenus/
 ├── data/
 │   ├── postgres/          the database cluster
 │   ├── redis/             Redis' own AOF/RDB
 │   └── media/             uploads
 │       ├── pictures/      avatars and server icons
 │       └── attachments/   message attachments
-└── backup/                nexora-YYYYMMDD-HHMMSS.sql.gz
+└── backup/                betweenus-YYYYMMDD-HHMMSS.sql.gz
 ```
 
 Then bring the stack up as usual (`pnpm prod:up`). Re-running the script is
@@ -829,7 +829,7 @@ server-side, and the second is the property the whole design exists to keep.
 Pictures are the exception because they are not encrypted, which is why they get
 a directory of their own.
 
-**What Compose actually reads.** Not `NEXORA_DATA_PATH` - Compose cannot branch
+**What Compose actually reads.** Not `BETWEENUS_DATA_PATH` - Compose cannot branch
 on whether a variable is set, so each mount interpolates one variable that falls
 back to the named volume it always used:
 
@@ -844,7 +844,7 @@ A deployment that never runs the script therefore behaves exactly as before, and
 one that does can still override a single path by hand - keep the database on the
 fast disk and the backups on the big one.
 
-`NEXORA_DATA_PATH` is recorded in `.env` only so the script can be re-run with
+`BETWEENUS_DATA_PATH` is recorded in `.env` only so the script can be re-run with
 no argument.
 
 **Permissions, the one thing that bites.** A named volume is seeded from the
@@ -855,8 +855,8 @@ script chowns `data/media` (and both subdirectories) to `1000:1000` and ensures 
 root, or do it yourself afterwards:
 
 ```bash
-sudo chown -R 1000:1000 /srv/sd2345/docker/nexora/data/media
-sudo chmod 777 /srv/sd2345/docker/nexora/backup
+sudo chown -R 1000:1000 /srv/sd2345/docker/betweenus/data/media
+sudo chmod 777 /srv/sd2345/docker/betweenus/backup
 ```
 
 Get this wrong and uploads fail with `EACCES` or database pre-migration dumps fail with permission errors while the rest of the service works.
@@ -867,10 +867,10 @@ matching directory:
 
 ```bash
 docker compose --env-file .env -f infrastructure/docker/docker-compose.yml down
-docker run --rm -v nexora_postgres-data:/from -v /srv/sd2345/docker/nexora/data/postgres:/to \
+docker run --rm -v betweenus_postgres-data:/from -v /srv/sd2345/docker/betweenus/data/postgres:/to \
   alpine sh -c 'cp -a /from/. /to/'
-# ...the same for nexora_redis-data -> data/redis and nexora_upload-data -> data/media
-pnpm data:path /srv/sd2345/docker/nexora     # chowns media, writes .env
+# ...the same for betweenus_redis-data -> data/redis and betweenus_upload-data -> data/media
+pnpm data:path /srv/sd2345/docker/betweenus     # chowns media, writes .env
 pnpm prod:up
 ```
 
@@ -902,7 +902,7 @@ server's:
 A change to any of them takes effect on
 `docker compose ... up -d db-backup`.
 
-Dumps are gzipped plain SQL named `nexora-YYYYMMDD-HHMMSS.sql.gz`, written under
+Dumps are gzipped plain SQL named `betweenus-YYYYMMDD-HHMMSS.sql.gz`, written under
 a `.partial` name and renamed only when `pg_dump` finished - so a dump
 interrupted halfway is never mistaken for a backup, by the retention sweep or by
 you. Plain SQL rather than a custom-format archive because restoring it needs
@@ -919,9 +919,9 @@ docker compose --env-file .env -f $C stop auth-service server-service chat-servi
 
 # Fresh database, then the dump. Adjust the filename.
 docker compose --env-file .env -f $C exec -T postgres \
-  psql -U postgres -c 'DROP DATABASE nexora WITH (FORCE);' -c 'CREATE DATABASE nexora;'
-gunzip -c /srv/sd2345/docker/nexora/backup/nexora-20260818-030000.sql.gz \
-  | docker compose --env-file .env -f $C exec -T postgres psql -U postgres -d nexora
+  psql -U postgres -c 'DROP DATABASE betweenus WITH (FORCE);' -c 'CREATE DATABASE betweenus;'
+gunzip -c /srv/sd2345/docker/betweenus/backup/betweenus-20260818-030000.sql.gz \
+  | docker compose --env-file .env -f $C exec -T postgres psql -U postgres -d betweenus
 
 docker compose --env-file .env -f $C up -d
 ```

@@ -23,7 +23,7 @@ const path = require('path');
 /** The mark, lifted out of the shared Android vector so there is one copy. */
 function markPaths() {
   const vector = fs.readFileSync(
-    path.join(__dirname, '../apps/android/ui-common/src/main/res/drawable/ic_nexora_logo.xml'),
+    path.join(__dirname, '../apps/android/ui-common/src/main/res/drawable/ic_betweenus_logo.xml'),
     'utf8',
   );
   const found = [...vector.matchAll(/android:pathData="([^"]+)"/g)].map((match) => match[1]);

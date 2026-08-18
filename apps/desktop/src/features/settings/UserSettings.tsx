@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { ActiveStatus, DeviceKey } from '@nexora/shared-types';
+import type { ActiveStatus, DeviceKey } from '@betweenus/shared-types';
 import { useAuthStore } from '../../stores/auth';
 import { useChatStore } from '../../stores/chat';
 import { usePresenceStore } from '../../stores/presence';
@@ -616,7 +616,7 @@ function VoiceSection(): JSX.Element {
               onChange={(pushToTalkKey) => update({ pushToTalkKey })}
             />
             <p className="text-xs text-slate-500">
-              It works while Nexora has focus, and not while another window does - a global key
+              It works while BetweenUs has focus, and not while another window does - a global key
               needs a keyboard hook this app does not install. Letting go is never missed: losing
               focus closes the microphone too, so alt-tabbing mid-sentence cannot leave it open.
             </p>
@@ -882,7 +882,7 @@ function NotificationsSection(): JSX.Element {
 
   useEffect(() => onPreferencesChanged(setPreferences), []);
   useEffect(() => {
-    void window.nexora?.getAppSettings().then(setMachine);
+    void window.betweenus?.getAppSettings().then(setMachine);
   }, []);
 
   const save = (patch: Partial<typeof preferences>): void => {
@@ -890,7 +890,7 @@ function NotificationsSection(): JSX.Element {
   };
 
   const saveMachine = (patch: { launchOnStartup?: boolean; closeToTray?: boolean }): void => {
-    void window.nexora?.setAppSettings(patch).then((next) => {
+    void window.betweenus?.setAppSettings(patch).then((next) => {
       setMachine((current) => (current ? { ...current, ...next } : current));
     });
   };
@@ -949,7 +949,7 @@ function NotificationsSection(): JSX.Element {
       <h2 className="mt-8 text-base font-semibold text-slate-100">This computer</h2>
       <div className="mt-3 space-y-1 rounded-lg bg-surface-800 p-4">
         <Switch
-          label="Open Nexora when the system starts"
+          label="Open BetweenUs when the system starts"
           hint="Starts in the tray, without a window in front of what you were doing."
           checked={machine?.launchOnStartup ?? false}
           disabled={machine === null || !machine.canManageAutoStart}
@@ -957,7 +957,7 @@ function NotificationsSection(): JSX.Element {
         />
         <Switch
           label="Keep running in the tray when the window is closed"
-          hint="Off makes closing the window quit Nexora, and notifications stop with it."
+          hint="Off makes closing the window quit BetweenUs, and notifications stop with it."
           checked={machine?.closeToTray ?? false}
           disabled={machine === null}
           onChange={(closeToTray) => saveMachine({ closeToTray })}
@@ -1123,7 +1123,7 @@ function RemoteSection(): JSX.Element {
   // Control failing silently was the worst part of the first version: the
   // session looked fine and the mouse simply did not move.
   useEffect(() => {
-    void window.nexora?.remoteInputDiagnostics().then((report) => setInputError(report.error));
+    void window.betweenus?.remoteInputDiagnostics().then((report) => setInputError(report.error));
   }, [session]);
 
   const disable = useAgentStore((state) => state.disable);
@@ -1220,7 +1220,7 @@ function AppearanceSection(): JSX.Element {
     <>
       <h1 className="text-xl font-semibold text-slate-50">Appearance</h1>
       <p className="mt-2 text-sm text-slate-400">
-        Nexora is dark. A light theme is not built yet, and a switch that does nothing is worse
+        BetweenUs is dark. A light theme is not built yet, and a switch that does nothing is worse
         than no switch.
       </p>
       <div className="mt-5 flex gap-3">

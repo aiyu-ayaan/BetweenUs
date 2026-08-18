@@ -32,7 +32,7 @@ export function ScreenSharePicker({ onClose }: { onClose: () => void }): JSX.Ele
   // and it only offers either when the capture asked for audio at all. So the
   // browser is always asked, and never shown a checkbox of ours that would
   // either duplicate that one or quietly contradict it.
-  const audioSupported = native ? window.nexora?.platform === 'win32' : true;
+  const audioSupported = native ? window.betweenus?.platform === 'win32' : true;
   const [withAudio, setWithAudio] = useState(audioSupported);
   // What is on the screen, not how good it should be. The two want opposite
   // things from the encoder and neither is the better one - see
@@ -44,7 +44,7 @@ export function ScreenSharePicker({ onClose }: { onClose: () => void }): JSX.Ele
   const share = useAudioSettings((state) => state.settings.share);
 
   useEffect(() => {
-    const bridge = window.nexora;
+    const bridge = window.betweenus;
     if (!bridge) {
       // A plain browser has no source list; the runtime asks on its own.
       setSources([]);

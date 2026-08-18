@@ -12,7 +12,7 @@ import { randomUUID } from 'node:crypto';
 import { dirname, extname, join, normalize, resolve, sep } from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import { Readable } from 'node:stream';
-import { env, envOr } from '@nexora/config';
+import { env, envOr } from '@betweenus/config';
 
 export interface StoredObject {
   /** Storage key, e.g. `attachments/2026/ab12….png`. Stable across drivers. */
@@ -466,10 +466,10 @@ export function getStorage(): StorageDriver {
     cached = new S3StorageDriver({
       endpoint: envOr('S3_ENDPOINT', ''),
       region: envOr('S3_REGION', 'us-east-1'),
-      bucket: envOr('S3_BUCKET', 'nexora'),
+      bucket: envOr('S3_BUCKET', 'betweenus'),
       accessKey: envOr('S3_ACCESS_KEY', ''),
       secretKey: envOr('S3_SECRET_KEY', ''),
-      publicUrl: envOr('S3_PUBLIC_URL', `${envOr('S3_ENDPOINT', '')}/${envOr('S3_BUCKET', 'nexora')}`),
+      publicUrl: envOr('S3_PUBLIC_URL', `${envOr('S3_ENDPOINT', '')}/${envOr('S3_BUCKET', 'betweenus')}`),
       forcePathStyle: envOr('S3_FORCE_PATH_STYLE', 'true') !== 'false',
     });
   } else {

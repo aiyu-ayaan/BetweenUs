@@ -34,7 +34,7 @@
  * quiet disappears. Only one person can drive, but everybody can point.
  */
 import { create } from 'zustand';
-import type { CallPeer } from '@nexora/shared-types';
+import type { CallPeer } from '@betweenus/shared-types';
 import type { Mesh } from '../services/mesh';
 // Circular by design and safe: the voice store attaches this one, and this one
 // only reads it from inside a function, long after both modules have loaded.
@@ -54,7 +54,7 @@ const POINTER_INTERVAL_MS = 60;
 /** A pointer nobody has heard from in this long has left the picture. */
 const POINTER_STALE_MS = 4_000;
 
-const TOPIC = 'nexora.share';
+const TOPIC = 'betweenus.share';
 
 interface Person {
   identity: string;
@@ -172,7 +172,7 @@ export const useShareControlStore = create<ShareControlState>((set, get) => ({
     sweeper = null;
     mesh = null;
     asked = null;
-    window.nexora?.remoteTarget(null, 'call');
+    window.betweenus?.remoteTarget(null, 'call');
     set({
       requests: [],
       controller: null,
@@ -210,7 +210,7 @@ export const useShareControlStore = create<ShareControlState>((set, get) => ({
       };
     });
 
-    if (get().controller === null) window.nexora?.remoteTarget(null, 'call');
+    if (get().controller === null) window.betweenus?.remoteTarget(null, 'call');
   },
 
   ask: (sharer) => {
@@ -249,7 +249,7 @@ export const useShareControlStore = create<ShareControlState>((set, get) => ({
     // `call`, which is its own target: a machine can be in a remote session at
     // the same time, watching a different monitor, and the two must not
     // overwrite each other.
-    window.nexora?.remoteTarget(sharedDisplayId(), 'call');
+    window.betweenus?.remoteTarget(sharedDisplayId(), 'call');
     set({ controller: request });
     publish({ k: 'grant' }, [identity]);
   },
@@ -258,7 +258,7 @@ export const useShareControlStore = create<ShareControlState>((set, get) => ({
     const { controller, driving } = get();
     if (controller) {
       publish({ k: 'revoke' }, [controller.identity]);
-      window.nexora?.remoteTarget(null, 'call');
+      window.betweenus?.remoteTarget(null, 'call');
       set({ controller: null });
     }
     if (driving) {
@@ -362,7 +362,7 @@ function onMessage(
     // Sent by either side: the sharer taking it back, or the driver letting go.
     case 'revoke':
       if (get().controller?.identity === identity) {
-        window.nexora?.remoteTarget(null, 'call');
+        window.betweenus?.remoteTarget(null, 'call');
         set({ controller: null });
       }
       if (get().driving === identity) set({ driving: null, asking: false });
@@ -370,7 +370,7 @@ function onMessage(
 
     case 'm': {
       if (!mayDrive(identity, get)) return;
-      window.nexora?.remoteMouse({
+      window.betweenus?.remoteMouse({
         action: message.a,
         x: message.x,
         y: message.y,
@@ -383,7 +383,7 @@ function onMessage(
 
     case 'key': {
       if (!mayDrive(identity, get)) return;
-      window.nexora?.remoteKey({
+      window.betweenus?.remoteKey({
         action: message.a,
         key: message.key,
         code: message.code,
@@ -421,6 +421,6 @@ function whyControlIsImpossible(): string | null {
   const { screenEnabled, sharedDisplayId: displayId } = useVoiceStore.getState();
   if (!screenEnabled) return 'they are not sharing a screen';
   if (!displayId) return 'a window is being shared, not a whole screen';
-  if (window.nexora?.platform !== 'win32') return 'control is not supported on that machine';
+  if (window.betweenus?.platform !== 'win32') return 'control is not supported on that machine';
   return null;
 }

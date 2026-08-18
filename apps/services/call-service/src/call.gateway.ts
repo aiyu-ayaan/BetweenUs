@@ -25,16 +25,16 @@ import { Injectable, OnModuleDestroy } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import type { Server as HttpServer } from 'node:http';
 import { WebSocket, WebSocketServer } from 'ws';
-import { resolveChannelAccess } from '@nexora/database';
-import { EVENTS, EventBus } from '@nexora/events';
-import { Logger } from '@nexora/logger';
-import { PERMISSIONS } from '@nexora/permissions';
-import { SIGNAL_MAX_PAYLOAD, authenticateHandshake } from '@nexora/websocket';
+import { resolveChannelAccess } from '@betweenus/database';
+import { EVENTS, EventBus } from '@betweenus/events';
+import { Logger } from '@betweenus/logger';
+import { PERMISSIONS } from '@betweenus/permissions';
+import { SIGNAL_MAX_PAYLOAD, authenticateHandshake } from '@betweenus/websocket';
 import type {
   CallPeer,
   ClientCallEvent,
   ServerCallEvent,
-} from '@nexora/shared-types';
+} from '@betweenus/shared-types';
 import { otherDevicesInCall } from './devices';
 
 const HEARTBEAT_INTERVAL_MS = 30_000;

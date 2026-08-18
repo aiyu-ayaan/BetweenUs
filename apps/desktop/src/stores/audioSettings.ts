@@ -11,7 +11,7 @@
 import { create } from 'zustand';
 import { DEFAULT_VOICE_SETTINGS, type VoiceSettings } from '../services/voice-quality';
 
-const STORAGE_KEY = 'nexora.voice-settings';
+const STORAGE_KEY = 'betweenus.voice-settings';
 
 function load(): VoiceSettings {
   try {

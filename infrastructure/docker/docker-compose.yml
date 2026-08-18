@@ -6,12 +6,12 @@
 # Networks are segmented so only the services that need a data store can reach
 # it. Postgres and Redis publish no ports.
 
-name: nexora
+name: betweenus
 
 x-service-env: &service-env
   NODE_ENV: production
   LOG_LEVEL: ${LOG_LEVEL:-info}
-  DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-nexora}?schema=public
+  DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-betweenus}?schema=public
   REDIS_URL: redis://redis:6379
   JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
   JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?JWT_REFRESH_SECRET is required}
@@ -48,7 +48,7 @@ x-backup: &backup
     PGHOST: postgres
     PGUSER: ${POSTGRES_USER:-postgres}
     PGPASSWORD: ${POSTGRES_PASSWORD:-postgres}
-    PGDATABASE: ${POSTGRES_DB:-nexora}
+    PGDATABASE: ${POSTGRES_DB:-betweenus}
     BACKUP_DIR: /backups
     # Weekly, and eight kept - two months of history for a few megabytes of
     # gzipped SQL. The interval is in hours: 24 is nightly, 1 is hourly.
@@ -176,7 +176,7 @@ services:
     # user cannot. Nothing else runs as root.
     user: root
     environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-nexora}?schema=public
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-betweenus}?schema=public
     working_dir: /repo/packages/database
     command: ["./node_modules/.bin/prisma", "migrate", "deploy"]
     depends_on:
@@ -239,7 +239,7 @@ services:
     volumes:
       # Uploads survive container replacement when the local driver is active.
       # UPLOAD_DATA_PATH takes either a Docker volume name (the default) or a
-      # host path - `/mnt/disk2/nexora-uploads`, `D:/nexora-uploads` - to keep
+      # host path - `/mnt/disk2/betweenus-uploads`, `D:/betweenus-uploads` - to keep
       # the files somewhere you can see and back up.
       #
       # The service runs as uid 1000, and the image ships /data/uploads owned by
@@ -383,7 +383,7 @@ services:
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
-      POSTGRES_DB: ${POSTGRES_DB:-nexora}
+      POSTGRES_DB: ${POSTGRES_DB:-betweenus}
     volumes:
       # POSTGRES_DATA_PATH is a Docker volume name by default and a host path
       # when scripts/data-path.mjs has written one. Postgres chowns its own

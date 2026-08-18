@@ -45,7 +45,7 @@ const WORKLET_SOURCE = `
 ${named(amplitudeToDb, 'amplitudeToDb')}
 ${named(stepGate, 'stepGate')}
 
-class NexoraGate extends AudioWorkletProcessor {
+class BetweenUsGate extends AudioWorkletProcessor {
   constructor() {
     super();
     this.thresholdDb = null;
@@ -101,7 +101,7 @@ class NexoraGate extends AudioWorkletProcessor {
   }
 }
 
-registerProcessor('nexora-gate', NexoraGate);
+registerProcessor('betweenus-gate', BetweenUsGate);
 `;
 
 let moduleUrl: string | null = null;
@@ -135,7 +135,7 @@ export interface MicLevel {
  * raw capture, which is the whole point of it.
  */
 export class NoiseGate implements AudioProcessor {
-  readonly name = 'nexora-noise-gate';
+  readonly name = 'betweenus-noise-gate';
 
   processedTrack?: MediaStreamTrack;
 
@@ -155,7 +155,7 @@ export class NoiseGate implements AudioProcessor {
     this.destination = context.createMediaStreamDestination();
 
     if (await addWorklet(context)) {
-      this.node = new AudioWorkletNode(context, 'nexora-gate');
+      this.node = new AudioWorkletNode(context, 'betweenus-gate');
       this.node.port.onmessage = (event: MessageEvent<MicLevel>) => this.listener?.(event.data);
       this.source.connect(this.node).connect(this.destination);
       this.setThreshold(this.thresholdDb);

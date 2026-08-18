@@ -15,7 +15,7 @@
  *   The rule has to be antisymmetric, and it is one comparison, so it is easy
  *   to get backwards and impossible to notice until two people call at once.
  *
- * Run with `pnpm --filter @nexora/desktop check`.
+ * Run with `pnpm --filter @betweenus/desktop check`.
  */
 import assert from 'node:assert/strict';
 import { webcrypto } from 'node:crypto';

@@ -5,7 +5,7 @@
  * window has no access token yet, and only the first waits for the refresh -
  * the second used to be sent anonymously and came back "Missing bearer token".
  *
- * Run with: pnpm --filter @nexora/desktop check
+ * Run with: pnpm --filter @betweenus/desktop check
  */
 import assert from 'node:assert/strict';
 import { ApiError, api, configureApi } from './api';
@@ -88,7 +88,7 @@ function stubBody(body: string, contentType: string, status = 200): void {
  * real cause three layers away.
  */
 async function anHtmlTwoHundredIsAFailure(): Promise<void> {
-  stubBody('<!doctype html><title>Nexora</title>', 'text/html');
+  stubBody('<!doctype html><title>BetweenUs</title>', 'text/html');
 
   await assert.rejects(
     () => api.machines(),

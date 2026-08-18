@@ -34,7 +34,7 @@ const ok = (label, condition, detail = '') => {
 };
 
 const suffix = Date.now().toString(36);
-const email = `smoke-${suffix}@nexora.local`;
+const email = `smoke-${suffix}@betweenus.local`;
 
 const auth = await json(`${AUTH}/api/v1/auth/register`, {
   method: 'POST',
@@ -239,7 +239,7 @@ ok('epoch ordering enforced', epochRejected);
 const otherAuth = await json(`${AUTH}/api/v1/auth/register`, {
   method: 'POST',
   body: JSON.stringify({
-    email: `smoke-b-${suffix}@nexora.local`,
+    email: `smoke-b-${suffix}@betweenus.local`,
     username: `smokeb${suffix}`,
     password: 'hunter2000',
   }),
@@ -273,7 +273,7 @@ const single = await json(`${SERVER}/api/v1/servers/${server.id}/invites`, {
 const inviteeAuth = await json(`${AUTH}/api/v1/auth/register`, {
   method: 'POST',
   body: JSON.stringify({
-    email: `smoke-invitee-${suffix}@nexora.local`,
+    email: `smoke-invitee-${suffix}@betweenus.local`,
     username: `smokeinvitee${suffix}`,
     password: 'hunter2000',
   }),
@@ -288,7 +288,7 @@ await json(`${SERVER}/api/v1/servers/join`, {
 const spentAuth = await json(`${AUTH}/api/v1/auth/register`, {
   method: 'POST',
   body: JSON.stringify({
-    email: `smoke-rejected-${suffix}@nexora.local`,
+    email: `smoke-rejected-${suffix}@betweenus.local`,
     username: `smokerejected${suffix}`,
     password: 'hunter2000',
   }),
@@ -617,7 +617,7 @@ ok('an already deleted message is not found', secondDelete.status === 404);
 const thirdAuth = await json(`${AUTH}/api/v1/auth/register`, {
   method: 'POST',
   body: JSON.stringify({
-    email: `smoke-c-${suffix}@nexora.local`,
+    email: `smoke-c-${suffix}@betweenus.local`,
     username: `smokec${suffix}`,
     password: 'hunter2000',
   }),
@@ -913,7 +913,7 @@ const post = async (url, body, headers) => {
   return payload;
 };
 
-const attachmentBytes = Buffer.from('nexora attachment ciphertext');
+const attachmentBytes = Buffer.from('betweenus attachment ciphertext');
 const stored = await post(
   `${CHAT}/api/v1/uploads`,
   form({ file: new Blob([attachmentBytes]) }),

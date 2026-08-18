@@ -10,7 +10,7 @@ import type {
   ChannelKeyEntry,
   EncryptedEnvelope,
   IdentityBackup,
-} from '@nexora/shared-types';
+} from '@betweenus/shared-types';
 import { ApiError, api } from './api';
 import { setIdentityStatus } from '../stores/identity';
 import {
@@ -177,7 +177,7 @@ async function adopt(pair: IdentityKeyPair, backedUp = false): Promise<void> {
   setIdentityStatus({ status: 'ready', backedUp });
 }
 
-const DEVICE_ID_KEY = 'nexora.deviceId';
+const DEVICE_ID_KEY = 'betweenus.deviceId';
 
 /**
  * Which machine this is, as far as the key directory is concerned.
@@ -219,7 +219,7 @@ function deviceLabel(): string {
     : /Linux/i.test(agent) ? 'Linux'
     : 'Unknown';
   // Electron's user agent says Chrome too, so the runtime is asked separately.
-  const shell = typeof window !== 'undefined' && window.nexora ? 'Nexora' : 'Browser';
+  const shell = typeof window !== 'undefined' && window.betweenus ? 'BetweenUs' : 'Browser';
   return `${shell} on ${platform}`;
 }
 
@@ -621,18 +621,18 @@ async function currentIdentity(): Promise<IdentityKeyPair> {
  * Vite dev server - there is no keychain, so localStorage is the fallback.
  */
 export async function secureGet(key: string): Promise<string | null> {
-  const bridge = window.nexora?.secureGet;
+  const bridge = window.betweenus?.secureGet;
   if (bridge) return bridge(key);
-  return localStorage.getItem(`nexora.secure.${key}`);
+  return localStorage.getItem(`betweenus.secure.${key}`);
 }
 
 export async function secureSet(key: string, value: string): Promise<void> {
-  const bridge = window.nexora?.secureSet;
+  const bridge = window.betweenus?.secureSet;
   if (bridge) {
     await bridge(key, value);
     return;
   }
-  localStorage.setItem(`nexora.secure.${key}`, value);
+  localStorage.setItem(`betweenus.secure.${key}`, value);
 }
 
 export type { EncryptedEnvelope };

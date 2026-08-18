@@ -1,6 +1,6 @@
 import 'reflect-metadata';
 import type { Server as HttpServer } from 'node:http';
-import { bootstrapService } from '@nexora/nest-common';
+import { bootstrapService } from '@betweenus/nest-common';
 import { AppModule } from './app.module';
 import { PresenceGateway } from './presence.gateway';
 

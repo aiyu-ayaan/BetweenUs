@@ -2,7 +2,7 @@
  * Role and permission vocabulary. Constants and pure helpers only - no service
  * business logic, no database access.
  */
-import type { ServerRole } from '@nexora/shared-types';
+import type { ServerRole } from '@betweenus/shared-types';
 
 export const SERVER_ROLES = ['OWNER', 'ADMIN', 'MODERATOR', 'MEMBER', 'GUEST'] as const;
 

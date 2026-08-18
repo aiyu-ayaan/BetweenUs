@@ -6,7 +6,7 @@
  * later touches this file only.
  */
 import Redis from 'ioredis';
-import type { Message, PresenceState, VoiceState } from '@nexora/shared-types';
+import type { Message, PresenceState, VoiceState } from '@betweenus/shared-types';
 
 export const EVENTS = {
   USER_CREATED: 'user.created',

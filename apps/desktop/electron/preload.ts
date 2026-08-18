@@ -187,7 +187,7 @@ const api = {
   },
 };
 
-contextBridge.exposeInMainWorld('nexora', api);
+contextBridge.exposeInMainWorld('betweenus', api);
 
-export type NexoraBridge = typeof api;
+export type BetweenUsBridge = typeof api;
 

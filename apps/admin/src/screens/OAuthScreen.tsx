@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { AdminOAuthProvider } from '@nexora/shared-types';
+import type { AdminOAuthProvider } from '@betweenus/shared-types';
 import { api } from '../api';
 import { messageOf } from '../App';
 

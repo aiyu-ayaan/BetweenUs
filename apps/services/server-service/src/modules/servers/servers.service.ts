@@ -5,16 +5,16 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { areFriends, prisma, resolveChannelAccess } from '@nexora/database';
-import { envOr } from '@nexora/config';
-import { EVENTS, EventBus } from '@nexora/events';
+import { areFriends, prisma, resolveChannelAccess } from '@betweenus/database';
+import { envOr } from '@betweenus/config';
+import { EVENTS, EventBus } from '@betweenus/events';
 import {
   EMOJI_NAME_PATTERN,
   MAX_SERVER_EMOJI,
   UPLOADED_PICTURE_URL,
   type ServerEmoji as ServerEmojiRow,
   type CreateServerEmojiRequest,
-} from '@nexora/shared-types';
+} from '@betweenus/shared-types';
 import type {
   Channel,
   ChannelMember as ChannelMemberDto,
@@ -32,14 +32,14 @@ import type {
   UpdateServerMemberRequest,
   UpdateServerRequest,
   UpdateServerRoleRequest,
-} from '@nexora/shared-types';
+} from '@betweenus/shared-types';
 import {
   ASSIGNABLE_PERMISSIONS,
   PERMISSIONS,
   effectivePermissions,
   isPermission,
   type Permission,
-} from '@nexora/permissions';
+} from '@betweenus/permissions';
 
 /** Highest first. Nobody may hand out a role at or above their own. */
 const ROLE_RANK: Record<ServerRole, number> = {

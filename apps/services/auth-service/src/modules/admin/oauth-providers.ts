@@ -1,14 +1,14 @@
 /**
- * The OAuth providers Nexora knows how to talk to, and how to read their
+ * The OAuth providers BetweenUs knows how to talk to, and how to read their
  * config out of the database.
  *
  * Adding a provider is a matter of adding an entry here - endpoints, scope and
  * how to read an id and a name out of its profile response - plus a button in
  * the clients. Credentials themselves are operator data, not code.
  */
-import { openSecret } from '@nexora/auth';
-import { envOr } from '@nexora/config';
-import { prisma } from '@nexora/database';
+import { openSecret } from '@betweenus/auth';
+import { envOr } from '@betweenus/config';
+import { prisma } from '@betweenus/database';
 
 export type ProviderName = 'google' | 'github';
 

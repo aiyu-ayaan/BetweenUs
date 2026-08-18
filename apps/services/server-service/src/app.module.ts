@@ -1,8 +1,8 @@
 import { Module } from '@nestjs/common';
-import { envOr } from '@nexora/config';
-import { EventBus } from '@nexora/events';
-import { pingDatabase } from '@nexora/database';
-import { createHealthController } from '@nexora/nest-common';
+import { envOr } from '@betweenus/config';
+import { EventBus } from '@betweenus/events';
+import { pingDatabase } from '@betweenus/database';
+import { createHealthController } from '@betweenus/nest-common';
 import {
   ChannelsController,
   ServersController,

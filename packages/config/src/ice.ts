@@ -41,7 +41,7 @@ import { env, envNumber, envOr } from './index';
 /**
  * One entry of a WebRTC `RTCConfiguration.iceServers`.
  *
- * Structurally the same as `IceServer` in `@nexora/shared-types`, and declared
+ * Structurally the same as `IceServer` in `@betweenus/shared-types`, and declared
  * here rather than imported so this package keeps its single dependency. The
  * two are checked against each other where they meet, at each service's
  * boundary.

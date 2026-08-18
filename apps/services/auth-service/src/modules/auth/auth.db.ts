@@ -5,7 +5,7 @@
  * live Postgres; production still gets the same `prisma` singleton every other
  * service holds.
  */
-import { prisma } from '@nexora/database';
+import { prisma } from '@betweenus/database';
 
 export const AuthDatabase = 'AUTH_DATABASE';
 

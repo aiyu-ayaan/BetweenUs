@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { PublicUser } from '@nexora/shared-types';
+import type { PublicUser } from '@betweenus/shared-types';
 import { api, session } from '../api';
 import { messageOf } from '../App';
 

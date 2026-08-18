@@ -18,9 +18,9 @@
  * as normal - a part that has gone is a part that does not need removing.
  */
 import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
-import { envNumber } from '@nexora/config';
-import { Logger } from '@nexora/logger';
-import { LocalStorageDriver, getStorage } from '@nexora/storage';
+import { envNumber } from '@betweenus/config';
+import { Logger } from '@betweenus/logger';
+import { LocalStorageDriver, getStorage } from '@betweenus/storage';
 
 const HOUR_MS = 60 * 60 * 1000;
 

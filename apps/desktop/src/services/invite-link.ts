@@ -7,7 +7,7 @@
  * with the answer to "where" attached.
  *
  * The link points at this deployment, because that is the one thing a code
- * cannot carry. Two Nexora deployments can both have an invite `k3m9x2qp` and
+ * cannot carry. Two BetweenUs deployments can both have an invite `k3m9x2qp` and
  * neither is wrong; a link says which.
  *
  * The parsing is pure and self-checked - it takes whatever somebody pasted,
@@ -53,7 +53,7 @@ export function inviteCodeFrom(input: string): string | null {
   return null;
 }
 
-const PENDING_KEY = 'nexora.pendingInvite';
+const PENDING_KEY = 'betweenus.pendingInvite';
 
 /**
  * Takes the invite off the address bar, if this window was opened by one.

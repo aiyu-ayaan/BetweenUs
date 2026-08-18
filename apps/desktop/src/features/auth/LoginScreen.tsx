@@ -1,8 +1,8 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import type { OAuthProviderSummary } from '@nexora/shared-types';
+import type { OAuthProviderSummary } from '@betweenus/shared-types';
 import { rememberedEmail, useAuthStore } from '../../stores/auth';
 import { api } from '../../services/api';
-import { GlobeIcon, NexoraLogoIcon } from '../../components/icons';
+import { GlobeIcon, BetweenUsLogoIcon } from '../../components/icons';
 import { ServerPicker, serverLabel } from './ServerPicker';
 
 export function LoginScreen(): JSX.Element {
@@ -37,14 +37,14 @@ export function LoginScreen(): JSX.Element {
       <div className="w-full max-w-md animate-pop rounded-2xl border border-edge bg-surface-900 p-8 shadow-pop">
         <div className="mb-6 text-center">
           <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl border border-edge bg-accent/15 p-2.5">
-            <NexoraLogoIcon className="h-full w-full text-accent" />
+            <BetweenUsLogoIcon className="h-full w-full text-accent" />
           </div>
           <h1 className="text-2xl font-semibold text-slate-50">
             {mode === 'login' ? 'Welcome back' : 'Create your account'}
           </h1>
           <p className="mt-1 text-sm text-slate-400">
             {mode === 'login'
-              ? 'Sign in to continue to Nexora'
+              ? 'Sign in to continue to BetweenUs'
               : 'Pick a username your teammates will see'}
           </p>
         </div>
@@ -175,7 +175,7 @@ export function LoginScreen(): JSX.Element {
           {mode === 'login' ? 'Need an account? Register' : 'Already registered? Sign in'}
         </button>
 
-        {/* Which deployment this is. Nexora is meant to be self-hosted, so the
+        {/* Which deployment this is. BetweenUs is meant to be self-hosted, so the
             address is worth showing even when nobody wants to change it. */}
         <div className="mt-6 border-t border-edge pt-4">
           <button

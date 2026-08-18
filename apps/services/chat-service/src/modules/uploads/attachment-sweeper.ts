@@ -17,10 +17,10 @@
  * why a delete that finds nothing is not an error.
  */
 import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
-import { envNumber } from '@nexora/config';
-import { prisma } from '@nexora/database';
-import { Logger } from '@nexora/logger';
-import { getStorage } from '@nexora/storage';
+import { envNumber } from '@betweenus/config';
+import { prisma } from '@betweenus/database';
+import { Logger } from '@betweenus/logger';
+import { getStorage } from '@betweenus/storage';
 
 const HOUR_MS = 60 * 60 * 1000;
 

@@ -35,7 +35,7 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import type { Request, Response } from 'express';
-import { prisma, resolveChannelAccess } from '@nexora/database';
+import { prisma, resolveChannelAccess } from '@betweenus/database';
 import {
   CurrentUser,
   JwtAuthGuard,
@@ -44,7 +44,7 @@ import {
   sealSecret,
   verifyAccessToken,
   type AuthenticatedUser,
-} from '@nexora/auth';
+} from '@betweenus/auth';
 import {
   MAX_ATTACHMENT_BYTES,
   MAX_PICTURE_BYTES,
@@ -58,7 +58,7 @@ import {
   type MultipartSession,
   type StoredObject,
   type UploadedPart,
-} from '@nexora/storage';
+} from '@betweenus/storage';
 import {
   AbortMultipartDto,
   CompleteMultipartDto,

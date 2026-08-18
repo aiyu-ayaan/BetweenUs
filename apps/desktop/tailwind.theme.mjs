@@ -12,14 +12,14 @@
  *
  * ## The workbench look
  *
- * Nexora is drawn as floating panels on a dark ground, the way a modern editor
+ * BetweenUs is drawn as floating panels on a dark ground, the way a modern editor
  * is: every region - rail, sidebar, main surface, right-hand panel - is its own
  * rounded card with a hairline edge, and the ground shows through the gutters
  * between them. That is the whole visual idea, and it is deliberately not the
  * flat wall of grey columns a chat app usually is.
  *
  * The old palette was Discord's, hex for hex, down to `#5865f2` and the `gg
- * sans` font stack. None of it is left. The ramp below is Nexora's own: a cool
+ * sans` font stack. None of it is left. The ramp below is BetweenUs's own: a cool
  * near-black ink with an iris accent.
  */
 export const theme = {

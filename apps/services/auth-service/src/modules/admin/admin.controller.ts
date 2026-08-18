@@ -11,14 +11,14 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
-import { CurrentUser, JwtAuthGuard, type AuthenticatedUser } from '@nexora/auth';
+import { CurrentUser, JwtAuthGuard, type AuthenticatedUser } from '@betweenus/auth';
 import type {
   AdminAuditPage,
   AdminOAuthProvider,
   AdminStatus,
   AdminUser,
   AdminUserPage,
-} from '@nexora/shared-types';
+} from '@betweenus/shared-types';
 import { AdminGuard } from './admin.guard';
 import { AdminService } from './admin.service';
 import { AdminOAuthProviderDto, AdminUserUpdateDto } from './dto';

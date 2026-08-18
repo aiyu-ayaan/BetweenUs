@@ -9,11 +9,11 @@
  * which issues a new password (and re-arms the change-on-login flag).
  */
 import { randomBytes } from 'node:crypto';
-import { hashPassword } from '@nexora/auth';
+import { hashPassword } from '@betweenus/auth';
 import { prisma } from '../src/index';
 
-const USERNAME = 'nexoraadmin';
-const EMAIL = 'admin@nexora.local';
+const USERNAME = 'betweenusadmin';
+const EMAIL = 'admin@betweenus.local';
 
 /** Readable but not guessable: 24 chars from an unambiguous alphabet. */
 function generatePassword(): string {
@@ -45,7 +45,7 @@ async function main(): Promise<void> {
         data: {
           email: EMAIL,
           username: USERNAME,
-          displayName: 'Nexora Admin',
+          displayName: 'BetweenUs Admin',
           passwordHash,
           role: 'ADMIN',
           mustChangePassword: true,

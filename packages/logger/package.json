@@ -1,5 +1,5 @@
 {
-  "name": "@nexora/logger",
+  "name": "@betweenus/logger",
   "private": true,
   "version": "0.1.0",
   "main": "dist/index.js",

@@ -1,4 +1,4 @@
-# Nexora MVP
+# BetweenUs MVP
 
 Scope definition for the first runnable version. Everything outside "In scope"
 is deliberately deferred — see `TODO.md` for the ordered backlog.

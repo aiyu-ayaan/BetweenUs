@@ -1,7 +1,7 @@
 /**
  * Self-check for the screen-share encoder settings.
  *
- * Run with `pnpm --filter @nexora/desktop check`. The bitrate ceiling is the
+ * Run with `pnpm --filter @betweenus/desktop check`. The bitrate ceiling is the
  * number that decides whether a share looks like a film or like a fax, and it
  * is arithmetic on a display size that nobody sees until they are watching.
  */

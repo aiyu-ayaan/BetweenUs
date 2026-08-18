@@ -1,5 +1,5 @@
 {
-  "name": "@nexora/admin",
+  "name": "@betweenus/admin",
   "private": true,
   "version": "0.1.0",
   "type": "module",
@@ -10,7 +10,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@nexora/shared-types": "workspace:*",
+    "@betweenus/shared-types": "workspace:*",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },

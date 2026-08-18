@@ -1,7 +1,7 @@
 /**
  * Self-check for the letterbox arithmetic behind pointer and click mapping.
  *
- * Run with `pnpm --filter @nexora/desktop check`. Every named cursor and every
+ * Run with `pnpm --filter @betweenus/desktop check`. Every named cursor and every
  * click handed to somebody else's machine goes through these two functions, so
  * an off-by-a-black-bar here is visible on the far end.
  */

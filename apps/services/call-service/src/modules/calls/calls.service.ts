@@ -12,10 +12,10 @@
  * socket that connects and then refuses.
  */
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import { iceServers } from '@nexora/config';
-import { resolveChannelAccess } from '@nexora/database';
-import { PERMISSIONS } from '@nexora/permissions';
-import type { CallIceResponse } from '@nexora/shared-types';
+import { iceServers } from '@betweenus/config';
+import { resolveChannelAccess } from '@betweenus/database';
+import { PERMISSIONS } from '@betweenus/permissions';
+import type { CallIceResponse } from '@betweenus/shared-types';
 
 @Injectable()
 export class CallsService {

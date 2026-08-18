@@ -19,10 +19,10 @@ import type {
   AuthTokens,
   OAuthProviderSummary,
   PublicUser,
-} from '@nexora/shared-types';
+} from '@betweenus/shared-types';
 
 const API_URL = import.meta.env.VITE_API_URL ?? '';
-const REFRESH_KEY = 'nexora.admin.refreshToken';
+const REFRESH_KEY = 'betweenus.admin.refreshToken';
 
 export class ApiError extends Error {
   constructor(

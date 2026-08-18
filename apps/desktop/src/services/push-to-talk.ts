@@ -8,7 +8,7 @@
  *
  * ## What this is not
  *
- * It listens to the *window*, so it works while Nexora is focused and not while
+ * It listens to the *window*, so it works while BetweenUs is focused and not while
  * it is behind something else. Discord's is global because it installs a
  * low-level keyboard hook; Electron's `globalShortcut` cannot stand in for one,
  * because it delivers a press and never a release - a push-to-talk that opens

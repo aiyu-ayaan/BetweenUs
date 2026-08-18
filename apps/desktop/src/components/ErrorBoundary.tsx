@@ -43,7 +43,7 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, State> {
         role="alert"
         className="flex h-full flex-col items-center justify-center gap-4 bg-surface-950 p-8 text-center"
       >
-        <h1 className="text-lg font-semibold text-slate-100">Nexora hit a bug and stopped</h1>
+        <h1 className="text-lg font-semibold text-slate-100">BetweenUs hit a bug and stopped</h1>
         <p className="max-w-xl break-words font-mono text-sm text-red-300">
           {error.message || String(error)}
         </p>

@@ -33,7 +33,7 @@ export default defineConfig(({ mode }) => {
     // One .env for the whole repo, same as the desktop app.
     envDir: fileURLToPath(new URL('../../', import.meta.url)),
     plugins: [react(), ...(lan ? [basicSsl()] : [])],
-    // Served at the root of the gateway - `https://nexora.example.com/` is the
+    // Served at the root of the gateway - `https://betweenus.example.com/` is the
     // app, `/admin` is the panel - so asset URLs are domain-rooted.
     base: '/',
     // The icon is the same icon; keeping one copy means it cannot drift.
@@ -43,10 +43,10 @@ export default defineConfig(({ mode }) => {
         // The shared packages build to CommonJS for the Node services. Rollup
         // cannot see named exports through that, so the bundle is pointed at
         // the TypeScript source instead - which it can also tree-shake.
-        '@nexora/shared-types': fileURLToPath(
+        '@betweenus/shared-types': fileURLToPath(
           new URL('../../packages/shared-types/src/index.ts', import.meta.url),
         ),
-        '@nexora/permissions': fileURLToPath(
+        '@betweenus/permissions': fileURLToPath(
           new URL('../../packages/permissions/src/index.ts', import.meta.url),
         ),
       },

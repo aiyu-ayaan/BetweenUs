@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Cleartext is permitted because Nexora is self-hosted and a great many
+  Cleartext is permitted because BetweenUs is self-hosted and a great many
   deployments are a box on a LAN reached over plain http - the same addresses
   the desktop client's server picker accepts. Android cannot express "private
   ranges only" here; the domain list is exact hosts or nothing, and a fixed

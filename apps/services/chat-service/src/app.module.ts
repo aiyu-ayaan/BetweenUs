@@ -1,9 +1,9 @@
 import { Module } from '@nestjs/common';
-import { envOr } from '@nexora/config';
-import { EventBus } from '@nexora/events';
-import { pingDatabase } from '@nexora/database';
-import { Logger, createLogger } from '@nexora/logger';
-import { createHealthController } from '@nexora/nest-common';
+import { envOr } from '@betweenus/config';
+import { EventBus } from '@betweenus/events';
+import { pingDatabase } from '@betweenus/database';
+import { Logger, createLogger } from '@betweenus/logger';
+import { createHealthController } from '@betweenus/nest-common';
 import { MessagesController } from './modules/messages/messages.controller';
 import { MessagesService } from './modules/messages/messages.service';
 import { UploadsController } from './modules/uploads/uploads.controller';

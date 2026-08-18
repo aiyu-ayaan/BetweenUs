@@ -1,6 +1,6 @@
-/** Self-check: `pnpm --filter @nexora/desktop check`. Message body encoding. */
+/** Self-check: `pnpm --filter @betweenus/desktop check`. Message body encoding. */
 import assert from 'node:assert/strict';
-import type { MessageAttachment } from '@nexora/shared-types';
+import type { MessageAttachment } from '@betweenus/shared-types';
 import {
   OVERFLOW_CHARS,
   REPLY_PREVIEW_CHARS,
@@ -29,7 +29,7 @@ async function main(): Promise<void> {
   assert.deepEqual(decodeBody('hello'), { text: 'hello', attachments: [] });
 
   // Including text that looks like an encoded body but was merely typed.
-  const impostor = 'nexora-body:1\n{"text":"nope","attachments":[]}';
+  const impostor = 'betweenus-body:1\n{"text":"nope","attachments":[]}';
   assert.deepEqual(decodeBody(impostor), { text: impostor, attachments: [] });
   assert.deepEqual(decodeBody('{"text":"nope"}'), {
     text: '{"text":"nope"}',
@@ -43,8 +43,8 @@ async function main(): Promise<void> {
   assert.deepEqual(decodeBody(encoded), body);
 
   // A body damaged in transit renders as text instead of throwing into the UI.
-  assert.deepEqual(decodeBody('\u0000nexora-body:1\nnot json'), {
-    text: '\u0000nexora-body:1\nnot json',
+  assert.deepEqual(decodeBody('\u0000betweenus-body:1\nnot json'), {
+    text: '\u0000betweenus-body:1\nnot json',
     attachments: [],
   });
 
@@ -59,7 +59,7 @@ async function main(): Promise<void> {
 
   // A quote with no id is dropped rather than rendered as an unclickable block.
   assert.deepEqual(
-    decodeBody('\u0000nexora-body:1\n{"text":"hi","attachments":[],"replyTo":{"author":"Ada"}}'),
+    decodeBody('\u0000betweenus-body:1\n{"text":"hi","attachments":[],"replyTo":{"author":"Ada"}}'),
     { text: 'hi', attachments: [] },
   );
 

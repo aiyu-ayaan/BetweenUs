@@ -7,10 +7,10 @@
  * invitee holds no key, nobody is online to wrap one for them, and every
  * message they try to send comes back "No channel key on this device yet".
  *
- * Run with: pnpm --filter @nexora/desktop check
+ * Run with: pnpm --filter @betweenus/desktop check
  */
 import assert from 'node:assert/strict';
-import type { ChannelKeyEntry, DeviceKey, PublishChannelKeysRequest } from '@nexora/shared-types';
+import type { ChannelKeyEntry, DeviceKey, PublishChannelKeysRequest } from '@betweenus/shared-types';
 import { configureApi } from './api';
 import {
   UNDECRYPTABLE,
@@ -218,7 +218,7 @@ function stubBrowserGlobals(): void {
 async function signIn(userId: string, device = 'device-1'): Promise<void> {
   resetE2ee();
   caller = userId;
-  localStorage.setItem('nexora.deviceId', `${userId}-${device}`);
+  localStorage.setItem('betweenus.deviceId', `${userId}-${device}`);
   await initIdentity(userId);
 }
 
@@ -367,7 +367,7 @@ async function main(): Promise<void> {
   // than quietly re-admitted - then reads nothing written since.
   resetE2ee();
   caller = 'alice';
-  localStorage.setItem('nexora.deviceId', 'alice-phone');
+  localStorage.setItem('betweenus.deviceId', 'alice-phone');
   await assert.rejects(initIdentity('alice'), /DEVICE_REVOKED/);
   assert.equal(
     await decryptForChannel(CHANNEL, afterRevoke),

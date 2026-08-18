@@ -34,7 +34,7 @@ import { TopBar } from './features/shell/TopBar';
 import { VersionNotice } from './components/VersionNotice';
 import { QuickSwitcher } from './features/shell/QuickSwitcher';
 import { useVoiceStore } from './stores/voice';
-import { NexoraLogoIcon } from './components/icons';
+import { BetweenUsLogoIcon } from './components/icons';
 import { ErrorBoundary } from './components/ErrorBoundary';
 
 /**
@@ -80,7 +80,7 @@ function Session(): JSX.Element {
         if (useAuthStore.getState().status !== 'authenticated') {
           // `pnpm dev:duo` hands each test window an identity so two clients can
           // be driven side by side without typing credentials twice.
-          const credentials = await window.nexora?.devLogin();
+          const credentials = await window.betweenus?.devLogin();
           if (credentials) await login(credentials.email, credentials.password);
         }
       } finally {
@@ -124,20 +124,20 @@ function Session(): JSX.Element {
   // When minimized during an active voice call, open a floating PiP overlay.
   // It only shows the other participant (active remote speaker or remote share).
   useEffect(() => {
-    if (!window.nexora?.onWindowMinimize) return;
+    if (!window.betweenus?.onWindowMinimize) return;
 
-    const unsubMinimize = window.nexora.onWindowMinimize(() => {
+    const unsubMinimize = window.betweenus.onWindowMinimize(() => {
       const voice = useVoiceStore.getState();
       if (voice.status === 'connected') {
-        void window.nexora?.openPip();
+        void window.betweenus?.openPip();
       }
     });
 
-    const unsubRestore = window.nexora.onWindowRestore?.(() => {
-      void window.nexora?.closePip();
+    const unsubRestore = window.betweenus.onWindowRestore?.(() => {
+      void window.betweenus?.closePip();
     });
 
-    const unsubAction = window.nexora.onPipAction?.((action) => {
+    const unsubAction = window.betweenus.onPipAction?.((action) => {
       if (action.type === 'toggleMic') {
         void useVoiceStore.getState().toggleMic();
       } else if (action.type === 'toggleCamera') {
@@ -157,7 +157,7 @@ function Session(): JSX.Element {
   // ─── PiP State & Video Streamer ──────────────────────────────────────────
   // Periodically synchronizes remote speaker state and video frames with the PiP overlay.
   useEffect(() => {
-    if (!window.nexora?.sendPipState) return;
+    if (!window.betweenus?.sendPipState) return;
 
     let offscreenCanvas: HTMLCanvasElement | null = null;
     let offscreenCtx: CanvasRenderingContext2D | null = null;
@@ -202,7 +202,7 @@ function Session(): JSX.Element {
           }
         : null;
 
-      window.nexora?.sendPipState?.({
+      window.betweenus?.sendPipState?.({
         channelName: voice.channelName ?? 'Voice Channel',
         activeSpeaker,
         totalParticipants: voice.tiles.length,
@@ -241,7 +241,7 @@ function Session(): JSX.Element {
             try {
               offscreenCtx.drawImage(videoToCapture, 0, 0, targetW, targetH);
               const frameData = offscreenCanvas.toDataURL('image/jpeg', 0.7);
-              window.nexora?.sendPipFrame?.(frameData);
+              window.betweenus?.sendPipFrame?.(frameData);
             } catch {
               // Frame capture error ignored
             }
@@ -294,9 +294,9 @@ function Session(): JSX.Element {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-4 bg-ground" aria-busy="true">
         <div className="flex h-14 w-14 animate-pulse items-center justify-center rounded-2xl border border-edge bg-accent/15 p-3">
-          <NexoraLogoIcon className="h-full w-full text-accent" />
+          <BetweenUsLogoIcon className="h-full w-full text-accent" />
         </div>
-        <p className="animate-pulse text-sm font-medium tracking-[0.2em] text-slate-500">NEXORA</p>
+        <p className="animate-pulse text-sm font-medium tracking-[0.2em] text-slate-500">BETWEENUS</p>
       </div>
     );
   }

@@ -1,4 +1,4 @@
-/** Self-check: `pnpm --filter @nexora/storage check`. Driver choice, traversal, round-trip. */
+/** Self-check: `pnpm --filter @betweenus/storage check`. Driver choice, traversal, round-trip. */
 import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { utimes } from 'node:fs/promises';
@@ -29,7 +29,7 @@ async function main(): Promise<void> {
 
   // A partially filled S3 config is still not configured - no half-broken S3.
   process.env.S3_ENDPOINT = 'http://localhost:9000';
-  process.env.S3_BUCKET = 'nexora';
+  process.env.S3_BUCKET = 'betweenus';
   assert.equal(isS3Configured(), false);
   setStorage(null);
   assert.equal(getStorage().name, 'local');
@@ -66,7 +66,7 @@ async function main(): Promise<void> {
   assert.equal(key.includes('holiday'), false);
 
   // --- Local round-trip.
-  const root = mkdtempSync(join(tmpdir(), 'nexora-storage-'));
+  const root = mkdtempSync(join(tmpdir(), 'betweenus-storage-'));
   try {
     const local = new LocalStorageDriver(root, '/api/v1/uploads');
     const stored = await local.put(key, Buffer.from('hello world'), 'image/png');

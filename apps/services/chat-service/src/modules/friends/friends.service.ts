@@ -7,14 +7,14 @@
  * a channel and chat-service already owns everything downstream of a channel id.
  */
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import { friendIdsOf, prisma } from '@nexora/database';
-import { EVENTS, EventBus } from '@nexora/events';
+import { friendIdsOf, prisma } from '@betweenus/database';
+import { EVENTS, EventBus } from '@betweenus/events';
 import type {
   DirectChannel,
   Friend,
   FriendshipStatus,
   UserSummary,
-} from '@nexora/shared-types';
+} from '@betweenus/shared-types';
 
 const SEARCH_LIMIT = 20;
 

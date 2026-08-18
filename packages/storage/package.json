@@ -1,5 +1,5 @@
 {
-  "name": "@nexora/storage",
+  "name": "@betweenus/storage",
   "private": true,
   "version": "0.1.0",
   "main": "dist/index.js",
@@ -10,7 +10,7 @@
     "check": "tsc -p tsconfig.json && node dist/check.js"
   },
   "dependencies": {
-    "@nexora/config": "workspace:*"
+    "@betweenus/config": "workspace:*"
   },
   "optionalDependencies": {
     "@aws-sdk/client-s3": "^3.632.0"

@@ -1,4 +1,4 @@
-/** Self-check: `pnpm --filter @nexora/desktop check`. Wrap/unwrap + message round-trip. */
+/** Self-check: `pnpm --filter @betweenus/desktop check`. Wrap/unwrap + message round-trip. */
 import assert from 'node:assert/strict';
 import {
   decryptMessage,

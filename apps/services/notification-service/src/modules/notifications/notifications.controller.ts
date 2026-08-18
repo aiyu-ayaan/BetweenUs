@@ -1,6 +1,6 @@
 import { Body, Controller, Get, Patch, Post, UseGuards } from '@nestjs/common';
-import { CurrentUser, JwtAuthGuard, type AuthenticatedUser } from '@nexora/auth';
-import type { ChannelUnread, NotificationPreferences } from '@nexora/shared-types';
+import { CurrentUser, JwtAuthGuard, type AuthenticatedUser } from '@betweenus/auth';
+import type { ChannelUnread, NotificationPreferences } from '@betweenus/shared-types';
 import { NotificationsService } from './notifications.service';
 import { MarkReadDto, UpdatePreferencesDto } from './dto';
 

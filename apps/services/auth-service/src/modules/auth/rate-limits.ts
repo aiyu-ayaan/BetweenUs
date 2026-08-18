@@ -5,7 +5,7 @@
  * numbers instead of a copy of them: a limit that drifts from the one under
  * test is a limit nobody is testing.
  */
-import type { RateLimitOptions } from '@nexora/nest-common';
+import type { RateLimitOptions } from '@betweenus/nest-common';
 
 /**
  * Login and register share one budget per client address: a credential-stuffing

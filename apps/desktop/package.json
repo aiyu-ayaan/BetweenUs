@@ -1,9 +1,9 @@
 {
-  "name": "@nexora/desktop",
+  "name": "@betweenus/desktop",
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "Nexora desktop client - chat, voice, screen share and remote desktop.",
+  "description": "BetweenUs desktop client - chat, voice, screen share and remote desktop.",
   "author": "aiyu-ayaan <ayaan35200@gmail.com>",
   "main": "dist-electron/main.js",
   "scripts": {
@@ -18,8 +18,8 @@
     "check": "tsx src/services/api.check.ts && tsx src/services/e2ee-crypto.check.ts && tsx src/services/e2ee.check.ts && tsx src/services/message-body.check.ts && tsx src/services/endpoint.check.ts && tsx src/features/voice/stage-geometry.check.ts && tsx src/services/share-quality.check.ts && tsx src/services/voice-quality.check.ts && tsx src/services/audio-devices.check.ts && tsx src/services/call-tones.check.ts && tsx src/services/reactions.check.ts && tsx src/services/invite-link.check.ts && tsx src/features/chat/emoji-names.check.ts && tsx src/features/chat/follow.check.ts && tsx src/services/server-emoji.check.ts && tsx src/services/mesh.check.ts && tsx src/services/idle.check.ts && tsx src/services/mentions.check.ts && tsx src/stores/peerAudio.check.ts && tsx src/services/push-to-talk.check.ts && tsx src/services/call-stats.check.ts && tsx electron/modifiers.check.ts && tsx src/services/media-presence.check.ts"
   },
   "dependencies": {
-    "@nexora/permissions": "workspace:*",
-    "@nexora/shared-types": "workspace:*",
+    "@betweenus/permissions": "workspace:*",
+    "@betweenus/shared-types": "workspace:*",
     "libheif-js": "^1.19.8",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",

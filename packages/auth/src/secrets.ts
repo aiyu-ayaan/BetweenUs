@@ -18,7 +18,7 @@ function key(): Buffer {
   const material = process.env.SETTINGS_SECRET ?? process.env.JWT_SECRET;
   if (!material) throw new Error('SETTINGS_SECRET or JWT_SECRET must be set to seal secrets');
   // A hash, not the raw value: the key has to be exactly 32 bytes.
-  return createHash('sha256').update(`nexora-settings:${material}`).digest();
+  return createHash('sha256').update(`betweenus-settings:${material}`).digest();
 }
 
 export function sealSecret(plain: string): string {

@@ -14,10 +14,10 @@
 import { BadRequestException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
 import Redis from 'ioredis';
-import { envOr } from '@nexora/config';
-import { prisma } from '@nexora/database';
-import { EVENTS, EventBus } from '@nexora/events';
-import { APP_REDIRECT_SCHEME, type AuthResponse, type OAuthProviderSummary } from '@nexora/shared-types';
+import { envOr } from '@betweenus/config';
+import { prisma } from '@betweenus/database';
+import { EVENTS, EventBus } from '@betweenus/events';
+import { APP_REDIRECT_SCHEME, type AuthResponse, type OAuthProviderSummary } from '@betweenus/shared-types';
 import { AuthService, toPublicUser } from '../auth/auth.service';
 import {
   PROVIDERS,
@@ -215,7 +215,7 @@ export class OAuthService {
     // Only a verified address may find an account. An unverified one is a
     // string the person signing in chose, so linking on it would mean anybody
     // who can type a victim's email into a fresh Google account walks into the
-    // Nexora account behind it, password and all.
+    // BetweenUs account behind it, password and all.
     if (!user && profile.email && profile.emailVerified) {
       // Same person, first time through this provider: link rather than
       // creating a duplicate account for an address that already exists.
@@ -238,7 +238,7 @@ export class OAuthService {
       // it would sit there waiting for the person who really owns it to sign
       // in and be linked to it by the branch above.
       const verified = profile.emailVerified ? profile.email?.toLowerCase() : undefined;
-      const email = verified ?? `${provider}-${profile.id}@users.noreply.nexora`;
+      const email = verified ?? `${provider}-${profile.id}@users.noreply.betweenus`;
       user = await prisma.user.create({
         data: {
           email,
@@ -296,8 +296,8 @@ const codeKey = (code: string): string => `oauth:code:${code}`;
  * origins.
  *
  * It used to be `redirectUri.startsWith(origin)`, and a prefix is not an
- * origin: an allow list naming `https://nexora.example` also matched
- * `https://nexora.example.attacker.test/`, which is a different site that would
+ * origin: an allow list naming `https://betweenus.example` also matched
+ * `https://betweenus.example.attacker.test/`, which is a different site that would
  * have been handed the code. Origins are parsed and compared as origins now,
  * with a path prefix allowed only once the origin already matches.
  */
@@ -352,7 +352,7 @@ export function matchesChallenge(verifier: string | undefined, challenge: string
  *
  * A phone has no loopback server, so the sign-in returns through a URL only the
  * app is registered for. Android will not promise that registration is
- * exclusive - a second app can claim `nexora://` - so a private scheme is
+ * exclusive - a second app can claim `betweenus://` - so a private scheme is
  * accepted only for a flow that also carries a challenge. The code that arrives
  * at a hijacked redirect is then worth nothing without the secret behind it,
  * which never leaves the app that started the sign-in.

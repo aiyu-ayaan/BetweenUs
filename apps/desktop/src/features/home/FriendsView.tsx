@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { Friend } from '@nexora/shared-types';
+import type { Friend } from '@betweenus/shared-types';
 import { useFriendsStore } from '../../stores/friends';
 import { usePresenceStore } from '../../stores/presence';
 import { Avatar } from '../../components/Avatar';
@@ -191,7 +191,7 @@ function AddFriend(): JSX.Element {
     <div className="flex-1 overflow-y-auto px-8 py-6">
       <h2 className="text-base font-bold uppercase tracking-wide text-slate-100">Add friend</h2>
       <p className="mt-1 text-sm text-slate-400">
-        You can add a friend with their Nexora username.
+        You can add a friend with their BetweenUs username.
       </p>
 
       <div className="mt-4 flex items-center gap-2 rounded-lg border border-edge bg-surface-950 px-4 py-2.5 transition-colors focus-within:border-accent/60">

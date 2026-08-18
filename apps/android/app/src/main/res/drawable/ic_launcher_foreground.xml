@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  The launcher icon's foreground layer: the Nexora mark, in white.
+  The launcher icon's foreground layer: the BetweenUs mark, in white.
 
-  The path data is the shared one - `ui-common/res/drawable/ic_nexora_logo.xml`,
-  which is itself the same geometry as `NexoraLogoIcon` in the desktop client.
+  The path data is the shared one - `ui-common/res/drawable/ic_betweenus_logo.xml`,
+  which is itself the same geometry as `BetweenUsLogoIcon` in the desktop client.
   Copied rather than redrawn, so the three clients cannot drift into three
   slightly different marks.
 

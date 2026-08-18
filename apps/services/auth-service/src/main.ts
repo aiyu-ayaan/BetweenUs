@@ -1,5 +1,5 @@
 import 'reflect-metadata';
-import { bootstrapService } from '@nexora/nest-common';
+import { bootstrapService } from '@betweenus/nest-common';
 import { AppModule } from './app.module';
 
 void bootstrapService({

@@ -9,12 +9,12 @@
 import { Injectable, OnModuleDestroy } from '@nestjs/common';
 import type { Server as HttpServer } from 'node:http';
 import { WebSocket, WebSocketServer } from 'ws';
-import { EVENTS, EventBus } from '@nexora/events';
-import { resolveChannelAccess } from '@nexora/database';
-import { PERMISSIONS } from '@nexora/permissions';
-import { Logger } from '@nexora/logger';
-import { CONTROL_MAX_PAYLOAD, authenticateHandshake } from '@nexora/websocket';
-import type { ClientPresenceEvent, ServerPresenceEvent } from '@nexora/shared-types';
+import { EVENTS, EventBus } from '@betweenus/events';
+import { resolveChannelAccess } from '@betweenus/database';
+import { PERMISSIONS } from '@betweenus/permissions';
+import { Logger } from '@betweenus/logger';
+import { CONTROL_MAX_PAYLOAD, authenticateHandshake } from '@betweenus/websocket';
+import type { ClientPresenceEvent, ServerPresenceEvent } from '@betweenus/shared-types';
 import { PresenceStore, isActiveStatus } from './presence.store';
 import { audienceOfChannel, audienceOfUser } from './audience';
 

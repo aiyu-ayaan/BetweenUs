@@ -16,7 +16,7 @@
  */
 import { create } from 'zustand';
 
-const STORAGE_KEY = 'nexora.peer-audio';
+const STORAGE_KEY = 'betweenus.peer-audio';
 
 export interface PeerAudio {
   /** 0 to 1, where 1 is however loud they arrived. */

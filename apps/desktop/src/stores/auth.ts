@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { PublicUser } from '@nexora/shared-types';
+import type { PublicUser } from '@betweenus/shared-types';
 import { ApiError, api, apiBaseUrl, configureApi } from '../services/api';
 import { chatSocket, presenceSocket } from '../services/socket';
 import { initIdentity, resetE2ee, type BackupSecret } from '../services/e2ee';
@@ -11,14 +11,14 @@ function connectSockets(accessToken: string): void {
   presenceSocket.connect(accessToken);
 }
 
-const STORAGE_KEY = 'nexora.refreshToken';
+const STORAGE_KEY = 'betweenus.refreshToken';
 /**
  * The address of the last account signed in on this machine, so the form comes
  * back filled in. Only the address: a password belongs in the OS keychain or
  * nowhere, and the refresh token above is what actually keeps a session alive
  * across restarts.
  */
-const EMAIL_KEY = 'nexora.lastEmail';
+const EMAIL_KEY = 'betweenus.lastEmail';
 
 /** Prefills the login form. Empty on a machine nobody has signed in on. */
 export function rememberedEmail(): string {
@@ -71,7 +71,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
    * waits for the one-time code and trades it for a session.
    */
   loginWithProvider: async (provider) => {
-    const bridge = window.nexora;
+    const bridge = window.betweenus;
     if (!bridge) {
       // In a tab the page itself is the redirect target: leave for the provider
       // and come back with `?code=`, which `restore` trades for a session. The

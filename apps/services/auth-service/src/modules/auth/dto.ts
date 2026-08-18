@@ -8,14 +8,14 @@ import {
   MinLength,
   ValidateIf,
 } from 'class-validator';
-import { UPLOADED_PICTURE_URL } from '@nexora/shared-types';
+import { UPLOADED_PICTURE_URL } from '@betweenus/shared-types';
 import type {
   ChangePasswordRequest,
   LoginRequest,
   RefreshRequest,
   RegisterRequest,
   UpdateAccountRequest,
-} from '@nexora/shared-types';
+} from '@betweenus/shared-types';
 
 export class RegisterDto implements RegisterRequest {
   @IsEmail()

@@ -1,4 +1,4 @@
-# Nexora — the current track
+# BetweenUs — the current track
 
 One ordered list of the work accepted for this pass, kept apart from `TODO.md`
 so that document can go back to being what it is: the record of how each phase
@@ -274,7 +274,7 @@ Fixed in the same pass:
 
 Infrastructure:
 
-- [x] **One data path for a deployment.** `pnpm data:path /srv/x/nexora` creates
+- [x] **One data path for a deployment.** `pnpm data:path /srv/x/betweenus` creates
       `data/postgres`, `data/redis`, `data/media` (with `pictures/` and
       `attachments/`) and `backup/`, chowns the uploads tree to the uid the
       services run as, and writes the four bind paths into `.env`. Compose
@@ -366,7 +366,7 @@ blocked by anything outside this document.
       backend each behind the same three-function interface.
 - [ ] **`REMOTE_FILE_TRANSFER` and `REMOTE_AUDIO`.** Both exist in the
       vocabulary and do nothing.
-- [ ] **The headless `remote-agent`.** Still a scaffold. A server has no Nexora
+- [ ] **The headless `remote-agent`.** Still a scaffold. A server has no BetweenUs
       window to run the agent inside, which is what it is for.
 - [ ] **Decide whether the shared UI moves to `packages/ui`.** Worth a rename
       only if a third client appears; today it would change nothing else.

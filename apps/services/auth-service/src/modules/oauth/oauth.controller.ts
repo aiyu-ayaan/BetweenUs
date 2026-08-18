@@ -12,13 +12,13 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import type { Response } from 'express';
-import { rateLimit } from '@nexora/nest-common';
+import { rateLimit } from '@betweenus/nest-common';
 import {
   API_CONTRACT_VERSION,
   type AuthResponse,
   type OAuthProviderSummary,
   type ServerVersion,
-} from '@nexora/shared-types';
+} from '@betweenus/shared-types';
 import { isProviderName } from '../admin/oauth-providers';
 import { OAuthExchangeDto } from './dto';
 import { OAuthService } from './oauth.service';
@@ -43,7 +43,7 @@ export class OAuthController {
   version(): ServerVersion {
     return {
       contract: API_CONTRACT_VERSION,
-      release: process.env.NEXORA_RELEASE ?? 'dev',
+      release: process.env.BETWEENUS_RELEASE ?? 'dev',
     };
   }
 

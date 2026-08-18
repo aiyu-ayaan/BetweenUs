@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import type { OAuthProviderSummary, PublicUser } from '@nexora/shared-types';
+import type { OAuthProviderSummary, PublicUser } from '@betweenus/shared-types';
 import { api } from '../api';
 import { adminOnly, messageOf } from '../App';
 
@@ -48,7 +48,7 @@ export function LoginScreen({
   return (
     <div className="grid h-full place-items-center px-4">
       <form onSubmit={submit} className="w-full max-w-sm rounded-xl bg-surface-800 p-8 shadow-2xl" noValidate>
-        <h1 className="mb-1 text-2xl font-semibold text-slate-50">Nexora Admin</h1>
+        <h1 className="mb-1 text-2xl font-semibold text-slate-50">BetweenUs Admin</h1>
         <p className="mb-6 text-sm text-slate-400">Sign in with your administrator account.</p>
 
         <label htmlFor="identifier" className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-400">
@@ -61,7 +61,7 @@ export function LoginScreen({
           value={identifier}
           onChange={(event) => setIdentifier(event.target.value)}
           className="mb-4 w-full rounded-md border border-surface-700 bg-surface-900 px-3 py-2 text-slate-100 placeholder-slate-500 focus:border-accent"
-          placeholder="nexoraadmin"
+          placeholder="betweenusadmin"
         />
 
         <label htmlFor="password" className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-400">

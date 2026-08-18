@@ -7,8 +7,8 @@
  * next to handing someone the panel after a demotion.
  */
 import { CanActivate, ExecutionContext, ForbiddenException, Injectable } from '@nestjs/common';
-import { prisma } from '@nexora/database';
-import type { AuthenticatedUser } from '@nexora/auth';
+import { prisma } from '@betweenus/database';
+import type { AuthenticatedUser } from '@betweenus/auth';
 
 @Injectable()
 export class AdminGuard implements CanActivate {

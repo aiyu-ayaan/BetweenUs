@@ -22,7 +22,7 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "Nexora"
+rootProject.name = "BetweenUs"
 include(":app")
 include(":core")
 include(":ui-common")

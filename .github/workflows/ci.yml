@@ -46,7 +46,7 @@ jobs:
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: nexora
+          POSTGRES_DB: betweenus
         ports: ['5432:5432']
         options: >-
           --health-cmd "pg_isready -U postgres"
@@ -62,7 +62,7 @@ jobs:
           --health-timeout 5s
           --health-retries 10
     env:
-      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/nexora?schema=public
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/betweenus?schema=public
       REDIS_URL: redis://127.0.0.1:6379
       LOCAL_STORAGE_PATH: ./storage-data
       LOCAL_STORAGE_PUBLIC_PREFIX: /api/v1/uploads
@@ -74,7 +74,7 @@ jobs:
           node-version: 20
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter @nexora/database run migrate:deploy
+      - run: pnpm --filter @betweenus/database run migrate:deploy
       - run: pnpm build
 
       - name: Start services

@@ -6,7 +6,7 @@
  * other, and one that finds too much - the joining socket itself, or another
  * person on the same channel - hangs up on somebody who never joined anything.
  *
- * Run with `pnpm --filter @nexora/call-service check`.
+ * Run with `pnpm --filter @betweenus/call-service check`.
  */
 import assert from 'node:assert/strict';
 import { otherDevicesInCall } from './devices';

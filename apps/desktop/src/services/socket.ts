@@ -3,7 +3,7 @@ import type {
   ClientPresenceEvent,
   ServerChatEvent,
   ServerPresenceEvent,
-} from '@nexora/shared-types';
+} from '@betweenus/shared-types';
 
 import { wsUrl } from './endpoint';
 

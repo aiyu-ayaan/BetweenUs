@@ -8,7 +8,7 @@
  * picture twice should not decrypt it twice.
  */
 import { useEffect, useRef, useState } from 'react';
-import type { MessageAttachment } from '@nexora/shared-types';
+import type { MessageAttachment } from '@betweenus/shared-types';
 import {
   formatBytes,
   openAttachment,

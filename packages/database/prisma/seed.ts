@@ -3,18 +3,18 @@
  * Run with `pnpm db:seed`. Idempotent - safe to run repeatedly.
  */
 import { PrismaClient } from '@prisma/client';
-import { hashPassword } from '@nexora/auth';
+import { hashPassword } from '@betweenus/auth';
 
 const prisma = new PrismaClient();
 
 async function main(): Promise<void> {
-  const passwordHash = await hashPassword('nexora123');
+  const passwordHash = await hashPassword('betweenus123');
 
   const user = await prisma.user.upsert({
-    where: { email: 'demo@nexora.local' },
+    where: { email: 'demo@betweenus.local' },
     update: {},
     create: {
-      email: 'demo@nexora.local',
+      email: 'demo@betweenus.local',
       username: 'demo',
       displayName: 'Demo User',
       passwordHash,
@@ -40,7 +40,7 @@ async function main(): Promise<void> {
     });
   }
 
-  console.log('Seeded demo@nexora.local / nexora123');
+  console.log('Seeded demo@betweenus.local / betweenus123');
 }
 
 main()

@@ -1,7 +1,7 @@
 import { randomUUID, createHash } from 'node:crypto';
 import jwt, { type SignOptions, type VerifyOptions } from 'jsonwebtoken';
-import { envOr, isProduction, requireEnv } from '@nexora/config';
-import type { JwtAccessPayload, JwtRefreshPayload, PublicUser } from '@nexora/shared-types';
+import { envOr, isProduction, requireEnv } from '@betweenus/config';
+import type { JwtAccessPayload, JwtRefreshPayload, PublicUser } from '@betweenus/shared-types';
 
 /**
  * The one algorithm this deployment signs with, named on the way in as well as
@@ -30,7 +30,7 @@ const PLACEHOLDER_SECRETS = new Set([
   'changeme',
   'secret',
   'password',
-  'nexora',
+  'betweenus',
 ]);
 
 /** Below this a secret is short enough to be worth attacking offline. */

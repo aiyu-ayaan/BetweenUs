@@ -20,7 +20,7 @@ importers:
 
   apps/admin:
     dependencies:
-      '@nexora/shared-types':
+      '@betweenus/shared-types':
         specifier: workspace:*
         version: link:../../packages/shared-types
       react:
@@ -60,10 +60,10 @@ importers:
 
   apps/desktop:
     dependencies:
-      '@nexora/permissions':
+      '@betweenus/permissions':
         specifier: workspace:*
         version: link:../../packages/permissions
-      '@nexora/shared-types':
+      '@betweenus/shared-types':
         specifier: workspace:*
         version: link:../../packages/shared-types
       libheif-js:
@@ -138,25 +138,25 @@ importers:
       '@nestjs/platform-express':
         specifier: ^10.4.1
         version: 10.4.22(@nestjs/common@10.4.22(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@10.4.22)
-      '@nexora/auth':
+      '@betweenus/auth':
         specifier: workspace:*
         version: link:../../../packages/auth
-      '@nexora/config':
+      '@betweenus/config':
         specifier: workspace:*
         version: link:../../../packages/config
-      '@nexora/database':
+      '@betweenus/database':
         specifier: workspace:*
         version: link:../../../packages/database
-      '@nexora/events':
+      '@betweenus/events':
         specifier: workspace:*
         version: link:../../../packages/events
-      '@nexora/logger':
+      '@betweenus/logger':
         specifier: workspace:*
         version: link:../../../packages/logger
-      '@nexora/nest-common':
+      '@betweenus/nest-common':
         specifier: workspace:*
         version: link:../../../packages/nest-common
-      '@nexora/shared-types':
+      '@betweenus/shared-types':
         specifier: workspace:*
         version: link:../../../packages/shared-types
       class-transformer:
@@ -202,31 +202,31 @@ importers:
       '@nestjs/platform-express':
         specifier: ^10.4.1
         version: 10.4.22(@nestjs/common@10.4.22(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@10.4.22)
-      '@nexora/auth':
+      '@betweenus/auth':
         specifier: workspace:*
         version: link:../../../packages/auth
-      '@nexora/config':
+      '@betweenus/config':
         specifier: workspace:*
         version: link:../../../packages/config
-      '@nexora/database':
+      '@betweenus/database':
         specifier: workspace:*
         version: link:../../../packages/database
-      '@nexora/events':
+      '@betweenus/events':
         specifier: workspace:*
         version: link:../../../packages/events
-      '@nexora/logger':
+      '@betweenus/logger':
         specifier: workspace:*
         version: link:../../../packages/logger
-      '@nexora/nest-common':
+      '@betweenus/nest-common':
         specifier: workspace:*
         version: link:../../../packages/nest-common
-      '@nexora/permissions':
+      '@betweenus/permissions':
         specifier: workspace:*
         version: link:../../../packages/permissions
-      '@nexora/shared-types':
+      '@betweenus/shared-types':
         specifier: workspace:*
         version: link:../../../packages/shared-types
-      '@nexora/websocket':
+      '@betweenus/websocket':
         specifier: workspace:*
         version: link:../../../packages/websocket
       class-transformer:
@@ -278,34 +278,34 @@ importers:
       '@nestjs/platform-express':
         specifier: ^10.4.1
         version: 10.4.22(@nestjs/common@10.4.22(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@10.4.22)
-      '@nexora/auth':
+      '@betweenus/auth':
         specifier: workspace:*
         version: link:../../../packages/auth
-      '@nexora/config':
+      '@betweenus/config':
         specifier: workspace:*
         version: link:../../../packages/config
-      '@nexora/database':
+      '@betweenus/database':
         specifier: workspace:*
         version: link:../../../packages/database
-      '@nexora/events':
+      '@betweenus/events':
         specifier: workspace:*
         version: link:../../../packages/events
-      '@nexora/logger':
+      '@betweenus/logger':
         specifier: workspace:*
         version: link:../../../packages/logger
-      '@nexora/nest-common':
+      '@betweenus/nest-common':
         specifier: workspace:*
         version: link:../../../packages/nest-common
-      '@nexora/permissions':
+      '@betweenus/permissions':
         specifier: workspace:*
         version: link:../../../packages/permissions
-      '@nexora/shared-types':
+      '@betweenus/shared-types':
         specifier: workspace:*
         version: link:../../../packages/shared-types
-      '@nexora/storage':
+      '@betweenus/storage':
         specifier: workspace:*
         version: link:../../../packages/storage
-      '@nexora/websocket':
+      '@betweenus/websocket':
         specifier: workspace:*
         version: link:../../../packages/websocket
       class-transformer:
@@ -363,25 +363,25 @@ importers:
       '@nestjs/platform-express':
         specifier: ^10.4.1
         version: 10.4.22(@nestjs/common@10.4.22(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@10.4.22)
-      '@nexora/auth':
+      '@betweenus/auth':
         specifier: workspace:*
         version: link:../../../packages/auth
-      '@nexora/config':
+      '@betweenus/config':
         specifier: workspace:*
         version: link:../../../packages/config
-      '@nexora/database':
+      '@betweenus/database':
         specifier: workspace:*
         version: link:../../../packages/database
-      '@nexora/logger':
+      '@betweenus/logger':
         specifier: workspace:*
         version: link:../../../packages/logger
-      '@nexora/nest-common':
+      '@betweenus/nest-common':
         specifier: workspace:*
         version: link:../../../packages/nest-common
-      '@nexora/permissions':
+      '@betweenus/permissions':
         specifier: workspace:*
         version: link:../../../packages/permissions
-      '@nexora/shared-types':
+      '@betweenus/shared-types':
         specifier: workspace:*
         version: link:../../../packages/shared-types
       class-transformer:
@@ -424,31 +424,31 @@ importers:
       '@nestjs/platform-express':
         specifier: ^10.4.1
         version: 10.4.22(@nestjs/common@10.4.22(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@10.4.22)
-      '@nexora/auth':
+      '@betweenus/auth':
         specifier: workspace:*
         version: link:../../../packages/auth
-      '@nexora/config':
+      '@betweenus/config':
         specifier: workspace:*
         version: link:../../../packages/config
-      '@nexora/database':
+      '@betweenus/database':
         specifier: workspace:*
         version: link:../../../packages/database
-      '@nexora/events':
+      '@betweenus/events':
         specifier: workspace:*
         version: link:../../../packages/events
-      '@nexora/logger':
+      '@betweenus/logger':
         specifier: workspace:*
         version: link:../../../packages/logger
-      '@nexora/nest-common':
+      '@betweenus/nest-common':
         specifier: workspace:*
         version: link:../../../packages/nest-common
-      '@nexora/permissions':
+      '@betweenus/permissions':
         specifier: workspace:*
         version: link:../../../packages/permissions
-      '@nexora/shared-types':
+      '@betweenus/shared-types':
         specifier: workspace:*
         version: link:../../../packages/shared-types
-      '@nexora/websocket':
+      '@betweenus/websocket':
         specifier: workspace:*
         version: link:../../../packages/websocket
       ioredis:
@@ -496,28 +496,28 @@ importers:
       '@nestjs/platform-express':
         specifier: ^10.4.1
         version: 10.4.22(@nestjs/common@10.4.22(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@10.4.22)
-      '@nexora/auth':
+      '@betweenus/auth':
         specifier: workspace:*
         version: link:../../../packages/auth
-      '@nexora/config':
+      '@betweenus/config':
         specifier: workspace:*
         version: link:../../../packages/config
-      '@nexora/database':
+      '@betweenus/database':
         specifier: workspace:*
         version: link:../../../packages/database
-      '@nexora/logger':
+      '@betweenus/logger':
         specifier: workspace:*
         version: link:../../../packages/logger
-      '@nexora/nest-common':
+      '@betweenus/nest-common':
         specifier: workspace:*
         version: link:../../../packages/nest-common
-      '@nexora/permissions':
+      '@betweenus/permissions':
         specifier: workspace:*
         version: link:../../../packages/permissions
-      '@nexora/shared-types':
+      '@betweenus/shared-types':
         specifier: workspace:*
         version: link:../../../packages/shared-types
-      '@nexora/websocket':
+      '@betweenus/websocket':
         specifier: workspace:*
         version: link:../../../packages/websocket
       class-transformer:
@@ -569,28 +569,28 @@ importers:
       '@nestjs/platform-express':
         specifier: ^10.4.1
         version: 10.4.22(@nestjs/common@10.4.22(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@10.4.22)
-      '@nexora/auth':
+      '@betweenus/auth':
         specifier: workspace:*
         version: link:../../../packages/auth
-      '@nexora/config':
+      '@betweenus/config':
         specifier: workspace:*
         version: link:../../../packages/config
-      '@nexora/database':
+      '@betweenus/database':
         specifier: workspace:*
         version: link:../../../packages/database
-      '@nexora/events':
+      '@betweenus/events':
         specifier: workspace:*
         version: link:../../../packages/events
-      '@nexora/logger':
+      '@betweenus/logger':
         specifier: workspace:*
         version: link:../../../packages/logger
-      '@nexora/nest-common':
+      '@betweenus/nest-common':
         specifier: workspace:*
         version: link:../../../packages/nest-common
-      '@nexora/permissions':
+      '@betweenus/permissions':
         specifier: workspace:*
         version: link:../../../packages/permissions
-      '@nexora/shared-types':
+      '@betweenus/shared-types':
         specifier: workspace:*
         version: link:../../../packages/shared-types
       class-transformer:
@@ -626,10 +626,10 @@ importers:
 
   apps/web:
     dependencies:
-      '@nexora/permissions':
+      '@betweenus/permissions':
         specifier: workspace:*
         version: link:../../packages/permissions
-      '@nexora/shared-types':
+      '@betweenus/shared-types':
         specifier: workspace:*
         version: link:../../packages/shared-types
       libheif-js:
@@ -681,10 +681,10 @@ importers:
 
   packages/auth:
     dependencies:
-      '@nexora/config':
+      '@betweenus/config':
         specifier: workspace:*
         version: link:../config
-      '@nexora/shared-types':
+      '@betweenus/shared-types':
         specifier: workspace:*
         version: link:../shared-types
       bcryptjs:
@@ -728,20 +728,20 @@ importers:
 
   packages/database:
     dependencies:
-      '@nexora/config':
+      '@betweenus/config':
         specifier: workspace:*
         version: link:../config
-      '@nexora/permissions':
+      '@betweenus/permissions':
         specifier: workspace:*
         version: link:../permissions
-      '@nexora/shared-types':
+      '@betweenus/shared-types':
         specifier: workspace:*
         version: link:../shared-types
       '@prisma/client':
         specifier: ^5.18.0
         version: 5.22.0(prisma@5.22.0)
     devDependencies:
-      '@nexora/auth':
+      '@betweenus/auth':
         specifier: workspace:*
         version: link:../auth
       '@types/node':
@@ -762,7 +762,7 @@ importers:
 
   packages/events:
     dependencies:
-      '@nexora/shared-types':
+      '@betweenus/shared-types':
         specifier: workspace:*
         version: link:../shared-types
       ioredis:
@@ -787,13 +787,13 @@ importers:
 
   packages/nest-common:
     dependencies:
-      '@nexora/config':
+      '@betweenus/config':
         specifier: workspace:*
         version: link:../config
-      '@nexora/logger':
+      '@betweenus/logger':
         specifier: workspace:*
         version: link:../logger
-      '@nexora/shared-types':
+      '@betweenus/shared-types':
         specifier: workspace:*
         version: link:../shared-types
       ioredis:
@@ -830,7 +830,7 @@ importers:
 
   packages/permissions:
     dependencies:
-      '@nexora/shared-types':
+      '@betweenus/shared-types':
         specifier: workspace:*
         version: link:../shared-types
     devDependencies:
@@ -849,7 +849,7 @@ importers:
 
   packages/storage:
     dependencies:
-      '@nexora/config':
+      '@betweenus/config':
         specifier: workspace:*
         version: link:../config
     optionalDependencies:
@@ -866,10 +866,10 @@ importers:
 
   packages/websocket:
     dependencies:
-      '@nexora/auth':
+      '@betweenus/auth':
         specifier: workspace:*
         version: link:../auth
-      '@nexora/shared-types':
+      '@betweenus/shared-types':
         specifier: workspace:*
         version: link:../shared-types
     devDependencies:

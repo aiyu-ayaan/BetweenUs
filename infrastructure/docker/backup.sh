@@ -14,7 +14,7 @@ MODE="${1:-loop}"
 BACKUP_DIR="${BACKUP_DIR:-/backups}"
 BACKUP_KEEP="${BACKUP_KEEP:-8}"
 BACKUP_INTERVAL_HOURS="${BACKUP_INTERVAL_HOURS:-168}"
-PREFIX="${BACKUP_PREFIX:-nexora}"
+PREFIX="${BACKUP_PREFIX:-betweenus}"
 
 log() { echo "[backup] $*"; }
 

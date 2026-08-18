@@ -1,7 +1,7 @@
 # Teams-style Picture-in-Picture (PiP) Floating Overlay Window
 
 ## Overview
-A lightweight, always-on-top floating window for Nexora Desktop (similar to Microsoft Teams and Discord) that displays incoming video (screen share or active participant camera) along with quick voice action controls when multitasking or minimizing the app.
+A lightweight, always-on-top floating window for BetweenUs Desktop (similar to Microsoft Teams and Discord) that displays incoming video (screen share or active participant camera) along with quick voice action controls when multitasking or minimizing the app.
 
 ---
 
@@ -15,8 +15,8 @@ A lightweight, always-on-top floating window for Nexora Desktop (similar to Micr
 
 ### 2. Triggering Modes
 1. **Manual**: A dedicated "Picture-in-Picture / Pop Out" button in the voice control toolbar (`VoiceControls.tsx`) and the stream header (`VoiceChannelView.tsx`).
-2. **Automatic**: When Nexora's main window is minimized while connected to an active voice channel with active video (screen share or camera stream).
-3. **Restoration**: Clicking the "Expand / Return to Nexora" button in the PiP overlay restores and focuses the main window and closes the PiP window.
+2. **Automatic**: When BetweenUs's main window is minimized while connected to an active voice channel with active video (screen share or camera stream).
+3. **Restoration**: Clicking the "Expand / Return to BetweenUs" button in the PiP overlay restores and focuses the main window and closes the PiP window.
 
 ### 3. Display Hierarchy (What is shown)
 1. **Incoming Screen Share**: If a participant (or local user) is sharing their screen, display the screen share stream.
@@ -28,7 +28,7 @@ Hovering over the PiP window reveals semi-transparent floating action controls:
 - **Mic Mute / Unmute** (with live mute state indicator)
 - **Deafen / Undeafen**
 - **Camera Toggle**
-- **Expand / Return to App** (brings Nexora back to front)
+- **Expand / Return to App** (brings BetweenUs back to front)
 - **Disconnect / Leave Call** (ends call and closes PiP)
 
 ---
@@ -41,7 +41,7 @@ Hovering over the PiP window reveals semi-transparent floating action controls:
   - `pip:open`: Creates and displays the PiP window, loading the app with `?pip=1` query parameter.
   - `pip:close`: Closes and destroys the PiP window.
   - `pip:is-open`: Returns whether the PiP window is currently open.
-  - `pip:focus-main`: Restores and focuses the main Nexora window.
+  - `pip:focus-main`: Restores and focuses the main BetweenUs window.
 - Window lifecycle synchronization: Closing the main app also cleans up the PiP window.
 
 ### 2. Renderer / Frontend Routing (`apps/desktop/src/App.tsx`)

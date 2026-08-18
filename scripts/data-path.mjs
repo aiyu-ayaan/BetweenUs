@@ -2,7 +2,7 @@
 /**
  * One data path for the whole deployment.
  *
- * A deployment says where its data lives once - NEXORA_DATA_PATH, or an
+ * A deployment says where its data lives once - BETWEENUS_DATA_PATH, or an
  * argument to this script - and this creates the tree under it and writes the
  * four bind paths compose actually mounts back into `.env`:
  *
@@ -17,8 +17,8 @@
  * keeps a stack that never set one working exactly as before.
  *
  * Usage:
- *   node scripts/data-path.mjs                 # reads NEXORA_DATA_PATH from .env
- *   node scripts/data-path.mjs /srv/x/nexora   # sets it, then does the same
+ *   node scripts/data-path.mjs                 # reads BETWEENUS_DATA_PATH from .env
+ *   node scripts/data-path.mjs /srv/x/betweenus   # sets it, then does the same
  */
 import { chownSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve, sep } from 'node:path';
@@ -76,13 +76,13 @@ if (process.argv.includes('--check')) {
 }
 
 const { text, values } = readEnvFile();
-const root = (process.argv[2] ?? process.env.NEXORA_DATA_PATH ?? values.NEXORA_DATA_PATH ?? '').trim();
+const root = (process.argv[2] ?? process.env.BETWEENUS_DATA_PATH ?? values.BETWEENUS_DATA_PATH ?? '').trim();
 
 if (!root) {
   console.error(
     'No data path given.\n\n' +
-      '  node scripts/data-path.mjs /srv/example/docker/nexora\n\n' +
-      'or set NEXORA_DATA_PATH in .env and run it with no argument. Without one\n' +
+      '  node scripts/data-path.mjs /srv/example/docker/betweenus\n\n' +
+      'or set BETWEENUS_DATA_PATH in .env and run it with no argument. Without one\n' +
       'the stack keeps its data in Docker named volumes, which is the default.',
   );
   process.exit(1);
@@ -112,7 +112,7 @@ const tree = {
  */
 const MEDIA_SUBDIRS = ['pictures', 'attachments'];
 
-let next = setEnv(text, 'NEXORA_DATA_PATH', root);
+let next = setEnv(text, 'BETWEENUS_DATA_PATH', root);
 for (const [key, path] of Object.entries(tree)) {
   mkdirSync(path, { recursive: true });
   next = setEnv(next, key, path.split(sep).join('/'));

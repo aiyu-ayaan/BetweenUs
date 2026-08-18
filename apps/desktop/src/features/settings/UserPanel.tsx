@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { ActiveStatus } from '@nexora/shared-types';
+import type { ActiveStatus } from '@betweenus/shared-types';
 import { useAuthStore } from '../../stores/auth';
 import { usePresenceStore } from '../../stores/presence';
 import { useVoiceStore } from '../../stores/voice';
@@ -10,7 +10,7 @@ const STATUS_CHOICES: Array<{ value: ActiveStatus; label: string; hint?: string 
   { value: 'online', label: 'Online' },
   { value: 'idle', label: 'Idle' },
   { value: 'dnd', label: 'Do Not Disturb', hint: 'You will not receive desktop notifications.' },
-  { value: 'invisible', label: 'Invisible', hint: 'You will not appear online, but can use Nexora normally.' },
+  { value: 'invisible', label: 'Invisible', hint: 'You will not appear online, but can use BetweenUs normally.' },
 ];
 
 const DOT: Record<ActiveStatus, string> = {

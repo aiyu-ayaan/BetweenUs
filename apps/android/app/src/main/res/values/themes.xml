@@ -4,7 +4,7 @@
     <!-- The window behind Compose. Dark, and painted the same near-black
          ground the app itself is drawn on, so a cold start does not flash
          white before the first frame. -->
-    <style name="Theme.Nexora" parent="android:Theme.Material.NoActionBar">
+    <style name="Theme.BetweenUs" parent="android:Theme.Material.NoActionBar">
         <item name="android:windowBackground">@color/ground</item>
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>

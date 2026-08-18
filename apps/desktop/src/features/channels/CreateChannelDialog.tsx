@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { ChannelType } from '@nexora/shared-types';
+import type { ChannelType } from '@betweenus/shared-types';
 import { useChatStore } from '../../stores/chat';
 import { useAuthStore } from '../../stores/auth';
 import { Avatar } from '../../components/Avatar';

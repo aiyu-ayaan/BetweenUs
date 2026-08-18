@@ -64,7 +64,7 @@ import type {
   IceCandidatePayload,
   IceServer,
   ServerCallEvent,
-} from '@nexora/shared-types';
+} from '@betweenus/shared-types';
 import { wsUrl } from './endpoint';
 import {
   PLAYOUT_DELAY,
@@ -319,7 +319,7 @@ class PeerLink {
 
     // Negotiated on both sides with a fixed id, so neither has to wait for the
     // other's `ondatachannel` and there is no race about who opens it.
-    this.channel = this.pc.createDataChannel('nexora.share', { negotiated: true, id: 0 });
+    this.channel = this.pc.createDataChannel('betweenus.share', { negotiated: true, id: 0 });
     this.channel.onmessage = (event) => {
       try {
         this.events.onData(JSON.parse(String(event.data)));

@@ -15,7 +15,7 @@ import type {
   RemoteScreen,
   RemoteSessionResponse,
   ServerRemoteEvent,
-} from '@nexora/shared-types';
+} from '@betweenus/shared-types';
 import { api } from '../services/api';
 import { wsUrl } from '../services/endpoint';
 import { ScreenLink } from '../services/remote-peer';
@@ -290,7 +290,7 @@ function openSocket(
         // Remembered before writing so the poller does not read it straight
         // back out and send it round again.
         lastClipboard = event.text;
-        window.nexora?.clipboardWrite(event.text);
+        window.betweenus?.clipboardWrite(event.text);
         return;
 
       // The agent's offer, and its ICE candidates. Relayed by the gateway,
@@ -350,7 +350,7 @@ let lastClipboard = '';
 
 function startClipboardSync(): void {
   stopClipboardSync();
-  const bridge = window.nexora;
+  const bridge = window.betweenus;
   if (!bridge) return;
 
   clipboardTimer = window.setInterval(() => {

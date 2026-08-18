@@ -10,7 +10,7 @@
  * dull, because the two ways of getting it wrong are both quiet - a status that
  * never comes back from idle, and a chosen status that the client overwrites.
  */
-import type { ActiveStatus } from '@nexora/shared-types';
+import type { ActiveStatus } from '@betweenus/shared-types';
 
 /**
  * Ten minutes, which is what Discord and Slack use. Long enough that reading a
@@ -66,7 +66,7 @@ export function autoStatus(
  * idle - and that is the honest answer a tab can give.
  */
 export function createIdleSource(): { seconds: () => Promise<number>; stop: () => void } {
-  const bridge = window.nexora;
+  const bridge = window.betweenus;
   if (bridge?.systemIdleSeconds) {
     return { seconds: () => bridge.systemIdleSeconds().catch(() => 0), stop: () => undefined };
   }

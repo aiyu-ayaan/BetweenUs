@@ -12,7 +12,7 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
-import { CurrentUser, JwtAuthGuard, type AuthenticatedUser } from '@nexora/auth';
+import { CurrentUser, JwtAuthGuard, type AuthenticatedUser } from '@betweenus/auth';
 import type {
   Channel,
   ChannelMember,
@@ -22,7 +22,7 @@ import type {
   ServerInvite,
   ServerMember,
   ServerWithRole,
-} from '@nexora/shared-types';
+} from '@betweenus/shared-types';
 import { ServersService } from './servers.service';
 import {
   AddServerMemberDto,

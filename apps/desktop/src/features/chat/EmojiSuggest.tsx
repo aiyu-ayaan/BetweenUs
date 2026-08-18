@@ -13,7 +13,7 @@
  * the box is where the composer's other popovers already are.
  */
 import { useEffect, useState } from 'react';
-import type { ServerEmoji } from '@nexora/shared-types';
+import type { ServerEmoji } from '@betweenus/shared-types';
 import { EMOJI_SUGGESTION_LIMIT, searchEmoji, type NamedEmoji } from './emoji-names';
 import { absoluteUrl } from '../../services/endpoint';
 

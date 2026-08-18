@@ -1,6 +1,6 @@
 /** Run with `tsx src/services/server-emoji.check.ts`. Custom emoji in a message. */
 import assert from 'node:assert/strict';
-import type { MessageCustomEmoji, ServerEmoji } from '@nexora/shared-types';
+import type { MessageCustomEmoji, ServerEmoji } from '@betweenus/shared-types';
 import { isOnlyEmoji, splitMessage, usedEmoji } from './server-emoji';
 
 const emoji = (name: string, animated = false): ServerEmoji => ({

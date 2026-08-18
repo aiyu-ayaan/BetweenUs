@@ -1,4 +1,4 @@
-# Nexora Development Planning
+# BetweenUs Development Planning
 
 Living document. `CLAUDE.md` is the target architecture; this file records how
 we get there in stages and what each stage delivers.
@@ -57,7 +57,7 @@ fresh one per request and never touch its budget. `x-real-ip` is set with
 read first, and the *last* hop of `x-forwarded-for` is the fallback.
 
 **The OAuth redirect allow list was a `startsWith`.** An entry of
-`https://nexora.example` also matched `https://nexora.example.attacker.test/`,
+`https://betweenus.example` also matched `https://betweenus.example.attacker.test/`,
 and that URL is where the one-time code that becomes a session travels. Origins
 are parsed and compared as origins now, with a path prefix allowed only once the
 origin already matches.
@@ -74,7 +74,7 @@ The rest, in the order they matter:
 - **An unverified provider email could find an account.** Google will hand out
   an address it has not verified; `email_verified` says which kind it is and was
   being ignored, so typing a victim's address into a fresh Google account was a
-  way into their Nexora account.
+  way into their BetweenUs account.
 - **A session was treated as an entitlement to every attachment.** The download
   route asked only whether the caller was signed in, so any account that came by
   a key could fetch the bytes behind it, private channels and direct messages
@@ -88,7 +88,7 @@ The rest, in the order they matter:
   allowed only when `CORS_ORIGIN` names the sites they may come from.
 
 Each of the six with something checkable behind it got a runnable check rather
-than a note — `@nexora/nest-common` gained its first, `auth` and `auth-service`
+than a note — `@betweenus/nest-common` gained its first, `auth` and `auth-service`
 extended theirs — because a trust boundary nobody can run is a trust boundary
 that comes back.
 
@@ -98,7 +98,7 @@ The client was Discord's, and not by resemblance: the palette was Discord's hex
 values (`#313338`, `#5865f2`), the font stack asked for `gg sans` first, the
 rail drew Discord's blob pill, and the layout was Discord's four flush columns.
 That was a reasonable way to get a working client quickly and a bad thing to
-keep, because it left Nexora with no way to look like anything.
+keep, because it left BetweenUs with no way to look like anything.
 
 What replaces it is closer to how an editor lays itself out than to how a chat
 app does:
@@ -352,24 +352,24 @@ implementation would slot into.
 
 ### Public ingress, on a server that already has a tunnel (phase 18)
 
-The original plan assumed `cloudflared` would be Nexora's own container. On a
+The original plan assumed `cloudflared` would be BetweenUs's own container. On a
 box already running one tunnel for everything, that is the wrong shape: a
 second tunnel, a second token, a second thing to keep alive.
 
 Both now work and the difference is one line. The gateway publishes on the host
 as `GATEWAY_PORT`, so an existing tunnel adds one ingress entry pointing at
 `http://localhost:8080`. The `--profile public` container is unchanged for
-anyone who wants Nexora to bring its own, and now waits on a gateway
+anyone who wants BetweenUs to bring its own, and now waits on a gateway
 healthcheck rather than on the container merely existing. What a tunnel cannot
 carry is stated rather than implied: WebRTC media negotiates its own UDP path
 to the SFU, and needs those ports or a TURN server.
 
 ### One address, any server (phase 16)
 
-Nexora is meant to be self-hosted, and until this phase the client could not act
+BetweenUs is meant to be self-hosted, and until this phase the client could not act
 like it. Two build-time variables (`VITE_API_URL`, `VITE_WS_URL`) fixed the
 deployment at compile time, the renderer's CSP named every host it was allowed
-to reach, and voice was told an absolute LiveKit URL - so "run your own Nexora"
+to reach, and voice was told an absolute LiveKit URL - so "run your own BetweenUs"
 meant rebuilding the app.
 
 **One base address, read at runtime.** Everything now goes through
@@ -638,7 +638,7 @@ that has to be right for every future deployment is one that will be wrong.
 - **The redirect had to be a private scheme, and that is the whole of the
   security problem.** The desktop comes back to a loopback port, which nothing
   else on the machine can steal because it is already listening. A phone has no
-  such thing, and `nexora://` can be registered by any app that fancies it. So
+  such thing, and `betweenus://` can be registered by any app that fancies it. So
   the flow is bound to a secret rather than to the redirect: the client sends a
   challenge when it starts and the verifier when it exchanges, and the scheme is
   refused outright without one. `SECURITY.md` has the shape of it.
@@ -759,7 +759,7 @@ that has to be right for every future deployment is one that will be wrong.
 - **One effective-permission resolver, used by all four services.** Chat, call
   and presence each carried their own copy of "look up the channel, look up the
   membership, check the role", which is three places to forget about private
-  channels and direct messages. The lookup moves into `@nexora/database` as
+  channels and direct messages. The lookup moves into `@betweenus/database` as
   `resolveChannelAccess`, and the three services call it. It is the same
   shortcut as the shared schema, and it splits the same way: when each service
   owns its data this becomes an RPC with an unchanged signature.
@@ -855,7 +855,7 @@ that has to be right for every future deployment is one that will be wrong.
 - **Redis Pub/Sub for chat fanout.** Chat WebSocket gateway publishes to
   `chat.message.created` and every instance re-broadcasts to its local sockets.
   This makes `chat-service` horizontally scalable from day one.
-- **JWT verified locally in every service** using `@nexora/auth`, no auth
+- **JWT verified locally in every service** using `@betweenus/auth`, no auth
   round-trip per request. Access tokens are short-lived (15m), refresh tokens
   are stored hashed in Postgres and rotated on use.
 - **Storage driver chosen by environment, local disk by default.** A developer
@@ -962,7 +962,7 @@ secret, which is what "token signature is invalid" on every voice join means.
 the desktop renderer on 5173, which then collides with `pnpm dev:duo` - that
 starts its own Vite, because it drives two Electron profiles against it.
 
-Desktop app: `pnpm --filter @nexora/desktop dev`.
+Desktop app: `pnpm --filter @betweenus/desktop dev`.
 
 Web client: `pnpm dev:web`, on <http://localhost:5175>. Its dev server proxies
 the same routes the desktop one does, minus `/api/v1/remote` and `/ws/remote` -
@@ -977,7 +977,7 @@ alongside `pnpm dev:backend` — see `TESTING.md`.
 
 Run live on 2026-08-08, on top of everything verified in phase 9 below:
 
-- `pnpm --filter @nexora/auth-service check` drives register, login, refresh
+- `pnpm --filter @betweenus/auth-service check` drives register, login, refresh
   rotation, reuse detection, logout and `/me` against an in-memory database.
 - Rate limiting observed: 24 rapid logins against a running auth-service gave
   401 until the budget ran out, then 429.
@@ -1059,7 +1059,7 @@ not touch remote-gateway at all:
 ```text
 Watcher                         Sharer
    │  ask / input                  │
-   ├──────── LiveKit data ────────►│  prompt, then window.nexora.remoteMouse
+   ├──────── LiveKit data ────────►│  prompt, then window.betweenus.remoteMouse
    │◄─────── grant / revoke ───────┤
 ```
 
@@ -1125,9 +1125,9 @@ Needs a human in front of it, and none of it has been driven yet:
 
 Machine checks, on 2026-08-09:
 
-- `pnpm --filter @nexora/desktop typecheck` and `build` pass; the renderer no
+- `pnpm --filter @betweenus/desktop typecheck` and `build` pass; the renderer no
   longer references `VITE_WS_URL` anywhere.
-- `pnpm --filter @nexora/desktop check` gained `endpoint.check.ts`, which
+- `pnpm --filter @betweenus/desktop check` gained `endpoint.check.ts`, which
   asserts the address parsing behind the picker: a bare hostname becomes
   `https`, trailing slashes and query strings go, a path is kept, `ftp://` and
   an empty string are refused, and `toWebSocketUrl` changes the scheme without
@@ -1196,7 +1196,7 @@ Verified on 2026-08-09 by building and by the automated checks; the live
 walkthrough below it is not done yet.
 
 - `pnpm typecheck`, `pnpm build` and `pnpm check` pass across every workspace
-  task, including the new `@nexora/permissions` self-check, which covers the
+  task, including the new `@betweenus/permissions` self-check, which covers the
   override arithmetic: a grant adds, a deny beats both the role and an explicit
   grant, and an unknown permission name is ignored rather than trusted.
 - The rename migration renames tables, columns, indexes and constraints in
@@ -1212,7 +1212,7 @@ all still need a human in front of them. `TESTING.md` says what to try.
 
 Run live against the development stack on 2026-08-09:
 
-- `pnpm admin:create` creates `nexoraadmin` and prints a generated password;
+- `pnpm admin:create` creates `betweenusadmin` and prints a generated password;
   the account is ADMIN with `mustChangePassword` set.
 - Login by username works; the admin API answers `PASSWORD_CHANGE_REQUIRED`
   until the password is changed, then serves the directory.
