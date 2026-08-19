@@ -157,6 +157,11 @@ Backlog worked down, this pass:
 - [x] **Android: microphone processing, a hi-fi mode, and an output route**,
       including the Opus `fmtp` patch that carries bitrate, channels and DTX.
       Input sensitivity is still open and the reason is written down.
+- [x] **Android: Permissions onboarding carousel with progress & Allow All.**
+      Replaced the static permission list with an interactive swipeable carousel
+      and live setup progress indicator. Added a batch "Allow All Permissions"
+      action using `RequestMultiplePermissions` alongside per-permission allow
+      and skip controls.
 - [x] **Android: invite management.** The three API calls existed and no screen
       did, so a server created on a phone could not be joined by anybody.
 - [x] **Android: the share quality ladder** was already landed with tests; this
