@@ -69,10 +69,48 @@ a local backend had never reached:
 
 All four are fixed. Call signalling for a peer not yet on the roster is now
 held rather than dropped as well - the impolite side offers exactly once, so a
-dropped offer was a tile stuck on "connecting..." for the life of the call -
-but **that one is a guess at the cause rather than a diagnosis**: nobody has a
-logcat from the call in question. If a tile sticks on "connecting..." again,
-that log is the thing worth capturing.
+dropped offer was a tile stuck on "connecting..." for the life of the call.
+That one was a guess at the cause rather than a diagnosis, and the guess was
+wrong; the real one is below.
+
+### The call that connected about half the time
+
+The symptom reported was directional - a call started from another client could
+be joined from the phone, a call started *from* the phone carried nothing - and
+then, on more attempts, "sometimes it works and sometimes it does not". The
+second description is the true one, and it is what named the fault: nothing in
+the mesh depends on who arrived first, so a failure that follows the direction
+is a coin toss that happened to land the same way twice.
+
+The coin is the peer id. It belongs to a **socket**, not to an account and not
+to a call: `call-service` mints one when a connection opens and announces it
+once, in `ready`. Both ends decide who offers by comparing the two ids, so they
+always disagree - unless one of them is comparing an id the other has never
+seen, in which case they can agree, and a call where both ends are polite is a
+call where nobody ever offers.
+
+Two ways the phone came to hold an id nobody else could see:
+
+- `CallSocket` is a process-wide singleton and leaving a call never closed it.
+  The engine's listener *was* removed, so the socket carried on reconnecting on
+  its own - a lift, a screen going off, a network handover - and every
+  reconnect earned a new peer id announced to nobody. The next call ran on that
+  socket and computed politeness from the id of a connection that had died
+  hours ago.
+- The same thing inside a call: a reconnect rejoins, the far side sees a peer
+  leave and a new one arrive and rebuilds its link against the new id, and this
+  end kept a link built against the old one.
+
+Both are fixed, and the fix is the shape the desktop already had. A call now
+starts on a connection of its own - `teardown` closes the socket and forgets
+the id - so `ready` is always heard and always this call's. And a `ready` that
+announces a *different* id than the call was built on now discards the peer
+links, which the roster in the following `joined` rebuilds against the identity
+everybody else can see.
+
+The two rules that hang off a peer id live in `CallIdentity.kt` with a test,
+away from the engine: neither was reachable from a test while it sat inside a
+class that needs WebRTC to construct, which is most of why it survived.
 
 ### Sending files
 

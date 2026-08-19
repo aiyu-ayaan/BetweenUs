@@ -380,6 +380,17 @@ class VoiceEngine(private val context: Context) {
         CallService.detach()
         detach?.invoke()
         detach = null
+        // The socket goes with the call, and that is the fix rather than
+        // tidiness. `ready` is sent once per connection and the listener above
+        // has just been removed, so a socket that stays up and reconnects on
+        // its own between calls - which is what a phone does - is a socket
+        // whose new peer id nobody heard. The next call then computed who
+        // offers from an id the far side has never seen, and connected about
+        // half the time. A call starts on a connection of its own, as the
+        // desktop's does, so `ready` is always heard and `selfPeerId` is always
+        // this call's.
+        CallSocket.disconnect()
+        selfPeerId = null
         connections.values.forEach { it.close() }
         connections.clear()
         earlySignals.clear()
@@ -635,7 +646,29 @@ class VoiceEngine(private val context: Context) {
     private suspend fun onSignal(event: JSONObject) {
         when (event.optString("type")) {
             "ready" -> {
-                selfPeerId = event.optString("peerId")
+                val announced = event.optString("peerId")
+
+                // A peer id belongs to the socket, and this socket is not
+                // necessarily the one the call was built on: a phone drops its
+                // connection constantly, and `onConnected` rejoins on a new one
+                // with a new id. Every link already open decided who offers by
+                // comparing the *old* id against the far side's, and the far
+                // side has since torn that link down and rebuilt it against the
+                // new one - so the two ends now disagree about who yields, and
+                // either nobody offers or both do. Both are a call that
+                // connects and then carries nothing.
+                //
+                // The links go, and the roster that arrives with `joined` a
+                // moment later builds them again against the identity everybody
+                // else can actually see.
+                if (CallIdentity.changed(selfPeerId, announced)) {
+                    connections.values.forEach { it.close() }
+                    connections.clear()
+                    earlySignals.clear()
+                    _participants.value = emptyList()
+                }
+
+                selfPeerId = announced
                 val waiting = earlyPeers.toList()
                 earlyPeers.clear()
                 waiting.forEach { addPeer(it) }
@@ -707,9 +740,7 @@ class VoiceEngine(private val context: Context) {
             if (earlyPeers.none { it.peerId == peer.peerId }) earlyPeers += peer
             return
         }
-        // Whoever has the larger peer id yields. Both sides compute this from
-        // the same two strings, so they always disagree - which is the point.
-        val link = PeerLink(peer, polite = self > peer.peerId)
+        val link = PeerLink(peer, polite = CallIdentity.polite(self, peer.peerId))
         connections[peer.peerId] = link
         _participants.update { it + Participant(peer) }
         link.start()
