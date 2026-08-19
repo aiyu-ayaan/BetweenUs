@@ -41,18 +41,31 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.aatech.betweenus.core.crypto.E2ee
 import androidx.compose.foundation.text.InlineTextContent
 import androidx.compose.foundation.text.appendInlineContent
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.text.Placeholder
 import androidx.compose.ui.text.PlaceholderVerticalAlign
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.style.TextOverflow
 import coil.compose.AsyncImage
+import com.aatech.betweenus.core.data.BetweenUsApi
 import com.aatech.betweenus.core.data.CustomEmoji
 import com.aatech.betweenus.core.data.Endpoint
+import com.aatech.betweenus.core.data.LinkPreview
 import com.aatech.betweenus.core.data.MessageAttachment
 import com.aatech.betweenus.core.data.PublicUser
 import com.aatech.betweenus.core.store.Conversation
@@ -63,6 +76,8 @@ import com.aatech.betweenus.ui.components.BetweenUsIcons
 import com.aatech.betweenus.ui.theme.Accent
 import com.aatech.betweenus.ui.theme.Danger
 import com.aatech.betweenus.ui.theme.Edge
+import java.util.concurrent.ConcurrentHashMap
+import java.util.regex.Pattern
 import com.aatech.betweenus.ui.theme.Ground
 import com.aatech.betweenus.ui.theme.Slate100
 import com.aatech.betweenus.ui.theme.Slate300
@@ -73,6 +88,7 @@ import com.aatech.betweenus.ui.theme.Surface700
 import com.aatech.betweenus.ui.theme.Surface800
 import com.aatech.betweenus.ui.theme.Surface850
 import com.aatech.betweenus.ui.theme.Surface900
+import com.aatech.betweenus.ui.theme.Surface950
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -281,6 +297,10 @@ fun MessageRow(
                             else -> {
                                 if (readable.text.isNotBlank()) {
                                     MessageText(readable)
+                                    val urls = remember(readable.text) { extractUrls(readable.text) }
+                                    urls.forEach { url ->
+                                        LinkPreviewCard(url)
+                                    }
                                 }
 
                                 readable.attachments.forEach { attachment ->
@@ -708,20 +728,172 @@ private fun withinFiveMinutes(earlier: String, later: String): Boolean = runCatc
  * and is on the open list; the desktop animates because a browser `<img>` does
  * it for free.
  */
+private val URL_REGEX = Pattern.compile("(https?://[^\\s<>\"]+)", Pattern.CASE_INSENSITIVE)
+
+private fun AnnotatedString.Builder.appendWithLinks(text: String) {
+    val matcher = URL_REGEX.matcher(text)
+    var lastIndex = 0
+    while (matcher.find()) {
+        val start = matcher.start()
+        val end = matcher.end()
+        val url = matcher.group()
+
+        if (start > lastIndex) {
+            append(text.substring(lastIndex, start))
+        }
+
+        pushStringAnnotation(tag = "URL", annotation = url)
+        pushStyle(
+            SpanStyle(
+                color = Accent,
+                textDecoration = TextDecoration.Underline,
+                fontWeight = FontWeight.Medium,
+            ),
+        )
+        append(url)
+        pop()
+        pop()
+
+        lastIndex = end
+    }
+    if (lastIndex < text.length) {
+        append(text.substring(lastIndex))
+    }
+}
+
+private fun extractUrls(text: String): List<String> {
+    val matcher = URL_REGEX.matcher(text)
+    val list = mutableListOf<String>()
+    while (matcher.find()) {
+        val url = matcher.group()
+        if (url !in list) list.add(url)
+        if (list.size >= 2) break
+    }
+    return list
+}
+
+private val previewCache = ConcurrentHashMap<String, LinkPreview?>()
+
 @Composable
-private fun MessageText(readable: ReadableMessage) {
-    val pieces = remember(readable.id, readable.text) {
-        CustomEmoji.split(readable.text, readable.body.emoji)
+private fun LinkPreviewCard(url: String) {
+    val uriHandler = LocalUriHandler.current
+    var preview by remember(url) { mutableStateOf(previewCache[url]) }
+
+    LaunchedEffect(url) {
+        if (previewCache.containsKey(url)) {
+            preview = previewCache[url]
+            return@LaunchedEffect
+        }
+        val fetched = BetweenUsApi.unfurl(url)
+        previewCache[url] = fetched
+        preview = fetched
     }
 
-    if (pieces.none { it is CustomEmoji.Piece.Emoji }) {
-        Text(
-            text = readable.text,
-            style = MaterialTheme.typography.bodyLarge,
-            color = Slate100,
-            lineHeight = 22.sp,
-        )
+    val item = preview ?: return
+    if (item.title.isNullOrBlank() && item.description.isNullOrBlank() && item.image.isNullOrBlank()) {
         return
+    }
+
+    val domain = remember(item.url) {
+        runCatching { java.net.URI(item.url).host ?: item.url }.getOrDefault(item.url)
+    }
+
+    Spacer(Modifier.height(6.dp))
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(topStart = 4.dp, bottomStart = 4.dp, topEnd = 12.dp, bottomEnd = 12.dp))
+            .background(Surface900)
+            .border(1.dp, Edge, RoundedCornerShape(topStart = 4.dp, bottomStart = 4.dp, topEnd = 12.dp, bottomEnd = 12.dp))
+            .drawBehind {
+                drawRect(
+                    color = Accent,
+                    topLeft = Offset.Zero,
+                    size = Size(4.dp.toPx(), size.height),
+                )
+            }
+            .clickable {
+                runCatching { uriHandler.openUri(item.url) }
+            }
+            .padding(start = 12.dp, end = 12.dp, top = 10.dp, bottom = 10.dp),
+    ) {
+        // Site name / domain row
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            if (!item.favicon.isNullOrBlank()) {
+                AsyncImage(
+                    model = item.favicon,
+                    contentDescription = null,
+                    modifier = Modifier
+                        .size(14.dp)
+                        .clip(RoundedCornerShape(2.dp)),
+                    contentScale = ContentScale.Fit,
+                )
+            }
+            Text(
+                text = item.siteName ?: domain,
+                style = MaterialTheme.typography.labelSmall,
+                color = Slate400,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+
+        // Title
+        val title = item.title
+        if (!title.isNullOrBlank()) {
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleSmall,
+                color = Accent,
+                fontWeight = FontWeight.Bold,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+
+        // Description
+        val description = item.description
+        if (!description.isNullOrBlank()) {
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text = description,
+                style = MaterialTheme.typography.bodySmall,
+                color = Slate300,
+                maxLines = 3,
+                overflow = TextOverflow.Ellipsis,
+                lineHeight = 16.sp,
+            )
+        }
+
+        // Preview Image
+        val image = item.image
+        if (!image.isNullOrBlank()) {
+            Spacer(Modifier.height(8.dp))
+            AsyncImage(
+                model = image,
+                contentDescription = item.title ?: "Link preview",
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 180.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Surface950)
+                    .border(1.dp, Edge, RoundedCornerShape(8.dp)),
+            )
+        }
+    }
+}
+
+@Composable
+private fun MessageText(readable: ReadableMessage) {
+    val uriHandler = LocalUriHandler.current
+    val pieces = remember(readable.id, readable.text) {
+        CustomEmoji.split(readable.text, readable.body.emoji)
     }
 
     val large = CustomEmoji.isOnlyEmoji(pieces)
@@ -731,7 +903,7 @@ private fun MessageText(readable: ReadableMessage) {
     val annotated = buildAnnotatedString {
         pieces.forEachIndexed { index, piece ->
             when (piece) {
-                is CustomEmoji.Piece.Text -> append(piece.text)
+                is CustomEmoji.Piece.Text -> appendWithLinks(piece.text)
                 is CustomEmoji.Piece.Emoji -> {
                     val id = "emoji-$index"
                     inline[id] = InlineTextContent(
@@ -752,12 +924,26 @@ private fun MessageText(readable: ReadableMessage) {
         }
     }
 
+    var layoutResult by remember { mutableStateOf<TextLayoutResult?>(null) }
+
     Text(
         text = annotated,
-        inlineContent = inline,
         style = MaterialTheme.typography.bodyLarge,
         color = Slate100,
         lineHeight = if (large) 44.sp else 22.sp,
+        inlineContent = inline,
+        onTextLayout = { layoutResult = it },
+        modifier = Modifier.pointerInput(annotated) {
+            detectTapGestures { pos ->
+                layoutResult?.let { layout ->
+                    val offset = layout.getOffsetForPosition(pos)
+                    annotated.getStringAnnotations(tag = "URL", start = offset, end = offset)
+                        .firstOrNull()?.let { annotation ->
+                            runCatching { uriHandler.openUri(annotation.item) }
+                        }
+                }
+            }
+        },
     )
 }
 

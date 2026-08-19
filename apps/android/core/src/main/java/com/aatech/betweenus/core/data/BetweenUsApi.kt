@@ -37,6 +37,26 @@ data class PublicUser(
     }
 }
 
+data class LinkPreview(
+    val url: String,
+    val title: String?,
+    val description: String?,
+    val image: String?,
+    val siteName: String?,
+    val favicon: String?,
+) {
+    companion object {
+        fun from(json: JSONObject) = LinkPreview(
+            url = json.optString("url"),
+            title = json.stringOrNull("title"),
+            description = json.stringOrNull("description"),
+            image = json.stringOrNull("image"),
+            siteName = json.stringOrNull("siteName"),
+            favicon = json.stringOrNull("favicon"),
+        )
+    }
+}
+
 /** The shape every service answers an error with. See section 24 of CLAUDE.md. */
 class ApiError(val code: String, message: String, val status: Int) : Exception(message)
 
@@ -338,6 +358,14 @@ object BetweenUsApi {
         Message.from(
             authed("POST", "/api/v1/messages/$messageId/reactions", obj("emoji" to emoji)),
         )
+    }
+
+    /** Fetch rich social OpenGraph details and link preview metadata for a URL. */
+    suspend fun unfurl(targetUrl: String): LinkPreview? = io {
+        runCatching {
+            val json = authed("GET", "/api/v1/messages/unfurl?url=${enc(targetUrl)}")
+            LinkPreview.from(json)
+        }.getOrNull()
     }
 
     // --- oauth ---
