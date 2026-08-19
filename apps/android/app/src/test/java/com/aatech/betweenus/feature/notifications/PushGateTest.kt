@@ -70,4 +70,57 @@ class PushGateTest {
         assertFalse(PushGate.mentions("ada said the same thing", self))
         assertFalse(PushGate.mentions("ask @adam about it", self))
     }
+
+    @Test
+    fun `suppresses push when the exact channel is open in the foreground`() {
+        val server1General = "chan_server1_general"
+        val server2General = "chan_server2_general"
+        val server1Random = "chan_server1_random"
+
+        // Server 1 general is open in foreground: suppress push for server 1 general
+        assertTrue(
+            PushGate.shouldSuppress(
+                channelId = server1General,
+                isForeground = true,
+                visibleChannelId = server1General,
+            )
+        )
+
+        // Server 1 general is open in foreground: DO NOT suppress push for server 2 general
+        assertFalse(
+            PushGate.shouldSuppress(
+                channelId = server2General,
+                isForeground = true,
+                visibleChannelId = server1General,
+            )
+        )
+
+        // Server 1 general is open in foreground: DO NOT suppress push for server 1 random
+        assertFalse(
+            PushGate.shouldSuppress(
+                channelId = server1Random,
+                isForeground = true,
+                visibleChannelId = server1General,
+            )
+        )
+
+        // App is in background: DO NOT suppress push even if visibleChannelId matches
+        assertFalse(
+            PushGate.shouldSuppress(
+                channelId = server1General,
+                isForeground = false,
+                visibleChannelId = server1General,
+            )
+        )
+
+        // No channel is open (e.g., friends tab, drawer): DO NOT suppress
+        assertFalse(
+            PushGate.shouldSuppress(
+                channelId = server1General,
+                isForeground = true,
+                visibleChannelId = null,
+            )
+        )
+    }
 }
+

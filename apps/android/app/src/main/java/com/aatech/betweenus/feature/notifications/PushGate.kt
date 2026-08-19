@@ -5,6 +5,8 @@ import com.aatech.betweenus.core.data.BetweenUsApi
 import com.aatech.betweenus.core.data.NotificationPreferences
 import com.aatech.betweenus.core.data.PublicUser
 import com.aatech.betweenus.core.data.Session
+import com.aatech.betweenus.core.store.AppForeground
+import com.aatech.betweenus.core.store.Conversation
 import com.aatech.betweenus.core.store.Workspace
 import java.time.LocalTime
 
@@ -115,4 +117,20 @@ object PushGate {
         if (name.isBlank()) return false
         return Regex("@${Regex.escape(name.lowercase())}(?![a-z0-9_.-])").containsMatchIn(body)
     }
+
+    /**
+     * The WhatsApp rule: whether a push for [channelId] should be suppressed because
+     * the user is actively viewing that exact chat right now in the foreground.
+     *
+     * If the user is looking at Server 1 #general (visibleChannelId == "chan_general_1"),
+     * a message in that same channel is dropped silently because it's already rendered on screen.
+     * A message in Server 2 #general (channelId == "chan_general_2") or any other channel
+     * is not suppressed and will post a push notification.
+     */
+    fun shouldSuppress(
+        channelId: String,
+        isForeground: Boolean = AppForeground.visible,
+        visibleChannelId: String? = Conversation.visibleChannelId,
+    ): Boolean = isForeground && visibleChannelId == channelId
 }
+
