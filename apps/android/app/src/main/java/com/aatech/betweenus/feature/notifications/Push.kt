@@ -24,6 +24,7 @@ object Push {
 
     fun init(context: Context) {
         MessageNotifications.ensureChannels(context)
+        SocialNotifications.ensureChannels(context)
         if (!enabled) return
 
         PushTokens.label = DeviceIdentity.label()

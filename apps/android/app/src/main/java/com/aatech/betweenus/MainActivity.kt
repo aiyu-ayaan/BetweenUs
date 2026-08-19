@@ -21,6 +21,7 @@ import com.aatech.betweenus.core.data.OAuthFlow
 import com.aatech.betweenus.core.data.Session
 import com.aatech.betweenus.core.store.PendingChannel
 import com.aatech.betweenus.core.store.PendingInvite
+import com.aatech.betweenus.core.store.PendingPlace
 import com.aatech.betweenus.core.store.Workspace
 import com.aatech.betweenus.feature.auth.LoginScreen
 import com.aatech.betweenus.feature.shell.Shell
@@ -86,6 +87,18 @@ class MainActivity : ComponentActivity() {
         // from outside the app rather than a second one only pushes know about.
         if (uri.host == "channel") {
             uri.pathSegments.firstOrNull()?.let { PendingChannel.offer(it) }
+            return
+        }
+
+        // The two places a notification can lead that are not a conversation.
+        if (uri.host == "friends") {
+            PendingPlace.offer(PendingPlace.Place.Friends)
+            return
+        }
+        if (uri.host == "server") {
+            uri.pathSegments.firstOrNull()?.let {
+                PendingPlace.offer(PendingPlace.Place.Server(it))
+            }
             return
         }
 

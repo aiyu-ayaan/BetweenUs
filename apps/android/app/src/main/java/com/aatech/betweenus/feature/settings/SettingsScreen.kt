@@ -545,6 +545,8 @@ fun SettingsScreen(
                         // account is walking away from.
                         com.aatech.betweenus.feature.notifications.MessageNotifications
                             .clearAll(context)
+                        com.aatech.betweenus.feature.notifications.SocialNotifications
+                            .clearAll(context)
                         com.aatech.betweenus.feature.notifications.PushGate.forgetPreferences()
                         Session.signOut()
                     }

@@ -38,6 +38,7 @@ import com.aatech.betweenus.feature.remote.RemoteMachinesScreen
 import com.aatech.betweenus.feature.remote.RemoteSessionScreen
 import com.aatech.betweenus.core.store.PendingChannel
 import com.aatech.betweenus.core.store.PendingInvite
+import com.aatech.betweenus.core.store.PendingPlace
 import com.aatech.betweenus.feature.servers.InviteSheet
 import com.aatech.betweenus.feature.servers.ServerSettingsScreen
 import com.aatech.betweenus.feature.settings.BetweenUsPermissions
@@ -134,7 +135,48 @@ fun Shell(user: PublicUser) {
     LaunchedEffect(pendingChannel) {
         val target = pendingChannel ?: return@LaunchedEffect
         PendingChannel.clear()
-        openChannel(target, Workspace.channel(target)?.serverId)
+        val channel = Workspace.channel(target)
+        // A call notification names a voice channel, and the chat route reads
+        // the same value - opening one there is an empty conversation. It lands
+        // on the call screen instead, with the join button rather than a join:
+        // a notification tapped from a lock screen is not consent to open a
+        // microphone.
+        if (channel?.type == ChannelType.VOICE) {
+            voiceChannelId = target
+            serverId = channel.serverId
+            joinOnArrival = false
+            navigation.navigate(Route.Voice)
+            return@LaunchedEffect
+        }
+        openChannel(target, channel?.serverId)
+    }
+
+    /**
+     * A notification that leads somewhere that is not a conversation: a friend
+     * request, or a server somebody was just added to. A server has no one
+     * screen, so it opens the same thing picking it in the drawer does - its
+     * first text channel.
+     */
+    val pendingPlace by PendingPlace.place.collectAsState()
+    // Keyed on the server list as well: the push and the workspace refresh that
+    // brings the new server in are a race, and losing it must mean "a moment
+    // later", not "never".
+    LaunchedEffect(pendingPlace, servers) {
+        when (val target = pendingPlace) {
+            null -> return@LaunchedEffect
+            is PendingPlace.Place.Friends -> {
+                PendingPlace.clear()
+                serverId = null
+                navigation.navigate(Route.Friends) { launchSingleTop = true }
+            }
+            is PendingPlace.Place.Server -> {
+                val landing = Workspace.channelsOf(target.serverId)
+                    .firstOrNull { it.type == ChannelType.TEXT }
+                    ?: return@LaunchedEffect
+                PendingPlace.clear()
+                openChannel(landing.id, target.serverId)
+            }
+        }
     }
 
     ModalNavigationDrawer(

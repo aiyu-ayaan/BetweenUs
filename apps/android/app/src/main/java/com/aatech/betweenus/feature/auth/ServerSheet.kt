@@ -94,6 +94,8 @@ fun ServerSheet(onDismiss: () -> Unit) {
                 com.aatech.betweenus.feature.chat.MediaCache.clear()
                 com.aatech.betweenus.feature.notifications.MessageNotifications
                     .clearAll(context.applicationContext)
+                com.aatech.betweenus.feature.notifications.SocialNotifications
+                    .clearAll(context.applicationContext)
                 com.aatech.betweenus.feature.notifications.PushGate.forgetPreferences()
                 Endpoint.set(if (base == Endpoint.default()) null else base)
                 activity?.recreate()

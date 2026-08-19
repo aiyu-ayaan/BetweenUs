@@ -46,7 +46,8 @@ body is sealed and only the device knows whether that conversation is already on
 screen; the notification is written here. `FCM/` documents all of it and
 `FCM/TESTING.md` is what to try first, because **none of it has been on a real
 device**. What is still open is the incoming-call UI for a dead app (phase 6),
-which waits on a `call.started` fan-out that does not exist yet.
+which is now only the full-screen ringing UI: the `call.started` fan-out it was
+waiting on exists, as `call.roster`.
 
 ### What a real deployment found
 
@@ -355,9 +356,34 @@ showing the conversation. Both decisions are made here.
       token that rotated while the app was closed lands under the right account;
       `Session.signOut` unregisters before the tokens go.
 - [x] Server-side fan-out on `message.created`.
+- [x] Server-side fan-out on the other four: `message.deleted`,
+      `friend.request` / `friend.accepted`, `server.member.added` and
+      `call.roster`. `FCM/PAYLOADS.md` has the wire format of each and the
+      reasoning behind the awkward parts.
+- [x] **Deleting a message takes its notification with it.** A push with no
+      words, sent to the whole audience with none of the filtering the message
+      went through - every one of those gates is a way to leave a notification
+      standing for something that no longer exists. The client rebuilds the
+      conversation's notification without that line rather than cancelling it,
+      because a conversation usually has more than one line; a thread with
+      nothing left is the one case where the notification goes.
+- [x] Friend requests, and somebody accepting one. Declining, cancelling and
+      unfriending send nothing.
+- [x] Being added to a server, minus the owner of a server they just made.
+- [x] A call in a channel you can hear and are not in - the roster, not the
+      arrival, so three people joining is one notification that keeps up rather
+      than three that pile up. An empty roster cancels it, which is the only
+      way a phone told about a call ever finds out it is over.
 - [x] Notification channels: messages and remote access, beside the call channel
-      `CallService` already owns.
-- [x] Tap-through: `betweenus://channel/<id>`, the same scheme an invite uses.
+      `CallService` already owns; then "Friends and servers" and "Calls you can
+      join", so a friend request can be turned down without turning a call down
+      with it.
+- [x] Tap-through: `betweenus://channel/<id>`, the same scheme an invite uses,
+      plus `betweenus://friends` and `betweenus://server/<id>` for the two
+      places a notification can lead that are not a conversation. A voice
+      channel opened this way lands on the call screen with the join button
+      rather than in a call: a notification tapped from a lock screen is not
+      consent to open a microphone.
 - [x] Foreground suppression: WhatsApp-style active chat channel suppression
       (`PushGate.shouldSuppress`). When the app is in the foreground and
       viewing a specific channel (such as Server 1 #general), push notifications
@@ -373,6 +399,9 @@ showing the conversation. Both decisions are made here.
 - [x] `POST_NOTIFICATIONS` was already asked for at the first moment it means
       something; the post is skipped when it is refused.
 - [x] Never log a registration token, an access token or a refresh token.
+- [x] A call in a channel is now pushed - `call.roster`, see phase 5. What is
+      still open below is the *ringing* UI, which is a full-screen intent and a
+      different thing from a notification saying a call is happening.
 - [ ] Incoming-call UI from a push with the app dead. Waits on a `call.started`
       fan-out that does not exist yet.
 - [ ] A "reply" that fails offline is silently dropped. It should queue on

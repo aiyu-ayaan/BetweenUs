@@ -682,3 +682,23 @@ The cases most worth putting a person in front of, in order:
     landing in the channel on both clients without the app opening.
 
 `TESTING.md` is the fuller version of this list and predates it.
+
+24. **The call that connected about half the time**, which is the fix with the
+    least to look at and the most to prove. Start a call from the phone, have
+    somebody join from the desktop, and confirm both hear each other. Then do
+    it again, four or five times, leaving the call properly between each -
+    the fault was a coin toss on a stale peer id, so one working call proves
+    nothing and five do. Then the reconnect case, which is the other half:
+    with a call up, put the phone into aeroplane mode for ten seconds and back
+    out. It must rejoin and still carry audio, not come back to a roster of
+    tiles stuck on "Connecting…".
+
+25. **The four new pushes**, which need two accounts and a phone whose app is
+    swiped away. Send a friend request and accept it from the other side; add
+    the account to a server; start a call in a voice channel it can hear and
+    then leave, which must make the call notification go away on its own. Last
+    and most interesting: send a message, wait for the notification, then
+    delete the message from the other client - the notification must lose that
+    line, and vanish entirely if it was the only one. `FCM/PAYLOADS.md` says
+    what each push carries and what is deliberately not filtered.
+

@@ -2,9 +2,11 @@ package com.aatech.betweenus.feature.notifications
 
 import android.graphics.Bitmap
 import com.aatech.betweenus.core.crypto.E2ee
+import com.aatech.betweenus.core.data.AuthPhase
 import com.aatech.betweenus.core.data.Http
 import com.aatech.betweenus.core.data.MessageBody
 import com.aatech.betweenus.core.data.PushTokens
+import com.aatech.betweenus.core.data.Session
 import com.aatech.betweenus.core.store.Conversation
 import com.aatech.betweenus.core.store.Workspace
 import com.google.firebase.messaging.FirebaseMessagingService
@@ -28,6 +30,11 @@ import kotlinx.coroutines.withTimeoutOrNull
  * The order of the gates matters. Cheap and local first - my own message, the
  * channel on screen - then the session, then the key, then the picture. A push
  * that is going to be dropped should cost nothing.
+ *
+ * Five kinds arrive here. One of them - `message.deleted` - exists to take a
+ * notification off the screen rather than put one on it, and is the only one
+ * that is allowed to do its work with no session and no key: removing
+ * something already drawn needs neither.
  */
 class PushService : FirebaseMessagingService() {
 
@@ -47,8 +54,114 @@ class PushService : FirebaseMessagingService() {
      */
     override fun onMessageReceived(message: RemoteMessage) {
         val data = message.data
-        if (data["type"] != "message.created") return
-        runBlocking { withTimeoutOrNull(BUDGET_MS) { handle(data) } }
+        runBlocking {
+            withTimeoutOrNull(BUDGET_MS) {
+                when (data["type"]) {
+                    "message.created" -> handle(data)
+                    "message.deleted" -> handleDeleted(data)
+                    "friend.request" -> handleFriend(data, accepted = false)
+                    "friend.accepted" -> handleFriend(data, accepted = true)
+                    "server.member.added" -> handleServerAdded(data)
+                    "call.roster" -> handleCallRoster(data)
+                    else -> Unit
+                }
+            }
+        }
+    }
+
+    /**
+     * A message was deleted, so the notification drawn for it is a lie.
+     *
+     * No session, no channel key and no preferences: there is nothing to read
+     * and nothing to decide. Either this device drew that message, in which
+     * case the line goes, or it did not, in which case this costs one map
+     * lookup. It is the one push that is never suppressed - a notification
+     * standing for a message that no longer exists is the thing being fixed,
+     * and every gate here is a way to leave it standing.
+     */
+    private fun handleDeleted(data: Map<String, String>) {
+        val channelId = data["channelId"] ?: return
+        val messageId = data["messageId"] ?: return
+        MessageNotifications.remove(
+            context = applicationContext,
+            channelId = channelId,
+            messageId = messageId,
+            conversationTitle = PushGate.conversationTitle(channelId),
+            isGroup = PushGate.isGroup(channelId),
+            selfName = (Session.state.value as? AuthPhase.SignedIn)?.user?.label.orEmpty(),
+        )
+    }
+
+    /** Somebody asked to be friends, or said yes. No words, so nothing to open. */
+    private suspend fun handleFriend(data: Map<String, String>, accepted: Boolean) {
+        val actorId = data["actorId"] ?: return
+        if (!wanted()) return
+        SocialNotifications.friend(
+            context = applicationContext,
+            actorId = actorId,
+            actorName = data["actorName"].orEmpty().ifBlank { "Someone" },
+            actorAvatar = avatar(data["actorAvatarUrl"]),
+            accepted = accepted,
+        )
+        // The friends screen reads its list from the network, so it has to be
+        // told there is something new to read.
+        runCatching { withTimeoutOrNull(REFRESH_MS) { Workspace.refresh() } }
+    }
+
+    /** Added to a server. The workspace is refreshed so it is actually there. */
+    private suspend fun handleServerAdded(data: Map<String, String>) {
+        val serverId = data["serverId"] ?: return
+        if (!wanted()) return
+        runCatching { withTimeoutOrNull(REFRESH_MS) { Workspace.refresh() } }
+        SocialNotifications.serverAdded(
+            context = applicationContext,
+            serverId = serverId,
+            serverName = data["serverName"].orEmpty().ifBlank { "a server" },
+            icon = avatar(data["serverIconUrl"]),
+        )
+    }
+
+    /**
+     * Who is in a call in a channel this account can hear and is not in.
+     *
+     * A roster of nobody is the call ending, and it cancels rather than posts -
+     * so it runs before every gate below it. A phone that was told about a call
+     * and then told nothing has a notification for a call that finished an hour
+     * ago, which is worse than never having been told.
+     */
+    private suspend fun handleCallRoster(data: Map<String, String>) {
+        val channelId = data["channelId"] ?: return
+        val count = data["count"]?.toIntOrNull() ?: 0
+        if (count == 0) {
+            SocialNotifications.clearCall(applicationContext, channelId)
+            return
+        }
+        if (!wanted()) return
+        // The channel is open in front of somebody: the call is already on
+        // their screen, in the roster under the channel.
+        if (PushGate.shouldSuppress(channelId)) return
+        runCatching { withTimeoutOrNull(REFRESH_MS) { Workspace.refresh() } }
+        SocialNotifications.callRoster(
+            context = applicationContext,
+            channelId = channelId,
+            channelName = Workspace.channel(channelId)?.name ?: "a channel",
+            participants = data["participants"].orEmpty(),
+            count = count,
+        )
+    }
+
+    /**
+     * The gates every notification-drawing push shares: a session to be sure
+     * whose phone this is, and quiet hours, which are minutes on this phone's
+     * clock and therefore nobody else's decision to make.
+     *
+     * The server has already refused the account that turned notifications off.
+     */
+    private suspend fun wanted(): Boolean {
+        PushGate.ensureSession() ?: return false
+        val preferences = PushGate.preferences()
+        if (preferences?.enabled == false) return false
+        return !PushGate.quiet(preferences)
     }
 
     private suspend fun handle(data: Map<String, String>) {
@@ -58,8 +171,7 @@ class PushService : FirebaseMessagingService() {
 
         // Somebody's own message, sent from their other machine. It is already
         // on their screen everywhere it matters.
-        val selfId = (com.aatech.betweenus.core.data.Session.state.value
-            as? com.aatech.betweenus.core.data.AuthPhase.SignedIn)?.user?.id
+        val selfId = (Session.state.value as? AuthPhase.SignedIn)?.user?.id
         if (selfId != null && authorId == selfId) return
 
         // The WhatsApp rule, and the reason a push is data-only at all: the
@@ -106,6 +218,7 @@ class PushService : FirebaseMessagingService() {
         MessageNotifications.show(
             context = applicationContext,
             channelId = channelId,
+            messageId = data["messageId"].orEmpty(),
             conversationTitle = PushGate.conversationTitle(channelId),
             isGroup = PushGate.isGroup(channelId),
             selfName = self.label,

@@ -53,6 +53,12 @@ object MessageNotifications {
         val at: Long,
         val image: Bitmap? = null,
         val mine: Boolean = false,
+        /**
+         * Which message this line is, so a deletion can find it. Empty for a
+         * reply typed into the shade, which has no id until it lands and is
+         * not a thing anybody deletes from another device.
+         */
+        val messageId: String = "",
     )
 
     private val history = ConcurrentHashMap<String, ArrayDeque<Line>>()
@@ -104,6 +110,7 @@ object MessageNotifications {
     fun show(
         context: Context,
         channelId: String,
+        messageId: String,
         conversationTitle: String,
         isGroup: Boolean,
         selfName: String,
@@ -118,10 +125,45 @@ object MessageNotifications {
 
         val lines = history.getOrPut(channelId) { ArrayDeque() }
         synchronized(lines) {
-            lines.addLast(Line(text, authorName, authorId, at, image))
+            lines.addLast(Line(text, authorName, authorId, at, image, messageId = messageId))
             while (lines.size > MAX_LINES) lines.removeFirst()
         }
         post(context, channelId, conversationTitle, isGroup, selfName, authorAvatar)
+    }
+
+    /**
+     * A message was deleted, so the line drawn for it goes.
+     *
+     * The notification is rebuilt without it rather than cancelled, because a
+     * conversation usually has more than one line in it and taking the whole
+     * thing away would hide messages that still exist. A thread with nothing
+     * left is the one case where the notification itself goes.
+     *
+     * Silently nothing when this device never drew that message - it was read
+     * already, or the process has been restarted since. Removing what is not
+     * there is the normal case, not an error.
+     */
+    fun remove(
+        context: Context,
+        channelId: String,
+        messageId: String,
+        conversationTitle: String,
+        isGroup: Boolean,
+        selfName: String,
+    ) {
+        val lines = history[channelId] ?: return
+        val remaining = synchronized(lines) {
+            if (lines.none { it.messageId == messageId }) return
+            val kept = lines.filterNot { it.messageId == messageId }
+            lines.clear()
+            lines.addAll(kept)
+            kept.size
+        }
+        if (remaining == 0) {
+            clear(context, channelId)
+            return
+        }
+        post(context, channelId, conversationTitle, isGroup, selfName, authorAvatar = null)
     }
 
     /**

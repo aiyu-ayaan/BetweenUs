@@ -91,6 +91,123 @@ Cheap and local first, so a push that will be dropped costs nothing.
 
 ---
 
+## `message.deleted`
+
+Sent on the Redis `message.deleted` event. The only push that exists to take
+something *off* a screen.
+
+```jsonc
+{
+  "data": {
+    "type": "message.deleted",
+    "messageId": "3f2a…",
+    "channelId": "9b41…"
+  },
+  "android": { "priority": "normal", "ttl": 86400000 }
+}
+```
+
+- **The whole audience, unfiltered** — no author check, no mute, no quiet hours,
+  no foreground rule. Every one of those gates is a way to leave a notification
+  standing for a message that no longer exists, and a recipient who was never
+  sent one has nothing to remove. The author is included too: they may have
+  deleted it from another machine.
+- **`priority: normal`.** Tidying a screen is worth doing and is not worth
+  pulling a sleeping phone out of Doze. It lands the moment the phone is next
+  awake, which is the moment anybody would look.
+- The client rebuilds the conversation's notification without that line rather
+  than cancelling it, because a conversation usually has more than one line and
+  taking the whole thing away would hide messages that still exist. A thread
+  with nothing left is the one case where the notification itself goes.
+- Silently nothing when this device never drew that message. That is the normal
+  case, not an error.
+
+---
+
+## `friend.request` and `friend.accepted`
+
+Sent on the Redis `friend.changed` event, to the side that did not act. Nothing
+here is sealed — a friend request has no body, and a name and a picture are
+already public — but the client still writes the notification, because it is
+still the only side that knows what is on screen.
+
+```jsonc
+{
+  "data": {
+    "type": "friend.request",            // or "friend.accepted"
+    "actorId": "77c0…",
+    "actorName": "Ada",
+    "actorAvatarUrl": "https://…"        // omitted when unset
+  },
+  "android": { "priority": "high", "ttl": 86400000 }
+}
+```
+
+Declining, cancelling and unfriending all reach the bus as `kind: "removed"` and
+send nothing. "Somebody you do not know decided not to know you" is not worth a
+buzz.
+
+---
+
+## `server.member.added`
+
+Sent on the Redis `server.member.added` event, minus the owner — nobody needs
+telling they have joined the server they just made.
+
+```jsonc
+{
+  "data": {
+    "type": "server.member.added",
+    "serverId": "5c11…",
+    "serverName": "Acme",
+    "serverIconUrl": "https://…"         // omitted when unset
+  },
+  "android": { "priority": "high", "ttl": 86400000 }
+}
+```
+
+The client refreshes the workspace before it navigates: the push and the server
+appearing in the sidebar are a race, and a tap that wins it must mean "a moment
+later", not "nothing happened".
+
+---
+
+## `call.roster`
+
+Sent on the Redis `call.roster` event — which `call-service` publishes on every
+join and every departure — to everyone who can hear the channel and is not in
+the call. This is the `call.started` fan-out the Android notes waited on, in the
+shape that turned out to be right.
+
+```jsonc
+{
+  "data": {
+    "type": "call.roster",
+    "channelId": "9b41…",
+    "channelName": "general",
+    "participants": "Ada and Ben",
+    "count": "2"
+  },
+  "android": { "priority": "high", "ttl": 86400000 }
+}
+```
+
+- **The roster, not the arrival.** Three people joining one after another is one
+  notification that keeps up, rather than three that pile up.
+- **`count: "0"` cancels it.** An empty roster is the call ending, and it is the
+  only way a phone that was told about a call ever finds out it is over. It runs
+  before every client-side gate, because a notification for a call that finished
+  an hour ago is worse than never having been told.
+- **`priority: normal` on that one.** A call is worth the Doze exemption; a call
+  that has already ended is not.
+- **`participants` is already a sentence.** Three names is where a notification
+  stops being one and starts being a list, so the fourth onwards are counted:
+  `"Ada, Ben and 2 others"`.
+- Muting the channel mutes its calls. Turning notifications off mutes
+  everything.
+
+---
+
 ## Registering a device
 
 ```http
