@@ -12,7 +12,7 @@
  * they are shown straight from an object URL - the upload, and the encryption
  * that precedes it, only happen on send.
  */
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { formatBytes } from '../../services/attachments';
 import { ImageEditor } from '../../components/ImageEditor';
 import {
@@ -25,9 +25,20 @@ import {
   XIcon,
 } from '../../components/icons';
 
+const IMAGE_EXT_RE = /\.(png|jpe?g|gif|webp|svg|bmp|ico|heic)$/i;
+const VIDEO_EXT_RE = /\.(mp4|webm|mov|m4v|ogg)$/i;
+
+export function isImage(file: File): boolean {
+  return file.type.startsWith('image/') || IMAGE_EXT_RE.test(file.name);
+}
+
+export function isVideo(file: File): boolean {
+  return file.type.startsWith('video/') || VIDEO_EXT_RE.test(file.name);
+}
+
 /** True for the files this screen has something to show rather than name. */
 export function isPreviewable(file: File): boolean {
-  return file.type.startsWith('image/') || file.type.startsWith('video/');
+  return isImage(file) || isVideo(file);
 }
 
 export function SendPreview({
@@ -109,8 +120,8 @@ export function SendPreview({
             type="button"
             onClick={onClose}
             disabled={sending}
-            aria-label="Back to the message box"
-            title="Back"
+            aria-label="Discard files"
+            title="Discard"
             className="ml-auto cursor-pointer rounded-md p-1.5 text-slate-400 transition-colors duration-150 hover:bg-white/[0.07] hover:text-slate-100 disabled:cursor-not-allowed"
           >
             <XIcon className="h-4 w-4" />
@@ -163,7 +174,7 @@ export function SendPreview({
           >
             <PaperclipIcon className="h-5 w-5" />
           </button>
-          {current?.type.startsWith('image/') && (
+          {current && isImage(current) && (
             <button
               type="button"
               onClick={() => setCropping(true)}
@@ -225,11 +236,23 @@ export function SendPreview({
 function Preview({ file }: { file: File }): JSX.Element {
   const url = useObjectUrl(file);
 
-  if (file.type.startsWith('image/')) {
-    return <img src={url} alt={file.name} className="max-h-[55vh] max-w-full object-contain" />;
+  if (isImage(file)) {
+    return url ? (
+      <img src={url} alt={file.name} className="max-h-[55vh] max-w-full object-contain" />
+    ) : (
+      <div className="flex h-48 w-full items-center justify-center">
+        <div className="h-6 w-6 animate-spin rounded-full border-2 border-slate-600 border-t-accent" />
+      </div>
+    );
   }
-  if (file.type.startsWith('video/')) {
-    return <video src={url} controls className="max-h-[55vh] max-w-full bg-black" />;
+  if (isVideo(file)) {
+    return url ? (
+      <video src={url} controls className="max-h-[55vh] max-w-full bg-black" />
+    ) : (
+      <div className="flex h-48 w-full items-center justify-center">
+        <div className="h-6 w-6 animate-spin rounded-full border-2 border-slate-600 border-t-accent" />
+      </div>
+    );
   }
   return (
     <div className="flex flex-col items-center gap-2 text-slate-300">
@@ -243,24 +266,39 @@ function Preview({ file }: { file: File }): JSX.Element {
 function Thumbnail({ file }: { file: File }): JSX.Element {
   const url = useObjectUrl(file);
 
-  if (file.type.startsWith('image/')) {
-    return <img src={url} alt="" className="h-full w-full object-cover" />;
+  if (isImage(file)) {
+    return url ? (
+      <img src={url} alt="" className="h-full w-full object-cover" />
+    ) : (
+      <ImageIcon className="h-5 w-5 text-slate-400" />
+    );
   }
-  if (file.type.startsWith('video/')) {
-    // Muted and unplayed: a poster frame, not a wall of moving thumbnails.
-    return <video src={url} muted className="h-full w-full object-cover" />;
+  if (isVideo(file)) {
+    return url ? (
+      <video src={url} muted className="h-full w-full object-cover" />
+    ) : (
+      <FileIcon className="h-5 w-5 text-slate-400" />
+    );
   }
-  return file.type.startsWith('image/') ? (
-    <ImageIcon className="h-5 w-5 text-slate-400" />
-  ) : (
-    <FileIcon className="h-5 w-5 text-slate-400" />
-  );
+  return <FileIcon className="h-5 w-5 text-slate-400" />;
 }
 
 /** An object URL for a local file, released when it stops being shown. */
-function useObjectUrl(file: File): string {
-  const url = useMemo(() => URL.createObjectURL(file), [file]);
-  useEffect(() => () => URL.revokeObjectURL(url), [url]);
+export function useObjectUrl(file: File | null | undefined): string | null {
+  const [url, setUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!file) {
+      setUrl(null);
+      return;
+    }
+    const objectUrl = URL.createObjectURL(file);
+    setUrl(objectUrl);
+    return () => {
+      URL.revokeObjectURL(objectUrl);
+    };
+  }, [file]);
+
   return url;
 }
 

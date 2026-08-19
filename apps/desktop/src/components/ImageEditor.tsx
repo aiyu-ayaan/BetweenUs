@@ -93,8 +93,14 @@ export function ImageEditor({
   // The source is a bitmap for the arithmetic and an object URL for the
   // preview: an <img> the browser lays out costs nothing to move and turn,
   // where a canvas would be repainted on every pointer move.
-  const url = useMemo(() => URL.createObjectURL(file), [file]);
-  useEffect(() => () => URL.revokeObjectURL(url), [url]);
+  const [url, setUrl] = useState<string | null>(null);
+  useEffect(() => {
+    const objectUrl = URL.createObjectURL(file);
+    setUrl(objectUrl);
+    return () => {
+      URL.revokeObjectURL(objectUrl);
+    };
+  }, [file]);
 
   const apply = (next: Edit): void => {
     if (bitmap) setEdit(clampEdit(bitmap, frame, next));
@@ -167,7 +173,7 @@ export function ImageEditor({
         }}
         onWheel={(event) => apply({ ...edit, zoom: edit.zoom * (event.deltaY < 0 ? 1.1 : 1 / 1.1) })}
       >
-        {bitmap && (
+        {bitmap && url && (
           <img
             src={url}
             alt=""

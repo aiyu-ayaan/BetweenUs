@@ -15,7 +15,7 @@ import { Avatar } from '../../components/Avatar';
 import { AttachmentList } from './Attachments';
 import { EmojiPicker } from './EmojiPicker';
 import { MessageMenu } from './MessageMenu';
-import { SendPreview, isPreviewable } from './SendPreview';
+import { SendPreview, isPreviewable, isImage } from './SendPreview';
 import { EmojiSuggest } from './EmojiSuggest';
 import {
   emojiFor,
@@ -1082,7 +1082,7 @@ function MessageComposer({
                 key={`${file.name}-${index}`}
                 className="flex items-center gap-2 rounded bg-surface-800 px-2 py-1.5"
               >
-                {file.type.startsWith('image/') ? (
+                {isImage(file) ? (
                   <ImageIcon className="h-4 w-4 shrink-0 text-slate-400" />
                 ) : (
                   <FileIcon className="h-4 w-4 shrink-0 text-slate-400" />
@@ -1238,7 +1238,10 @@ function MessageComposer({
             setFiles(files.map((file, at) => (at === index ? edited : file)))
           }
           onSend={() => void submit()}
-          onClose={() => setPreviewing(false)}
+          onClose={() => {
+            setFiles([]);
+            setPreviewing(false);
+          }}
         />
       )}
 
