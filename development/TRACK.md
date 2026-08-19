@@ -157,6 +157,11 @@ Backlog worked down, this pass:
 - [x] **Android: microphone processing, a hi-fi mode, and an output route**,
       including the Opus `fmtp` patch that carries bitrate, channels and DTX.
       Input sensitivity is still open and the reason is written down.
+- [x] **Clean chat images & social media media saving naming (bu_{timestamp}).**
+      Removed filename and size metadata overlay from image attachments in chat,
+      giving full, unobstructed image previews. Standardized image/video save
+      and download naming across Android and Desktop to `bu_YYYYMMDD_HHmmss.ext`
+      matching modern social messaging apps.
 - [x] **Android: Permissions onboarding carousel with progress & Allow All.**
       Replaced the static permission list with an interactive swipeable carousel
       and live setup progress indicator. Added a batch "Allow All Permissions"
