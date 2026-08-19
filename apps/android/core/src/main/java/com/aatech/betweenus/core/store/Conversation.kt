@@ -16,6 +16,7 @@ import com.aatech.betweenus.core.data.UploadedObject
 import com.aatech.betweenus.core.data.UploadedPart
 import com.aatech.betweenus.core.data.Session
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -290,9 +291,11 @@ object Conversation {
      * refusal was the client's, not the deployment's. The server has taken
      * multipart uploads all along.
      *
-     * Sequential on purpose, exactly as on the desktop: parts in parallel would
-     * multiply what this holds in memory, and a phone's uplink is the
-     * bottleneck either way.
+     * A few parts at a time, exactly as on the desktop. One at a time was the
+     * old answer and it was the wrong one: a single request spends most of its
+     * life waiting - the round trip to the gateway, the tunnel, the store's own
+     * acknowledgement - and none of that is uplink. [UPLOAD_LANES] slices held
+     * at once is the cost, which is why it is a small number.
      */
     private suspend fun putBytes(
         ciphertext: ByteArray,
@@ -307,24 +310,45 @@ object Conversation {
         val total = (ciphertext.size + partSize - 1) / partSize
 
         try {
-            val parts = ArrayList<UploadedPart>(total)
-            for (index in 0 until total) {
-                val from = index * partSize
-                val to = minOf(ciphertext.size, from + partSize)
-                parts += BetweenUsApi.uploadPart(
-                    ticket = opened.ticket,
-                    partNumber = index + 1,
-                    bytes = ciphertext.copyOfRange(from, to),
-                )
-                onProgress?.invoke((index + 1).toFloat() / total)
+            val parts = arrayOfNulls<UploadedPart>(total)
+            val next = java.util.concurrent.atomic.AtomicInteger(0)
+            val done = java.util.concurrent.atomic.AtomicInteger(0)
+
+            coroutineScope {
+                repeat(minOf(UPLOAD_LANES, total)) {
+                    launch {
+                        while (true) {
+                            val index = next.getAndIncrement()
+                            if (index >= total) break
+                            val from = index * partSize
+                            val to = minOf(ciphertext.size, from + partSize)
+                            parts[index] = BetweenUsApi.uploadPart(
+                                ticket = opened.ticket,
+                                partNumber = index + 1,
+                                bytes = ciphertext.copyOfRange(from, to),
+                            )
+                            onProgress?.invoke(done.incrementAndGet().toFloat() / total)
+                        }
+                    }
+                }
             }
-            return BetweenUsApi.completeMultipart(opened.ticket, parts)
+            return BetweenUsApi.completeMultipart(opened.ticket, parts.filterNotNull())
         } catch (error: Throwable) {
             // Leave no half-uploaded parts behind for a file nobody will send.
             runCatching { BetweenUsApi.abortMultipart(opened.ticket) }
             throw error
         }
     }
+
+    /**
+     * How many parts are in flight at once.
+     *
+     * Three rather than one, and not many more: past this the parts start
+     * competing for the same uplink instead of covering each other's latency,
+     * and each one in flight is another slice of the ciphertext held in memory
+     * on a phone that already asks for `largeHeap` to seal one file.
+     */
+    private const val UPLOAD_LANES = 3
 
     /** Matches MAX_IMAGE_EDGE in `apps/desktop/src/services/attachments.ts`. */
     private const val MAX_IMAGE_EDGE = 1920

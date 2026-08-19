@@ -73,7 +73,17 @@ export async function uploadAttachment(
   };
 }
 
-/** One request when it fits in one; otherwise a part at a time. */
+/**
+ * How many parts are in flight at once.
+ *
+ * Three rather than one, and not many more: past this the parts start
+ * competing for the same uplink instead of covering each other's latency, and
+ * the object store is being asked to hold more of one file open at a time for
+ * no gain.
+ */
+const UPLOAD_LANES = 3;
+
+/** One request when it fits in one; otherwise a few parts at a time. */
 async function putBytes(
   bytes: Uint8Array<ArrayBuffer>,
   onProgress?: UploadProgress,
@@ -91,14 +101,28 @@ async function putBytes(
   const total = Math.ceil(blob.size / partSize);
 
   try {
-    const parts: UploadedPart[] = [];
-    for (let index = 0; index < total; index += 1) {
-      // Sequential on purpose: parallel parts would multiply the memory this
-      // holds, and the bottleneck is the uplink either way.
-      const slice = blob.slice(index * partSize, (index + 1) * partSize);
-      parts.push(await api.uploadPart(ticket, index + 1, slice));
-      onProgress?.((index + 1) / total);
-    }
+    // A few parts at a time. One at a time was the old answer and it was the
+    // wrong one: a single request spends most of its life waiting - the round
+    // trip to the gateway, the tunnel, the store's own acknowledgement - and
+    // none of that is uplink. A `Blob.slice` is a view rather than a copy, so
+    // the parts in flight cost no extra memory to hold.
+    const parts: UploadedPart[] = new Array(total);
+    let next = 0;
+    let done = 0;
+
+    const worker = async (): Promise<void> => {
+      for (let index = next; index < total; index = next) {
+        next = index + 1;
+        const slice = blob.slice(index * partSize, (index + 1) * partSize);
+        parts[index] = await api.uploadPart(ticket, index + 1, slice);
+        done += 1;
+        onProgress?.(done / total);
+      }
+    };
+
+    await Promise.all(
+      Array.from({ length: Math.min(UPLOAD_LANES, total) }, () => worker()),
+    );
     return await api.completeMultipart(ticket, parts);
   } catch (error) {
     // Leave no half-uploaded parts behind for a file nobody will ever send.
