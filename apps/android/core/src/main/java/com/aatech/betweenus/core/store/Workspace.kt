@@ -136,6 +136,11 @@ object Workspace {
             // channel never arrives and there is nothing to badge.
             servers.forEach { loadChannels(it.id) }
             servers.forEach { loadEmoji(it.id) }
+            // And the member lists. Presence reports who is in a voice channel
+            // as user ids, and the member list is the only thing that turns one
+            // into a name - so without this every voice roster in the sidebar
+            // read "Someone" until the members screen had been opened once.
+            servers.forEach { loadMembers(it.id, force = true) }
             loadDirectChannels()
             loadFriends()
             loadUnread()

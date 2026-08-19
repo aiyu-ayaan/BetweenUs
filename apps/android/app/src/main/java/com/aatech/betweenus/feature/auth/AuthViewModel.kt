@@ -76,7 +76,12 @@ class AuthViewModel : ViewModel() {
                 }
                 // The password is dropped here and never stored: Session takes
                 // the tokens, and the field is cleared with the rest of the form.
-                Session.start(response, email = form.email.trim())
+                // The password goes with it. It is the secret that opens this
+                // account's identity backup, and sign-in is the one moment it
+                // is in hand - without it every sign-in ended in a prompt for
+                // the password that had just been typed, and a registration
+                // uploaded no backup at all.
+                Session.start(response, email = form.email.trim(), password = form.password)
                 _state.update { it.copy(busy = false, password = "") }
             } catch (error: Exception) {
                 _state.update { it.copy(busy = false, error = Session.messageOf(error)) }

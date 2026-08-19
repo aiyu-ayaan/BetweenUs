@@ -54,7 +54,8 @@ fun PicturePicker(
     canClear: Boolean,
     onPicked: suspend (url: String) -> Unit,
     onClear: suspend () -> Unit,
-    preview: @Composable () -> Unit,
+    /** Drawn beside the buttons. Empty where the screen already shows one. */
+    preview: @Composable () -> Unit = {},
 ) {
     val scope = rememberCoroutineScope()
     val context = androidx.compose.ui.platform.LocalContext.current

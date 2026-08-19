@@ -231,6 +231,26 @@ class VoiceEngine(private val context: Context) {
     private var pollJob: Job? = null
     private var joinTimeout: Job? = null
 
+    /**
+     * Offers and candidates that arrived before the peer they belong to was on
+     * the roster.
+     *
+     * The relay sends `joined` before anybody's signalling, but "before" on two
+     * different sockets is not an ordering anyone can rely on, and the far side
+     * offers the instant it sees us. A signal dropped here is dropped for good:
+     * the impolite peer offers once, so losing that one offer is a tile that
+     * says "connecting..." for the life of the call. Held instead, and replayed
+     * the moment the link exists.
+     */
+    private val earlySignals = ConcurrentHashMap<String, MutableList<JSONObject>>()
+
+    /**
+     * Peers announced before the relay had told us our own id. Politeness is
+     * decided by comparing the two ids, so there is nothing to decide yet -
+     * and the old answer, dropping them, was a roster the call never recovered.
+     */
+    private val earlyPeers = mutableListOf<CallPeer>()
+
     private var audioTrack: AudioTrack? = null
     private var videoCapturer: VideoCapturer? = null
     private var cameraTrack: VideoTrack? = null
@@ -362,6 +382,8 @@ class VoiceEngine(private val context: Context) {
         detach = null
         connections.values.forEach { it.close() }
         connections.clear()
+        earlySignals.clear()
+        earlyPeers.clear()
         stopVideo()
         audioTrack?.dispose()
         audioTrack = null
@@ -612,7 +634,12 @@ class VoiceEngine(private val context: Context) {
 
     private suspend fun onSignal(event: JSONObject) {
         when (event.optString("type")) {
-            "ready" -> selfPeerId = event.optString("peerId")
+            "ready" -> {
+                selfPeerId = event.optString("peerId")
+                val waiting = earlyPeers.toList()
+                earlyPeers.clear()
+                waiting.forEach { addPeer(it) }
+            }
 
             "joined" -> {
                 joinTimeout?.cancel()
@@ -647,6 +674,8 @@ class VoiceEngine(private val context: Context) {
 
             "peer.left" -> {
                 val peerId = event.optString("peerId")
+                earlySignals.remove(peerId)
+                earlyPeers.removeAll { it.peerId == peerId }
                 connections.remove(peerId)?.close()
                 _participants.update { list -> list.filterNot { it.peer.peerId == peerId } }
                 CallTones.play(CallTones.Tone.LEAVE)
@@ -655,7 +684,12 @@ class VoiceEngine(private val context: Context) {
             "signal" -> {
                 val from = event.optString("from")
                 val data = event.optJSONObject("data") ?: return
-                connections[from]?.onSignal(data)
+                val link = connections[from]
+                if (link != null) {
+                    link.onSignal(data)
+                } else {
+                    earlySignals.getOrPut(from) { mutableListOf() }.add(data)
+                }
             }
 
             // This account joined a call from somewhere else, so this
@@ -669,13 +703,20 @@ class VoiceEngine(private val context: Context) {
 
     private fun addPeer(peer: CallPeer) {
         if (connections.containsKey(peer.peerId)) return
-        val self = selfPeerId ?: return
+        val self = selfPeerId ?: run {
+            if (earlyPeers.none { it.peerId == peer.peerId }) earlyPeers += peer
+            return
+        }
         // Whoever has the larger peer id yields. Both sides compute this from
         // the same two strings, so they always disagree - which is the point.
         val link = PeerLink(peer, polite = self > peer.peerId)
         connections[peer.peerId] = link
         _participants.update { it + Participant(peer) }
         link.start()
+        // Anything that arrived while there was nowhere to put it, in the order
+        // it arrived: an offer before its candidates, which is the order that
+        // matters.
+        earlySignals.remove(peer.peerId)?.forEach { link.onSignal(it) }
     }
 
     private fun send(to: String, data: JSONObject) {

@@ -543,7 +543,14 @@ object BetweenUsApi {
         authed(
             "POST",
             "/api/v1/e2ee/keys",
-            JSONObject().put("channelId", channelId).put("epoch", epoch).put("entries", array),
+            JSONObject()
+                .put("channelId", channelId)
+                .put("epoch", epoch)
+                // Required by the endpoint. Leaving it out failed validation on
+                // every publish, so this client could never mint a channel's
+                // first epoch - only read one some other client had minted.
+                .put("senderDeviceId", senderDeviceId)
+                .put("entries", array),
         )
     }
 

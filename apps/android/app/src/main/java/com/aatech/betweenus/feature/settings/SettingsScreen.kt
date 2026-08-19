@@ -175,14 +175,9 @@ fun SettingsScreen(
                 canClear = user.avatarUrl != null,
                 onPicked = { url -> Session.updateUser(BetweenUsApi.setAvatar(url)) },
                 onClear = { Session.updateUser(BetweenUsApi.setAvatar(null)) },
-                preview = {
-                    Avatar(
-                        id = user.id,
-                        label = user.label,
-                        url = user.avatarUrl?.let { Endpoint.absolute(it) },
-                        size = 56.dp,
-                    )
-                },
+                // No preview: the account row above this already draws the
+                // avatar, and two of the same picture on one screen reads as a
+                // second, different setting.
             )
 
             SectionLabel("Profile")
