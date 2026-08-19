@@ -5,7 +5,6 @@ import com.aatech.betweenus.core.crypto.E2ee
 import com.aatech.betweenus.core.data.Http
 import com.aatech.betweenus.core.data.MessageBody
 import com.aatech.betweenus.core.data.PushTokens
-import com.aatech.betweenus.core.store.AppForeground
 import com.aatech.betweenus.core.store.Conversation
 import com.aatech.betweenus.core.store.Workspace
 import com.google.firebase.messaging.FirebaseMessagingService
@@ -66,7 +65,7 @@ class PushService : FirebaseMessagingService() {
         // The WhatsApp rule, and the reason a push is data-only at all: the
         // conversation is open, in front of somebody, right now. Both halves
         // are needed - a locked phone still has the chat screen composed.
-        if (AppForeground.visible && Conversation.visibleChannelId == channelId) return
+        if (PushGate.shouldSuppress(channelId)) return
 
         val self = PushGate.ensureSession() ?: return
         if (authorId == self.id) return
