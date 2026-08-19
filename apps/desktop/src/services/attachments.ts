@@ -188,8 +188,17 @@ export async function saveAttachment(
   link.href = url;
   // A converted HEIC is JPEG bytes now; saving them under a .heic name would
   // hand the operating system a file that lies about itself.
-  link.download =
-    blob.type === attachment.contentType ? attachment.name : withExtension(attachment.name, 'jpg');
+  const isMedia = attachment.contentType.startsWith('image/') || attachment.contentType.startsWith('video/');
+  if (isMedia) {
+    const now = new Date();
+    const pad = (n: number) => n.toString().padStart(2, '0');
+    const dateStr = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+    const ext = (blob.type === attachment.contentType ? attachment.name.split('.').pop() : 'jpg') || 'jpg';
+    link.download = `bu_${dateStr}.${ext}`;
+  } else {
+    link.download =
+      blob.type === attachment.contentType ? attachment.name : withExtension(attachment.name, 'jpg');
+  }
   link.click();
   // Revoked on the next tick: the click has to have read it first.
   setTimeout(() => URL.revokeObjectURL(url), 0);

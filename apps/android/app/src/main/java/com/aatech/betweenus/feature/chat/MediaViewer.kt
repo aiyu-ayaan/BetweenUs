@@ -70,6 +70,18 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+
+/**
+ * Formats a clean media file name with `bu_YYYYMMDD_HHmmss.ext` timestamp matching modern social apps.
+ */
+fun formatBuMediaName(originalName: String? = null, fallbackExt: String = "jpg"): String {
+    val dateStr = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
+    val ext = originalName?.substringAfterLast('.', "")?.takeIf { it.isNotBlank() } ?: fallbackExt
+    return "bu_${dateStr}.${ext.lowercase(Locale.US)}"
+}
 
 /**
  * Fullscreen Interactive Image Viewer modal with pinch-to-zoom, pan, save to Pictures/BetweenUs album, and share.
@@ -160,7 +172,7 @@ fun ImageViewerDialog(
                     }
 
                     Text(
-                        text = title,
+                        text = if (title.isBlank() || title.endsWith(".jpg", true) || title.endsWith(".jpeg", true) || title.endsWith(".png", true) || title.endsWith(".webp", true)) "Photo" else title,
                         style = MaterialTheme.typography.titleMedium,
                         color = Slate100,
                         maxLines = 1,
@@ -347,7 +359,7 @@ fun VideoPlayerDialog(
                     }
 
                     Text(
-                        text = title,
+                        text = if (title.isBlank() || title.endsWith(".mp4", true) || title.endsWith(".mov", true) || title.endsWith(".webm", true)) "Video" else title,
                         style = MaterialTheme.typography.titleMedium,
                         color = Slate100,
                         maxLines = 1,
@@ -409,20 +421,16 @@ fun VideoPlayerDialog(
 }
 
 /**
- * Saves an image to the device gallery under Pictures/BetweenUs album.
+ * Saves an image to the device gallery under Pictures/BetweenUs album with bu_YYYYMMDD_HHmmss.jpg naming.
  */
 suspend fun saveImageToStorage(
     context: Context,
     bitmap: Bitmap,
-    fileName: String = "BetweenUs_${System.currentTimeMillis()}.jpg",
+    fileName: String? = null,
 ): Uri? = withContext(Dispatchers.IO) {
     runCatching {
         val resolver = context.contentResolver
-        val safeName = if (fileName.endsWith(".jpg", true) || fileName.endsWith(".png", true)) {
-            fileName
-        } else {
-            "$fileName.jpg"
-        }
+        val safeName = formatBuMediaName(fileName, "jpg")
 
         val contentValues = ContentValues().apply {
             put(MediaStore.Images.Media.DISPLAY_NAME, safeName)
@@ -452,7 +460,7 @@ suspend fun saveImageToStorage(
 
 /**
  * Saves decrypted media bytes (video, audio, image, document) to public storage under Pictures/BetweenUs,
- * Movies/BetweenUs, or Download/BetweenUs.
+ * Movies/BetweenUs, or Download/BetweenUs with standard social media timestamp naming.
  */
 suspend fun saveMediaToStorage(
     context: Context,
@@ -466,32 +474,50 @@ suspend fun saveMediaToStorage(
         val isImage = contentType.startsWith("image/")
         val isAudio = contentType.startsWith("audio/")
 
-        val (collection, relativeDir, mime) = when {
-            isImage -> Triple(
-                MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
-                "Pictures/BetweenUs",
-                contentType.ifBlank { "image/jpeg" },
-            )
-            isVideo -> Triple(
-                MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
-                "Movies/BetweenUs",
-                contentType.ifBlank { "video/mp4" },
-            )
-            isAudio -> Triple(
-                MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
-                "Music/BetweenUs",
-                contentType.ifBlank { "audio/mpeg" },
-            )
-            else -> Triple(
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) MediaStore.Downloads.EXTERNAL_CONTENT_URI
-                else MediaStore.Files.getContentUri("external"),
-                "Download/BetweenUs",
-                contentType.ifBlank { "application/octet-stream" },
-            )
+        val collection: Uri
+        val relativeDir: String
+        val mime: String
+        val defaultExt: String
+
+        when {
+            isImage -> {
+                collection = MediaStore.Images.Media.EXTERNAL_CONTENT_URI
+                relativeDir = "Pictures/BetweenUs"
+                mime = contentType.ifBlank { "image/jpeg" }
+                defaultExt = "jpg"
+            }
+            isVideo -> {
+                collection = MediaStore.Video.Media.EXTERNAL_CONTENT_URI
+                relativeDir = "Movies/BetweenUs"
+                mime = contentType.ifBlank { "video/mp4" }
+                defaultExt = "mp4"
+            }
+            isAudio -> {
+                collection = MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
+                relativeDir = "Music/BetweenUs"
+                mime = contentType.ifBlank { "audio/mpeg" }
+                defaultExt = "mp3"
+            }
+            else -> {
+                collection = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    MediaStore.Downloads.EXTERNAL_CONTENT_URI
+                } else {
+                    MediaStore.Files.getContentUri("external")
+                }
+                relativeDir = "Download/BetweenUs"
+                mime = contentType.ifBlank { "application/octet-stream" }
+                defaultExt = "bin"
+            }
+        }
+
+        val safeName = if (isImage || isVideo) {
+            formatBuMediaName(name, defaultExt)
+        } else {
+            name.ifBlank { formatBuMediaName(name, defaultExt) }
         }
 
         val contentValues = ContentValues().apply {
-            put(MediaStore.MediaColumns.DISPLAY_NAME, name)
+            put(MediaStore.MediaColumns.DISPLAY_NAME, safeName)
             put(MediaStore.MediaColumns.MIME_TYPE, mime)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 put(MediaStore.MediaColumns.RELATIVE_PATH, relativeDir)

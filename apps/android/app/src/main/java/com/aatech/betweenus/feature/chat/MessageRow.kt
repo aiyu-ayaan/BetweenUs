@@ -455,35 +455,6 @@ private fun AttachmentCard(
                                 .fillMaxWidth()
                                 .heightIn(min = 160.dp, max = 300.dp),
                         )
-
-                        // Bottom Gradient metadata bar
-                        Box(
-                            modifier = Modifier
-                                .align(Alignment.BottomCenter)
-                                .fillMaxWidth()
-                                .background(Color.Black.copy(alpha = 0.6f))
-                                .padding(horizontal = 10.dp, vertical = 6.dp),
-                        ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Text(
-                                    text = attachment.name,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = Slate100,
-                                    maxLines = 1,
-                                    modifier = Modifier.weight(1f),
-                                )
-                                Spacer(Modifier.width(8.dp))
-                                Text(
-                                    text = readableSize(attachment.size),
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = Slate400,
-                                )
-                            }
-                        }
                     }
                 } else {
                     Row(
