@@ -323,9 +323,60 @@ Desktop and web, earlier passes:
       machine doing both at once no longer points both at whichever was set
       last. Every input event says which of the two it came from.
 
+Attachments and pictures:
+
+- [x] **Crop and rotate before a picture is sent or stored.** Drag, pinch or
+      wheel to zoom, two buttons to turn, and the frame is the crop. The
+      geometry is one module per client - `services/image-edit.ts` and
+      `core/data/ImageEdit.kt`, one a port of the other - with a self-check on
+      each side proving the same three properties: the frame is always covered,
+      the pan is clamped to the picture, and the written file is the crop in the
+      source's own pixels rather than an upscale of it. It sits between the
+      picker and the avatar upload, and behind a crop button in the send
+      preview.
+- [x] **Sending in the background, on Android.** `Outbox` is a queue; handing a
+      batch to it returns at once and the work carries on under a foreground
+      service with an ongoing notification. Before this a send ran in the chat
+      screen's own coroutine scope, so a minute-long video pinned the preview
+      dialog open for a minute and leaving the channel abandoned the upload with
+      its parts already in object storage.
+- [x] **Video compressed before it is sent, on Android.** 720p H.264 at 2.5
+      Mbps through Media3's Transformer, before the file is sealed. Every way it
+      can go wrong ends in "send what was picked": an already-small clip, one
+      over twenty minutes, a device with no encoder to spare, and a re-encode
+      that came out bigger than its source are all left alone. **Desktop and web
+      do not compress video** - there is no equivalent that is not shipping
+      ffmpeg into the bundle - so a clip sent from a browser is still whatever
+      was picked.
+- [x] **A few upload parts at a time rather than one.** Three lanes on every
+      client. A single part spends most of its life waiting on the round trip
+      rather than on uplink, and out-of-order parts were already supported and
+      checked in `packages/storage`.
+
+Android faults found against a real deployment:
+
+- [x] **The phone could never mint a channel's first key.** Publishing wrapped
+      keys never sent `senderDeviceId`, which the endpoint requires, so every
+      publish failed validation - a new account could not send its first message
+      until a web or desktop client had keyed the channel for it.
+- [x] **Sign-in dropped the password before starting the session**, so the
+      identity backup was never opened on the way in and never uploaded on the
+      way out of a registration. Every sign-in ended in a prompt for the
+      password that had just been typed.
+- [x] **A workspace refresh never loaded member lists**, and a voice roster is
+      user ids until a member list turns them into people - so the sidebar said
+      "Someone" until the members screen had been opened once.
+- [x] **Call signalling for a peer not yet on the roster is held** rather than
+      dropped, along with peers announced before the relay has issued our own
+      id. The impolite side offers exactly once, so a dropped offer was a tile
+      that said "connecting..." for the life of the call.
+- [x] **One avatar control in settings**, not two: the account row already drew
+      the picture the picker was drawing again beside its buttons.
+
 Documentation:
 
 - [x] **Post-SFU corrections** across `TODO.md`, and phase 27 opened for push.
+- [x] **This pass**, recorded here and in `ANDROID_TODO.md`.
 
 ---
 

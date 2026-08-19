@@ -198,8 +198,11 @@ way a browser would execute. Attachments are always served as
 client fetches, decrypts and renders them itself.
 
 Compression happens before encryption, because ciphertext does not compress:
-an oversized photo is redrawn to 1920px JPEG and text-shaped files are gzipped,
-both in the client. HEIC — what a phone camera writes by default — is decoded
+an oversized photo is redrawn to 1920px JPEG, a video picked on Android is
+re-encoded to 720p H.264, and text-shaped files are gzipped - all in the client.
+(Desktop and web do not re-encode video: there is no way to do it in a browser
+that is not shipping a codec into the bundle, so a clip sent from there is
+whatever was picked.) HEIC — what a phone camera writes by default — is decoded
 in the client by libheif compiled to WebAssembly and converted whatever its
 size, because no browser engine can draw one. Both ends run through that
 conversion: a HEIC picked on this machine becomes a JPEG before it is sent, and
@@ -357,6 +360,14 @@ Two things a new client must get right, because the server cannot check either:
 the sign-in rules under "Identity backup" above (a failed fetch is not "no
 backup"), and the NUL-prefixed `betweenus-body:1` marker for messages that carry
 attachments. Everything else is shape the DTOs already enforce.
+
+One of those shapes is worth naming here rather than leaving to a 400, because
+of how it fails. `POST /api/v1/e2ee/keys` requires `senderDeviceId` on the
+*bundle*, beside `channelId` and `epoch`, as well as the per-entry recipient
+fields. A client that omits it can still read a channel key somebody else
+minted and cannot mint one itself - so it works perfectly until it is the first
+client into a new channel, and then a brand-new account cannot send its first
+message. The Android client shipped with exactly that.
 
 Private-key storage is the one platform-specific part: the Electron client
 seals it with `safeStorage` (the OS keychain). The equivalents are the Android

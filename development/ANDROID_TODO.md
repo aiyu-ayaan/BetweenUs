@@ -46,6 +46,54 @@ transports. Two things wait behind it because they are the same push - an
 in-app notification for a message arriving in a channel that is not on screen
 (phase 4), and the incoming-call UI for a dead app (phase 6).
 
+### What a real deployment found
+
+The client was driven against a live deployment from a phone for the first
+time, and four faults fell out at once - all of them things an emulator against
+a local backend had never reached:
+
+- publishing wrapped channel keys never sent `senderDeviceId`, which the
+  endpoint requires, so **the phone could read a channel key but never mint
+  one**. A brand-new account could not send its first message until a web or
+  desktop client had keyed the channel for it;
+- sign-in dropped the password before `Session.start`, so **the identity backup
+  was never opened on the way in and never uploaded on the way out of a
+  registration** - and every sign-in ended in a prompt for the password just
+  typed;
+- a workspace refresh never loaded member lists, so **a voice roster read
+  "Someone"** until the members screen had been opened once;
+- settings drew the avatar twice, once in the account row and again as the
+  picture picker's preview.
+
+All four are fixed. Call signalling for a peer not yet on the roster is now
+held rather than dropped as well - the impolite side offers exactly once, so a
+dropped offer was a tile stuck on "connecting..." for the life of the call -
+but **that one is a guess at the cause rather than a diagnosis**: nobody has a
+logcat from the call in question. If a tile sticks on "connecting..." again,
+that log is the thing worth capturing.
+
+### Sending files
+
+Sending used to run in the chat screen's own coroutine scope. It does not any
+more: `Outbox` is a queue, handing a batch to it returns at once, and the work
+carries on under `UploadService` - a foreground service with an ongoing
+notification, which is both the disclosure Android requires and the progress
+bar somebody wants. The composer draws the same progress above it.
+
+A video is re-encoded to 720p H.264 at 2.5 Mbps by Media3's Transformer before
+it is sealed, which is the difference between a clip arriving in seconds and a
+clip arriving in ten minutes. Every failure path ends in "send what was
+picked". Upload parts now go up three at a time rather than one.
+
+There is a crop-and-rotate screen for pictures, shared in design with the
+desktop's: `core/data/ImageEdit.kt` is a port of `services/image-edit.ts`, and
+`ImageEditTest` mirrors that file's own self-check because the two clients frame
+the same photograph and have to agree what "the frame" means.
+
+**None of this has been in front of a human on a device.** The compression path
+is the one to try first, on a long 4K clip, and then with the app backgrounded
+mid-upload.
+
 Everything else that was open here is tracked in `TRACK.md` and is being worked
 through: markdown bodies, an emoji picker, audio
 routing and ducking, the share quality ladder, remote clipboard and file
