@@ -6,6 +6,7 @@ import { Logger, createLogger } from '@betweenus/logger';
 import { createHealthController } from '@betweenus/nest-common';
 import { MessagesController } from './modules/messages/messages.controller';
 import { MessagesService } from './modules/messages/messages.service';
+import { UnfurlService } from './modules/messages/unfurl.service';
 import { UploadsController } from './modules/uploads/uploads.controller';
 import { ScratchSweeper } from './modules/uploads/scratch-sweeper';
 import { AttachmentSweeper } from './modules/uploads/attachment-sweeper';
@@ -33,6 +34,7 @@ const SERVICE_NAME = 'chat-service';
   ],
   providers: [
     MessagesService,
+    UnfurlService,
     E2eeService,
     FriendsService,
     ChatGateway,

@@ -13,8 +13,9 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { CurrentUser, JwtAuthGuard, type AuthenticatedUser } from '@betweenus/auth';
-import type { Message, Paginated } from '@betweenus/shared-types';
+import type { LinkPreview, Message, Paginated } from '@betweenus/shared-types';
 import { MessagesService } from './messages.service';
+import { UnfurlService } from './unfurl.service';
 import {
   CreateMessageDto,
   MessageQueryDto,
@@ -26,7 +27,10 @@ import {
 @Controller('messages')
 @UseGuards(JwtAuthGuard)
 export class MessagesController {
-  constructor(private readonly messages: MessagesService) {}
+  constructor(
+    private readonly messages: MessagesService,
+    private readonly unfurlService: UnfurlService,
+  ) {}
 
   @Get()
   history(
@@ -34,6 +38,13 @@ export class MessagesController {
     @Query() query: MessageQueryDto,
   ): Promise<Paginated<Message>> {
     return this.messages.history(user.id, query.channelId, query.before);
+  }
+
+  // Ahead of `:messageId` routes, or `unfurl` is read as a message id.
+  @Get('unfurl')
+  unfurl(@Query('url') targetUrl?: string): Promise<LinkPreview | null> {
+    if (!targetUrl) return Promise.resolve(null);
+    return this.unfurlService.unfurl(targetUrl);
   }
 
   // Ahead of `:messageId` routes, or `pins` is read as a message id.

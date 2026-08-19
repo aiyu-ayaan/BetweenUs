@@ -19,6 +19,15 @@ export interface Paginated<T> {
   nextCursor: string | null;
 }
 
+export interface LinkPreview {
+  url: string;
+  title: string | null;
+  description: string | null;
+  image: string | null;
+  siteName: string | null;
+  favicon: string | null;
+}
+
 // --- Auth ---
 
 export interface RegisterRequest {
