@@ -446,6 +446,12 @@ Push notifications (phase 27, messages only):
       in place, and is dropped when it is my own message, when the conversation
       is on screen *and* the app is visible, inside quiet hours on this phone's
       clock, or when a mentions-only channel did not mention me.
+- [x] **Active chat foreground suppression (WhatsApp rule).** `PushGate.shouldSuppress`
+      silently drops incoming pushes for the exact channel currently active in the
+      foreground (e.g., Server 1 #general) where messages are already visible.
+      Pushes for any other channel or server (e.g., Server 2 #general, or other
+      channels on Server 1) still post notifications normally. Verified with unit
+      tests in `PushGateTest.kt` ensuring channel/server isolation and lifecycle checks.
 - [x] **The notification.** `MessagingStyle`, one per channel, sender picture,
       decrypted image in the expanded view, direct reply from the shade without
       opening the app, mark-as-read, tap-through on `betweenus://channel/<id>`,

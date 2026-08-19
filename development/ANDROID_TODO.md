@@ -320,10 +320,15 @@ showing the conversation. Both decisions are made here.
 - [x] Notification channels: messages and remote access, beside the call channel
       `CallService` already owns.
 - [x] Tap-through: `betweenus://channel/<id>`, the same scheme an invite uses.
-- [x] Foreground suppression: no notification for the channel already on screen,
-      and one for a channel that is not - which is also the phase 4 item that
-      was wired and never posted. `AppForeground` is the second half of the
-      check: a locked phone still has the chat screen composed.
+- [x] Foreground suppression: WhatsApp-style active chat channel suppression
+      (`PushGate.shouldSuppress`). When the app is in the foreground and
+      viewing a specific channel (such as Server 1 #general), push notifications
+      for that active channel are silently suppressed because the conversation is
+      already on screen. Push notifications for any other channel or server (such
+      as Server 2 #general, or other channels on Server 1) still post normally,
+      and notifications still post when the app is backgrounded or the screen is
+      locked (`AppForeground`). Fully verified with unit test coverage in
+      `PushGateTest.kt` covering exact channel/server isolation and lifecycle states.
 - [x] The notification proper: `MessagingStyle`, the sender's picture, a
       decrypted image in the expanded view, direct reply from the shade (a
       broadcast, so it never opens the app), and mark-as-read.
