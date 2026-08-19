@@ -108,6 +108,11 @@ Chat, on desktop and web:
       person and follows the account, and a muted person is silent even when
       they mention you - a mute any mention could bypass is a mute the loud
       person controls.
+- [x] **Attachment drop preview & discard handling.** Fixed broken image/video
+      previews caused by `useMemo` object URL revocation during React
+      re-mounts/StrictMode, and added fallback extension recognition for OS
+      file drops. Discarding/closing the send preview modal now clears pending
+      attachments from the chat composer state instead of leaving them attached.
 
 Backlog worked down, this pass:
 
