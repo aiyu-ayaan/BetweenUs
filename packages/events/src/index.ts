@@ -58,8 +58,17 @@ export interface EventPayloads {
   /**
    * Both sides of the friendship, because either of them may be connected to a
    * different instance and both screens have to change.
+   *
+   * `actorId` and `kind` are for the half that is not a screen refresh: a
+   * notification has to say who did what, and "reload your friend list" cannot.
+   * Both are optional so a producer that only wants the refresh still type
+   * checks - a subscriber with neither simply sends nothing.
    */
-  [EVENTS.FRIEND_CHANGED]: { userIds: string[] };
+  [EVENTS.FRIEND_CHANGED]: {
+    userIds: string[];
+    actorId?: string;
+    kind?: 'requested' | 'accepted' | 'removed';
+  };
 }
 
 export type EventName = keyof EventPayloads;

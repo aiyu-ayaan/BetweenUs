@@ -115,21 +115,24 @@ export class FriendsService {
 
     if (existing?.status === 'ACCEPTED') return this.friendOf(userId, existing.id);
     if (existing) {
-      // They asked first: treat the answering request as the acceptance.
-      if (existing.requesterId !== userId) {
+      // They asked first and this is the answer, so it is an acceptance -
+      // which is a different notification from a request, and the far side
+      // has already been told about the request.
+      const answering = existing.requesterId !== userId;
+      if (answering) {
         await prisma.friendship.update({
           where: { id: existing.id },
           data: { status: 'ACCEPTED' },
         });
       }
-      await this.announce(userId, target.id);
+      await this.announce(userId, target.id, answering ? 'accepted' : 'requested');
       return this.friendOf(userId, existing.id);
     }
 
     const created = await prisma.friendship.create({
       data: { userAId, userBId, requesterId: userId, status: 'PENDING' },
     });
-    await this.announce(userId, target.id);
+    await this.announce(userId, target.id, 'requested');
     return this.friendOf(userId, created.id);
   }
 
@@ -145,7 +148,7 @@ export class FriendsService {
     }
 
     await prisma.friendship.update({ where: { id: friendship.id }, data: { status: 'ACCEPTED' } });
-    await this.announce(userId, otherUserId);
+    await this.announce(userId, otherUserId, 'accepted');
     return this.friendOf(userId, friendship.id);
   }
 
@@ -153,16 +156,28 @@ export class FriendsService {
   async remove(userId: string, otherUserId: string): Promise<void> {
     const friendship = await this.require(userId, otherUserId);
     await prisma.friendship.delete({ where: { id: friendship.id } });
-    await this.announce(userId, otherUserId);
+    await this.announce(userId, otherUserId, 'removed');
   }
 
   /**
    * Tells both sides to reload their list. The event carries no `Friend` of its
    * own because the DTO is written from the reader's side - direction, and who
    * asked - so one payload cannot serve both of them.
+   *
+   * `kind` is the half a notification needs and a screen refresh does not.
+   * Omitting it says "reload", which is all a DM channel appearing is: nothing
+   * about the friendship changed, so nobody's phone should buzz about it.
    */
-  private async announce(userId: string, otherUserId: string): Promise<void> {
-    await this.events.publish(EVENTS.FRIEND_CHANGED, { userIds: [userId, otherUserId] });
+  private async announce(
+    userId: string,
+    otherUserId: string,
+    kind?: 'requested' | 'accepted' | 'removed',
+  ): Promise<void> {
+    await this.events.publish(EVENTS.FRIEND_CHANGED, {
+      userIds: [userId, otherUserId],
+      actorId: userId,
+      kind,
+    });
   }
 
   /** Direct message channels this user is part of, most recent first. */

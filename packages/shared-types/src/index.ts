@@ -1102,6 +1102,69 @@ export interface MessagePushData {
   mentionsOnly?: string;
 }
 
+/**
+ * A message was deleted, and a notification drawn for it is now a lie.
+ *
+ * The only push that exists to take something *off* a screen. It carries no
+ * words because it needs none - the id is enough to find the line and drop it,
+ * and the notification is rebuilt without it or cancelled if it was the only
+ * one left.
+ */
+export interface MessageDeletedPushData {
+  type: 'message.deleted';
+  messageId: string;
+  channelId: string;
+}
+
+/**
+ * Somebody asked to be friends, or said yes.
+ *
+ * Nothing here is sealed: a friend request has no body, and the name and
+ * picture are already public. The client still writes the notification, for the
+ * same reason every other one does - it is the only side that knows whether the
+ * friends screen is already open.
+ */
+export interface FriendPushData {
+  type: 'friend.request' | 'friend.accepted';
+  actorId: string;
+  actorName: string;
+  actorAvatarUrl?: string;
+}
+
+/** Added to a server by somebody who was allowed to. */
+export interface ServerMemberPushData {
+  type: 'server.member.added';
+  serverId: string;
+  serverName: string;
+  serverIconUrl?: string;
+}
+
+/**
+ * Who is in a call, sent to the people who can hear it and are not.
+ *
+ * The whole roster rather than the one who joined, because it is one
+ * notification per channel that is rewritten as people come and go - and
+ * because the roster is the only thing that can also say a call has *ended*.
+ * `count` of `"0"` is exactly that, and is what cancels the notification.
+ */
+export interface CallPushData {
+  type: 'call.roster';
+  channelId: string;
+  channelName: string;
+  /** Already joined for reading: "Ayaan and Bob". Empty when the call ended. */
+  participants: string;
+  /** FCM data values are strings, so a number has to travel as one. */
+  count: string;
+}
+
+/** Everything that can arrive as a data-only push. */
+export type PushData =
+  | MessagePushData
+  | MessageDeletedPushData
+  | FriendPushData
+  | ServerMemberPushData
+  | CallPushData;
+
 // --- Chat WebSocket protocol (/ws/chat) ---
 
 export type ClientChatEvent =

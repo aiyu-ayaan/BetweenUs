@@ -1,5 +1,5 @@
 /**
- * Fan-out: a message was created, and somebody's phone is asleep.
+ * Fan-out: something happened, and somebody's phone is asleep.
  *
  * Everything already running - the desktop app, an open tab, a phone with the
  * app in front of somebody - is fed by `/ws/chat` and needs nothing from here.
@@ -21,14 +21,37 @@
  * the phone is never woken. Quiet hours are on the recipient's clock and a
  * mention is inside the ciphertext, so both are decided on the client - the
  * push still goes, and the client drops it. See FCM/README.md.
+ *
+ * Five things are worth waking a phone for, and only the first carries words:
+ *
+ * - `message.created` - somebody said something.
+ * - `message.deleted` - somebody unsaid it, and the notification drawn for it
+ *   is now a lie. The only push here that exists to take something *off* a
+ *   screen.
+ * - `friend.request` / `friend.accepted` - somebody asked, or said yes.
+ * - `server.member.added` - somebody put this account in a server.
+ * - `call.roster` - who is in a call in a channel this account can hear. The
+ *   whole roster rather than the arrival, because it is one notification that
+ *   is rewritten as people come and go, and because an empty roster is the
+ *   only thing that can say the call is over.
  */
 import { Injectable, OnModuleInit } from '@nestjs/common';
 import { channelAudience, prisma } from '@betweenus/database';
 import { EVENTS, EventBus } from '@betweenus/events';
+import type { EventName, EventPayloads } from '@betweenus/events';
 import { Logger } from '@betweenus/logger';
-import type { Message, MessagePushData } from '@betweenus/shared-types';
+import type {
+  CallPushData,
+  FriendPushData,
+  Message,
+  MessageDeletedPushData,
+  MessagePushData,
+  PushData,
+  ServerMemberPushData,
+} from '@betweenus/shared-types';
 import { DevicesService } from '../modules/devices/devices.service';
 import { messaging } from './firebase';
+import { namesOf, rosterChanged } from './roster';
 
 /** FCM's own ceiling for one `sendEach` call. */
 const MAX_PER_BATCH = 500;
@@ -54,6 +77,16 @@ export class PushService implements OnModuleInit {
     private readonly logger: Logger,
   ) {}
 
+  /**
+   * The last roster pushed per channel, so an announcement nobody's phone can
+   * tell apart from the previous one is not a second buzz.
+   *
+   * ponytail: in memory, so two instances of this service would each push once
+   * for the same roster. One instance is what the compose file runs; move this
+   * to Redis if there is ever a second.
+   */
+  private readonly rosters = new Map<string, string[]>();
+
   async onModuleInit(): Promise<void> {
     if (!messaging()) {
       // Said once, at boot, rather than per message. A deployment with no
@@ -61,17 +94,29 @@ export class PushService implements OnModuleInit {
       this.logger.info('Push disabled: no Firebase credentials in the environment');
     }
 
-    await this.events.subscribe(EVENTS.MESSAGE_CREATED, (envelope) => {
-      void this.onMessage(envelope.payload.message).catch((error: unknown) => {
-        this.logger.error('Push fan-out failed', { reason: String(error) });
+    await this.on(EVENTS.MESSAGE_CREATED, (payload) => this.onMessage(payload.message));
+    await this.on(EVENTS.MESSAGE_DELETED, (payload) => this.onMessageDeleted(payload));
+    await this.on(EVENTS.FRIEND_CHANGED, (payload) => this.onFriendChanged(payload));
+    await this.on(EVENTS.SERVER_MEMBER_ADDED, (payload) => this.onServerMemberAdded(payload));
+    await this.on(EVENTS.CALL_ROSTER, (payload) => this.onCallRoster(payload.voice));
+  }
+
+  /**
+   * One subscription, one place that catches. A fan-out that throws must not
+   * take the bus handler with it: the next event is somebody else's phone.
+   */
+  private async on<K extends EventName>(
+    event: K,
+    handle: (payload: EventPayloads[K]) => Promise<void>,
+  ): Promise<void> {
+    await this.events.subscribe(event, (envelope) => {
+      void handle(envelope.payload).catch((error: unknown) => {
+        this.logger.error('Push fan-out failed', { event, reason: String(error) });
       });
     });
   }
 
   private async onMessage(message: Message): Promise<void> {
-    const transport = messaging();
-    if (!transport) return;
-
     const audience = (await channelAudience(message.channelId)).filter(
       (userId) => userId !== message.author.id,
     );
@@ -80,20 +125,179 @@ export class PushService implements OnModuleInit {
     const recipients = await this.allowed(audience, message);
     if (recipients.length === 0) return;
 
+    await this.deliver(
+      recipients.map((one) => ({
+        userId: one.userId,
+        data: this.payload(message, one.mentionsOnly),
+      })),
+    );
+  }
+
+  /**
+   * A message was deleted, so the notification drawn for it has to go.
+   *
+   * The whole audience, with none of the filtering the message itself went
+   * through: the point is to take a notification away, and a recipient who was
+   * never sent one simply has nothing to remove. Filtering here would be a way
+   * to leave a notification standing for a message that no longer exists - the
+   * author included, since they may have deleted it from another machine.
+   */
+  private async onMessageDeleted(payload: {
+    messageId: string;
+    channelId: string;
+  }): Promise<void> {
+    const audience = await channelAudience(payload.channelId);
+    if (audience.length === 0) return;
+
+    const data: MessageDeletedPushData = {
+      type: 'message.deleted',
+      messageId: payload.messageId,
+      channelId: payload.channelId,
+    };
+    // Normal priority: taking a stale notification off a screen is worth doing
+    // and is not worth pulling a sleeping phone out of Doze for. It lands the
+    // moment the phone is next awake, which is the moment anybody would see it.
+    await this.deliver(
+      audience.map((userId) => ({ userId, data })),
+      { urgent: false },
+    );
+  }
+
+  /**
+   * Somebody asked to be friends, or said yes.
+   *
+   * Only the far side is told - the actor already knows what they just did -
+   * and only for the two kinds that are news. Declining, cancelling and
+   * unfriending all arrive as `removed`, and none of them is a notification.
+   */
+  private async onFriendChanged(payload: {
+    userIds: string[];
+    actorId?: string;
+    kind?: 'requested' | 'accepted' | 'removed';
+  }): Promise<void> {
+    const { actorId, kind } = payload;
+    if (!actorId || (kind !== 'requested' && kind !== 'accepted')) return;
+
+    const recipients = payload.userIds.filter((userId) => userId !== actorId);
+    if (recipients.length === 0) return;
+
+    const actor = await prisma.user.findUnique({
+      where: { id: actorId },
+      select: { username: true, displayName: true, avatarUrl: true },
+    });
+    if (!actor) return;
+
+    const data: FriendPushData = {
+      type: kind === 'requested' ? 'friend.request' : 'friend.accepted',
+      actorId,
+      actorName: actor.displayName || actor.username,
+    };
+    if (actor.avatarUrl) data.actorAvatarUrl = actor.avatarUrl;
+
+    await this.deliver((await this.enabled(recipients)).map((userId) => ({ userId, data })));
+  }
+
+  /** Added to a server: one person, one notification, no words to seal. */
+  private async onServerMemberAdded(payload: {
+    serverId: string;
+    userId: string;
+  }): Promise<void> {
+    const server = await prisma.server.findUnique({
+      where: { id: payload.serverId },
+      select: { name: true, iconUrl: true, ownerId: true },
+    });
+    if (!server) return;
+    // Creating a server adds its owner to it, and nobody needs telling they
+    // have joined the thing they just made.
+    if (server.ownerId === payload.userId) return;
+
+    const data: ServerMemberPushData = {
+      type: 'server.member.added',
+      serverId: payload.serverId,
+      serverName: server.name,
+    };
+    if (server.iconUrl) data.serverIconUrl = server.iconUrl;
+
+    await this.deliver(
+      (await this.enabled([payload.userId])).map((userId) => ({ userId, data })),
+    );
+  }
+
+  /**
+   * Who is in a call, told to the people who can hear the channel and are not
+   * in it.
+   *
+   * This is the `call.started` fan-out the Android notes have been waiting
+   * for, in the shape that turned out to be right: the roster, not the
+   * arrival. One notification per channel, rewritten as people come and go,
+   * and an empty roster is what cancels it - which is the only way a phone
+   * that was told about a call ever finds out it is over.
+   */
+  private async onCallRoster(voice: { channelId: string; userIds: string[] }): Promise<void> {
+    const { channelId, userIds } = voice;
+    if (!rosterChanged(this.rosters.get(channelId), userIds)) return;
+    const first = !this.rosters.has(channelId);
+    this.rosters.set(channelId, [...userIds]);
+    // A channel nobody has been told about, whose call has already ended:
+    // nothing to cancel, so nothing to send.
+    if (first && userIds.length === 0) return;
+
+    const channel = await prisma.channel.findUnique({
+      where: { id: channelId },
+      select: { name: true },
+    });
+    if (!channel) return;
+
+    const audience = (await channelAudience(channelId)).filter(
+      (userId) => !userIds.includes(userId),
+    );
+    if (audience.length === 0) return;
+
+    const data: CallPushData = {
+      type: 'call.roster',
+      channelId,
+      channelName: channel.name,
+      participants: namesOf(await namesFor(userIds)),
+      count: String(userIds.length),
+    };
+
+    // A call is somebody waiting for an answer, so it is worth the Doze
+    // exemption. A call that has *ended* is not: the notification it cancels
+    // had already stopped mattering.
+    await this.deliver(
+      (await this.allowedInChannel(audience, channelId)).map((userId) => ({ userId, data })),
+      { urgent: userIds.length > 0 },
+    );
+  }
+
+  /**
+   * Every push goes out through here: the tokens, FCM's batch ceiling, and the
+   * dead ones that come back.
+   *
+   * One entry per recipient rather than one payload for all of them, because
+   * `message.created` writes a different payload per recipient - the
+   * mentions-only flag is the reader's, not the message's.
+   */
+  private async deliver(
+    recipients: { userId: string; data: PushData }[],
+    options: { urgent?: boolean } = {},
+  ): Promise<void> {
+    const transport = messaging();
+    if (!transport || recipients.length === 0) return;
+
     const byUser = await this.devices.tokensFor(recipients.map((one) => one.userId));
-    const messages = recipients.flatMap((recipient) => {
-      const data = this.payload(message, recipient.mentionsOnly);
-      return (byUser.get(recipient.userId) ?? []).map((token) => ({
+    const messages = recipients.flatMap((recipient) =>
+      (byUser.get(recipient.userId) ?? []).map((token) => ({
         token,
-        data: data as unknown as Record<string, string>,
+        data: recipient.data as unknown as Record<string, string>,
         android: {
           // The point of the push is a phone that is asleep, and a normal
           // priority data message is exactly what Doze holds back.
-          priority: 'high' as const,
+          priority: (options.urgent === false ? 'normal' : 'high') as 'normal' | 'high',
           ttl: TIME_TO_LIVE_SECONDS * 1000,
         },
-      }));
-    });
+      })),
+    );
     if (messages.length === 0) return;
 
     const dead: string[] = [];
@@ -115,10 +319,34 @@ export class PushService implements OnModuleInit {
 
     const forgotten = await this.devices.forget(dead);
     this.logger.info('Push sent', {
-      channelId: message.channelId,
+      type: recipients[0]?.data.type,
       recipients: recipients.length,
       delivered,
       forgotten,
+    });
+  }
+
+  /** Accounts that have not turned notifications off altogether. */
+  private async enabled(audience: string[]): Promise<string[]> {
+    const off = await prisma.notificationSetting.findMany({
+      where: { userId: { in: audience }, enabled: false },
+      select: { userId: true },
+    });
+    const silent = new Set(off.map((row) => row.userId));
+    return audience.filter((userId) => !silent.has(userId));
+  }
+
+  /** The same, plus the channel mute - which a call in that channel obeys too. */
+  private async allowedInChannel(audience: string[], channelId: string): Promise<string[]> {
+    const settings = await prisma.notificationSetting.findMany({
+      where: { userId: { in: audience } },
+      select: { userId: true, enabled: true, mutedChannelIds: true },
+    });
+    const byUser = new Map(settings.map((row) => [row.userId, row]));
+    return audience.filter((userId) => {
+      const row = byUser.get(userId);
+      if (!row) return true;
+      return row.enabled && !row.mutedChannelIds.includes(channelId);
     });
   }
 
@@ -172,4 +400,21 @@ export class PushService implements OnModuleInit {
     if (mentionsOnly) data.mentionsOnly = '1';
     return data;
   }
+}
+
+/**
+ * Display names for a set of ids, in the order they were asked for. Somebody
+ * who has since been deleted is left out rather than named "Unknown".
+ */
+async function namesFor(userIds: string[]): Promise<string[]> {
+  if (userIds.length === 0) return [];
+  const rows = await prisma.user.findMany({
+    where: { id: { in: userIds } },
+    select: { id: true, username: true, displayName: true },
+  });
+  const byId = new Map(rows.map((row) => [row.id, row.displayName || row.username]));
+  return userIds.flatMap((userId) => {
+    const name = byId.get(userId);
+    return name ? [name] : [];
+  });
 }
