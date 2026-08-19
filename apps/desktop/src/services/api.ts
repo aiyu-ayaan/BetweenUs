@@ -15,6 +15,7 @@ import type {
   DirectChannel,
   Friend,
   IdentityBackupResponse,
+  LinkPreview,
   Message,
   NotificationPreferences,
   OAuthProviderSummary,
@@ -432,6 +433,10 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ emoji }),
     }),
+
+  /** Fetch rich social OpenGraph details and link preview metadata for a URL. */
+  unfurl: (url: string): Promise<LinkPreview | null> =>
+    request(`/api/v1/messages/unfurl?url=${encodeURIComponent(url)}`),
 
   // --- Uploads ---
   //

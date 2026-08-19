@@ -7,9 +7,10 @@ import {
   type FormEvent,
   type KeyboardEvent,
 } from 'react';
-import type { Channel, MessageAttachment, MessageReply } from '@betweenus/shared-types';
+import type { Channel, LinkPreview, MessageAttachment, MessageReply } from '@betweenus/shared-types';
 import { useChatStore, type DecryptedMessage } from '../../stores/chat';
 import { UNDECRYPTABLE } from '../../services/e2ee';
+import { api } from '../../services/api';
 import { useAuthStore } from '../../stores/auth';
 import { usePresenceStore } from '../../stores/presence';
 import { Avatar } from '../../components/Avatar';
@@ -588,14 +589,17 @@ function MessageList({
                   <>
                     {/* A message that is only files has no text line at all. */}
                     {message.content.length > 0 && (
-                      <p className="whitespace-pre-wrap break-words leading-relaxed text-slate-200">
-                        <MessageText message={message} />
-                        {message.editedAt && (
-                          <span className="ml-1.5 align-baseline text-xs text-slate-500">
-                            (edited)
-                          </span>
-                        )}
-                      </p>
+                      <>
+                        <p className="whitespace-pre-wrap break-words leading-relaxed text-slate-200">
+                          <MessageText message={message} />
+                          {message.editedAt && (
+                            <span className="ml-1.5 align-baseline text-xs text-slate-500">
+                              (edited)
+                            </span>
+                          )}
+                        </p>
+                        <MessageLinkPreviews content={message.content} />
+                      </>
                     )}
                     <AttachmentList channelId={channel.id} attachments={message.attachments} />
                     <ReactionRow
@@ -855,18 +859,35 @@ function QuotedMessage({ reply }: { reply: MessageReply }): JSX.Element {
   );
 }
 
+const URL_REGEX = /(https?:\/\/[^\s<>"']+)/gi;
+
+function renderTextWithLinks(text: string): JSX.Element {
+  const parts = text.split(URL_REGEX);
+  return (
+    <>
+      {parts.map((part, i) => {
+        if (part.match(/^https?:\/\//i)) {
+          return (
+            <a
+              key={i}
+              href={part}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-accent underline hover:text-accent-hover font-medium break-all transition-colors"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {part}
+            </a>
+          );
+        }
+        return <Fragment key={i}>{part}</Fragment>;
+      })}
+    </>
+  );
+}
 
 /**
- * A message's words, with its custom emoji drawn.
- *
- * The pictures come from the message rather than from the server it was sent
- * in - they are in the envelope - so a shortcode forwarded into a direct
- * message still renders, and one whose emoji has since been deleted degrades to
- * the word somebody typed rather than to a broken image.
- *
- * A message that is nothing but emoji is drawn large, which every chat app
- * does and is not decoration: a reaction sent as a message is the whole
- * message, and at 22 pixels it reads as a typo.
+ * A message's words, with its custom emoji drawn and URLs highlighted as hyperlinks.
  */
 function MessageText({ message }: { message: DecryptedMessage }): JSX.Element {
   const pieces = splitMessage(message.content, message.emoji ?? []);
@@ -876,16 +897,13 @@ function MessageText({ message }: { message: DecryptedMessage }): JSX.Element {
     <>
       {pieces.map((piece, index) =>
         piece.kind === 'text' ? (
-          <Fragment key={index}>{piece.text}</Fragment>
+          <Fragment key={index}>{renderTextWithLinks(piece.text)}</Fragment>
         ) : (
           <img
             key={index}
             src={absoluteUrl(piece.emoji.url)}
             alt={`:${piece.emoji.name}:`}
             title={`:${piece.emoji.name}:`}
-            // Animated ones animate because the file does - a GIF or an
-            // animated WebP in an `<img>` needs nothing else, which is the
-            // whole reason the upload keeps the original bytes.
             className={`inline-block object-contain align-text-bottom ${
               large ? 'h-11 w-11' : 'h-[22px] w-[22px]'
             }`}
@@ -893,6 +911,115 @@ function MessageText({ message }: { message: DecryptedMessage }): JSX.Element {
         ),
       )}
     </>
+  );
+}
+
+const previewCache = new Map<string, LinkPreview | null>();
+
+function extractUrls(text: string): string[] {
+  const matches = text.match(/https?:\/\/[^\s<>"']+/gi);
+  if (!matches) return [];
+  return Array.from(new Set(matches)).slice(0, 2);
+}
+
+function LinkPreviewCard({ url }: { url: string }): JSX.Element | null {
+  const [preview, setPreview] = useState<LinkPreview | null | undefined>(() => previewCache.get(url));
+
+  useEffect(() => {
+    if (previewCache.has(url)) {
+      setPreview(previewCache.get(url));
+      return;
+    }
+    let cancelled = false;
+    api.unfurl(url).then(
+      (res) => {
+        previewCache.set(url, res);
+        if (!cancelled) setPreview(res);
+      },
+      () => {
+        previewCache.set(url, null);
+        if (!cancelled) setPreview(null);
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [url]);
+
+  if (!preview || (!preview.title && !preview.description && !preview.image)) {
+    return null;
+  }
+
+  let domain = '';
+  try {
+    domain = new URL(preview.url).hostname;
+  } catch {
+    domain = preview.url;
+  }
+
+  return (
+    <div className="mt-2.5 max-w-lg rounded-r-lg border border-edge border-l-4 border-l-accent bg-surface-900/90 p-3 shadow-md transition-all hover:bg-surface-850">
+      {/* Site Name & Favicon */}
+      <div className="flex items-center space-x-1.5 text-xs font-semibold text-slate-400">
+        {preview.favicon && (
+          <img
+            src={preview.favicon}
+            alt=""
+            className="h-3.5 w-3.5 rounded-sm object-contain"
+            onError={(e) => {
+              (e.target as HTMLElement).style.display = 'none';
+            }}
+          />
+        )}
+        <span className="truncate">{preview.siteName || domain}</span>
+      </div>
+
+      {/* Title */}
+      {preview.title && (
+        <a
+          href={preview.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="mt-1 block text-sm font-semibold text-accent hover:underline line-clamp-2"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {preview.title}
+        </a>
+      )}
+
+      {/* Description */}
+      {preview.description && (
+        <p className="mt-1 text-xs text-slate-300 line-clamp-3 leading-relaxed">
+          {preview.description}
+        </p>
+      )}
+
+      {/* Image Preview */}
+      {preview.image && (
+        <div className="mt-2.5 overflow-hidden rounded-md border border-edge/60 bg-surface-950">
+          <img
+            src={preview.image}
+            alt={preview.title || 'Preview image'}
+            className="max-h-60 w-full object-cover"
+            onError={(e) => {
+              (e.target as HTMLElement).style.display = 'none';
+            }}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MessageLinkPreviews({ content }: { content: string }): JSX.Element | null {
+  const urls = extractUrls(content);
+  if (urls.length === 0) return null;
+  return (
+    <div className="flex flex-col space-y-1">
+      {urls.map((url) => (
+        <LinkPreviewCard key={url} url={url} />
+      ))}
+    </div>
   );
 }
 
