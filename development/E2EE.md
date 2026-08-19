@@ -270,6 +270,14 @@ the reply either and the conversation quietly splits in two. The re-read finds
 the key the newcomer sealed for them and moves them onto the newer epoch, which
 is what makes the next message work in both directions.
 
+One more rule is the client's, for the same reason: **a push notification is
+written on the device, never by a service.** A push carries the sealed envelope
+and no words, because `notification-service` holds ciphertext like every other
+service and could not write a readable notification if it wanted to. The phone
+decrypts the body it was woken with and writes the shade itself; a device that
+has not been given the channel key yet says "New message", which is the honest
+answer rather than a padlock. See `FCM/README.md`.
+
 ## Voice channels
 
 Call media goes directly from one participant to another over DTLS-SRTP. There

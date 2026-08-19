@@ -124,9 +124,10 @@ Web:
 
 Android:
 
-- [x] `google-services.json` at `apps/android/app/`, and the Gradle plugin
-      applied only when it is there - so a clone without one still compiles and
-      runs, with `BuildConfig.HAS_FIREBASE` false and nothing registered
+- [x] `google-services.json` handling: git-ignored, read from
+      `apps/android/app/`, and the Gradle plugin applied only when it is there -
+      so a clone without one still compiles and runs, with
+      `BuildConfig.HAS_FIREBASE` false and nothing registered
 - [x] Firebase Messaging and a `FirebaseMessagingService`; registered on
       sign-in, on session restore and on every `onNewToken`. Firebase is
       confined to one file (`feature/notifications/Push.kt`) and `:core` stays

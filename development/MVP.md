@@ -37,9 +37,12 @@ when the MVP shipped.
 
 - Remote desktop (`remote-gateway`, `remote-agent`, remote permissions)
 - Presence service, typing indicators
-- Push notifications to a signed-out or sleeping client (the desktop client
-  raises local notifications since phase 11, and `notification-service` holds
-  the mutes, quiet hours and read state since phase 14)
+- Push notifications: ~~Android~~ (phase 27 - a device registry in Postgres and
+  Firestore, a data-only FCM fan-out, and the notification written on the
+  device; documented in `FCM/`), Web Push and a push for calls or remote
+  sessions are still ahead. The desktop client raises local notifications since
+  phase 11, and `notification-service` has held the mutes, quiet hours and read
+  state since phase 14
 - User service (profiles, avatars, friends); message-attachment linking
 - ~~OAuth logins~~ (shipped in phase 11: Google and GitHub, configured from the
   admin panel), email verification, password reset

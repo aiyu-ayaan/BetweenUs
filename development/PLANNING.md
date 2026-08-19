@@ -31,6 +31,7 @@ we get there in stages and what each stage delivers.
 | 24 | Peer-to-peer media | LiveKit removed; `/ws/call` signalling, a WebRTC mesh for calls, a direct peer connection for remote desktop | In progress |
 | 25 | The call follows the account | Call survives navigating anywhere in the client, one call per account across devices, a browser prompt before a tab with a live call closes | In progress |
 | 26 | The workbench | The client stops being a copy of Discord: own palette, floating panels on a ground, a command bar with Ctrl+K, one entrance for everything that opens | In progress |
+| 27 | Push notifications | A device registry in Postgres and Firestore, a data-only FCM fan-out on `message.created`, and the Android transport. Web Push, calls and remote sessions are not built | In progress |
 
 Hardening moved to phase 10: encryption changes the message format and presence
 adds a service, so both were cheaper to land before tests were written against
@@ -573,6 +574,15 @@ that has to be right for every future deployment is one that will be wrong.
   When a web or Android client arrives it asks the same three questions and
   gets the same answers, which is what "one backend, many clients" has to mean
   for a preference.
+
+- **Phase 27 did not change that.** The service now sends a push, but it still
+  raises no notification: the push is data-only and carries no words, so the
+  client is what writes the shade. It has to be - the body is sealed with the
+  channel key, and the client is the only side that knows whether the
+  conversation is already on screen. The server answers the half it can see
+  (notifications off, a muted channel, a muted person) and the device answers
+  the rest (my own message, the channel on screen, quiet hours on this clock, a
+  mention inside the ciphertext). See `FCM/README.md`.
 - **Unread is derived from a read marker, not counted into a column.** One row
   per user per channel holding `lastReadAt`, and the count is messages after it
   that someone else wrote. A stored counter has to be decremented by every path

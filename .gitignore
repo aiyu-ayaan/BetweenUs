@@ -17,3 +17,11 @@ storage-data
 serviceAccountKey.json
 *serviceAccountKey*.json
 firebase-adminsdk*.json
+
+# The Android client config. Not a sending credential - it identifies the app
+# rather than authorising anything - but it names somebody's Firebase project,
+# and which project a clone pushes from is the operator's decision and not this
+# repository's. Drop your own at apps/android/app/google-services.json; the
+# Gradle plugin is applied only when it is there, so a clone without one still
+# builds. See FCM/README.md.
+google-services.json

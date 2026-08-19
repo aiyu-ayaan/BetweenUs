@@ -113,7 +113,8 @@ then delete the file. It is not needed again.
 | `FIREBASE_PRIVATE_KEY` | `private_key`, with its newlines as literal `\n` |
 | `FIREBASE_SERVICE_ACCOUNT` | The whole key as base64 or raw JSON, in one variable. Set it and the three above are ignored |
 
-`serviceAccountKey.json` and `firebase-adminsdk*.json` are in `.gitignore`.
+`serviceAccountKey.json`, `firebase-adminsdk*.json` and `google-services.json`
+are all in `.gitignore`.
 
 **With none of them set, push is simply off.** The service logs one line at boot
 and every other part of it — preferences, unread counts, read markers — carries
@@ -135,8 +136,12 @@ used.
 
 `apps/android/app/google-services.json` is the client config: the project
 number, the app id and the API key. It is not a secret in the way the service
-account is — it identifies the app, it does not authorise sending — and it is
-scoped to the `com.aatech.betweenus` package.
+account is — it identifies the app, it does not authorise sending — but it is
+**git-ignored all the same**, because it names a particular Firebase project
+and which project a build pushes from belongs to whoever ships it, not to this
+repository.
+
+So it is not in the tree. Put your own there.
 
 The Gradle plugin is applied **only when the file is present**:
 

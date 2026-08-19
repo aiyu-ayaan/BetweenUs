@@ -204,6 +204,12 @@ Passwords, tokens, refresh tokens and secrets are never logged. A refresh-token
 reuse is logged as a warning with the account and the reason, which is the
 signal that a token was stolen.
 
+**A push registration token is one of those secrets.** It is a credential that
+can deliver a notification to somebody's phone, so it is never logged - not on
+success, not in a rejection, where only the FCM error code is recorded - and it
+is never in a response body: the device registry answers with the device id, the
+platform and the label, and nothing else.
+
 ## Known gaps
 
 These are decisions, not oversights. They are here so nobody has to rediscover
@@ -242,6 +248,20 @@ permission the event type requires and forwards the event itself without
 inspecting its fields. The agent is what has to validate a click coordinate or a
 key code, because the gateway would only be guessing at what the machine on the
 other end considers sane.
+
+**A push wakes a phone that a muted-thread setting cannot reach.** The server
+filters what it can see - notifications off, a muted channel, a muted person -
+but quiet hours are minutes on the recipient's own clock and a mention is inside
+the ciphertext, so both are decided on the device *after* it has been woken. The
+notification is suppressed; the wake-up is not. Deciding either on the server
+would mean either storing a timezone or being able to read the message.
+
+**The Firestore device mirror is best effort.** Postgres is the registry the
+fan-out reads; the Firestore copy is written after it and its failures are
+logged rather than thrown. A mirror can therefore be behind - it holds a token
+that Postgres has already deleted - and nothing sends from it. It is reconciled
+by the next registration, which the client makes on every sign-in and every
+rotation. See `FCM/README.md`.
 
 **Metadata is not protected.** The server knows who wrote to which channel and
 when, how large each message was, and who is in a voice channel. See `E2EE.md`.

@@ -424,6 +424,16 @@ register itself to start with the system.
    back in the tray with no window in front of what you were doing. Turn it off
    and reboot again - it stays gone.
 
+**A phone with the app closed is a different test**, and it lives in
+`FCM/TESTING.md` because it needs a Firebase project rather than a packaged
+build. The short version: a message must wake a swiped-away app and arrive with
+its *words* - which means a cold process restored a session and fetched a
+channel key - there must be no notification for the conversation already on
+screen and one for the same conversation with the screen locked, and a reply
+typed into the shade must land in the channel without the app opening. `FCM/`
+is the rest of it: the architecture in `README.md`, the payload and the order
+of the gates in `PAYLOADS.md`.
+
 ## Remote desktop
 
 Needs two machines, or two accounts and a second machine - the interesting
@@ -722,7 +732,11 @@ read state: the preference round trip with the mute list deduplicated, a patch
 that leaves untouched fields alone, a minute outside the day refused, your own
 message never unread, someone else's counted, history from before you joined
 not counted, the read marker clearing the count, a channel you cannot see
-answering 404 rather than 403, and an anonymous caller refused.
+answering 404 rather than 403, and an anonymous caller refused. It also covers
+the push device registry: a phone registers, a rotated token lands on the same
+row rather than making a second one, an unknown platform is refused, an
+anonymous caller is refused, and a device unregisters. The registration token
+itself is never asserted on, because it is never answered with.
 
 ## Self-checks and CI
 

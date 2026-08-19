@@ -303,9 +303,10 @@ words.** The body is sealed with the channel key, so no service could write a
 notification worth reading, and no service knows whether this phone is already
 showing the conversation. Both decisions are made here.
 
-- [x] `google-services.json` at `apps/android/app/`, with the Gradle plugin
-      applied only when it exists - so a clone without one still compiles and
-      installs. `BuildConfig.HAS_FIREBASE` is what the runtime reads.
+- [x] `google-services.json` handling: git-ignored, read from
+      `apps/android/app/`, with the Gradle plugin applied only when it exists -
+      so a clone without one still compiles and installs.
+      `BuildConfig.HAS_FIREBASE` is what the runtime reads.
 - [x] Firebase Messaging + `PushService : FirebaseMessagingService`. Firebase is
       confined to `feature/notifications/Push.kt`; `:core` reaches it through
       `PushTokens.provider` and never depends on Play services itself.
