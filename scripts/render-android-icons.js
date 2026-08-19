@@ -1,8 +1,6 @@
 /**
- * Render Android launcher icon PNGs with:
- *   - Background: #3730A2
- *   - Mark: 75% zoom, centred
- *   - Both square (rounded-rect) and circle variants
+ * Render Android launcher icon PNGs directly from the desktop SVG
+ * (apps/desktop/public/icon.svg) with #3730A2 background and 75% zoom.
  *
  *   node scripts/render-android-icons.js
  */
@@ -10,49 +8,42 @@ const { Resvg } = require('@resvg/resvg-js');
 const fs = require('fs');
 const path = require('path');
 
-/** The mark, lifted out of the shared Android vector so there is one copy. */
-function markPaths() {
-  const vector = fs.readFileSync(
-    path.join(__dirname, '../apps/android/ui-common/src/main/res/drawable/ic_betweenus_logo.xml'),
-    'utf8',
-  );
-  const found = [...vector.matchAll(/android:pathData="([^"]+)"/g)].map((match) => match[1]);
-  if (found.length !== 2) throw new Error(`expected two paths in the mark, found ${found.length}`);
-  return found;
-}
+const desktopSvg = fs.readFileSync(
+  path.join(__dirname, '../apps/desktop/public/icon.svg'),
+  'utf8',
+);
 
-/**
- * One icon as an SVG string.
- *
- * `rounded` is the second icon Android asks for: the same art pre-masked into a
- * circle, for launchers that do not mask it themselves. Both are drawn here
- * rather than only the square one, because a launcher that wants the round one
- * and finds the square one shows a square inside a circle.
- */
-function icon(paths, { rounded }) {
+// Extract the two path elements (headset pads + headband) from the desktop SVG
+const pathMatches = [...desktopSvg.matchAll(/<path\s+d="([^"]+)"\s+fill="([^"]+)"\s*\/>/g)];
+if (pathMatches.length !== 2) throw new Error(`expected 2 paths, got ${pathMatches.length}`);
+
+function icon({ rounded }) {
   const clip = rounded
     ? '<clipPath id="mask"><circle cx="512" cy="512" r="512"/></clipPath>'
     : '<clipPath id="mask"><rect x="0" y="0" width="1024" height="1024" rx="220"/></clipPath>';
 
-  // 75% zoom, centred
   const scale = 0.75;
-  const offset = 512 - 512 * scale;
+  const offset = 512 - 512 * scale; // 128
 
+  // Use the exact same gradients from the desktop SVG
   return `<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
   <defs>
     ${clip}
+    <linearGradient id="betweenusHeadset" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#a78bfa" />
+      <stop offset="100%" stop-color="#6c5ce7" />
+    </linearGradient>
   </defs>
   <g clip-path="url(#mask)">
     <rect width="1024" height="1024" fill="#3730A2"/>
     <g transform="translate(${offset} ${offset}) scale(${scale})">
-      <path d="${paths[0]}" fill="#FFFFFF"/>
-      <path d="${paths[1]}" fill="#FFFFFF" fill-opacity="0.92"/>
+      <path d="${pathMatches[0][1]}" fill="url(#betweenusHeadset)"/>
+      <path d="${pathMatches[1][1]}" fill="#ffffff"/>
     </g>
   </g>
 </svg>`;
 }
 
-/** The density buckets Android asks for, and the pixel size of each. */
 const DENSITIES = {
   'mipmap-mdpi': 48,
   'mipmap-hdpi': 72,
@@ -62,7 +53,6 @@ const DENSITIES = {
 };
 
 function main() {
-  const paths = markPaths();
   const res = path.join(__dirname, '../apps/android/app/src/main/res');
 
   for (const [bucket, size] of Object.entries(DENSITIES)) {
@@ -70,14 +60,11 @@ function main() {
     fs.mkdirSync(directory, { recursive: true });
 
     for (const rounded of [false, true]) {
-      const svg = icon(paths, { rounded });
+      const svg = icon({ rounded });
       const png = new Resvg(svg, { fitTo: { mode: 'width', value: size } }).render().asPng();
       const name = rounded ? 'ic_launcher_round.png' : 'ic_launcher.png';
       fs.writeFileSync(path.join(directory, name), png);
 
-      // The template's WebP files sit under the same names. Two files that
-      // resolve to one resource is a build error, so the one being replaced
-      // goes with it.
       const stale = path.join(directory, name.replace(/\.png$/, '.webp'));
       if (fs.existsSync(stale)) fs.unlinkSync(stale);
     }
