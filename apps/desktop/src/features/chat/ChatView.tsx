@@ -9,6 +9,7 @@ import {
 } from 'react';
 import type { Channel, MessageAttachment, MessageReply } from '@betweenus/shared-types';
 import { useChatStore, type DecryptedMessage } from '../../stores/chat';
+import { UNDECRYPTABLE } from '../../services/e2ee';
 import { useAuthStore } from '../../stores/auth';
 import { usePresenceStore } from '../../stores/presence';
 import { Avatar } from '../../components/Avatar';
@@ -128,7 +129,13 @@ function PanelButton({
   );
 }
 
-export function ChatView({ onToggleMembers }: { onToggleMembers?: () => void }): JSX.Element {
+export function ChatView({
+  onToggleMembers,
+  showMembers = false,
+}: {
+  onToggleMembers?: () => void;
+  showMembers?: boolean;
+}): JSX.Element {
   const { messages, loadingMessages, error } = useChatStore();
   const channel = useChatStore((state) => state.activeChannel());
   /**
@@ -218,8 +225,13 @@ export function ChatView({ onToggleMembers }: { onToggleMembers?: () => void }):
               type="button"
               onClick={onToggleMembers}
               aria-label="Toggle member list"
+              aria-pressed={showMembers}
               title="Members"
-              className="cursor-pointer rounded-md p-1.5 text-slate-400 transition-colors duration-150 hover:bg-white/[0.07] hover:text-slate-100"
+              className={`cursor-pointer rounded-md p-1.5 transition-colors duration-150 ${
+                showMembers
+                  ? 'bg-white/[0.08] text-slate-100'
+                  : 'text-slate-400 hover:bg-white/[0.07] hover:text-slate-100'
+              }`}
             >
               <UsersIcon className="h-5 w-5" />
             </button>
@@ -460,6 +472,18 @@ function MessageList({
           but says so before the first fetch has answered. */}
       {(exhausted || (messages.length === 0 && !loadingOlder)) && (
         <EmptyChannel channel={channel} />
+      )}
+
+      {/* Said once for the channel rather than once per message. What a row can
+          say is that it is sealed; what somebody actually needs is why, and
+          that it repairs itself - a machine holding these keys hands them over
+          the next time it opens this channel, so there is nothing to do but
+          open BetweenUs where you first signed in. */}
+      {messages.some((message) => message.content === UNDECRYPTABLE) && (
+        <p className="mb-2 rounded-md bg-surface-800 px-3 py-2 text-xs text-slate-400">
+          Some of these messages were sealed for another of your devices. Open
+          BetweenUs on the device you first signed in with and they will unlock here.
+        </p>
       )}
 
       {loadingOlder && (

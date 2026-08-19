@@ -326,7 +326,7 @@ function Workbench(): JSX.Element {
 
   const [settings, setSettings] = useState<'none' | 'user' | 'server'>('none');
   const [homeScreen, setHomeScreen] = useState<'friends' | 'remote' | null>('friends');
-  const [showMembers, setShowMembers] = useState(true);
+  const [showMembers, setShowMembers] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [switcher, setSwitcher] = useState(false);
 
@@ -368,9 +368,12 @@ function Workbench(): JSX.Element {
         panelAvailable={chatOnScreen}
         panelOpen={panelOpen}
         onTogglePanel={() => {
-          if (rightPanel === 'none') useChatStore.getState().showPanel('members');
-          else if (rightPanel === 'members') setShowMembers((open) => !open);
-          else useChatStore.getState().showPanel('none');
+          if (rightPanel !== 'members') {
+            useChatStore.getState().showPanel('members');
+            setShowMembers(true);
+          } else {
+            setShowMembers((open) => !open);
+          }
         }}
       />
 
@@ -401,7 +404,17 @@ function Workbench(): JSX.Element {
           <VoiceChannelView channel={channel} />
         ) : (
           <>
-            <ChatView onToggleMembers={() => setShowMembers((value) => !value)} />
+            <ChatView
+              onToggleMembers={() => {
+                if (rightPanel !== 'members') {
+                  useChatStore.getState().showPanel('members');
+                  setShowMembers(true);
+                } else {
+                  setShowMembers((value) => !value);
+                }
+              }}
+              showMembers={showMembers && rightPanel === 'members'}
+            />
             {/* One right-hand column, whatever is in it: pins and search are the
                 same kind of list about this channel as the member list, and two
                 of them open at once would leave nothing to read. */}
