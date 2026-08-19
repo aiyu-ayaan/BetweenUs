@@ -1,5 +1,7 @@
 package com.aatech.betweenus.feature.home
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -16,27 +18,33 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
-import com.aatech.betweenus.core.data.Endpoint
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import com.aatech.betweenus.core.data.BetweenUsApi
+import com.aatech.betweenus.core.data.Endpoint
 import com.aatech.betweenus.core.data.UserSummary
 import com.aatech.betweenus.core.store.Presence
 import com.aatech.betweenus.core.store.Workspace
+import com.aatech.betweenus.feature.settings.BetweenUsPermissions
+import com.aatech.betweenus.feature.settings.NotificationPermissionBanner
 import com.aatech.betweenus.ui.components.AvatarWithStatus
+import com.aatech.betweenus.ui.components.BetweenUsField
+import com.aatech.betweenus.ui.components.BetweenUsIcon
+import com.aatech.betweenus.ui.components.BetweenUsIcons
 import com.aatech.betweenus.ui.components.Chip
 import com.aatech.betweenus.ui.components.EmptyState
 import com.aatech.betweenus.ui.components.IconAction
 import com.aatech.betweenus.ui.components.ListRow
-import com.aatech.betweenus.ui.components.BetweenUsField
-import com.aatech.betweenus.ui.components.BetweenUsIcon
-import com.aatech.betweenus.ui.components.BetweenUsIcons
 import com.aatech.betweenus.ui.components.Notice
 import com.aatech.betweenus.ui.components.SectionLabel
 import com.aatech.betweenus.ui.theme.Danger
@@ -55,6 +63,7 @@ import kotlinx.coroutines.launch
  */
 @Composable
 fun FriendsScreen(onOpenMenu: () -> Unit, onOpenChannel: (String) -> Unit) {
+    val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val friends by Workspace.friends.collectAsState()
     val statuses by Presence.statuses.collectAsState()
@@ -63,6 +72,26 @@ fun FriendsScreen(onOpenMenu: () -> Unit, onOpenChannel: (String) -> Unit) {
     var results by remember { mutableStateOf<List<UserSummary>>(emptyList()) }
     var note by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
+
+    var permissionTick by remember { mutableIntStateOf(0) }
+    LifecycleResumeEffect(Unit) {
+        permissionTick++
+        onPauseOrDispose { }
+    }
+
+    var notificationBannerDismissed by rememberSaveable { mutableStateOf(false) }
+    val notificationsGranted = remember(permissionTick) {
+        BetweenUsPermissions.granted(context, BetweenUsPermissions.NOTIFICATIONS)
+    }
+
+    val notificationLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { allowed ->
+        permissionTick++
+        if (!allowed) {
+            BetweenUsPermissions.openSettings(context)
+        }
+    }
 
     LaunchedEffect(Unit) { Workspace.loadFriends() }
     LaunchedEffect(query) {
@@ -99,6 +128,19 @@ fun FriendsScreen(onOpenMenu: () -> Unit, onOpenChannel: (String) -> Unit) {
             )
         }
         HorizontalDivider(color = Edge)
+
+        // Notification Permission Warning Banner (if user denied or turned off notifications)
+        if (BetweenUsPermissions.NOTIFICATIONS != null && !notificationsGranted && !notificationBannerDismissed) {
+            NotificationPermissionBanner(
+                onEnable = {
+                    notificationLauncher.launch(BetweenUsPermissions.NOTIFICATIONS)
+                },
+                onDismiss = {
+                    notificationBannerDismissed = true
+                },
+            )
+            HorizontalDivider(color = Edge)
+        }
 
         LazyColumn(Modifier.fillMaxSize()) {
             item {

@@ -2,6 +2,8 @@ package com.aatech.betweenus.feature.chat
 
 import android.graphics.Bitmap
 import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -30,15 +32,20 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.compose.LifecycleResumeEffect
+import com.aatech.betweenus.feature.settings.BetweenUsPermissions
+import com.aatech.betweenus.feature.settings.NotificationPermissionBanner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -269,6 +276,26 @@ fun ChatScreen(
         previewCaption = ""
     }
 
+    var permissionTick by remember { mutableIntStateOf(0) }
+    LifecycleResumeEffect(Unit) {
+        permissionTick++
+        onPauseOrDispose { }
+    }
+
+    var notificationBannerDismissed by rememberSaveable { mutableStateOf(false) }
+    val notificationsGranted = remember(permissionTick) {
+        BetweenUsPermissions.granted(context, BetweenUsPermissions.NOTIFICATIONS)
+    }
+
+    val notificationLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { allowed ->
+        permissionTick++
+        if (!allowed) {
+            BetweenUsPermissions.openSettings(context)
+        }
+    }
+
     Column(
         Modifier
             .fillMaxSize()
@@ -341,6 +368,19 @@ fun ChatScreen(
         }
 
         HorizontalDivider(color = Edge)
+
+        // Notification Permission Warning Banner (if user denied or turned off notifications)
+        if (BetweenUsPermissions.NOTIFICATIONS != null && !notificationsGranted && !notificationBannerDismissed) {
+            NotificationPermissionBanner(
+                onEnable = {
+                    notificationLauncher.launch(BetweenUsPermissions.NOTIFICATIONS)
+                },
+                onDismiss = {
+                    notificationBannerDismissed = true
+                },
+            )
+            HorizontalDivider(color = Edge)
+        }
 
         if (busy && messages.isEmpty()) {
             LinearProgressIndicator(Modifier.fillMaxWidth(), color = Accent)

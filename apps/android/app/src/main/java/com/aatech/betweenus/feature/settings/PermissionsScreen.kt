@@ -5,6 +5,11 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -34,6 +39,7 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -44,6 +50,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -90,7 +97,7 @@ private fun getPermissionItems(): List<PermissionItem> {
             title = "Microphone",
             category = "Calls & Voice",
             detail = "Speaking in voice channels, 1-on-1 calls, and group calls.",
-            rationale = "Without it you can still listen to others, but won't be able to talk.",
+            rationale = "Without it you can still listen to others, but won't be able to talk in calls.",
             icon = BetweenUsIcons.Mic,
             permissions = listOf(BetweenUsPermissions.MICROPHONE),
         ),
@@ -158,7 +165,7 @@ private fun isItemGranted(context: Context, item: PermissionItem): Boolean {
 }
 
 /**
- * Interactive carousel for permissions with live progress and a one-tap "Allow All" button.
+ * Interactive carousel for permissions with live progress and WhatsApp-style step progression.
  */
 @Composable
 fun PermissionsScreen(
@@ -176,14 +183,19 @@ fun PermissionsScreen(
     }
 
     val refusedMap = remember { mutableStateMapOf<String, Boolean>() }
+    val pagerState = rememberPagerState(initialPage = 0) { items.size }
 
-    // Launcher for single item request
+    // Launcher for single item request with auto-advance
     val singleLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions(),
     ) { results ->
         tick++
         results.forEach { (perm, granted) ->
             if (!granted) refusedMap[perm] = true
+        }
+        // Auto-advance to next slide if available
+        if (pagerState.currentPage < items.size - 1) {
+            scope.launch { pagerState.animateScrollToPage(pagerState.currentPage + 1) }
         }
     }
 
@@ -195,6 +207,8 @@ fun PermissionsScreen(
         results.forEach { (perm, granted) ->
             if (!granted) refusedMap[perm] = true
         }
+        BetweenUsPermissions.markIntroduced(context)
+        onDone()
     }
 
     val grantedStatus = remember(tick) {
@@ -211,7 +225,6 @@ fun PermissionsScreen(
         label = "permissionsProgress",
     )
 
-    val pagerState = rememberPagerState(initialPage = 0) { items.size }
     val currentItem = items.getOrNull(pagerState.currentPage) ?: items.first()
     val isCurrentGranted = grantedStatus[currentItem.id] == true
     val isCurrentRefused = currentItem.permissions.any { refusedMap[it] == true } && !isCurrentGranted
@@ -224,6 +237,8 @@ fun PermissionsScreen(
         }
         if (missing.isNotEmpty()) {
             singleLauncher.launch(missing.toTypedArray())
+        } else if (pagerState.currentPage < items.size - 1) {
+            scope.launch { pagerState.animateScrollToPage(pagerState.currentPage + 1) }
         }
     }
 
@@ -296,16 +311,16 @@ fun PermissionsScreen(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    text = "SETUP PROGRESS",
+                    text = "STEP ${pagerState.currentPage + 1} OF ${items.size}",
                     style = MaterialTheme.typography.labelSmall,
                     color = Slate500,
-                    fontWeight = FontWeight.SemiBold,
+                    fontWeight = FontWeight.Bold,
                 )
                 Text(
                     text = "$grantedCount of ${items.size} granted",
                     style = MaterialTheme.typography.labelSmall,
                     color = if (allGranted) StatusOnline else Accent,
-                    fontWeight = FontWeight.Medium,
+                    fontWeight = FontWeight.SemiBold,
                 )
             }
             Spacer(Modifier.height(8.dp))
@@ -475,10 +490,9 @@ fun PermissionsScreen(
                         }
                         else -> {
                             Chip(
-                                text = "Tap to Allow",
-                                tone = Slate100,
-                                selected = true,
-                                onClick = { requestSingle(item) },
+                                text = "Required for ${item.title}",
+                                tone = Slate400,
+                                selected = false,
                             )
                         }
                     }
@@ -519,7 +533,7 @@ fun PermissionsScreen(
 
         Spacer(Modifier.height(14.dp))
 
-        // --- Bottom Action Footer ---
+        // --- Bottom Action Footer (WhatsApp Style) ---
         HorizontalDivider(color = Edge)
         Column(
             modifier = Modifier
@@ -528,83 +542,130 @@ fun PermissionsScreen(
                 .padding(horizontal = 20.dp, vertical = 14.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            // Main Button: "Allow All Permissions" or "Continue"
+            // Main Action Button (WhatsApp Style: Allow active item or continue)
             BetweenUsButton(
-                text = if (allGranted) {
-                    "All Granted — Continue"
-                } else {
-                    "Allow All Permissions (${items.size - grantedCount} remaining)"
+                text = when {
+                    allGranted -> "All Set — Continue"
+                    isCurrentGranted && pagerState.currentPage < items.size - 1 -> "Next"
+                    isCurrentGranted -> "Continue"
+                    isCurrentRefused -> "Open Settings"
+                    else -> "Allow ${currentItem.title}"
                 },
                 onClick = {
-                    if (allGranted) {
-                        BetweenUsPermissions.markIntroduced(context)
-                        onDone()
-                    } else {
-                        requestAll()
+                    when {
+                        allGranted -> {
+                            BetweenUsPermissions.markIntroduced(context)
+                            onDone()
+                        }
+                        isCurrentGranted && pagerState.currentPage < items.size - 1 -> {
+                            scope.launch { pagerState.animateScrollToPage(pagerState.currentPage + 1) }
+                        }
+                        isCurrentGranted -> {
+                            BetweenUsPermissions.markIntroduced(context)
+                            onDone()
+                        }
+                        isCurrentRefused -> {
+                            BetweenUsPermissions.openSettings(context)
+                        }
+                        else -> {
+                            requestSingle(currentItem)
+                        }
                     }
                 },
                 modifier = Modifier.fillMaxWidth(),
             )
 
-            // Sub-Actions: Step-by-step allow and navigation
             if (!allGranted) {
                 Spacer(Modifier.height(10.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                // Secondary Batch Option
+                OutlinedButton(
+                    onClick = { requestAll() },
+                    shape = RoundedCornerShape(10.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = Slate300,
+                    ),
+                    border = BorderStroke(1.dp, Surface700),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(44.dp),
                 ) {
-                    if (!isCurrentGranted) {
-                        OutlinedButton(
-                            onClick = {
-                                if (isCurrentRefused) {
-                                    BetweenUsPermissions.openSettings(context)
-                                } else {
-                                    requestSingle(currentItem)
-                                }
-                            },
-                            shape = RoundedCornerShape(10.dp),
-                            colors = ButtonDefaults.outlinedButtonColors(
-                                contentColor = Slate100,
-                            ),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, Surface700),
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(44.dp),
-                        ) {
-                            Text(
-                                text = if (isCurrentRefused) "Open Settings" else "Allow ${currentItem.title}",
-                                style = MaterialTheme.typography.bodyMedium,
-                                maxLines = 1,
-                            )
-                        }
-                    }
-
-                    if (pagerState.currentPage < items.size - 1) {
-                        OutlinedButton(
-                            onClick = {
-                                scope.launch { pagerState.animateScrollToPage(pagerState.currentPage + 1) }
-                            },
-                            shape = RoundedCornerShape(10.dp),
-                            colors = ButtonDefaults.outlinedButtonColors(
-                                contentColor = Slate300,
-                            ),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, Surface700),
-                            modifier = Modifier
-                                .weight(if (isCurrentGranted) 1f else 0.8f)
-                                .height(44.dp),
-                        ) {
-                            Text("Next", style = MaterialTheme.typography.bodyMedium)
-                        }
-                    }
+                    Text(
+                        text = "Allow All Permissions at Once",
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
                 }
             }
 
-            Spacer(Modifier.height(10.dp))
+            Spacer(Modifier.height(8.dp))
             Text(
                 text = "You can skip anything. BetweenUs will ask again when needed.",
                 style = MaterialTheme.typography.bodySmall,
                 color = Slate500,
                 textAlign = TextAlign.Center,
+            )
+        }
+    }
+}
+
+/**
+ * Sleek top-of-layout banner displayed when notification permission is disabled.
+ * Allows instant granting or dismissing without blocking the user.
+ */
+@Composable
+fun NotificationPermissionBanner(
+    onEnable: () -> Unit,
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .background(Color(0xFF281E12))
+            .border(1.dp, StatusIdle.copy(alpha = 0.35f))
+            .padding(horizontal = 14.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        BetweenUsIcon(
+            icon = BetweenUsIcons.BellOff,
+            tint = StatusIdle,
+            size = 20.dp,
+        )
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = "Notifications are turned off",
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Bold,
+                color = Slate100,
+            )
+            Text(
+                text = "You won't receive message alerts or incoming call notifications.",
+                style = MaterialTheme.typography.bodySmall,
+                color = Slate400,
+            )
+        }
+        Text(
+            text = "Enable",
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.Bold,
+            color = StatusIdle,
+            modifier = Modifier
+                .clip(RoundedCornerShape(6.dp))
+                .background(StatusIdle.copy(alpha = 0.18f))
+                .clickable(onClick = onEnable)
+                .padding(horizontal = 12.dp, vertical = 6.dp),
+        )
+        Box(
+            modifier = Modifier
+                .size(24.dp)
+                .clip(CircleShape)
+                .clickable(onClick = onDismiss),
+            contentAlignment = Alignment.Center,
+        ) {
+            BetweenUsIcon(
+                icon = BetweenUsIcons.X,
+                tint = Slate400,
+                size = 14.dp,
             )
         }
     }
