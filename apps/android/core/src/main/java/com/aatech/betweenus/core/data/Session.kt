@@ -108,6 +108,10 @@ object Session {
         Conversation.start()
         Workspace.start()
         scope.launch { runCatching { E2ee.initIdentity(user.id, secret) } }
+        // The push registration belongs to the account, not to the app: it is
+        // made here on every sign-in and every restore, so a token that rotated
+        // while the app was closed is put back under the right user.
+        scope.launch { PushTokens.register() }
     }
 
     /**
@@ -171,6 +175,9 @@ object Session {
      */
     suspend fun signOut() {
         val stored = refreshToken
+        // Before the tokens go, because unregistering needs one. A row left
+        // behind delivers this account's messages to whoever signs in next.
+        PushTokens.unregister()
         if (stored != null) runCatching { BetweenUsApi.logout(stored) }
         clear()
         // Only a deliberate sign-out empties the cache. A session that expired

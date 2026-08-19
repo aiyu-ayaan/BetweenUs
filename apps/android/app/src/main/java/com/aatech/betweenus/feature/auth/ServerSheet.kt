@@ -66,6 +66,7 @@ fun ServerSheet(onDismiss: () -> Unit) {
     // Not a cast: a modal bottom sheet composes into its own window, so the
     // context here is wrapped and `as? Activity` is null. See findActivity.
     val activity = LocalContext.current.findActivity()
+    val context = LocalContext.current
 
     var address by remember { mutableStateOf(Endpoint.current()) }
     var note by remember { mutableStateOf<String?>(null) }
@@ -88,8 +89,12 @@ fun ServerSheet(onDismiss: () -> Unit) {
                 // be reached; a no-op when nobody is signed in.
                 Session.signOut()
                 // Another server is another account: the pictures decrypted
-                // for this one do not follow it there.
+                // for this one do not follow it there, and neither do the
+                // notifications still holding its words.
                 com.aatech.betweenus.feature.chat.MediaCache.clear()
+                com.aatech.betweenus.feature.notifications.MessageNotifications
+                    .clearAll(context.applicationContext)
+                com.aatech.betweenus.feature.notifications.PushGate.forgetPreferences()
                 Endpoint.set(if (base == Endpoint.default()) null else base)
                 activity?.recreate()
             } catch (error: Exception) {

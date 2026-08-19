@@ -200,4 +200,53 @@ ok(
   JSON.stringify(strangerUnread),
 );
 
+// --- the push device registry ---
+//
+// The token itself is never asserted on, because it is never answered with: a
+// credential that can push to somebody's phone does not come back out of the
+// API and does not go in a log.
+
+const deviceId = `smoke-${Date.now().toString(36)}`;
+const registered = await json(`${NOTIFY}/api/v1/notifications/devices`, {
+  method: 'POST',
+  headers: aliceAuth,
+  body: JSON.stringify({
+    token: `token-${deviceId}-1`,
+    platform: 'android',
+    deviceId,
+    label: 'Smoke device',
+  }),
+});
+ok('a device registers', registered.deviceId === deviceId, JSON.stringify(registered));
+ok('the registry never answers with the token', registered.token === undefined);
+
+// A rotation is the same call. It has to land on the same row rather than
+// making a second one, which is the whole reason the key is the device and not
+// the token.
+const rotated = await json(`${NOTIFY}/api/v1/notifications/devices`, {
+  method: 'POST',
+  headers: aliceAuth,
+  body: JSON.stringify({ token: `token-${deviceId}-2`, platform: 'android', deviceId }),
+});
+ok('a rotated token updates the same device', rotated.deviceId === deviceId);
+
+const badPlatform = await status(`${NOTIFY}/api/v1/notifications/devices`, {
+  method: 'POST',
+  headers: aliceAuth,
+  body: JSON.stringify({ token: 'x', platform: 'symbian', deviceId }),
+});
+ok('an unknown platform is refused', badPlatform === 400, String(badPlatform));
+
+const anonymousRegister = await status(`${NOTIFY}/api/v1/notifications/devices`, {
+  method: 'POST',
+  body: JSON.stringify({ token: 'x', platform: 'android', deviceId }),
+});
+ok('registering needs a token', anonymousRegister === 401, String(anonymousRegister));
+
+const unregistered = await status(`${NOTIFY}/api/v1/notifications/devices/${deviceId}`, {
+  method: 'DELETE',
+  headers: aliceAuth,
+});
+ok('a device unregisters', unregistered === 200, String(unregistered));
+
 console.log('\nnotification smoke passed');

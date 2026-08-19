@@ -141,6 +141,10 @@ fun ChatScreen(
 
     DisposableEffect(channelId) {
         Conversation.open(channelId)
+        // Reading the conversation is what dismisses its notification. Leaving
+        // it up would mean a shade full of messages already on screen.
+        com.aatech.betweenus.feature.notifications.MessageNotifications
+            .clear(context, channelId)
         onDispose { Conversation.close(channelId) }
     }
 

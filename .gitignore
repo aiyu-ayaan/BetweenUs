@@ -11,3 +11,9 @@ coverage
 dist-electron
 release
 storage-data
+
+# A Firebase service-account key is a private key. It belongs in .env (see
+# FCM/README.md and `pnpm firebase:env`), never in the history.
+serviceAccountKey.json
+*serviceAccountKey*.json
+firebase-adminsdk*.json

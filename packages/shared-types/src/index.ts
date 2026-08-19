@@ -1033,6 +1033,66 @@ export interface MarkChannelReadRequest {
   channelId: string;
 }
 
+// --- Push devices (phase 27) ---
+
+/** The transports a push token can belong to. One per client family. */
+export type DevicePlatform = 'android' | 'ios' | 'web';
+
+/**
+ * One installation's push token.
+ *
+ * Keyed on (user, device) rather than on the token: a token rotates - FCM mints
+ * a new one after a restore, a clear-data or its own schedule - and a registry
+ * keyed on it would grow a row per rotation and push to every dead one. The
+ * device id is the client-minted installation id that already identifies this
+ * machine to the key directory, so one phone is one row for as long as the app
+ * is installed.
+ */
+export interface RegisterDeviceRequest {
+  /** The FCM registration token, or the Web Push endpoint. Never logged. */
+  token: string;
+  platform: DevicePlatform;
+  /** Client-minted, stable per installation - the same id `DeviceKey` uses. */
+  deviceId: string;
+  /** What to call it in a list: "Pixel 8". Untrusted, display only. */
+  label?: string;
+  /** The client build, so a push that a version cannot render can be skipped. */
+  appVersion?: string;
+}
+
+/** What the registry answers with. Deliberately never the token itself. */
+export interface RegisteredDevice {
+  deviceId: string;
+  platform: DevicePlatform;
+  label: string | null;
+  lastSeenAt: string;
+}
+
+/**
+ * The data-only push a client is woken with.
+ *
+ * Data-only, and never `notification`: the body is sealed with the channel key,
+ * so the only side that can write a notification worth reading is the client -
+ * which is also the only side that knows whether that channel is already on
+ * screen. Every field here is either on the message envelope already or is a
+ * preference the recipient set themselves.
+ *
+ * All values are strings: FCM's data map has no other type.
+ */
+export interface MessagePushData {
+  type: 'message.created';
+  messageId: string;
+  channelId: string;
+  authorId: string;
+  authorName: string;
+  authorAvatarUrl?: string;
+  /** The sealed envelope, so a client that holds the key can show the words. */
+  content: string;
+  createdAt: string;
+  /** "1" when this channel is mentions-only for this recipient. */
+  mentionsOnly?: string;
+}
+
 // --- Chat WebSocket protocol (/ws/chat) ---
 
 export type ClientChatEvent =

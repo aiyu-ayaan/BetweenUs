@@ -21,6 +21,7 @@
     "desktop:package:win": "pnpm --filter @betweenus/desktop package:win",
     "desktop:package:win-packaged": "pnpm --filter @betweenus/desktop package:win-packaged",
     "data:path": "node scripts/data-path.mjs",
+    "firebase:env": "node scripts/firebase-env.mjs",
     "db:backup": "docker compose --env-file .env -f infrastructure/docker/docker-compose.yml run --rm -e BACKUP_ON_MIGRATE=1 db-backup-once",
     "prod:build": "pnpm build",
     "prod:up": "docker compose --env-file .env -f infrastructure/docker/docker-compose.yml up -d --build",

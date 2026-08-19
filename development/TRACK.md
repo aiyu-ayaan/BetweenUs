@@ -5,10 +5,10 @@ so that document can go back to being what it is: the record of how each phase
 got to where it is, and the backlog of everything anyone has ever thought of.
 
 This is narrower. It is the set of items chosen to be built now, and nothing
-else joins it without being chosen. **Push notifications are deliberately not
-here** - FCM, Web Push, the shared device registry and the two Android features
-that wait behind them are phase 27 in `TODO.md`, and are the next major phase
-rather than part of this one.
+else joins it without being chosen. **Push notifications joined it** - the
+device registry, the `message.created` fan-out and the Android transport are
+below; Web Push and the call and remote-session fan-outs stay in phase 27 of
+`TODO.md`, unchosen.
 
 Ticked here means: landed in code, `pnpm typecheck` and `pnpm check` green, and
 a self-check where the logic had somewhere to hide. It does not mean a human has
@@ -404,8 +404,37 @@ End-to-end encryption:
       stand-in directory wrote entries as it validated them, leaving a
       half-published epoch behind on a rejected bundle.
 
+Push notifications (phase 27, messages only):
+
+- [x] **Device registry.** `DeviceToken`, one row per (account, installation)
+      and keyed on the installation rather than the token - a token rotates, and
+      a table keyed on it grows a row per rotation and then pushes at every dead
+      one. The token is unique across the table too, so a phone signing into a
+      second account takes the row with it. Registered on sign-in and on
+      restore; unregistered before sign-out discards the tokens.
+- [x] **Firebase credentials from the environment, never a file.** Three
+      variables or one, `pnpm firebase:env` to convert a downloaded key, and
+      `serviceAccountKey.json` git-ignored. Unset means push is off and nothing
+      else about the service changes.
+- [x] **Data-only fan-out on `message.created`.** The server filters what it can
+      see - notifications off, muted channel, muted person - and never writes a
+      notification, because the body is sealed and it does not know what is on
+      screen. Dead tokens are deleted rather than retried.
+- [x] **The Android transport.** `FirebaseMessagingService`, with Firebase
+      confined to one file so `:core` stays transport-agnostic. A push decrypts
+      in place, and is dropped when it is my own message, when the conversation
+      is on screen *and* the app is visible, inside quiet hours on this phone's
+      clock, or when a mentions-only channel did not mention me.
+- [x] **The notification.** `MessagingStyle`, one per channel, sender picture,
+      decrypted image in the expanded view, direct reply from the shade without
+      opening the app, mark-as-read, tap-through on `betweenus://channel/<id>`,
+      and cleared on open and on sign-out.
+
 Documentation:
 
+- [x] **`FCM/`** in the repository root: the architecture and the setup in
+      `README.md`, the wire format and the order of the gates in `PAYLOADS.md`,
+      and what to try first in `TESTING.md`.
 - [x] **Post-SFU corrections** across `TODO.md`, and phase 27 opened for push.
 - [x] **This pass**, recorded here and in `ANDROID_TODO.md`.
 
@@ -615,5 +644,14 @@ The cases most worth putting a person in front of, in order:
     in mid-call as well - on the phone the tone follows the call's route, and
     an arrival in the earpiece while the call is elsewhere is the bug that
     would show.
+
+23. **Push, end to end**, which is the one nothing above covers and the one
+    with the most ways to be wrong. `FCM/TESTING.md` is the ordered version;
+    the four that matter are: a token reaching `device_tokens` at all; a
+    message waking a swiped-away app and arriving with its *words*, which
+    means a cold process restored a session and fetched a channel key; no
+    notification for the conversation on screen, and one for the same
+    conversation with the screen locked; and a reply typed into the shade
+    landing in the channel on both clients without the app opening.
 
 `TESTING.md` is the fuller version of this list and predates it.

@@ -35,6 +35,12 @@ x-service-env: &service-env
   S3_ACCESS_KEY: ${S3_ACCESS_KEY:-}
   S3_SECRET_KEY: ${S3_SECRET_KEY:-}
   S3_PUBLIC_URL: ${S3_PUBLIC_URL:-}
+  # Firebase Cloud Messaging, for the Android push. Empty = push is off, which
+  # is a running deployment without notifications rather than a broken one.
+  FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID:-}
+  FIREBASE_CLIENT_EMAIL: ${FIREBASE_CLIENT_EMAIL:-}
+  FIREBASE_PRIVATE_KEY: ${FIREBASE_PRIVATE_KEY:-}
+  FIREBASE_SERVICE_ACCOUNT: ${FIREBASE_SERVICE_ACCOUNT:-}
 
 # Everything the backup script needs: it reaches Postgres over the data network
 # with the same credentials the services use, and writes where BACKUP_DATA_PATH

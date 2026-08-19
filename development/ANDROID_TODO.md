@@ -39,12 +39,14 @@ first.
 nobody has put two devices in a call or driven a real agent's screen. Those are
 the cases the design is built around and the ones most likely to be wrong.
 
-Phase 5 (FCM) is the largest thing not started, and the only one that needs
-backend work. It is deferred on purpose and is now phase 27 in `TODO.md`, with
-the web client's Web Push beside it: one device registry, one fan-out, two
-transports. Two things wait behind it because they are the same push - an
-in-app notification for a message arriving in a channel that is not on screen
-(phase 4), and the incoming-call UI for a dead app (phase 6).
+Phase 5 (FCM) has landed for messages, along with the backend half it shares
+with the web client - the device registry and the `message.created` fan-out,
+phase 27 in `TODO.md`. A push is data-only and carries no words, because the
+body is sealed and only the device knows whether that conversation is already on
+screen; the notification is written here. `FCM/` documents all of it and
+`FCM/TESTING.md` is what to try first, because **none of it has been on a real
+device**. What is still open is the incoming-call UI for a dead app (phase 6),
+which waits on a `call.started` fan-out that does not exist yet.
 
 ### What a real deployment found
 
@@ -286,38 +288,51 @@ data is cleared.
 - [ ] Reconnect driven by a network-change callback, rather than waiting for the
       backoff timer to come round.
 - [x] Unread state and per-channel read markers.
-- [ ] An OS notification for a message that arrives while the app is open but
-      the channel is not on screen. Everything is in place except the posting.
+- [x] An OS notification for a message that arrives while the app is open but
+      the channel is not on screen - posted by the push handler, see phase 5.
 
-## Phase 5 — Notifications (FCM)
+## Phase 5 — Notifications (FCM) ✅ for messages (compiles; never on a device)
 
-This is the phase with real backend work in it, and the only place Android
-needs something the desktop does not. It is deliberately not started, and it is
-tracked as **phase 27** in `TODO.md` alongside the web client's Web Push and the
-device registry both of them share - the transports differ, the registry and the
-fan-out do not, and building either one alone would build half of it twice.
+The phase with real backend work in it, and the only place Android needs
+something the desktop does not. The backend half is shared with the web client's
+Web Push and is **phase 27** in `TODO.md`; `FCM/` in the repository root is the
+documentation for all of it, and `FCM/TESTING.md` is the order to try it in.
 
-- [ ] Add `google-services.json` handling: file is git-ignored, its path and the
-      project id come from `local.properties`; the build degrades to "no FCM"
-      when it is absent so a clone still compiles.
-- [ ] Firebase Messaging dependency + `FirebaseMessagingService` subclass.
-- [ ] **Device token registry** in `notification-service`:
-      `POST /api/v1/notifications/devices` `{ token, platform, deviceId }` on
-      sign-in and on every `onNewToken`; `DELETE` on sign-out. Table keyed by
-      user + device, storing the FCM registration token, the platform, the last
-      seen time and the app version.
-- [ ] Rotate with the session: an FCM token is bound to the account that
-      registered it, so a sign-out or a server switch must delete the row before
-      the tokens are discarded, and a refresh-token rotation must not orphan it.
-- [ ] Server-side fan-out on `message.created` (mentions and DMs), on
-      `call.started`, and on `remote.session.started`.
-- [ ] Notification channels: messages, calls, remote access — separate, so a
-      person can silence one without the others.
-- [ ] Tap-through: deep link into the channel, the call, or the remote session.
-- [ ] Foreground suppression: no notification for the channel already on screen.
-- [ ] `POST_NOTIFICATIONS` runtime permission (API 33+), asked at the first
-      moment it means something rather than on launch.
-- [ ] Never log a registration token, an access token or a refresh token.
+The rule everything else follows: **the push is data-only and carries no
+words.** The body is sealed with the channel key, so no service could write a
+notification worth reading, and no service knows whether this phone is already
+showing the conversation. Both decisions are made here.
+
+- [x] `google-services.json` at `apps/android/app/`, with the Gradle plugin
+      applied only when it exists - so a clone without one still compiles and
+      installs. `BuildConfig.HAS_FIREBASE` is what the runtime reads.
+- [x] Firebase Messaging + `PushService : FirebaseMessagingService`. Firebase is
+      confined to `feature/notifications/Push.kt`; `:core` reaches it through
+      `PushTokens.provider` and never depends on Play services itself.
+- [x] **Device token registry** in `notification-service`:
+      `POST /api/v1/notifications/devices`, `DELETE …/:deviceId`. Keyed on
+      (user, installation) rather than on the token, because a token rotates.
+- [x] Rotate with the session: registered on sign-in *and* on restore, so a
+      token that rotated while the app was closed lands under the right account;
+      `Session.signOut` unregisters before the tokens go.
+- [x] Server-side fan-out on `message.created`.
+- [x] Notification channels: messages and remote access, beside the call channel
+      `CallService` already owns.
+- [x] Tap-through: `betweenus://channel/<id>`, the same scheme an invite uses.
+- [x] Foreground suppression: no notification for the channel already on screen,
+      and one for a channel that is not - which is also the phase 4 item that
+      was wired and never posted. `AppForeground` is the second half of the
+      check: a locked phone still has the chat screen composed.
+- [x] The notification proper: `MessagingStyle`, the sender's picture, a
+      decrypted image in the expanded view, direct reply from the shade (a
+      broadcast, so it never opens the app), and mark-as-read.
+- [x] `POST_NOTIFICATIONS` was already asked for at the first moment it means
+      something; the post is skipped when it is refused.
+- [x] Never log a registration token, an access token or a refresh token.
+- [ ] Incoming-call UI from a push with the app dead. Waits on a `call.started`
+      fan-out that does not exist yet.
+- [ ] A "reply" that fails offline is silently dropped. It should queue on
+      `Outbox` the way a send from the composer does.
 
 ## Phase 6 — Voice and video ✅ (compiles; not yet seen working on a device)
 

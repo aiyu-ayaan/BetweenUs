@@ -19,6 +19,7 @@ import com.aatech.betweenus.core.data.AuthPhase
 import com.aatech.betweenus.core.data.InviteLink
 import com.aatech.betweenus.core.data.OAuthFlow
 import com.aatech.betweenus.core.data.Session
+import com.aatech.betweenus.core.store.PendingChannel
 import com.aatech.betweenus.core.store.PendingInvite
 import com.aatech.betweenus.core.store.Workspace
 import com.aatech.betweenus.feature.auth.LoginScreen
@@ -77,6 +78,14 @@ class MainActivity : ComponentActivity() {
                 runCatching { OAuthFlow.complete(code) }
                     .onFailure { Session.reportSignInFailure(Session.messageOf(it)) }
             }
+            return
+        }
+
+        // A notification that was tapped: betweenus://channel/<id>. The same
+        // scheme an invite uses, because there should be one way into a channel
+        // from outside the app rather than a second one only pushes know about.
+        if (uri.host == "channel") {
+            uri.pathSegments.firstOrNull()?.let { PendingChannel.offer(it) }
             return
         }
 

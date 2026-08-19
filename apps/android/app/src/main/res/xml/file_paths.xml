@@ -12,4 +12,8 @@
     <cache-path name="edited" path="edited/" />
     <!-- And what the video compressor wrote, likewise. -->
     <cache-path name="outgoing" path="outgoing/" />
+    <!-- The picture inside a message notification. The system UI is another
+         process and cannot be handed a bitmap, so the decrypted thumbnail is
+         written here and granted to it for as long as the notification lives. -->
+    <cache-path name="notifications" path="notifications/" />
 </paths>

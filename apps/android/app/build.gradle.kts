@@ -3,6 +3,18 @@ plugins {
     alias(libs.plugins.kotlin.compose)
 }
 
+/**
+ * Push, when this checkout has a Firebase project to push from.
+ *
+ * `google-services.json` is what names the project, and the plugin fails the
+ * build outright when it is missing - so it is applied only when the file is
+ * there. A clone without one still compiles and installs; it simply never gets
+ * a registration token, `Push.enabled` is false, and nothing is registered. See
+ * FCM/README.md.
+ */
+val hasFirebase = file("google-services.json").exists()
+if (hasFirebase) apply(plugin = "com.google.gms.google-services")
+
 android {
     namespace = "com.aatech.betweenus"
     // 37 because androidx.core 1.19 and lifecycle 2.11 refuse to be compiled
@@ -20,6 +32,10 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        // Read at runtime before anything touches Firebase: without the config
+        // file there is no project to get a token from.
+        buildConfigField("boolean", "HAS_FIREBASE", hasFirebase.toString())
     }
 
     androidResources {
@@ -103,6 +119,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 
@@ -140,6 +157,12 @@ dependencies {
     implementation(libs.media3.transformer)
     implementation(libs.media3.effect)
     implementation(libs.media3.common)
+    // Push. Data-only messages, so the notification is written here and never
+    // by Android - which is the only way a sealed body can be shown at all, and
+    // the only way "this channel is already on screen" can be honoured.
+    implementation(platform(libs.firebase.bom))
+    implementation(libs.firebase.messaging)
+    implementation(libs.kotlinx.coroutines.play.services)
     testImplementation(libs.junit)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)

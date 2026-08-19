@@ -68,6 +68,8 @@ model User {
   reactions       MessageReaction[]
   /// One per machine this account has signed in on - see DeviceKey.
   deviceKeys    DeviceKey[]
+  /// One per installation that can be pushed to - see DeviceToken.
+  deviceTokens  DeviceToken[]
   identityBackup IdentityBackup?
   identities    UserIdentity[]
   notifications NotificationSetting?
@@ -165,6 +167,44 @@ model ChannelRead {
   @@id([userId, channelId])
   @@index([channelId])
   @@map("channel_reads")
+}
+
+/// One installation's push token, owned by notification-service.
+///
+/// Keyed on (user, device) and not on the token. A registration token rotates -
+/// FCM mints a new one after a restore, a clear-data, or on its own schedule -
+/// so a registry keyed on the token grows a row per rotation and then pushes to
+/// every dead one. `deviceId` is the same client-minted installation id
+/// `DeviceKey` uses, which makes one phone one row for as long as the app is
+/// installed.
+///
+/// The token is also unique on its own, because the *device* can move between
+/// accounts: signing out and into another account on the same phone gives that
+/// account the same token, and the row it used to belong to has to go rather
+/// than keep pushing somebody else's messages at it.
+model DeviceToken {
+  id       String @id @default(uuid())
+  userId   String
+  /// Client-minted, stable per installation.
+  deviceId String
+  /// The FCM registration token. Never logged - see section 23 of CLAUDE.md.
+  token    String @unique
+  /// android | ios | web. A string rather than an enum: adding a transport
+  /// should not be a migration.
+  platform String
+  /// What to call it in a list: "Pixel 8". Client-supplied and untrusted.
+  label      String?
+  /// The client build, so a push a version cannot render can be skipped.
+  appVersion String?
+  lastSeenAt DateTime @default(now())
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, deviceId])
+  @@index([userId])
+  @@map("device_tokens")
 }
 
 /// A third-party login linked to an account. The provider's own user id is what

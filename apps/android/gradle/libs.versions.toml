@@ -25,6 +25,10 @@ media3 = "1.9.4"
 # The Kotlin half has to match `kotlin` exactly - KSP is compiled against one
 # compiler version and refuses to run against another.
 ksp = "2.2.10-2.0.2"
+# Push. The BoM pins every Firebase artifact together; the plugin is what reads
+# google-services.json into the build.
+firebaseBom = "34.4.0"
+googleServices = "4.4.4"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -60,10 +64,17 @@ androidx-room-compiler = { group = "androidx.room", name = "room-compiler", vers
 media3-transformer = { group = "androidx.media3", name = "media3-transformer", version.ref = "media3" }
 media3-effect = { group = "androidx.media3", name = "media3-effect", version.ref = "media3" }
 media3-common = { group = "androidx.media3", name = "media3-common", version.ref = "media3" }
+firebase-bom = { group = "com.google.firebase", name = "firebase-bom", version.ref = "firebaseBom" }
+# No `-ktx` suffix: those artifacts were folded into the main ones and are
+# gone from BoM 34. The version comes from the BoM, which is why there is none.
+firebase-messaging = { group = "com.google.firebase", name = "firebase-messaging" }
+# `Task.await()`. Firebase hands out Tasks and the app is written in coroutines.
+kotlinx-coroutines-play-services = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-play-services", version.ref = "coroutines" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 android-library = { id = "com.android.library", version.ref = "agp" }
 ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
+google-services = { id = "com.google.gms.google-services", version.ref = "googleServices" }
 

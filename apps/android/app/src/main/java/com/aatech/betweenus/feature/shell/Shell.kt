@@ -36,6 +36,7 @@ import com.aatech.betweenus.feature.home.FriendsScreen
 import com.aatech.betweenus.feature.members.MembersScreen
 import com.aatech.betweenus.feature.remote.RemoteMachinesScreen
 import com.aatech.betweenus.feature.remote.RemoteSessionScreen
+import com.aatech.betweenus.core.store.PendingChannel
 import com.aatech.betweenus.core.store.PendingInvite
 import com.aatech.betweenus.feature.servers.InviteSheet
 import com.aatech.betweenus.feature.servers.ServerSettingsScreen
@@ -105,6 +106,7 @@ fun Shell(user: PublicUser) {
     LaunchedEffect(serverId, channelId) { LastPlace.remember(serverId, channelId) }
 
     val invited by PendingInvite.code.collectAsState()
+
     val identity by E2ee.status.collectAsState()
     var unlocking by remember { mutableStateOf(false) }
     LaunchedEffect(identity) {
@@ -121,6 +123,18 @@ fun Shell(user: PublicUser) {
             popUpTo(Route.Chat) { inclusive = true }
             launchSingleTop = true
         }
+    }
+
+    /**
+     * A notification that was tapped. It leaves a channel id behind rather than
+     * navigating - an intent is not a navigation controller - and this is where
+     * it becomes a screen. Taken once, so it does not reopen on every redraw.
+     */
+    val pendingChannel by PendingChannel.channelId.collectAsState()
+    LaunchedEffect(pendingChannel) {
+        val target = pendingChannel ?: return@LaunchedEffect
+        PendingChannel.clear()
+        openChannel(target, Workspace.channel(target)?.serverId)
     }
 
     ModalNavigationDrawer(

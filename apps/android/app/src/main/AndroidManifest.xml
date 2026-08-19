@@ -151,6 +151,34 @@
             android:name=".feature.chat.UploadService"
             android:exported="false"
             android:foregroundServiceType="dataSync" />
+
+        <!-- Where a push lands. Data-only, so nothing is drawn until this
+             service has decided whether it should be: the body is sealed and
+             the channel may already be on screen. -->
+        <service
+            android:name=".feature.notifications.PushService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
+
+        <!-- Reply, mark as read, and swipe-away. Not exported: the only thing
+             that may press these is the system UI drawing our own
+             notification. -->
+        <receiver
+            android:name=".feature.notifications.NotificationActionReceiver"
+            android:exported="false" />
+
+        <!-- The small icon and the tint Android uses for a push we did not
+             draw ourselves - a Firebase console test message, say. Everything
+             this app sends is data-only and never reaches these. -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_icon"
+            android:resource="@drawable/ic_betweenus_notification" />
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="betweenus.messages" />
     </application>
 
 </manifest>

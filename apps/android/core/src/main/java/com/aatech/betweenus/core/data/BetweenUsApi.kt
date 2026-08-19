@@ -582,6 +582,40 @@ object BetweenUsApi {
         authed("POST", "/api/v1/notifications/read", obj("channelId" to channelId))
     }
 
+    // --- push devices ---
+
+    /**
+     * Register this installation for push, and re-register whenever FCM rotates
+     * the token. The same call for both: the server upserts on the device id,
+     * so there is nothing for the client to know about which one this is.
+     *
+     * The token is a credential that can push to this phone. It goes in a body
+     * and is never logged - see section 23 of CLAUDE.md.
+     */
+    suspend fun registerDevice(
+        token: String,
+        deviceId: String,
+        platform: String = "android",
+        label: String? = null,
+        appVersion: String? = null,
+    ): Unit = io {
+        authed(
+            "POST",
+            "/api/v1/notifications/devices",
+            JSONObject()
+                .put("token", token)
+                .put("deviceId", deviceId)
+                .put("platform", platform)
+                .apply { label?.let { put("label", it) } }
+                .apply { appVersion?.let { put("appVersion", it) } },
+        )
+    }
+
+    /** Sign-out. Called while there is still an access token to call it with. */
+    suspend fun unregisterDevice(deviceId: String): Unit = io {
+        authed("DELETE", "/api/v1/notifications/devices/${enc(deviceId)}")
+    }
+
     // --- calls ---
 
     /**

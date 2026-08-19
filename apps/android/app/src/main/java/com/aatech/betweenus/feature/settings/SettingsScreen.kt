@@ -540,6 +540,12 @@ fun SettingsScreen(
                         LastPlace.forget()
                         // So does the plaintext of its pictures.
                         com.aatech.betweenus.feature.chat.MediaCache.clear()
+                        // And so does anything still sitting in the shade: a
+                        // notification holds the words of a conversation this
+                        // account is walking away from.
+                        com.aatech.betweenus.feature.notifications.MessageNotifications
+                            .clearAll(context)
+                        com.aatech.betweenus.feature.notifications.PushGate.forgetPreferences()
                         Session.signOut()
                     }
                 },

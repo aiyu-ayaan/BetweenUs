@@ -5,10 +5,17 @@ the top honest — it is what a new session reads first.
 
 ## Next up
 
-**Phase 27 - push notifications** is the next major phase and is deliberately
-not started: it is the only remaining work that needs a new backend surface, and
-it is the one thing every client is missing in the same way. See the phase-27
-section below for what it covers on the backend, the web client and Android.
+**Phase 27 - push notifications** is half landed. The device registry, the
+`message.created` fan-out and the whole Android transport are in code and
+documented in `FCM/`; a swiped-away phone is now reachable. What is still open
+is Web Push, and the fan-out for calls and remote sessions - an incoming-call
+push with the app dead is the one a phone most obviously wants. See the phase-27
+section below.
+
+**None of it has been in front of a human.** `FCM/TESTING.md` is the order to
+try it in, and the four things most likely to be wrong are: the token arriving
+at all, decryption in a cold process woken by a push, the suppression rule with
+the screen locked, and the reply from the shade.
 
 Everything else that was still open across web, desktop, Android and the backend
 has been pulled into `TRACK.md`, which is the ordered list of what is being
@@ -60,7 +67,7 @@ it is, and the backlog of everything anybody has thought of. Where an item
 appears in both, the phase sections below carry the reasoning and `TRACK.md`
 carries the state.
 
-## Phase 27 — push notifications (next major phase, not started)
+## Phase 27 — push notifications (Android landed, web and calls open)
 
 Every client today only raises a notification while it is running. A closed tab,
 a quit desktop app and a swiped-away phone are all unreachable, which is the one
@@ -68,22 +75,45 @@ gap that makes BetweenUs feel unlike the thing it is copying. It is also the onl
 remaining item that needs a service to grow a new surface, which is why it is a
 phase of its own rather than a line in somebody else's.
 
-The backend half is shared; the transports are per client.
+The backend half is shared; the transports are per client. The registry, the
+fan-out and the Android transport have landed; Web Push, calls and remote
+sessions have not. **All of it is documented in `FCM/`** - the architecture in
+`FCM/README.md`, the wire format and the order of the gates in
+`FCM/PAYLOADS.md`, and what to try first in `FCM/TESTING.md`.
+
+The rule the whole design turns on: **the push is data-only and carries no
+words.** A message body is sealed with the channel key, so no service could
+write a notification worth reading; and no service knows whether the recipient
+is looking at that conversation right now. Both are decided on the device, which
+is why a message arriving in the channel already on screen makes no sound - the
+same behaviour WhatsApp has, for the same reason.
 
 Backend (`notification-service`):
 
-- [ ] Device registry: `POST /api/v1/notifications/devices`
-      `{ token, platform, deviceId }`, `DELETE` on sign-out. One row per
-      (user, device), storing the transport token, the platform, the last seen
-      time and the app version
-- [ ] The registration is bound to the account that made it: a sign-out, a
-      server switch or an account switch deletes the row *before* the tokens are
-      discarded, and a refresh-token rotation must not orphan it
-- [ ] Fan-out on `message.created` (mentions and DMs), `call.started` and
-      `remote.session.started`, through the same predicate that already decides
-      whether a notification is allowed - mute, quiet hours, DND and the account
-      switch are not re-implemented per transport
-- [ ] Never log a registration token
+- [x] Device registry: `POST /api/v1/notifications/devices`
+      `{ token, platform, deviceId, label?, appVersion? }`, `DELETE
+      /api/v1/notifications/devices/:deviceId` on sign-out. One row per
+      (user, device) - `DeviceToken` - keyed on the installation and not on the
+      token, because a token rotates and a table keyed on it grows a row per
+      rotation and then pushes at every dead one
+- [x] The registration is bound to the account that made it: the token is
+      unique across the table, so the same phone signing into a second account
+      takes the row with it rather than leaving one behind, and `Session.signOut`
+      unregisters *before* the tokens are discarded
+- [x] Firebase credentials from the environment and never from a file -
+      `FIREBASE_PROJECT_ID` / `FIREBASE_CLIENT_EMAIL` / `FIREBASE_PRIVATE_KEY`,
+      or the whole key in `FIREBASE_SERVICE_ACCOUNT`. `pnpm firebase:env`
+      converts a downloaded key. With none set, push is off and the service is
+      otherwise unchanged
+- [x] Fan-out on `message.created`, through the half of the predicate a server
+      can answer: notifications off, a muted channel, a muted person. Quiet
+      hours and mentions are the client's, because one is on the recipient's
+      clock and the other is inside the ciphertext
+- [x] Dead tokens deleted on `registration-token-not-registered` rather than
+      retried forever
+- [x] Never log a registration token
+- [ ] Fan-out on `call.started` and `remote.session.started`. A call push with
+      the app dead is the whole reason a phone needs this and a desktop does not
 
 Web:
 
@@ -94,19 +124,29 @@ Web:
 
 Android:
 
-- [ ] `google-services.json` handling: git-ignored, its path and project id from
-      `local.properties`, and the build degrades to "no FCM" when it is absent
-      so a clone still compiles
-- [ ] Firebase Messaging dependency and a `FirebaseMessagingService`; register
-      on sign-in and on every `onNewToken`
-- [ ] Notification channels: messages, calls, remote access - separate, so one
-      can be silenced without the others
-- [ ] Incoming-call UI raised from a push with the app dead, which is the whole
-      reason a phone needs this and a desktop does not
-- [ ] Foreground suppression: nothing for the channel already on screen, and the
-      in-app notification for a message arriving in a channel that is *not* on
-      screen, which is the half already wired but never posted
-- [ ] `POST_NOTIFICATIONS` at the first moment it means something
+- [x] `google-services.json` at `apps/android/app/`, and the Gradle plugin
+      applied only when it is there - so a clone without one still compiles and
+      runs, with `BuildConfig.HAS_FIREBASE` false and nothing registered
+- [x] Firebase Messaging and a `FirebaseMessagingService`; registered on
+      sign-in, on session restore and on every `onNewToken`. Firebase is
+      confined to one file (`feature/notifications/Push.kt`) and `:core` stays
+      transport-agnostic behind `PushTokens`
+- [x] Notification channels: messages and remote access, separate from the call
+      channel `CallService` already owns, so one can be silenced alone
+- [x] Foreground suppression: nothing for the channel already on screen -
+      `AppForeground.visible && Conversation.visibleChannelId == channelId`.
+      Both halves are needed; a locked phone still has the chat screen composed,
+      so the visible-channel check alone silences a channel forever
+- [x] The notification itself: `MessagingStyle`, one per channel, the sender's
+      picture, direct reply from the shade (a broadcast, so it never opens the
+      app), mark-as-read, a decrypted picture in the expanded view, and
+      tap-through on `betweenus://channel/<id>`
+- [x] Quiet hours and mentions applied on the device, which is the only side
+      that can: one is the phone's own clock, the other is inside the ciphertext
+- [x] `POST_NOTIFICATIONS` - already asked for at the first moment it means
+      something, and the post is skipped when it is refused
+- [ ] Incoming-call UI raised from a push with the app dead. Waits on the
+      `call.started` fan-out above
 
 Desktop:
 
