@@ -22,10 +22,10 @@
             <InsightsFilterSettings>
               <option name="connection">
                 <ConnectionSetting>
-                  <option name="appId" value="PLACEHOLDER" />
-                  <option name="mobileSdkAppId" value="" />
-                  <option name="projectId" value="" />
-                  <option name="projectNumber" value="" />
+                  <option name="appId" value="com.aatech.betweenus" />
+                  <option name="mobileSdkAppId" value="1:899489736148:android:26ba269ff44844aeb0a241" />
+                  <option name="projectId" value="betweenus-d5cda" />
+                  <option name="projectNumber" value="899489736148" />
                 </ConnectionSetting>
               </option>
               <option name="signal" value="SIGNAL_UNSPECIFIED" />
