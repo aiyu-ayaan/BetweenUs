@@ -157,6 +157,12 @@ Backlog worked down, this pass:
 - [x] **Android: microphone processing, a hi-fi mode, and an output route**,
       including the Opus `fmtp` patch that carries bitrate, channels and DTX.
       Input sensitivity is still open and the reason is written down.
+- [x] **URL Clickable Hyperlinks & Rich Social Link Previews (Android, Web, Desktop).**
+      Added URL link detection and highlighting with clickable links that open in the
+      browser across all three platforms. Implemented a safe backend unfurling service
+      (`GET /api/v1/messages/unfurl`) extracting OpenGraph/meta tags (title, description,
+      preview image, site name, favicon) with in-memory caching and SSRF protection.
+      Rendered rich preview cards below messages across Desktop, Web, and Android.
 - [x] **Android: WhatsApp-style permission carousel & top notification warning banner.**
       Implemented step-by-step auto-advancing permission carousel with primary action
       buttons, batch authorization, and active permission monitoring. When notification
