@@ -721,6 +721,16 @@ data class ChannelKeys(
     val keys: List<ChannelKeyEntry>,
     /** Members with a device key but no entry at `epoch` - they need a re-wrap. */
     val missingRecipients: List<DeviceKey>,
+    /**
+     * The same question asked of every epoch, for machines whose owner already
+     * holds that epoch somewhere else. Filling these is what lets a phone that
+     * signed in today read what was said before it existed, instead of a screen
+     * of padlocks - see `development/E2EE.md`.
+     *
+     * Empty against a server older than this field, which is the correct
+     * reading: nothing to repair that this client knows about.
+     */
+    val gaps: List<EpochGap>,
 ) {
     companion object {
         fun from(json: JSONObject) = ChannelKeys(
@@ -728,6 +738,17 @@ data class ChannelKeys(
             keys = json.optJSONArray("keys")?.map { ChannelKeyEntry.from(it) }.orEmpty(),
             missingRecipients =
                 json.optJSONArray("missingRecipients")?.map { DeviceKey.from(it) }.orEmpty(),
+            gaps = json.optJSONArray("gaps")?.map { EpochGap.from(it) }.orEmpty(),
+        )
+    }
+}
+
+/** One epoch, and the machines still missing it. */
+data class EpochGap(val epoch: Int, val devices: List<DeviceKey>) {
+    companion object {
+        fun from(json: JSONObject) = EpochGap(
+            epoch = json.optInt("epoch"),
+            devices = json.optJSONArray("devices")?.map { DeviceKey.from(it) }.orEmpty(),
         )
     }
 }

@@ -753,6 +753,29 @@ export interface ChannelKeysResponse {
    * which it has to fetch anyway.
    */
   rekeyNeeded: boolean;
+  /**
+   * Machines missing an epoch *their owner already holds somewhere else*, over
+   * every epoch the channel has had, newest first. This is what lets a second
+   * machine read history rather than only what is written after it arrives.
+   *
+   * `missingRecipients` covers the current epoch only, which is enough to keep
+   * the next message readable and nothing else. A machine that signs in today
+   * is missing every epoch before today: it cannot re-wrap them for itself
+   * (it holds none of them), and nothing else was looking, so it mints a fresh
+   * epoch and everything written before it stays a padlock for good.
+   *
+   * "Their owner already holds it" is the boundary, and it is load-bearing:
+   * without it this would hand the whole history to somebody who joined
+   * yesterday, which is the opposite of the rule everything else here keeps. It
+   * repairs one person's access on their own second machine and nothing else.
+   *
+   * A client that holds an epoch fills these gaps. The server already lets a
+   * holder add to an existing epoch, so this needs no new permission - only
+   * somebody to notice, which is what this field is.
+   *
+   * Empty for a channel with no key yet.
+   */
+  gaps: Array<{ epoch: number; devices: DeviceKey[] }>;
 }
 
 /**

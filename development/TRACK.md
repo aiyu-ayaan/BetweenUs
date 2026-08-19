@@ -382,6 +382,27 @@ Android faults found against a real deployment:
 - [x] **One avatar control in settings**, not two: the account row already drew
       the picture the picker was drawing again beside its buttons.
 
+End-to-end encryption:
+
+- [x] **A second machine reads history.** The key directory answers one more
+      question - who is missing *any* epoch their owner already holds elsewhere,
+      not only the current one - and a client that holds an epoch fills those
+      gaps when it opens the channel. Without it a machine signed in today held
+      exactly one epoch, could not repair itself because it held none of the
+      others, and had nobody looking on its behalf: it minted a fresh epoch and
+      every message before that moment was a padlock for good. "Their owner
+      already holds it" is the boundary, and it is what keeps this from handing
+      a year of history to somebody who joined yesterday.
+- [x] **Two words on the row, one sentence for the channel.** The placeholder
+      is "🔒 Encrypted"; why, and that it repairs itself as soon as a machine
+      holding those keys opens the channel, is said once above the list rather
+      than eight times down it.
+- [x] **The self-check gives each machine its own keychain.** Its stand-in
+      shared one identity across every simulated device, so "a different laptop"
+      opened every wrap addressed to the other one and proved nothing - and its
+      stand-in directory wrote entries as it validated them, leaving a
+      half-published epoch behind on a rejected bundle.
+
 Documentation:
 
 - [x] **Post-SFU corrections** across `TODO.md`, and phase 27 opened for push.

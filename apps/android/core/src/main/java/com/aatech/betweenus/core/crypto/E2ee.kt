@@ -3,6 +3,7 @@ package com.aatech.betweenus.core.crypto
 import android.content.Context
 import com.aatech.betweenus.core.data.ApiError
 import com.aatech.betweenus.core.data.ChannelKeyEntry
+import com.aatech.betweenus.core.data.ChannelKeys
 import com.aatech.betweenus.core.data.DeviceKey
 import com.aatech.betweenus.core.data.IdentityBackup
 import com.aatech.betweenus.core.data.BetweenUsApi
@@ -51,7 +52,14 @@ sealed interface IdentityStatus {
  * channel and disagreeing about any of it locks somebody out of their history.
  */
 object E2ee {
-    const val UNDECRYPTABLE = "🔒 Encrypted - no key on this device yet"
+    /**
+     * Shown instead of a message this device holds no key for.
+     *
+     * Two words: it is drawn once per message, and a sentence repeated down a
+     * whole screen is not eight times as informative as one. Why, and what to
+     * do about it, is said once for the channel.
+     */
+    const val UNDECRYPTABLE = "🔒 Encrypted"
 
     private lateinit var store: SecureStore
 
@@ -339,9 +347,43 @@ object E2ee {
             return
         }
 
-        val key = state.keys[state.epoch] ?: return
-        if (latest.missingRecipients.isEmpty()) return
-        shareKey(channelId, state.epoch, key, latest.missingRecipients)
+        fillGaps(channelId, state, latest)
+    }
+
+    /**
+     * Hands every epoch this phone holds to the machines that are missing it.
+     *
+     * This is what lets a second machine read *history* rather than only what
+     * is written after it arrives. Re-wrapping the current epoch and nothing
+     * else left a machine that signed in today missing every epoch before
+     * today - it holds none of them so it cannot repair itself, and with nobody
+     * looking on its behalf it minted a fresh epoch and the whole conversation
+     * before that moment stayed a padlock for good.
+     *
+     * The server only ever lists a machine whose *owner* already holds that
+     * epoch, so this repairs one person's own second machine and hands nothing
+     * to somebody who joined last week.
+     *
+     * Failures are per epoch and never fatal: a racing rotation or a device
+     * revoked between the read and the write fails one wrap, and neither is a
+     * reason to stop opening the channel.
+     */
+    private suspend fun fillGaps(channelId: String, state: ChannelKeyState, latest: ChannelKeys) {
+        // Belt and braces for a server older than `gaps`, where this is the
+        // only re-wrap that happens.
+        state.keys[state.epoch]?.let { key ->
+            if (latest.missingRecipients.isNotEmpty()) {
+                runCatching { shareKey(channelId, state.epoch, key, latest.missingRecipients) }
+            }
+        }
+
+        for (gap in latest.gaps) {
+            // An epoch we cannot open is not ours to hand out, and the server
+            // would refuse it anyway: only a holder may add to an existing one.
+            val key = state.keys[gap.epoch] ?: continue
+            if (gap.devices.isEmpty()) continue
+            runCatching { shareKey(channelId, gap.epoch, key, gap.devices) }
+        }
     }
 
     /** Keys a channel that was just created, so whoever opens it first can read. */

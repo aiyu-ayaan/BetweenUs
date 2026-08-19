@@ -43,6 +43,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.aatech.betweenus.core.crypto.E2ee
 import com.aatech.betweenus.core.data.MessageAttachment
 import com.aatech.betweenus.core.data.MessageReply
 import com.aatech.betweenus.core.data.PublicUser
@@ -357,6 +358,25 @@ fun ChatScreen(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 10.dp),
             ) {
+                // Said once for the channel rather than once per message. A row
+                // can say it is sealed; what somebody needs is why, and that it
+                // repairs itself - a machine holding those keys hands them over
+                // the next time it opens this channel.
+                if (messages.any { it.text == E2ee.UNDECRYPTABLE }) {
+                    item {
+                        Text(
+                            text = "Some of these messages were sealed for another of your " +
+                                "devices. Open BetweenUs on the device you first signed in " +
+                                "with and they will unlock here.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Slate500,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                        )
+                    }
+                }
+
                 items(messages, key = { it.id }) { readable ->
                     val index = messages.indexOf(readable)
                     val previous = messages.getOrNull(index - 1)

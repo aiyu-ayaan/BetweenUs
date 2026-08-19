@@ -86,11 +86,18 @@ function publish(dto: PublishChannelKeysRequest): Response {
     return forbidden('EPOCH_NOT_HELD');
   }
 
+  // Every entry is checked before any of them is written, which is what the
+  // service does - it validates, then `createMany`. Storing as it went left a
+  // half-published epoch behind on a rejected bundle, and a half-published
+  // epoch is a channel key nobody can open and an epoch number nobody minted.
   for (const entry of dto.entries) {
     if (!MEMBERS.includes(entry.recipientUserId)) return forbidden('RECIPIENT_NOT_MEMBER');
     if (revoked.has(`${entry.recipientUserId}:${entry.recipientDeviceId}`)) {
       return forbidden('DEVICE_REVOKED');
     }
+  }
+
+  for (const entry of dto.entries) {
     const duplicate = stored.some(
       (row) =>
         row.epoch === dto.epoch &&
@@ -109,6 +116,30 @@ function publish(dto: PublishChannelKeysRequest): Response {
 
   published.push(dto.epoch);
   return json({ epoch: dto.epoch, stored: dto.entries.length });
+}
+
+/**
+ * Machines missing an epoch their owner already holds somewhere else, over
+ * every epoch that exists. Mirrors `E2eeService.gaps`, including the condition
+ * that makes it safe: a person's second machine is repaired, and a member who
+ * joined last week is still not handed the year before that.
+ */
+function gapsNow(): Array<{ epoch: number; devices: DeviceKey[] }> {
+  const held = new Set(
+    stored.map((row) => `${row.epoch}:${row.recipientUserId}:${row.recipientDeviceId}`),
+  );
+  const owners = new Set(stored.map((row) => `${row.epoch}:${row.recipientUserId}`));
+  const epochs = [...new Set(stored.map((row) => row.epoch))].sort((a, b) => b - a);
+  return epochs
+    .map((epoch) => ({
+      epoch,
+      devices: knownDevices().filter(
+        (device) =>
+          owners.has(`${epoch}:${device.userId}`) &&
+          !held.has(`${epoch}:${device.userId}:${device.deviceId}`),
+      ),
+    }))
+    .filter((gap) => gap.devices.length > 0);
 }
 
 /** Is the current epoch on a machine that should not have it? */
@@ -181,6 +212,9 @@ function stubDirectory(): void {
           // epoch was minted. The second cannot be found by looking for its
           // wraps - revoking deletes them - so it is found by the clock.
           rekeyNeeded: staleNow(epoch),
+          // The same question asked of every epoch, which is what lets a
+          // machine that signed in today be handed the history.
+          gaps: gapsNow(),
         }),
       );
     }
@@ -193,15 +227,28 @@ function stubDirectory(): void {
   }) as typeof fetch;
 }
 
-/** `secureGet`/`secureSet` fall back to localStorage, which Node has not got. */
+/**
+ * `secureGet`/`secureSet` fall back to localStorage, which Node has not got.
+ *
+ * One store, with the sealed identity partitioned by device id. Two machines
+ * are two keychains, and sharing one here would have made every "different
+ * laptop" in this file the same laptop under another name - it would open every
+ * wrap addressed to the other one and prove nothing. The device id is the same
+ * value the client reads, so switching machines switches keychains without
+ * anything else having to know.
+ */
 function stubBrowserGlobals(): void {
   const store = new Map<string, string>();
+  const partition = (key: string): string =>
+    key.startsWith('betweenus.secure.')
+      ? `${store.get('betweenus.deviceId') ?? 'unknown'}/${key}`
+      : key;
   Object.assign(globalThis, {
     window: { location: { origin: 'http://localhost:8080' } },
     localStorage: {
-      getItem: (key: string) => store.get(key) ?? null,
-      setItem: (key: string, value: string) => store.set(key, value),
-      removeItem: (key: string) => store.delete(key),
+      getItem: (key: string) => store.get(partition(key)) ?? null,
+      setItem: (key: string, value: string) => store.set(partition(key), value),
+      removeItem: (key: string) => store.delete(partition(key)),
     },
   });
 }
@@ -319,23 +366,64 @@ async function main(): Promise<void> {
     (row) => row.epoch === latestEpoch() && row.recipientDeviceId === 'alice-phone',
   );
   assert.equal(phoneWraps.length, 1, 'a new machine must be wrapped for, once');
+
+  // And it reads nothing yet. The phone holds one epoch - the one it had to
+  // mint for itself, because no machine holding the older ones was online to
+  // wrap them for it - so the whole conversation up to this moment is a
+  // padlock. That is the wall of them a second device opens on, and what the
+  // next few lines exist to repair.
   assert.equal(
     await decryptForChannel(CHANNEL, afterBob),
-    'after bob left',
-    'the second machine reads what the first one could',
+    UNDECRYPTABLE,
+    'a brand new machine starts with no history, before anyone repairs it',
   );
+  assert.equal(await decryptForChannel(CHANNEL, beforeBob), UNDECRYPTABLE);
 
-  // The laptop still works. Two machines, two wraps, one key.
+  // The laptop still reads its own history.
   await signIn('alice', 'device-1');
   assert.equal(await decryptForChannel(CHANNEL, afterBob), 'after bob left');
 
-  const beforeRevoke = published.length;
+  // And opening the channel on the laptop hands the phone every epoch the
+  // laptop holds. This is the repair: it is the same person, who can read
+  // those messages on the machine in front of them, and the server offers the
+  // gap only for a machine whose *owner* already holds that epoch.
+  const epochBeforeRepair = latestEpoch();
   await syncChannelKeys(CHANNEL);
   assert.equal(
-    published.length,
-    beforeRevoke,
+    latestEpoch(),
+    epochBeforeRepair,
     'every device is covered, so nothing needs re-keying',
   );
+  assert.deepEqual(
+    stored
+      .filter((row) => row.recipientDeviceId === 'alice-phone')
+      .map((row) => row.epoch)
+      .sort((a, b) => a - b),
+    [1, 2, 3, 4],
+    'the phone is handed every epoch the laptop holds, not only the newest',
+  );
+
+  // So the phone now reads the whole conversation, including what was written
+  // three epochs before it existed.
+  await signIn('alice', 'phone');
+  assert.equal(
+    await decryptForChannel(CHANNEL, beforeBob),
+    'before bob arrived',
+    'the second machine reads history once a machine that holds it has been online',
+  );
+  assert.equal(await decryptForChannel(CHANNEL, afterBob), 'after bob left');
+
+  // And bob, who was never a member when that was written, is still not handed
+  // it. The repair is one person's own second machine and nothing wider: the
+  // gap list names a device only when its owner already holds that epoch.
+  const bobDevices = new Set(
+    stored.filter((row) => row.recipientUserId === 'bob').map((row) => row.epoch),
+  );
+  assert.equal(bobDevices.has(3), false, 'a former member gains nothing from a repair');
+  assert.equal(bobDevices.has(4), false, 'a former member gains nothing from a repair');
+
+  await signIn('alice', 'device-1');
+  const beforeRevoke = latestEpoch();
 
   // Alice loses the phone and revokes it. Its wraps go with it, and the channel
   // has to move past the key it was holding - the same rule as a member who
@@ -348,7 +436,7 @@ async function main(): Promise<void> {
   stored = stored.filter((row) => row.recipientDeviceId !== 'alice-phone');
 
   await syncChannelKeys(CHANNEL);
-  assert.equal(published.length, beforeRevoke + 1, 'a revoked device forces exactly one re-key');
+  assert.equal(latestEpoch(), beforeRevoke + 1, 'a revoked device forces exactly one re-key');
 
   const newest = latestEpoch();
   assert.deepEqual(

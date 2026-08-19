@@ -8,6 +8,7 @@
 import type {
   BackupSecretKind,
   ChannelKeyEntry,
+  ChannelKeysResponse,
   EncryptedEnvelope,
   IdentityBackup,
 } from '@betweenus/shared-types';
@@ -28,8 +29,14 @@ import {
   type IdentityKeyPair,
 } from './e2ee-crypto';
 
-/** Shown instead of a message we hold no key for. Never throws into the UI. */
-export const UNDECRYPTABLE = '\u{1F512} Encrypted - no key on this device yet';
+/**
+ * Shown instead of a message we hold no key for. Never throws into the UI.
+ *
+ * Two words, because it is drawn once per message and a sentence repeated down
+ * a whole screen is not eight times as informative as one - the explanation and
+ * what to do about it belong in the single line the channel draws above them.
+ */
+export const UNDECRYPTABLE = '\u{1F512} Encrypted';
 
 export class MissingChannelKeyError extends Error {
   constructor() {
@@ -354,9 +361,10 @@ export async function callKeyForChannel(channelId: string): Promise<string> {
 }
 
 /**
- * Re-wraps the current key for members who have none. Called when a channel is
- * opened, so a member who joined after the key was minted becomes readable
- * without anyone restarting the app.
+ * Re-wraps the keys this machine holds for the machines that hold none. Called
+ * when a channel is opened, so a member who joined after a key was minted -
+ * and a second machine somebody signed in on yesterday - becomes able to read
+ * without anyone restarting anything.
  */
 export async function syncChannelKeys(channelId: string): Promise<void> {
   const state = await ensureChannelKey(channelId);
@@ -375,8 +383,40 @@ export async function syncChannelKeys(channelId: string): Promise<void> {
     return;
   }
 
-  if (latest.missingRecipients.length === 0) return;
-  await shareKey(channelId, state.epoch, key, latest.missingRecipients);
+  await fillGaps(channelId, state, latest);
+}
+
+/**
+ * Hands every epoch this machine holds to the machines that are missing it.
+ *
+ * This is what makes a second device able to read *history* rather than only
+ * what is written after it arrives. The old answer re-wrapped the current epoch
+ * and nothing else, so a machine signing in today was missing every epoch
+ * before today, could not re-wrap them for itself (it holds none of them), and
+ * had nobody looking on its behalf - it minted a fresh epoch and the whole
+ * conversation before that moment stayed a padlock for good.
+ *
+ * Failures are per epoch and never fatal. A racing rotation, a device revoked
+ * between the read and the write, a member removed - each of them fails one
+ * wrap, and none of them is a reason to stop opening the channel.
+ */
+async function fillGaps(
+  channelId: string,
+  state: ChannelKeyState,
+  latest: ChannelKeysResponse,
+): Promise<void> {
+  for (const gap of latest.gaps) {
+    const key = state.keys.get(gap.epoch);
+    // An epoch we cannot open is not ours to hand out, and the server would
+    // refuse it anyway: only a holder may add to an existing epoch.
+    if (!key || gap.devices.length === 0) continue;
+    try {
+      await shareKey(channelId, gap.epoch, key, gap.devices);
+    } catch {
+      // Somebody else got there first, or one of those devices has just been
+      // revoked. Either way the next open asks again.
+    }
+  }
 }
 
 /**
@@ -496,7 +536,9 @@ async function loadChannelKey(channelId: string): Promise<ChannelKeyState> {
   channels.set(channelId, state);
 
   // Members who joined after the key was minted cannot read anything until a
-  // holder re-wraps it for them. We hold it, so we do it.
+  // holder re-wraps it for them. We hold it, so we do it. Older epochs are
+  // `syncChannelKeys`' job - opening a channel is where that belongs, and
+  // doing it here as well would publish every gap twice.
   if (response.missingRecipients.length > 0) {
     const key = keys.get(response.epoch);
     if (key) void shareKey(channelId, response.epoch, key, response.missingRecipients);

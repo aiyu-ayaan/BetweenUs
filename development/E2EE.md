@@ -36,6 +36,28 @@ this" was a question the directory could not answer.
 It is a list now: one row per installation, with a client-minted device id, a
 label, and a revocation stamp. A channel key is wrapped once per device.
 
+A machine that arrives later is wrapped for later. `GET /api/v1/e2ee/keys/:channelId`
+answers two questions rather than one: who is missing the *current* epoch, and
+who is missing *any* epoch their owner already holds on another machine. The
+first keeps the next message readable. The second is what lets a phone signed in
+today read what was said before it existed - without it, a second device holds
+one epoch, cannot repair itself because it holds none of the others, and nobody
+is looking on its behalf, so it mints a fresh epoch and the whole conversation
+before that moment is a padlock for good.
+
+"their owner already holds it" is the boundary and it is load-bearing. Without
+it the same mechanism would hand a year of history to somebody who joined
+yesterday, which is the opposite of the rule everything else here keeps. With
+it, the only thing repaired is one person's access on their own second machine -
+messages they can already read on the laptop in the next room. It also needs no
+new permission: the server already lets a holder add entries to an existing
+epoch, so the gap list is somebody noticing rather than somebody being trusted.
+
+What it does need is a machine that holds those keys to open the channel once.
+Any member's device will do - the wraps are addressed per device, so whoever
+holds the epoch can seal it for the machine that is missing it - but until one
+of them does, the padlocks stay.
+
 **Revoking** deletes the wraps addressed to that device and stops it being
 sealed for again; the row stays, because when a machine stopped being trusted is
 the only thing anybody can audit afterwards. Every channel it could read then
@@ -96,6 +118,10 @@ open a channel
    |
    +-- members missing this epoch?
    |      seal the key for them too       POST /api/v1/e2ee/keys
+   |
+   +-- another machine of a member missing an *older* epoch we hold?
+   |      seal that one for it too        POST /api/v1/e2ee/keys
+   |      (never for somebody who does not already hold that epoch)
    |
    +-- unwrap -> channel key in memory
 
@@ -329,6 +355,13 @@ guarantee is the same one; there is simply no longer a hop to keep frames from.
     of its own. Until then: a remote session trusts the deployment's gateway not
     to actively attack it, which is worth knowing before pointing one at a
     machine you care about.
+
+13. **A second machine recovers history only once a machine that already holds
+    it comes online.** The wraps are addressed per device, so nothing but a
+    holder can seal an epoch for the machine missing it - and the server cannot,
+    having never held one. Any member's device does the repair, the next time
+    one of them opens the channel; until then the padlocks stay. There is no
+    offline path here and there cannot be one.
 
 ## Porting this to a web or Android client
 

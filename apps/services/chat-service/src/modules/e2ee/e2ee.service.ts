@@ -22,6 +22,15 @@ import type {
 } from '@betweenus/shared-types';
 import { MessagesService } from '../messages/messages.service';
 
+/**
+ * How many epochs back a re-wrap is offered in one response.
+ *
+ * A ceiling rather than a policy: a client works through what it is given and
+ * asks again, so a channel with a hundred epochs recovers over a few opens
+ * instead of in one response nobody wants to build or parse.
+ */
+const MAX_GAP_EPOCHS = 20;
+
 @Injectable()
 export class E2eeService {
   constructor(private readonly messages: MessagesService) {}
@@ -206,7 +215,73 @@ export class E2eeService {
       })),
       missingRecipients: epoch === 0 ? [] : await this.missingAtEpoch(channelId, epoch),
       rekeyNeeded: epoch === 0 ? false : await this.staleAtEpoch(channelId, epoch),
+      gaps: epoch === 0 ? [] : await this.gaps(channelId, epoch),
     };
+  }
+
+  /**
+   * Machines missing an epoch *their owner already holds on another machine*,
+   * across every epoch the channel has had.
+   *
+   * `missingRecipients` answers a narrower question - the current epoch only -
+   * which keeps the next message readable and does nothing for the last year of
+   * them. A machine that signs in today is missing every earlier epoch, cannot
+   * re-wrap them for itself because it holds none of them, and had nothing
+   * looking on its behalf. So it minted a fresh epoch and everything written
+   * before it stayed sealed for good: the wall of padlocks a second device used
+   * to open on.
+   *
+   * The "their owner already holds it" condition is the whole of the boundary,
+   * and it is not a detail. Without it this would hand every past epoch to
+   * somebody who joined the channel yesterday, which is the opposite of the
+   * rule the rest of this file keeps: a member reads from when they joined.
+   * With it, the only thing being repaired is a person's own access on a second
+   * machine - they can read those messages already, on the laptop in the next
+   * room.
+   *
+   * Two queries whatever the number of epochs. Publishing against it is
+   * governed as it always was: a caller may add to an existing epoch only while
+   * holding that epoch's key.
+   */
+  private async gaps(
+    channelId: string,
+    epoch: number,
+  ): Promise<Array<{ epoch: number; devices: DeviceKey[] }>> {
+    const memberIds = await this.memberIds(channelId);
+    const [covered, devices] = await Promise.all([
+      prisma.channelKey.findMany({
+        where: { channelId },
+        select: { epoch: true, recipientUserId: true, recipientDeviceId: true },
+      }),
+      prisma.deviceKey.findMany({
+        where: { userId: { in: memberIds }, revokedAt: null },
+      }),
+    ]);
+
+    const has = new Set(
+      covered.map((row) => `${row.epoch}:${row.recipientUserId}:${row.recipientDeviceId}`),
+    );
+    /** Who may be given epoch E at all: whoever already has it somewhere. */
+    const owners = new Set(covered.map((row) => `${row.epoch}:${row.recipientUserId}`));
+    // Only epochs that exist. An epoch nobody ever minted is not a gap, and
+    // inventing one here would ask a client to publish a key for it.
+    const epochs = [...new Set(covered.map((row) => row.epoch))].sort((a, b) => b - a);
+
+    return epochs
+      .map((at) => ({
+        epoch: at,
+        devices: devices
+          .filter(
+            (device) =>
+              owners.has(`${at}:${device.userId}`) &&
+              !has.has(`${at}:${device.userId}:${device.deviceId}`),
+          )
+          .map(toDeviceKey),
+      }))
+      .filter((gap) => gap.devices.length > 0)
+      // The newest epochs matter most - they are what the next message uses -
+      // and a channel with a long history should not be one enormous response.
+      .slice(0, MAX_GAP_EPOCHS);
   }
 
   /**

@@ -268,8 +268,11 @@ fun MessageRow(
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                             ) {
                                 BetweenUsIcon(BetweenUsIcons.Lock, tint = Danger, size = 16.dp)
+                                // One word, because it is drawn once per
+                                // message. Why, and what to do about it, is
+                                // said once for the channel - see ChatScreen.
                                 Text(
-                                    text = "Encrypted - no key on this device yet",
+                                    text = "Encrypted",
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = Slate400,
                                 )
