@@ -1,15 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Monochrome layer: the BetweenUs mark, single color, used by themed icons on Android 13+. -->
+<!-- Monochrome layer for Android 13+ themed icons, scaled to 54% in safe zone. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="1024"
     android:viewportHeight="1024">
     <group
-        android:scaleX="0.75"
-        android:scaleY="0.75"
-        android:translateX="128"
-        android:translateY="128">
+        android:scaleX="0.54"
+        android:scaleY="0.54"
+        android:translateX="235.52"
+        android:translateY="253.56">
         <path
             android:fillColor="#000000"
             android:pathData="M275.673088 576.216064v-60.6464c0-21.42208-17.46944-38.139904-38.842368-36.37248 0 0-170.27072-2.41664-170.27072 113.262592v188.42624c0 108.34432 170.758144 106.129408 170.758144 106.129408 21.183488 1.222656 38.354944-15.01184 38.354944-36.574208v-80.048128c-28.741632-22.59968-47.20128-57.689088-47.20128-97.088512s18.459648-74.487808 47.20128-97.088512m473.335808 0v-60.6464c0-21.42208 17.46944-38.139904 38.842368-36.37248 0 0 170.27072-2.41664 170.27072 113.262592v188.42624c0 108.34432-170.758144 106.129408-170.758144 106.129408-21.183488 1.222656-38.354944-15.01184-38.354944-36.574208v-80.048128c28.741632-22.59968 47.20128-57.689088 47.20128-97.088512s-18.459648-74.487808-47.20128-97.088512" />

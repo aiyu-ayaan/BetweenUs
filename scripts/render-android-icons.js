@@ -1,6 +1,7 @@
 /**
- * Render Android launcher icon PNGs directly from the desktop SVG
- * (apps/desktop/public/icon.svg) with #3730A2 background and 75% zoom.
+ * Render Android launcher icon PNGs directly from desktop SVG specs
+ * with safe-zone scaling (54% mark size, centered), so it never cuts off
+ * inside circle/squircle masks on any Android device.
  *
  *   node scripts/render-android-icons.js
  */
@@ -22,21 +23,27 @@ function icon({ rounded }) {
     ? '<clipPath id="mask"><circle cx="512" cy="512" r="512"/></clipPath>'
     : '<clipPath id="mask"><rect x="0" y="0" width="1024" height="1024" rx="220"/></clipPath>';
 
-  const scale = 0.75;
-  const offset = 512 - 512 * scale; // 128
+  // 54% scale, centered at (512, 512)
+  const scale = 0.54;
+  const offsetX = 235.52;
+  const offsetY = 253.56;
 
-  // Use the exact same gradients from the desktop SVG
   return `<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
   <defs>
     ${clip}
+    <linearGradient id="betweenusBg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#5b21b6" />
+      <stop offset="50%" stop-color="#3730a3" />
+      <stop offset="100%" stop-color="#0f172a" />
+    </linearGradient>
     <linearGradient id="betweenusHeadset" x1="0%" y1="0%" x2="100%" y2="100%">
       <stop offset="0%" stop-color="#a78bfa" />
       <stop offset="100%" stop-color="#6c5ce7" />
     </linearGradient>
   </defs>
   <g clip-path="url(#mask)">
-    <rect width="1024" height="1024" fill="#3730A2"/>
-    <g transform="translate(${offset} ${offset}) scale(${scale})">
+    <rect width="1024" height="1024" fill="url(#betweenusBg)"/>
+    <g transform="translate(${offsetX} ${offsetY}) scale(${scale})">
       <path d="${pathMatches[0][1]}" fill="url(#betweenusHeadset)"/>
       <path d="${pathMatches[1][1]}" fill="#ffffff"/>
     </g>
