@@ -113,10 +113,11 @@ Chat, on desktop and web:
       re-mounts/StrictMode, and added fallback extension recognition for OS
       file drops. Discarding/closing the send preview modal now clears pending
       attachments from the chat composer state instead of leaving them attached.
-- [x] **Member list hidden by default.** The right-hand people / member column
-      on server channels now defaults to closed (`showMembers: false`), giving
-      the conversation full width until explicitly opened via the header or
-      top-bar layout toggle.
+- [x] **Member list hidden by default & redundant TopBar toggle removed.** The
+      right-hand people / member column on server channels now defaults to
+      closed (`showMembers: false`), giving the conversation full width until
+      explicitly opened via the channel header member toggle. The duplicate
+      TopBar right sidebar toggle was removed.
 
 Backlog worked down, this pass:
 
