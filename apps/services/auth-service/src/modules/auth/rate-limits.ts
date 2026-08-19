@@ -32,12 +32,18 @@ export const CREDENTIALS_RATE_LIMIT: RateLimitOptions = {
  * of their account for longer than the minute it is aimed at - and the address
  * doing the aiming runs out first anyway.
  *
+ * Normalised the way the lookup normalises it, or the bucket is a formality:
+ * `Ayaan@x.com` and `ayaan@x.com` reach the same row and would otherwise get
+ * ten attempts each. What it cannot do is join up the two *names* for one
+ * account - the field takes an email or a username, and telling which account a
+ * username belongs to is a database read this runs before.
+ *
  * ponytail: a counter is the whole of it. There is no "this account is under
  * attack" signal, no notification and no escalating backoff.
  */
 export const LOGIN_RATE_LIMIT: RateLimitOptions = {
   ...CREDENTIALS_RATE_LIMIT,
-  subject: (body) => (typeof body.email === 'string' ? body.email : null),
+  subject: (body) => (typeof body.email === 'string' ? body.email.trim().toLowerCase() : null),
   subjectLimit: 10,
 };
 

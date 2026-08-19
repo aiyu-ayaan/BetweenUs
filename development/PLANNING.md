@@ -276,12 +276,13 @@ which is the one arrangement that never needed the tunnel in the first place.
 - **Provider sign-in redirects the page; it does not open a loopback server.**
   The desktop client starts a temporary server on `127.0.0.1` because a
   packaged renderer has no origin a provider can return to. A tab has one, and
-  the auth service already accepted a `redirect` parameter checked against
-  `OAUTH_ALLOWED_REDIRECTS` - the admin panel's flow. So the browser leaves for
-  the provider and comes back with the same one-time code the desktop client
-  gets, which `restore` trades for a session before anything renders. A
-  deployment has to list its own origin in `OAUTH_ALLOWED_REDIRECTS`;
-  `localhost` is allowed already, so development needs nothing.
+  the auth service already accepted a `redirect` parameter checked against an
+  allow list - the admin panel's flow. So the browser leaves for the provider
+  and comes back with the same one-time code the desktop client gets, which
+  `restore` trades for a session before anything renders. The allow list is
+  derived from `PUBLIC_API_URL` and `CORS_ORIGIN` rather than configured
+  separately, so a deployment's own origin is trusted without being named
+  twice, and `localhost` is allowed already.
 - **Notifications in a tab use the Notifications API.** Permission is asked at
   the first notification worth raising rather than at sign-in, because a prompt
   on the way in is the one people refuse; the unread count goes in the title,
@@ -831,8 +832,12 @@ that has to be right for every future deployment is one that will be wrong.
   auth-service trades the code for a profile, and the finished session comes
   back to a loopback server as a one-time code the client redeems. The same
   shape serves a future web client, with an allowed origin instead of loopback.
-  The redirect target is restricted to loopback plus `OAUTH_ALLOWED_REDIRECTS`,
-  because an open redirect here hands sessions to whoever asks.
+  The redirect target is restricted to loopback plus the deployment's own
+  origins - `PUBLIC_API_URL` and `CORS_ORIGIN`, which it has already had to
+  name - because an open redirect here hands sessions to whoever asks. It was
+  a variable of its own once, and that was the wrong question to ask an
+  operator: every answer was "my own site", and getting it wrong is a
+  `BAD_REDIRECT` on the one button nobody can test until the site is public.
 - **A provider login links before it creates.** Provider account id first, then
   verified email, and only then a new account - otherwise signing in with
   Google after registering with the same address silently forks the person into

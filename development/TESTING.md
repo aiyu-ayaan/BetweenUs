@@ -811,9 +811,9 @@ is worth checking is only where the two runtimes differ.
   shows up in the tab title, which is the only badge a tab has.
 - **Provider sign-in.** With Google or GitHub configured in the admin panel,
   the button leaves the page for the provider and comes back signed in - no
-  loopback server, unlike the desktop app. On a deployment this needs the
-  origin in `OAUTH_ALLOWED_REDIRECTS`; `localhost:5175` is allowed already, so
-  development needs nothing. A refused redirect answers `BAD_REDIRECT`.
+  loopback server, unlike the desktop app. Nothing to configure on either: the
+  allowed destinations are derived from `PUBLIC_API_URL` and `CORS_ORIGIN`, and
+  `localhost` is allowed already. A refused redirect answers `BAD_REDIRECT`.
 - **It talks to the origin it was served from.** No `VITE_API_URL` is involved:
   the dev server proxies to the services, and a deployed bundle reaches the
   gateway that served it. The login screen's server picker still points it

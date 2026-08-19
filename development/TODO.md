@@ -353,7 +353,7 @@ a human in front of the app, and so does most of phase 12.
       if a third client appears; today it would change nothing else
 - [x] Provider sign-in in a browser: the page redirects to the provider and
       comes back with the one-time code, using the `redirect` parameter the
-      auth service already checks against `OAUTH_ALLOWED_REDIRECTS`
+      auth service checks against the deployment's own origins
 - [x] Notifications in a tab: the Notifications API, permission asked at the
       first notification worth raising, and the unread count in the title -
       a tab has no tray and no dock

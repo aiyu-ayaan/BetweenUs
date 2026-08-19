@@ -25,6 +25,7 @@ import { pageSize, paginate } from './modules/admin/admin.service';
 import {
   challengeFor,
   isAllowedRedirect,
+  trustedRedirectOrigins,
   isAppRedirect,
   matchesChallenge,
 } from './modules/oauth/oauth.service';
@@ -259,6 +260,48 @@ function checkOAuthRedirects(): void {
   // Nothing configured means nothing but loopback.
   assert.equal(isAllowedRedirect('https://betweenus.example/done', ''), false);
   assert.equal(isAllowedRedirect('not-a-url', allow), false);
+
+  // --- Where that list now comes from.
+  //
+  // There is no `OAUTH_ALLOWED_REDIRECTS` any more: the deployment's own
+  // origins are read from what it has already had to set. Getting this wrong
+  // is a `BAD_REDIRECT` on the one button nobody can test until the site is
+  // public, so it is worth pinning.
+  const before = { api: process.env.PUBLIC_API_URL, cors: process.env.CORS_ORIGIN };
+  try {
+    process.env.PUBLIC_API_URL = 'https://betweenus.example.com';
+    process.env.CORS_ORIGIN = 'https://app.betweenus.example.com, https://panel.betweenus.example.com';
+    const derived = trustedRedirectOrigins();
+
+    // The site the API is served from - which is where the web client and the
+    // admin panel live, and the case that produced BAD_REDIRECT in production.
+    assert.equal(isAllowedRedirect('https://betweenus.example.com/', derived), true);
+    assert.equal(isAllowedRedirect('https://app.betweenus.example.com/done', derived), true);
+    assert.equal(isAllowedRedirect('https://panel.betweenus.example.com/admin', derived), true);
+    // And nothing else, however similar it looks.
+    assert.equal(isAllowedRedirect('https://betweenus.example.com.attacker.test/', derived), false);
+
+    // A wildcard CORS setting must not become a wildcard redirect. "Any site
+    // may call the API" is not "any site may be handed a session code".
+    process.env.CORS_ORIGIN = '*';
+    const wild = trustedRedirectOrigins();
+    assert.equal(isAllowedRedirect('https://attacker.test/', wild), false);
+    assert.equal(isAllowedRedirect('https://betweenus.example.com/', wild), true);
+
+    // A deployment that has set neither still signs in from the desktop, and
+    // from nowhere else.
+    delete process.env.PUBLIC_API_URL;
+    delete process.env.CORS_ORIGIN;
+    const bare = trustedRedirectOrigins();
+    assert.equal(bare, '');
+    assert.equal(isAllowedRedirect('http://127.0.0.1:53123/callback', bare), true);
+    assert.equal(isAllowedRedirect('https://betweenus.example.com/', bare), false);
+  } finally {
+    if (before.api === undefined) delete process.env.PUBLIC_API_URL;
+    else process.env.PUBLIC_API_URL = before.api;
+    if (before.cors === undefined) delete process.env.CORS_ORIGIN;
+    else process.env.CORS_ORIGIN = before.cors;
+  }
 }
 
 /**

@@ -22,7 +22,6 @@ x-service-env: &service-env
   SETTINGS_SECRET: ${SETTINGS_SECRET:-}
   # Where a browser reaches this deployment - the OAuth callback is built from it.
   PUBLIC_API_URL: ${PUBLIC_API_URL:-http://localhost:8080}
-  OAUTH_ALLOWED_REDIRECTS: ${OAUTH_ALLOWED_REDIRECTS:-}
   CORS_ORIGIN: ${CORS_ORIGIN:-*}
   # Empty S3 values keep uploads on the local volume mounted below.
   STORAGE_DRIVER: ${STORAGE_DRIVER:-}

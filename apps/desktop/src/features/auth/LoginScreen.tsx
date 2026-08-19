@@ -52,20 +52,28 @@ export function LoginScreen(): JSX.Element {
         <form onSubmit={submit} className="space-y-4" noValidate>
           <div>
             <label htmlFor="email" className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-400">
-              Email
+              {mode === 'login' ? 'Email or username' : 'Email'}
             </label>
+            {/*
+              Signing in takes either, and the server has accepted either all
+              along - it is the same field, and an address contains an @ where a
+              username may not. What did not take either was this input: `email`
+              asks the browser for an address, offers only addresses to autofill,
+              and puts an address keyboard on a phone. Registering still asks
+              for an address, because that one really is one.
+            */}
             <input
               id="email"
-              type="email"
+              type={mode === 'login' ? 'text' : 'email'}
               required
-              autoComplete="email"
+              autoComplete={mode === 'login' ? 'username' : 'email'}
               value={email}
               onChange={(event) => {
                 setEmail(event.target.value);
                 clearError();
               }}
               className="w-full rounded-md border border-edge bg-surface-950 px-3 py-2 text-slate-100 placeholder-slate-500 transition-colors duration-200 focus:border-accent"
-              placeholder="you@example.com"
+              placeholder={mode === 'login' ? 'you@example.com or ayaan' : 'you@example.com'}
             />
           </div>
 

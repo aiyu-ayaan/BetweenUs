@@ -114,12 +114,18 @@ fun LoginScreen(
 
             Spacer(Modifier.height(24.dp))
 
+            // Signing in takes an email or a username, and the server has
+            // accepted either all along - an address contains an @ where a
+            // username may not. The email keyboard is the part that did not:
+            // it puts "@" and ".com" where the letters should be for somebody
+            // typing a name. Registering still asks for an address, because
+            // that one really is one.
             BetweenUsField(
-                label = "Email",
+                label = if (registering) "Email" else "Email or username",
                 value = form.email,
                 onValueChange = viewModel::setEmail,
-                placeholder = "you@example.com",
-                keyboardType = KeyboardType.Email,
+                placeholder = if (registering) "you@example.com" else "you@example.com or ayaan",
+                keyboardType = if (registering) KeyboardType.Email else KeyboardType.Text,
                 enabled = !form.busy,
             )
 

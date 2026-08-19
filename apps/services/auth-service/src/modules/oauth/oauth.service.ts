@@ -288,11 +288,41 @@ const stateKey = (state: string): string => `oauth:state:${state}`;
 const codeKey = (code: string): string => `oauth:code:${code}`;
 
 /**
+ * The origins a finished sign-in may be sent back to.
+ *
+ * Derived rather than configured. There used to be an `OAUTH_ALLOWED_REDIRECTS`
+ * variable and it was the wrong shape of question to ask an operator: every
+ * deployment's answer is "my own site", they are already telling us what that
+ * is twice over, and getting it wrong produces a `BAD_REDIRECT` on the one
+ * button nobody can test until the site is public. So the answer is read from
+ * what the deployment has already had to set:
+ *
+ * - `PUBLIC_API_URL` - where a browser reaches this API. The web client and
+ *   the admin panel are served from the same origin behind the same gateway,
+ *   and the provider's own callback is a path on it, so a deployment that
+ *   cannot trust this origin has nothing left to trust.
+ * - `CORS_ORIGIN` - the sites this API already answers credentialed requests
+ *   for. A wildcard is skipped: "any site may call the API" is not "any site
+ *   may be handed a session code", and treating it as one would be the open
+ *   redirect this whole function exists to prevent.
+ *
+ * Loopback is added by [isAllowedRedirect] itself, for the desktop client's
+ * temporary server.
+ */
+export function trustedRedirectOrigins(): string {
+  return [envOr('PUBLIC_API_URL', ''), envOr('CORS_ORIGIN', '')]
+    .flatMap((value) => value.split(','))
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0 && entry !== '*')
+    .join(',');
+}
+
+/**
  * Where a completed sign-in may be sent back to.
  *
  * An open redirect here hands a session to whoever asked for it - the one-time
  * code travels in the query string of exactly this URL - so the list is exact:
- * loopback (the desktop client's temporary server) and the configured public
+ * loopback (the desktop client's temporary server) and the deployment's own
  * origins.
  *
  * It used to be `redirectUri.startsWith(origin)`, and a prefix is not an
@@ -380,7 +410,7 @@ function assertAllowedRedirect(redirectUri: string, challenge?: string): void {
     });
   }
 
-  if (isAllowedRedirect(redirectUri, envOr('OAUTH_ALLOWED_REDIRECTS', ''))) return;
+  if (isAllowedRedirect(redirectUri, trustedRedirectOrigins())) return;
 
   throw new BadRequestException({
     code: 'BAD_REDIRECT',
