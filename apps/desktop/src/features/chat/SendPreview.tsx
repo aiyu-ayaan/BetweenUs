@@ -14,7 +14,16 @@
  */
 import { useEffect, useMemo, useState } from 'react';
 import { formatBytes } from '../../services/attachments';
-import { FileIcon, ImageIcon, PaperclipIcon, SendIcon, TrashIcon, XIcon } from '../../components/icons';
+import { ImageEditor } from '../../components/ImageEditor';
+import {
+  CropIcon,
+  FileIcon,
+  ImageIcon,
+  PaperclipIcon,
+  SendIcon,
+  TrashIcon,
+  XIcon,
+} from '../../components/icons';
 
 /** True for the files this screen has something to show rather than name. */
 export function isPreviewable(file: File): boolean {
@@ -30,6 +39,7 @@ export function SendPreview({
   failure,
   onCaption,
   onRemove,
+  onReplace,
   onAdd,
   onSend,
   onClose,
@@ -43,11 +53,14 @@ export function SendPreview({
   failure: string | null;
   onCaption: (text: string) => void;
   onRemove: (index: number) => void;
+  /** A picture that came back from the crop screen, in place of the original. */
+  onReplace: (index: number, file: File) => void;
   onAdd: () => void;
   onSend: () => void;
   onClose: () => void;
 }): JSX.Element {
   const [at, setAt] = useState(0);
+  const [cropping, setCropping] = useState(false);
   // Clamped rather than reset: removing a file should keep you looking at the
   // batch, not throw you back to the first one.
   const index = Math.min(at, files.length - 1);
@@ -68,6 +81,22 @@ export function SendPreview({
       aria-label="Send files"
       className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/85 p-6"
     >
+      {cropping && current && (
+        <ImageEditor
+          file={current}
+          title={current.name}
+          onCancel={() => setCropping(false)}
+          onDone={(edited) => {
+            setCropping(false);
+            // Same name, so the batch strip and the caption do not jump about;
+            // the extension follows the type the editor actually wrote.
+            onReplace(index, new File([edited], withExtension(current.name, 'jpg'), {
+              type: edited.type,
+            }));
+          }}
+        />
+      )}
+
       <div className="flex max-h-full w-full max-w-3xl animate-pop flex-col overflow-hidden rounded-xl border border-edge bg-surface-900 shadow-pop">
         <header className="flex h-12 shrink-0 items-center gap-3 border-b border-edge px-4">
           <p className="truncate text-sm font-medium text-slate-100">
@@ -134,6 +163,18 @@ export function SendPreview({
           >
             <PaperclipIcon className="h-5 w-5" />
           </button>
+          {current?.type.startsWith('image/') && (
+            <button
+              type="button"
+              onClick={() => setCropping(true)}
+              disabled={sending}
+              aria-label={`Crop and rotate ${current.name}`}
+              title="Crop and rotate"
+              className="cursor-pointer rounded-md p-1.5 text-slate-300 transition-colors duration-200 hover:text-accent disabled:cursor-not-allowed disabled:text-slate-600"
+            >
+              <CropIcon className="h-5 w-5" />
+            </button>
+          )}
           <button
             type="button"
             onClick={() => onRemove(index)}
@@ -221,4 +262,10 @@ function useObjectUrl(file: File): string {
   const url = useMemo(() => URL.createObjectURL(file), [file]);
   useEffect(() => () => URL.revokeObjectURL(url), [url]);
   return url;
+}
+
+/** `holiday.heic` -> `holiday.jpg`. A file that lies about its type confuses every client that opens it. */
+function withExtension(name: string, extension: string): string {
+  const dot = name.lastIndexOf('.');
+  return `${dot > 0 ? name.slice(0, dot) : name}.${extension}`;
 }

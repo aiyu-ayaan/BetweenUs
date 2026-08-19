@@ -35,6 +35,7 @@ object BetweenUsIcons {
     val ChevronRight = R.drawable.ic_chevron_right
     val Compass = R.drawable.ic_compass
     val Copy = R.drawable.ic_copy
+    val Crop = R.drawable.ic_crop
     val Download = R.drawable.ic_download
     val Eye = R.drawable.ic_eye
     val File = R.drawable.ic_file
@@ -60,6 +61,8 @@ object BetweenUsIcons {
     val Play = R.drawable.ic_play
     val Plus = R.drawable.ic_plus
     val Reply = R.drawable.ic_reply
+    val RotateLeft = R.drawable.ic_rotate_left
+    val RotateRight = R.drawable.ic_rotate_right
     val ScreenShare = R.drawable.ic_screen_share
     val Search = R.drawable.ic_search
     val Send = R.drawable.ic_send

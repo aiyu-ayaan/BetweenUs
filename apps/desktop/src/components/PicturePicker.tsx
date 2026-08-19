@@ -9,6 +9,7 @@
 import { useRef, useState } from 'react';
 import { api } from '../services/api';
 import { preparePicture } from '../services/attachments';
+import { ImageEditor } from './ImageEditor';
 
 export function PicturePicker({
   label,
@@ -28,12 +29,22 @@ export function PicturePicker({
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
 
-  const choose = async (file: File | undefined): Promise<void> => {
-    if (!file) return;
+  /**
+   * The picked file, held while it is being framed. A centre crop is what this
+   * used to do on its own, and it is the wrong crop for most photographs of a
+   * person - who is rarely in the middle of their own picture.
+   */
+  const [editing, setEditing] = useState<File | null>(null);
+
+  const upload = async (picture: Blob): Promise<void> => {
     setBusy(true);
     setFailure(null);
     try {
-      const square = await preparePicture(file);
+      // Still squared here: the editor's frame is square, so this is a scale
+      // to the stored size rather than a second crop.
+      const square = await preparePicture(
+        new File([picture], 'picture.webp', { type: picture.type }),
+      );
       const stored = await api.uploadPicture(square, 'picture.webp');
       await onChange(stored.url);
     } catch (error) {
@@ -58,6 +69,21 @@ export function PicturePicker({
 
   return (
     <div className="flex items-center gap-4">
+      {editing && (
+        <ImageEditor
+          file={editing}
+          aspect={1}
+          title={`Frame your ${label}`}
+          type="image/webp"
+          maxOutputEdge={1024}
+          onCancel={() => setEditing(null)}
+          onDone={(edited) => {
+            setEditing(null);
+            void upload(edited);
+          }}
+        />
+      )}
+
       <button
         type="button"
         onClick={() => picker.current?.click()}
@@ -79,7 +105,11 @@ export function PicturePicker({
           accept="image/png,image/jpeg,image/gif,image/webp"
           hidden
           onChange={(event) => {
-            void choose(event.target.files?.[0]);
+            const file = event.target.files?.[0];
+            if (file) {
+              setFailure(null);
+              setEditing(file);
+            }
             // Reset, or choosing the same file twice in a row does nothing.
             event.target.value = '';
           }}

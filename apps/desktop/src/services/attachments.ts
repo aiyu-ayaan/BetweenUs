@@ -287,7 +287,7 @@ function isHeic(name: string, contentType: string): boolean {
 }
 
 /** Anything the platform can decode, plus the one thing it cannot. */
-async function decodeImage(file: File): Promise<ImageBitmap> {
+export async function decodeImage(file: File): Promise<ImageBitmap> {
   return isHeic(file.name, file.type) ? decodeHeic(file) : createImageBitmap(file);
 }
 

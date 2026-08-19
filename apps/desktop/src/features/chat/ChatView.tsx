@@ -1234,6 +1234,9 @@ function MessageComposer({
             setFiles(left);
             if (left.length === 0) setPreviewing(false);
           }}
+          onReplace={(index, edited) =>
+            setFiles(files.map((file, at) => (at === index ? edited : file)))
+          }
           onSend={() => void submit()}
           onClose={() => setPreviewing(false)}
         />

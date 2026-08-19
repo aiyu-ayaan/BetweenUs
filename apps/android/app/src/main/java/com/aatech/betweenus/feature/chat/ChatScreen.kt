@@ -516,6 +516,9 @@ fun ChatScreen(
         },
         onCaption = { previewCaption = it },
         onRemove = { previewing = previewing - it },
+        onReplace = { original, edited ->
+            previewing = previewing.map { if (it == original) edited else it }
+        },
         onAdd = { showAttachmentSheet = true },
         onCancel = {
             previewing = emptyList()

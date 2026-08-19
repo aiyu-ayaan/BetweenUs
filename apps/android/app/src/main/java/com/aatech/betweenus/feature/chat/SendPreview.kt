@@ -79,6 +79,8 @@ fun SendPreviewDialog(
     note: String?,
     onCaption: (String) -> Unit,
     onRemove: (PickedPreview) -> Unit,
+    /** A picture that came back from the crop screen, in place of the original. */
+    onReplace: (PickedPreview, PickedPreview) -> Unit,
     onAdd: () -> Unit,
     onCancel: () -> Unit,
     onSend: () -> Unit,
@@ -87,6 +89,28 @@ fun SendPreviewDialog(
     var at by remember(items.size) { mutableStateOf(0) }
     val index = at.coerceIn(0, items.lastIndex)
     val current = items[index]
+    var cropping by remember { mutableStateOf(false) }
+
+    if (cropping && current.isImage) {
+        ImageEditorDialog(
+            source = current.uri,
+            title = current.name,
+            onCancel = { cropping = false },
+            onDone = { edited ->
+                cropping = false
+                // The editor always writes a JPEG, so the name follows: a file
+                // that lies about its type confuses every client that opens it.
+                onReplace(
+                    current,
+                    PickedPreview(
+                        uri = edited,
+                        name = current.name.substringBeforeLast('.', current.name) + ".jpg",
+                        contentType = "image/jpeg",
+                    ),
+                )
+            },
+        )
+    }
 
     Dialog(
         onDismissRequest = { if (!busy) onCancel() },
@@ -123,6 +147,9 @@ fun SendPreviewDialog(
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
+                }
+                if (current.isImage) {
+                    IconAction(BetweenUsIcons.Crop, "Crop and rotate", { if (!busy) cropping = true })
                 }
                 IconAction(BetweenUsIcons.Paperclip, "Add another file", { if (!busy) onAdd() })
                 IconAction(BetweenUsIcons.Trash, "Remove this one", { if (!busy) onRemove(current) })

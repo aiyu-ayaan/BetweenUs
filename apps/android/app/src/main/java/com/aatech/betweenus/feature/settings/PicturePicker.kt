@@ -24,6 +24,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.aatech.betweenus.core.data.BetweenUsApi
 import com.aatech.betweenus.core.data.Pictures
+import com.aatech.betweenus.feature.chat.ImageEditorDialog
 import com.aatech.betweenus.feature.chat.readPicked
 import com.aatech.betweenus.ui.components.Chip
 import com.aatech.betweenus.ui.theme.Danger
@@ -63,24 +64,49 @@ fun PicturePicker(
     var busy by remember { mutableStateOf(false) }
     var failure by remember { mutableStateOf<String?>(null) }
 
+    /**
+     * The picked file, held while it is being framed. A centre crop is what
+     * this used to do on its own, and it is the wrong crop for most photographs
+     * of a person - who is rarely in the middle of their own picture.
+     */
+    var editing by remember { mutableStateOf<android.net.Uri?>(null) }
+
     val picker = rememberLauncherForActivityResult(
         ActivityResultContracts.PickVisualMedia(),
     ) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
-        scope.launch {
-            busy = true
-            failure = runCatching {
-                val picked = readPicked(context, uri)
-                val square = Pictures.square(
-                    bytes = picked.bytes,
-                    edge = Pictures.PICTURE_EDGE,
-                    format = Bitmap.CompressFormat.WEBP,
-                ) ?: error("That file could not be read as a picture")
-                val stored = BetweenUsApi.uploadPicture(square, "picture.webp", "image/webp")
-                onPicked(stored.url)
-            }.exceptionOrNull()?.message
-            busy = false
-        }
+        failure = null
+        editing = uri
+    }
+
+    editing?.let { source ->
+        ImageEditorDialog(
+            source = source,
+            title = "Frame your $label",
+            aspect = 1f,
+            maxOutputEdge = Pictures.PICTURE_EDGE * 2,
+            onCancel = { editing = null },
+            onDone = { framed ->
+                editing = null
+                scope.launch {
+                    busy = true
+                    failure = runCatching {
+                        val picked = readPicked(context, framed)
+                        // Still squared here: the editor's frame was square, so
+                        // this is a scale to the stored size rather than a
+                        // second crop.
+                        val square = Pictures.square(
+                            bytes = picked.bytes,
+                            edge = Pictures.PICTURE_EDGE,
+                            format = Bitmap.CompressFormat.WEBP,
+                        ) ?: error("That file could not be read as a picture")
+                        val stored = BetweenUsApi.uploadPicture(square, "picture.webp", "image/webp")
+                        onPicked(stored.url)
+                    }.exceptionOrNull()?.message
+                    busy = false
+                }
+            },
+        )
     }
 
     Row(

@@ -329,6 +329,14 @@ export const PencilIcon = (props: IconProps): JSX.Element => (
   </Base>
 );
 
+/** Feather's `crop`. Opens the crop-and-rotate screen. */
+export const CropIcon = (props: IconProps): JSX.Element => (
+  <Base {...props}>
+    <path d="M6.13 1L6 16a2 2 0 0 0 2 2h15" />
+    <path d="M1 6.13L16 6a2 2 0 0 1 2 2v15" />
+  </Base>
+);
+
 export const SmileIcon = (props: IconProps): JSX.Element => (
   <Base {...props}>
     <circle cx="12" cy="12" r="10" />
