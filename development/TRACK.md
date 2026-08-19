@@ -157,6 +157,11 @@ Backlog worked down, this pass:
 - [x] **Android: microphone processing, a hi-fi mode, and an output route**,
       including the Opus `fmtp` patch that carries bitrate, channels and DTX.
       Input sensitivity is still open and the reason is written down.
+- [x] **Android: WhatsApp-style permission carousel & top notification warning banner.**
+      Implemented step-by-step auto-advancing permission carousel with primary action
+      buttons, batch authorization, and active permission monitoring. When notification
+      permission is denied/disabled, displays a dismissible warning banner on top of
+      the chat and friends layouts instead of blocking the app.
 - [x] **Clean chat images & social media media saving naming (bu_{timestamp}).**
       Removed filename and size metadata overlay from image attachments in chat,
       giving full, unobstructed image previews. Standardized image/video save
