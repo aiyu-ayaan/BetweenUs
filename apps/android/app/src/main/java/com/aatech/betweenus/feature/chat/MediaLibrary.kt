@@ -131,3 +131,53 @@ private fun extensionFor(contentType: String): String = when {
     contentType.startsWith("video/") -> "." + contentType.substringAfter('/')
     else -> ""
 }
+
+/**
+ * A picked file, made ready to send.
+ *
+ * The one thing that happens between the picker and the upload: a video is
+ * re-encoded smaller. Everything else is read as it stands - pictures are
+ * already normalised on the way through `Conversation.uploadAttachment`, and a
+ * document has nothing to normalise.
+ *
+ * A temporary file the compressor wrote is deleted once it has been read, so
+ * the cache does not fill up with copies of everything anybody has ever sent.
+ */
+suspend fun prepareForSending(
+    context: Context,
+    uri: Uri,
+    name: String,
+    contentType: String,
+    onCompress: (Float) -> Unit = {},
+): PickedFile {
+    if (!contentType.startsWith("video/")) return readPicked(context, uri)
+
+    val prepared = compressVideo(context, uri, sizeOf(context, uri), onCompress)
+    val read = readPicked(context, prepared.uri)
+    if (prepared.temporary) {
+        withContext(Dispatchers.IO) { runCatching { context.contentResolver.delete(prepared.uri, null, null) } }
+    }
+    // The compressor always writes MP4/H.264, whatever went in, and the name
+    // has to say so: a file that lies about its type confuses every client
+    // that opens it.
+    return if (prepared.temporary) {
+        PickedFile(
+            name = name.substringBeforeLast('.', name) + ".mp4",
+            contentType = "video/mp4",
+            bytes = read.bytes,
+        )
+    } else {
+        PickedFile(name = name, contentType = contentType, bytes = read.bytes)
+    }
+}
+
+/** What the provider says the file weighs, or 0 when it will not say. */
+suspend fun sizeOf(context: Context, uri: Uri): Long = withContext(Dispatchers.IO) {
+    runCatching {
+        context.contentResolver.query(uri, arrayOf(OpenableColumns.SIZE), null, null, null)
+            ?.use { cursor ->
+                val column = cursor.getColumnIndex(OpenableColumns.SIZE)
+                if (column >= 0 && cursor.moveToFirst()) cursor.getLong(column) else 0L
+            }
+    }.getOrNull() ?: 0L
+}

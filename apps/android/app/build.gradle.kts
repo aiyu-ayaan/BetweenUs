@@ -133,6 +133,13 @@ dependencies {
     implementation(libs.androidx.navigation.compose)
     // Voice, video, screen share and the remote screen. A mesh, never an SFU.
     implementation(libs.webrtc)
+    // Transcoding a picked video before it is sent. A phone writes 4K at 50
+    // Mbps, which is a file nobody wants to upload and nobody wants to be
+    // sent; Transformer is the maintained way to drive MediaCodec, and
+    // hand-rolling that is a project rather than a feature.
+    implementation(libs.media3.transformer)
+    implementation(libs.media3.effect)
+    implementation(libs.media3.common)
     testImplementation(libs.junit)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)

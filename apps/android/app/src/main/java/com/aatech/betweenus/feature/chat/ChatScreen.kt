@@ -65,6 +65,7 @@ import com.aatech.betweenus.ui.theme.Slate400
 import com.aatech.betweenus.ui.theme.Slate50
 import com.aatech.betweenus.ui.theme.Slate500
 import com.aatech.betweenus.ui.theme.Surface850
+import com.aatech.betweenus.ui.theme.Surface800
 import com.aatech.betweenus.ui.theme.Surface900
 import com.aatech.betweenus.ui.theme.Surface950
 import kotlinx.coroutines.launch
@@ -153,6 +154,13 @@ fun ChatScreen(
      */
     var following by remember(channelId) { mutableStateOf(true) }
 
+    // What the outbox is doing, and whether it is doing it for this channel.
+    // Everything it reports outlives this screen; drawing it is the only part
+    // that does not.
+    val outgoing by Outbox.progress.collectAsState()
+    val outboxFailures by Outbox.failures.collectAsState()
+    val sendingHere = outgoing?.takeIf { it.channelId == channelId }
+
     // Opening a channel starts at the newest message, without an animation - a
     // conversation you have just walked into has no "before" to scroll from.
     // Keyed on whether there are messages at all, so the first page landing
@@ -232,42 +240,28 @@ fun ChatScreen(
         }
     }
 
-    /** Reads, seals, uploads and sends whatever the preview is holding. */
+    /**
+     * Hands the batch to [Outbox] and closes the preview at once.
+     *
+     * Nothing is awaited here on purpose. Sealing and uploading a video is
+     * minutes, and doing it in this screen's scope meant the preview stayed
+     * pinned open for all of them, and the upload died the moment the channel
+     * was left. It runs under a foreground service now, and this screen only
+     * watches the bar.
+     */
     fun sendPreviewed() {
         val chosen = previewing
-        if (chosen.isEmpty() || uploading) return
-        scope.launch {
-            uploading = true
-            uploadProgress = 0f
-            failure = runCatching {
-                val uploaded = chosen.mapIndexed { index, item ->
-                    val picked = readPicked(context, item.uri)
-                    require(picked.bytes.size <= MAX_ATTACHMENT_BYTES) {
-                        "${picked.name} is larger than ${MAX_ATTACHMENT_BYTES / (1024 * 1024)} MB"
-                    }
-                    Conversation.uploadAttachment(
-                        channelId = channelId,
-                        name = picked.name,
-                        contentType = picked.contentType,
-                        bytes = picked.bytes,
-                        // Across the whole batch, not per file: three files is
-                        // one wait, and a bar that restarts twice reads as a
-                        // send that has gone wrong.
-                        onProgress = { fraction ->
-                            uploadProgress = (index + fraction) / chosen.size
-                        },
-                    )
-                }
-                Conversation.send(channelId, previewCaption.trim(), pending + uploaded, replyingTo)
-                pending = emptyList()
-                replyingTo = null
-                previewing = emptyList()
-                previewCaption = ""
-                null
-            }.exceptionOrNull()?.message
-            uploading = false
-            uploadProgress = null
-        }
+        if (chosen.isEmpty()) return
+        Outbox.enqueue(
+            context = context,
+            channelId = channelId,
+            caption = previewCaption.trim(),
+            items = chosen,
+            replyTo = replyingTo,
+        )
+        replyingTo = null
+        previewing = emptyList()
+        previewCaption = ""
     }
 
     Column(
@@ -431,6 +425,49 @@ fun ChatScreen(
             Notice(it, Danger, Modifier.padding(horizontal = 12.dp, vertical = 4.dp))
         }
 
+        // --- What is going out, if anything is ---
+        //
+        // Above the composer rather than over the whole screen, because the
+        // send is no longer something to wait for: the next message can be
+        // typed while a video is still on its way.
+        sendingHere?.let { going ->
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .background(Surface900)
+                    .padding(horizontal = 12.dp, vertical = 6.dp),
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text(
+                        text = going.name,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Slate100,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Text(
+                        text = buildString {
+                            if (going.total > 1) append("${going.index}/${going.total} · ")
+                            append("${(going.fraction * 100).toInt()}%")
+                        },
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Slate500,
+                    )
+                }
+                Spacer(Modifier.height(4.dp))
+                LinearProgressIndicator(
+                    progress = { going.fraction },
+                    modifier = Modifier.fillMaxWidth().height(3.dp).clip(RoundedCornerShape(2.dp)),
+                    color = Accent,
+                    trackColor = Surface800,
+                )
+            }
+        }
+
         // --- Composer Input Well ---
         Composer(
             channelId = channelId,
@@ -526,6 +563,13 @@ fun ChatScreen(
         },
         onSend = { sendPreviewed() },
     )
+
+    LaunchedEffect(outboxFailures[channelId]) {
+        outboxFailures[channelId]?.let {
+            failure = it
+            Outbox.clearFailure(channelId)
+        }
+    }
 
     // --- Fullscreen Interactive Image Viewer ---
     viewingImage?.let { (bitmap, title) ->

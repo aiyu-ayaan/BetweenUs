@@ -38,6 +38,11 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
+    <!-- And a message with a video attached has to survive the same thing: the
+         screen going off, the channel being left, the app being backgrounded.
+         Without it Android is entitled to stop the upload halfway, which is
+         parts already in object storage and nothing left to finish them. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <!-- A call goes to a headset that is already paired, which needs one
          permission on each side of the API 31 split. BLUETOOTH_CONNECT is the
          runtime one and is asked for with the microphone; the two legacy ones
@@ -141,6 +146,11 @@
             android:name=".feature.voice.CallService"
             android:exported="false"
             android:foregroundServiceType="microphone|camera|mediaProjection" />
+
+        <service
+            android:name=".feature.chat.UploadService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
     </application>
 
 </manifest>

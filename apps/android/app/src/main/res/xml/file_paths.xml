@@ -8,4 +8,8 @@
 <paths>
     <cache-path name="camera" path="camera/" />
     <cache-path name="media" path="media/" />
+    <!-- What the crop screen wrote, on its way to the same place. -->
+    <cache-path name="edited" path="edited/" />
+    <!-- And what the video compressor wrote, likewise. -->
+    <cache-path name="outgoing" path="outgoing/" />
 </paths>

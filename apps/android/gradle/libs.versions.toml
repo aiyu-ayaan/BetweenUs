@@ -19,6 +19,9 @@ appcompat = "1.7.1"
 browser = "1.9.0"
 material = "1.14.0"
 room = "2.8.4"
+# Transcoding a video before it is sent. Transformer is the maintained way to
+# drive MediaCodec, and hand-rolling one is a project rather than a feature.
+media3 = "1.9.4"
 # The Kotlin half has to match `kotlin` exactly - KSP is compiled against one
 # compiler version and refuses to run against another.
 ksp = "2.2.10-2.0.2"
@@ -54,6 +57,9 @@ webrtc = { group = "io.github.webrtc-sdk", name = "android", version.ref = "webr
 androidx-room-runtime = { group = "androidx.room", name = "room-runtime", version.ref = "room" }
 androidx-room-ktx = { group = "androidx.room", name = "room-ktx", version.ref = "room" }
 androidx-room-compiler = { group = "androidx.room", name = "room-compiler", version.ref = "room" }
+media3-transformer = { group = "androidx.media3", name = "media3-transformer", version.ref = "media3" }
+media3-effect = { group = "androidx.media3", name = "media3-effect", version.ref = "media3" }
+media3-common = { group = "androidx.media3", name = "media3-common", version.ref = "media3" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

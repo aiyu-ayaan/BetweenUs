@@ -9,6 +9,7 @@ import com.aatech.betweenus.core.data.OAuthFlow
 import com.aatech.betweenus.core.data.Session
 import com.aatech.betweenus.core.store.Cache
 import com.aatech.betweenus.core.store.LastPlace
+import com.aatech.betweenus.feature.chat.Outbox
 import com.aatech.betweenus.feature.voice.AudioPrefs
 import com.aatech.betweenus.feature.voice.CallTones
 
@@ -31,5 +32,9 @@ class BetweenUsApp : Application() {
         Cache.init(this)
         CallTones.init(this)
         AudioPrefs.init(this)
+        // The queue that carries a message with files in it. Started here so a
+        // send survives the screen it was started from - which is the whole
+        // reason it exists.
+        Outbox.init(this)
     }
 }
