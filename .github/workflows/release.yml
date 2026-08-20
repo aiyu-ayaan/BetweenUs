@@ -42,13 +42,18 @@ name: Release
 on:
   push:
     branches: [master]
-  # Opens the release PR without a commit marker, for when a release has to be
-  # cut from what is already on master.
   workflow_dispatch:
     inputs:
-      marker:
-        description: Release type
+      mode:
+        description: 'pr = open the release PR; release = build and publish the version master already carries'
         required: true
+        default: pr
+        type: choice
+        options: [pr, release]
+      marker:
+        description: 'Release type (pr mode only)'
+        required: false
+        default: alpha
         type: choice
         options: [alpha, beta, stable, fix, feat, major]
 
@@ -70,6 +75,7 @@ jobs:
 
   version:
     name: Work out the next version
+    if: github.event_name == 'push' || inputs.mode == 'pr'
     runs-on: ubuntu-latest
     outputs:
       release: ${{ steps.next.outputs.release }}
@@ -218,7 +224,7 @@ jobs:
 
   merged:
     name: Detect a merged release PR
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' || inputs.mode == 'release'
     runs-on: ubuntu-latest
     outputs:
       release: ${{ steps.detect.outputs.release }}
@@ -226,26 +232,56 @@ jobs:
       channel: ${{ steps.detect.outputs.channel }}
       prerelease: ${{ steps.detect.outputs.prerelease }}
     steps:
+      # Two, because HEAD^ is what the version is compared against - and on a
+      # merge commit that is master as it stood before the PR went in.
       - uses: actions/checkout@v4
         with:
           fetch-depth: 2
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
       - name: Is this the release commit
         id: detect
         env:
+          EVENT: ${{ github.event_name }}
           SUBJECT: ${{ github.event.head_commit.message }}
         run: |
-          # Squashing gives the PR title as the subject; a merge commit does
-          # not, so the files the PR touches are the fallback answer.
           subject="$(printf '%s' "$SUBJECT" | head -1)"
-          changed="$(git show --name-only --pretty= HEAD)"
+          current="$(node -p "require('./package.json').version")"
           release=false
-          case "$subject" in
-            'chore(release): v'*) release=true ;;
-          esac
-          if printf '%s' "$changed" | grep -qx 'package.json' \
-             && printf '%s' "$changed" | grep -qx 'CHANGELOG.md'; then
+
+          if [ "$EVENT" = workflow_dispatch ]; then
+            # Asked for by hand: release whatever master carries. This is the
+            # way back after a rollback, and after a release PR that merged
+            # without this job noticing.
             release=true
+            echo "Dispatched: releasing v${current} as master stands."
+          else
+            # A squash or rebase merge puts the PR title on the commit, so the
+            # subject answers on its own.
+            case "$subject" in
+              'chore(release): v'*) release=true ;;
+            esac
+
+            # A merge commit's subject is "Merge pull request #n", which says
+            # nothing, so the version field is the answer instead: HEAD^ is
+            # master before the merge whichever way the PR went in, and only a
+            # release PR moves that field.
+            #
+            # This used to ask which files the commit touched. It could never
+            # fire on the one shape it existed for: `git show --name-only`
+            # prints NOTHING for a merge commit, so the CHANGELOG.md test was
+            # always false and a merged release PR built nothing.
+            previous="$(git show HEAD^:package.json 2>/dev/null \
+              | node -pe 'JSON.parse(require("node:fs").readFileSync(0,"utf8")).version' \
+              2>/dev/null || true)"
+            echo "subject: ${subject}"
+            echo "version: ${previous:-<unknown>} -> ${current}"
+            if [ -n "$previous" ] && [ "$previous" != "$current" ]; then
+              release=true
+            fi
           fi
 
           echo "release=$release" >> "$GITHUB_OUTPUT"
@@ -254,18 +290,17 @@ jobs:
             exit 0
           fi
 
-          version="$(node -p "require('./package.json').version")"
-          case "$version" in
+          case "$current" in
             *-alpha.*) channel=alpha ;;
             *-beta.*)  channel=beta ;;
             *)         channel=latest ;;
           esac
           {
-            echo "version=$version"
+            echo "version=$current"
             echo "channel=$channel"
             echo "prerelease=$([ "$channel" = latest ] && echo false || echo true)"
           } >> "$GITHUB_OUTPUT"
-          echo "Releasing v$version on the $channel channel."
+          echo "Releasing v$current on the $channel channel."
 
   images:
     name: ${{ matrix.target }} image
