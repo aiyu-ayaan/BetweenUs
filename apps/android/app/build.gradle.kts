@@ -15,6 +15,29 @@ plugins {
 val hasFirebase = file("google-services.json").exists()
 if (hasFirebase) apply(plugin = "com.google.gms.google-services")
 
+/**
+ * Release signing, when the environment supplies a keystore.
+ *
+ * A keystore belongs to whoever ships the app and must never be in this
+ * repository, so the release build reads one from the environment or signs
+ * nothing at all. CI decodes `ANDROID_KEYSTORE_BASE64` to a file and points
+ * `ANDROID_KEYSTORE_FILE` at it; a clone with none of those set still builds
+ * `assembleRelease`, unsigned, exactly as it did before.
+ */
+val keystoreFile = System.getenv("ANDROID_KEYSTORE_FILE")?.takeIf { it.isNotBlank() }?.let(::file)
+val hasKeystore = keystoreFile?.exists() == true
+
+/**
+ * The version this build carries.
+ *
+ * The release workflow is the source of truth - it derives the name from the
+ * marker on the commit and passes a monotonic code alongside it. Building by
+ * hand gives the placeholder below, which is fine for a debug install and is
+ * never what reaches a release.
+ */
+val appVersionName = System.getenv("BETWEENUS_VERSION_NAME")?.takeIf { it.isNotBlank() } ?: "0.0.0"
+val appVersionCode = System.getenv("BETWEENUS_VERSION_CODE")?.trim()?.toIntOrNull() ?: 1
+
 android {
     namespace = "com.aatech.betweenus"
     // 37 because androidx.core 1.19 and lifecycle 2.11 refuse to be compiled
@@ -28,8 +51,8 @@ android {
         applicationId = "com.aatech.betweenus"
         minSdk = 24
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = appVersionCode
+        versionName = appVersionName
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -77,6 +100,17 @@ android {
         }
     }
 
+    signingConfigs {
+        if (hasKeystore) {
+            create("release") {
+                storeFile = keystoreFile
+                storePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("ANDROID_KEY_ALIAS")
+                keyPassword = System.getenv("ANDROID_KEY_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         release {
             /**
@@ -104,10 +138,11 @@ android {
                 "proguard-rules.pro",
             )
 
-            // No signing config. `assembleRelease` produces an unsigned APK
-            // until a real keystore is configured - which is deliberate: a
-            // keystore belongs to whoever ships the app and must never be in
-            // this repository. See development/ANDROID_TODO.md.
+            // Signed when the environment carried a keystore, unsigned when
+            // it did not - see the comment on `keystoreFile` above. An
+            // unsigned APK still installs over adb; it is only a release
+            // artifact that has to be signed.
+            if (hasKeystore) signingConfig = signingConfigs.getByName("release")
         }
     }
     compileOptions {

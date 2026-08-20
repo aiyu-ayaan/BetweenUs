@@ -1,7 +1,7 @@
 {
   "name": "betweenus",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.0.0",
   "packageManager": "pnpm@9.0.0",
   "license": "SEE LICENSE IN LICENSE",
   "scripts": {
@@ -28,7 +28,7 @@
     "prod:down": "docker compose --env-file .env -f infrastructure/docker/docker-compose.yml down",
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
-    "check": "turbo run check",
+    "check": "node scripts/release-version.mjs --check && turbo run check",
     "db:generate": "pnpm --filter @betweenus/database generate",
     "db:migrate": "pnpm --filter @betweenus/database migrate",
     "db:seed": "pnpm --filter @betweenus/database seed",

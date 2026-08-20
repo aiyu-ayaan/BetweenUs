@@ -1,0 +1,417 @@
+# Automated release, driven by a marker at the START of a commit subject on
+# master:
+#
+#   !major   1.4.2         -> 2.0.0           stable
+#   !feat    1.4.2         -> 1.5.0           stable
+#   !fix     1.4.2         -> 1.4.3           stable
+#   !alpha   0.0.1         -> 0.0.2-alpha.1   pre-release
+#            0.0.2-alpha.1 -> 0.0.2-alpha.2
+#   !beta    0.0.2-alpha.3 -> 0.0.2-beta.1    promote, same base version
+#   !stable  0.0.2-beta.2  -> 0.0.2           promote to stable, no bump
+#
+# A push with no marker is not a release and this workflow does nothing. The
+# rules, including what happens when one push carries several markers, live in
+# scripts/release-version.mjs and are covered by its `--check` self-test, which
+# `pnpm check` runs - so a change to them fails CI rather than a release.
+#
+# What a release does, in order:
+#
+#   1. stamp    - write the version into the manifests, commit it, tag it
+#   2. images   - build every server image and push it to Docker Hub
+#   3. desktop  - build the Windows installer and portable exe
+#   4. android  - build the signed APKs and the AAB
+#   5. release  - publish the GitHub Release with all of it attached
+#
+# Nothing here deploys. The release publishes a docker-compose.yml pinned to
+# the version, and a server takes it when its operator decides to - which is
+# the point: a running deployment holds the only copy of its data, and it does
+# not get restarted by a git push.
+
+name: Release
+
+on:
+  push:
+    branches: [master]
+  # The same flow without a commit marker, for when a release has to be cut
+  # from what is already on master.
+  workflow_dispatch:
+    inputs:
+      marker:
+        description: Release type
+        required: true
+        type: choice
+        options: [alpha, beta, stable, fix, feat, major]
+
+permissions:
+  contents: write
+
+# Never two releases at once: the second would stamp a version computed from a
+# manifest the first has already moved past.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+env:
+  IMAGE_REPO: ${{ vars.BETWEENUS_IMAGE_REPO || 'aiyuayaan/betweenus' }}
+
+jobs:
+  version:
+    name: Work out the next version
+    runs-on: ubuntu-latest
+    outputs:
+      release: ${{ steps.next.outputs.release }}
+      marker: ${{ steps.next.outputs.marker }}
+      version: ${{ steps.next.outputs.version }}
+      channel: ${{ steps.next.outputs.channel }}
+      prerelease: ${{ steps.next.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # Every subject pushed, not just the head commit: a push of three commits
+      # where the middle one asks for a release is still a release.
+      - name: Collect pushed commit subjects
+        if: github.event_name == 'push'
+        env:
+          BEFORE_SHA: ${{ github.event.before }}
+          AFTER_SHA: ${{ github.sha }}
+        run: |
+          if [ -n "$BEFORE_SHA" ] && [ "$(echo "$BEFORE_SHA" | tr -d 0)" != "" ] \
+             && git cat-file -e "$BEFORE_SHA^{commit}" 2>/dev/null; then
+            git log "$BEFORE_SHA..$AFTER_SHA" --format=%s > subjects.txt
+          else
+            git log -1 --format=%s > subjects.txt
+          fi
+          cat subjects.txt
+
+      # workflow_dispatch has no commits to read; the chosen marker is the input.
+      - name: Use the dispatched marker
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          echo "!${{ inputs.marker }}: manual release" > subjects.txt
+
+      - name: Next version
+        id: next
+        run: |
+          node scripts/release-version.mjs \
+            --current "$(node -p "require('./package.json').version")" \
+            --subjects-file subjects.txt | tee -a "$GITHUB_OUTPUT"
+
+      - name: Nothing to release
+        if: steps.next.outputs.release != 'true'
+        run: echo "No !major/!feat/!fix/!alpha/!beta/!stable marker on this push."
+
+  stamp:
+    name: Stamp ${{ needs.version.outputs.version }} and tag it
+    needs: version
+    if: needs.version.outputs.release == 'true'
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+    steps:
+      # RELEASE_TOKEN is only needed when master is protected against the
+      # built-in token. Without it this falls back to GITHUB_TOKEN, which is
+      # enough for an unprotected branch.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
+
+      - name: Write the version into the manifests
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          node - <<'NODE'
+          const { readFileSync, writeFileSync } = require('node:fs');
+          const version = process.env.VERSION;
+          // The desktop manifest as well as the root one: electron-builder
+          // reads it for the installer name and for the About box, so a
+          // release whose exe says 0.1.0 is a release nobody can identify.
+          for (const path of ['package.json', 'apps/desktop/package.json']) {
+            const manifest = JSON.parse(readFileSync(path, 'utf8'));
+            manifest.version = version;
+            writeFileSync(path, JSON.stringify(manifest, null, 2) + '\n');
+          }
+          NODE
+
+      - name: Commit and tag
+        id: tag
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add package.json apps/desktop/package.json
+          # [skip ci] keeps ci.yml off this commit; the `chore(release):`
+          # subject is what keeps THIS workflow off it, because
+          # release-version.mjs ignores its own commits.
+          git commit -m "chore(release): v${VERSION} [skip ci]"
+          git tag -a "v${VERSION}" -m "v${VERSION}"
+          git push origin HEAD:master
+          git push origin "v${VERSION}"
+          echo "tag=v${VERSION}" >> "$GITHUB_OUTPUT"
+
+  images:
+    name: ${{ matrix.target }} image
+    needs: [version, stamp]
+    runs-on: ubuntu-latest
+    strategy:
+      # One failure should not hide the rest; every image is independent.
+      fail-fast: false
+      matrix:
+        target:
+          - auth-service
+          - server-service
+          - chat-service
+          - presence-service
+          - notification-service
+          - call-service
+          - remote-gateway
+          - web
+          - admin-web
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.stamp.outputs.tag }}
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      # One Docker Hub repository holds every image, told apart by a tag
+      # prefix: aiyuayaan/betweenus:chat-service-0.0.1. Alongside the exact
+      # version each image gets a moving tag for its channel - `alpha`, `beta`
+      # or `latest` - which is what docker-compose.prod.yml follows when
+      # BETWEENUS_VERSION is unset.
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE_REPO }}
+          tags: |
+            type=raw,value=${{ matrix.target }}-${{ needs.version.outputs.version }}
+            type=raw,value=${{ matrix.target }}-${{ needs.version.outputs.channel }}
+
+      - uses: docker/build-push-action@v6
+        with:
+          # One Dockerfile builds every image from the repo root: it needs the
+          # workspace, the lockfile and packages/, not just one directory.
+          context: .
+          file: infrastructure/docker/Dockerfile
+          target: ${{ matrix.target }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          # One scope for every image, not one per target: they share the
+          # install and compile stages, so a per-target scope would cache the
+          # same layers nine times and hit none of them.
+          cache-from: type=gha,scope=betweenus
+          cache-to: type=gha,mode=max,scope=betweenus
+
+  desktop:
+    name: Windows installer and portable exe
+    needs: [version, stamp]
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.stamp.outputs.tag }}
+
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # The whole workspace, because the renderer imports the shared packages
+      # and resolves them through their built declarations.
+      - run: pnpm build
+
+      - name: Package
+        env:
+          # No code-signing certificate here. electron-builder would otherwise
+          # go looking for one in the machine store and fail on what it finds.
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+        run: pnpm --filter @betweenus/desktop exec electron-builder --config electron-builder.yml --win
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: desktop
+          path: |
+            apps/desktop/release/*.exe
+          if-no-files-found: error
+
+  android:
+    name: Android APKs and AAB
+    needs: [version, stamp]
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/android
+    # Hoisted so the steps below can ask whether they were supplied: the
+    # `secrets` context is not available in a step-level `if`, but `env` is.
+    env:
+      GOOGLE_SERVICES_JSON: ${{ secrets.ANDROID_GOOGLE_SERVICES_JSON }}
+      LOCAL_PROPERTIES: ${{ secrets.ANDROID_LOCAL_PROPERTIES }}
+      KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.stamp.outputs.tag }}
+
+      # 21 because gradle/gradle-daemon-jvm.properties asks for it.
+      - uses: actions/setup-java@v4
+        with:
+          java-version: 21
+          distribution: temurin
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      # google-services.json is gitignored - it names somebody's Firebase
+      # project, and which project a build pushes from is the operator's
+      # decision. Without the secret the build still succeeds: the Gradle
+      # plugin is applied only when the file is there, HAS_FIREBASE goes false,
+      # and the app simply never registers for push.
+      - name: Firebase client config
+        if: env.GOOGLE_SERVICES_JSON != ''
+        run: printf '%s' "$GOOGLE_SERVICES_JSON" > app/google-services.json
+
+      # local.properties carries betweenus.serverUrl - the deployment a release
+      # build points at by default. It is only a default: the server picker on
+      # the login screen overrides it. sdk.dir is not needed, the runner sets
+      # ANDROID_HOME.
+      - name: Local properties
+        if: env.LOCAL_PROPERTIES != ''
+        run: printf '%s\n' "$LOCAL_PROPERTIES" > local.properties
+
+      # Unsigned when the keystore secrets are absent, which keeps a fork's
+      # release runnable without handing it a signing key.
+      - name: Keystore
+        id: keystore
+        if: env.KEYSTORE_BASE64 != ''
+        run: |
+          printf '%s' "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
+          echo "path=$RUNNER_TEMP/release.jks" >> "$GITHUB_OUTPUT"
+
+      # assembleRelease and bundleRelease are two invocations on purpose:
+      # app/build.gradle.kts turns ABI splits off whenever a `bundle` task is
+      # in the requested set, because AGP refuses splits during a bundle. Ask
+      # for both at once and the APKs come out as one universal build with the
+      # per-ABI ones missing.
+      - name: Build APKs
+        env:
+          BETWEENUS_VERSION_NAME: ${{ needs.version.outputs.version }}
+          BETWEENUS_VERSION_CODE: ${{ github.run_number }}
+          ANDROID_KEYSTORE_FILE: ${{ steps.keystore.outputs.path }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: ./gradlew :app:assembleRelease --stacktrace
+
+      - name: Build AAB
+        env:
+          BETWEENUS_VERSION_NAME: ${{ needs.version.outputs.version }}
+          BETWEENUS_VERSION_CODE: ${{ github.run_number }}
+          ANDROID_KEYSTORE_FILE: ${{ steps.keystore.outputs.path }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: ./gradlew :app:bundleRelease --stacktrace
+
+      # app-arm64-v8a-release.apk says nothing about which release it is once
+      # it has been downloaded. Name them after the version.
+      - name: Name the artifacts after the version
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/android"
+          for apk in app/build/outputs/apk/release/*.apk; do
+            abi="$(basename "$apk" | sed -e 's/^app-//' -e 's/-release\.apk$//')"
+            cp "$apk" "$RUNNER_TEMP/android/BetweenUs-${VERSION}-${abi}.apk"
+          done
+          cp app/build/outputs/bundle/release/app-release.aab \
+             "$RUNNER_TEMP/android/BetweenUs-${VERSION}.aab"
+          ls -la "$RUNNER_TEMP/android"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android
+          path: ${{ runner.temp }}/android/*
+          if-no-files-found: error
+
+  release:
+    name: Publish v${{ needs.version.outputs.version }}
+    needs: [version, stamp, images, desktop, android]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.stamp.outputs.tag }}
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      # A drop-in deployment folder: compose pinned to this exact version, plus
+      # the two files it mounts. The paths are flattened because the release
+      # copy sits in a directory of its own rather than in the repo tree.
+      - name: Assemble the deployment bundle
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          mkdir -p bundle
+          sed -e "s|\.\./nginx/nginx\.conf|./nginx.conf|" \
+              -e "s|\${BETWEENUS_VERSION:-latest}|\${BETWEENUS_VERSION:-${VERSION}}|g" \
+              infrastructure/docker/docker-compose.prod.yml > bundle/docker-compose.yml
+          cp infrastructure/docker/backup.sh bundle/backup.sh
+          cp infrastructure/nginx/nginx.conf bundle/nginx.conf
+          grep -n 'image:' bundle/docker-compose.yml
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.stamp.outputs.tag }}
+          name: v${{ needs.version.outputs.version }}
+          prerelease: ${{ needs.version.outputs.prerelease == 'true' }}
+          generate_release_notes: true
+          body: |
+            ## Install
+
+            **Desktop (Windows)** — `BetweenUs Setup ${{ needs.version.outputs.version }}.exe` installs;
+            the other `.exe` is portable and needs nothing.
+
+            **Android** — take the APK matching your device (`arm64-v8a` unless it is
+            old or an emulator), or `universal` if you would rather not choose. The
+            `.aab` is for Play, not for sideloading.
+
+            **Server** — `docker-compose.yml`, `nginx.conf` and `backup.sh` below are a
+            deployment folder. Put them beside your existing `.env` and:
+
+            ```bash
+            docker compose --env-file .env pull
+            docker compose --env-file .env up -d
+            ```
+
+            Same project name, same volumes, same `.env` as a built deployment, so an
+            existing server keeps its database and its uploads. `BETWEENUS_VERSION` in
+            `.env` overrides the pinned version; unset, this bundle stays on
+            `${{ needs.version.outputs.version }}`.
+
+            ## Images
+
+            `${{ env.IMAGE_REPO }}:<service>-${{ needs.version.outputs.version }}`, and
+            `<service>-${{ needs.version.outputs.channel }}` following this channel.
+          files: |
+            artifacts/desktop/*
+            artifacts/android/*
+            bundle/docker-compose.yml
+            bundle/nginx.conf
+            bundle/backup.sh
