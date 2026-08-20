@@ -25,12 +25,21 @@
 #      Windows installer and the Android APKs are built, and the tag and the
 #      GitHub Release are created last, once all of it exists.
 #
-# The order in step 2 is the whole rollback story. Only exact-version image
-# tags are pushed while the build is still in doubt; the moving channel tags -
-# `latest`, `alpha`, `beta` - are re-pointed in `promote`, after every artifact
-# is built, so a half-finished release never becomes the thing a deployment
-# pulls. If anything fails, `rollback` deletes the version tags it pushed and
-# removes the tag and Release if either got as far as existing.
+# The order in step 2 is the whole rollback story:
+#
+#   images, desktop, android  ->  publish  ->  promote
+#
+# Only exact-version image tags exist while any of it can still fail. The
+# moving tags a deployment actually follows - `latest`, `alpha`, `beta` - are
+# re-pointed by `promote`, which is dead last: after every artifact is built
+# AND after the Release exists. If anything fails, `rollback` deletes the
+# version tags it pushed and removes the tag and Release if either got as far
+# as existing, and the channel tags have not moved, so they still point at the
+# last release that finished.
+#
+# `promote` used to run before `publish`, and a `publish` that failed left the
+# worst of both: `alpha` pointing at a build whose version tags rollback had
+# just deleted, and no Release to say what it was.
 #
 # Nothing here deploys. The Release carries a docker-compose.yml pinned to the
 # version, and a server takes it when its operator decides to: a running
@@ -334,6 +343,10 @@ jobs:
       # here would mean a failed Android build leaving `latest` pointing at a
       # release that was never finished.
       - uses: docker/build-push-action@v6
+        env:
+          # Nine images means nine build-record artifacts nobody reads, and
+          # they are downloaded by anything that asks for "all artifacts".
+          DOCKER_BUILD_RECORD_UPLOAD: false
         with:
           # One Dockerfile builds every image from the repo root: it needs the
           # workspace, the lockfile and packages/, not just one directory.
@@ -497,11 +510,13 @@ jobs:
           path: ${{ runner.temp }}/android/*
           if-no-files-found: error
 
-  # Only now do the tags a deployment follows move. Everything above has to
-  # have succeeded, so `latest` never points at a release with no installer.
+  # Dead last, after the Release exists. This used to run before `publish`, and
+  # a `publish` that failed then left the worst of both: `alpha` pointing at a
+  # build whose version tags rollback had just deleted, and no Release to say
+  # what it was. The tag a deployment follows is the last thing that moves.
   promote:
     name: Point ${{ needs.merged.outputs.channel }} at this release
-    needs: [merged, images, desktop, android]
+    needs: [merged, images, desktop, android, publish]
     if: needs.merged.outputs.release == 'true'
     runs-on: ubuntu-latest
     steps:
@@ -527,7 +542,7 @@ jobs:
 
   publish:
     name: Publish v${{ needs.merged.outputs.version }}
-    needs: [merged, images, desktop, android, promote]
+    needs: [merged, images, desktop, android]
     if: needs.merged.outputs.release == 'true'
     runs-on: ubuntu-latest
     steps:
@@ -539,9 +554,19 @@ jobs:
         with:
           node-version: 20
 
+      # By name, both of them. Downloading everything also pulls the nine
+      # `*.dockerbuild` build records that build-push-action uploads per image -
+      # nothing here wants them, and one of them failing its fifth retry is
+      # what took a release down after every artifact had already been built.
       - uses: actions/download-artifact@v4
         with:
-          path: artifacts
+          name: desktop
+          path: artifacts/desktop
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: android
+          path: artifacts/android
 
       # A drop-in deployment folder: compose pinned to this exact version, plus
       # the two files it mounts. The paths are flattened because the release
@@ -606,7 +631,8 @@ jobs:
             ## Images
 
             `${{ env.IMAGE_REPO }}:<service>-${{ needs.merged.outputs.version }}`, and
-            `<service>-${{ needs.merged.outputs.channel }}` now following this release.
+            `<service>-${{ needs.merged.outputs.channel }}`, which is moved to this release
+            as the last step of the run.
           files: |
             artifacts/desktop/*
             artifacts/android/*
