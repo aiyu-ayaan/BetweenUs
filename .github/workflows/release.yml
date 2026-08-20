@@ -10,30 +10,40 @@
 #   !stable  0.0.2-beta.2  -> 0.0.2           promote to stable, no bump
 #
 # A push with no marker is not a release and this workflow does nothing. The
-# rules, including what happens when one push carries several markers, live in
-# scripts/release-version.mjs and are covered by its `--check` self-test, which
-# `pnpm check` runs - so a change to them fails CI rather than a release.
+# rules live in scripts/release-version.mjs and the notes in
+# scripts/release-notes.mjs; `pnpm check` runs both self-tests, so a change to
+# either fails CI rather than a release.
 #
-# What a release does, in order:
+# TWO STEPS, NOT ONE
 #
-#   1. stamp    - write the version into the manifests, commit it, tag it
-#   2. images   - build every server image and push it to Docker Hub
-#   3. desktop  - build the Windows installer and portable exe
-#   4. android  - build the signed APKs and the AAB
-#   5. release  - publish the GitHub Release with all of it attached
+#   1. A marker on master opens (or updates) a release PR. It bumps the version
+#      in the manifests and writes the CHANGELOG entry, and nothing is built.
+#      The diff is the last chance to look at what is about to ship and at the
+#      notes that will describe it.
 #
-# Nothing here deploys. The release publishes a docker-compose.yml pinned to
-# the version, and a server takes it when its operator decides to - which is
-# the point: a running deployment holds the only copy of its data, and it does
-# not get restarted by a git push.
+#   2. Merging that PR is what releases. The images go to Docker Hub, the
+#      Windows installer and the Android APKs are built, and the tag and the
+#      GitHub Release are created last, once all of it exists.
+#
+# The order in step 2 is the whole rollback story. Only exact-version image
+# tags are pushed while the build is still in doubt; the moving channel tags -
+# `latest`, `alpha`, `beta` - are re-pointed in `promote`, after every artifact
+# is built, so a half-finished release never becomes the thing a deployment
+# pulls. If anything fails, `rollback` deletes the version tags it pushed and
+# removes the tag and Release if either got as far as existing.
+#
+# Nothing here deploys. The Release carries a docker-compose.yml pinned to the
+# version, and a server takes it when its operator decides to: a running
+# deployment holds the only copy of its data and does not get restarted by a
+# git push.
 
 name: Release
 
 on:
   push:
     branches: [master]
-  # The same flow without a commit marker, for when a release has to be cut
-  # from what is already on master.
+  # Opens the release PR without a commit marker, for when a release has to be
+  # cut from what is already on master.
   workflow_dispatch:
     inputs:
       marker:
@@ -44,8 +54,9 @@ on:
 
 permissions:
   contents: write
+  pull-requests: write
 
-# Never two releases at once: the second would stamp a version computed from a
+# Never two releases at once: the second would compute its version from a
 # manifest the first has already moved past.
 concurrency:
   group: release
@@ -55,6 +66,8 @@ env:
   IMAGE_REPO: ${{ vars.BETWEENUS_IMAGE_REPO || 'aiyuayaan/betweenus' }}
 
 jobs:
+  # --- Step 1: the release PR ------------------------------------------------
+
   version:
     name: Work out the next version
     runs-on: ubuntu-latest
@@ -62,8 +75,7 @@ jobs:
       release: ${{ steps.next.outputs.release }}
       marker: ${{ steps.next.outputs.marker }}
       version: ${{ steps.next.outputs.version }}
-      channel: ${{ steps.next.outputs.channel }}
-      prerelease: ${{ steps.next.outputs.prerelease }}
+      current: ${{ steps.current.outputs.version }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -89,40 +101,40 @@ jobs:
           fi
           cat subjects.txt
 
-      # workflow_dispatch has no commits to read; the chosen marker is the input.
       - name: Use the dispatched marker
         if: github.event_name == 'workflow_dispatch'
         run: |
           echo "!${{ inputs.marker }}: manual release" > subjects.txt
 
+      - id: current
+        run: echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+
       - name: Next version
         id: next
         run: |
           node scripts/release-version.mjs \
-            --current "$(node -p "require('./package.json').version")" \
+            --current "${{ steps.current.outputs.version }}" \
             --subjects-file subjects.txt | tee -a "$GITHUB_OUTPUT"
 
       - name: Nothing to release
         if: steps.next.outputs.release != 'true'
         run: echo "No !major/!feat/!fix/!alpha/!beta/!stable marker on this push."
 
-  stamp:
-    name: Stamp ${{ needs.version.outputs.version }} and tag it
+  release-pr:
+    name: Release PR for v${{ needs.version.outputs.version }}
     needs: version
     if: needs.version.outputs.release == 'true'
     runs-on: ubuntu-latest
-    outputs:
-      tag: ${{ steps.tag.outputs.tag }}
     steps:
-      # RELEASE_TOKEN is only needed when master is protected against the
-      # built-in token. Without it this falls back to GITHUB_TOKEN, which is
-      # enough for an unprotected branch.
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          token: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
 
-      - name: Write the version into the manifests
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Bump the manifests
         env:
           VERSION: ${{ needs.version.outputs.version }}
         run: |
@@ -130,8 +142,8 @@ jobs:
           const { readFileSync, writeFileSync } = require('node:fs');
           const version = process.env.VERSION;
           // The desktop manifest as well as the root one: electron-builder
-          // reads it for the installer name and for the About box, so a
-          // release whose exe says 0.1.0 is a release nobody can identify.
+          // reads it for the installer name and the About box, so a release
+          // whose exe says 0.1.0 is a release nobody can identify.
           for (const path of ['package.json', 'apps/desktop/package.json']) {
             const manifest = JSON.parse(readFileSync(path, 'utf8'));
             manifest.version = version;
@@ -139,26 +151,126 @@ jobs:
           }
           NODE
 
-      - name: Commit and tag
-        id: tag
+      # Everything since the last released tag, which is what this version
+      # contains. On the first release there is no tag and the whole history is
+      # the answer.
+      - name: Write the CHANGELOG entry
         env:
           VERSION: ${{ needs.version.outputs.version }}
+          PREVIOUS: ${{ needs.version.outputs.current }}
         run: |
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add package.json apps/desktop/package.json
-          # [skip ci] keeps ci.yml off this commit; the `chore(release):`
-          # subject is what keeps THIS workflow off it, because
-          # release-version.mjs ignores its own commits.
-          git commit -m "chore(release): v${VERSION} [skip ci]"
-          git tag -a "v${VERSION}" -m "v${VERSION}"
-          git push origin HEAD:master
-          git push origin "v${VERSION}"
-          echo "tag=v${VERSION}" >> "$GITHUB_OUTPUT"
+          if git rev-parse -q --verify "refs/tags/v${PREVIOUS}" > /dev/null; then
+            git log "v${PREVIOUS}..HEAD" --format=%s > subjects.txt
+          else
+            git log --format=%s > subjects.txt
+          fi
+          node scripts/release-notes.mjs \
+            --version "$VERSION" \
+            --previous "$PREVIOUS" \
+            --repository "$GITHUB_REPOSITORY" \
+            --subjects-file subjects.txt > CHANGELOG.next.md
+          mv CHANGELOG.next.md CHANGELOG.md
+          rm -f subjects.txt
+          cat CHANGELOG.md
+
+      - name: Open or update the release PR
+        id: pr
+        uses: peter-evans/create-pull-request@v7
+        with:
+          token: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
+          commit-message: 'chore(release): v${{ needs.version.outputs.version }}'
+          title: 'chore(release): v${{ needs.version.outputs.version }}'
+          body: |
+            Automated release PR — a `!${{ needs.version.outputs.marker }}` marker on master.
+
+            | | |
+            | --- | --- |
+            | From | `${{ needs.version.outputs.current }}` |
+            | To | `${{ needs.version.outputs.version }}` |
+            | Marker | `!${{ needs.version.outputs.marker }}` |
+
+            Changed here: `package.json`, `apps/desktop/package.json`, `CHANGELOG.md`.
+            The CHANGELOG diff is the release note — edit it in this branch if it
+            reads badly, that is what this PR is for.
+
+            **Merging this PR is what releases.** It builds and pushes the server
+            images, the Windows installer and the Android APKs, then creates the
+            tag and the GitHub Release. Closing it without merging releases
+            nothing and costs nothing.
+          branch: chore/release-v${{ needs.version.outputs.version }}
+          base: master
+          labels: release
+          delete-branch: true
+
+      - name: Ensure the PR exists
+        if: steps.pr.outputs.pull-request-number == ''
+        run: |
+          echo "No release PR was created or updated."
+          echo "Branch protection, or a v${{ needs.version.outputs.version }} that already exists."
+          exit 1
+
+      - name: Summary
+        run: |
+          echo "### Release PR for v${{ needs.version.outputs.version }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "${{ steps.pr.outputs.pull-request-url }}" >> "$GITHUB_STEP_SUMMARY"
+
+  # --- Step 2: merging that PR is the release --------------------------------
+
+  merged:
+    name: Detect a merged release PR
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    outputs:
+      release: ${{ steps.detect.outputs.release }}
+      version: ${{ steps.detect.outputs.version }}
+      channel: ${{ steps.detect.outputs.channel }}
+      prerelease: ${{ steps.detect.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Is this the release commit
+        id: detect
+        env:
+          SUBJECT: ${{ github.event.head_commit.message }}
+        run: |
+          # Squashing gives the PR title as the subject; a merge commit does
+          # not, so the files the PR touches are the fallback answer.
+          subject="$(printf '%s' "$SUBJECT" | head -1)"
+          changed="$(git show --name-only --pretty= HEAD)"
+          release=false
+          case "$subject" in
+            'chore(release): v'*) release=true ;;
+          esac
+          if printf '%s' "$changed" | grep -qx 'package.json' \
+             && printf '%s' "$changed" | grep -qx 'CHANGELOG.md'; then
+            release=true
+          fi
+
+          echo "release=$release" >> "$GITHUB_OUTPUT"
+          if [ "$release" != true ]; then
+            echo "Not a release commit; nothing is built."
+            exit 0
+          fi
+
+          version="$(node -p "require('./package.json').version")"
+          case "$version" in
+            *-alpha.*) channel=alpha ;;
+            *-beta.*)  channel=beta ;;
+            *)         channel=latest ;;
+          esac
+          {
+            echo "version=$version"
+            echo "channel=$channel"
+            echo "prerelease=$([ "$channel" = latest ] && echo false || echo true)"
+          } >> "$GITHUB_OUTPUT"
+          echo "Releasing v$version on the $channel channel."
 
   images:
     name: ${{ matrix.target }} image
-    needs: [version, stamp]
+    needs: merged
+    if: needs.merged.outputs.release == 'true'
     runs-on: ubuntu-latest
     strategy:
       # One failure should not hide the rest; every image is independent.
@@ -176,29 +288,16 @@ jobs:
           - admin-web
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: ${{ needs.stamp.outputs.tag }}
-
       - uses: docker/setup-buildx-action@v3
-
       - uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      # One Docker Hub repository holds every image, told apart by a tag
-      # prefix: aiyuayaan/betweenus:chat-service-0.0.1. Alongside the exact
-      # version each image gets a moving tag for its channel - `alpha`, `beta`
-      # or `latest` - which is what docker-compose.prod.yml follows when
-      # BETWEENUS_VERSION is unset.
-      - id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.IMAGE_REPO }}
-          tags: |
-            type=raw,value=${{ matrix.target }}-${{ needs.version.outputs.version }}
-            type=raw,value=${{ matrix.target }}-${{ needs.version.outputs.channel }}
-
+      # The exact version only. The channel tag that deployments actually
+      # follow is moved in `promote`, once every artifact exists - pushing it
+      # here would mean a failed Android build leaving `latest` pointing at a
+      # release that was never finished.
       - uses: docker/build-push-action@v6
         with:
           # One Dockerfile builds every image from the repo root: it needs the
@@ -207,8 +306,7 @@ jobs:
           file: infrastructure/docker/Dockerfile
           target: ${{ matrix.target }}
           push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          tags: ${{ env.IMAGE_REPO }}:${{ matrix.target }}-${{ needs.merged.outputs.version }}
           # One scope for every image, not one per target: they share the
           # install and compile stages, so a per-target scope would cache the
           # same layers nine times and hit none of them.
@@ -217,13 +315,11 @@ jobs:
 
   desktop:
     name: Windows installer and portable exe
-    needs: [version, stamp]
+    needs: merged
+    if: needs.merged.outputs.release == 'true'
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: ${{ needs.stamp.outputs.tag }}
-
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
@@ -246,13 +342,13 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: desktop
-          path: |
-            apps/desktop/release/*.exe
+          path: apps/desktop/release/*.exe
           if-no-files-found: error
 
   android:
     name: Android APKs and AAB
-    needs: [version, stamp]
+    needs: merged
+    if: needs.merged.outputs.release == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -265,8 +361,6 @@ jobs:
       KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: ${{ needs.stamp.outputs.tag }}
 
       # 21 because gradle/gradle-daemon-jvm.properties asks for it.
       - uses: actions/setup-java@v4
@@ -293,23 +387,52 @@ jobs:
         if: env.LOCAL_PROPERTIES != ''
         run: printf '%s\n' "$LOCAL_PROPERTIES" > local.properties
 
-      # Unsigned when the keystore secrets are absent, which keeps a fork's
-      # release runnable without handing it a signing key.
+      # Unsigned when the secret is absent, which keeps a fork's release
+      # runnable without handing it a signing key.
       - name: Keystore
         id: keystore
         if: env.KEYSTORE_BASE64 != ''
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
         run: |
-          printf '%s' "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
+          # Two ways a perfectly good keystore arrives as something `base64 -d`
+          # refuses. `certutil -encode` on Windows wraps its output in PEM
+          # banner lines, and every terminal and text box wraps long base64 at
+          # some column - so the banners go and so does all whitespace before
+          # anything tries to decode it.
+          printf '%s' "$KEYSTORE_BASE64" \
+            | grep -v -- '-----' \
+            | tr -d '[:space:]' \
+            | base64 -d > "$RUNNER_TEMP/release.jks" || {
+                echo "::error::ANDROID_KEYSTORE_BASE64 is not base64. Generate it with:"
+                echo "::error::  Linux/macOS:  base64 -w0 release.jks"
+                echo "::error::  PowerShell:   [Convert]::ToBase64String([IO.File]::ReadAllBytes('release.jks'))"
+                echo "::error::Paste the whole single-line result, with nothing else in the secret."
+                exit 1
+              }
+
+          # A keystore that cannot be opened with the password and alias it was
+          # given is worth finding out about here rather than ten minutes later,
+          # as an APK that built fine and is not signed.
+          if ! keytool -list -keystore "$RUNNER_TEMP/release.jks" \
+                 -storepass "$KEYSTORE_PASSWORD" -alias "$KEY_ALIAS" > /dev/null 2>&1; then
+            echo "::error::The keystore decoded, but ANDROID_KEYSTORE_PASSWORD or ANDROID_KEY_ALIAS does not open it."
+            keytool -list -keystore "$RUNNER_TEMP/release.jks" -storepass "$KEYSTORE_PASSWORD" 2>&1 \
+              | sed -n '1,20p' || true
+            exit 1
+          fi
+
           echo "path=$RUNNER_TEMP/release.jks" >> "$GITHUB_OUTPUT"
 
       # assembleRelease and bundleRelease are two invocations on purpose:
-      # app/build.gradle.kts turns ABI splits off whenever a `bundle` task is
-      # in the requested set, because AGP refuses splits during a bundle. Ask
-      # for both at once and the APKs come out as one universal build with the
+      # app/build.gradle.kts disables ABI splits whenever a `bundle` task is in
+      # the requested set, because AGP refuses splits during a bundle. Ask for
+      # both at once and the APKs come out as one universal build with the
       # per-ABI ones missing.
       - name: Build APKs
         env:
-          BETWEENUS_VERSION_NAME: ${{ needs.version.outputs.version }}
+          BETWEENUS_VERSION_NAME: ${{ needs.merged.outputs.version }}
           BETWEENUS_VERSION_CODE: ${{ github.run_number }}
           ANDROID_KEYSTORE_FILE: ${{ steps.keystore.outputs.path }}
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
@@ -319,7 +442,7 @@ jobs:
 
       - name: Build AAB
         env:
-          BETWEENUS_VERSION_NAME: ${{ needs.version.outputs.version }}
+          BETWEENUS_VERSION_NAME: ${{ needs.merged.outputs.version }}
           BETWEENUS_VERSION_CODE: ${{ github.run_number }}
           ANDROID_KEYSTORE_FILE: ${{ steps.keystore.outputs.path }}
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
@@ -331,7 +454,7 @@ jobs:
       # it has been downloaded. Name them after the version.
       - name: Name the artifacts after the version
         env:
-          VERSION: ${{ needs.version.outputs.version }}
+          VERSION: ${{ needs.merged.outputs.version }}
         run: |
           mkdir -p "$RUNNER_TEMP/android"
           for apk in app/build/outputs/apk/release/*.apk; do
@@ -348,14 +471,47 @@ jobs:
           path: ${{ runner.temp }}/android/*
           if-no-files-found: error
 
-  release:
-    name: Publish v${{ needs.version.outputs.version }}
-    needs: [version, stamp, images, desktop, android]
+  # Only now do the tags a deployment follows move. Everything above has to
+  # have succeeded, so `latest` never points at a release with no installer.
+  promote:
+    name: Point ${{ needs.merged.outputs.channel }} at this release
+    needs: [merged, images, desktop, android]
+    if: needs.merged.outputs.release == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      # `imagetools create` re-points a tag at an existing manifest. No rebuild,
+      # no pull, and it keeps multi-arch manifests intact.
+      - name: Re-point the channel tags
+        env:
+          VERSION: ${{ needs.merged.outputs.version }}
+          CHANNEL: ${{ needs.merged.outputs.channel }}
+        run: |
+          for target in auth-service server-service chat-service presence-service \
+                        notification-service call-service remote-gateway web admin-web; do
+            docker buildx imagetools create \
+              --tag "${IMAGE_REPO}:${target}-${CHANNEL}" \
+              "${IMAGE_REPO}:${target}-${VERSION}"
+          done
+
+  publish:
+    name: Publish v${{ needs.merged.outputs.version }}
+    needs: [merged, images, desktop, android, promote]
+    if: needs.merged.outputs.release == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ needs.stamp.outputs.tag }}
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
 
       - uses: actions/download-artifact@v4
         with:
@@ -366,7 +522,7 @@ jobs:
       # copy sits in a directory of its own rather than in the repo tree.
       - name: Assemble the deployment bundle
         env:
-          VERSION: ${{ needs.version.outputs.version }}
+          VERSION: ${{ needs.merged.outputs.version }}
         run: |
           mkdir -p bundle
           sed -e "s|\.\./nginx/nginx\.conf|./nginx.conf|" \
@@ -376,16 +532,32 @@ jobs:
           cp infrastructure/nginx/nginx.conf bundle/nginx.conf
           grep -n 'image:' bundle/docker-compose.yml
 
+      # The notes were written and reviewed in the release PR. Reading them back
+      # out of CHANGELOG.md means the Release says exactly what the diff said it
+      # would, including any edit made on the PR branch.
+      - name: Release notes
+        id: notes
+        env:
+          VERSION: ${{ needs.merged.outputs.version }}
+        run: |
+          {
+            echo 'body<<CHANGELOG_EOF'
+            node scripts/release-notes.mjs --section --version "$VERSION"
+            echo CHANGELOG_EOF
+          } >> "$GITHUB_OUTPUT"
+
       - uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ needs.stamp.outputs.tag }}
-          name: v${{ needs.version.outputs.version }}
-          prerelease: ${{ needs.version.outputs.prerelease == 'true' }}
-          generate_release_notes: true
+          tag_name: v${{ needs.merged.outputs.version }}
+          target_commitish: ${{ github.sha }}
+          name: v${{ needs.merged.outputs.version }}
+          prerelease: ${{ needs.merged.outputs.prerelease == 'true' }}
           body: |
+            ${{ steps.notes.outputs.body }}
+
             ## Install
 
-            **Desktop (Windows)** — `BetweenUs-${{ needs.version.outputs.version }}-Setup.exe`
+            **Desktop (Windows)** — `BetweenUs-${{ needs.merged.outputs.version }}-Setup.exe`
             installs; `-Portable.exe` needs nothing.
 
             **Android** — take the APK matching your device (`arm64-v8a` unless it is
@@ -403,15 +575,89 @@ jobs:
             Same project name, same volumes, same `.env` as a built deployment, so an
             existing server keeps its database and its uploads. `BETWEENUS_VERSION` in
             `.env` overrides the pinned version; unset, this bundle stays on
-            `${{ needs.version.outputs.version }}`.
+            `${{ needs.merged.outputs.version }}`.
 
             ## Images
 
-            `${{ env.IMAGE_REPO }}:<service>-${{ needs.version.outputs.version }}`, and
-            `<service>-${{ needs.version.outputs.channel }}` following this channel.
+            `${{ env.IMAGE_REPO }}:<service>-${{ needs.merged.outputs.version }}`, and
+            `<service>-${{ needs.merged.outputs.channel }}` now following this release.
           files: |
             artifacts/desktop/*
             artifacts/android/*
             bundle/docker-compose.yml
             bundle/nginx.conf
             bundle/backup.sh
+
+  # --- If any of that failed, leave nothing half-published -------------------
+
+  rollback:
+    name: Undo a failed release
+    needs: [merged, images, desktop, android, promote, publish]
+    if: always() && needs.merged.outputs.release == 'true' && contains(needs.*.result, 'failure')
+    runs-on: ubuntu-latest
+    steps:
+      # Docker Hub has no API in the CLI for deleting a tag, so this is the REST
+      # one. The same token that pushed can delete.
+      - name: Delete the version image tags
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+          VERSION: ${{ needs.merged.outputs.version }}
+        run: |
+          jwt="$(curl -sf -H 'Content-Type: application/json' \
+            -d "$(jq -nc --arg u "$DOCKERHUB_USERNAME" --arg p "$DOCKERHUB_TOKEN" \
+                   '{username:$u,password:$p}')" \
+            https://hub.docker.com/v2/users/login/ | jq -r .token)"
+          if [ -z "$jwt" ] || [ "$jwt" = null ]; then
+            echo "::warning::Could not sign in to Docker Hub; version tags left in place."
+            exit 0
+          fi
+
+          for target in auth-service server-service chat-service presence-service \
+                        notification-service call-service remote-gateway web admin-web; do
+            tag="${target}-${VERSION}"
+            code="$(curl -s -o /dev/null -w '%{http_code}' -X DELETE \
+              -H "Authorization: JWT $jwt" \
+              "https://hub.docker.com/v2/repositories/${IMAGE_REPO}/tags/${tag}/")"
+            # 404 is the wanted state too: that image never got pushed.
+            case "$code" in
+              20*|404) echo "removed ${tag} (${code})" ;;
+              *) echo "::warning::could not remove ${tag} (${code})" ;;
+            esac
+          done
+
+          # The channel tags are deliberately not touched. They still point at
+          # the last release that finished, which is the whole reason `promote`
+          # runs after everything rather than alongside it.
+
+      # A tag and a Release only exist if `publish` got part way, which is rare
+      # but leaves the worst mess: a version people can see and download that
+      # has no images behind it.
+      - name: Delete the tag and the Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.merged.outputs.version }}
+        run: |
+          if gh release view "v${VERSION}" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            gh release delete "v${VERSION}" --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag
+            echo "deleted release v${VERSION} and its tag"
+          else
+            gh api -X DELETE "repos/$GITHUB_REPOSITORY/git/refs/tags/v${VERSION}" 2>/dev/null \
+              && echo "deleted tag v${VERSION}" \
+              || echo "no tag v${VERSION} to delete"
+          fi
+
+      - name: Say what is left to do
+        env:
+          VERSION: ${{ needs.merged.outputs.version }}
+        run: |
+          {
+            echo "### Release v${VERSION} rolled back"
+            echo
+            echo "Version image tags removed; the \`${{ needs.merged.outputs.channel }}\` tags"
+            echo "still point at the last release that finished, and no Release was left behind."
+            echo
+            echo "The version bump is still on master. Fix what failed and push another"
+            echo "marker - the next release will be computed from v${VERSION}, so use"
+            echo "\`!fix\` or \`!alpha\` rather than trying to re-cut this one."
+          } >> "$GITHUB_STEP_SUMMARY"
