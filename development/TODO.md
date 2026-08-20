@@ -245,6 +245,7 @@ Everything that touched a LiveKit type:
 
 - [x] `stores/shareControl.ts` on the data channel instead of `DataReceived`
 - [x] `MediaSink`, `ShareStage`, `VoiceChannelView` take `MediaStreamTrack`
+- [x] `VoiceChannelView` adaptive call grid: dynamic 1/2/4/6/9 layout scaling, uniform card dimensions, ambient blurred background for non-standard aspect ratios, and floating glassmorphism control dock
 - [x] `share-quality.ts` and `voice-quality.ts` produce capture constraints and
       `RTCRtpSender` parameters instead of LiveKit publish options
 - [x] Playout delay: `playoutDelayHint` on the receiver, which is what LiveKit's

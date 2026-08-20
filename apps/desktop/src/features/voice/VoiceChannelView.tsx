@@ -152,8 +152,10 @@ export function VoiceChannelView({ channel }: { channel: Channel }): JSX.Element
       </div>
 
       {connected && (
-        <footer className="flex shrink-0 justify-center border-t border-edge bg-black/30 px-4 py-3">
-          <VoiceControls size="lg" />
+        <footer className="flex shrink-0 justify-center px-4 py-3 z-20">
+          <div className="rounded-2xl border border-white/10 bg-surface-950/90 px-4 py-2 backdrop-blur-xl shadow-2xl">
+            <VoiceControls size="lg" />
+          </div>
         </footer>
       )}
     </section>
@@ -756,22 +758,28 @@ function ControlButtons({ share }: { share: VoiceShare }): JSX.Element {
   );
 }
 
-/** Nine at a time with pager arrows, rather than tiles shrinking to nothing. */
+/** Compute responsive grid layout based on number of participants */
+function getGridClass(count: number): string {
+  if (count === 1) return 'grid grid-cols-1 w-full max-w-4xl h-full max-h-[70vh] aspect-video';
+  if (count === 2) return 'grid grid-cols-1 md:grid-cols-2 gap-4 w-full max-w-6xl h-full max-h-[66vh]';
+  if (count <= 4) return 'grid grid-cols-2 gap-4 w-full max-w-6xl h-full max-h-[72vh]';
+  if (count <= 6) return 'grid grid-cols-2 lg:grid-cols-3 gap-3 w-full max-w-7xl h-full max-h-[74vh]';
+  return 'grid grid-cols-3 gap-3 w-full max-w-7xl h-full max-h-[78vh]';
+}
+
+/** Modern adaptive call grid with paging when participants exceed PAGE_SIZE */
 function PagedGrid({ tiles }: { tiles: Stage[] }): JSX.Element {
   const [page, setPage] = useState(0);
   const pages = Math.max(1, Math.ceil(tiles.length / PAGE_SIZE));
-  // People leave; the page they were on can vanish under the pager.
   const current = Math.min(page, pages - 1);
   const shown = tiles.slice(current * PAGE_SIZE, current * PAGE_SIZE + PAGE_SIZE);
+  const gridClass = getGridClass(shown.length);
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3">
-      {/* `items-start`, not the equal-height rows this had: a tile is now as
-          tall as the picture in it, and a portrait camera in row one must not
-          stretch the landscape one beside it to match. */}
-      <ul className="grid w-full max-w-5xl grid-cols-[repeat(auto-fit,minmax(220px,1fr))] items-start gap-3">
+    <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-4 w-full h-full p-2">
+      <ul className={`${gridClass} items-stretch justify-items-stretch transition-all duration-300`}>
         {shown.map((tile) => (
-          <li key={tile.key}>
+          <li key={tile.key} className="flex min-h-0 min-w-0 w-full h-full">
             <StageTile tile={tile} />
           </li>
         ))}
@@ -819,7 +827,7 @@ function PagerButton({
       onClick={onClick}
       disabled={disabled}
       aria-label={label}
-      className="cursor-pointer rounded-md bg-surface-800 p-2 text-slate-300 transition-colors duration-200 hover:bg-white/[0.06] disabled:cursor-not-allowed disabled:opacity-40"
+      className="cursor-pointer rounded-lg bg-surface-800 p-2 text-slate-300 transition-all duration-200 hover:bg-white/[0.08] hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
     >
       {children}
     </button>
@@ -827,58 +835,68 @@ function PagerButton({
 }
 
 /**
- * One person's tile, shaped like whatever they are actually sending.
- *
- * It used to be 16:9 with the picture cropped to fill it, which is fine until
- * somebody joins from a phone: a portrait camera then arrived as a letterbox
- * slice out of the middle of them, with their head and their chin outside the
- * tile. The fix is not to letterbox inside a 16:9 box - that leaves the same
- * black bars the crop was avoiding - it is to let the box be the shape of the
- * picture. The grid aligns its rows to the top, so a portrait tile is simply
- * taller than the landscape one beside it.
- *
- * 16:9 until the first frame says otherwise, because that is what a tile with
- * no video is, and a tile that changes shape when the camera comes on is less
- * jarring than one that changes shape a second later.
+ * Cinematic participant card tile:
+ * - Uniform height and width across participants
+ * - Ambient blurred background behind video to seamlessly fill container
+ * - Sharp centered contained video
+ * - Speaking pulse glow and user status badges
  */
 function StageTile({ tile }: { tile: Stage }): JSX.Element {
-  const [aspect, setAspect] = useState(16 / 9);
-  // Identity is stable, so the sink is not re-subscribing on every render.
-  const onAspect = useCallback((ratio: number) => setAspect(ratio), []);
-
   return (
     <div
-      style={{ aspectRatio: tile.videoTrack ? aspect : 16 / 9 }}
-      className={`relative flex items-center justify-center overflow-hidden rounded-lg bg-surface-800 ring-2 transition-colors duration-200 ${
-        tile.speaking ? 'ring-amber-400' : 'ring-transparent'
+      className={`relative flex min-h-[160px] w-full h-full items-center justify-center overflow-hidden rounded-2xl bg-surface-900/90 border border-white/10 shadow-2xl transition-all duration-300 ring-2 ${
+        tile.speaking
+          ? 'ring-emerald-400 shadow-[0_0_20px_rgba(52,211,153,0.3)]'
+          : 'ring-transparent'
       }`}
     >
       {tile.videoTrack ? (
-        // Contain rather than cover: the box is already the right shape, so
-        // there is nothing to crop, and this is what keeps it honest during
-        // the moment between a rotation and the box catching up.
-        <VideoSink track={tile.videoTrack} fit="contain" onAspect={onAspect} />
+        <>
+          {/* Ambient blurred backdrop for luxury presentation */}
+          <div className="absolute inset-0 overflow-hidden opacity-30 blur-2xl scale-125 select-none pointer-events-none">
+            <VideoSink track={tile.videoTrack} fit="cover" />
+          </div>
+          {/* Sharp contained foreground video */}
+          <div className="relative z-10 flex h-full w-full items-center justify-center">
+            <VideoSink track={tile.videoTrack} fit="contain" />
+          </div>
+        </>
       ) : (
-        <span
-          aria-hidden="true"
-          className="flex h-16 w-16 items-center justify-center rounded-full bg-surface-700 text-xl font-semibold text-slate-200"
-        >
-          {tile.name.charAt(0).toUpperCase()}
-        </span>
+        <div className="relative z-10 flex flex-col items-center justify-center gap-3">
+          <div className="relative">
+            <span
+              aria-hidden="true"
+              className="flex h-20 w-20 sm:h-24 sm:w-24 items-center justify-center rounded-full bg-gradient-to-br from-indigo-600/80 to-purple-600/80 text-2xl sm:text-3xl font-bold text-white shadow-xl border border-white/20 select-none"
+            >
+              {tile.name.charAt(0).toUpperCase()}
+            </span>
+            {tile.speaking && (
+              <span className="absolute inset-0 rounded-full animate-ping ring-2 ring-emerald-400 opacity-60 pointer-events-none" />
+            )}
+          </div>
+          <span className="text-sm font-medium text-slate-300 select-none max-w-[180px] truncate">
+            {tile.name}
+          </span>
+        </div>
       )}
 
-      <p className="absolute bottom-1.5 left-1.5 flex items-center gap-1 rounded bg-black/60 px-1.5 py-0.5 text-xs text-slate-200">
-        {!tile.micEnabled && <MicOffIcon className="h-3 w-3 text-red-400" />}
-        <span className="truncate">
+      {/* Bottom User info pill badge */}
+      <div className="absolute bottom-3 left-3 z-20 flex items-center gap-1.5 rounded-xl bg-black/65 px-2.5 py-1 text-xs font-medium text-slate-200 backdrop-blur-md border border-white/10 shadow-md">
+        {!tile.micEnabled && <MicOffIcon className="h-3.5 w-3.5 text-red-400 shrink-0" />}
+        <span className="truncate max-w-[140px]">
           {tile.name}
           {tile.isLocal && ' (you)'}
         </span>
-      </p>
+      </div>
 
+      {/* Speaking status indicator */}
       {tile.speaking && (
-        <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-amber-400">
-          <span className="sr-only">speaking</span>
-        </span>
+        <div className="absolute right-3 top-3 z-20 flex items-center gap-1.5 rounded-full bg-black/60 px-2 py-0.5 backdrop-blur-md border border-emerald-500/30">
+          <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+          <span className="text-[10px] font-semibold text-emerald-300 uppercase tracking-wider">
+            Speaking
+          </span>
+        </div>
       )}
     </div>
   );
