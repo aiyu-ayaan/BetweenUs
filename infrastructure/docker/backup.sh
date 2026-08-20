@@ -20,29 +20,40 @@ log() { echo "[backup] $*"; }
 
 dump() {
   mkdir -p "$BACKUP_DIR"
-  if ! touch "$BACKUP_DIR/.write_test" 2>/dev/null; then
+
+  # Scratch files are named per run, not per dump, and mktemp is also the
+  # writability test - a directory that cannot hold this cannot hold a backup.
+  #
+  # Per run matters. The scheduled dump and the pre-migration one both wait on
+  # the same healthy Postgres and start together, so they reach this line in
+  # the same second and used to compute the same `$target.partial`. One of them
+  # renamed it; the other found nothing to rename, exited 1, and stopped the
+  # migration - and so the whole stack - over a backup that had in fact been
+  # taken. `$$` would not have fixed it either: every container's shell is PID
+  # 1, so both were `.betweenus.1`.
+  if ! scratch="$(mktemp "$BACKUP_DIR/.$PREFIX.XXXXXX" 2>/dev/null)"; then
     log "FAILED: $BACKUP_DIR is not writable (check directory permissions/ownership on BACKUP_DATA_PATH)"
     return 1
   fi
-  rm -f "$BACKUP_DIR/.write_test"
+  failed="$scratch.failed"
+
   target="$BACKUP_DIR/$PREFIX-$(date +%Y%m%d-%H%M%S).sql.gz"
   log "dumping $PGDATABASE to $target"
-  # Dump to a partial name and rename, so a dump interrupted halfway is never
+  # Dump to the scratch name and rename, so a dump interrupted halfway is never
   # mistaken for a backup - by the retention sweep below or by a human.
   #
   # The exit status of a pipeline is gzip's, and gzip succeeds at compressing
   # nothing whatsoever - so `pg_dump | gzip` reports success for a database that
   # refused the connection, and writes a valid empty archive. pg_dump's own
   # status goes in a file instead, because `pipefail` is not in POSIX sh.
-  failed="$BACKUP_DIR/.$PREFIX.failed"
-  rm -f "$failed"
-  { pg_dump --no-owner --no-privileges || echo "$?" > "$failed"; } | gzip -9 > "$target.partial"
+  { pg_dump --no-owner --no-privileges || echo "$?" > "$failed"; } | gzip -9 > "$scratch"
   if [ -s "$failed" ]; then
     log "FAILED: pg_dump exited $(cat "$failed")"
-    rm -f "$target.partial" "$failed"
+    rm -f "$scratch" "$failed"
     return 1
   fi
-  mv "$target.partial" "$target"
+  rm -f "$failed"
+  mv "$scratch" "$target"
   log "wrote $(du -h "$target" | cut -f1) $target"
   prune
 }

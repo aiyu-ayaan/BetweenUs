@@ -167,6 +167,17 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      # After the pre-migration dump, not alongside it. Both used to wait on
+      # the same healthy Postgres and start together, which meant two dumps of
+      # the same database in the same second - one of them redundant, and the
+      # pair of them racing. The scratch-file collision that caused is fixed in
+      # backup.sh; taking the same dump twice was never wanted either.
+      #
+      # Nothing is lost by waiting: if the pre-migration dump fails, `migrate`
+      # does not run and no service starts, so a scheduled backup of a stack
+      # that is not up would be backing up nothing anyone is using.
+      db-backup-once:
+        condition: service_completed_successfully
 
   # One-shot: applies Prisma migrations before any service accepts traffic.
   # Reuses the auth-service image because it already carries the schema and the
