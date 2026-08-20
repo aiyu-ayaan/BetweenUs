@@ -199,6 +199,9 @@ class VoiceEngine(private val context: Context) {
     private val _cameraOn = MutableStateFlow(false)
     val cameraOn: StateFlow<Boolean> = _cameraOn.asStateFlow()
 
+    private val _isFrontCamera = MutableStateFlow(true)
+    val isFrontCamera: StateFlow<Boolean> = _isFrontCamera.asStateFlow()
+
     private val _sharing = MutableStateFlow(false)
     val sharing: StateFlow<Boolean> = _sharing.asStateFlow()
 
@@ -470,7 +473,8 @@ class VoiceEngine(private val context: Context) {
         _state.value is CallState.Live || _state.value is CallState.Connecting
 
     /** The camera. [startScreenShare] instead turns the capture into a share. */
-    fun startCamera(front: Boolean = true) {
+    fun startCamera(front: Boolean = _isFrontCamera.value) {
+        _isFrontCamera.value = front
         if (videoCapturer != null) stopVideo()
         val enumerator = if (Camera2Enumerator.isSupported(context)) {
             Camera2Enumerator(context)
@@ -493,6 +497,15 @@ class VoiceEngine(private val context: Context) {
         _cameraOn.value = true
         publish(Slot.CAMERA, track)
         afterMediaChange()
+    }
+
+    /** Flip between front and back facing cameras. */
+    fun switchCamera() {
+        val next = !_isFrontCamera.value
+        _isFrontCamera.value = next
+        if (_cameraOn.value) {
+            startCamera(next)
+        }
     }
 
     /**

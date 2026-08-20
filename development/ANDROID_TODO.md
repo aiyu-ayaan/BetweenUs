@@ -424,7 +424,12 @@ showing the conversation. Both decisions are made here.
 - [x] One `PeerConnection` per other participant; the same 2–5 comfortable /
       6–8 degraded ceiling the desktop has.
 - [x] Mic capture, mute, speaker routing, audio focus.
-- [x] Camera capture, front/back switch.
+- [x] Camera capture, front/back switch (dynamic camera flip support in `VoiceEngine.switchCamera()`).
+- [x] WhatsApp/Modern mobile video call UI redesign (`VoiceChannelScreen.kt`):
+      - Adaptive zero-scroll stage: 1-on-1 full-screen remote view + floating self PiP card.
+      - 2-remote split stage and 3-4 remote 2x2 balanced grid.
+      - 5+ participant hero active speaker stage with horizontal thumbnail strip.
+      - Floating glassmorphic bottom control bar with circular actions (Flip camera, Video, Mic mute, Screen share, Audio device switch, and End call).
 - [x] Foreground service with a `CallStyle` ongoing notification, hang-up and
       mute actions; call survives backgrounding and screen lock.
 - [x] `POST_NOTIFICATIONS` asked for when a call is joined, alongside the

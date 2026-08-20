@@ -5,26 +5,31 @@ import android.content.Context
 import android.media.projection.MediaProjectionManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import android.os.Handler
-import android.os.Looper
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -37,9 +42,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.aatech.betweenus.core.data.PublicUser
 import com.aatech.betweenus.core.store.Workspace
@@ -47,20 +58,22 @@ import com.aatech.betweenus.feature.settings.BetweenUsPermissions
 import com.aatech.betweenus.feature.settings.rememberPermission
 import com.aatech.betweenus.feature.settings.rememberPermissions
 import com.aatech.betweenus.ui.components.Avatar
-import com.aatech.betweenus.ui.components.EmptyState
-import com.aatech.betweenus.ui.components.IconAction
 import com.aatech.betweenus.ui.components.BetweenUsButton
+import com.aatech.betweenus.ui.components.BetweenUsIcon
+import com.aatech.betweenus.ui.components.BetweenUsIcons
+import com.aatech.betweenus.ui.components.EmptyState
 import com.aatech.betweenus.ui.components.Notice
 import com.aatech.betweenus.ui.theme.Accent
 import com.aatech.betweenus.ui.theme.Danger
 import com.aatech.betweenus.ui.theme.Edge
 import com.aatech.betweenus.ui.theme.Ground
 import com.aatech.betweenus.ui.theme.Slate100
+import com.aatech.betweenus.ui.theme.Slate300
 import com.aatech.betweenus.ui.theme.Slate400
 import com.aatech.betweenus.ui.theme.Slate50
 import com.aatech.betweenus.ui.theme.Slate500
 import com.aatech.betweenus.ui.theme.StatusOnline
-import com.aatech.betweenus.ui.components.BetweenUsIcons
+import com.aatech.betweenus.ui.theme.Surface800
 import com.aatech.betweenus.ui.theme.Surface900
 import com.aatech.betweenus.ui.theme.Surface950
 import org.webrtc.RendererCommon
@@ -68,11 +81,14 @@ import org.webrtc.SurfaceViewRenderer
 import org.webrtc.VideoTrack
 
 /**
- * A voice or video call.
+ * A WhatsApp/modern-style voice & video call screen.
  *
- * The microphone is asked for here and nowhere else: at the moment somebody
- * taps join, which is the only moment the request means anything. Refusing it
- * leaves the screen saying so rather than appearing to do nothing.
+ * Designed with adaptive layouts (no vertical scrolling in calls):
+ * - 1-on-1: Remote peer fills the screen with local self-view in a floating PiP card.
+ * - 3-person (2 remote): 2 vertical tiles on top half, balanced layout on bottom half.
+ * - 4-person (3-4 remote): 2x2 equal grid filling the viewport cleanly.
+ * - 5+ person: Active speaker hero view with horizontal thumbnail strip.
+ * - Floating glassmorphic control dock with camera flip, mute, video, share, speaker, and end call.
  */
 @Composable
 fun VoiceChannelScreen(
@@ -83,45 +99,28 @@ fun VoiceChannelScreen(
     onBack: () -> Unit,
 ) {
     val context = LocalContext.current
-    // The call belongs to the process, not to this composable. A rotation, a
-    // navigation, or the activity being rebuilt used to take the call with it.
     val engine = remember { VoiceEngine.of(context) }
 
     val state by engine.state.collectAsState()
     val participants by engine.participants.collectAsState()
     val muted by engine.muted.collectAsState()
     val cameraOn by engine.cameraOn.collectAsState()
+    val isFrontCamera by engine.isFrontCamera.collectAsState()
     val sharing by engine.sharing.collectAsState()
-    // Who holds the one screen this call has. Sharing while somebody else does
-    // takes it from them, so the button says so rather than being a surprise.
     val screenHolder by engine.screenHolder.collectAsState()
     val localVideo by engine.localVideo.collectAsState()
     val problem by engine.problem.collectAsState()
 
     val channel = channelId?.let { Workspace.channel(it) }
 
-    // Somebody else's screen takes the whole display: a share is usually text,
-    // and text in a quarter of a phone is not text. Closing the stage goes back
-    // to the grid and is remembered, so it does not reopen on the next poll -
-    // only a share that stops and starts again does that.
     val watching = participants.firstOrNull { it.visibleScreen != null }
     var dismissed by remember { mutableStateOf<String?>(null) }
-
-    // Where the call plays and which microphone it uses, from inside the call:
-    // the moment somebody wants that is the moment a headset is in their hand,
-    // and settings is three taps and a lost call screen away.
     var pickingDevices by remember { mutableStateOf(false) }
+
     LaunchedEffect(watching?.peer?.peerId) {
         if (watching == null) dismissed = null
     }
 
-    // The microphone is the one that decides whether the call happens.
-    // Notifications are asked for in the same breath because a call runs as a
-    // foreground service and the notification is how anyone gets back to it -
-    // but refusing them is not a reason to refuse the call.
-    // Nearby devices goes with them: without it Android reports no Bluetooth
-    // headset at all, so one that is paired and on somebody's head is not in
-    // the list and the call cannot be sent to it.
     val microphone = rememberPermissions(
         permissions = listOfNotNull(
             BetweenUsPermissions.MICROPHONE,
@@ -134,10 +133,6 @@ fun VoiceChannelScreen(
     }
     val camera = rememberPermission(BetweenUsPermissions.CAMERA) { engine.startCamera() }
 
-    // Tapping a voice channel is the decision to join it. Landing on a screen
-    // with a button that asks the same question again is asking twice - the
-    // permission prompt is the only thing that still has to be asked, and it
-    // only appears the first time.
     LaunchedEffect(joinOnArrival, channelId) {
         if (joinOnArrival && channelId != null && state is VoiceEngine.CallState.Idle) {
             onJoined()
@@ -183,159 +178,572 @@ fun VoiceChannelScreen(
         return
     }
 
-    Column(Modifier.fillMaxSize().background(Ground).systemBarsPadding()) {
+    val isInCall = state is VoiceEngine.CallState.Live || state is VoiceEngine.CallState.Connecting
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Ground)
+            .systemBarsPadding(),
+    ) {
+        // --- STAGE CONTENT ---
+        when {
+            channelId == null -> {
+                EmptyState(
+                    icon = BetweenUsIcons.Speaker,
+                    title = "No channel",
+                    detail = "Pick a voice channel from the drawer first.",
+                    modifier = Modifier.align(Alignment.Center),
+                )
+            }
+
+            !isInCall -> {
+                // Not in call screen (Idle / Failed / Permission refused)
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center,
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(96.dp)
+                            .clip(CircleShape)
+                            .background(Surface900)
+                            .border(2.dp, Edge, CircleShape),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        BetweenUsIcon(BetweenUsIcons.Speaker, size = 44.dp, tint = Accent)
+                    }
+
+                    Spacer(Modifier.height(24.dp))
+                    Text(
+                        text = channel?.name ?: "Voice Channel",
+                        style = MaterialTheme.typography.titleLarge,
+                        color = Slate50,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        text = "Encrypted direct peer-to-peer voice and video. Media never touches the server.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Slate400,
+                        textAlign = TextAlign.Center,
+                    )
+
+                    Spacer(Modifier.height(24.dp))
+                    (state as? VoiceEngine.CallState.Failed)?.let {
+                        Notice(it.reason, Danger)
+                        Spacer(Modifier.height(16.dp))
+                    }
+
+                    if (microphone.refused) {
+                        Notice(
+                            "BetweenUs cannot use the microphone. Android will not ask again from here.",
+                            Danger,
+                        )
+                        Spacer(Modifier.height(16.dp))
+                        BetweenUsButton("Open app settings", onClick = { microphone.openSettings() })
+                    } else {
+                        BetweenUsButton(
+                            text = if (state is VoiceEngine.CallState.Failed) "Try again" else "Join Voice",
+                            onClick = { microphone.request() },
+                        )
+                    }
+                }
+            }
+
+            else -> {
+                // ACTIVE CALL - Adaptive WhatsApp / Modern Video Stage
+                Box(modifier = Modifier.fillMaxSize()) {
+                    when {
+                        // 0 remote participants (Waiting for others)
+                        participants.isEmpty() -> {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(horizontal = 12.dp, vertical = 72.dp)
+                                    .clip(RoundedCornerShape(24.dp))
+                                    .background(Surface950)
+                                    .border(1.dp, Edge, RoundedCornerShape(24.dp)),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                CallTile(
+                                    label = "${self.label} (you)",
+                                    id = self.id,
+                                    track = localVideo,
+                                    eglContext = engine.eglBase.eglBaseContext,
+                                    muted = muted,
+                                    isLocal = true,
+                                    fit = RendererCommon.ScalingType.SCALE_ASPECT_FILL,
+                                    modifier = Modifier.fillMaxSize(),
+                                )
+                                Box(
+                                    modifier = Modifier
+                                        .align(Alignment.Center)
+                                        .background(Color.Black.copy(alpha = 0.65f), RoundedCornerShape(16.dp))
+                                        .padding(horizontal = 16.dp, vertical = 10.dp),
+                                ) {
+                                    Text(
+                                        text = "Waiting for others to join…",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = Slate300,
+                                    )
+                                }
+                            }
+                        }
+
+                        // 1-on-1 Call: Remote fills screen, Local in floating PiP
+                        participants.size == 1 -> {
+                            val remote = participants.first()
+                            CallTile(
+                                label = remote.peer.username,
+                                id = remote.peer.userId,
+                                track = remote.video,
+                                eglContext = engine.eglBase.eglBaseContext,
+                                muted = !remote.micEnabled,
+                                speaking = remote.speaking,
+                                connected = remote.connected,
+                                fit = RendererCommon.ScalingType.SCALE_ASPECT_FILL,
+                                modifier = Modifier.fillMaxSize(),
+                            )
+
+                            // Floating PiP for self (top-right)
+                            FloatingPipTile(
+                                label = "${self.label} (you)",
+                                id = self.id,
+                                track = localVideo,
+                                eglContext = engine.eglBase.eglBaseContext,
+                                muted = muted,
+                                onFlipCamera = {
+                                    if (cameraOn) engine.switchCamera()
+                                },
+                                modifier = Modifier
+                                    .align(Alignment.TopEnd)
+                                    .padding(top = 68.dp, end = 14.dp),
+                            )
+                        }
+
+                        // 2 Remote Participants (3 total): Top half split in 2 vertical tiles, bottom half local PiP
+                        participants.size == 2 -> {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(top = 64.dp, bottom = 96.dp, start = 8.dp, end = 8.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .weight(1f),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                ) {
+                                    CallTile(
+                                        label = participants[0].peer.username,
+                                        id = participants[0].peer.userId,
+                                        track = participants[0].video,
+                                        eglContext = engine.eglBase.eglBaseContext,
+                                        muted = !participants[0].micEnabled,
+                                        speaking = participants[0].speaking,
+                                        connected = participants[0].connected,
+                                        fit = RendererCommon.ScalingType.SCALE_ASPECT_FILL,
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .fillMaxHeight(),
+                                    )
+                                    CallTile(
+                                        label = participants[1].peer.username,
+                                        id = participants[1].peer.userId,
+                                        track = participants[1].video,
+                                        eglContext = engine.eglBase.eglBaseContext,
+                                        muted = !participants[1].micEnabled,
+                                        speaking = participants[1].speaking,
+                                        connected = participants[1].connected,
+                                        fit = RendererCommon.ScalingType.SCALE_ASPECT_FILL,
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .fillMaxHeight(),
+                                    )
+                                }
+                            }
+
+                            // Self in Floating PiP
+                            FloatingPipTile(
+                                label = "${self.label} (you)",
+                                id = self.id,
+                                track = localVideo,
+                                eglContext = engine.eglBase.eglBaseContext,
+                                muted = muted,
+                                onFlipCamera = {
+                                    if (cameraOn) engine.switchCamera()
+                                },
+                                modifier = Modifier
+                                    .align(Alignment.BottomEnd)
+                                    .padding(bottom = 110.dp, end = 14.dp),
+                            )
+                        }
+
+                        // 3 or 4 Remote Participants (4-5 total): 2x2 Balanced Grid (no scroll)
+                        participants.size in 3..4 -> {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(top = 64.dp, bottom = 96.dp, start = 8.dp, end = 8.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .weight(1f),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                ) {
+                                    CallTile(
+                                        label = participants[0].peer.username,
+                                        id = participants[0].peer.userId,
+                                        track = participants[0].video,
+                                        eglContext = engine.eglBase.eglBaseContext,
+                                        muted = !participants[0].micEnabled,
+                                        speaking = participants[0].speaking,
+                                        connected = participants[0].connected,
+                                        fit = RendererCommon.ScalingType.SCALE_ASPECT_FILL,
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .fillMaxHeight(),
+                                    )
+                                    CallTile(
+                                        label = participants[1].peer.username,
+                                        id = participants[1].peer.userId,
+                                        track = participants[1].video,
+                                        eglContext = engine.eglBase.eglBaseContext,
+                                        muted = !participants[1].micEnabled,
+                                        speaking = participants[1].speaking,
+                                        connected = participants[1].connected,
+                                        fit = RendererCommon.ScalingType.SCALE_ASPECT_FILL,
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .fillMaxHeight(),
+                                    )
+                                }
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .weight(1f),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                ) {
+                                    CallTile(
+                                        label = participants[2].peer.username,
+                                        id = participants[2].peer.userId,
+                                        track = participants[2].video,
+                                        eglContext = engine.eglBase.eglBaseContext,
+                                        muted = !participants[2].micEnabled,
+                                        speaking = participants[2].speaking,
+                                        connected = participants[2].connected,
+                                        fit = RendererCommon.ScalingType.SCALE_ASPECT_FILL,
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .fillMaxHeight(),
+                                    )
+                                    if (participants.size == 4) {
+                                        CallTile(
+                                            label = participants[3].peer.username,
+                                            id = participants[3].peer.userId,
+                                            track = participants[3].video,
+                                            eglContext = engine.eglBase.eglBaseContext,
+                                            muted = !participants[3].micEnabled,
+                                            speaking = participants[3].speaking,
+                                            connected = participants[3].connected,
+                                            fit = RendererCommon.ScalingType.SCALE_ASPECT_FILL,
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .fillMaxHeight(),
+                                        )
+                                    } else {
+                                        // 4th spot is self preview
+                                        CallTile(
+                                            label = "${self.label} (you)",
+                                            id = self.id,
+                                            track = localVideo,
+                                            eglContext = engine.eglBase.eglBaseContext,
+                                            muted = muted,
+                                            isLocal = true,
+                                            fit = RendererCommon.ScalingType.SCALE_ASPECT_FILL,
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .fillMaxHeight(),
+                                        )
+                                    }
+                                }
+                            }
+
+                            if (participants.size == 4) {
+                                FloatingPipTile(
+                                    label = "${self.label} (you)",
+                                    id = self.id,
+                                    track = localVideo,
+                                    eglContext = engine.eglBase.eglBaseContext,
+                                    muted = muted,
+                                    onFlipCamera = {
+                                        if (cameraOn) engine.switchCamera()
+                                    },
+                                    modifier = Modifier
+                                        .align(Alignment.BottomEnd)
+                                        .padding(bottom = 110.dp, end = 14.dp),
+                                )
+                            }
+                        }
+
+                        // 5+ Participants: Hero active speaker stage with bottom participant strip
+                        else -> {
+                            val activeSpeaker = participants.firstOrNull { it.speaking }
+                                ?: participants.first()
+                            val others = participants.filterNot { it.peer.peerId == activeSpeaker.peer.peerId }
+
+                            Box(modifier = Modifier.fillMaxSize()) {
+                                // Large Active Speaker Card
+                                CallTile(
+                                    label = activeSpeaker.peer.username,
+                                    id = activeSpeaker.peer.userId,
+                                    track = activeSpeaker.video,
+                                    eglContext = engine.eglBase.eglBaseContext,
+                                    muted = !activeSpeaker.micEnabled,
+                                    speaking = activeSpeaker.speaking,
+                                    connected = activeSpeaker.connected,
+                                    fit = RendererCommon.ScalingType.SCALE_ASPECT_FILL,
+                                    modifier = Modifier.fillMaxSize(),
+                                )
+
+                                // Filmstrip of other participants at bottom
+                                LazyRow(
+                                    modifier = Modifier
+                                        .align(Alignment.BottomCenter)
+                                        .fillMaxWidth()
+                                        .padding(bottom = 104.dp),
+                                    contentPadding = PaddingValues(horizontal = 12.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                ) {
+                                    items(others, key = { it.peer.peerId }) { participant ->
+                                        Box(
+                                            modifier = Modifier
+                                                .width(85.dp)
+                                                .height(115.dp)
+                                                .shadow(6.dp, RoundedCornerShape(12.dp)),
+                                        ) {
+                                            CallTile(
+                                                label = participant.peer.username,
+                                                id = participant.peer.userId,
+                                                track = participant.video,
+                                                eglContext = engine.eglBase.eglBaseContext,
+                                                muted = !participant.micEnabled,
+                                                speaking = participant.speaking,
+                                                connected = participant.connected,
+                                                isCompact = true,
+                                                fit = RendererCommon.ScalingType.SCALE_ASPECT_FILL,
+                                                modifier = Modifier.fillMaxSize(),
+                                            )
+                                        }
+                                    }
+                                }
+
+                                // Local self in PiP
+                                FloatingPipTile(
+                                    label = "${self.label} (you)",
+                                    id = self.id,
+                                    track = localVideo,
+                                    eglContext = engine.eglBase.eglBaseContext,
+                                    muted = muted,
+                                    onFlipCamera = {
+                                        if (cameraOn) engine.switchCamera()
+                                    },
+                                    modifier = Modifier
+                                        .align(Alignment.TopEnd)
+                                        .padding(top = 68.dp, end = 14.dp),
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // --- TOP TRANSLUCENT HEADER BAR ---
         Row(
-            modifier = Modifier.fillMaxWidth().background(Surface950).padding(4.dp),
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .fillMaxWidth()
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(Color.Black.copy(alpha = 0.85f), Color.Transparent),
+                    ),
+                )
+                .padding(horizontal = 14.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            IconAction(BetweenUsIcons.ChevronLeft, "Back", onBack)
-            Column(Modifier.weight(1f).padding(start = 8.dp)) {
+            Box(
+                modifier = Modifier
+                    .size(38.dp)
+                    .clip(CircleShape)
+                    .background(Color.Black.copy(alpha = 0.45f))
+                    .border(1.dp, Color.White.copy(alpha = 0.15f), CircleShape)
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        onClick = onBack,
+                    ),
+                contentAlignment = Alignment.Center,
+            ) {
+                BetweenUsIcon(BetweenUsIcons.ChevronLeft, tint = Slate100, size = 20.dp)
+            }
+
+            Spacer(Modifier.width(12.dp))
+
+            Column(Modifier.weight(1f)) {
                 Text(
-                    text = channel?.name ?: "Call",
+                    text = channel?.name ?: "Voice Call",
                     style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
                     color = Slate50,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
                 Text(
                     text = when (val current = state) {
                         VoiceEngine.CallState.Idle -> "Not connected"
                         is VoiceEngine.CallState.Connecting -> "Connecting…"
                         is VoiceEngine.CallState.Live ->
-                            "${participants.size + 1} in the room · peer to peer"
+                            "${participants.size + 1} in call · E2EE"
                         is VoiceEngine.CallState.Failed -> current.reason
                     },
                     style = MaterialTheme.typography.bodySmall,
-                    color = if (state is VoiceEngine.CallState.Failed) Danger else Slate500,
+                    color = if (state is VoiceEngine.CallState.Failed) Danger else Slate400,
                 )
             }
-        }
-        HorizontalDivider(color = Edge)
 
-        // One peer failing is one tile, not the call - but a tile that silently
-        // never carries anything is indistinguishable from a working one, which
-        // is exactly how a mesh that negotiated nothing went unnoticed.
+            if (isInCall) {
+                Box(
+                    modifier = Modifier
+                        .size(38.dp)
+                        .clip(CircleShape)
+                        .background(Color.Black.copy(alpha = 0.45f))
+                        .border(1.dp, Color.White.copy(alpha = 0.15f), CircleShape)
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null,
+                            onClick = { pickingDevices = true },
+                        ),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    BetweenUsIcon(BetweenUsIcons.Speaker, tint = Slate100, size = 18.dp)
+                }
+            }
+        }
+
+        // Problem alert banner
         problem?.let {
-            Notice(it, Danger, modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp))
+            Notice(
+                it,
+                Danger,
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = 64.dp, start = 12.dp, end = 12.dp),
+            )
         }
 
-        Box(Modifier.weight(1f)) {
-            when {
-                channelId == null -> EmptyState(
-                    icon = BetweenUsIcons.Speaker,
-                    title = "No channel",
-                    detail = "Pick a voice channel from the drawer first.",
-                    modifier = Modifier.align(Alignment.Center),
-                )
-
-                state is VoiceEngine.CallState.Idle ||
-                    state is VoiceEngine.CallState.Failed -> Column(
-                    modifier = Modifier.align(Alignment.Center).padding(24.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                ) {
-                    Text(
-                        text = "Voice and video go directly between the people in the call. " +
-                            "Nothing passes through the server.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Slate400,
-                        textAlign = TextAlign.Center,
-                    )
-                    Spacer(Modifier.height(16.dp))
-                    (state as? VoiceEngine.CallState.Failed)?.let {
-                        Notice(it.reason, Danger)
-                        Spacer(Modifier.height(12.dp))
-                    }
-                    if (microphone.refused) {
-                        Notice(
-                            "BetweenUs cannot use the microphone. Android will not ask again from here.",
-                            Danger,
-                        )
-                        Spacer(Modifier.height(12.dp))
-                        BetweenUsButton("Open app settings", onClick = { microphone.openSettings() })
-                    } else {
-                        BetweenUsButton(
-                            text = if (state is VoiceEngine.CallState.Failed) "Try again" else "Join the call",
-                            onClick = { microphone.request() },
-                        )
-                    }
-                }
-
-                else -> LazyVerticalGrid(
-                    columns = GridCells.Fixed(if (participants.size > 1) 2 else 1),
-                    modifier = Modifier.fillMaxSize().padding(8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    item {
-                        Tile(
-                            label = "${self.label} (you)",
-                            id = self.id,
-                            track = localVideo,
-                            eglContext = engine.eglBase.eglBaseContext,
-                            muted = muted,
-                        )
-                    }
-                    items(participants, key = { it.peer.peerId }) { participant ->
-                        Tile(
-                            label = participant.peer.username,
-                            id = participant.peer.userId,
-                            track = participant.video,
-                            eglContext = engine.eglBase.eglBaseContext,
-                            muted = !participant.micEnabled,
-                            speaking = participant.speaking,
-                            connected = participant.connected,
-                        )
-                    }
-                }
-            }
-        }
-
-        if (state is VoiceEngine.CallState.Connecting || state is VoiceEngine.CallState.Live) {
-            HorizontalDivider(color = Edge)
-            Row(
-                modifier = Modifier.fillMaxWidth().background(Surface950).padding(8.dp),
-                horizontalArrangement = Arrangement.SpaceEvenly,
-                verticalAlignment = Alignment.CenterVertically,
+        // --- FLOATING BOTTOM ACTION BAR (WhatsApp style) ---
+        if (isInCall) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 20.dp),
             ) {
-                IconAction(
-                    icon = if (muted) BetweenUsIcons.MicOff else BetweenUsIcons.Mic,
-                    contentDescription = if (muted) "Unmute" else "Mute",
-                    tint = if (muted) Danger else Slate100,
-                    onClick = engine::toggleMute,
-                )
-                IconAction(
-                    icon = if (cameraOn) BetweenUsIcons.Video else BetweenUsIcons.VideoOff,
-                    contentDescription = if (cameraOn) "Turn the camera off" else "Turn the camera on",
-                    tint = if (cameraOn) Accent else Slate400,
-                    onClick = { if (cameraOn) engine.stopVideo() else camera.request() },
-                )
-                IconAction(
-                    icon = BetweenUsIcons.ScreenShare,
-                    contentDescription = when {
-                        sharing -> "Stop sharing"
-                        screenHolder != null -> "Take over the screen"
-                        else -> "Share the screen"
-                    },
-                    tint = if (sharing) Accent else Slate400,
-                    onClick = {
-                        if (sharing) {
-                            engine.stopVideo()
-                        } else {
-                            val manager = context.getSystemService(Context.MEDIA_PROJECTION_SERVICE)
-                                as MediaProjectionManager
-                            projection.launch(manager.createScreenCaptureIntent())
-                        }
-                    },
-                )
-                IconAction(
-                    icon = BetweenUsIcons.Speaker,
-                    contentDescription = "Where the call plays",
-                    onClick = { pickingDevices = true },
-                )
-                IconAction(
-                    icon = BetweenUsIcons.Phone,
-                    contentDescription = "Leave the call",
-                    tint = Danger,
-                    onClick = { engine.leave(); onBack() },
-                )
+                Row(
+                    modifier = Modifier
+                        .shadow(16.dp, RoundedCornerShape(36.dp))
+                        .clip(RoundedCornerShape(36.dp))
+                        .background(Color(0xFF131824).copy(alpha = 0.92f))
+                        .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(36.dp))
+                        .padding(horizontal = 14.dp, vertical = 10.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    // 1. Flip Camera (visible when camera is on)
+                    AnimatedVisibility(visible = cameraOn, enter = fadeIn(), exit = fadeOut()) {
+                        CallCircleButton(
+                            icon = BetweenUsIcons.RotateRight,
+                            contentDescription = "Flip camera (${if (isFrontCamera) "Front" else "Back"})",
+                            active = false,
+                            tint = Slate100,
+                            size = 46.dp,
+                            onClick = { engine.switchCamera() },
+                        )
+                    }
+
+                    // 2. Camera Toggle
+                    CallCircleButton(
+                        icon = if (cameraOn) BetweenUsIcons.Video else BetweenUsIcons.VideoOff,
+                        contentDescription = if (cameraOn) "Turn camera off" else "Turn camera on",
+                        active = cameraOn,
+                        activeColor = Accent,
+                        tint = if (cameraOn) Color.White else Slate400,
+                        size = 48.dp,
+                        onClick = { if (cameraOn) engine.stopVideo() else camera.request() },
+                    )
+
+                    // 3. Microphone Toggle
+                    CallCircleButton(
+                        icon = if (muted) BetweenUsIcons.MicOff else BetweenUsIcons.Mic,
+                        contentDescription = if (muted) "Unmute" else "Mute",
+                        active = muted,
+                        activeColor = Danger.copy(alpha = 0.25f),
+                        tint = if (muted) Danger else Color.White,
+                        size = 52.dp,
+                        onClick = engine::toggleMute,
+                    )
+
+                    // 4. Screen Share Toggle
+                    CallCircleButton(
+                        icon = BetweenUsIcons.ScreenShare,
+                        contentDescription = when {
+                            sharing -> "Stop sharing"
+                            screenHolder != null -> "Take over screen"
+                            else -> "Share screen"
+                        },
+                        active = sharing,
+                        activeColor = Accent,
+                        tint = if (sharing) Color.White else Slate400,
+                        size = 48.dp,
+                        onClick = {
+                            if (sharing) {
+                                engine.stopVideo()
+                            } else {
+                                val manager = context.getSystemService(Context.MEDIA_PROJECTION_SERVICE)
+                                    as MediaProjectionManager
+                                projection.launch(manager.createScreenCaptureIntent())
+                            }
+                        },
+                    )
+
+                    // 5. Leave Call (Prominent Red Button)
+                    Box(
+                        modifier = Modifier
+                            .size(54.dp)
+                            .clip(CircleShape)
+                            .background(Danger)
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null,
+                                onClick = { engine.leave(); onBack() },
+                            ),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        BetweenUsIcon(
+                            BetweenUsIcons.Phone,
+                            tint = Color.White,
+                            size = 22.dp,
+                            contentDescription = "Leave call",
+                        )
+                    }
+                }
             }
         }
     }
@@ -344,81 +752,63 @@ fun VoiceChannelScreen(
 }
 
 /**
- * One participant's tile: their video if they are sending any, else a face.
- *
- * The tile is the shape of what is arriving, not a shape the picture is cut to
- * fit. A phone sends portrait and a desktop sends landscape, and the same call
- * has both in it - a square tile filled by cropping showed a laptop's camera as
- * a strip out of the middle of somebody, and hid the top and bottom of anybody
- * on a phone.
- *
- * The frame's own rotation decides which way round it is. WebRTC does not turn
- * the pixels when somebody turns their phone; it says so in the frame, and a
- * renderer that ignores that draws a rotated picture into a box the wrong shape.
- *
- * Square until something arrives, because that is the shape of the face that
- * stands in for a camera nobody has turned on.
+ * Circular action button for the modern bottom floating call bar.
  */
 @Composable
-private fun Tile(
+private fun CallCircleButton(
+    icon: Int,
+    contentDescription: String,
+    active: Boolean = false,
+    activeColor: Color = Surface800,
+    tint: Color = Slate100,
+    size: androidx.compose.ui.unit.Dp = 48.dp,
+    onClick: () -> Unit,
+) {
+    Box(
+        modifier = Modifier
+            .size(size)
+            .clip(CircleShape)
+            .background(if (active) activeColor else Surface800.copy(alpha = 0.7f))
+            .border(1.dp, Color.White.copy(alpha = 0.1f), CircleShape)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onClick,
+            ),
+        contentAlignment = Alignment.Center,
+    ) {
+        BetweenUsIcon(icon, tint = tint, size = 20.dp, contentDescription = contentDescription)
+    }
+}
+
+/**
+ * Floating Picture-in-Picture (PiP) card showing the user's camera/avatar.
+ */
+@Composable
+private fun FloatingPipTile(
     label: String,
     id: String,
     track: VideoTrack?,
     eglContext: org.webrtc.EglBase.Context,
-    muted: Boolean = false,
-    speaking: Boolean = false,
-    connected: Boolean = true,
+    muted: Boolean,
+    onFlipCamera: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
-    var aspect by remember(id) { mutableStateOf(1f) }
-    // The resolution callback arrives on a render thread; Compose state is
-    // written from the main one.
-    val main = remember { Handler(Looper.getMainLooper()) }
-
     Box(
-        modifier = Modifier
-            .aspectRatio(if (track != null) aspect else 1f)
-            .clip(RoundedCornerShape(14.dp))
+        modifier = modifier
+            .width(108.dp)
+            .height(154.dp)
+            .shadow(14.dp, RoundedCornerShape(18.dp))
+            .clip(RoundedCornerShape(18.dp))
             .background(Surface900)
-            .then(
-                // The ring is the only thing that says who is talking when
-                // nobody has a camera on, which is most calls from a phone.
-                if (speaking) Modifier.border(2.dp, StatusOnline, RoundedCornerShape(14.dp))
-                else Modifier,
-            ),
-        contentAlignment = Alignment.Center,
+            .border(1.5.dp, Color.White.copy(alpha = 0.22f), RoundedCornerShape(18.dp)),
     ) {
         if (track != null) {
             AndroidView(
                 factory = { context ->
                     SurfaceViewRenderer(context).apply {
-                        init(
-                            eglContext,
-                            object : RendererCommon.RendererEvents {
-                                override fun onFirstFrameRendered() = Unit
-
-                                override fun onFrameResolutionChanged(
-                                    width: Int,
-                                    height: Int,
-                                    rotation: Int,
-                                ) {
-                                    // A quarter turn swaps what the frame
-                                    // measures for what it looks like.
-                                    val turned = rotation % 180 != 0
-                                    val drawnWidth = if (turned) height else width
-                                    val drawnHeight = if (turned) width else height
-                                    if (drawnWidth > 0 && drawnHeight > 0) {
-                                        main.post {
-                                            aspect = drawnWidth.toFloat() / drawnHeight
-                                        }
-                                    }
-                                }
-                            },
-                        )
-                        // Fit, not fill: the box is already the right shape, so
-                        // there is nothing to crop - and this is what keeps the
-                        // picture whole in the moment between somebody turning
-                        // their phone and the box catching up.
-                        setScalingType(RendererCommon.ScalingType.SCALE_ASPECT_FIT)
+                        init(eglContext, null)
+                        setScalingType(RendererCommon.ScalingType.SCALE_ASPECT_FILL)
                         setEnableHardwareScaler(true)
                         track.addSink(this)
                     }
@@ -430,42 +820,169 @@ private fun Tile(
                 modifier = Modifier.fillMaxSize(),
             )
         } else {
-            Avatar(id = id, label = label, url = null, size = 64.dp)
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Avatar(id = id, label = label, url = null, size = 48.dp)
+            }
         }
 
+        // Bottom label pill
         Row(
-            modifier = Modifier.align(Alignment.BottomStart).padding(8.dp),
+            modifier = Modifier
+                .align(Alignment.BottomStart)
+                .padding(6.dp)
+                .background(Color.Black.copy(alpha = 0.65f), RoundedCornerShape(8.dp))
+                .padding(horizontal = 6.dp, vertical = 2.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Text(
+                text = "You",
+                style = MaterialTheme.typography.labelSmall,
+                color = Slate100,
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Medium,
+            )
+            if (muted) {
+                BetweenUsIcon(BetweenUsIcons.MicOff, tint = Danger, size = 10.dp)
+            }
+        }
+
+        // Quick flip button if video is active
+        if (track != null) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(6.dp)
+                    .size(24.dp)
+                    .clip(CircleShape)
+                    .background(Color.Black.copy(alpha = 0.55f))
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        onClick = onFlipCamera,
+                    ),
+                contentAlignment = Alignment.Center,
+            ) {
+                BetweenUsIcon(BetweenUsIcons.RotateRight, tint = Slate100, size = 12.dp)
+            }
+        }
+    }
+}
+
+/**
+ * Standard call participant tile with smooth video rendering, speaking ring,
+ * frosted glass user badge, and muted indicators.
+ */
+@Composable
+private fun CallTile(
+    label: String,
+    id: String,
+    track: VideoTrack?,
+    eglContext: org.webrtc.EglBase.Context,
+    modifier: Modifier = Modifier,
+    muted: Boolean = false,
+    speaking: Boolean = false,
+    connected: Boolean = true,
+    isLocal: Boolean = false,
+    isCompact: Boolean = false,
+    fit: RendererCommon.ScalingType = RendererCommon.ScalingType.SCALE_ASPECT_FILL,
+) {
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(if (isCompact) 12.dp else 18.dp))
+            .background(Surface900)
+            .then(
+                if (speaking) {
+                    Modifier.border(
+                        2.5.dp,
+                        StatusOnline,
+                        RoundedCornerShape(if (isCompact) 12.dp else 18.dp),
+                    )
+                } else {
+                    Modifier.border(
+                        1.dp,
+                        Edge,
+                        RoundedCornerShape(if (isCompact) 12.dp else 18.dp),
+                    )
+                },
+            ),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (track != null) {
+            AndroidView(
+                factory = { context ->
+                    SurfaceViewRenderer(context).apply {
+                        init(eglContext, null)
+                        setScalingType(fit)
+                        setEnableHardwareScaler(true)
+                        track.addSink(this)
+                    }
+                },
+                onRelease = { renderer ->
+                    track.removeSink(renderer)
+                    renderer.release()
+                },
+                modifier = Modifier.fillMaxSize(),
+            )
+        } else {
+            Avatar(
+                id = id,
+                label = label,
+                url = null,
+                size = if (isCompact) 36.dp else 72.dp,
+            )
+        }
+
+        // Overlay participant name & status pill
+        Row(
+            modifier = Modifier
+                .align(Alignment.BottomStart)
+                .padding(if (isCompact) 4.dp else 10.dp)
+                .background(
+                    Color.Black.copy(alpha = 0.65f),
+                    RoundedCornerShape(if (isCompact) 6.dp else 8.dp),
+                )
+                .padding(
+                    horizontal = if (isCompact) 5.dp else 8.dp,
+                    vertical = if (isCompact) 2.dp else 4.dp,
+                ),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             Text(
                 text = label,
-                style = MaterialTheme.typography.bodySmall,
+                style = if (isCompact) MaterialTheme.typography.labelSmall else MaterialTheme.typography.bodySmall,
                 color = if (connected) Slate100 else Slate500,
+                fontSize = if (isCompact) 10.sp else 12.sp,
+                fontWeight = FontWeight.Medium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
             if (muted) {
-                com.aatech.betweenus.ui.components.BetweenUsIcon(
+                BetweenUsIcon(
                     icon = BetweenUsIcons.MicOff,
                     tint = Danger,
-                    size = 14.dp,
+                    size = if (isCompact) 10.dp else 13.dp,
                 )
             }
             if (!connected) {
                 Text(
                     text = "connecting…",
-                    style = MaterialTheme.typography.bodySmall,
+                    style = MaterialTheme.typography.labelSmall,
                     color = Slate500,
+                    fontSize = if (isCompact) 9.sp else 11.sp,
                 )
             }
         }
 
+        // Online status dot
         if (connected && track == null) {
             Box(
                 Modifier
                     .align(Alignment.TopEnd)
-                    .padding(8.dp)
-                    .background(StatusOnline, RoundedCornerShape(999.dp))
-                    .padding(3.dp),
+                    .padding(if (isCompact) 4.dp else 8.dp)
+                    .background(StatusOnline, CircleShape)
+                    .size(if (isCompact) 6.dp else 8.dp),
             )
         }
     }
