@@ -79,10 +79,13 @@ jobs:
 
       - name: Start services
         run: |
-          for service in auth-service server-service chat-service presence-service notification-service remote-gateway; do
+          # call-service is here for the presence smoke: the voice roster is
+          # published by whoever holds the signalling sockets, so a roster
+          # cannot be made without it.
+          for service in auth-service server-service chat-service presence-service notification-service call-service remote-gateway; do
             node "apps/services/$service/dist/main.js" > "/tmp/$service.log" 2>&1 &
           done
-          for port in 3001 3003 3004 3005 3008; do
+          for port in 3001 3003 3004 3005 3007 3008; do
             for _ in $(seq 1 30); do
               curl -sf "127.0.0.1:$port/health" > /dev/null && break
               sleep 2

@@ -254,6 +254,16 @@ export class UploadsController {
       throw new BadRequestException({ code: 'INVALID_KEY', message: 'Invalid object key' });
     }
 
+    // Half-uploaded parts are scratch space, not objects anyone may read - and
+    // that is true of the account that uploaded them too, so it is settled
+    // before identity is looked at rather than after. Below the ownership check
+    // this could never fire: `mayRead` wants an attachment row, a part has
+    // none, and every request for one was refused as somebody else's file
+    // rather than as the invalid key it is.
+    if (key.startsWith(`${MULTIPART_PREFIX}/`)) {
+      throw new BadRequestException({ code: 'INVALID_KEY', message: 'Invalid object key' });
+    }
+
     if (!key.startsWith('pictures/')) {
       const userId = callerId(request);
       if (!userId) {
@@ -268,11 +278,6 @@ export class UploadsController {
           message: 'This file is not yours to fetch',
         });
       }
-    }
-
-    // Half-uploaded parts are scratch space, not objects anyone may read.
-    if (key.startsWith(`${MULTIPART_PREFIX}/`)) {
-      throw new BadRequestException({ code: 'INVALID_KEY', message: 'Invalid object key' });
     }
 
     const storage = getStorage();

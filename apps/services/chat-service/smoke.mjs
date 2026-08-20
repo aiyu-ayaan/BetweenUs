@@ -54,17 +54,30 @@ const refreshed = await json(`${AUTH}/api/v1/auth/refresh`, {
 });
 ok('refresh', Boolean(refreshed.accessToken));
 
-// Rotation: the consumed refresh token must not work twice.
-let reuseRejected = false;
+// Rotation: a consumed refresh token never buys a second session.
+//
+// Which of the two legal answers comes back depends on
+// REFRESH_REPLAY_GRACE_MS, and a smoke run against a live deployment does not
+// get to pick it. Inside the window the replay is the rotation whose answer
+// never arrived, so the identical pair comes back and nothing is revoked;
+// outside it the same replay is a leaked token and is refused. Both branches
+// are driven against the clock in apps/services/auth-service/src/check.ts.
+// What has to hold here, under either setting, is that the spent token does
+// not mint a new one.
+let replay;
 try {
-  await json(`${AUTH}/api/v1/auth/refresh`, {
+  replay = await json(`${AUTH}/api/v1/auth/refresh`, {
     method: 'POST',
     body: JSON.stringify({ refreshToken: auth.refreshToken }),
   });
 } catch {
-  reuseRejected = true;
+  replay = null;
 }
-ok('refresh rotation', reuseRejected);
+ok(
+  'refresh rotation',
+  replay === null || replay.refreshToken === refreshed.refreshToken,
+  replay === null ? 'refused' : 'idempotent inside the grace window',
+);
 
 const server = await json(`${SERVER}/api/v1/servers`, {
   method: 'POST',
@@ -135,12 +148,18 @@ ok('traversal blocked', traversal.status >= 400, String(traversal.status));
 // courier endpoints: publish a device key, read the member directory, store a
 // wrapped channel key and read it back.
 
+// The directory is per device, not per account: a device id is minted by the
+// client and opaque to the server, so any stable string will do here.
+const deviceId = `smoke-device-${suffix}`;
 const devicePublicKey = JSON.stringify({ kty: 'EC', crv: 'P-256', x: 'smoke-x', y: 'smoke-y' });
 await json(`${CHAT}/api/v1/e2ee/devices`, {
   method: 'POST',
   headers: authed,
-  body: JSON.stringify({ publicKey: devicePublicKey }),
+  body: JSON.stringify({ deviceId, publicKey: devicePublicKey, label: 'smoke' }),
 });
+
+const myDevices = await json(`${CHAT}/api/v1/e2ee/devices/mine`, { headers: authed });
+ok('own devices', myDevices.some((device) => device.deviceId === deviceId));
 
 const devices = await json(`${CHAT}/api/v1/e2ee/devices?channelId=${channel.id}`, {
   headers: authed,
@@ -195,9 +214,11 @@ await json(`${CHAT}/api/v1/e2ee/keys`, {
   body: JSON.stringify({
     channelId: channel.id,
     epoch: 1,
+    senderDeviceId: deviceId,
     entries: [
       {
         recipientUserId: me.id,
+        recipientDeviceId: deviceId,
         senderPublicKey: devicePublicKey,
         wrappedKey: 'c21va2Utd3JhcHBlZC1rZXk=',
         iv: 'c21va2UtaXY=',
@@ -218,9 +239,11 @@ try {
     body: JSON.stringify({
       channelId: channel.id,
       epoch: 3,
+      senderDeviceId: deviceId,
       entries: [
         {
           recipientUserId: me.id,
+          recipientDeviceId: deviceId,
           senderPublicKey: devicePublicKey,
           wrappedKey: 'c21va2Utd3JhcHBlZC1rZXk=',
           iv: 'c21va2UtaXY=',
@@ -982,7 +1005,9 @@ const assembledBytes = Buffer.from(
 );
 ok('multipart assembled in part order', assembledBytes.equals(Buffer.concat(chunks)));
 
-// Scratch space for parts is not an object anyone may read.
+// Scratch space for parts is not an object anyone may read - refused as an
+// invalid key, before anyone is asked who they are, so the answer is the same
+// signed in or not.
 const scratch = await fetch(`${CHAT}/api/v1/uploads/.multipart/anything/00001`);
 ok('multipart scratch is not downloadable', scratch.status === 400, String(scratch.status));
 

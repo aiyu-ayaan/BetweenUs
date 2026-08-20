@@ -51,23 +51,34 @@ const register = async (name) => {
   });
 };
 
-/** Resolves on the first event of a given type, or rejects after a timeout. */
-const waitFor = (socket, type, timeoutMs = 5000) =>
-  new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error(`timed out waiting for ${type}`)), timeoutMs);
-    const onMessage = (raw) => {
-      const event = JSON.parse(raw.toString());
-      if (event.type !== type) return;
-      clearTimeout(timer);
-      socket.off('message', onMessage);
-      resolve(event);
-    };
-    socket.on('message', onMessage);
-  });
+/**
+ * Takes the first event of a type that has not been taken already - out of a
+ * buffer, not off a freshly attached listener.
+ *
+ * The difference matters here more than it looks. Revoking a grant ends the
+ * session from inside the HTTP call that did the revoking, so `session.ended`
+ * reaches this socket *before* the `await` on that call returns: a listener
+ * attached afterwards is attached to an event that has already been and gone.
+ * Consuming on match is what keeps a second wait for a repeated type - two
+ * `control.changed`, one for the grant and one for the release - from being
+ * answered with the first one again.
+ */
+const waitFor = async (socket, type, timeoutMs = 5000) => {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    const index = socket.events.findIndex((event) => event.type === type);
+    if (index !== -1) return socket.events.splice(index, 1)[0];
+    if (Date.now() > deadline) throw new Error(`timed out waiting for ${type}`);
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+};
 
+/** Opens a socket and buffers its events from the first one. */
 const open = (url) =>
   new Promise((resolve, reject) => {
     const socket = new WebSocket(url);
+    socket.events = [];
+    socket.on('message', (raw) => socket.events.push(JSON.parse(raw.toString())));
     socket.once('open', () => resolve(socket));
     socket.once('error', reject);
     socket.once('close', (code) => reject(new Error(`closed ${code}`)));
@@ -192,13 +203,15 @@ ok(
   })) === 503,
 );
 
-let refused = false;
-try {
-  await open(`${REMOTE_WS}/ws/remote?agent=not-a-real-token`);
-} catch {
-  refused = true;
-}
-ok('a wrong agent token is refused', refused);
+// The refusal is a close, not a failed upgrade: the gateway accepts the socket
+// and then closes it 4401, so waiting on `open` is a race this used to lose -
+// `open` fires first and the close lands a moment later, with nothing watching.
+const agentRefused = await new Promise((resolve) => {
+  const socket = new WebSocket(`${REMOTE_WS}/ws/remote?agent=not-a-real-token`);
+  socket.once('close', (code) => resolve(code));
+  socket.once('error', () => resolve(-1));
+});
+ok('a wrong agent token is refused', agentRefused === 4401, String(agentRefused));
 
 const agent = await open(`${REMOTE_WS}/ws/remote?agent=${encodeURIComponent(enrolled.agentToken)}`);
 const agentReady = await waitFor(agent, 'ready');
@@ -227,16 +240,18 @@ const started = await waitFor(agent, 'session.start');
 ok('agent was asked', started.sessionId === session.sessionId);
 ok('agent was told how to reach the controller', Array.isArray(started.iceServers));
 
-// Somebody else's session id is not a way in, even with a valid account.
-let borrowed = false;
-try {
-  await open(
+// Somebody else's session id is not a way in, even with a valid account. Same
+// shape as the agent refusal above: the socket opens and is then closed, so the
+// close code is the answer and `open` resolving is not. 4403 rather than 4401
+// because the account is real and known - it is the session that is not theirs.
+const borrowed = await new Promise((resolve) => {
+  const socket = new WebSocket(
     `${REMOTE_WS}/ws/remote?sessionId=${session.sessionId}&token=${encodeURIComponent(stranger.accessToken)}`,
   );
-} catch {
-  borrowed = true;
-}
-ok("a session cannot be borrowed", borrowed);
+  socket.once('close', (code) => resolve(code));
+  socket.once('error', () => resolve(-1));
+});
+ok('a session cannot be borrowed', borrowed === 4403, String(borrowed));
 
 // The whole point: view-only means the relay drops input, whatever the UI does.
 controller.send(JSON.stringify({ type: 'input.mouse', action: 'move', x: 10, y: 10 }));

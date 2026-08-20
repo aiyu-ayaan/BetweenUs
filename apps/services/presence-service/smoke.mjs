@@ -8,12 +8,14 @@
 // whole deployment's user directory and a typing event a channel id handed to
 // strangers.
 //
-// Needs Postgres, Redis, auth-service, server-service and presence-service.
+// Needs Postgres, Redis, auth-service, server-service, call-service and
+// presence-service - call-service because the voice roster is published by it.
 import WebSocket from 'ws';
 
 const AUTH = 'http://127.0.0.1:3001';
 const SERVER = 'http://127.0.0.1:3003';
 const PRESENCE = 'ws://127.0.0.1:3005/ws/presence';
+const CALL = 'ws://127.0.0.1:3007/ws/call';
 
 const json = async (url, options = {}) => {
   const response = await fetch(url, {
@@ -32,6 +34,14 @@ const ok = (label, condition, detail = '') => {
   }
   console.log(`${label} ok`, detail);
 };
+
+/** A bare /ws/call socket - this file needs it to make a roster, not to call. */
+const callSocket = (token) =>
+  new Promise((resolve, reject) => {
+    const socket = new WebSocket(CALL, { headers: { Authorization: `Bearer ${token}` } });
+    socket.on('error', reject);
+    socket.on('open', () => resolve(socket));
+  });
 
 const register = async (name) => {
   const suffix = `${Date.now().toString(36)}${name}`;
@@ -95,10 +105,20 @@ console.log('voice channel ok', voiceChannel.name, voiceChannel.type);
 
 // Bob shares the server, so he is entitled to Alice's presence. Carol is not
 // added to anything, which is the whole of her job here.
-await json(`${SERVER}/api/v1/servers/${server.id}/members`, {
+//
+// He joins on an invite rather than being added by name: adding by name needs
+// a friendship, and a friendship would entitle Bob to Alice's presence on its
+// own - which is exactly the entitlement this file is trying to isolate from
+// shared membership. The invite keeps the two apart.
+const invite = await json(`${SERVER}/api/v1/servers/${server.id}/invites`, {
   method: 'POST',
   headers: aliceAuth,
-  body: JSON.stringify({ username: bob.user.username }),
+  body: JSON.stringify({}),
+});
+await json(`${SERVER}/api/v1/servers/join`, {
+  method: 'POST',
+  headers: { Authorization: `Bearer ${bob.accessToken}` },
+  body: JSON.stringify({ code: invite.code }),
 });
 console.log('membership ok', bob.user.username);
 
@@ -152,13 +172,28 @@ c.send({ type: 'voice.join', channelId: voiceChannel.id });
 const forbidden = await c.waitFor((event) => event.type === 'error');
 ok('non-member voice join refused', forbidden?.code === 'CHANNEL_FORBIDDEN');
 
+// A member asking the same thing is told nothing, which is the answer: the
+// only job left for `voice.join` on this socket is to refuse the people who
+// may not.
 a.send({ type: 'voice.join', channelId: voiceChannel.id });
+ok(
+  'member voice join is not refused',
+  (await a.waitFor((event) => event.type === 'error', 500)) === null,
+);
+
+// The roster itself comes from call-service, which owns the signalling sockets
+// and so is the only thing that knows who is really in a call - this socket
+// used to write it from whatever a client claimed. So Alice joins the call for
+// real, over /ws/call, and the fanout is watched here.
+const aliceCall = await callSocket(alice.accessToken);
+aliceCall.send(JSON.stringify({ type: 'join', channelId: voiceChannel.id }));
+
 const joined = await b.waitFor(
   (event) => event.type === 'voice.changed' && event.voice.channelId === voiceChannel.id,
 );
 ok('voice roster join', joined?.voice.userIds.includes(alice.user.id));
 
-a.send({ type: 'voice.leave', channelId: voiceChannel.id });
+aliceCall.send(JSON.stringify({ type: 'leave' }));
 const left = await b.waitFor(
   (event) =>
     event.type === 'voice.changed' &&
@@ -166,6 +201,7 @@ const left = await b.waitFor(
     !event.voice.userIds.includes(alice.user.id),
 );
 ok('voice roster leave', left !== null);
+aliceCall.close();
 ok(
   'voice roster not sent to a stranger',
   !c.events.some((event) => event.type === 'voice.changed'),
@@ -225,9 +261,14 @@ const offline = await b.waitFor(
     event.user.status === 'offline',
 );
 ok('offline fanout', offline !== null);
+// Not "no presence.changed at all": Carol is in her own audience, so her own
+// arrival comes back to her. Everything about anybody else is what must never
+// reach her, and that is what this asserts.
 ok(
   'no presence about strangers at all',
-  !c.events.some((event) => event.type === 'presence.changed'),
+  c.events
+    .filter((event) => event.type === 'presence.changed')
+    .every((event) => event.user.userId === carol.user.id),
 );
 
 b.socket.close();

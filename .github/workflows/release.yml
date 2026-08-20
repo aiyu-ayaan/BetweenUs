@@ -385,8 +385,8 @@ jobs:
           body: |
             ## Install
 
-            **Desktop (Windows)** — `BetweenUs Setup ${{ needs.version.outputs.version }}.exe` installs;
-            the other `.exe` is portable and needs nothing.
+            **Desktop (Windows)** — `BetweenUs-${{ needs.version.outputs.version }}-Setup.exe`
+            installs; `-Portable.exe` needs nothing.
 
             **Android** — take the APK matching your device (`arm64-v8a` unless it is
             old or an emulator), or `universal` if you would rather not choose. The
