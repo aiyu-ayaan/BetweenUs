@@ -371,7 +371,7 @@ jobs:
           mkdir -p bundle
           sed -e "s|\.\./nginx/nginx\.conf|./nginx.conf|" \
               -e "s|\${BETWEENUS_VERSION:-latest}|\${BETWEENUS_VERSION:-${VERSION}}|g" \
-              infrastructure/docker/docker-compose.prod.yml > bundle/docker-compose.yml
+              infrastructure/docker/docker-compose.yml > bundle/docker-compose.yml
           cp infrastructure/docker/backup.sh bundle/backup.sh
           cp infrastructure/nginx/nginx.conf bundle/nginx.conf
           grep -n 'image:' bundle/docker-compose.yml

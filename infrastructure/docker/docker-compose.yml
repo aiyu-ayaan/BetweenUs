@@ -1,26 +1,29 @@
-# The same stack as docker-compose.yml, pulled instead of built.
+# The stack, pulled rather than built. docker-compose.build.yml is the same
+# stack built from this checkout instead - for working on it, or for running a
+# commit no release was ever cut from.
 #
 #   docker compose --env-file .env \
-#     -f infrastructure/docker/docker-compose.prod.yml pull
+#     -f infrastructure/docker/docker-compose.yml pull
 #   docker compose --env-file .env \
-#     -f infrastructure/docker/docker-compose.prod.yml up -d
+#     -f infrastructure/docker/docker-compose.yml up -d
 #
 # Every image comes from one Docker Hub repository, told apart by a tag prefix:
 # aiyuayaan/betweenus:chat-service-0.0.1. BETWEENUS_VERSION picks which release
 # runs; leave it unset and each service tracks the moving `latest` tag, or set
 # it to `alpha` or `beta` to track a channel.
 #
-# WHY THIS FILE EXISTS ALONGSIDE docker-compose.yml, AND WHAT MUST NOT DIVERGE
+# WHY THIS FILE EXISTS ALONGSIDE docker-compose.build.yml, AND WHAT MUST NOT
+# DIVERGE
 #
 # `name`, the service names, the volume names and the environment are the ones
-# docker-compose.yml uses, and they have to stay that way. Compose derives
+# docker-compose.build.yml uses, and they have to stay that way. Compose derives
 # volume names from the project name - betweenus_postgres-data - so a project
 # renamed here is a deployment that comes up with an empty database beside the
 # full one it can no longer see. Nothing about switching from building to
 # pulling is allowed to touch where the data lives.
 #
-# Which makes the upgrade path from a built deployment to a pulled one exactly
-# one thing: swap the -f, same .env, same host. Same volumes, same data.
+# Which makes the move from a built deployment to a pulled one exactly one
+# thing: swap the -f, same .env, same host. Same volumes, same data.
 
 name: betweenus
 
