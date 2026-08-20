@@ -138,7 +138,7 @@ function ImageAttachment({
     <button
       type="button"
       onClick={onOpen}
-      title={`${attachment.name} - ${formatBytes(attachment.size)}`}
+      title={attachment.name}
       className="block cursor-pointer overflow-hidden rounded-lg border border-edge bg-surface-850"
       style={box ? { width: box.width, height: box.height } : undefined}
     >
@@ -390,7 +390,9 @@ function PreviewOverlay({
       >
         <header className="flex h-12 shrink-0 items-center gap-3 border-b border-edge px-4">
           <p className="truncate text-sm font-medium text-slate-100">{attachment.name}</p>
-          <span className="text-xs text-slate-400">{formatBytes(attachment.size)}</span>
+          {!isImage && (
+            <span className="text-xs text-slate-400">{formatBytes(attachment.size)}</span>
+          )}
           <div className="ml-auto flex gap-1">
             <IconButton
               label="Download"
