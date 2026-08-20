@@ -220,14 +220,7 @@ function AccountSection(): JSX.Element {
                   }
                 : undefined
             }
-          >
-            <Avatar
-              name={user?.displayName ?? '?'}
-              avatarUrl={user?.avatarUrl}
-              size="lg"
-              ringColour="border-surface-800"
-            />
-          </PicturePicker>
+          />
         </div>
 
         <dl className="space-y-4 bg-surface-850 px-4 py-4">

@@ -22,8 +22,8 @@ export function PicturePicker({
   onChange: (url: string) => Promise<void> | void;
   /** Omitted when there is nothing to clear back to. */
   onClear?: () => Promise<void> | void;
-  /** The picture as it looks now - an Avatar, usually. */
-  children: React.ReactNode;
+  /** The picture as it looks now - an Avatar, usually. Omitted when already displayed elsewhere. */
+  children?: React.ReactNode;
 }): JSX.Element {
   const picker = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
@@ -84,19 +84,21 @@ export function PicturePicker({
         />
       )}
 
-      <button
-        type="button"
-        onClick={() => picker.current?.click()}
-        disabled={busy}
-        aria-label={`Change ${label}`}
-        title={`Change ${label}`}
-        className="group relative cursor-pointer rounded-full disabled:cursor-not-allowed"
-      >
-        {children}
-        <span className="absolute inset-0 flex items-center justify-center rounded-full bg-black/60 text-[10px] font-bold uppercase tracking-wide text-white opacity-0 transition-opacity duration-200 group-hover:opacity-100">
-          {busy ? '…' : 'Change'}
-        </span>
-      </button>
+      {children && (
+        <button
+          type="button"
+          onClick={() => picker.current?.click()}
+          disabled={busy}
+          aria-label={`Change ${label}`}
+          title={`Change ${label}`}
+          className="group relative cursor-pointer rounded-full disabled:cursor-not-allowed shrink-0"
+        >
+          {children}
+          <span className="absolute inset-0 flex items-center justify-center rounded-full bg-black/60 text-[10px] font-bold uppercase tracking-wide text-white opacity-0 transition-opacity duration-200 group-hover:opacity-100">
+            {busy ? '…' : 'Change'}
+          </span>
+        </button>
+      )}
 
       <div>
         <input
