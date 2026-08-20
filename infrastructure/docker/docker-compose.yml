@@ -1,10 +1,26 @@
-# Full stack. Development uses docker-compose.dev.yml (data stores only) plus
-# `pnpm dev` on the host; this file runs everything in containers.
+# The same stack as docker-compose.yml, pulled instead of built.
 #
-#   docker compose -f infrastructure/docker/docker-compose.yml up -d --build
+#   docker compose --env-file .env \
+#     -f infrastructure/docker/docker-compose.prod.yml pull
+#   docker compose --env-file .env \
+#     -f infrastructure/docker/docker-compose.prod.yml up -d
 #
-# Networks are segmented so only the services that need a data store can reach
-# it. Postgres and Redis publish no ports.
+# Every image comes from one Docker Hub repository, told apart by a tag prefix:
+# aiyuayaan/betweenus:chat-service-0.0.1. BETWEENUS_VERSION picks which release
+# runs; leave it unset and each service tracks the moving `latest` tag, or set
+# it to `alpha` or `beta` to track a channel.
+#
+# WHY THIS FILE EXISTS ALONGSIDE docker-compose.yml, AND WHAT MUST NOT DIVERGE
+#
+# `name`, the service names, the volume names and the environment are the ones
+# docker-compose.yml uses, and they have to stay that way. Compose derives
+# volume names from the project name - betweenus_postgres-data - so a project
+# renamed here is a deployment that comes up with an empty database beside the
+# full one it can no longer see. Nothing about switching from building to
+# pulling is allowed to touch where the data lives.
+#
+# Which makes the upgrade path from a built deployment to a pulled one exactly
+# one thing: swap the -f, same .env, same host. Same volumes, same data.
 
 name: betweenus
 
@@ -15,15 +31,10 @@ x-service-env: &service-env
   REDIS_URL: redis://redis:6379
   JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
   JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?JWT_REFRESH_SECRET is required}
-  # Grace for a refresh interrupted between the server rotating and the client
-  # storing the result; see .env.example.
   REFRESH_REPLAY_GRACE_MS: ${REFRESH_REPLAY_GRACE_MS:-30000}
-  # Seals OAuth client secrets at rest; falls back to JWT_SECRET when unset.
   SETTINGS_SECRET: ${SETTINGS_SECRET:-}
-  # Where a browser reaches this deployment - the OAuth callback is built from it.
   PUBLIC_API_URL: ${PUBLIC_API_URL:-http://localhost:8080}
   CORS_ORIGIN: ${CORS_ORIGIN:-*}
-  # Empty S3 values keep uploads on the local volume mounted below.
   STORAGE_DRIVER: ${STORAGE_DRIVER:-}
   LOCAL_STORAGE_PATH: /data/uploads
   MAX_UPLOAD_BYTES: ${MAX_UPLOAD_BYTES:-26214400}
@@ -35,18 +46,11 @@ x-service-env: &service-env
   S3_ACCESS_KEY: ${S3_ACCESS_KEY:-}
   S3_SECRET_KEY: ${S3_SECRET_KEY:-}
   S3_PUBLIC_URL: ${S3_PUBLIC_URL:-}
-  # Firebase Cloud Messaging, for the Android push. Empty = push is off, which
-  # is a running deployment without notifications rather than a broken one.
   FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID:-}
   FIREBASE_CLIENT_EMAIL: ${FIREBASE_CLIENT_EMAIL:-}
   FIREBASE_PRIVATE_KEY: ${FIREBASE_PRIVATE_KEY:-}
   FIREBASE_SERVICE_ACCOUNT: ${FIREBASE_SERVICE_ACCOUNT:-}
 
-# Everything the backup script needs: it reaches Postgres over the data network
-# with the same credentials the services use, and writes where BACKUP_DATA_PATH
-# points. `pg_dump` comes from the postgres image so its version matches the
-# server's - a dump taken by a newer or older client is the classic way to find
-# out, during a restore, that the backup was never usable.
 x-backup: &backup
   image: postgres:16-alpine
   environment:
@@ -55,8 +59,6 @@ x-backup: &backup
     PGPASSWORD: ${POSTGRES_PASSWORD:-postgres}
     PGDATABASE: ${POSTGRES_DB:-betweenus}
     BACKUP_DIR: /backups
-    # Weekly, and eight kept - two months of history for a few megabytes of
-    # gzipped SQL. The interval is in hours: 24 is nightly, 1 is hourly.
     BACKUP_INTERVAL_HOURS: ${BACKUP_INTERVAL_HOURS:-168}
     BACKUP_KEEP: ${BACKUP_KEEP:-8}
     BACKUP_ON_MIGRATE: ${BACKUP_ON_MIGRATE:-1}
@@ -72,10 +74,6 @@ services:
     image: nginx:1.27-alpine
     restart: unless-stopped
     ports:
-      # Published on the host so a cloudflared already running there - one
-      # tunnel for the whole server - can point at http://localhost:8080. With
-      # the container tunnel below this does not need to be published at all;
-      # set GATEWAY_PORT to 127.0.0.1:8080 to keep it off the LAN.
       - "${GATEWAY_PORT:-8080}:8080"
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O- http://127.0.0.1:8080/health || exit 1"]
@@ -99,43 +97,23 @@ services:
       - api-network
       - remote-network
 
-  # The web client: static bundle behind the same gateway, served at its root.
-  # No API of its own - it calls the same services the desktop app does.
   web:
-    build:
-      context: ../..
-      dockerfile: infrastructure/docker/Dockerfile
-      target: web
+    image: ${BETWEENUS_IMAGE_REPO:-aiyuayaan/betweenus}:web-${BETWEENUS_VERSION:-latest}
     restart: unless-stopped
     networks:
       - api-network
 
-  # The admin panel: static bundle behind the same gateway.
   admin-web:
-    build:
-      context: ../..
-      dockerfile: infrastructure/docker/Dockerfile
-      target: admin-web
+    image: ${BETWEENUS_IMAGE_REPO:-aiyuayaan/betweenus}:admin-web-${BETWEENUS_VERSION:-latest}
     restart: unless-stopped
     networks:
       - api-network
 
-  # Public ingress, opt-in:
-  #   docker compose -f infrastructure/docker/docker-compose.yml --profile public up -d
-  #
-  # Skip it entirely if cloudflared already runs on the host for the whole
-  # server: add one ingress entry pointing at http://localhost:${GATEWAY_PORT}
-  # and reload it. See infrastructure/cloudflare/tunnel.yml, which documents
-  # both ways round.
   cloudflared:
     image: cloudflare/cloudflared:latest
     restart: unless-stopped
     command: tunnel --no-autoupdate run
     environment:
-      # Left blank when unset: Compose interpolates every service, profile or
-      # not, so a required-check here would break plain `up` for anyone whose
-      # cloudflared runs on the host. Empty token only fails --profile public,
-      # where cloudflared itself reports it.
       TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:-}
     depends_on:
       nginx:
@@ -145,10 +123,6 @@ services:
     profiles:
       - public
 
-  # One dump, then exit - the safety net for the migration below, which is the
-  # one moment a schema change can lose data irreversibly. It runs before
-  # `migrate`, and a failed dump stops the migration rather than being logged
-  # and ignored; set BACKUP_ON_MIGRATE=0 if you would rather it did not.
   db-backup-once:
     <<: *backup
     restart: "no"
@@ -157,9 +131,6 @@ services:
       postgres:
         condition: service_healthy
 
-  # The scheduled backup: one dump now, then one every BACKUP_INTERVAL_HOURS.
-  # Sleep-and-dump rather than cron because a container that only wakes up
-  # hourly is a container whose failures nobody sees in `docker compose logs`.
   db-backup:
     <<: *backup
     restart: unless-stopped
@@ -168,17 +139,12 @@ services:
       postgres:
         condition: service_healthy
 
-  # One-shot: applies Prisma migrations before any service accepts traffic.
-  # Reuses the auth-service image because it already carries the schema and the
-  # Prisma CLI; nothing about it is auth-specific.
+  # Same image as auth-service, which is where the Prisma schema and the CLI
+  # live. Pulling rather than building changes nothing about the ordering: the
+  # dump runs, then the migration, then anything that serves traffic.
   migrate:
-    build:
-      context: ../..
-      dockerfile: infrastructure/docker/Dockerfile
-      target: auth-service
+    image: ${BETWEENUS_IMAGE_REPO:-aiyuayaan/betweenus}:auth-service-${BETWEENUS_VERSION:-latest}
     restart: "no"
-    # Prisma verifies it can write to its engine directory; the image's `node`
-    # user cannot. Nothing else runs as root.
     user: root
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-betweenus}?schema=public
@@ -193,10 +159,7 @@ services:
       - data-network
 
   auth-service:
-    build:
-      context: ../..
-      dockerfile: infrastructure/docker/Dockerfile
-      target: auth-service
+    image: ${BETWEENUS_IMAGE_REPO:-aiyuayaan/betweenus}:auth-service-${BETWEENUS_VERSION:-latest}
     restart: unless-stopped
     environment:
       <<: *service-env
@@ -213,10 +176,7 @@ services:
       - data-network
 
   server-service:
-    build:
-      context: ../..
-      dockerfile: infrastructure/docker/Dockerfile
-      target: server-service
+    image: ${BETWEENUS_IMAGE_REPO:-aiyuayaan/betweenus}:server-service-${BETWEENUS_VERSION:-latest}
     restart: unless-stopped
     environment:
       <<: *service-env
@@ -233,24 +193,14 @@ services:
       - data-network
 
   chat-service:
-    build:
-      context: ../..
-      dockerfile: infrastructure/docker/Dockerfile
-      target: chat-service
+    image: ${BETWEENUS_IMAGE_REPO:-aiyuayaan/betweenus}:chat-service-${BETWEENUS_VERSION:-latest}
     restart: unless-stopped
     environment:
       <<: *service-env
       CHAT_SERVICE_PORT: 3004
     volumes:
-      # Uploads survive container replacement when the local driver is active.
-      # UPLOAD_DATA_PATH takes either a Docker volume name (the default) or a
-      # host path - `/mnt/disk2/betweenus-uploads`, `D:/betweenus-uploads` - to keep
-      # the files somewhere you can see and back up.
-      #
-      # The service runs as uid 1000, and the image ships /data/uploads owned by
-      # it so an empty named volume inherits that. A *host* path is never seeded
-      # from the image: chown it to 1000:1000 first, or every attachment fails
-      # with EACCES while the rest of the service works perfectly.
+      # Same mount, same default volume name, same uid expectation as the built
+      # stack. A host path here still has to be chowned to 1000:1000 first.
       - ${UPLOAD_DATA_PATH:-upload-data}:/data/uploads
     depends_on:
       migrate:
@@ -264,10 +214,7 @@ services:
       - data-network
 
   notification-service:
-    build:
-      context: ../..
-      dockerfile: infrastructure/docker/Dockerfile
-      target: notification-service
+    image: ${BETWEENUS_IMAGE_REPO:-aiyuayaan/betweenus}:notification-service-${BETWEENUS_VERSION:-latest}
     restart: unless-stopped
     environment:
       <<: *service-env
@@ -284,10 +231,7 @@ services:
       - data-network
 
   presence-service:
-    build:
-      context: ../..
-      dockerfile: infrastructure/docker/Dockerfile
-      target: presence-service
+    image: ${BETWEENUS_IMAGE_REPO:-aiyuayaan/betweenus}:presence-service-${BETWEENUS_VERSION:-latest}
     restart: unless-stopped
     environment:
       <<: *service-env
@@ -304,27 +248,15 @@ services:
       - data-network
 
   call-service:
-    build:
-      context: ../..
-      dockerfile: infrastructure/docker/Dockerfile
-      target: call-service
+    image: ${BETWEENUS_IMAGE_REPO:-aiyuayaan/betweenus}:call-service-${BETWEENUS_VERSION:-latest}
     restart: unless-stopped
     environment:
       <<: *service-env
       CALL_SERVICE_PORT: 3007
-      # There is no media-server address here, and there must never be one:
-      # call-service introduces two clients over /ws/call and they carry the
-      # media between themselves. See section 4 of claude.md.
-      #
-      # Where a peer learns its own public address. Not a relay, needs no port
-      # opened, and one request per call is all the traffic; point it at your
-      # own coturn if you would rather not talk to these.
+      # Still no media-server address, for the reason section 4 of claude.md
+      # gives. Pulling an image instead of building one changes nothing about
+      # where media goes: directly between the peers, never through here.
       STUN_URLS: ${STUN_URLS:-stun:stun.l.google.com:19302,stun:stun.cloudflare.com:3478}
-      # A relay, for the pairs of networks that cannot form a direct path at all
-      # - symmetric NAT on both sides, mobile carrier-grade NAT. Optional and
-      # unset by default, so this deployment relays nothing unless you say so;
-      # the cost of leaving it off is that those particular calls fail. The key
-      # never leaves this service - only the short-lived credentials it mints.
       CLOUDFLARE_TURN_KEY_ID: ${CLOUDFLARE_TURN_KEY_ID:-}
       CLOUDFLARE_TURN_KEY_API_TOKEN: ${CLOUDFLARE_TURN_KEY_API_TOKEN:-}
       CLOUDFLARE_TURN_TTL_SECONDS: ${CLOUDFLARE_TURN_TTL_SECONDS:-86400}
@@ -337,21 +269,12 @@ services:
       - api-network
       - data-network
 
-  # Remote desktop, kept off every network it does not need. It talks to
-  # Postgres and to nothing else; it never reaches the chat services, and
-  # nothing reaches the machines - their agents dial out.
   remote-gateway:
-    build:
-      context: ../..
-      dockerfile: infrastructure/docker/Dockerfile
-      target: remote-gateway
+    image: ${BETWEENUS_IMAGE_REPO:-aiyuayaan/betweenus}:remote-gateway-${BETWEENUS_VERSION:-latest}
     restart: unless-stopped
     environment:
       <<: *service-env
       REMOTE_GATEWAY_PORT: 3008
-      # The same answer call-service gives, for the same reason: the agent and
-      # the controller have to find each other, and nothing here knows or needs
-      # to know where either of them is.
       STUN_URLS: ${STUN_URLS:-stun:stun.l.google.com:19302,stun:stun.cloudflare.com:3478}
       CLOUDFLARE_TURN_KEY_ID: ${CLOUDFLARE_TURN_KEY_ID:-}
       CLOUDFLARE_TURN_KEY_API_TOKEN: ${CLOUDFLARE_TURN_KEY_API_TOKEN:-}
@@ -361,26 +284,11 @@ services:
         condition: service_completed_successfully
       postgres:
         condition: service_healthy
-      # Redis carries the session relay: the agent and the controller need not
-      # be on the same replica, so the messages between them go through Pub/Sub.
       redis:
         condition: service_healthy
     networks:
       - remote-network
       - data-network
-
-  # There was a `livekit` service here, and it is worth knowing what went with
-  # it. It published 7880, 7881 and a UDP range, because WebRTC media cannot go
-  # through Nginx or a Cloudflare Tunnel. It needed LIVEKIT_NODE_IP - the
-  # address clients reach this host on - because otherwise it advertised its
-  # Docker bridge address and every call negotiated all the way to media and
-  # then timed out. That setting had no right answer for every deployment and a
-  # wrong one was invisible until somebody tried to talk.
-  #
-  # Media now goes directly between the clients. No container carries it, no
-  # port is published for it, and nothing in this file states an address that
-  # only the server can reach. Adding a media service back is how all three of
-  # those come back together.
 
   postgres:
     image: postgres:16-alpine
@@ -390,9 +298,6 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
       POSTGRES_DB: ${POSTGRES_DB:-betweenus}
     volumes:
-      # POSTGRES_DATA_PATH is a Docker volume name by default and a host path
-      # when scripts/data-path.mjs has written one. Postgres chowns its own
-      # data directory on start, so a bind mount needs nothing done to it.
       - ${POSTGRES_DATA_PATH:-postgres-data}:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
@@ -425,8 +330,6 @@ networks:
   cloudflare-network:
   api-network:
   data-network:
-  # There is no media-network: no container carries media.
-  #
-  # Remote desktop is deliberately not on api-network: the gateway reaches
-  # Postgres and nothing else reaches it except Nginx.
+  # No media-network, for the same reason docker-compose.yml has none: no
+  # container carries media. Remote desktop stays off api-network.
   remote-network:
