@@ -431,21 +431,12 @@ jobs:
           KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
         run: |
-          # Two ways a perfectly good keystore arrives as something `base64 -d`
-          # refuses. `certutil -encode` on Windows wraps its output in PEM
-          # banner lines, and every terminal and text box wraps long base64 at
-          # some column - so the banners go and so does all whitespace before
-          # anything tries to decode it.
-          printf '%s' "$KEYSTORE_BASE64" \
-            | grep -v -- '-----' \
-            | tr -d '[:space:]' \
-            | base64 -d > "$RUNNER_TEMP/release.jks" || {
-                echo "::error::ANDROID_KEYSTORE_BASE64 is not base64. Generate it with:"
-                echo "::error::  Linux/macOS:  base64 -w0 release.jks"
-                echo "::error::  PowerShell:   [Convert]::ToBase64String([IO.File]::ReadAllBytes('release.jks'))"
-                echo "::error::Paste the whole single-line result, with nothing else in the secret."
-                exit 1
-              }
+          # Six ways a perfectly good keystore arrives as something `base64 -d`
+          # refuses - PEM banners, line wrapping, a BOM, quotes, the URL-safe
+          # alphabet, missing padding - and all six are recovered from. What is
+          # left is a secret that does not hold base64 of a keystore, which the
+          # script says in those words. Its own self-check covers every shape.
+          sh "$GITHUB_WORKSPACE/.github/scripts/decode-keystore.sh" "$RUNNER_TEMP/release.jks"
 
           # A keystore that cannot be opened with the password and alias it was
           # given is worth finding out about here rather than ten minutes later,
