@@ -3,3 +3,11 @@
 # by /bin/sh: with CRLF line endings that fails as `\r: not found`, on the host
 # where it is easiest to miss and hardest to explain.
 *.sh text eol=lf
+
+# The Gradle wrapper is a shell script without the extension, so the rule above
+# misses it. On a Linux runner a CRLF `gradlew` fails as `bad interpreter`,
+# which is a worse version of the same afternoon. Its executable bit is
+# recorded in the index (100755) rather than chmod'ed in CI: `core.fileMode` is
+# false on Windows, so a checkout there cannot set it and every clone would
+# need the same workaround.
+apps/android/gradlew text eol=lf
