@@ -299,6 +299,29 @@ its own, and a substituted one is rejected before any media flows.
 This replaces the insertable-streams encryption the SFU design needed. The
 guarantee is the same one; there is simply no longer a hop to keep frames from.
 
+The key that signs a fingerprint is the channel's *current* epoch, and a call
+outlives an epoch, so it cannot be read once and held. A member who joins a
+channel it holds no key for mints the next epoch to get one at all — so the
+moment somebody new arrives in a voice channel, everybody already in the call is
+signing with the generation before theirs, every fingerprint is refused as
+`their media key does not match this channel's`, and because only the impolite
+side offers, whichever way the refusal falls the connection is never made and
+the tile sits on "Connecting…" for good.
+
+Two rules keep the call on the epoch that counts:
+
+- **The key is re-read when the roster changes**, before the link to the new
+  peer negotiates. A newcomer publishes its epoch during the join, ahead of
+  appearing on anybody's roster, so the re-read is guaranteed to find it.
+- **A failed verification re-reads once, then refuses.** That covers the
+  rotations no roster change announces — two people joining at the same moment,
+  or a member removed mid-call. Once and no more: a proof that is simply wrong
+  must not become a way to make a client hammer the key directory.
+
+A call also re-reads on the way in rather than trusting a cached epoch, which is
+what a client that persists its keys across restarts (Android) needs to avoid
+joining under one that is days dead.
+
 ## Known limits
 
 1. **One identity per user, copied to each machine.** Signing in elsewhere

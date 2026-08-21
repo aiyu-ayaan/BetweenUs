@@ -457,6 +457,18 @@ Push notifications (phase 27, messages only):
       opening the app, mark-as-read, tap-through on `betweenus://channel/<id>`,
       and cleared on open and on sign-out.
 
+Calls:
+
+- [x] **The call that refused whoever joined it.** The fingerprint signature was
+      made with the channel key read once at join, and a member arriving in a
+      channel it holds no key for mints the next epoch - so the newcomer signed
+      with a generation nobody in the call had, was refused with "their media
+      key does not match this channel's", and, since only the impolite side
+      offers, ended on a tile stuck at "Connecting…" whichever way the refusal
+      fell. The key is now re-read when the roster changes and once more when a
+      verification fails, on both clients. `mesh.check.ts` pins the retry:
+      exactly one re-read, and a forged proof still refused after it.
+
 Documentation:
 
 - [x] **`FCM/`** in the repository root: the architecture and the setup in
@@ -702,3 +714,13 @@ The cases most worth putting a person in front of, in order:
     line, and vanish entirely if it was the only one. `FCM/PAYLOADS.md` says
     what each push carries and what is deliberately not filtered.
 
+26. **Somebody joining a call they have never had the key for**, which is the
+    one the epoch re-read exists for. Use an account that has just been added
+    to the server and has never opened the channel. Start a call from one
+    device, join from theirs, and confirm both hear each other with no "their
+    media key does not match this channel's" and no tile left on
+    "Connecting…". Then do it the other way round - the new account starts the
+    call and the older one joins - because who offers depends on a peer-id
+    comparison and only one of the two orderings was ever the visible failure.
+    Worth a third pass with a third person joining while the first two are
+    already talking.
