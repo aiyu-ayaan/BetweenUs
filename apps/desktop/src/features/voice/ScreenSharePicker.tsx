@@ -8,6 +8,7 @@
  * capture time, far too late to put a chooser on screen.
  */
 import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useVoiceStore } from '../../stores/voice';
 import { isDesktopRuntime } from '../../services/platform';
 import { useAudioSettings } from '../../stores/audioSettings';
@@ -75,7 +76,17 @@ export function ScreenSharePicker({ onClose }: { onClose: () => void }): JSX.Ele
     void shareScreen(chosen, withAudio && audioSupported, intent);
   };
 
-  return (
+  // Rendered into the document body rather than where it is written.
+  //
+  // The button that opens this sits in the call's control bar, and that bar is
+  // frosted glass - `backdrop-filter`. An element with a backdrop-filter is a
+  // containing block for every fixed-position descendant, exactly as a
+  // `transform` is, so `fixed inset-0` stopped meaning the viewport and started
+  // meaning the little pill the buttons live in: the dialog was laid out a few
+  // hundred pixels wide inside the toolbar, which is what "the picker does not
+  // open" looked like. A portal takes it out of that subtree entirely, so no
+  // ancestor's paint effects can ever own it again.
+  return createPortal(
     <div
       role="dialog"
       aria-modal="true"
@@ -221,7 +232,8 @@ export function ScreenSharePicker({ onClose }: { onClose: () => void }): JSX.Ele
           </button>
         </footer>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
