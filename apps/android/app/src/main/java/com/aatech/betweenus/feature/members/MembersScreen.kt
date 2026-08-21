@@ -77,6 +77,7 @@ fun MembersScreen(
     // service refuses anyone else.
     var candidates by remember { mutableStateOf<List<UserSummary>>(emptyList()) }
     var editing by remember { mutableStateOf<ServerMember?>(null) }
+    var menuFor by remember { mutableStateOf<ServerMember?>(null) }
 
     LaunchedEffect(serverId) { serverId?.let { Workspace.loadMembers(it, force = true) } }
 
@@ -182,16 +183,28 @@ fun MembersScreen(
             items(online, key = { "on-${it.userId}" }) { member ->
                 MemberRow(member, statuses[member.userId]?.wire ?: "online", mayManage,
                     onOpenDirect = { scope.launch { onOpenDirect(Workspace.openDirect(member.userId).channelId) } },
-                    onEdit = { editing = member })
+                    onEdit = { editing = member },
+                    onMenu = { menuFor = member })
             }
 
             if (offline.isNotEmpty()) item { SectionLabel("Offline — ${offline.size}") }
             items(offline, key = { "off-${it.userId}" }) { member ->
                 MemberRow(member, "offline", mayManage,
                     onOpenDirect = { scope.launch { onOpenDirect(Workspace.openDirect(member.userId).channelId) } },
-                    onEdit = { editing = member })
+                    onEdit = { editing = member },
+                    onMenu = { menuFor = member })
             }
         }
+    }
+
+    menuFor?.let { member ->
+        MemberMenuSheet(
+            member = member,
+            onDismiss = { menuFor = null },
+            onOpenDirect = {
+                scope.launch { onOpenDirect(Workspace.openDirect(member.userId).channelId) }
+            },
+        )
     }
 
     editing?.let { member ->
@@ -211,6 +224,7 @@ private fun MemberRow(
     mayManage: Boolean,
     onOpenDirect: () -> Unit,
     onEdit: () -> Unit,
+    onMenu: () -> Unit,
 ) {
     ListRow(
         title = member.label,
@@ -227,6 +241,7 @@ private fun MemberRow(
         trailing = {
             if (member.role != ServerRole.MEMBER) Chip(member.role.name.lowercase())
             IconAction(BetweenUsIcons.Message, "Message", onOpenDirect)
+            IconAction(BetweenUsIcons.User, "More", onMenu)
             if (mayManage && member.role != ServerRole.OWNER) {
                 IconAction(BetweenUsIcons.Shield, "Role and permissions", onEdit)
             }

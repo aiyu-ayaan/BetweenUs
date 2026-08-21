@@ -19,6 +19,7 @@ class PushGateTest {
         quietStartMinute = start,
         quietEndMinute = end,
         mutedChannelIds = emptyList(),
+        mutedUserIds = emptyList(),
     )
 
     private val self = PublicUser(

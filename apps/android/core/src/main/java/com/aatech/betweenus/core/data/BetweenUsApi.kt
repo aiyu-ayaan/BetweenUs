@@ -588,17 +588,29 @@ object BetweenUsApi {
         NotificationPreferences.from(authed("GET", "/api/v1/notifications/preferences"))
     }
 
+    /**
+     * A patch, and only of what is named.
+     *
+     * [quiet] is a pair rather than two nullable minutes because null has to
+     * mean two different things: leaving the field out means "as they were",
+     * and a pair of nulls means "clear them". Sending the two minutes as plain
+     * nullable arguments made every other change to these preferences - the
+     * on/off switch, a mute - quietly wipe somebody's quiet hours.
+     */
     suspend fun updateNotificationPreferences(
         enabled: Boolean? = null,
-        quietStartMinute: Int? = null,
-        quietEndMinute: Int? = null,
+        quiet: Pair<Int?, Int?>? = null,
         mutedChannelIds: List<String>? = null,
+        mutedUserIds: List<String>? = null,
     ): NotificationPreferences = io {
         val body = JSONObject()
         enabled?.let { body.put("enabled", it) }
-        body.put("quietStartMinute", quietStartMinute ?: JSONObject.NULL)
-        body.put("quietEndMinute", quietEndMinute ?: JSONObject.NULL)
+        quiet?.let {
+            body.put("quietStartMinute", it.first ?: JSONObject.NULL)
+            body.put("quietEndMinute", it.second ?: JSONObject.NULL)
+        }
         mutedChannelIds?.let { body.put("mutedChannelIds", jsonArrayOf(it)) }
+        mutedUserIds?.let { body.put("mutedUserIds", jsonArrayOf(it)) }
         NotificationPreferences.from(authed("PATCH", "/api/v1/notifications/preferences", body))
     }
 

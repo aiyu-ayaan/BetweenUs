@@ -808,6 +808,12 @@ data class NotificationPreferences(
     val quietStartMinute: Int?,
     val quietEndMinute: Int?,
     val mutedChannelIds: List<String>,
+    /**
+     * People this account has muted. Silent wherever they write, mentions
+     * included - a mute any mention can bypass is a mute the loud person
+     * controls.
+     */
+    val mutedUserIds: List<String>,
 ) {
     companion object {
         fun from(json: JSONObject) = NotificationPreferences(
@@ -815,6 +821,7 @@ data class NotificationPreferences(
             quietStartMinute = if (json.isNull("quietStartMinute")) null else json.optInt("quietStartMinute"),
             quietEndMinute = if (json.isNull("quietEndMinute")) null else json.optInt("quietEndMinute"),
             mutedChannelIds = json.strings("mutedChannelIds"),
+            mutedUserIds = json.strings("mutedUserIds"),
         )
     }
 }
