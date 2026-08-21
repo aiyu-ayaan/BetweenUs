@@ -284,7 +284,12 @@ class VoiceEngine(private val context: Context) {
                 // The channel key is what signs our DTLS fingerprint. Without
                 // it there is nothing to prove the far side is talking to us and
                 // not to the relay, so the call does not start.
-                channelKey = E2ee.callKeyForChannel(channelId)
+                // Fresh, not the epoch this phone happened to cache: held keys
+                // survive a restart here, so a cached one can be days behind
+                // what the channel has rotated to - and joining a call under a
+                // dead epoch is the "their media key does not match" refusal
+                // seen from the other side.
+                channelKey = E2ee.callKeyForChannel(channelId, refresh = true)
                 iceServers = BetweenUsApi.callIce(channelId).map { it.toWebRtc() }
 
                 startMicrophone()
@@ -701,6 +706,10 @@ class VoiceEngine(private val context: Context) {
             }
 
             "peer.joined" -> event.optJSONObject("peer")?.let {
+                // Before the link, because a link negotiates as soon as it
+                // exists: whoever just arrived may have minted the epoch this
+                // device is now behind. See `refreshChannelKey`.
+                refreshChannelKey()
                 addPeer(CallPeer.from(it))
                 CallTones.play(CallTones.Tone.JOIN)
             }
@@ -745,6 +754,27 @@ class VoiceEngine(private val context: Context) {
 
             "error" -> fail(event.optString("message").ifEmpty { "The call service refused this" })
         }
+    }
+
+    /**
+     * Re-reads the channel key, because somebody arriving may have minted it.
+     *
+     * A member who joins a channel holding none of its keys mints the next
+     * epoch for itself - that is the only way it gets one at all. Everybody
+     * already in the call is still signing fingerprints with the epoch they
+     * read when *they* joined, one generation behind, so the newcomer refuses
+     * every one of them with "their media key does not match this channel's" -
+     * and since only the impolite side offers, whichever way the refusal falls
+     * the connection is simply never made and the tile sits on "connecting".
+     *
+     * A failure is not fatal: the key we already hold is still the best guess,
+     * and `verifyFingerprint` asks again if it turns out to be wrong.
+     */
+    private suspend fun refreshChannelKey() {
+        val id = channelId ?: return
+        runCatching { E2ee.callKeyForChannel(id, refresh = true) }
+            .getOrNull()
+            ?.let { channelKey = it }
     }
 
     private fun addPeer(peer: CallPeer) {
@@ -813,6 +843,8 @@ class VoiceEngine(private val context: Context) {
 
         private var makingOffer = false
         private var closed = false
+        /** One re-read of the channel key per peer. See `verifyFingerprint`. */
+        private var retriedKey = false
 
         private val pc: PeerConnection = factory.createPeerConnection(
             PeerConnection.RTCConfiguration(iceServers).apply {
@@ -1166,8 +1198,22 @@ class VoiceEngine(private val context: Context) {
             )
         }
 
-        private fun verifyFingerprint(sdp: String, proof: String): Boolean {
+        /**
+         * Whether the far side signed this fingerprint with the channel's key,
+         * re-reading the key once before giving up.
+         *
+         * The retry is the point: two people joining at the same moment, or a
+         * member removed mid-call, rotate the epoch under a connection that is
+         * already open, and this device would otherwise refuse a peer for
+         * holding the *newer* key. Once only - a proof that is simply wrong
+         * must not become a way to make this client hammer the key directory.
+         */
+        private suspend fun verifyFingerprint(sdp: String, proof: String): Boolean {
             val fingerprint = fingerprintOf(sdp) ?: return false
+            if (Crypto.signFingerprint(channelKey, fingerprint) == proof) return true
+            if (retriedKey) return false
+            retriedKey = true
+            refreshChannelKey()
             return Crypto.signFingerprint(channelKey, fingerprint) == proof
         }
 
