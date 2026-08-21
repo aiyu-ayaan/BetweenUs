@@ -7,6 +7,7 @@ import androidx.core.app.RemoteInput
 import com.aatech.betweenus.core.data.AuthPhase
 import com.aatech.betweenus.core.data.Session
 import com.aatech.betweenus.core.store.Conversation
+import com.aatech.betweenus.feature.chat.Outbox
 import com.aatech.betweenus.core.store.Workspace
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -69,8 +70,14 @@ class NotificationActionReceiver : BroadcastReceiver() {
                             runCatching { Conversation.send(channelId, text, emptyList()) }.isSuccess
                         } ?: false
 
+                        // Offline, or the send failed: the words are kept on
+                        // disk and go out on the next network rather than
+                        // disappearing, which is what used to happen and
+                        // happened without a word.
+                        if (!sent) Outbox.enqueueText(application, channelId, text)
+
                         val self = (Session.state.value as? AuthPhase.SignedIn)?.user
-                        if (sent && self != null) {
+                        if (self != null) {
                             // Shown back in the thread, which is what makes a
                             // reply from the shade feel like it went anywhere.
                             MessageNotifications.noteOwnReply(
@@ -79,11 +86,14 @@ class NotificationActionReceiver : BroadcastReceiver() {
                                 conversationTitle = PushGate.conversationTitle(channelId),
                                 isGroup = PushGate.isGroup(channelId),
                                 selfName = self.label,
-                                text = text,
+                                // Said plainly while it is still queued: a
+                                // reply shown as sent and then not sent is the
+                                // failure this whole change is about.
+                                text = if (sent) text else "$text (sending…)",
                             )
                             // The reply is the read: nobody replies to a
                             // conversation and then wants it still unread.
-                            Workspace.markRead(channelId)
+                            if (sent) Workspace.markRead(channelId)
                         }
                     } finally {
                         pending.finish()

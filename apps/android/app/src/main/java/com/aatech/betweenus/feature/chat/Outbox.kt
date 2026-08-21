@@ -4,7 +4,9 @@ import android.content.Context
 import android.net.Uri
 import com.aatech.betweenus.core.data.MessageAttachment
 import com.aatech.betweenus.core.data.MessageReply
+import com.aatech.betweenus.core.data.NetworkWatch
 import com.aatech.betweenus.core.store.Conversation
+import com.aatech.betweenus.feature.notifications.PushGate
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -59,6 +61,8 @@ object Outbox {
         val caption: String,
         val items: List<Item>,
         val replyTo: MessageReply?,
+        /** Set for a text-only message that is on disk until it is sent. */
+        val pendingId: Long? = null,
     )
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -79,11 +83,66 @@ object Outbox {
         if (started) return
         started = true
         val app = context.applicationContext
+        PendingReplies.init(app)
         scope.launch {
             for (send in queue) {
                 waiting = (waiting - 1).coerceAtLeast(0)
                 runSend(app, send)
             }
+        }
+        // Anything a previous run could not send, and anything that failed
+        // while the phone had no network. `onAvailable` fires again on a
+        // handover, so this has to be safe to run twice - it is, because a
+        // send that succeeds takes its row off the disk first.
+        replay(app)
+        NetworkWatch.onAvailable { replay(app) }
+    }
+
+    /**
+     * A text message queued to disk first, then sent.
+     *
+     * This is what a reply typed into the notification shade uses. It used to
+     * be sent inline by the broadcast receiver and dropped - without a word -
+     * when that failed, which is every reply written in a lift or on a train.
+     */
+    fun enqueueText(context: Context, channelId: String, text: String) {
+        init(context)
+        val pending = PendingReplies.add(channelId, text)
+        waiting += 1
+        queue.trySend(
+            Send(
+                channelId = channelId,
+                caption = text,
+                items = emptyList(),
+                replyTo = null,
+                pendingId = pending.id,
+            ),
+        )
+    }
+
+    /** Whether anything is still waiting to go out, for a screen to say so. */
+    fun pendingFor(channelId: String): Int =
+        PendingReplies.all().count { it.channelId == channelId }
+
+    /** Sign-out throws unsent words away rather than sending them as somebody else. */
+    fun forgetPending() {
+        PendingReplies.clear()
+    }
+
+    private fun replay(context: Context) {
+        val rows = PendingReplies.all()
+        if (rows.isEmpty()) return
+        rows.forEach { row ->
+            waiting += 1
+            queue.trySend(
+                Send(
+                    channelId = row.channelId,
+                    caption = row.text,
+                    items = emptyList(),
+                    replyTo = null,
+                    pendingId = row.id,
+                ),
+            )
         }
     }
 
@@ -117,6 +176,10 @@ object Outbox {
     }
 
     private suspend fun runSend(context: Context, send: Send) {
+        if (send.pendingId != null) {
+            runTextSend(send)
+            return
+        }
         val total = send.items.size
         try {
             val uploaded = ArrayList<MessageAttachment>(total)
@@ -168,6 +231,31 @@ object Outbox {
         } finally {
             _progress.value = null
             if (waiting == 0) UploadService.stop(context)
+        }
+    }
+
+    /**
+     * A message with no files in it, which is a send and a row to delete.
+     *
+     * The row goes first only on success: a failure leaves it on disk, and the
+     * next validated network - or the next launch - tries it again. A duplicate
+     * would be worse than a delay, so nothing here retries in a loop.
+     */
+    private suspend fun runTextSend(send: Send) {
+        val sent = runCatching {
+            // A replay at launch runs before anything has signed in, and a
+            // send with no session fails for a reason that has nothing to do
+            // with the network.
+            requireNotNull(PushGate.ensureSession()) { "not signed in" }
+            Conversation.send(send.channelId, send.caption.trim(), emptyList())
+        }
+        if (sent.isSuccess) {
+            PendingReplies.remove(send.pendingId ?: return)
+            _failures.update { it - send.channelId }
+        } else {
+            _failures.update {
+                it + (send.channelId to "Waiting to send - this phone is offline")
+            }
         }
     }
 

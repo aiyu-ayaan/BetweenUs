@@ -92,6 +92,7 @@ fun ServerSheet(onDismiss: () -> Unit) {
                 // for this one do not follow it there, and neither do the
                 // notifications still holding its words.
                 com.aatech.betweenus.feature.chat.MediaCache.clear()
+                com.aatech.betweenus.feature.chat.Outbox.forgetPending()
                 com.aatech.betweenus.feature.notifications.MessageNotifications
                     .clearAll(context.applicationContext)
                 com.aatech.betweenus.feature.notifications.SocialNotifications

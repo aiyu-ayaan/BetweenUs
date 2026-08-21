@@ -548,6 +548,7 @@ fun SettingsScreen(
                         com.aatech.betweenus.feature.notifications.SocialNotifications
                             .clearAll(context)
                         com.aatech.betweenus.feature.notifications.PushGate.forgetPreferences()
+                        com.aatech.betweenus.feature.chat.Outbox.forgetPending()
                         Session.signOut()
                     }
                 },
