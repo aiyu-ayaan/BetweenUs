@@ -66,12 +66,38 @@ RUN --mount=type=cache,id=betweenus-turbo,target=/repo/.turbo \
     pnpm build
 
 # ---------------------------------------------------------------------------
+# Production dependencies. The same manifests as `deps`, installed again with
+# --prod, and nothing else: this stage never sees a line of source.
+#
+# The runtime used to be a copy of the `build` stage, which meant every service
+# image carried the whole workspace install - two copies of TypeScript, the
+# turbo binary, esbuild, webpack, the Nest CLI, tsx. 465MB of node_modules to
+# run `node dist/main.js`, and none of it reachable from it.
+#
+# It costs one extra install, which is cached and shares the pnpm store with
+# the one above, and it is why `prisma` is a dependency of @betweenus/database
+# rather than a devDependency: the `migrate` service in docker-compose.yml runs
+# `prisma migrate deploy` out of this image, so the CLI has to survive --prod.
+# ---------------------------------------------------------------------------
+FROM base AS prod-deps
+COPY pnpm-workspace.yaml package.json pnpm-lock.yaml ./
+COPY --parents packages/*/package.json apps/admin/package.json apps/web/package.json apps/services/*/package.json ./
+COPY packages/database/prisma ./packages/database/prisma
+RUN --mount=type=cache,id=betweenus-pnpm-store,target=/pnpm/store     pnpm config set store-dir /pnpm/store &&     pnpm install --frozen-lockfile --prod
+
+# ---------------------------------------------------------------------------
 # Runtime. Every Node service is the same image with a different working
 # directory, so the expensive copy happens once and all seven reference it.
+#
+# Two copies, not one: the production install, then the compiled output laid
+# over it. The `/./` in each source path is where the copied tree starts, so
+# packages/chat/dist lands at /repo/packages/chat/dist rather than one level
+# deeper. Source, tests and the vite output for the two nginx images stay out.
 # ---------------------------------------------------------------------------
 FROM base AS service
 ENV NODE_ENV=production
-COPY --from=build /repo /repo
+COPY --from=prod-deps /repo /repo
+COPY --from=build --parents /repo/./packages/*/dist /repo/./apps/services/*/dist /repo/
 # Where chat-service's upload volume mounts (LOCAL_STORAGE_PATH). It has to
 # exist in the image, owned by the user the service runs as: Docker seeds an
 # empty named volume from the image path including its ownership, but a
