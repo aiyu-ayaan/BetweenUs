@@ -596,6 +596,27 @@ Calls:
       system bars are hidden while one runs, the peer's name pill is lifted
       clear of the control dock, and back shrinks the activity into system
       picture-in-picture instead of ending the call. The self-view is draggable.
+- [x] **The screen share picker could not be opened, on desktop or in a
+      browser.** The button opened it and nothing appeared. The dialog is
+      `fixed inset-0`; the control bar it is written inside is frosted glass,
+      and an element with a `backdrop-filter` is a containing block for every
+      fixed-position descendant exactly as a `transform` is - so `inset-0`
+      stopped meaning the viewport and started meaning the pill the buttons
+      live in, and the dialog was laid out a few hundred pixels wide inside the
+      toolbar. It renders through a portal into `document.body` now, which puts
+      it out of reach of any ancestor's paint effects, in the docked bar and the
+      theatre one alike.
+- [x] **Picture-in-picture on Android refuses cleanly.** It needs no permission
+      - nothing to declare, nothing to ask for, and what it does need was
+      already on `MainActivity`. What it has is three ways to be refused, and
+      all three used to arrive as a caught exception. A device with no
+      picture-in-picture and an activity that is finishing or not in front are
+      both asked about first and answered with a plain false; the catch stays
+      for the per-app switch under Special app access, which is on by default
+      and has no public getter. And whether the call *is* the little window is
+      read from the mode change itself rather than inferred from a new
+      `Configuration`, which is compared by value and so could report the old
+      answer.
 - [x] **Adding somebody to a server from the phone searches.** The field asked
       for a username typed exactly right and gave no sign whether a failure was
       the spelling or the feature; it now offers what it finds, friends-only,

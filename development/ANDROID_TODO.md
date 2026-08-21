@@ -515,7 +515,15 @@ showing the conversation. Both decisions are made here.
 - [x] Full-screen while a call is running; the system bars come back when it
       ends.
 - [x] Back shrinks the call into system picture-in-picture rather than ending
-      it (`CallPip.kt`).
+      it (`CallPip.kt`). It needs no permission: nothing to declare, nothing to
+      ask for, only `supportsPictureInPicture` and a wide enough `configChanges`
+      on the activity, both of which the manifest already has. It has three ways
+      to be refused instead - a device with none, the per-app switch under
+      Settings → Apps → Special app access, and an activity that is finishing or
+      not in front - and `enter` returns false for all three rather than
+      throwing, so backing out on a phone without picture-in-picture simply
+      leaves the screen. Whether the call *is* the floating window comes from
+      the mode-change callback, not from comparing configurations.
 - [x] The self-view can be dragged anywhere on the stage.
 - [x] WhatsApp/Modern mobile video call UI redesign (`VoiceChannelScreen.kt`):
       - Adaptive zero-scroll stage: 1-on-1 full-screen remote view + floating self PiP card.
