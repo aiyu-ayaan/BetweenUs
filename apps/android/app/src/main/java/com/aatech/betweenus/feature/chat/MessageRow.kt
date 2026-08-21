@@ -15,6 +15,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -46,6 +48,8 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -66,7 +70,9 @@ import com.aatech.betweenus.core.data.BetweenUsApi
 import com.aatech.betweenus.core.data.CustomEmoji
 import com.aatech.betweenus.core.data.Endpoint
 import com.aatech.betweenus.core.data.LinkPreview
+import com.aatech.betweenus.core.data.Markup
 import com.aatech.betweenus.core.data.MessageAttachment
+import com.aatech.betweenus.core.data.MessageCustomEmoji
 import com.aatech.betweenus.core.data.PublicUser
 import com.aatech.betweenus.core.store.Conversation
 import com.aatech.betweenus.core.store.ReadableMessage
@@ -889,14 +895,72 @@ private fun LinkPreviewCard(url: String) {
     }
 }
 
+/**
+ * A message's words: the markdown-ish marks, the custom emoji and the links,
+ * in that order and for a reason. `Markup` takes the marks out of the text, so
+ * every span it reports is an index into what comes back; the emoji splitter
+ * then runs over that same string and appends each shortcode as its own
+ * alternate text, which is the same length as the source - so the offsets
+ * still line up when the styles are laid over the finished string.
+ */
 @Composable
 private fun MessageText(readable: ReadableMessage) {
-    val uriHandler = LocalUriHandler.current
-    val pieces = remember(readable.id, readable.text) {
-        CustomEmoji.split(readable.text, readable.body.emoji)
+    val blocks = remember(readable.id, readable.text) { Markup.parse(readable.text) }
+
+    if (blocks.size == 1 && blocks[0].kind == Markup.Kind.Body) {
+        MarkupBody(blocks[0], readable.body.emoji)
+        return
     }
 
-    val large = CustomEmoji.isOnlyEmoji(pieces)
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        blocks.forEach { block ->
+            when (block.kind) {
+                Markup.Kind.Body -> MarkupBody(block, readable.body.emoji)
+                Markup.Kind.Quote -> Row(modifier = Modifier.height(IntrinsicSize.Min)) {
+                    Box(
+                        modifier = Modifier
+                            .width(3.dp)
+                            .fillMaxHeight()
+                            .clip(RoundedCornerShape(2.dp))
+                            .background(Edge),
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    MarkupBody(block, readable.body.emoji, dim = true)
+                }
+                Markup.Kind.Code -> Text(
+                    text = block.text,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontFamily = FontFamily.Monospace,
+                    color = Slate100,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(Surface950)
+                        .border(1.dp, Edge, RoundedCornerShape(6.dp))
+                        .padding(horizontal = 10.dp, vertical = 8.dp),
+                )
+            }
+        }
+    }
+}
+
+private fun Markup.Style.span(): SpanStyle = when (this) {
+    Markup.Style.Bold -> SpanStyle(fontWeight = FontWeight.Bold)
+    Markup.Style.Italic -> SpanStyle(fontStyle = FontStyle.Italic)
+    Markup.Style.Strike -> SpanStyle(textDecoration = TextDecoration.LineThrough)
+    Markup.Style.Code -> SpanStyle(fontFamily = FontFamily.Monospace, background = Surface950)
+}
+
+@Composable
+private fun MarkupBody(
+    block: Markup.Block,
+    emoji: List<MessageCustomEmoji>,
+    dim: Boolean = false,
+) {
+    val uriHandler = LocalUriHandler.current
+    val pieces = remember(block.text, emoji) { CustomEmoji.split(block.text, emoji) }
+
+    val large = block.spans.isEmpty() && CustomEmoji.isOnlyEmoji(pieces)
     val size = if (large) 40.sp else 22.sp
     val inline = mutableMapOf<String, InlineTextContent>()
 
@@ -917,10 +981,18 @@ private fun MessageText(readable: ReadableMessage) {
                         )
                     }
                     // The alternative text is the shortcode, so copying the
-                    // message copies what was typed rather than a blank.
+                    // message copies what was typed rather than a blank - and
+                    // so the offsets below still mean what they meant.
                     appendInlineContent(id, ":${piece.emoji.name}:")
                 }
             }
+        }
+        block.spans.forEach { span ->
+            // Clamped, because a style is only as trustworthy as the string it
+            // was measured against and this one has been rebuilt.
+            val from = span.start.coerceIn(0, length)
+            val to = span.end.coerceIn(from, length)
+            if (to > from) addStyle(span.style.span(), from, to)
         }
     }
 
@@ -929,7 +1001,7 @@ private fun MessageText(readable: ReadableMessage) {
     Text(
         text = annotated,
         style = MaterialTheme.typography.bodyLarge,
-        color = Slate100,
+        color = if (dim) Slate400 else Slate100,
         lineHeight = if (large) 44.sp else 22.sp,
         inlineContent = inline,
         onTextLayout = { layoutResult = it },
