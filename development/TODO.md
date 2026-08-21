@@ -8,9 +8,9 @@ the top honest — it is what a new session reads first.
 **Phase 27 - push notifications** is half landed. The device registry, the
 `message.created` fan-out and the whole Android transport are in code and
 documented in `FCM/`; a swiped-away phone is now reachable. What is still open
-is Web Push, and the fan-out for calls and remote sessions - an incoming-call
-push with the app dead is the one a phone most obviously wants. See the phase-27
-section below.
+is Web Push, and the fan-out for remote sessions. The call half is answered by
+`call.roster`, and Android rings from it: a direct call raises a full-screen
+answer screen with the app dead. See the phase-27 section below.
 
 **None of it has been in front of a human.** `FCM/TESTING.md` is the order to
 try it in, and the four things most likely to be wrong are: the token arriving
@@ -112,8 +112,11 @@ Backend (`notification-service`):
 - [x] Dead tokens deleted on `registration-token-not-registered` rather than
       retried forever
 - [x] Never log a registration token
-- [ ] Fan-out on `call.started` and `remote.session.started`. A call push with
-      the app dead is the whole reason a phone needs this and a desktop does not
+- [x] Fan-out for a call, as `call.roster` rather than `call.started`: the
+      whole roster is what makes a notification that keeps up as people arrive
+      and *goes away* when the last one leaves, which a "started" event cannot
+      do. Android rings from it.
+- [ ] Fan-out on `remote.session.started`
 
 Web:
 
@@ -146,8 +149,12 @@ Android:
       that can: one is the phone's own clock, the other is inside the ciphertext
 - [x] `POST_NOTIFICATIONS` - already asked for at the first moment it means
       something, and the post is skipped when it is refused
-- [ ] Incoming-call UI raised from a push with the app dead. Waits on the
-      `call.started` fan-out above
+- [x] Incoming-call UI raised from a push with the app dead. A `CallStyle`
+      notification with a full-screen intent onto its own activity, which is
+      what shows over a locked phone without giving `MainActivity` that
+      property for every launch. Direct conversations only: a phone that rings
+      for every call happening in a server it is in is a phone somebody turns
+      notifications off on, and those keep the quiet notification
 
 Desktop:
 
