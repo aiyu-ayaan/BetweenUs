@@ -14,12 +14,22 @@
  * - **Politeness.** Two peers that agree on who is polite deadlock or glare.
  *   The rule has to be antisymmetric, and it is one comparison, so it is easy
  *   to get backwards and impossible to notice until two people call at once.
+ * - **The re-read on a rotated key.** A member joining a channel it holds no
+ *   key for mints the next epoch, so everybody already in the call is one
+ *   generation behind. Without the re-read every fingerprint is refused and
+ *   the call never connects - which is the bug this was written for.
  *
  * Run with `pnpm --filter @betweenus/desktop check`.
  */
 import assert from 'node:assert/strict';
 import { webcrypto } from 'node:crypto';
-import { fingerprintOf, patchOpus, signFingerprint, verifyFingerprint } from './mesh';
+import {
+  fingerprintOf,
+  patchOpus,
+  signFingerprint,
+  verifyFingerprint,
+  verifyFingerprintWithRefresh,
+} from './mesh';
 
 // The module reaches for the browser's crypto and btoa; Node has both, under
 // slightly different names.
@@ -122,6 +132,32 @@ function politenessIsAntisymmetric(): void {
   assert.equal(polite(a, a), false, 'a peer never connects to itself, but the rule stays total');
 }
 
+/**
+ * The newcomer's rotation: they arrive holding the epoch they just minted, and
+ * this client is still on the one before it. The first check fails, the
+ * re-read hands over the epoch they signed with, and the peer connects.
+ */
+async function aRotatedChannelKeyIsPickedUpOnce(): Promise<void> {
+  const rotated = 'the-epoch-the-newcomer-just-minted';
+  const proof = await signFingerprint(rotated, fingerprintOf(SDP)!);
+
+  let reads = 0;
+  const channelKey = async (refresh?: boolean): Promise<string> => {
+    reads += 1;
+    return refresh ? rotated : KEY;
+  };
+
+  assert.equal(await verifyFingerprintWithRefresh(channelKey, SDP, proof), true);
+  assert.equal(reads, 2, 'the stale key is tried first, then exactly one re-read');
+
+  // And the re-read is not a way in: a proof signed with no key of this
+  // channel's stays refused however many epochs are fetched.
+  reads = 0;
+  const forged = await signFingerprint('some-other-channels-key', fingerprintOf(SDP)!);
+  assert.equal(await verifyFingerprintWithRefresh(channelKey, SDP, forged), false);
+  assert.equal(reads, 2, 'and it never re-reads more than once');
+}
+
 async function main(): Promise<void> {
   await theFingerprintIsFoundAndSigned();
   await aSubstitutedFingerprintIsRefused();
@@ -130,6 +166,7 @@ async function main(): Promise<void> {
   opusOptionsLandOnTheRightPayload();
   anSdpWithNoOpusIsLeftAlone();
   politenessIsAntisymmetric();
+  await aRotatedChannelKeyIsPickedUpOnce();
   console.log('mesh self-check passed');
 }
 
