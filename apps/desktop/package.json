@@ -1,7 +1,7 @@
 {
   "name": "@betweenus/desktop",
   "private": true,
-  "version": "0.0.1-alpha.2",
+  "version": "0.0.1-alpha.3",
   "type": "module",
   "description": "BetweenUs desktop client - chat, voice, screen share and remote desktop.",
   "author": "aiyu-ayaan <ayaan35200@gmail.com>",
