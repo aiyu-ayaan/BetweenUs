@@ -33,6 +33,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -46,10 +47,15 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.compose.ui.unit.sp
 import com.aatech.betweenus.core.data.PublicUser
 import com.aatech.betweenus.core.store.Workspace
@@ -110,6 +116,24 @@ fun VoiceChannelScreen(
     val problem by engine.problem.collectAsState()
 
     val channel = channelId?.let { Workspace.channel(it) }
+
+    // A call is the whole screen. The status and navigation bars are hidden
+    // for as long as one is running and put back when it ends or the screen
+    // goes away - a swipe from an edge still brings them back transiently,
+    // which is the only way out of a full-screen app Android guarantees.
+    val inCallNow = state is VoiceEngine.CallState.Live ||
+        state is VoiceEngine.CallState.Connecting
+    val view = LocalView.current
+    DisposableEffect(inCallNow, view) {
+        val window = (view.context as? Activity)?.window
+        val bars = window?.let { WindowCompat.getInsetsController(it, view) }
+        if (inCallNow && bars != null) {
+            bars.systemBarsBehavior =
+                WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            bars.hide(WindowInsetsCompat.Type.systemBars())
+        }
+        onDispose { bars?.show(WindowInsetsCompat.Type.systemBars()) }
+    }
 
     val watching = participants.firstOrNull { it.visibleScreen != null }
     var dismissed by remember { mutableStateOf<String?>(null) }
@@ -176,7 +200,7 @@ fun VoiceChannelScreen(
         return
     }
 
-    val isInCall = state is VoiceEngine.CallState.Live || state is VoiceEngine.CallState.Connecting
+    val isInCall = inCallNow
 
     Box(
         modifier = Modifier
@@ -304,6 +328,9 @@ fun VoiceChannelScreen(
                                 speaking = remote.speaking,
                                 connected = remote.connected,
                                 fit = RendererCommon.ScalingType.SCALE_ASPECT_FILL,
+                                // Clear of the floating dock, which is drawn
+                                // over the bottom of this tile.
+                                labelBottomPadding = 92.dp,
                                 modifier = Modifier.fillMaxSize(),
                             )
 
@@ -876,6 +903,7 @@ private fun CallTile(
     isLocal: Boolean = false,
     isCompact: Boolean = false,
     fit: RendererCommon.ScalingType = RendererCommon.ScalingType.SCALE_ASPECT_FILL,
+    labelBottomPadding: Dp = 0.dp,
 ) {
     Box(
         modifier = modifier
@@ -921,6 +949,7 @@ private fun CallTile(
             modifier = Modifier
                 .align(Alignment.BottomStart)
                 .padding(if (isCompact) 4.dp else 10.dp)
+                .padding(bottom = labelBottomPadding)
                 .background(
                     Color.Black.copy(alpha = 0.65f),
                     RoundedCornerShape(if (isCompact) 6.dp else 8.dp),
