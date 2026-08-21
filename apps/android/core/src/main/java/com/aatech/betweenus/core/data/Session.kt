@@ -2,6 +2,7 @@ package com.aatech.betweenus.core.data
 
 import android.content.Context
 import android.content.SharedPreferences
+import com.aatech.betweenus.core.crypto.SecureStore
 import com.aatech.betweenus.core.crypto.BackupSecret
 import com.aatech.betweenus.core.crypto.E2ee
 import com.aatech.betweenus.core.store.Cache
@@ -38,15 +39,23 @@ sealed interface AuthPhase {
  * the email is remembered so signing in again does not mean typing it again.
  * A password is never stored anywhere.
  *
- * Both are in plain `SharedPreferences` for now, which is private to the app
- * but readable on a rooted device. Moving the refresh token into the Keystore
- * is the hardening phase in development/ANDROID_TODO.md.
+ * The refresh token is sealed by the Keystore rather than written in the
+ * clear: preferences are private to the app and readable on a rooted device,
+ * and a refresh token is a sign-in that lasts. It is keyed per deployment, so
+ * a phone that has used two servers holds a token for each and switching
+ * deployments cannot present one server's token to another. The email is not
+ * a secret and stays where it was.
+ *
+ * A token written by an older build is moved on the first launch that finds
+ * it, and the plaintext removed - which is the only reason [REFRESH_KEY] still
+ * exists.
  */
 object Session {
     private const val REFRESH_KEY = "refreshToken"
     private const val EMAIL_KEY = "lastEmail"
 
     private lateinit var prefs: SharedPreferences
+    private lateinit var secure: SecureStore
     private val refreshLock = Mutex()
 
     @Volatile
@@ -58,19 +67,38 @@ object Session {
 
     fun init(context: Context) {
         prefs = context.applicationContext.getSharedPreferences("betweenus.session", Context.MODE_PRIVATE)
+        secure = SecureStore(context)
+
+        // A build before this one wrote the token in the clear. Move it once
+        // and delete it, rather than leaving a readable copy behind for the
+        // life of the install.
+        prefs.getString(REFRESH_KEY, null)?.let { legacy ->
+            secure.put(secureKey(), legacy)
+            prefs.edit().remove(REFRESH_KEY).apply()
+        }
+
         // A stored refresh token means there is something to restore, and the
         // splash should stay up until it is known whether it still works.
-        if (prefs.getString(REFRESH_KEY, null) != null) _state.value = AuthPhase.Restoring
+        if (refreshToken != null) _state.value = AuthPhase.Restoring
     }
+
+    /**
+     * One entry per deployment.
+     *
+     * A phone that has signed into two servers holds a token for each, and
+     * switching between them cannot present one server's token to the other -
+     * which the old single key did, once, per switch.
+     */
+    private fun secureKey(): String = "refreshToken:" + Endpoint.current()
 
     /** Prefills the sign-in form. Empty on a device nobody has signed in on. */
     fun rememberedEmail(): String = prefs.getString(EMAIL_KEY, "").orEmpty()
 
     private var refreshToken: String?
-        get() = prefs.getString(REFRESH_KEY, null)
-        set(value) = prefs.edit().apply {
-            if (value == null) remove(REFRESH_KEY) else putString(REFRESH_KEY, value)
-        }.apply()
+        get() = secure.get(secureKey())
+        set(value) {
+            if (value == null) secure.remove(secureKey()) else secure.put(secureKey(), value)
+        }
 
     /**
      * A sign-in or a registration that worked.

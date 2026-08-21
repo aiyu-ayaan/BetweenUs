@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
@@ -24,7 +26,19 @@ if (hasFirebase) apply(plugin = "com.google.gms.google-services")
  * `ANDROID_KEYSTORE_FILE` at it; a clone with none of those set still builds
  * `assembleRelease`, unsigned, exactly as it did before.
  */
-val keystoreFile = System.getenv("ANDROID_KEYSTORE_FILE")?.takeIf { it.isNotBlank() }?.let(::file)
+val keystoreProperties = Properties().apply {
+    // A person shipping from a laptop has no CI environment to read. This file
+    // is git-ignored and holds the same four values; the environment still
+    // wins, so nothing about the workflow changes.
+    val local = rootProject.file("keystore.properties")
+    if (local.exists()) local.inputStream().use { load(it) }
+}
+
+fun signingValue(env: String, property: String): String? =
+    System.getenv(env)?.takeIf { it.isNotBlank() }
+        ?: keystoreProperties.getProperty(property)?.takeIf { it.isNotBlank() }
+
+val keystoreFile = signingValue("ANDROID_KEYSTORE_FILE", "storeFile")?.let(::file)
 val hasKeystore = keystoreFile?.exists() == true
 
 /**
@@ -104,9 +118,9 @@ android {
         if (hasKeystore) {
             create("release") {
                 storeFile = keystoreFile
-                storePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
-                keyAlias = System.getenv("ANDROID_KEY_ALIAS")
-                keyPassword = System.getenv("ANDROID_KEY_PASSWORD")
+                storePassword = signingValue("ANDROID_KEYSTORE_PASSWORD", "storePassword")
+                keyAlias = signingValue("ANDROID_KEY_ALIAS", "keyAlias")
+                keyPassword = signingValue("ANDROID_KEY_PASSWORD", "keyPassword")
             }
         }
     }

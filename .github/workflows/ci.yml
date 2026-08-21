@@ -101,3 +101,38 @@ jobs:
       - name: Service logs
         if: failure()
         run: tail -n 200 /tmp/*.log
+
+  android:
+    name: Android debug build and unit tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/android
+    steps:
+      - uses: actions/checkout@v4
+
+      # 21 because gradle/gradle-daemon-jvm.properties asks for it, which is
+      # the same version the release job builds with.
+      - uses: actions/setup-java@v4
+        with:
+          java-version: 21
+          distribution: temurin
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      # No google-services.json and no local.properties here on purpose: a
+      # pull request has to build the way a fresh clone does. The Firebase
+      # plugin is applied only when the file exists, so this is the path a
+      # contributor is actually on.
+      - run: ./gradlew testDebugUnitTest --stacktrace
+
+      # The debug APK, which is the check that matters: it is the whole
+      # manifest, every resource and the Compose compiler, none of which a unit
+      # test touches.
+      - run: ./gradlew assembleDebug --stacktrace
+
+      # Compiled, not run. The instrumented tests need a device, and an
+      # emulator on every pull request is minutes of runner time for a suite
+      # that is about the Keystore and SharedPreferences; compiling them is
+      # what stops them rotting.
+      - run: ./gradlew assembleDebugAndroidTest --stacktrace

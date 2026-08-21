@@ -13,3 +13,10 @@
 .externalNativeBuild
 .cxx
 local.properties
+
+# The release signing key and its passwords. A keystore belongs to whoever
+# ships the app; the build reads this file only when the environment has not
+# already supplied the same four values.
+keystore.properties
+*.jks
+*.keystore

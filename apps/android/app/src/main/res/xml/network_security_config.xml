@@ -6,13 +6,26 @@
   ranges only" here; the domain list is exact hosts or nothing, and a fixed
   list would not contain whichever 192.168.x.x a person actually runs.
 
-  Public deployments go through Cloudflare and are https regardless. See the
-  hardening phase in development/ANDROID_TODO.md.
+  Public deployments go through Cloudflare and are https regardless.
+
+  User-installed certificate authorities are trusted, which is the answer to a
+  self-hosted deployment behind a private CA - an internal PKI, or a step-ca on
+  the same LAN. The alternatives were worse in both directions: pinning needs a
+  certificate known when the app is built, and this app is built once for
+  every deployment there will ever be; and shipping a trust-all override, which
+  is the usual shortcut, is not a certificate story at all.
+
+  What this costs is honest: a certificate the *phone's owner* has chosen to
+  install is trusted. It is their phone and their decision, it is made in
+  Android's own settings with Android's own warnings, and it applies to this
+  app rather than to the system. What it does not do is trust anything nobody
+  installed.
 -->
 <network-security-config>
     <base-config cleartextTrafficPermitted="true">
         <trust-anchors>
             <certificates src="system" />
+            <certificates src="user" />
         </trust-anchors>
     </base-config>
 </network-security-config>

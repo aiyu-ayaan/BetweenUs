@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.dp
 import com.aatech.betweenus.core.crypto.BackupSecret
 import com.aatech.betweenus.core.crypto.E2ee
 import com.aatech.betweenus.core.crypto.IdentityStatus
+import android.content.Intent
 import com.aatech.betweenus.core.data.Endpoint
 import com.aatech.betweenus.core.data.BetweenUsApi
 import com.aatech.betweenus.core.data.NotificationPreferences
@@ -501,6 +502,35 @@ fun SettingsScreen(
                     icon = BetweenUsIcons.Speaker,
                     granted = BetweenUsPermissions.granted(context, BetweenUsPermissions.BLUETOOTH),
                     request = bluetooth,
+                )
+            }
+
+            var crashes by remember { mutableStateOf(CrashReports.enabled) }
+            ListRow(
+                title = "Keep a crash report",
+                subtitle = "On this phone only. Nothing is uploaded and nobody else is involved.",
+                leading = { BetweenUsIcon(BetweenUsIcons.File) },
+                trailing = {
+                    Switch(
+                        checked = crashes,
+                        onCheckedChange = {
+                            crashes = it
+                            CrashReports.enabled = it
+                        },
+                        colors = switchColours(),
+                    )
+                },
+            )
+            if (crashes && CrashReports.report() != null) {
+                ListRow(
+                    title = "Share the last crash",
+                    subtitle = "The stack, the Android version and the model. No account, no address.",
+                    leading = { BetweenUsIcon(BetweenUsIcons.Download) },
+                    onClick = {
+                        CrashReports.share(context)?.let {
+                            context.startActivity(Intent.createChooser(it, "Share the crash report"))
+                        }
+                    },
                 )
             }
 

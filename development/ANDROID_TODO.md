@@ -709,14 +709,42 @@ says so too; both halves are needed.
 
 ## Phase 13 — Hardening and release
 
-- [ ] Move the refresh token out of plain `SharedPreferences` into an
-      encrypted store or the Keystore, and key it per deployment.
-- [ ] Certificate handling for self-hosted deployments with a private CA.
-- [ ] R8/ProGuard rules, shrink, and a release signing config sourced from
-      `local.properties`.
-- [ ] Instrumented tests for sign-in, server switch, send-message.
-- [ ] Crash reporting, opt-in.
-- [ ] CI: assemble debug on pull request, alongside the existing pnpm jobs.
+- [x] The refresh token is out of plain `SharedPreferences` and sealed by the
+      Keystore, keyed per deployment - so a phone that has used two servers
+      holds a token for each and switching cannot present one server's token to
+      the other. A token written by an older build is moved on the first launch
+      that finds it and the plaintext deleted.
+- [x] Certificate handling for self-hosted deployments with a private CA:
+      user-installed certificate authorities are trusted. Pinning needs a
+      certificate known when the app is built and this app is built once for
+      every deployment there will ever be; a trust-all override is not a
+      certificate story at all. What is trusted is what the phone's owner
+      installed, in Android's own settings, with Android's own warnings.
+- [x] R8/ProGuard rules, shrink, and a release signing config. The environment
+      supplies the keystore in CI; a `keystore.properties` beside the project
+      supplies the same four values for somebody shipping from a laptop. Both
+      are git-ignored, and with neither, `assembleRelease` produces an unsigned
+      APK - which is correct: a signing key belongs to whoever ships the app.
+- [x] Instrumented tests for the two things that outlive the process and cannot
+      be checked on a JVM: the Keystore-sealed session (`SecureSessionTest`)
+      and the server switch and the unsent-reply queue (`ServerSwitchTest`).
+      Sending a message is not among them - it needs a deployment to send to,
+      which is an end-to-end test and lives in `TESTING.md`.
+- [x] Crash reporting, opt-in, and local. The stack trace is written to the
+      app's own storage only when somebody has asked for it, and sharing it is
+      a deliberate tap. No SDK: a self-hosted app phoning a service its
+      operator did not choose is a strange default, and the report carries the
+      stack, the Android version and the model - no account, no address, no
+      token.
+- [x] CI: `assembleDebug`, the unit tests and the instrumented tests compiled,
+      on every pull request, alongside the existing pnpm jobs.
+- [ ] A light theme. **Not started, and the reason is the palette rather than
+      the design:** the ramp in `ui/theme/Color.kt` is forty top-level
+      constants referenced directly by thirty-five files, so a second scheme
+      means threading a palette through every one of them. It is open on the
+      desktop and web for the same reason it is here - nothing about a light
+      BetweenUs has been designed yet, and a half-converted theme is worse than
+      none.
 
 ## Phase 14 — Local cache ✅ (compiles; not yet seen working on a device)
 

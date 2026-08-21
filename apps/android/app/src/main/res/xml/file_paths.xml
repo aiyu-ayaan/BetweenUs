@@ -16,4 +16,7 @@
          process and cannot be handed a bitmap, so the decrypted thumbnail is
          written here and granted to it for as long as the notification lives. -->
     <cache-path name="notifications" path="notifications/" />
+    <!-- The last crash, when somebody has asked for one to be kept, on its
+         way to whatever they choose to share it with. -->
+    <files-path name="crash" path="crash/" />
 </paths>

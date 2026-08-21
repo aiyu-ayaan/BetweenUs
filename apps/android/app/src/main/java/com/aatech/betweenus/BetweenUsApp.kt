@@ -17,6 +17,7 @@ import com.aatech.betweenus.core.store.AppForeground
 import com.aatech.betweenus.core.store.LastPlace
 import com.aatech.betweenus.feature.chat.Outbox
 import com.aatech.betweenus.feature.notifications.Push
+import com.aatech.betweenus.feature.settings.CrashReports
 import com.aatech.betweenus.feature.voice.AudioPrefs
 import com.aatech.betweenus.feature.voice.CallTones
 
@@ -29,6 +30,8 @@ import com.aatech.betweenus.feature.voice.CallTones
 class BetweenUsApp : Application(), ImageLoaderFactory {
     override fun onCreate() {
         super.onCreate()
+        // First, so a crash in anything below it is the one that gets recorded.
+        CrashReports.init(this)
         Endpoint.init(this)
         NetworkWatch.init(this)
         Session.init(this)
