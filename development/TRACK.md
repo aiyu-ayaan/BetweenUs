@@ -614,9 +614,13 @@ Calls:
       both asked about first and answered with a plain false; the catch stays
       for the per-app switch under Special app access, which is on by default
       and has no public getter. And whether the call *is* the little window is
-      read from the mode change itself rather than inferred from a new
-      `Configuration`, which is compared by value and so could report the old
-      answer.
+      asked of the activity every time rather than cached against a
+      `Configuration`, which is compared by value and so could hold the old
+      answer; the configuration is what says *when* to look, not what the
+      answer is. `addOnPictureInPictureModeChangedListener` would be the direct
+      way to put it and is not available - androidx.activity 1.13 removed both
+      it and `PictureInPictureModeChangedInfo`, which is what broke the release
+      build when this first landed.
 - [x] **Adding somebody to a server from the phone searches.** The field asked
       for a username typed exactly right and gave no sign whether a failure was
       the spelling or the feature; it now offers what it finds, friends-only,

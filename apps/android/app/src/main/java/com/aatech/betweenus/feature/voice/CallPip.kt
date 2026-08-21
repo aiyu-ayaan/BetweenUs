@@ -8,15 +8,9 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.util.Rational
 import androidx.activity.ComponentActivity
-import androidx.activity.PictureInPictureModeChangedInfo
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
-import androidx.core.util.Consumer
 import androidx.lifecycle.Lifecycle
 
 /**
@@ -104,42 +98,32 @@ object CallPip {
 /**
  * Whether the call is currently the little floating window.
  *
- * The activity tells us, rather than being inferred from a new
- * [android.content.res.Configuration]. Configuration was the obvious key and
- * the wrong one: it is compared by value, so the answer only changes when some
- * field of it does, and it arrives on its own schedule relative to the mode
- * change. Listening to the mode change itself is both exact and earlier, and
- * `ComponentActivity` has carried the listener since activity 1.5.
+ * The activity is asked, every time this runs. It is a field read, so there is
+ * nothing to save by caching it - and caching it is what went wrong: keyed on
+ * the [android.content.res.Configuration], the answer only changed when some
+ * field of that object did, because a Configuration is compared by value. What
+ * the configuration is good for is knowing *when* to look. Entering or leaving
+ * picture-in-picture resizes the window, Compose republishes the configuration
+ * when that happens, and reading it here is what subscribes this composable to
+ * that - so the read below happens again at exactly the moment its answer can
+ * have changed.
  *
- * A context that is not a `ComponentActivity` - a preview, a test - simply
- * never reports being in PiP, which is true.
+ * `ComponentActivity.addOnPictureInPictureModeChangedListener` would say it
+ * more directly, and is not an option: androidx.activity 1.13 removed that
+ * listener and its `PictureInPictureModeChangedInfo` altogether.
+ *
+ * A context with no activity behind it - a preview, a test - simply never
+ * reports being in PiP, which is true.
  */
 @Composable
 fun rememberInPictureInPicture(): Boolean {
     val context = LocalContext.current
-    val activity = remember(context) {
-        generateSequence(context) { (it as? ContextWrapper)?.baseContext }
-            .filterIsInstance<ComponentActivity>()
-            .firstOrNull()
-    }
 
-    var inPip by remember(activity) {
-        mutableStateOf(activity?.isInPictureInPictureMode == true)
-    }
+    // Read for its dependency, not its value: see above.
+    LocalConfiguration.current
 
-    DisposableEffect(activity) {
-        if (activity == null) return@DisposableEffect onDispose { }
-
-        // Re-read on subscribe: the mode can have changed between the initial
-        // state above and this effect running.
-        inPip = activity.isInPictureInPictureMode
-
-        val listener = Consumer<PictureInPictureModeChangedInfo> { info ->
-            inPip = info.isInPictureInPictureMode
-        }
-        activity.addOnPictureInPictureModeChangedListener(listener)
-        onDispose { activity.removeOnPictureInPictureModeChangedListener(listener) }
-    }
-
-    return inPip
+    return generateSequence(context) { (it as? ContextWrapper)?.baseContext }
+        .filterIsInstance<Activity>()
+        .firstOrNull()
+        ?.isInPictureInPictureMode == true
 }

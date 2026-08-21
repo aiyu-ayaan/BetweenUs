@@ -522,8 +522,11 @@ showing the conversation. Both decisions are made here.
       Settings → Apps → Special app access, and an activity that is finishing or
       not in front - and `enter` returns false for all three rather than
       throwing, so backing out on a phone without picture-in-picture simply
-      leaves the screen. Whether the call *is* the floating window comes from
-      the mode-change callback, not from comparing configurations.
+      leaves the screen. Whether the call *is* the floating window is asked of
+      the activity on every recomposition rather than cached against a
+      `Configuration`, which is compared by value and so could hold the old
+      answer. `addOnPictureInPictureModeChangedListener` would say it more
+      directly and is not available: androidx.activity 1.13 removed it.
 - [x] The self-view can be dragged anywhere on the stage.
 - [x] WhatsApp/Modern mobile video call UI redesign (`VoiceChannelScreen.kt`):
       - Adaptive zero-scroll stage: 1-on-1 full-screen remote view + floating self PiP card.
