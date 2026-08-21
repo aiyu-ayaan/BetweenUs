@@ -565,7 +565,11 @@ Anything changing the slots has to change both clients in the same commit.
       double-tap to reset.
 - [x] Orientation the viewer chooses, overriding the phone's rotation lock, and
       handed back when the stage closes.
-- [ ] Quality ladder mirroring `share-quality.ts`.
+- [x] Quality ladder mirroring `share-quality.ts`. `ShareQuality.kt`, with the
+      same numbers and a test; the capture size, the encoder ceiling and the
+      SDP bitrate all come from it. One profile rather than the desktop's
+      detail/motion pair - a phone shares its own screen, which is text far
+      more often than it is film.
 
 A share is not another tile in the grid. It is usually text, and text in a
 quarter of a phone screen is not text, so an arriving share takes the whole

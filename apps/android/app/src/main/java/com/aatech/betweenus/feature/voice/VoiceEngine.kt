@@ -196,6 +196,21 @@ class VoiceEngine(private val context: Context) {
     private val _muted = MutableStateFlow(false)
     val muted: StateFlow<Boolean> = _muted.asStateFlow()
 
+    /**
+     * What another app is doing to this call's audio.
+     *
+     * A phone call, a voice assistant or a navigation prompt all arrive the
+     * same way - as audio focus being taken - and the two useful answers are
+     * different. Something short and spoken over the top is a DUCK: the call
+     * carries on quieter. A cellular call is a HOLD: the microphone closes and
+     * playback stops, because the person is talking to somebody else and the
+     * room must not be sent to this call while they do.
+     */
+    enum class Interruption { NONE, DUCK, HOLD }
+
+    private val _interruption = MutableStateFlow(Interruption.NONE)
+    val interruption: StateFlow<Interruption> = _interruption.asStateFlow()
+
     private val _cameraOn = MutableStateFlow(false)
     val cameraOn: StateFlow<Boolean> = _cameraOn.asStateFlow()
 
@@ -451,9 +466,43 @@ class VoiceEngine(private val context: Context) {
      * audio.
      */
     private fun applyMute() {
-        val muted = _muted.value
+        // Held means muted whatever the button says, and the button is left
+        // alone: coming back from a phone call must not unmute somebody who
+        // was muted before it rang.
+        val muted = _muted.value || _interruption.value == Interruption.HOLD
         audioTrack?.setEnabled(!muted)
         runCatching { audioDevice.setMicrophoneMute(muted) }
+    }
+
+    /**
+     * Another app took the audio, or gave it back.
+     *
+     * Called from [CallAudio]'s focus listener, which is the only place the
+     * system says so. Ducking lowers what this call plays; holding closes the
+     * microphone as well and tells the far end, so a tile goes to "muted"
+     * rather than to a silence nobody can explain.
+     */
+    fun setInterruption(interruption: Interruption) {
+        if (_interruption.value == interruption) return
+        _interruption.value = interruption
+        applyMute()
+        applyPlayback()
+        publishMediaState()
+        if (inCall()) CallService.start(context, callLabel(), foregroundTypes(), _muted.value)
+    }
+
+    /** How loud this call plays, which is the ducking half of an interruption. */
+    private fun playbackGain(): Double = when (_interruption.value) {
+        Interruption.NONE -> 1.0
+        // Quiet enough to hear the prompt over, loud enough that the call has
+        // not gone away.
+        Interruption.DUCK -> 0.2
+        Interruption.HOLD -> 0.0
+    }
+
+    private fun applyPlayback() {
+        val gain = playbackGain()
+        connections.values.forEach { it.applyPlayback(gain) }
     }
 
     /**
@@ -1097,6 +1146,21 @@ class VoiceEngine(private val context: Context) {
                 transceivers[slot]?.sender?.setTrack(track, false)
                 if (track != null) tune(slot)
             }
+            // A peer that arrives during an interruption starts at the volume
+            // everybody else is at, rather than at full while a phone call is
+            // in progress.
+            applyPlayback(playbackGain())
+        }
+
+        /**
+         * How loud this peer plays. Both audio slots, because a shared screen
+         * carries its own sound and ducking one of the two is ducking neither.
+         */
+        fun applyPlayback(gain: Double) {
+            for (slot in listOf(Slot.MIC, Slot.SCREEN_AUDIO)) {
+                val track = transceivers[slot]?.receiver?.track() as? AudioTrack ?: continue
+                runCatching { track.setVolume(gain) }
+            }
         }
 
         private suspend fun offer() {
@@ -1394,6 +1458,13 @@ class VoiceEngine(private val context: Context) {
             instance ?: synchronized(this) {
                 instance ?: VoiceEngine(context.applicationContext).also { instance = it }
             }
+
+        /**
+         * The engine only if one exists, for the few callers that must not
+         * build one just to ask a question - the audio focus listener fires
+         * on a process with no call in it as readily as on one that has.
+         */
+        fun current(): VoiceEngine? = instance
 
         /**
          * Ends whatever call is running, if there is one. Signing out is the

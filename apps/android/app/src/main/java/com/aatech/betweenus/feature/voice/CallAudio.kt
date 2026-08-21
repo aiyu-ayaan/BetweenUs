@@ -54,6 +54,31 @@ object CallAudio {
     private var previousMode: Int = AudioManager.MODE_NORMAL
     private var previousSpeaker: Boolean = false
     private var focus: AudioFocusRequest? = null
+
+    /**
+     * What the system says another app is doing to this call's audio.
+     *
+     * A cellular call, a voice assistant and a navigation prompt all arrive
+     * here and nowhere else: an incoming phone call needs no telephony
+     * permission to notice, because taking the audio *is* how the platform
+     * announces it. Reading `READ_PHONE_STATE` to learn the same thing would
+     * be asking for a permission to be told something already known.
+     */
+    private val onFocusChange = AudioManager.OnAudioFocusChangeListener { change ->
+        VoiceEngine.current()?.setInterruption(
+            when (change) {
+                AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> VoiceEngine.Interruption.DUCK
+                AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> VoiceEngine.Interruption.HOLD
+                // A permanent loss is another app taking the audio for good -
+                // a second VoIP call, usually. The call is not ended here,
+                // because ending somebody's call on their behalf is worse than
+                // holding it: they come back to it muted and can unmute.
+                AudioManager.AUDIOFOCUS_LOSS -> VoiceEngine.Interruption.HOLD
+                AudioManager.AUDIOFOCUS_GAIN -> VoiceEngine.Interruption.NONE
+                else -> VoiceEngine.Interruption.NONE
+            },
+        )
+    }
     private var held = false
     private var scoStarted = false
 
@@ -78,13 +103,14 @@ object CallAudio {
                         .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
                         .build(),
                 )
+                .setOnAudioFocusChangeListener(onFocusChange)
                 .build()
             manager.requestAudioFocus(request)
             focus = request
         } else {
             @Suppress("DEPRECATION")
             manager.requestAudioFocus(
-                null,
+                onFocusChange,
                 AudioManager.STREAM_VOICE_CALL,
                 AudioManager.AUDIOFOCUS_GAIN_TRANSIENT,
             )
@@ -300,10 +326,13 @@ object CallAudio {
             manager.abandonAudioFocusRequest(request)
         } else {
             @Suppress("DEPRECATION")
-            manager.abandonAudioFocus(null)
+            manager.abandonAudioFocus(onFocusChange)
         }
         focus = null
         held = false
+        // The call is over, so nothing is interrupting it any more. Leaving
+        // this set would hold the microphone shut on the next call.
+        VoiceEngine.current()?.setInterruption(VoiceEngine.Interruption.NONE)
     }
 }
 
