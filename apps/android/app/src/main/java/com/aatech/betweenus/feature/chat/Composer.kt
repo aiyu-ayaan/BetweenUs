@@ -44,14 +44,18 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.aatech.betweenus.core.data.MessageAttachment
 import com.aatech.betweenus.core.data.MessageReply
+import com.aatech.betweenus.core.data.EmojiNames
 import com.aatech.betweenus.core.store.Presence
+import com.aatech.betweenus.core.store.Workspace
 import com.aatech.betweenus.core.store.ReadableMessage
 import com.aatech.betweenus.ui.components.IconAction
 import com.aatech.betweenus.ui.components.BetweenUsIcon
@@ -92,11 +96,36 @@ fun Composer(
     onCameraClick: () -> Unit,
     onSend: (String) -> Unit,
 ) {
-    var text by remember(channelId) { mutableStateOf("") }
+    // A caret position, not just a string: the `:` menu has to know what is
+    // behind the cursor, and inserting an emoji mid-sentence has to put it
+    // where the cursor is rather than at the end.
+    var field by remember(channelId) { mutableStateOf(TextFieldValue("")) }
     var showEmojiPicker by remember { mutableStateOf(false) }
+    val text = field.text
 
     LaunchedEffect(editing?.id) {
-        text = editing?.text ?: ""
+        val body = editing?.text ?: ""
+        field = TextFieldValue(body, TextRange(body.length))
+    }
+
+    val customEmoji = remember(channelId) {
+        Workspace.emojiFor(Workspace.channel(channelId)?.serverId)
+    }
+    val query = remember(field) { EmojiNames.queryAt(field.text, field.selection.start) }
+    val suggestions = remember(query, customEmoji) {
+        query?.let { emojiSuggestions(it.term, customEmoji) }.orEmpty()
+    }
+
+    /** Put a chosen emoji where the caret is, and leave the caret after it. */
+    fun insert(insertion: String, replacing: EmojiNames.Query?) {
+        val caret = field.selection.start
+        val from = replacing?.start ?: caret
+        val before = field.text.substring(0, from)
+        val after = field.text.substring(caret)
+        // A space after it, because the next thing typed is a word and not
+        // part of the shortcode that was just resolved.
+        val body = "$insertion "
+        field = TextFieldValue(before + body + after, TextRange(from + body.length))
     }
 
     val isImeVisible = WindowInsets.isImeVisible
@@ -108,6 +137,8 @@ fun Composer(
             .fillMaxWidth()
             .background(Surface950),
     ) {
+        EmojiSuggestBar(suggestions) { suggestion -> insert(suggestion.insert, query) }
+
         HorizontalDivider(color = Edge)
 
         // Editing banner
@@ -313,10 +344,10 @@ fun Composer(
                     }
 
                     BasicTextField(
-                        value = text,
+                        value = field,
                         onValueChange = {
-                            text = it
-                            if (it.isNotEmpty()) Presence.noteTyping(channelId)
+                            field = it
+                            if (it.text.isNotEmpty()) Presence.noteTyping(channelId)
                         },
                         textStyle = TextStyle(
                             color = Slate100,
@@ -379,7 +410,7 @@ fun Composer(
                     .let {
                         if (canSend) it.clickable {
                             val payload = text.trim()
-                            text = ""
+                            field = TextFieldValue("")
                             onSend(payload)
                         } else it
                     },
@@ -397,9 +428,8 @@ fun Composer(
     if (showEmojiPicker) {
         EmojiPickerSheet(
             onDismiss = { showEmojiPicker = false },
-            onEmojiPicked = { emoji ->
-                text = text + emoji
-            },
+            onEmojiPicked = { emoji -> insert(emoji, replacing = null) },
+            custom = customEmoji,
         )
     }
 }

@@ -41,6 +41,9 @@ dependencies {
     implementation(libs.androidx.core.ktx)
     // Avatars and server icons come off the deployment as URLs.
     api(libs.coil.compose)
+    // An animated custom emoji is a GIF, and Coil draws its first frame
+    // without this. The decoder is registered in `BetweenUsApp`.
+    api(libs.coil.gif)
     debugImplementation(libs.androidx.compose.ui.tooling)
     testImplementation(libs.junit)
 }

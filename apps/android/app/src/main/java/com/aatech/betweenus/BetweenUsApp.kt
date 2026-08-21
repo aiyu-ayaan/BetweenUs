@@ -1,6 +1,11 @@
 package com.aatech.betweenus
 
 import android.app.Application
+import android.os.Build
+import coil.ImageLoader
+import coil.ImageLoaderFactory
+import coil.decode.GifDecoder
+import coil.decode.ImageDecoderDecoder
 import com.aatech.betweenus.core.crypto.DeviceIdentity
 import com.aatech.betweenus.core.crypto.E2ee
 import com.aatech.betweenus.core.data.Endpoint
@@ -21,7 +26,7 @@ import com.aatech.betweenus.feature.voice.CallTones
  * here on purpose: nothing yet needs injecting that a constructor cannot hand
  * over, and a graph for three objects is scaffolding for its own sake.
  */
-class BetweenUsApp : Application() {
+class BetweenUsApp : Application(), ImageLoaderFactory {
     override fun onCreate() {
         super.onCreate()
         Endpoint.init(this)
@@ -44,4 +49,20 @@ class BetweenUsApp : Application() {
         AppForeground.init(this)
         Push.init(this)
     }
+
+    /**
+     * Coil, with a GIF decoder in it.
+     *
+     * An animated custom emoji is a GIF, and without a decoder Coil draws its
+     * first frame - which is how a `:party_parrot:` arrives as a still parrot.
+     * The platform's own `ImageDecoder` does it from API 28; below that Coil's
+     * own decoder is the fallback, and it is the reason `minSdk 24` is not a
+     * reason to skip this.
+     */
+    override fun newImageLoader(): ImageLoader = ImageLoader.Builder(this)
+        .components {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) add(ImageDecoderDecoder.Factory())
+            else add(GifDecoder.Factory())
+        }
+        .build()
 }

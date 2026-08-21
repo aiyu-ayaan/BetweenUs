@@ -38,6 +38,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.layout.ContentScale
+import coil.compose.AsyncImage
+import com.aatech.betweenus.core.data.Endpoint
+import com.aatech.betweenus.core.data.ServerEmoji
 import com.aatech.betweenus.ui.components.BetweenUsIcon
 import com.aatech.betweenus.ui.components.BetweenUsIcons
 import com.aatech.betweenus.ui.theme.Accent
@@ -103,9 +107,20 @@ private val CATEGORIES = listOf(
 fun EmojiPickerSheet(
     onDismiss: () -> Unit,
     onEmojiPicked: (String) -> Unit,
+    /**
+     * This server's own emoji, in a tab of their own before the Unicode ones.
+     * A custom one is picked as its `:name:`, because the shortcode is what the
+     * message carries; the picture comes from the manifest the sender attaches.
+     */
+    custom: List<ServerEmoji> = emptyList(),
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var selectedCategory by remember { mutableIntStateOf(0) }
+    // The server's tab is index 0 when there is one, so every other index
+    // shifts by one - which is why the grid asks this rather than the tab.
+    val customTab = custom.isNotEmpty()
+    val tabs = (if (customTab) listOf("🏷️" to "Server") else emptyList()) +
+        CATEGORIES.map { it.icon to it.name }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -144,7 +159,7 @@ fun EmojiPickerSheet(
                     }
                 },
             ) {
-                CATEGORIES.forEachIndexed { index, category ->
+                tabs.forEachIndexed { index, tab ->
                     Tab(
                         selected = selectedCategory == index,
                         onClick = { selectedCategory = index },
@@ -153,9 +168,9 @@ fun EmojiPickerSheet(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                             ) {
-                                Text(text = category.icon, fontSize = 16.sp)
+                                Text(text = tab.first, fontSize = 16.sp)
                                 Text(
-                                    text = category.name,
+                                    text = tab.second,
                                     style = MaterialTheme.typography.labelSmall,
                                     color = if (selectedCategory == index) Slate100 else Slate400,
                                 )
@@ -168,7 +183,11 @@ fun EmojiPickerSheet(
             HorizontalDivider(color = Edge)
 
             // Emoji Grid
-            val currentEmojis = CATEGORIES.getOrNull(selectedCategory)?.emojis.orEmpty()
+            val onCustomTab = customTab && selectedCategory == 0
+            val currentEmojis = if (onCustomTab) emptyList() else {
+                CATEGORIES.getOrNull(if (customTab) selectedCategory - 1 else selectedCategory)
+                    ?.emojis.orEmpty()
+            }
             LazyVerticalGrid(
                 columns = GridCells.Adaptive(minSize = 44.dp),
                 modifier = Modifier
@@ -178,6 +197,25 @@ fun EmojiPickerSheet(
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
+                if (onCustomTab) {
+                    items(custom) { emoji ->
+                        Box(
+                            modifier = Modifier
+                                .size(44.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable { onEmojiPicked(":${emoji.name}:") },
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            AsyncImage(
+                                model = Endpoint.absolute(emoji.url),
+                                contentDescription = ":${emoji.name}:",
+                                contentScale = ContentScale.Fit,
+                                modifier = Modifier.size(30.dp),
+                            )
+                        }
+                    }
+                }
+
                 items(currentEmojis) { emoji ->
                     Box(
                         modifier = Modifier
