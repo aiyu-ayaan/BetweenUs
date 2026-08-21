@@ -515,7 +515,7 @@ jobs:
   # build whose version tags rollback had just deleted, and no Release to say
   # what it was. The tag a deployment follows is the last thing that moves.
   promote:
-    name: Point ${{ needs.merged.outputs.channel }} at this release
+    name: Point ${{ needs.merged.outputs.channel }} and latest at this release
     needs: [merged, images, desktop, android, publish]
     if: needs.merged.outputs.release == 'true'
     runs-on: ubuntu-latest
@@ -528,16 +528,33 @@ jobs:
 
       # `imagetools create` re-points a tag at an existing manifest. No rebuild,
       # no pull, and it keeps multi-arch manifests intact.
+      #
+      # Two moving tags, not one. The channel tag says "the newest alpha" or
+      # "the newest beta"; `latest` is what docker-compose.yml falls back to
+      # when BETWEENUS_VERSION is empty, which is what every first deployment
+      # has. It used to be pushed only when the release was stable, so a
+      # repository that had never cut one had no `latest` at all, and a plain
+      # `up -d` died on a tag that did not exist.
+      #
+      # `latest` therefore follows the newest release of any channel. Once
+      # there is a stable line with alphas still shipping beside it, drop the
+      # second tag here, or a deployment tracking `latest` gets walked onto a
+      # pre-release by the next alpha.
       - name: Re-point the channel tags
         env:
           VERSION: ${{ needs.merged.outputs.version }}
           CHANNEL: ${{ needs.merged.outputs.channel }}
         run: |
+          tags="$CHANNEL"
+          [ "$CHANNEL" = latest ] || tags="$tags latest"
+
           for target in auth-service server-service chat-service presence-service \
                         notification-service call-service remote-gateway web admin-web; do
-            docker buildx imagetools create \
-              --tag "${IMAGE_REPO}:${target}-${CHANNEL}" \
-              "${IMAGE_REPO}:${target}-${VERSION}"
+            for tag in $tags; do
+              docker buildx imagetools create \
+                --tag "${IMAGE_REPO}:${target}-${tag}" \
+                "${IMAGE_REPO}:${target}-${VERSION}"
+            done
           done
 
   publish:
@@ -630,9 +647,9 @@ jobs:
 
             ## Images
 
-            `${{ env.IMAGE_REPO }}:<service>-${{ needs.merged.outputs.version }}`, and
-            `<service>-${{ needs.merged.outputs.channel }}`, which is moved to this release
-            as the last step of the run.
+            `${{ env.IMAGE_REPO }}:<service>-${{ needs.merged.outputs.version }}`. The moving
+            tags `<service>-${{ needs.merged.outputs.channel }}` and `<service>-latest` are
+            pointed at it as the last step of the run.
           files: |
             artifacts/desktop/*
             artifacts/android/*
