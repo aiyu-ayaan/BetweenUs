@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.0.1-alpha.3](https://github.com/aiyu-ayaan/BetweenUs/compare/v0.0.1-alpha.2...v0.0.1-alpha.3) (2026-08-21)
+
+### Features
+
+* Publish the service images for arm64 as well as amd64
+
+### Bug fixes
+
+* Repair action refs mangled by the arm64 patch script
+
+### Other changes
+
+* Betweenus is also available on arm docs
+
 ## [0.0.1-alpha.2](https://github.com/aiyu-ayaan/BetweenUs/compare/v0.0.1-alpha.1...v0.0.1-alpha.2) (2026-08-21)
 
 ### Features
