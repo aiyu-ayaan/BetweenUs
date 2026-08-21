@@ -45,9 +45,25 @@ phase 27 in `TODO.md`. A push is data-only and carries no words, because the
 body is sealed and only the device knows whether that conversation is already on
 screen; the notification is written here. `FCM/` documents all of it and
 `FCM/TESTING.md` is what to try first, because **none of it has been on a real
-device**. What is still open is the incoming-call UI for a dead app (phase 6),
-which is now only the full-screen ringing UI: the `call.started` fan-out it was
-waiting on exists, as `call.roster`.
+device**. A direct call now rings from a push with the app dead - a `CallStyle`
+notification with a full-screen intent onto its own activity - and that is the
+one thing on this list most in need of a real phone: a full-screen intent is
+the feature manufacturers differ most about.
+
+Phase 13 has landed apart from the light theme. The refresh token is sealed by
+the Keystore and keyed per deployment, a private CA is handled by trusting what
+the phone's owner installed, signing reads a keystore from the environment or a
+git-ignored file beside the project, crash reporting is opt-in and local, and
+CI builds the debug APK on every pull request.
+
+**Three items are open and two of them are blocked on something that is not
+this client.** Input sensitivity needs an insertion point on Android's WebRTC
+capture path that does not exist short of a custom audio device module. Remote
+file transfer needs a wire: there is no file message in the gateway's
+vocabulary, nothing on the desktop agent that would receive one, and a remote
+session opens no data channel to carry it. The light theme is open on its own
+terms - the palette is forty top-level constants used directly by thirty-five
+files, and nothing about a light BetweenUs has been designed.
 
 ### What a real deployment found
 
@@ -363,8 +379,13 @@ data is cleared.
       desktop's, sequential for the same reason. The upload also survives an
       access token expiring mid-file, which minutes of parts makes likely, and
       reports its progress into the send preview.
-- [ ] Markdown-ish message body rendering, matching
-      `apps/desktop/src/services/message-body.ts`.
+- [x] Markdown-ish message body rendering. `core/data/Markup.kt`: bold,
+      italic, strikethrough, inline code, fenced code and quoted lines, with
+      the marks *removed* - which is the part with a bug in it, because every
+      span is then an index into the text that comes back. The emoji splitter
+      runs over that same string afterwards and appends each shortcode as
+      alternate text of the same length, so the offsets still line up.
+      `MarkupTest` asserts both halves of every case.
 
 ## Phase 4 — Realtime ✅
 
@@ -463,8 +484,12 @@ showing the conversation. Both decisions are made here.
       happening nearby is a phone somebody turns notifications off on.
       Declining lasts as long as the call, because every arrival is another
       roster push.
-- [ ] A "reply" that fails offline is silently dropped. It should queue on
-      `Outbox` the way a send from the composer does.
+- [x] A reply that fails offline is kept rather than dropped. It goes to disk
+      before it is sent - a broadcast receiver is killed the moment it returns,
+      so the in-memory queue was the wrong shape for it - and out again on the
+      next validated network or the next launch. The thread says "sending…"
+      until it has gone, and signing out throws unsent words away rather than
+      sending them as whoever signs in next.
 
 ## Phase 6 — Voice and video ✅ (compiles; not yet seen working on a device)
 
@@ -645,9 +670,13 @@ says so too; both halves are needed.
       one buys. It is a disclosure and not a gate - each is still requested at
       the moment it is needed, so anything skipped there can be granted by
       tapping the thing that wanted it.
-- [ ] Input-sensitivity setting. Android's WebRTC has no insertion point on the
-      capture path short of a custom audio device module; see `TRACK.md`.
-- [ ] Theme: dark is the design; a light variant only if it is asked for.
+- [ ] Input-sensitivity setting. **Blocked, and not by effort:** Android's
+      WebRTC has no insertion point on the capture path short of a custom audio
+      device module, and the desktop's gate is a Web Audio worklet on the
+      captured track. A level meter driving a mute toggle would be a different
+      thing wearing the same name. See `TRACK.md`.
+- [ ] Theme: dark is the design. A light variant is open and the obstacle is
+      the palette, not the taste - see phase 13.
 - [x] Server switcher reachable from settings, not just from the login screen.
 
 ## Phase 11 — Servers, roles and moderation ✅

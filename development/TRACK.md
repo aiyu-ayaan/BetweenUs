@@ -191,6 +191,72 @@ Backlog worked down, this pass:
       deployment reports.
 - [x] **Android: reconnect on a network-change callback** was ticked here and
       not in `ANDROID_TODO.md`. The code has it - `core/data/Network.kt`.
+- [x] **Markdown-ish bodies on the phone.** Bold, italic, strikethrough,
+      inline code, fenced code and quoted lines, in `core/data/Markup.kt`. The
+      marks are stripped, which is the part with a bug in it: every span the
+      parser reports is an index into the text that comes *back*, and the emoji
+      splitter then runs over that same string and appends each shortcode as
+      alternate text of exactly its own length, so the offsets still mean what
+      they meant. Fenced code is never parsed inside, an unmatched mark is just
+      a character, and `snake_case` is not two italics. Tested case by case,
+      both halves of each.
+- [x] **The `:` menu, the server's own emoji in the picker, and animated ones.**
+      `emoji-names.ts` ported table and all, because a shortcode is a contract
+      between the clients and a name only one of them knows sends a message the
+      others draw as a word. The composer holds a caret rather than a string
+      now - the menu has to know what is behind the cursor, and an emoji picked
+      mid-sentence goes where the cursor is. `coil-gif` is registered in the
+      image loader, so an animated emoji is no longer a still first frame.
+- [x] **The member menu on the phone**: message, add friend, mute, copy id.
+      Muting is per person and held by the server, so somebody muted on a phone
+      is muted on a laptop. Found while adding it: the notification-preferences
+      patch sent both quiet minutes on every call, so using the on/off switch
+      wiped whatever quiet hours the account had. The two minutes are one
+      argument now, and leaving it out leaves them alone.
+- [x] **A reply from the shade that cannot be sent is kept.** It was sent inline
+      by the broadcast receiver and, when that failed, discarded without a word
+      - which is every reply written in a lift or on a train. It goes to disk
+      first and out on the next validated network or the next launch; the
+      thread says "sending…" until it has; signing out throws unsent words away
+      rather than sending them as whoever signs in next.
+- [x] **A direct call rings on the phone, full-screen, with the app dead.**
+      `call.roster` is the fan-out this was waiting for. A `CallStyle`
+      notification with a full-screen intent onto its own activity, because
+      showing over a locked phone is an activity property and `MainActivity`
+      must not have it for every launch. Answering joins on arrival - pressing
+      Answer is consent to open a microphone in a way tapping a notification is
+      not - and declining lasts as long as the call, since every arrival and
+      departure is another roster push. A server's voice channel keeps the
+      quiet notification: a phone that rings for every call happening nearby is
+      a phone somebody turns notifications off on.
+- [x] **A call on the phone ducks for a prompt and holds for a phone call.**
+      Audio focus was requested with no listener at all, so a cellular call
+      arriving mid-call left the microphone open and the room going out over
+      it. A transient duck lowers what the call plays; a loss closes the
+      microphone as well and tells the far end, so the tile reads muted rather
+      than silent. Coming back does not unmute somebody who was already muted,
+      and no telephony permission is asked for - taking the audio is how the
+      platform announces a call.
+- [x] **The remote clipboard on the phone, both directions**, gated on
+      `REMOTE_CLIPBOARD`. The send half existed and nothing called it; the
+      receive half was dropped on the floor. What the machine has copied is
+      *shown* rather than written onto the phone: a machine that could
+      overwrite the clipboard of the phone watching it could put a URL under
+      somebody's next paste.
+- [x] **Phase 13 hardening, minus the light theme.** The refresh token is
+      sealed by the Keystore and keyed per deployment, so a phone that has used
+      two servers holds a token for each and switching cannot present one
+      server's token to the other; a token written by an older build is moved
+      once and the plaintext deleted. A private CA is handled by trusting what
+      the phone's owner installed - pinning needs a certificate known at build
+      time and this app is built once for every deployment there will ever be.
+      Signing reads the keystore from the environment or a git-ignored file
+      beside the project. Crash reporting is opt-in, local, and shared by hand,
+      with no SDK phoning a service the operator did not choose. Instrumented
+      tests cover the two things that cannot be checked on a JVM - the sealed
+      session, and the server switch with the unsent-reply queue - and CI
+      builds the debug APK, runs the unit tests and compiles the instrumented
+      ones on every pull request.
 
 Chat and media, across all three clients:
 
@@ -589,33 +655,24 @@ blocked by anything outside this document.
 
 ### Android
 
-- [ ] **An emoji picker and an upload screen on the phone.** It renders custom
-      emoji and sends them; what it has not got is the `:` menu, the picker, and
-      the settings screen that uploads one. Animating a GIF needs Coil's
-      `coil-gif` artifact - one dependency line, absent from the offline cache
-      when this landed.
-- [ ] **The member menu**, which landed on desktop and web this pass. The shortcode table is a shared contract in
-      `emoji-names.ts`; the phone has neither.
-- [ ] **Markdown-ish body rendering.** `message-body.ts` is the contract.
-      (Replies landed, on all three clients.)
 - [ ] **Input sensitivity on the phone.** The two modes, the processing switches
-      and an output route landed; the gate did not. The desktop gates the
-      captured track in a Web Audio worklet, and Android's WebRTC has no
-      insertion point on the capture path short of a custom audio device module.
-      A level meter driving a mute toggle would be a different thing wearing the
-      same name.
-- [ ] **Ducking and an incoming phone call.** Two parts of the audio-focus
-      problem; the third, headset routing, landed - see the Bluetooth item
-      above.
-- [ ] **Remote clipboard and file transfer**, each gated on its own permission.
-- [ ] **Phase 13 hardening, minus R8.** The refresh token out of plain
-      `SharedPreferences` into the Keystore and keyed per deployment;
-      private-CA certificate handling; a real signing config, which needs a
-      keystore that is not in this repository. R8 and resource shrinking are on
-      - 54.8 MB to 43.1 MB - and `assembleRelease` produces an unsigned APK
-      until that keystore is configured, which is the correct default: a
-      signing key belongs to whoever ships the app.
-- [ ] **Instrumented tests and CI**, opt-in crash reporting, and a light theme.
+      and an output route landed; the gate did not, and this is the one item on
+      the list blocked by the platform rather than by time. The desktop gates
+      the captured track in a Web Audio worklet, and Android's WebRTC has no
+      insertion point on the capture path short of a custom audio device
+      module. A level meter driving a mute toggle would be a different thing
+      wearing the same name.
+- [ ] **Remote file transfer**, gated on `REMOTE_FILE_TRANSFER`. Blocked on a
+      wire that does not exist anywhere: the gateway has no file message, the
+      desktop agent has nothing that would receive one, and a remote session
+      negotiates a video track and no data channel. The permission does nothing
+      on every client, which is why this sits beside the desktop's own entry
+      rather than under Android alone. The clipboard, which shares the item it
+      used to be half of, landed - see below.
+- [ ] **A light theme on the phone**, which is the same item the desktop has and
+      is open for the same reason: the ramp is forty top-level constants used
+      directly by thirty-five files, and nothing about a light BetweenUs has
+      been designed.
 
 ---
 
@@ -794,3 +851,39 @@ The cases most worth putting a person in front of, in order:
     the far end can still be blank locally. Then back out of the call: it must
     shrink to a floating window with the call still running and audio still
     flowing, and tapping it must come back to the full screen.
+
+28. **The ringing call**, which is this pass's item with the most that can be
+    wrong and the least that a build proves. Two accounts, a direct
+    conversation, and the phone's app swiped away: start a call from the other
+    client and the phone must ring - full screen, over the lock screen, with a
+    ringtone. Answer must land in the call with audio flowing rather than on
+    the join button. Then do it again and press Decline: the ring must stop and
+    must *not* come back when a third person joins the same call, because every
+    arrival is another roster push. Last, start a call and hang up before
+    answering: the notification must go away on its own. A full-screen intent is
+    the thing manufacturers differ about most, so this is worth trying on two
+    makes of phone rather than one.
+
+29. **A phone call arriving during a BetweenUs call**, which nothing but a real
+    SIM can test. With a call up, ring the phone: the microphone must close and
+    the far end must see the tile go muted, not silent. Answer the phone call,
+    end it, and the BetweenUs call must come back - and must *not* unmute
+    somebody who was already muted before it rang. Then the ducking half: get a
+    navigation prompt or an assistant to speak over the call and confirm it
+    goes quiet rather than away.
+
+30. **A reply typed into the shade with the phone offline.** Aeroplane mode,
+    reply from the notification, and the thread must say "sending…" rather than
+    swallowing it. Turn the network back on: it must arrive, once. Then the
+    harder half - reply offline, force-stop the app, and launch it again: it
+    must still go. Last, reply offline and sign out: it must never arrive,
+    because unsent words belong to the account that wrote them.
+
+31. **Markdown and the `:` menu against another client.** Send `**bold**`, a
+    fenced code block and a quoted line from the phone and read them on the
+    desktop, then the reverse - the marks are stripped by the sender, so a
+    disagreement shows up as asterisks on one side and not the other. Then type
+    `:fir` in the composer: the flame must be offered above the fire engine,
+    the server's own emoji must be offered above both, and picking one
+    mid-sentence must put it where the cursor was rather than at the end.
+
