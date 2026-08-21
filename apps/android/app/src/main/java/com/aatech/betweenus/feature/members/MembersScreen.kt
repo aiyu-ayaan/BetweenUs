@@ -29,6 +29,7 @@ import com.aatech.betweenus.core.data.BetweenUsApi
 import com.aatech.betweenus.core.data.PresenceStatus
 import com.aatech.betweenus.core.data.ServerMember
 import com.aatech.betweenus.core.data.ServerRole
+import com.aatech.betweenus.core.data.UserSummary
 import com.aatech.betweenus.core.store.Presence
 import com.aatech.betweenus.core.store.Workspace
 import com.aatech.betweenus.ui.components.AvatarWithStatus
@@ -43,6 +44,7 @@ import com.aatech.betweenus.ui.components.SectionLabel
 import com.aatech.betweenus.ui.theme.Danger
 import com.aatech.betweenus.ui.theme.Edge
 import com.aatech.betweenus.ui.theme.Ground
+import com.aatech.betweenus.ui.theme.Slate400
 import com.aatech.betweenus.ui.theme.Slate50
 import com.aatech.betweenus.ui.theme.Surface950
 import kotlinx.coroutines.launch
@@ -69,6 +71,11 @@ fun MembersScreen(
 
     var adding by remember { mutableStateOf("") }
     var note by remember { mutableStateOf<String?>(null) }
+    // Typing a username exactly right, blind, was the whole interaction here;
+    // people who could not guess the spelling could not add anybody. The
+    // search is the same one the desktop offers, and friends-only because the
+    // service refuses anyone else.
+    var candidates by remember { mutableStateOf<List<UserSummary>>(emptyList()) }
     var editing by remember { mutableStateOf<ServerMember?>(null) }
 
     LaunchedEffect(serverId) { serverId?.let { Workspace.loadMembers(it, force = true) } }
@@ -78,6 +85,18 @@ fun MembersScreen(
         (statuses[it.userId] ?: PresenceStatus.OFFLINE) != PresenceStatus.OFFLINE
     }
     val offline = members - online.toSet()
+
+    LaunchedEffect(adding, members) {
+        val query = adding.trim()
+        candidates = if (query.length < 2) {
+            emptyList()
+        } else {
+            val already = members.map { it.userId }.toSet()
+            runCatching { BetweenUsApi.searchUsers(query, friendsOnly = true) }
+                .getOrDefault(emptyList())
+                .filterNot { it.id in already }
+        }
+    }
     val mayManage = server?.can("MANAGE_MEMBER") == true
 
     Column(Modifier.fillMaxSize().background(Ground).systemBarsPadding()) {
@@ -117,19 +136,45 @@ fun MembersScreen(
                             // them. An invite link is how a stranger gets in,
                             // by choosing to.
                             placeholder = "A friend's username",
-                            imeAction = ImeAction.Done,
-                            onImeAction = {
+                            imeAction = ImeAction.Search,
+                        )
+                        note?.let { Notice(it, Danger, Modifier.padding(top = 8.dp)) }
+                        if (adding.trim().length >= 2 && candidates.isEmpty() && note == null) {
+                            Notice(
+                                "No friend by that name. Only friends can be added; " +
+                                    "send an invite link to anyone else.",
+                                Slate400,
+                                Modifier.padding(top = 8.dp),
+                            )
+                        }
+                    }
+                }
+
+                items(candidates, key = { "add-${it.id}" }) { user ->
+                    ListRow(
+                        title = user.label,
+                        subtitle = "@${user.username}",
+                        leading = {
+                            AvatarWithStatus(
+                                id = user.id,
+                                label = user.label,
+                                url = user.avatarUrl?.let { Endpoint.absolute(it) },
+                                status = statuses[user.id]?.wire ?: "offline",
+                                size = 36.dp,
+                            )
+                        },
+                        trailing = {
+                            IconAction(BetweenUsIcons.UserPlus, "Add to this server", {
                                 scope.launch {
                                     note = runCatching {
-                                        BetweenUsApi.addMember(serverId, adding.trim())
+                                        BetweenUsApi.addMember(serverId, user.username)
                                         Workspace.loadMembers(serverId, force = true)
                                         adding = ""
                                     }.exceptionOrNull()?.message
                                 }
-                            },
-                        )
-                        note?.let { Notice(it, Danger, Modifier.padding(top = 8.dp)) }
-                    }
+                            })
+                        },
+                    )
                 }
             }
 
