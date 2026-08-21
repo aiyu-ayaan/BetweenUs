@@ -322,6 +322,32 @@ Infrastructure:
       database cannot go first. `pg_dump` runs from the postgres image so its
       version matches the server's, dumps land under a `.partial` name until
       complete, and plain SQL means a restore needs nothing but `psql`.
+- [x] **A `latest` tag that exists.** `promote` pushed one moving tag, the
+      channel one, and the channel of a pre-release is `alpha` - so a
+      repository that has never cut a stable release had no `<service>-latest`
+      at all, while `docker-compose.yml` falls back to exactly that when
+      `BETWEENUS_VERSION` is empty. A first deployment therefore died on
+      `betweenus:call-service-latest: not found`. Every release now moves both
+      tags, and the comment says to drop the second one once a stable line
+      ships alongside alphas, or `latest` would walk a production deployment
+      onto a pre-release.
+- [x] **Service images without the toolchain in them.** The runtime stage was a
+      copy of the build stage, so every image carried the whole workspace
+      install - two TypeScripts, the turbo binary, esbuild, webpack, the Nest
+      CLI, tsx: 465MB of `node_modules` to run `node dist/main.js`. A
+      `prod-deps` stage installs the same manifests with `--prod` and the
+      runtime is that, plus the `dist` directories laid over it. 818MB to
+      519MB per image.
+
+      Three manifests had to be honest about it first, because a `--prod`
+      install is what finds this out: `@nestjs/common` and `@nestjs/core` were
+      peer *and* dev dependencies of `nest-common` and `auth`, satisfied only
+      by the dev half, so the pruned image threw `Cannot find module
+      '@nestjs/common'` on boot; `@aws-sdk/client-s3` is `import()`ed by
+      `@betweenus/storage` at runtime and was a devDependency, so S3 storage
+      would have failed the same way; and `prisma` has to survive the prune
+      because the `migrate` service runs `prisma migrate deploy` out of the
+      auth-service image.
 
 Desktop and web, earlier passes:
 
