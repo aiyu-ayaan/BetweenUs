@@ -249,8 +249,14 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
       // used here only to sign this client's DTLS fingerprint, so the
       // signalling server cannot substitute one of its own and stand in the
       // middle. See mesh.ts.
-      const [channelKey, { iceServers }] = await Promise.all([
-        callKeyForChannel(channelId),
+      // Read here as well as per-link, so a channel this device holds no key
+      // for fails the join outright instead of failing every peer in it. And
+      // read *fresh*: a cached epoch is the one this client held when it last
+      // opened the channel, and joining a call under a key everybody else has
+      // already rotated past is the whole "their media key does not match"
+      // failure, from the other side.
+      const [, { iceServers }] = await Promise.all([
+        callKeyForChannel(channelId, true),
         api.callIce(channelId),
       ]);
 
@@ -262,7 +268,9 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
         channelId,
         token,
         iceServers,
-        channelKey,
+        // Re-read when the roster changes rather than snapshotted: see
+        // `Mesh.channelKey`.
+        channelKey: (refresh) => callKeyForChannel(channelId, refresh),
         onTrack: (peerId, slot, track) => {
           const slots = remoteTracks.get(peerId) ?? {};
           slots[slot] = track;

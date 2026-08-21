@@ -138,8 +138,15 @@ interface MeshOptions extends MeshEvents {
   channelId: string;
   token: string;
   iceServers: IceServer[];
-  /** The channel key, used only to sign and verify DTLS fingerprints. */
-  channelKey: string;
+  /**
+   * The channel key, used only to sign and verify DTLS fingerprints.
+   *
+   * A function rather than a value because the key rotates *during* a call: a
+   * member who joins a channel holding none of its keys mints the next epoch
+   * to get one at all, so the moment somebody new arrives everybody already in
+   * the call is a generation behind them. `refresh` re-reads the directory.
+   */
+  channelKey: (refresh?: boolean) => Promise<string>;
 }
 
 /**
@@ -191,6 +198,25 @@ export async function verifyFingerprint(
 }
 
 /**
+ * Verifies, re-reading the channel key once when the first try fails.
+ *
+ * The re-read is the whole point. Two people joining at the same moment, or a
+ * member removed mid-call, rotate the channel's epoch underneath a connection
+ * that is already open, and without this the peer holding the *newer* key is
+ * refused as though it were the relay standing in the middle. Once only,
+ * though: a proof that is simply wrong must not become a way to make this
+ * client hammer the key directory.
+ */
+export async function verifyFingerprintWithRefresh(
+  channelKey: (refresh?: boolean) => Promise<string>,
+  sdp: string,
+  proof: string,
+): Promise<boolean> {
+  if (await verifyFingerprint(await channelKey(), sdp, proof)) return true;
+  return verifyFingerprint(await channelKey(true), sdp, proof);
+}
+
+/**
  * Opus options live in the SDP's `fmtp` line and cannot be changed on a live
  * sender, so they are patched into the local description before it is set.
  *
@@ -236,6 +262,8 @@ class PeerLink {
   /** Perfect negotiation bookkeeping. */
   private makingOffer = false;
   private ignoreOffer = false;
+  /** One re-read of the channel key per peer. See `verify`. */
+  private retriedKey = false;
   private readonly polite: boolean;
   private micEncoding: MicEncoding | null = null;
   private sharePublish: SharePublish | null = null;
@@ -267,7 +295,7 @@ class PeerLink {
     readonly peer: CallPeer,
     selfPeerId: string,
     iceServers: IceServer[],
-    private readonly channelKey: string,
+    private readonly channelKey: (refresh?: boolean) => Promise<string>,
     private readonly send: (signal: CallSignal) => void,
     private readonly events: {
       onTrack: (slot: Slot, track: MediaStreamTrack | null) => void;
@@ -546,6 +574,13 @@ class PeerLink {
     this.events.onProblem(`${this.peer.username}: ${what} - ${reason}`);
   }
 
+  /** One re-read per peer: see `verifyFingerprintWithRefresh`. */
+  private async verify(sdp: string, proof: string): Promise<boolean> {
+    if (this.retriedKey) return verifyFingerprint(await this.channelKey(), sdp, proof);
+    this.retriedKey = true;
+    return verifyFingerprintWithRefresh((refresh) => this.channelKey(refresh), sdp, proof);
+  }
+
   private async sendDescription(): Promise<void> {
     const description = this.pc.localDescription;
     if (!description?.sdp) return;
@@ -561,7 +596,7 @@ class PeerLink {
     this.send({
       kind: description.type === 'offer' ? 'offer' : 'answer',
       sdp: description.sdp,
-      fingerprintProof: await signFingerprint(this.channelKey, fingerprint),
+      fingerprintProof: await signFingerprint(await this.channelKey(), fingerprint),
     });
   }
 
@@ -590,7 +625,7 @@ class PeerLink {
 
       // The check that makes the relay untrusted. A server that swapped the
       // fingerprint cannot produce this, so the connection is never made.
-      if (!(await verifyFingerprint(this.channelKey, signal.sdp, signal.fingerprintProof))) {
+      if (!(await this.verify(signal.sdp, signal.fingerprintProof))) {
         console.error(
           '[mesh] refusing a peer whose DTLS fingerprint is not signed with the channel key',
           this.peer.peerId,
@@ -879,8 +914,36 @@ export class Mesh {
   /** The previous reading per peer, so a rate can be worked out from a total. */
   private readonly lastSamples = new Map<string, LinkSample>();
   private closed = false;
+  /** The channel key as last read, shared by every link. See `channelKey`. */
+  private key: Promise<string> | null = null;
 
   constructor(private readonly options: MeshOptions) {}
+
+  /**
+   * The key every link signs and verifies fingerprints with, read once and
+   * re-read whenever somebody joins.
+   *
+   * This is the fix for a call that refused a newcomer with "their media key
+   * does not match this channel's" and then sat on "connecting". A member who
+   * joins a channel holding none of its keys mints the next epoch for itself -
+   * that is the only way it gets one - and everybody already in the call is
+   * still signing with the epoch they snapshotted when *they* joined. One
+   * generation apart, so every fingerprint is refused, and because only the
+   * impolite side offers, whichever way the refusal falls the connection is
+   * never made. Re-reading the moment a peer appears puts both sides on the
+   * epoch the newcomer minted, before the first offer is written.
+   */
+  private channelKey(refresh = false): Promise<string> {
+    if (refresh || !this.key) {
+      this.key = this.options.channelKey(refresh).catch((error: unknown) => {
+        // Never remember a failure: the next signal asks again rather than
+        // being stuck with a rejection for the rest of the call.
+        this.key = null;
+        throw error;
+      });
+    }
+    return this.key;
+  }
 
   /** Opens the socket and joins. Resolves once the server has answered. */
   async join(): Promise<void> {
@@ -947,6 +1010,10 @@ export class Mesh {
         return;
 
       case 'peer.joined':
+        // Before the link, because the link starts negotiating immediately.
+        // Somebody arriving may have just minted the epoch everyone else is
+        // now behind - see `channelKey`.
+        void this.channelKey(true).catch(() => {});
         this.link(event.peer);
         this.announcePeers();
         return;
@@ -1011,7 +1078,7 @@ export class Mesh {
       peer,
       this.selfPeerId ?? '',
       this.options.iceServers,
-      this.options.channelKey,
+      (refresh) => this.channelKey(refresh),
       (signal) => this.send({ type: 'signal', to: peer.peerId, data: signal }),
       {
         onTrack: (slot, track) => this.options.onTrack(peer.peerId, slot, track),
