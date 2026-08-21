@@ -39,6 +39,8 @@ import com.aatech.betweenus.core.data.Session
 import com.aatech.betweenus.core.data.RemoteMachine
 import com.aatech.betweenus.ui.components.Chip
 import com.aatech.betweenus.ui.components.EmptyState
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 import com.aatech.betweenus.ui.components.IconAction
 import com.aatech.betweenus.ui.components.ListRow
 import com.aatech.betweenus.ui.components.BetweenUsIcon
@@ -178,8 +180,12 @@ fun RemoteSessionScreen(machineId: String, onBack: () -> Unit) {
     val screens by engine.screens.collectAsState()
     val activeId by engine.activeScreenId.collectAsState()
     val controlling by engine.controlGranted.collectAsState()
+    val permissions by engine.permissions.collectAsState()
+    val remoteClipboard by engine.remoteClipboard.collectAsState()
+    val clipboard = LocalClipboardManager.current
 
     var surface by remember { mutableStateOf(IntSize.Zero) }
+    var clipboardNote by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(machineId) { engine.start(machineId) }
     DisposableEffect(engine) { onDispose { engine.dispose() } }
@@ -208,6 +214,24 @@ fun RemoteSessionScreen(machineId: String, onBack: () -> Unit) {
                     color = if (state is RemoteEngine.State.Ended) Danger else Slate500,
                 )
             }
+            // Offered only with REMOTE_CLIPBOARD, which is the gateway's rule
+            // and not this screen's: it refuses a `clipboard.set` from a
+            // session without it either way.
+            if (permissions.contains("REMOTE_CLIPBOARD")) {
+                IconAction(
+                    icon = BetweenUsIcons.Copy,
+                    contentDescription = "Send this phone's clipboard to the machine",
+                    onClick = {
+                        val text = clipboard.getText()?.text.orEmpty()
+                        clipboardNote = if (text.isBlank()) {
+                            "Nothing on this phone's clipboard to send"
+                        } else {
+                            engine.sendClipboard(text)
+                            "Sent to the machine"
+                        }
+                    },
+                )
+            }
             IconAction(
                 icon = if (controlling) BetweenUsIcons.Lock else BetweenUsIcons.Eye,
                 contentDescription = if (controlling) "Hand control back" else "Ask for control",
@@ -215,6 +239,43 @@ fun RemoteSessionScreen(machineId: String, onBack: () -> Unit) {
             )
         }
         HorizontalDivider(color = Edge)
+
+        clipboardNote?.let { note ->
+            Text(
+                text = note,
+                style = MaterialTheme.typography.bodySmall,
+                color = Slate500,
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+            )
+        }
+
+        // What the machine has copied. Deliberately not written onto this
+        // phone's clipboard as it arrives - a machine that could overwrite the
+        // clipboard of the phone watching it whenever it liked could put a URL
+        // under somebody's next paste. Taking it is a tap.
+        remoteClipboard?.let { text ->
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = "On the machine's clipboard: ${text.take(80)}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Slate500,
+                    modifier = Modifier.weight(1f),
+                )
+                IconAction(
+                    icon = BetweenUsIcons.Copy,
+                    contentDescription = "Copy it to this phone",
+                    onClick = {
+                        clipboard.setText(AnnotatedString(text))
+                        clipboardNote = "Copied to this phone"
+                    },
+                )
+            }
+        }
 
         if (screens.size > 1) {
             Row(

@@ -174,10 +174,32 @@ class RemoteEngine(context: Context) {
     fun selectScreen(screenId: String) =
         RemoteSocket.send(JSONObject().put("type", "screen.select").put("screenId", screenId))
 
+    /**
+     * This phone's clipboard, onto the machine's.
+     *
+     * The check here is a courtesy - the gateway refuses `clipboard.set` from
+     * a session without `REMOTE_CLIPBOARD` and is the one enforcing it. What
+     * this buys is a button that is not offered rather than one that silently
+     * does nothing.
+     */
     fun sendClipboard(text: String) {
-        if (!_permissions.value.contains("REMOTE_CLIPBOARD")) return
+        if (!mayClipboard()) return
         RemoteSocket.send(JSONObject().put("type", "clipboard.set").put("text", text))
     }
+
+    fun mayClipboard(): Boolean = _permissions.value.contains("REMOTE_CLIPBOARD")
+
+    /**
+     * The machine's clipboard, as it last arrived.
+     *
+     * Not written to this phone's clipboard the moment it lands: a remote
+     * machine that could overwrite the clipboard of the phone watching it
+     * whenever it liked is a machine that can put a URL under somebody's next
+     * paste. It is offered, and copying it is a tap - the same way the far
+     * direction is a tap rather than a poll.
+     */
+    private val _remoteClipboard = MutableStateFlow<String?>(null)
+    val remoteClipboard: StateFlow<String?> = _remoteClipboard.asStateFlow()
 
     // --- signalling ---
 
@@ -237,6 +259,10 @@ class RemoteEngine(context: Context) {
                     .map { event.getJSONArray("permissions").getString(it) }
                 _controlGranted.value = event.optBoolean("granted")
             }
+
+            // The machine's clipboard, which the gateway only relays to a
+            // session holding REMOTE_CLIPBOARD.
+            "clipboard.set" -> _remoteClipboard.value = event.optString("text").ifEmpty { null }
 
             "rtc.signal" -> event.optJSONObject("data")?.let { onRtcSignal(it) }
         }

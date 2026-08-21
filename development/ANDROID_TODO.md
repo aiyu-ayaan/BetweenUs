@@ -608,7 +608,21 @@ says so too; both halves are needed.
       decisions about who may reach a machine on one device and the access
       itself on every device - backwards for the one feature where taking
       access back in a hurry is the point.
-- [ ] Clipboard and file transfer, each gated on its own permission.
+- [x] Clipboard, both directions, gated on `REMOTE_CLIPBOARD`. The phone's
+      clipboard goes to the machine on a tap; what the machine has copied is
+      *shown* rather than written onto the phone, because a machine that could
+      overwrite the clipboard of the phone watching it whenever it liked could
+      put a URL under somebody's next paste. Taking it is a second tap. The
+      gateway is the one enforcing the permission - it refuses `clipboard.set`
+      from a session without it in either direction - and the button is hidden
+      rather than left to do nothing.
+- [ ] File transfer, gated on `REMOTE_FILE_TRANSFER`. **Blocked, and not on
+      this client:** there is no wire for it. The gateway has no file message
+      in its vocabulary, the desktop agent has nothing that would receive one,
+      and a remote session opens no data channel to carry it - see
+      `remote-peer.ts`, which negotiates a video track and nothing else. The
+      permission exists and does nothing on every client. Whoever adds the
+      protocol adds this with it.
 - [x] Audit trail is the gateway's job; the client only shows the state.
 - [x] No Android *agent* — a phone is a controller, not a target.
 
