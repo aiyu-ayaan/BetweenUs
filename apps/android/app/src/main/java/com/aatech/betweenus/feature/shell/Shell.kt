@@ -131,9 +131,10 @@ fun Shell(user: PublicUser) {
      * navigating - an intent is not a navigation controller - and this is where
      * it becomes a screen. Taken once, so it does not reopen on every redraw.
      */
-    val pendingChannel by PendingChannel.channelId.collectAsState()
+    val pendingChannel by PendingChannel.target.collectAsState()
     LaunchedEffect(pendingChannel) {
-        val target = pendingChannel ?: return@LaunchedEffect
+        val pending = pendingChannel ?: return@LaunchedEffect
+        val target = pending.channelId
         PendingChannel.clear()
         val channel = Workspace.channel(target)
         // A call notification names a voice channel, and the chat route reads
@@ -144,7 +145,9 @@ fun Shell(user: PublicUser) {
         if (channel?.type == ChannelType.VOICE) {
             voiceChannelId = target
             serverId = channel.serverId
-            joinOnArrival = false
+            // Only an answered ring joins on arrival. A tapped notification
+            // lands on the join button instead.
+            joinOnArrival = pending.join
             navigation.navigate(Route.Voice)
             return@LaunchedEffect
         }

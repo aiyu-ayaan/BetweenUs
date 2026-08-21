@@ -11,6 +11,11 @@
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- A ringing call takes the screen, over the lock screen if it has to.
+         Granted by default for an app whose notification is a `CallStyle` one,
+         and refused for anything else - which is the rule, not a loophole: this
+         is only ever used for a call somebody is being asked to answer. -->
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
 
     <!-- The attachment sheet shows the phone's recent photos inline, which
          means reading them. The system photo picker and the document browser
@@ -131,6 +136,21 @@
                 <data android:scheme="betweenus" />
             </intent-filter>
         </activity>
+
+        <!-- The answer screen a ringing call opens. Its own activity because
+             showing over a locked phone and turning the screen on are activity
+             properties, and MainActivity must not have them for every launch.
+             Not exported: nothing outside this app has any business ringing
+             this phone. -->
+        <activity
+            android:name=".feature.voice.IncomingCallActivity"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:launchMode="singleTop"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
+            android:taskAffinity=""
+            android:theme="@style/Theme.BetweenUs" />
 
         <!-- Where a photo taken from the attachment sheet lands. The camera app
              is a different process and cannot be handed a `file://` path, so it

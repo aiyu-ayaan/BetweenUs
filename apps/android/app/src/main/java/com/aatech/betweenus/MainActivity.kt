@@ -90,6 +90,14 @@ class MainActivity : ComponentActivity() {
             return
         }
 
+        // Answered from a ringing call: the same channel, and a join on
+        // arrival, which is the one difference between this and the link
+        // above.
+        if (uri.host == "call") {
+            uri.pathSegments.firstOrNull()?.let { PendingChannel.offer(it, join = true) }
+            return
+        }
+
         // The two places a notification can lead that are not a conversation.
         if (uri.host == "friends") {
             PendingPlace.offer(PendingPlace.Place.Friends)

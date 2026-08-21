@@ -38,6 +38,14 @@ class NotificationActionReceiver : BroadcastReceiver() {
                 return
             }
 
+            ACTION_DECLINE_CALL -> {
+                // Not answering is a decision, and it lasts as long as the
+                // call does: every arrival and departure is another roster
+                // push, and each one would ring again.
+                SocialNotifications.declineCall(application, channelId)
+                return
+            }
+
             ACTION_MARK_READ -> {
                 val pending = goAsync()
                 scope.launch {
@@ -107,6 +115,7 @@ class NotificationActionReceiver : BroadcastReceiver() {
         const val ACTION_REPLY = "com.aatech.betweenus.notification.REPLY"
         const val ACTION_MARK_READ = "com.aatech.betweenus.notification.MARK_READ"
         const val ACTION_DISMISS = "com.aatech.betweenus.notification.DISMISS"
+        const val ACTION_DECLINE_CALL = "com.aatech.betweenus.notification.DECLINE_CALL"
         const val EXTRA_CHANNEL_ID = "channelId"
 
         /**

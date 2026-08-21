@@ -13,15 +13,24 @@ import kotlinx.coroutines.flow.asStateFlow
  * has already been honoured must not reopen on the next launch.
  */
 object PendingChannel {
-    private val _channelId = MutableStateFlow<String?>(null)
-    val channelId: StateFlow<String?> = _channelId.asStateFlow()
 
-    fun offer(id: String) {
-        _channelId.value = id
+    /**
+     * [join] is set only when somebody answered a ringing call. Opening a
+     * voice channel from a tapped notification is not consent to open a
+     * microphone; pressing Answer on a ringing one is exactly that, and the
+     * two arrive down the same path.
+     */
+    data class Target(val channelId: String, val join: Boolean = false)
+
+    private val _target = MutableStateFlow<Target?>(null)
+    val target: StateFlow<Target?> = _target.asStateFlow()
+
+    fun offer(id: String, join: Boolean = false) {
+        _target.value = Target(id, join)
     }
 
     /** Taken once, by whoever opened it. */
     fun clear() {
-        _channelId.value = null
+        _target.value = null
     }
 }

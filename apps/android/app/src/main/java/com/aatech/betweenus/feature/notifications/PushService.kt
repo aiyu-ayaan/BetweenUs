@@ -141,6 +141,23 @@ class PushService : FirebaseMessagingService() {
         // their screen, in the roster under the channel.
         if (PushGate.shouldSuppress(channelId)) return
         runCatching { withTimeoutOrNull(REFRESH_MS) { Workspace.refresh() } }
+
+        // A direct conversation is somebody calling *you*, and that rings: a
+        // full-screen answer screen over a locked phone. A server's voice
+        // channel is something happening nearby, and it keeps the quiet
+        // notification below - a phone that rings for every one of those is a
+        // phone somebody turns notifications off on.
+        val direct = Workspace.directChannel(channelId)
+        if (direct != null) {
+            SocialNotifications.ringing(
+                context = applicationContext,
+                channelId = channelId,
+                caller = data["participants"].orEmpty().ifBlank { direct.participant.label },
+                callerPicture = avatar(direct.participant.avatarUrl),
+            )
+            return
+        }
+
         SocialNotifications.callRoster(
             context = applicationContext,
             channelId = channelId,

@@ -6,12 +6,17 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
+import android.media.AudioAttributes
+import android.media.RingtoneManager
 import android.net.Uri
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import androidx.core.app.Person
+import androidx.core.graphics.drawable.IconCompat
 import com.aatech.betweenus.MainActivity
 import com.aatech.betweenus.R
+import com.aatech.betweenus.feature.voice.IncomingCallActivity
 import java.util.concurrent.ConcurrentHashMap
 
 /**
@@ -34,6 +39,14 @@ object SocialNotifications {
 
     /** Somebody is in a call you can join. Loud, like a call should be. */
     const val CHANNEL_CALLS = "betweenus.calls.incoming"
+
+    /**
+     * A call that is ringing at you personally, which is a different thing
+     * from one happening nearby. Its own channel because it is the one that
+     * takes over the screen and plays a ringtone, and somebody who wants the
+     * quiet version has to be able to turn this off without losing the other.
+     */
+    const val CHANNEL_RINGING = "betweenus.calls.ringing"
 
     fun ensureChannels(context: Context) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
@@ -61,7 +74,118 @@ object SocialNotifications {
                 },
             )
         }
+        if (manager.getNotificationChannel(CHANNEL_RINGING) == null) {
+            manager.createNotificationChannel(
+                NotificationChannel(
+                    CHANNEL_RINGING,
+                    "Incoming calls",
+                    NotificationManager.IMPORTANCE_HIGH,
+                ).apply {
+                    description = "Somebody is calling you"
+                    enableVibration(true)
+                    vibrationPattern = longArrayOf(0, 700, 700, 700, 700)
+                    setSound(
+                        RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE),
+                        AudioAttributes.Builder()
+                            .setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE)
+                            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                            .build(),
+                    )
+                },
+            )
+        }
     }
+
+    /**
+     * Somebody is calling, and this phone is not looking at the conversation.
+     *
+     * A `CallStyle` notification with a full-screen intent, which is what puts
+     * the answer screen over a locked phone rather than a line in the shade.
+     * It rings for a direct conversation only: a call in a server's voice
+     * channel is something happening nearby, and a phone that rings for every
+     * one of those is a phone somebody turns notifications off on. Those keep
+     * [callRoster], which is the quiet version and unchanged.
+     *
+     * Declined is remembered for as long as the call lasts, because the roster
+     * changes every time anybody joins or leaves and each change is another
+     * push: without it, saying no once means being asked again by the next
+     * person to arrive.
+     */
+    fun ringing(
+        context: Context,
+        channelId: String,
+        caller: String,
+        callerPicture: Bitmap?,
+    ) {
+        if (!NotificationManagerCompat.from(context).areNotificationsEnabled()) return
+        if (channelId in declined) return
+        ensureChannels(context)
+
+        val id = idOf(RING_BASE, channelId)
+        val person = Person.Builder()
+            .setName(caller)
+            .apply { callerPicture?.let { setIcon(IconCompat.createWithBitmap(it)) } }
+            .setImportant(true)
+            .build()
+
+        val answer = PendingIntent.getActivity(
+            context,
+            id,
+            Intent(context, MainActivity::class.java)
+                .setAction(Intent.ACTION_VIEW)
+                .setData(Uri.parse("betweenus://call/$channelId"))
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+        // The full-screen intent is its own activity rather than MainActivity:
+        // showing over a locked phone is a property of an activity, and giving
+        // it to the main one would give it to every launch of the app.
+        val ring = PendingIntent.getActivity(
+            context,
+            id,
+            IncomingCallActivity.intent(context, channelId, caller),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+        val decline = PendingIntent.getBroadcast(
+            context,
+            id,
+            Intent(context, NotificationActionReceiver::class.java)
+                .setAction(NotificationActionReceiver.ACTION_DECLINE_CALL)
+                .putExtra(NotificationActionReceiver.EXTRA_CHANNEL_ID, channelId),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+
+        val notification = NotificationCompat.Builder(context, CHANNEL_RINGING)
+            .setSmallIcon(R.drawable.ic_betweenus_notification)
+            .setStyle(NotificationCompat.CallStyle.forIncomingCall(person, decline, answer))
+            .setCategory(NotificationCompat.CATEGORY_CALL)
+            .setPriority(NotificationCompat.PRIORITY_MAX)
+            .setOngoing(true)
+            // `true` is what lets it interrupt: without it the platform is
+            // free to decide a heads-up notification was enough, which is
+            // exactly what it decides for a phone that is in somebody's pocket.
+            .setFullScreenIntent(ring, true)
+            .setContentIntent(answer)
+            .build()
+
+        posted.add(id)
+        NotificationManagerCompat.from(context).notify(id, notification)
+    }
+
+    /** Answered, declined, or the caller gave up. */
+    fun clearRinging(context: Context, channelId: String) {
+        val id = idOf(RING_BASE, channelId)
+        posted.remove(id)
+        NotificationManagerCompat.from(context).cancel(id)
+    }
+
+    /** Said no. Silent until this call ends, not until the app restarts. */
+    fun declineCall(context: Context, channelId: String) {
+        declined.add(channelId)
+        clearRinging(context, channelId)
+    }
+
+    private val declined = java.util.Collections.newSetFromMap(ConcurrentHashMap<String, Boolean>())
 
     /** "Ana sent you a friend request", or "Ana accepted your friend request". */
     fun friend(
@@ -130,6 +254,9 @@ object SocialNotifications {
     }
 
     fun clearCall(context: Context, channelId: String) {
+        // The call is over, so a refusal to answer it has expired with it.
+        declined.remove(channelId)
+        clearRinging(context, channelId)
         val id = idOf(CALL_BASE, channelId)
         posted.remove(id)
         NotificationManagerCompat.from(context).cancel(id)
@@ -206,4 +333,5 @@ object SocialNotifications {
     private const val FRIEND_BASE = 3_000_000
     private const val SERVER_BASE = 4_000_000
     private const val CALL_BASE = 5_000_000
+    private const val RING_BASE = 6_000_000
 }

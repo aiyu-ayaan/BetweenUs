@@ -454,8 +454,15 @@ showing the conversation. Both decisions are made here.
 - [x] A call in a channel is now pushed - `call.roster`, see phase 5. What is
       still open below is the *ringing* UI, which is a full-screen intent and a
       different thing from a notification saying a call is happening.
-- [ ] Incoming-call UI from a push with the app dead. Waits on a `call.started`
-      fan-out that does not exist yet.
+- [x] Incoming-call UI from a push with the app dead. `call.roster` is the
+      fan-out it was waiting for. A direct conversation rings - a `CallStyle`
+      notification with a full-screen intent onto `IncomingCallActivity`, which
+      shows over a locked phone because that is an activity property and
+      `MainActivity` must not have it for every launch. A server's voice
+      channel keeps the quiet notification: a phone that rings for every call
+      happening nearby is a phone somebody turns notifications off on.
+      Declining lasts as long as the call, because every arrival is another
+      roster push.
 - [ ] A "reply" that fails offline is silently dropped. It should queue on
       `Outbox` the way a send from the composer does.
 
@@ -494,8 +501,12 @@ showing the conversation. Both decisions are made here.
       mute actions; call survives backgrounding and screen lock.
 - [x] `POST_NOTIFICATIONS` asked for when a call is joined, alongside the
       microphone — refusing it does not refuse the call.
-- [ ] Incoming-call UI, from an FCM push when the app is dead.
-- [ ] Ducking, and behaviour on an incoming phone call.
+- [x] Incoming-call UI, from an FCM push when the app is dead. See phase 5.
+- [x] Ducking, and behaviour on an incoming phone call. Audio focus was
+      requested with no listener, so a cellular call left the microphone open
+      and the room going out over it. A transient duck lowers what the call
+      plays; a loss closes the microphone and tells the far end. No telephony
+      permission - taking the audio is how the platform announces a call.
 - [x] Bluetooth and wired-headset routing, an output and an input picker in the
       call's control row, and the same two in settings. `BLUETOOTH_CONNECT` is
       asked for alongside the microphone: without the grant the platform reports
