@@ -182,6 +182,15 @@ Backlog worked down, this pass:
       did, so a server created on a phone could not be joined by anybody.
 - [x] **Android: the share quality ladder** was already landed with tests; this
       pass only found that this document still had it open.
+- [x] **Android: an invite link that opens the app, and OAuth through Custom
+      Tabs.** Both were listed open here and ticked in `ANDROID_TODO.md`, and
+      the code agrees with the second document: `betweenus://invite/<code>` is
+      claimed in the manifest, held in `PendingInvite` across the sign-in it
+      may trigger, and redeemed after it; `OAuthFlow` opens a Custom Tab, binds
+      the callback to a state value it minted, and draws only the providers the
+      deployment reports.
+- [x] **Android: reconnect on a network-change callback** was ticked here and
+      not in `ANDROID_TODO.md`. The code has it - `core/data/Network.kt`.
 
 Chat and media, across all three clients:
 
@@ -598,12 +607,7 @@ blocked by anything outside this document.
 - [ ] **Ducking and an incoming phone call.** Two parts of the audio-focus
       problem; the third, headset routing, landed - see the Bluetooth item
       above.
-- [ ] **An invite link that opens the app.** Minting, revoking and sharing a
-      code landed; a deep link that joins on a tap did not, and it needs an
-      app-link and a host to claim.
 - [ ] **Remote clipboard and file transfer**, each gated on its own permission.
-- [ ] **OAuth through Custom Tabs**, with an app-link callback, offering only
-      the providers the server reports.
 - [ ] **Phase 13 hardening, minus R8.** The refresh token out of plain
       `SharedPreferences` into the Keystore and keyed per deployment;
       private-CA certificate handling; a real signing config, which needs a

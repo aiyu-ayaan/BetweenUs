@@ -373,8 +373,11 @@ data is cleared.
 - [x] Reconnect on token refresh, and on any socket failure with backoff.
 - [x] Re-read the workspace on reconnect and on resume, which is what actually
       recovers from a socket that was away - nothing replays a missed event.
-- [ ] Reconnect driven by a network-change callback, rather than waiting for the
-      backoff timer to come round.
+- [x] Reconnect driven by a network-change callback, rather than waiting for the
+      backoff timer to come round. `core/data/Network.kt` registers a
+      `NetworkCallback`; `onAvailable` wakes every socket at once. A lost
+      network is not treated as offline on its own, because a handover loses
+      the old one while the new one is already carrying traffic.
 - [x] Unread state and per-channel read markers.
 - [x] An OS notification for a message that arrives while the app is open but
       the channel is not on screen - posted by the push handler, see phase 5.
