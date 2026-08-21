@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.0.1-alpha.2](https://github.com/aiyu-ayaan/BetweenUs/compare/v0.0.1-alpha.1...v0.0.1-alpha.2) (2026-08-21)
+
+### Features
+
+* Let a caller ask for a channel key that is not the cached one
+
+### Bug fixes
+
+* Point `latest` at every release, not only stable ones
+* Re-read the channel key when somebody joins the call
+* Stop the scheduled backup racing the pre-migration one
+
+### Other changes
+
+* Apha release done
+* Record the missing `latest` tag and the image slimming
+* Build the runtime from a production install, not the build stage
+* Record the call key's epoch and how it is kept current
+* Pin the one re-read on a rotated channel key
+
 ## [0.0.1-alpha.1](https://github.com/aiyu-ayaan/BetweenUs/compare/v0.0.0...v0.0.1-alpha.1) (2026-08-20)
 
 ### Features
