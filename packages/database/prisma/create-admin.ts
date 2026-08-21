@@ -10,7 +10,10 @@
  */
 import { randomBytes } from 'node:crypto';
 import { hashPassword } from '@betweenus/auth';
-import { prisma } from '../src/index';
+// The compiled output, not '../src/index': this script runs via tsx against
+// a deployed image too, where the workspace source is not present - `dist` is,
+// because that is what the runtime stage copies out of the build stage.
+import { prisma } from '../dist/index';
 
 const USERNAME = 'betweenusadmin';
 const EMAIL = 'admin@betweenus.local';

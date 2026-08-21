@@ -737,6 +737,9 @@ importers:
 
   packages/database:
     dependencies:
+      '@betweenus/auth':
+        specifier: workspace:*
+        version: link:../auth
       '@betweenus/config':
         specifier: workspace:*
         version: link:../config
@@ -752,19 +755,16 @@ importers:
       prisma:
         specifier: ^5.18.0
         version: 5.22.0
+      tsx:
+        specifier: ^4.16.5
+        version: 4.23.11
     devDependencies:
-      '@betweenus/auth':
-        specifier: workspace:*
-        version: link:../auth
       '@types/node':
         specifier: ^20.14.10
         version: 20.19.43
       dotenv-cli:
         specifier: ^7.4.2
         version: 7.4.4
-      tsx:
-        specifier: ^4.16.5
-        version: 4.23.11
       typescript:
         specifier: ^5.5.4
         version: 5.9.3

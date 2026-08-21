@@ -19,17 +19,17 @@
     "schema": "prisma/schema.prisma"
   },
   "dependencies": {
+    "@betweenus/auth": "workspace:*",
     "@betweenus/config": "workspace:*",
     "@betweenus/permissions": "workspace:*",
     "@betweenus/shared-types": "workspace:*",
     "@prisma/client": "^5.18.0",
-    "prisma": "^5.18.0"
+    "prisma": "^5.18.0",
+    "tsx": "^4.16.5"
   },
   "devDependencies": {
-    "@betweenus/auth": "workspace:*",
     "@types/node": "^20.14.10",
     "dotenv-cli": "^7.4.2",
-    "tsx": "^4.16.5",
     "typescript": "^5.5.4"
   }
 }
