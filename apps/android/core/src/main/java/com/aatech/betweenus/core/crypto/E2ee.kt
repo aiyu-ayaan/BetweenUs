@@ -306,7 +306,14 @@ object E2ee {
      * which the server has never held - which is exactly why a signature made
      * with it proves the relay did not substitute a fingerprint of its own.
      */
-    suspend fun callKeyForChannel(channelId: String): String {
+    suspend fun callKeyForChannel(channelId: String, refresh: Boolean = false): String {
+        // `refresh` is what a call asks for when somebody new arrives. Joining a
+        // channel you hold no key for mints the next epoch - that is the only
+        // way a new member gets one - so the newcomer's key is a generation
+        // ahead of the one everybody already in the call read when they joined,
+        // and without the re-read the two sides sign fingerprints with
+        // different keys and refuse each other for good.
+        if (refresh) forgetKeys(channelId)
         val state = ensureChannelKey(channelId)
         return state.keys[state.epoch] ?: throw MissingChannelKeyError()
     }

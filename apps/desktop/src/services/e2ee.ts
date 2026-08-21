@@ -353,7 +353,12 @@ export async function decryptFileForChannel(
  * encrypted by DTLS-SRTP between the two peers, with no server in between to
  * keep it from - see `mesh.ts`.
  */
-export async function callKeyForChannel(channelId: string): Promise<string> {
+export async function callKeyForChannel(channelId: string, refresh = false): Promise<string> {
+  // `refresh` is what a call asks for when somebody new arrives: joining a
+  // channel you hold no key for mints the next epoch, so the newcomer's key is
+  // a generation ahead of the one everybody in the call snapshotted. Without
+  // the re-read the two sides sign with different keys and refuse each other.
+  if (refresh) channels.delete(channelId);
   const state = await ensureChannelKey(channelId);
   const key = state.keys.get(state.epoch);
   if (!key) throw new MissingChannelKeyError();
