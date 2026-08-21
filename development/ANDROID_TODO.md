@@ -113,6 +113,55 @@ The two rules that hang off a peer id live in `CallIdentity.kt` with a test,
 away from the engine: neither was reachable from a test while it sat inside a
 class that needs WebRTC to construct, which is most of why it survived.
 
+### The self-view that was always empty
+
+Reported from a real call: the far end arrived and filled the screen, and the
+little self-view in the corner was a blank box - still offering its flip
+button, so something believed a camera was running.
+
+Two faults, both in how a `SurfaceViewRenderer` was being built, and both
+repeated in all four places that built one by hand.
+
+- **A new capture is a new `VideoTrack`.** `startCamera` disposes the capturer
+  and the track and makes another, which is what flipping the camera does -
+  `switchCamera` is `startCamera` with the other lens. `AndroidView` will not
+  rebuild its view for that, because nothing about its factory changed, so the
+  renderer stayed sunk into a disposed track and the tile went empty for good.
+  Nothing in the state flow says otherwise either: the track goes null and
+  non-null inside one frame, so Compose never sees the null and never takes the
+  branch that would have made a new renderer.
+- **A `SurfaceView` over a `SurfaceView` is behind it.** Unless it says
+  `setZOrderMediaOverlay(true)`, the second one punches a hole through the
+  first instead of drawing into it. That is the self-view over a full-screen
+  peer, and the filmstrip over a share - both of them a blank box over a
+  picture that was arriving perfectly well.
+
+Both live in `VideoSurface.kt` now, which is the only place in the app that
+turns a track into pixels. `key(track)` is the first fix and the overlay flag
+the second; the self-view is mirrored there too, which is what a front camera
+should look like to the person in front of it.
+
+### The call is the whole screen, and survives leaving it
+
+Three things a phone call is expected to do, and did not:
+
+- The status and navigation bars sat over the call. They are hidden for as long
+  as one is running and put back when it ends. A swipe from an edge still
+  brings them back transiently, which is the only way out of a full-screen app
+  the platform guarantees.
+- The peer's name pill was underneath the floating control dock. It is lifted
+  clear of it.
+- Back ended the call. It now shrinks the activity into system
+  picture-in-picture - `CallPip.kt`, and `supportsPictureInPicture` on the
+  activity - so the call carries on in a floating window with no peer
+  connection rebuilt and no renderer recreated. Back means what it usually
+  means only if the system refuses. In that window there is room for the
+  picture and nothing else, so the header, the dock and the problem banner are
+  not drawn.
+
+The self-view can also be dragged anywhere on the stage, clamped to the screen
+so it cannot be thrown off an edge. There is no snap-to-corner.
+
 ### Sending files
 
 Sending used to run in the chat screen's own coroutine scope. It does not any
@@ -425,6 +474,14 @@ showing the conversation. Both decisions are made here.
       6–8 degraded ceiling the desktop has.
 - [x] Mic capture, mute, speaker routing, audio focus.
 - [x] Camera capture, front/back switch (dynamic camera flip support in `VoiceEngine.switchCamera()`).
+- [x] One renderer path, `VideoSurface.kt`: a new `VideoTrack` makes a new
+      renderer, and a tile drawn over another one says so. See the note above -
+      the self-view was a blank box in every call without both.
+- [x] Full-screen while a call is running; the system bars come back when it
+      ends.
+- [x] Back shrinks the call into system picture-in-picture rather than ending
+      it (`CallPip.kt`).
+- [x] The self-view can be dragged anywhere on the stage.
 - [x] WhatsApp/Modern mobile video call UI redesign (`VoiceChannelScreen.kt`):
       - Adaptive zero-scroll stage: 1-on-1 full-screen remote view + floating self PiP card.
       - 2-remote split stage and 3-4 remote 2x2 balanced grid.
@@ -576,6 +633,10 @@ says so too; both halves are needed.
       joins nothing on its own. An `https://` link pasted into *Join a server*
       keeps working, which is what the desktop's links are.
 - [x] Member list with presence and roles.
+- [x] Adding a friend to a server searches, rather than asking for a username
+      typed exactly right and giving no sign which of the spelling and the
+      feature was what failed. Friends-only, because the service refuses
+      anybody else, and people already in the server are filtered out.
 - [x] Role and permission editing for those who hold `MANAGE_ROLE`.
 - [x] Avatars and server icons set from the phone, squared and scaled in the
       client the way the desktop does it. The upload call existed and nothing

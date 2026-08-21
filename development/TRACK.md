@@ -509,6 +509,23 @@ Calls:
       verification fails, on both clients. `mesh.check.ts` pins the retry:
       exactly one re-read, and a forged proof still refused after it.
 
+- [x] **The self-view that was always a blank box, on Android.** Two faults in
+      the same four hand-built renderers: a new capture is a new `VideoTrack`
+      and `AndroidView` will not rebuild its view for one, so a camera flip
+      left the renderer sunk into a disposed track; and a `SurfaceView` over
+      another `SurfaceView` is behind it unless it says otherwise, which is the
+      self-view over a full-screen peer and the filmstrip over a share. Both
+      now live in one `VideoSurface.kt`, keyed on the track and told to draw as
+      an overlay where it overlaps.
+- [x] **A call on Android is the whole screen and survives leaving it.** The
+      system bars are hidden while one runs, the peer's name pill is lifted
+      clear of the control dock, and back shrinks the activity into system
+      picture-in-picture instead of ending the call. The self-view is draggable.
+- [x] **Adding somebody to a server from the phone searches.** The field asked
+      for a username typed exactly right and gave no sign whether a failure was
+      the spelling or the feature; it now offers what it finds, friends-only,
+      with those already in the server filtered out.
+
 Documentation:
 
 - [x] **`FCM/`** in the repository root: the architecture and the setup in
@@ -764,3 +781,12 @@ The cases most worth putting a person in front of, in order:
     comparison and only one of the two orderings was ever the visible failure.
     Worth a third pass with a third person joining while the first two are
     already talking.
+
+27. **The phone's own camera, which nobody had seen work.** In a call with one
+    other person: the self-view must show the camera, mirrored, and keep
+    showing it across a flip, a turn off and a turn on, and a share started and
+    stopped. Then the same from the other side of the same call - the fault was
+    in the renderer, not in what was being sent, so a tile that looks fine to
+    the far end can still be blank locally. Then back out of the call: it must
+    shrink to a floating window with the call still running and audio still
+    flowing, and tapping it must come back to the full screen.
