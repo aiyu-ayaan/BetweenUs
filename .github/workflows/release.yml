@@ -27,7 +27,12 @@
 #
 # The order in step 2 is the whole rollback story:
 #
-#   images, desktop, android  ->  publish  ->  promote
+#   images -> manifest, desktop, android  ->  publish  ->  promote
+#
+# `images` builds each service twice, amd64 and arm64, on a runner of that
+# architecture, and pushes both by digest under no tag at all. `manifest` is
+# what names them: one tag per service, a manifest list with both
+# architectures in it.
 #
 # Only exact-version image tags exist while any of it can still fail. The
 # moving tags a deployment actually follows - `latest`, `alpha`, `beta` - are
@@ -311,11 +316,21 @@ jobs:
           } >> "$GITHUB_OUTPUT"
           echo "Releasing v$current on the $channel channel."
 
+  # amd64 and arm64, one runner each, both native. QEMU was the other option
+  # and it is the wrong one here: every image runs `pnpm install` and `tsc`
+  # over the whole workspace, and emulating that turns a five-minute job into
+  # an hour of instruction translation. GitHub's arm64 runners are free for
+  # public repositories, so the arm64 half builds on real arm64 hardware.
+  #
+  # Neither half tags anything. Each pushes its image *by digest* and reports
+  # that digest; `manifest` below is what puts a tag on Docker Hub, one tag
+  # naming both. Tagging here instead would need an `-amd64`/`-arm64` suffix
+  # per image - 27 tags a release, 18 of them scaffolding.
   images:
-    name: ${{ matrix.target }} image
+    name: ${{ matrix.target }} image (${{ matrix.arch }})
     needs: merged
     if: needs.merged.outputs.release == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.runner }}
     strategy:
       # One failure should not hide the rest; every image is independent.
       fail-fast: false
@@ -330,22 +345,29 @@ jobs:
           - remote-gateway
           - web
           - admin-web
+        arch: [amd64, arm64]
+        include:
+          - arch: amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            runner: ubuntu-24.04-arm
     steps:
-      - uses: actions/checkout@v4
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/login-action@v3
+      - uses: actions/checkout\v4
+      - uses: docker/setup-buildx-action\v3
+      - uses: docker/login-action\v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      # The exact version only. The channel tag that deployments actually
-      # follow is moved in `promote`, once every artifact exists - pushing it
-      # here would mean a failed Android build leaving `latest` pointing at a
-      # release that was never finished.
-      - uses: docker/build-push-action@v6
+      # The exact version only, and not even that until `manifest` runs. The
+      # channel tags a deployment actually follows are moved in `promote`, once
+      # every artifact exists - pushing them here would mean a failed Android
+      # build leaving `latest` pointing at a release nobody finished.
+      - uses: docker/build-push-action\v6
+        id: build
         env:
-          # Nine images means nine build-record artifacts nobody reads, and
-          # they are downloaded by anything that asks for "all artifacts".
+          # Eighteen builds means eighteen build-record artifacts nobody reads,
+          # and they are downloaded by anything that asks for "all artifacts".
           DOCKER_BUILD_RECORD_UPLOAD: false
         with:
           # One Dockerfile builds every image from the repo root: it needs the
@@ -353,13 +375,88 @@ jobs:
           context: .
           file: infrastructure/docker/Dockerfile
           target: ${{ matrix.target }}
-          push: true
-          tags: ${{ env.IMAGE_REPO }}:${{ matrix.target }}-${{ needs.merged.outputs.version }}
-          # One scope for every image, not one per target: they share the
-          # install and compile stages, so a per-target scope would cache the
-          # same layers nine times and hit none of them.
-          cache-from: type=gha,scope=betweenus
-          cache-to: type=gha,mode=max,scope=betweenus
+          platforms: linux/${{ matrix.arch }}
+          # Pushed with no tag at all: the blobs and a manifest land in the
+          # repository addressable only by digest, and stay off the tag page
+          # until `manifest` names them.
+          outputs: type=image,name=${{ env.IMAGE_REPO }},push-by-digest=true,name-canonical=true,push=true
+          # One scope per architecture, not one per target: the nine images
+          # share the install and compile stages, so a per-target scope would
+          # cache the same layers nine times and hit none of them. The two
+          # architectures cannot share a scope, because none of those layers
+          # are the same.
+          cache-from: type=gha,scope=betweenus-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=betweenus-${{ matrix.arch }}
+
+      # An empty file named after the digest. `manifest` needs nothing else,
+      # and a file name travels through the artifact API without quoting.
+      - name: Record the digest
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          test -n "$DIGEST"
+          mkdir -p "/tmp/digests/${{ matrix.target }}"
+          touch "/tmp/digests/${{ matrix.target }}/${DIGEST#sha256:}"
+
+      - uses: actions/upload-artifact\v4
+        with:
+          name: digest-${{ matrix.target }}-${{ matrix.arch }}
+          path: /tmp/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  # The tag every job below refers to is created here, and it is a manifest
+  # list: one name, two architectures, and a client that pulls it gets the one
+  # it can run. Without it an arm64 host - a Pi, an Ampere VPS, an Apple
+  # silicon Mac with no Rosetta - fails the pull outright:
+  #
+  #   no matching manifest for linux/arm64/v8 in the manifest list entries
+  manifest:
+    name: Multi-arch tags for v${{ needs.merged.outputs.version }}
+    needs: [merged, images]
+    if: needs.merged.outputs.release == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: docker/setup-buildx-action\v3
+      - uses: docker/login-action\v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      # merge-multiple keeps the per-target directory each job uploaded, so
+      # what lands is digests/<target>/<digest>: two files per target.
+      - uses: actions/download-artifact\v4
+        with:
+          path: digests
+          pattern: digest-*
+          merge-multiple: true
+
+      - name: Name both architectures with one tag
+        env:
+          VERSION: ${{ needs.merged.outputs.version }}
+        run: |
+          for target in auth-service server-service chat-service presence-service \
+                        notification-service call-service remote-gateway web admin-web; do
+            refs=""
+            for digest in "digests/${target}"/*; do
+              [ -e "$digest" ] || continue
+              refs="$refs ${IMAGE_REPO}@sha256:$(basename "$digest")"
+            done
+
+            # Both halves or neither. A manifest list with one architecture in
+            # it is the exact bug this job exists to prevent, and it looks like
+            # a working release from every amd64 machine anyone would test from.
+            count="$(echo $refs | wc -w)"
+            if [ "$count" != 2 ]; then
+              echo "::error::${target}: expected 2 digests, found ${count}"
+              exit 1
+            fi
+
+            docker buildx imagetools create \
+              --tag "${IMAGE_REPO}:${target}-${VERSION}" $refs
+            docker buildx imagetools inspect "${IMAGE_REPO}:${target}-${VERSION}" \
+              | grep -E '^(Name|  Platform):' || true
+          done
 
   desktop:
     name: Windows installer and portable exe
@@ -516,7 +613,7 @@ jobs:
   # what it was. The tag a deployment follows is the last thing that moves.
   promote:
     name: Point ${{ needs.merged.outputs.channel }} and latest at this release
-    needs: [merged, images, desktop, android, publish]
+    needs: [merged, images, manifest, desktop, android, publish]
     if: needs.merged.outputs.release == 'true'
     runs-on: ubuntu-latest
     steps:
@@ -559,7 +656,7 @@ jobs:
 
   publish:
     name: Publish v${{ needs.merged.outputs.version }}
-    needs: [merged, images, desktop, android]
+    needs: [merged, images, manifest, desktop, android]
     if: needs.merged.outputs.release == 'true'
     runs-on: ubuntu-latest
     steps:
@@ -647,7 +744,9 @@ jobs:
 
             ## Images
 
-            `${{ env.IMAGE_REPO }}:<service>-${{ needs.merged.outputs.version }}`. The moving
+            `${{ env.IMAGE_REPO }}:<service>-${{ needs.merged.outputs.version }}`, built for
+            `linux/amd64` and `linux/arm64` under one tag - a 64-bit Pi, an Ampere VPS or an
+            Apple silicon Mac pulls the same name and gets its own architecture. The moving
             tags `<service>-${{ needs.merged.outputs.channel }}` and `<service>-latest` are
             pointed at it as the last step of the run.
           files: |
@@ -661,7 +760,7 @@ jobs:
 
   rollback:
     name: Undo a failed release
-    needs: [merged, images, desktop, android, promote, publish]
+    needs: [merged, images, manifest, desktop, android, promote, publish]
     if: always() && needs.merged.outputs.release == 'true' && contains(needs.*.result, 'failure')
     runs-on: ubuntu-latest
     steps:

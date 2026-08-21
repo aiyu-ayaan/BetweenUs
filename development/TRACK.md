@@ -348,6 +348,20 @@ Infrastructure:
       would have failed the same way; and `prisma` has to survive the prune
       because the `migrate` service runs `prisma migrate deploy` out of the
       auth-service image.
+- [x] **arm64 images.** Everything published was amd64 only, so an arm64 host -
+      a 64-bit Pi, an Ampere or Graviton VPS, an Apple silicon Mac without
+      Rosetta - could not pull the stack at all: `no matching manifest for
+      linux/arm64/v8 in the manifest list entries`. The `images` matrix now has
+      an architecture axis and runs the arm64 half on GitHub's arm64 runners,
+      which are free for a public repository; QEMU was the alternative and it
+      would have emulated `pnpm install` and `tsc` for every image.
+
+      Neither half tags anything. Both push by digest, and a `manifest` job
+      names the pair with the single `<service>-<version>` tag every other job
+      already refers to - so nothing else in the pipeline changed shape, and
+      the Hub tag page looks exactly as it did. That job refuses to publish a
+      list with one architecture in it, which is the failure that would
+      otherwise look like a working release from any amd64 machine.
 
 Desktop and web, earlier passes:
 
