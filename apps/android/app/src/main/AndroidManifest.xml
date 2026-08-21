@@ -97,12 +97,15 @@
              back when it closes, so a recreate meant close, hand back, reopen,
              ask again - a rotation loop that ended in a crash. It also drops
              every video renderer and rebuilds them mid-call for nothing. -->
+        <!-- Backing out of a call shrinks it into a floating window rather
+             than ending it. See feature/voice/CallPip.kt. -->
         <activity
             android:name=".MainActivity"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|uiMode|density"
             android:exported="true"
             android:label="@string/app_name"
             android:launchMode="singleTask"
+            android:supportsPictureInPicture="true"
             android:theme="@style/Theme.BetweenUs"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>

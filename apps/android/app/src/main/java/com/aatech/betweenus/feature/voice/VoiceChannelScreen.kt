@@ -3,12 +3,14 @@ package com.aatech.betweenus.feature.voice
 import android.app.Activity
 import android.content.Context
 import android.media.projection.MediaProjectionManager
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -22,6 +24,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
@@ -42,16 +45,21 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -83,6 +91,7 @@ import com.aatech.betweenus.ui.theme.Surface900
 import com.aatech.betweenus.ui.theme.Surface950
 import org.webrtc.RendererCommon
 import org.webrtc.VideoTrack
+import kotlin.math.roundToInt
 
 /**
  * A WhatsApp/modern-style voice & video call screen.
@@ -134,6 +143,12 @@ fun VoiceChannelScreen(
         }
         onDispose { bars?.show(WindowInsetsCompat.Type.systemBars()) }
     }
+
+    // Back during a call shrinks it rather than ending it. Only if the system
+    // refuses does back mean what it usually means.
+    val inPip = rememberInPictureInPicture()
+    val leaveScreen = { if (!(inCallNow && CallPip.enter(context))) onBack() }
+    BackHandler(enabled = inCallNow && !inPip) { leaveScreen() }
 
     val watching = participants.firstOrNull { it.visibleScreen != null }
     var dismissed by remember { mutableStateOf<String?>(null) }
@@ -592,7 +607,8 @@ fun VoiceChannelScreen(
         }
 
         // --- TOP TRANSLUCENT HEADER BAR ---
-        Row(
+        // Nothing but the picture fits in a PiP window.
+        if (!inPip) Row(
             modifier = Modifier
                 .align(Alignment.TopCenter)
                 .fillMaxWidth()
@@ -613,7 +629,7 @@ fun VoiceChannelScreen(
                     .clickable(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null,
-                        onClick = onBack,
+                        onClick = leaveScreen,
                     ),
                 contentAlignment = Alignment.Center,
             ) {
@@ -664,7 +680,7 @@ fun VoiceChannelScreen(
         }
 
         // Problem alert banner
-        problem?.let {
+        if (!inPip) problem?.let {
             Notice(
                 it,
                 Danger,
@@ -675,7 +691,7 @@ fun VoiceChannelScreen(
         }
 
         // --- FLOATING BOTTOM ACTION BAR (WhatsApp style) ---
-        if (isInCall) {
+        if (isInCall && !inPip) {
             Box(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
@@ -806,6 +822,9 @@ private fun CallCircleButton(
     }
 }
 
+private val PIP_WIDTH = 108.dp
+private val PIP_HEIGHT = 154.dp
+
 /**
  * Floating Picture-in-Picture (PiP) card showing the user's camera/avatar.
  */
@@ -819,10 +838,29 @@ private fun FloatingPipTile(
     onFlipCamera: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    // Dragged anywhere on the stage, the way every other phone does it. The
+    // tile is laid out at the top-right, so the offset runs left and down from
+    // there and is clamped to what is left of the screen.
+    // ponytail: free drag, no snap-to-corner. Add one if it feels loose.
+    val metrics = LocalConfiguration.current
+    var drag by remember { mutableStateOf(Offset.Zero) }
+    val slackX = with(LocalDensity.current) { (metrics.screenWidthDp.dp - PIP_WIDTH - 28.dp).toPx() }
+    val slackY = with(LocalDensity.current) { (metrics.screenHeightDp.dp - PIP_HEIGHT - 160.dp).toPx() }
+
     Box(
         modifier = modifier
-            .width(108.dp)
-            .height(154.dp)
+            .offset { IntOffset(drag.x.roundToInt(), drag.y.roundToInt()) }
+            .pointerInput(Unit) {
+                detectDragGestures { change, moved ->
+                    change.consume()
+                    drag = Offset(
+                        (drag.x + moved.x).coerceIn(-slackX.coerceAtLeast(0f), 0f),
+                        (drag.y + moved.y).coerceIn(0f, slackY.coerceAtLeast(0f)),
+                    )
+                }
+            }
+            .width(PIP_WIDTH)
+            .height(PIP_HEIGHT)
             .shadow(14.dp, RoundedCornerShape(18.dp))
             .clip(RoundedCornerShape(18.dp))
             .background(Surface900)
