@@ -1,5 +1,37 @@
 # Changelog
 
+## [0.0.1-alpha.4](https://github.com/aiyu-ayaan/BetweenUs/compare/v0.0.1-alpha.3...v0.0.1-alpha.4) (2026-08-21)
+
+### Features
+
+* Phase 13 hardening - Keystore session, private CA, crash reports, CI
+* The remote clipboard, both directions
+* A direct call rings, full-screen, with the app dead
+* A call ducks for a prompt and holds for a phone call
+* The member menu - message, add friend, mute, copy id
+* A colon menu, the server's own emoji in the picker, and animated ones
+* Bold, italic, strike, code and quotes in a message body
+* Back out of a call and it keeps going in a floating window
+* A call takes the whole screen
+
+### Bug fixes
+
+* Picture-in-picture refuses cleanly, and knows when it is on
+* The screen share picker could not open
+* A reply typed into the shade that cannot be sent is kept, not dropped
+* Adding somebody to a server no longer means guessing a username
+* The self-view that was always an empty box
+* Let admin:create and seed run from the deployed image
+
+### Other changes
+
+* Done with the enhancement
+* The picker that would not open, and what picture-in-picture needs
+* Phase 27's call half is answered by call.roster, and Android rings from it
+* Record this pass in TRACK.md and ANDROID_TODO.md
+* Reconcile TRACK.md and ANDROID_TODO.md with what the code actually has
+* Record the call-screen fixes and what to try on a device
+
 ## [0.0.1-alpha.3](https://github.com/aiyu-ayaan/BetweenUs/compare/v0.0.1-alpha.2...v0.0.1-alpha.3) (2026-08-21)
 
 ### Features
