@@ -51,7 +51,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.viewinterop.AndroidView
 import com.aatech.betweenus.core.data.PublicUser
 import com.aatech.betweenus.core.store.Workspace
 import com.aatech.betweenus.feature.settings.BetweenUsPermissions
@@ -77,7 +76,6 @@ import com.aatech.betweenus.ui.theme.Surface800
 import com.aatech.betweenus.ui.theme.Surface900
 import com.aatech.betweenus.ui.theme.Surface950
 import org.webrtc.RendererCommon
-import org.webrtc.SurfaceViewRenderer
 import org.webrtc.VideoTrack
 
 /**
@@ -804,19 +802,11 @@ private fun FloatingPipTile(
             .border(1.5.dp, Color.White.copy(alpha = 0.22f), RoundedCornerShape(18.dp)),
     ) {
         if (track != null) {
-            AndroidView(
-                factory = { context ->
-                    SurfaceViewRenderer(context).apply {
-                        init(eglContext, null)
-                        setScalingType(RendererCommon.ScalingType.SCALE_ASPECT_FILL)
-                        setEnableHardwareScaler(true)
-                        track.addSink(this)
-                    }
-                },
-                onRelease = { renderer ->
-                    track.removeSink(renderer)
-                    renderer.release()
-                },
+            VideoSurface(
+                track = track,
+                eglContext = eglContext,
+                overlay = true,
+                mirror = true,
                 modifier = Modifier.fillMaxSize(),
             )
         } else {
@@ -909,19 +899,12 @@ private fun CallTile(
         contentAlignment = Alignment.Center,
     ) {
         if (track != null) {
-            AndroidView(
-                factory = { context ->
-                    SurfaceViewRenderer(context).apply {
-                        init(eglContext, null)
-                        setScalingType(fit)
-                        setEnableHardwareScaler(true)
-                        track.addSink(this)
-                    }
-                },
-                onRelease = { renderer ->
-                    track.removeSink(renderer)
-                    renderer.release()
-                },
+            VideoSurface(
+                track = track,
+                eglContext = eglContext,
+                fit = fit,
+                overlay = isLocal,
+                mirror = isLocal,
                 modifier = Modifier.fillMaxSize(),
             )
         } else {

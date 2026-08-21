@@ -48,7 +48,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.viewinterop.AndroidView
 import com.aatech.betweenus.ui.components.Avatar
 import com.aatech.betweenus.ui.components.IconAction
 import com.aatech.betweenus.ui.components.BetweenUsIcon
@@ -62,7 +61,6 @@ import com.aatech.betweenus.ui.theme.StatusOnline
 import com.aatech.betweenus.ui.theme.Surface900
 import org.webrtc.EglBase
 import org.webrtc.RendererCommon
-import org.webrtc.SurfaceViewRenderer
 import org.webrtc.VideoTrack
 import kotlin.math.max
 import kotlin.math.min
@@ -363,21 +361,14 @@ private fun ProjectedVideo(
         val slackX = with(density) { ((width - maxWidth).coerceAtLeast(0.dp)).toPx() / 2f }
         val slackY = with(density) { ((height - maxHeight).coerceAtLeast(0.dp)).toPx() / 2f }
 
-        AndroidView(
-            factory = { context ->
-                SurfaceViewRenderer(context).apply {
-                    init(eglContext, events)
-                    setScalingType(RendererCommon.ScalingType.SCALE_ASPECT_FIT)
-                    // Off on purpose. See the note above: this is what was
-                    // resampling the share down to the size of a phone.
-                    setEnableHardwareScaler(false)
-                    track.addSink(this)
-                }
-            },
-            onRelease = { renderer ->
-                track.removeSink(renderer)
-                renderer.release()
-            },
+        VideoSurface(
+            track = track,
+            eglContext = eglContext,
+            fit = RendererCommon.ScalingType.SCALE_ASPECT_FIT,
+            // Off on purpose. See the note above: this is what was resampling
+            // the share down to the size of a phone.
+            hardwareScaler = false,
+            events = events,
             modifier = Modifier
                 .size(width, height)
                 .offset {
@@ -412,21 +403,14 @@ private fun FilmstripTile(
         contentAlignment = Alignment.Center,
     ) {
         if (track != null) {
-            AndroidView(
-                factory = { context ->
-                    SurfaceViewRenderer(context).apply {
-                        init(eglContext, null)
-                        // A thumbnail is cropped rather than letterboxed: at
-                        // this size the black bars would be most of the tile.
-                        setScalingType(RendererCommon.ScalingType.SCALE_ASPECT_FILL)
-                        setEnableHardwareScaler(true)
-                        track.addSink(this)
-                    }
-                },
-                onRelease = { renderer ->
-                    track.removeSink(renderer)
-                    renderer.release()
-                },
+            // A thumbnail is cropped rather than letterboxed: at this size
+            // the black bars would be most of the tile.
+            VideoSurface(
+                track = track,
+                eglContext = eglContext,
+                fit = RendererCommon.ScalingType.SCALE_ASPECT_FILL,
+                // The strip sits over the share's own renderer.
+                overlay = true,
                 modifier = Modifier.fillMaxSize(),
             )
         } else {
