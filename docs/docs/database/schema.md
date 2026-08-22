@@ -12,44 +12,21 @@ its owning service's code paths.
 
 ## Entity relationship diagram
 
+One diagram for all 20 models reads as a wall of boxes — every field zooms
+to unreadable no matter how far you pan out. Split by domain instead, each
+diagram placed next to the section it belongs to.
+
+## Identity & auth
+
 ```mermaid
 erDiagram
-    User ||--o{ ServerMember : "has memberships"
-    User ||--o{ Server : owns
     User ||--o{ RefreshToken : has
     User ||--o{ DeviceKey : "has (E2EE identity)"
     User ||--o{ DeviceToken : "has (push)"
     User ||--|| IdentityBackup : "backs up identity to"
     User ||--o{ UserIdentity : "links OAuth"
     User ||--o{ Friendship : "is party to"
-    User ||--o{ RemoteMachine : owns
-    User ||--o{ RemoteGrant : "granted access to"
-    User ||--o{ RemoteSession : opens
-
-    Server ||--o{ ServerMember : has
-    Server ||--o{ Channel : has
-    Server ||--o{ ServerInvite : has
-    Server ||--o{ ServerCustomRole : has
-    Server ||--o{ ServerEmoji : has
-
-    ServerMember }o--o{ ServerCustomRole : "holds (via ServerMemberRole)"
-
-    Channel ||--o{ Message : has
-    Channel ||--o{ ChannelMember : "restricts to (if private)"
-    Channel ||--o{ ChannelKey : "has wrapped keys"
-    Channel ||--o{ ChannelRead : "has read markers"
-
-    Message ||--o{ MessageReaction : has
-    Message ||--o{ Attachment : claims
-    User ||--o{ Message : authors
-
-    RemoteMachine ||--o{ RemoteGrant : has
-    RemoteMachine ||--o{ RemoteSession : has
-    RemoteMachine ||--o{ RemoteAudit : has
-    RemoteSession ||--o{ RemoteAudit : has
 ```
-
-## Identity & auth
 
 ### `User`
 The account. `passwordHash` is `'oauth-only'` for a provider-created account
@@ -94,6 +71,21 @@ recipient's. The server stores only ciphertext (`wrappedKey`) it cannot
 open. `epoch` increments when the channel's membership/key needs to rotate.
 
 ## Servers, roles, channels
+
+```mermaid
+erDiagram
+    User ||--o{ Server : owns
+    User ||--o{ ServerMember : "has memberships"
+    Server ||--o{ ServerMember : has
+    Server ||--o{ Channel : has
+    Server ||--o{ ServerInvite : has
+    Server ||--o{ ServerCustomRole : has
+    Server ||--o{ ServerEmoji : has
+    ServerMember }o--o{ ServerCustomRole : "holds (via ServerMemberRole)"
+    Channel ||--o{ ChannelMember : "restricts to (if private)"
+    Channel ||--o{ ChannelRead : "has read markers"
+    Channel ||--o{ ChannelKey : "has wrapped keys"
+```
 
 ### `Server`
 A community — `slug` is the public, permanent join handle (superseded by
@@ -143,6 +135,15 @@ has nothing secret about it.
 
 ## Messages & attachments
 
+```mermaid
+erDiagram
+    Channel ||--o{ Message : has
+    User ||--o{ Message : authors
+    Message ||--o{ MessageReaction : has
+    Message ||--o{ Attachment : claims
+    User ||--o{ Attachment : uploads
+```
+
 ### `Message`
 `content` is opaque to the server — a serialized `EncryptedEnvelope`
 ciphertext, or plain text before E2EE existed. `deletedAt` + emptied
@@ -179,6 +180,17 @@ because the same physical device can change accounts (sign out, sign in as
 someone else) and must not keep pushing to the old owner.
 
 ## Remote desktop
+
+```mermaid
+erDiagram
+    User ||--o{ RemoteMachine : owns
+    User ||--o{ RemoteGrant : "granted access to"
+    User ||--o{ RemoteSession : opens
+    RemoteMachine ||--o{ RemoteGrant : has
+    RemoteMachine ||--o{ RemoteSession : has
+    RemoteMachine ||--o{ RemoteAudit : has
+    RemoteSession ||--o{ RemoteAudit : has
+```
 
 ### `RemoteMachine`
 `agentTokenHash` is the enrolled agent's credential, hashed like a
