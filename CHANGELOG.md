@@ -1,5 +1,34 @@
 # Changelog
 
+## [0.0.1-alpha.8](https://github.com/aiyu-ayaan/BetweenUs/compare/v0.0.1-alpha.7...v0.0.1-alpha.8) (2026-08-22)
+
+### Features
+
+* Print every command the deployment needs after the copy
+* The installer copies the files and stops there
+* Install a deployment without cloning the repository
+* Paste a picture into the composer
+* Send into BetweenUs from the system share sheet
+
+### Bug fixes
+
+* One owner for the message list's scroll
+* Keep the call header clear of the status bar
+
+### Other changes
+
+* Changes done for android release
+* The no-clone install path, and the build commands it dated
+* Record the share sheet, composer paste and the two screen fixes
+
+### Artifacts
+
+| Platform | This release |
+| --- | --- |
+| Server images | Carried forward from [v0.0.1-alpha.7](https://github.com/aiyu-ayaan/BetweenUs/releases/tag/v0.0.1-alpha.7) |
+| Desktop (Windows) | Carried forward from [v0.0.1-alpha.7](https://github.com/aiyu-ayaan/BetweenUs/releases/tag/v0.0.1-alpha.7) |
+| Android | Built here |
+
 ## [0.0.1-alpha.7](https://github.com/aiyu-ayaan/BetweenUs/compare/v0.0.1-alpha.6...v0.0.1-alpha.7) (2026-08-22)
 
 ### Features
