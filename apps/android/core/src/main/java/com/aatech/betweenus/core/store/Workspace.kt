@@ -243,6 +243,20 @@ object Workspace {
         scope.launch { runCatching { BetweenUsApi.markChannelRead(channelId) } }
     }
 
+    /**
+     * The same channel, read on one of this account's other devices.
+     *
+     * Everything [markRead] does except telling the server, which already knows
+     * - it is what sent this. Posting the marker back would have every device
+     * answering every other device's read with one of its own, for as long as
+     * they are all awake.
+     */
+    fun noteReadElsewhere(channelId: String) {
+        if (_unread.value[channelId] == null) return
+        _unread.update { it - channelId }
+        Cache.putUnread(_unread.value)
+    }
+
     // --- mutations ---
 
     suspend fun createServer(name: String): ServerWithRole =

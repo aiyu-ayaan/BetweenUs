@@ -71,7 +71,12 @@ That is not a style preference, it is forced twice over:
    channel each *window* has focused. That is what stops a phone buzzing for a
    conversation being read on a laptop, and it is the one thing here no client
    can decide, because a client only ever sees its own screen. See
-   `docs/push-suppression.md`.
+   `push-suppression.md`.
+
+   That covers the message that has not been sent yet. The notification already
+   sitting in a pocket is covered by `channel.read`, which every client raises
+   by marking a channel read and which cancels that conversation's notification
+   on all of the account's other devices.
 
 So the push wakes the app, and the app writes the notification. This is exactly
 how WhatsApp behaves and for the same reason.
@@ -85,7 +90,7 @@ how WhatsApp behaves and for the same reason.
 | Muted person | Server | The author is on the envelope |
 | My own message | Client | Cheap, and the id is right there |
 | Channel already on screen *here* | Client | Cheapest where the screen is |
-| Channel on screen on *another* device | Server | Only the server sees the other devices — `docs/push-suppression.md` |
+| Channel on screen on *another* device | Server | Only the server sees the other devices — `push-suppression.md` |
 | Quiet hours | Client | Minutes on *this* phone's clock, no timezone on the server |
 | Mentions-only | Client | The mention is inside the ciphertext |
 

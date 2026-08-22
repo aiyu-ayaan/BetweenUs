@@ -4,7 +4,7 @@
  * It exists for one thing: so a phone is not woken for a message its owner is
  * reading on this screen. `notification-service` asks presence-service who has
  * a channel focused before it fans a push out, and drops them - see
- * `docs/push-suppression.md`.
+ * `push-suppression.md`.
  *
  * "Focused" is deliberately strict. A channel is reported only while it is the
  * open one *and* this window has the operating system's focus. A desktop left

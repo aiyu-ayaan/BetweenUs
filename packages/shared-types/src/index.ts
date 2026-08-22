@@ -970,7 +970,7 @@ export type ClientPresenceEvent =
    * while it stays that way; `channel.blur` is sent when the window loses
    * focus or the channel is left. It is what stops a push waking a phone for a
    * conversation its owner is already reading somewhere else - see
-   * `docs/push-suppression.md`.
+   * `push-suppression.md`.
    */
   | { type: 'channel.focus'; channelId: string }
   | { type: 'channel.blur'; channelId: string }
@@ -1128,6 +1128,27 @@ export interface MessageDeletedPushData {
 }
 
 /**
+ * This account read a channel somewhere else.
+ *
+ * The mirror image of a message push: it exists to take a notification *off* a
+ * screen rather than to put one on it. A phone that buzzed on the way to a desk
+ * should not still be showing the notification once the message has been read
+ * on the laptop.
+ *
+ * It carries no words and no message id - "everything in this channel up to
+ * now" is the whole of what a read marker means, and the notification for that
+ * channel is what gets cancelled. Sent to every device of the account,
+ * including the one that did the reading, which has already cleared its own and
+ * has nothing to do.
+ */
+export interface ChannelReadPushData {
+  type: 'channel.read';
+  channelId: string;
+  /** ISO 8601, so a client can ignore one that arrives out of order. */
+  at: string;
+}
+
+/**
  * Somebody asked to be friends, or said yes.
  *
  * Nothing here is sealed: a friend request has no body, and the name and
@@ -1172,6 +1193,7 @@ export interface CallPushData {
 export type PushData =
   | MessagePushData
   | MessageDeletedPushData
+  | ChannelReadPushData
   | FriendPushData
   | ServerMemberPushData
   | CallPushData;

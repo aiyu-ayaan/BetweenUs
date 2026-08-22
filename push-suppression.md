@@ -10,6 +10,11 @@ Android drops a push for the channel that phone is showing. What it cannot see
 is the *other* devices — a client only knows its own screen. So the fact has to
 reach a server, and the server has to apply it.
 
+There are two halves to that, and this document covers both: **the push that is
+never sent**, because the conversation is open somewhere else, and **the
+notification already showing**, which goes away when the conversation is read
+somewhere else.
+
 ---
 
 ## The rule, exactly
@@ -149,6 +154,45 @@ somebody never learns about; a redundant one is a buzz.
 
 ---
 
+## The notification that is already there
+
+Focus stops a push being *sent*. It does nothing about one that was sent an hour
+ago and is still sitting in a pocket — and reading the message on a laptop
+should take that away too, which is what every messenger does.
+
+That is `channel.read`, and it rides on a marker every client already sets:
+
+```
+  desktop opens #general
+        │
+        ├── POST /api/v1/notifications/read ──►  notification-service
+        │                                        upserts ChannelRead
+        │                                        publishes channel.read
+        │                                              │
+        │                                        PushService.onChannelRead
+        │                                              │
+        └──────────────────────────────────── FCM ─────┴──► every device of
+                                              (normal priority)   that account
+```
+
+On arrival Android cancels that conversation's notification outright and clears
+its unread badge. Two details matter:
+
+- **It cancels the whole thread**, where `message.deleted` removes one line.
+  "Read up to now" means nothing in that conversation is still unseen.
+- **The badge is cleared without posting a marker back.**
+  `Workspace.noteReadElsewhere` is `markRead` minus the API call. With the call,
+  every device would answer every other device's read with one of its own, for
+  as long as they were all awake.
+
+The reader's own device gets the push too and does nothing with it — it cleared
+its notification when the channel opened. Excluding it would mean the server
+knowing which device sent the marker, which it does not and has no reason to.
+
+`FCM/PAYLOADS.md` has the wire format.
+
+---
+
 ## What is still decided on the client
 
 `PushGate.shouldSuppress` on Android is unchanged and still runs. It is the same
@@ -167,7 +211,9 @@ nothing.
 | `apps/services/presence-service/src/presence.gateway.ts` | the handlers, the heartbeat refresh, the disconnect |
 | `apps/services/presence-service/src/presence.controller.ts` | `GET internal/presence/focus` |
 | `apps/services/notification-service/src/push/focus.ts` | the lookup, and its failure direction |
-| `apps/services/notification-service/src/push/push.service.ts` | `onMessage` subtracts the readers |
+| `apps/services/notification-service/src/push/push.service.ts` | `onMessage` subtracts the readers; `onChannelRead` cancels what is already showing |
+| `apps/services/notification-service/src/modules/notifications/notifications.service.ts` | `markRead` publishes `channel.read` |
+| `apps/android/app/src/main/java/.../notifications/PushService.kt` | `handleRead` cancels the thread and the badge |
 | `apps/desktop/src/services/channel-focus.ts` | desktop and web (one app, one module) |
 | `apps/android/core/src/main/java/.../store/ChannelFocus.kt` | Android |
 
@@ -191,6 +237,9 @@ Two clients, one account.
 5. Kill the desktop process outright, and send within a minute and a half. The
    phone buzzes as soon as the entry ages out — this is the 90-second backstop,
    and it is the longest anything should ever stay silent for.
+6. For the other half: with the desktop closed, send to `#general` and let the
+   phone buzz. Now open `#general` on the desktop. The phone's notification
+   should disappear on its own, and its unread badge with it.
 
 `redis-cli zrange presence:focus:<channelId> 0 -1 withscores` shows exactly who
 the server thinks is reading.

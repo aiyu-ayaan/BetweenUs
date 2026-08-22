@@ -549,7 +549,17 @@ Notifications:
       device for #general and nothing else. Every failure of the lookup -
       timeout, refused connection, bad body - answers "nobody is reading",
       because a missed notification is worse than a redundant one. Full design
-      and a two-device test in `docs/push-suppression.md`.
+      and a two-device test in `push-suppression.md`.
+- [x] **A notification read elsewhere takes itself down.** Focus stops a push
+      being sent and does nothing about one already sitting in a pocket, which
+      is half the problem and the half people notice. `markRead` - which every
+      client already calls on opening a channel - now publishes `channel.read`,
+      and `PushService` fans it to that account's own devices, which cancel the
+      conversation's notification and clear its unread badge. The badge is
+      cleared *without* posting a marker back (`Workspace.noteReadElsewhere`):
+      with the call, every device would answer every other device's read with
+      one of its own for as long as they were all awake.
+
 - [x] **Every attachment sends under the foreground service, not only what the
       preview could draw.** A document, a spreadsheet, an audio file took a
       second path from the one above: read, sealed and uploaded inline in the
@@ -558,6 +568,24 @@ Notifications:
       mid-upload still lost it. Everything picked now lands in the send preview
       (a file with nothing to look at gets a card with its name and type) and
       goes to `Outbox` like a photo does.
+
+Android, calls:
+
+- [x] **The connection panel.** Bitrate each way, loss, round trip and frame
+      size per peer, and the sentence that says which of them is bad enough to
+      be what somebody is hearing. `CallStats.kt` is a port of
+      `services/call-stats.ts` with `CallStatsTest` mirroring
+      `call-stats.check.ts`, the same arrangement `ImageEdit` has - two clients
+      in one call must not disagree about what 5% loss is. It costs no extra
+      work: the one-second `getStats` poll that decides who is speaking now
+      reads the byte counters on the same walk of the report.
+- [x] **The speaking ring lights for your own tile.** It never had: `speaking`
+      is read from a peer connection's inbound statistics and no peer
+      connection carries your own microphone, so every self tile passed a
+      hardcoded `false`. The level now comes off the microphone itself through
+      the audio device module's samples callback - which also means it works
+      alone in a channel, where there are no statistics at all and where
+      "is this thing picking me up?" is the question being asked.
 
 End-to-end encryption:
 

@@ -12,7 +12,7 @@ is Web Push, and the fan-out for remote sessions. The call half is answered by
 `call.roster`, and Android rings from it: a direct call raises a full-screen
 answer screen with the app dead. Cross-device suppression has also landed - a
 message does not wake a phone whose owner has the same channel open on another
-device, desktop or a second phone (`docs/push-suppression.md`). See the
+device, desktop or a second phone (`push-suppression.md`). See the
 phase-27 section below.
 
 **None of it has been in front of a human.** `FCM/TESTING.md` is the order to
@@ -90,7 +90,7 @@ write a notification worth reading. Whether the recipient is looking at that
 conversation *right now* is decided in two places: locally, on the device that
 already has it open - that is why a message never sounds on the screen showing
 it - and now on the server too, for every *other* device the same account owns.
-See `docs/push-suppression.md` for the second half.
+See `push-suppression.md` for the second half.
 
 Backend (`notification-service`):
 
@@ -126,7 +126,11 @@ Backend (`notification-service`):
       the same way `presence:online` is, and `message.created` asks
       `presence-service` who is reading before it fans out at all - so a message
       does not buzz a phone whose owner has that exact channel open on a laptop.
-      See `docs/push-suppression.md`.
+      See `push-suppression.md`.
+- [x] **`channel.read` fan-out.** A read marker now reaches that account's
+      other devices, which cancel the conversation's notification and its
+      unread badge. Suppression stops a push being sent; this is the half that
+      deals with one already showing.
 - [ ] Fan-out on `remote.session.started`
 
 Web:

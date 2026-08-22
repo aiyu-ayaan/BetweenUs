@@ -124,6 +124,44 @@ something *off* a screen.
 
 ---
 
+## `channel.read`
+
+Sent on the Redis `channel.read` event, which `notification-service` publishes
+whenever any client marks a channel read. The second of the two pushes that
+exist to take something *off* a screen.
+
+```jsonc
+{
+  "data": {
+    "type": "channel.read",
+    "channelId": "9b41…",
+    "at": "2026-08-22T09:14:03.221Z"
+  },
+  "android": { "priority": "normal", "ttl": 86400000 }
+}
+```
+
+- **One recipient: the account that did the reading.** No audience, no
+  preferences, nobody else's phone. A read marker is this account talking to
+  itself — "I have dealt with that conversation, on the machine I am sitting
+  at" — and the phone in the pocket is who needs telling.
+- **Every device of that account, the reader included.** The reader has already
+  cleared its own notification and does nothing with this; excluding it would
+  mean the server knowing which device sent the marker, which it does not and
+  has no reason to.
+- **Cancels the whole thread**, unlike `message.deleted`, which takes one line
+  out. "Read up to now" is what a read marker means, so nothing in that
+  conversation is still unseen.
+- The unread badge goes with it. On Android that is
+  `Workspace.noteReadElsewhere`, which does what `markRead` does *except* post
+  the marker back — otherwise every device would answer every other device's
+  read with one of its own for as long as they were all awake.
+- **`priority: normal`**, for the same reason as `message.deleted`.
+- No words, no message id, and nothing sealed: a timestamp and a channel id are
+  the whole payload.
+
+---
+
 ## `friend.request` and `friend.accepted`
 
 Sent on the Redis `friend.changed` event, to the side that did not act. Nothing

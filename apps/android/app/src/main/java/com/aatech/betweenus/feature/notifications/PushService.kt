@@ -59,6 +59,7 @@ class PushService : FirebaseMessagingService() {
                 when (data["type"]) {
                     "message.created" -> handle(data)
                     "message.deleted" -> handleDeleted(data)
+                    "channel.read" -> handleRead(data)
                     "friend.request" -> handleFriend(data, accepted = false)
                     "friend.accepted" -> handleFriend(data, accepted = true)
                     "server.member.added" -> handleServerAdded(data)
@@ -90,6 +91,27 @@ class PushService : FirebaseMessagingService() {
             isGroup = PushGate.isGroup(channelId),
             selfName = (Session.state.value as? AuthPhase.SignedIn)?.user?.label.orEmpty(),
         )
+    }
+
+    /**
+     * This account read the conversation on another of its devices.
+     *
+     * The notification here has been dealt with by somebody sitting at a
+     * laptop, and a phone still showing it is a phone asking to be checked for
+     * something already seen. The unread badge goes with it, for the same
+     * reason.
+     *
+     * Like a deletion, this is never suppressed and needs nothing: no session,
+     * no channel key, no preferences. Every gate here would be a way to leave a
+     * notification standing that its owner has already answered.
+     *
+     * The device that did the reading gets this too and has nothing to do -
+     * opening the channel cleared its own notification a moment ago.
+     */
+    private fun handleRead(data: Map<String, String>) {
+        val channelId = data["channelId"] ?: return
+        MessageNotifications.clear(applicationContext, channelId)
+        Workspace.noteReadElsewhere(channelId)
     }
 
     /** Somebody asked to be friends, or said yes. No words, so nothing to open. */

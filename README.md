@@ -27,7 +27,7 @@ A modern, secure communication platform with end-to-end encrypted messaging, pee
 
 Messages, attachments, and call media are end-to-end encrypted: the server stores and routes ciphertext, never holding any key that can decrypt it. Voice, video, and screen sharing stream directly between participants via a peer-to-peer WebRTC mesh with DTLS-SRTP encryption — requiring zero media server infrastructure.
 
-`CLAUDE.md` is the target architecture. `development/` tracks what is built, why each decision was taken, and what is deliberately left open. `docs/` holds a small number of deep dives on one cross-cutting feature each, linked from wherever that feature is mentioned. `DEPLOYMENT.md` is the step-by-step guide for deploying on a server with Docker Compose, Cloudflare Tunnels, and STUN/TURN relays.
+`CLAUDE.md` is the target architecture. `development/` tracks what is built, why each decision was taken, and what is deliberately left open. `DEPLOYMENT.md` is the step-by-step guide for deploying on a server with Docker Compose, Cloudflare Tunnels, and STUN/TURN relays.
 
 ---
 
@@ -100,6 +100,7 @@ Electron preload bridge, and a browser tab has none of them.
 | Ask to drive somebody's shared screen | ✅ | ✅ | — |
 | Be driven while sharing your screen | ✅ | — | — |
 | Manual quality override | ✅ | ✅ | ⚠️ automatic |
+| Connection panel: bitrate, loss, round trip, frame size | ✅ | ✅ | ✅ |
 | Push to talk | ✅ | ✅ | — |
 | Picture-in-picture while minimised | ✅ | — | — |
 | Join and leave tones | ✅ | ✅ | ✅ |
@@ -111,6 +112,7 @@ Electron preload bridge, and a browser tab has none of them.
 | Notifications for messages, mentions and calls | ✅ | ✅ | ✅ FCM, app dead or alive |
 | Per-channel and per-person mute, quiet hours | ✅ | ✅ | ✅ |
 | Not woken for a chat open on another of your devices | ✅ | ✅ | ✅ |
+| Notification clears when you read it on another device | — | — | ✅ |
 | System tray, start with the system | ✅ | — | — |
 | Self-updates from GitHub Releases (alpha / beta / stable) | — | — | ✅ |
 | **Remote desktop** | | | |
@@ -124,8 +126,9 @@ whichever client you arrived from.
 
 **Push suppression** works the same way WhatsApp's does: if any of your
 windows has a channel open and focused, none of your devices is woken for a
-message in it. A different channel still buzzes normally, even in the same
-server. See `docs/push-suppression.md`.
+message in it, and a notification already showing on a phone goes away when you
+read that conversation on a laptop. A different channel still buzzes normally,
+even in the same server. See `push-suppression.md`.
 
 ---
 
@@ -503,7 +506,7 @@ A native Android mobile application built with **Kotlin 2.2**, **Jetpack Compose
   notification, only the phone can. Messages, mentions, calls (a `CallStyle`
   full-screen intent that rings with the app dead), friend requests and being
   added to a server. Suppressed for a channel any of your other devices already
-  has open and focused - see `docs/push-suppression.md`.
+  has open and focused - see `push-suppression.md`.
 - **Attachments send under a foreground service**: leaving the channel, taking
   a call or locking the phone no longer kills an upload halfway.
 - **Self-updating**: checks its own GitHub releases on launch and once a day in
@@ -707,7 +710,18 @@ was built the way it was; this is the short version.
   desktop, web or a second phone. Per account, per exact channel: a different
   server still notifies normally everywhere. Clients report focus over
   `/ws/presence`; `notification-service` asks `presence-service` before every
-  fan-out and drops the readers. `docs/push-suppression.md`.
+  fan-out and drops the readers. `push-suppression.md`.
+- **A notification that has been read elsewhere takes itself down.** The other
+  half of the same problem: focus stops a push being sent, and does nothing
+  about one already sitting in a pocket. Marking a channel read - which every
+  client already does on opening one - now raises `channel.read`, and the
+  account's other devices cancel that conversation's notification and its
+  unread badge.
+- **The connection panel, on Android.** Bitrate each way, packet loss, round
+  trip and frame size per peer, plus the warning when a link is bad enough to
+  explain what somebody is hearing. A port of the desktop's, arithmetic for
+  arithmetic, because two clients in the same call must not disagree about what
+  5% loss is.
 - **Every attachment sends under the foreground service, not only pictures and
   video.** A document used to upload inline in the chat screen's own scope,
   which died the moment the screen did - leaving the channel mid-upload left
@@ -828,4 +842,4 @@ Third-party dependencies keep their own licences.
 | `development/ANDROID_TODO.md` | Native Android client architecture, roadmap, and completed phases |
 | `development/TRACK.md` | The current track: what has landed this pass, and why it was built the way it was |
 | `FCM/README.md` | Push notification design: why it is data-only, what the server can decide and what only the client can |
-| `docs/push-suppression.md` | Why a phone is not woken for a chat already open on another of your devices, end to end |
+| `push-suppression.md` | Why a phone is not woken for a chat open on another of your devices, and why a notification goes away when you read it elsewhere |

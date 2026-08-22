@@ -26,14 +26,17 @@
  * *already reading the channel on another device*. A client can only ever see
  * its own screen, so only a server can answer that one - it asks
  * presence-service, and drops those recipients from the fan-out. See
- * `docs/push-suppression.md`.
+ * `push-suppression.md`.
  *
  * Five things are worth waking a phone for, and only the first carries words:
  *
  * - `message.created` - somebody said something.
  * - `message.deleted` - somebody unsaid it, and the notification drawn for it
- *   is now a lie. The only push here that exists to take something *off* a
- *   screen.
+ *   is now a lie. One of the two pushes here that exist to take something *off*
+ *   a screen.
+ * - `channel.read` - this account read the conversation somewhere else, so the
+ *   notification for it on every other device has been dealt with. The other
+ *   one that takes something away.
  * - `friend.request` / `friend.accepted` - somebody asked, or said yes.
  * - `server.member.added` - somebody put this account in a server.
  * - `call.roster` - who is in a call in a channel this account can hear. The
@@ -48,6 +51,7 @@ import type { EventName, EventPayloads } from '@betweenus/events';
 import { Logger } from '@betweenus/logger';
 import type {
   CallPushData,
+  ChannelReadPushData,
   FriendPushData,
   Message,
   MessageDeletedPushData,
@@ -103,6 +107,7 @@ export class PushService implements OnModuleInit {
 
     await this.on(EVENTS.MESSAGE_CREATED, (payload) => this.onMessage(payload.message));
     await this.on(EVENTS.MESSAGE_DELETED, (payload) => this.onMessageDeleted(payload));
+    await this.on(EVENTS.CHANNEL_READ, (payload) => this.onChannelRead(payload));
     await this.on(EVENTS.FRIEND_CHANGED, (payload) => this.onFriendChanged(payload));
     await this.on(EVENTS.SERVER_MEMBER_ADDED, (payload) => this.onServerMemberAdded(payload));
     await this.on(EVENTS.CALL_ROSTER, (payload) => this.onCallRoster(payload.voice));
@@ -187,6 +192,33 @@ export class PushService implements OnModuleInit {
       audience.map((userId) => ({ userId, data })),
       { urgent: false },
     );
+  }
+
+  /**
+   * This account read a channel on one of its devices, so the notification for
+   * it goes away on the others.
+   *
+   * The mirror image of `onMessageDeleted`: no audience to work out, no
+   * preferences to consult - a read marker is this account talking to itself,
+   * and nobody else's phone is involved. It goes to every device including the
+   * one that did the reading, which has already cleared its own notification
+   * and does nothing with this.
+   *
+   * Normal priority. Taking a stale notification off a screen is worth doing
+   * and is not worth pulling a sleeping phone out of Doze for; it lands the
+   * moment the phone is next awake, which is the moment anybody would see it.
+   */
+  private async onChannelRead(payload: {
+    userId: string;
+    channelId: string;
+    at: string;
+  }): Promise<void> {
+    const data: ChannelReadPushData = {
+      type: 'channel.read',
+      channelId: payload.channelId,
+      at: payload.at,
+    };
+    await this.deliver([{ userId: payload.userId, data }], { urgent: false });
   }
 
   /**

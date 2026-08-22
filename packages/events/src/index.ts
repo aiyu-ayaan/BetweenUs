@@ -34,6 +34,16 @@ export const EVENTS = {
   MESSAGE_UPDATED: 'message.updated',
   MESSAGE_DELETED: 'message.deleted',
   FRIEND_CHANGED: 'friend.changed',
+  /**
+   * Somebody read a channel, on one of their devices.
+   *
+   * Published so their *other* devices can take down a notification for it.
+   * A phone that buzzed while its owner was walking to their desk should not
+   * still be showing that notification once they have read the message on the
+   * laptop - which is the behaviour every messenger has and the one thing a
+   * read marker was never used for here.
+   */
+  CHANNEL_READ: 'channel.read',
 } as const;
 
 export interface EventPayloads {
@@ -64,6 +74,7 @@ export interface EventPayloads {
    * Both are optional so a producer that only wants the refresh still type
    * checks - a subscriber with neither simply sends nothing.
    */
+  [EVENTS.CHANNEL_READ]: { userId: string; channelId: string; at: string };
   [EVENTS.FRIEND_CHANGED]: {
     userIds: string[];
     actorId?: string;

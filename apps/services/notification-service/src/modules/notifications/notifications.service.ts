@@ -13,6 +13,7 @@
  */
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { prisma, resolveChannelAccess } from '@betweenus/database';
+import { EVENTS, EventBus } from '@betweenus/events';
 import type {
   ChannelUnread,
   NotificationPreferences,
@@ -31,6 +32,8 @@ const DEFAULTS: NotificationPreferences = {
 
 @Injectable()
 export class NotificationsService {
+  constructor(private readonly events: EventBus) {}
+
   async preferences(userId: string): Promise<NotificationPreferences> {
     const row = await prisma.notificationSetting.findUnique({ where: { userId } });
     if (!row) return DEFAULTS;
@@ -161,6 +164,15 @@ export class NotificationsService {
       where: { userId_channelId: { userId, channelId } },
       create: { userId, channelId, lastReadAt: at },
       update: { lastReadAt: at },
+    });
+
+    // Their other devices, so a notification this account has already dealt
+    // with stops sitting in a pocket. Published rather than pushed from here:
+    // the fan-out belongs to `PushService`, which owns the tokens.
+    await this.events.publish(EVENTS.CHANNEL_READ, {
+      userId,
+      channelId,
+      at: at.toISOString(),
     });
 
     return { channelId, count: 0, lastReadAt: at.toISOString() };
