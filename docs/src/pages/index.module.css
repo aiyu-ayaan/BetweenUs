@@ -9,7 +9,7 @@
       rgba(124, 92, 255, 0) 70%
     ),
     var(--ifm-background-color);
-  border-bottom: 1px solid var(--ifm-toc-border-color);
+  border-bottom: 1px solid var(--betweenus-edge);
 }
 
 .heroBanner::before {
@@ -80,18 +80,17 @@
 }
 
 .primaryButton {
-  --ifm-button-background: linear-gradient(
-    135deg,
-    var(--betweenus-iris),
-    var(--ifm-color-primary-darker)
-  );
-  background: var(--ifm-button-background);
+  background: var(--betweenus-iris);
   border: none;
-  box-shadow: 0 8px 24px -8px var(--betweenus-glow);
+  border-radius: 8px;
+  box-shadow: var(--betweenus-shadow-panel);
+  transition: background-color 0.14s cubic-bezier(0.32, 0.72, 0, 1),
+    box-shadow 0.14s cubic-bezier(0.32, 0.72, 0, 1);
 }
 
 .primaryButton:hover {
-  filter: brightness(1.08);
+  background: var(--betweenus-iris-hover);
+  box-shadow: var(--betweenus-shadow-pop);
   color: white;
 }
 
@@ -142,17 +141,17 @@
 .screenshotFrame {
   max-width: 960px;
   width: 100%;
-  border-radius: 14px;
-  border: 1px solid var(--ifm-toc-border-color);
-  background: var(--ifm-background-surface-color);
+  border-radius: var(--betweenus-radius);
+  border: 1px solid var(--betweenus-edge);
+  background: var(--betweenus-surface-900);
   padding: 0.5rem;
-  box-shadow: 0 30px 60px -30px rgba(0, 0, 0, 0.45);
+  box-shadow: var(--betweenus-shadow-pop);
 }
 
 .screenshot {
   display: block;
   width: 100%;
-  border-radius: 9px;
+  border-radius: 0.5rem;
 }
 
 .ctaSection {

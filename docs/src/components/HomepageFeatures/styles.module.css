@@ -5,15 +5,19 @@
 .featureCard {
   height: 100%;
   padding: 1.75rem 1.5rem;
-  border-radius: 12px;
-  border: 1px solid var(--ifm-toc-border-color);
-  background: var(--ifm-background-surface-color);
-  transition: transform 0.15s ease, border-color 0.15s ease;
+  border-radius: var(--betweenus-radius);
+  border: 1px solid var(--betweenus-edge);
+  background: var(--betweenus-surface-900);
+  box-shadow: var(--betweenus-shadow-panel);
+  transition: transform 0.14s cubic-bezier(0.32, 0.72, 0, 1),
+    border-color 0.14s cubic-bezier(0.32, 0.72, 0, 1),
+    box-shadow 0.14s cubic-bezier(0.32, 0.72, 0, 1);
 }
 
 .featureCard:hover {
   transform: translateY(-3px);
   border-color: color-mix(in srgb, var(--betweenus-iris) 40%, transparent);
+  box-shadow: var(--betweenus-shadow-pop);
 }
 
 .featureIcon {

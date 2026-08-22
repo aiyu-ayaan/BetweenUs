@@ -1,47 +1,77 @@
 /**
- * BetweenUs docs theme. Overrides Infima's default green with the client's
- * own iris accent (see development/PLANNING.md, "the workbench", phase 26)
- * so the docs don't read as a stock Docusaurus site.
+ * BetweenUs docs theme. Pulled directly from the desktop client's own
+ * palette (apps/desktop/tailwind.theme.mjs) rather than approximated - the
+ * same ground, surface ramp, iris accent, hairline edges, panel radius and
+ * shadows the "workbench" client design uses (development/PLANNING.md,
+ * phase 26). The client is dark-only ("nothing about a light BetweenUs has
+ * been designed" - development/ANDROID_TODO.md), so these docs are too;
+ * docusaurus.config.ts disables the light/dark switch.
  */
 
 :root {
-  --ifm-color-primary: #6c47fa;
-  --ifm-color-primary-dark: #5730f7;
-  --ifm-color-primary-darker: #4d24f5;
-  --ifm-color-primary-darkest: #3f1dcb;
-  --ifm-color-primary-light: #8164fb;
-  --ifm-color-primary-lighter: #8c71fc;
-  --ifm-color-primary-lightest: #ac98fd;
-  --ifm-code-font-size: 95%;
-  --docusaurus-highlighted-code-line-bg: rgba(124, 92, 255, 0.1);
+  /* Accent, from tailwind.theme.mjs colors.accent */
+  --ifm-color-primary: #7c5cff;
+  --ifm-color-primary-dark: #6a44f5;
+  --ifm-color-primary-darker: #6039ee;
+  --ifm-color-primary-darkest: #4f2ac9;
+  --ifm-color-primary-light: #9272ff;
+  --ifm-color-primary-lighter: #9d80ff;
+  --ifm-color-primary-lightest: #c1b3ff;
+  --ifm-code-font-size: 90%;
+  --docusaurus-highlighted-code-line-bg: rgba(124, 92, 255, 0.12);
 
   --betweenus-iris: #7c5cff;
+  --betweenus-iris-hover: #6a44f5;
   --betweenus-iris-soft: rgba(124, 92, 255, 0.14);
   --betweenus-glow: rgba(124, 92, 255, 0.35);
+
+  /* Ground + surface ramp, from tailwind.theme.mjs colors.ground/surface */
+  --betweenus-ground: #06070a;
+  --betweenus-surface-950: #0b0d12;
+  --betweenus-surface-900: #15181f;
+  --betweenus-surface-850: #0f1117;
+  --betweenus-surface-800: #101319;
+  --betweenus-surface-700: #222734;
+  --betweenus-surface-600: #1a1e27;
+
+  /* The one hairline every panel in the app is drawn with. */
+  --betweenus-edge: rgba(255, 255, 255, 0.07);
+
+  /* Status dots - colors.status */
+  --betweenus-online: #3fd68c;
+  --betweenus-idle: #f5b83d;
+  --betweenus-dnd: #ff5d5d;
+
+  --betweenus-danger: #ff4d4f;
+
+  --ifm-font-family-base: 'Inter', 'Segoe UI Variable Text', 'Segoe UI',
+    system-ui, 'Helvetica Neue', sans-serif;
+  --ifm-font-family-monospace: 'JetBrains Mono', 'Cascadia Code', Consolas,
+    monospace;
+
+  /* Panel shape: borderRadius.panel and boxShadow.panel/pop */
+  --betweenus-radius: 0.75rem;
+  --betweenus-shadow-panel: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --betweenus-shadow-pop: 0 12px 32px -8px rgba(0, 0, 0, 0.7);
+
+  --ifm-background-color: var(--betweenus-ground);
+  --ifm-background-surface-color: var(--betweenus-surface-900);
+  --ifm-navbar-background-color: var(--betweenus-surface-950);
+  --ifm-footer-background-color: var(--betweenus-ground);
+  --ifm-toc-border-color: var(--betweenus-edge);
+  --ifm-color-emphasis-300: var(--betweenus-edge);
+  --ifm-hr-border-color: var(--betweenus-edge);
+  --ifm-table-border-color: var(--betweenus-edge);
+  --ifm-code-background: var(--betweenus-surface-800);
 }
 
-[data-theme='dark'] {
-  --ifm-color-primary: #9c8cff;
-  --ifm-color-primary-dark: #8874ff;
-  --ifm-color-primary-darker: #7c65ff;
-  --ifm-color-primary-darkest: #5b41f0;
-  --ifm-color-primary-light: #b0a3ff;
-  --ifm-color-primary-lighter: #b9adff;
-  --ifm-color-primary-lightest: #ded6ff;
-  --docusaurus-highlighted-code-line-bg: rgba(156, 140, 255, 0.15);
-
-  --betweenus-iris: #9c8cff;
-  --betweenus-iris-soft: rgba(156, 140, 255, 0.14);
-  --betweenus-glow: rgba(156, 140, 255, 0.28);
-  --ifm-background-color: #0b0c12;
-  --ifm-background-surface-color: #12131c;
-  --ifm-navbar-background-color: #0e0f17;
-  --ifm-footer-background-color: #0b0c12;
+body {
+  background: var(--betweenus-ground);
 }
 
 .markdown h2 {
   --ifm-h2-font-size: 1.5rem;
-  border-bottom: 1px solid var(--ifm-toc-border-color);
+  border-bottom: 1px solid var(--betweenus-edge);
   padding-bottom: 0.4rem;
 }
 
@@ -56,8 +86,9 @@
 /* Navbar: an accent underline on the active top-level link instead of the
    default flat highlight, and a tighter border under the whole bar. */
 .navbar {
-  border-bottom: 1px solid var(--ifm-toc-border-color);
+  border-bottom: 1px solid var(--betweenus-edge);
   box-shadow: none;
+  background-color: var(--betweenus-surface-950);
 }
 
 .navbar__link--active {
@@ -67,12 +98,14 @@
 /* Sidebar: current page reads as a filled pill with a left accent bar,
    not Infima's flat background-tint default. */
 .theme-doc-sidebar-container {
-  border-right: 1px solid var(--ifm-toc-border-color) !important;
+  border-right: 1px solid var(--betweenus-edge) !important;
+  background: var(--betweenus-ground);
 }
 
 .menu__link {
   border-radius: 8px;
-  transition: background-color 0.12s ease, color 0.12s ease;
+  transition: background-color 0.14s cubic-bezier(0.32, 0.72, 0, 1),
+    color 0.14s ease;
 }
 
 .menu__link:hover {
@@ -98,7 +131,7 @@
 
 /* Table of contents: a left rail marker on the active heading. */
 .table-of-contents {
-  border-left: 1px solid var(--ifm-toc-border-color);
+  border-left: 1px solid var(--betweenus-edge);
   padding-left: 0.9rem;
 }
 
@@ -118,6 +151,7 @@
 /* Breadcrumbs: quieter separators, accent on the current page. */
 .breadcrumbs__link {
   border-radius: 6px;
+  background: var(--betweenus-surface-900);
 }
 
 .breadcrumbs__item--active .breadcrumbs__link {
@@ -125,7 +159,7 @@
   color: var(--betweenus-iris);
 }
 
-/* Inline code and fenced code blocks. */
+/* Inline code and fenced code blocks - the workbench's panel shape. */
 :not(pre) > code {
   background: var(--betweenus-iris-soft);
   color: var(--betweenus-iris);
@@ -135,28 +169,30 @@
 }
 
 div[class^='codeBlockContainer'] {
-  border: 1px solid var(--ifm-toc-border-color);
-  border-radius: 10px;
+  border: 1px solid var(--betweenus-edge);
+  border-radius: var(--betweenus-radius);
+  box-shadow: var(--betweenus-shadow-panel);
 }
 
-/* Tables: rounded frame instead of Infima's plain ruled grid. */
+/* Tables: rounded panel frame instead of Infima's plain ruled grid. */
 table {
   display: table;
-  border: 1px solid var(--ifm-toc-border-color);
-  border-radius: 10px;
+  border: 1px solid var(--betweenus-edge);
+  border-radius: var(--betweenus-radius);
   overflow: hidden;
 }
 
 table thead tr {
-  background-color: var(--ifm-background-surface-color);
+  background-color: var(--betweenus-surface-800);
+}
+
+table tr {
+  background-color: var(--betweenus-surface-900);
+  border-top: 1px solid var(--betweenus-edge);
 }
 
 table tr:nth-child(2n) {
-  background-color: color-mix(
-    in srgb,
-    var(--ifm-background-surface-color) 60%,
-    transparent
-  );
+  background-color: var(--betweenus-surface-850);
 }
 
 /* Admonitions: iris-tinted "note" to match the rest of the site instead of
@@ -169,37 +205,61 @@ table tr:nth-child(2n) {
 
 /* Prev/next pagination cards at the bottom of every page. */
 .pagination-nav__link {
-  border: 1px solid var(--ifm-toc-border-color);
-  border-radius: 10px;
-  transition: border-color 0.12s ease, transform 0.12s ease;
+  border: 1px solid var(--betweenus-edge);
+  border-radius: var(--betweenus-radius);
+  background: var(--betweenus-surface-900);
+  transition: border-color 0.14s cubic-bezier(0.32, 0.72, 0, 1),
+    transform 0.14s cubic-bezier(0.32, 0.72, 0, 1);
 }
 
 .pagination-nav__link:hover {
   border-color: var(--betweenus-iris);
   transform: translateY(-2px);
+  box-shadow: var(--betweenus-shadow-pop);
 }
 
 .pagination-nav__sublabel {
   color: var(--ifm-color-emphasis-600);
 }
 
-/* Mermaid diagrams: frame them like a card so they don't float loose on
+/* Mermaid diagrams: frame them like a panel so they don't float loose on
    the page background. */
 .docusaurus-mermaid-container {
-  border: 1px solid var(--ifm-toc-border-color);
-  border-radius: 10px;
+  border: 1px solid var(--betweenus-edge);
+  border-radius: var(--betweenus-radius);
   padding: 1rem;
-  background: var(--ifm-background-surface-color);
+  background: var(--betweenus-surface-900);
+  box-shadow: var(--betweenus-shadow-panel);
 }
 
 /* "Generated index" category pages (Architecture, Services, etc.) */
 article a.card {
-  border: 1px solid var(--ifm-toc-border-color);
-  transition: border-color 0.12s ease, transform 0.12s ease;
+  border: 1px solid var(--betweenus-edge);
+  border-radius: var(--betweenus-radius);
+  background: var(--betweenus-surface-900);
+  transition: border-color 0.14s cubic-bezier(0.32, 0.72, 0, 1),
+    transform 0.14s cubic-bezier(0.32, 0.72, 0, 1);
 }
 
 article a.card:hover {
   border-color: var(--betweenus-iris);
   transform: translateY(-2px);
-  box-shadow: 0 12px 24px -16px var(--betweenus-glow);
+  box-shadow: var(--betweenus-shadow-pop);
+}
+
+/* Search (docusaurus-search-local): match the panel language. */
+.navbar__search-input {
+  border-radius: 8px;
+  border: 1px solid var(--betweenus-edge);
+  background-color: var(--betweenus-surface-900) !important;
+}
+
+.DocSearch-Modal,
+#search-local-container .suggestion-content,
+.search-local-dropdown {
+  border-radius: var(--betweenus-radius) !important;
+}
+
+footer.footer {
+  border-top: 1px solid var(--betweenus-edge);
 }

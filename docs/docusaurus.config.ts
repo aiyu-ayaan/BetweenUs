@@ -37,6 +37,16 @@ const config: Config = {
   onBrokenLinks: 'warn',
   onBrokenMarkdownLinks: 'warn',
 
+  // The desktop client's own fonts (tailwind.theme.mjs): Inter for text,
+  // JetBrains Mono for code. Neither ships as a system font, so they're
+  // pulled from Google Fonts rather than bundled.
+  stylesheets: [
+    {
+      href: 'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap',
+      type: 'text/css',
+    },
+  ],
+
   i18n: {
     defaultLocale: 'en',
     locales: ['en'],
@@ -61,8 +71,13 @@ const config: Config = {
 
   themeConfig: {
     image: 'img/home.png',
+    // The desktop client is dark-only - "nothing about a light BetweenUs
+    // has been designed" (development/ANDROID_TODO.md) - so the docs match
+    // it rather than offering a light mode the app itself doesn't have.
     colorMode: {
-      respectPrefersColorScheme: true,
+      defaultMode: 'dark',
+      disableSwitch: true,
+      respectPrefersColorScheme: false,
     },
     navbar: {
       title: 'BetweenUs',
@@ -106,7 +121,7 @@ const config: Config = {
       copyright: `Copyright © ${new Date().getFullYear()} BetweenUs. Built with Docusaurus.`,
     },
     prism: {
-      theme: prismThemes.github,
+      theme: prismThemes.dracula,
       darkTheme: prismThemes.dracula,
       additionalLanguages: ['bash', 'json', 'yaml', 'docker', 'nginx'],
     },
