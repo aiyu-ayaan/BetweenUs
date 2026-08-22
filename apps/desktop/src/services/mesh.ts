@@ -278,6 +278,8 @@ class PeerLink {
   private shareCodec: SharePublish['videoCodec'] | null = null;
   /** Video slots that have decoded at least one frame. See `pollVideo`. */
   private readonly liveVideo = new Set<Slot>();
+  /** How loud this peer is, 0..1. See `pollAudioLevel`. */
+  private level = 0;
   /**
    * Candidates that arrived before there was a remote description to attach
    * them to.
@@ -854,16 +856,47 @@ class PeerLink {
     return now;
   }
 
-  /** Audio levels this peer is producing on their microphone right now, 0..1. */
+  /** How loud this peer is, 0..1, as of the last `pollAudioLevel`. */
   audioLevel(): number {
-    let loudest = 0;
+    return this.level;
+  }
+
+  /**
+   * Reads how loud this peer is.
+   *
+   * `getSynchronizationSources()` is the obvious way to ask and is why nobody
+   * ever saw a speaking ring on desktop or the web: it reports a level only for
+   * sources it considers current, and in Chromium it is routinely empty on a
+   * connection carrying perfectly good audio - so the ring was driven by a
+   * number that was almost always zero. `inbound-rtp` carries the same reading
+   * and is always there; it is what the Android client has been reading, which
+   * is why the ring works there and only there.
+   *
+   * Asynchronous, so the poll reads the previous tick's answer. 200 ms behind a
+   * syllable is not something a person can see.
+   */
+  async pollAudioLevel(): Promise<void> {
     const receiver = this.transceivers.get('mic')?.receiver;
-    if (receiver?.getSynchronizationSources) {
-      for (const source of receiver.getSynchronizationSources()) {
-        loudest = Math.max(loudest, source.audioLevel ?? 0);
-      }
+    if (!receiver) {
+      this.level = 0;
+      return;
     }
-    return loudest;
+
+    let loudest = 0;
+    for (const source of receiver.getSynchronizationSources?.() ?? []) {
+      loudest = Math.max(loudest, source.audioLevel ?? 0);
+    }
+
+    if (loudest === 0) {
+      const report = await receiver.getStats().catch(() => null);
+      report?.forEach((entry) => {
+        const stat = entry as { type?: string; kind?: string; audioLevel?: number };
+        if (stat.type !== 'inbound-rtp' || stat.kind !== 'audio') return;
+        loudest = Math.max(loudest, Number(stat.audioLevel ?? 0));
+      });
+    }
+
+    this.level = Number.isFinite(loudest) ? loudest : 0;
   }
 
   send_(payload: unknown): void {
@@ -1228,6 +1261,9 @@ export class Mesh {
       const speaking = new Set<string>();
       if (this.localSpeaking) speaking.add('local');
       for (const link of this.links.values()) {
+        // Started here, read next tick: the level comes from `getStats`, which
+        // is a promise. See `pollAudioLevel`.
+        void link.pollAudioLevel();
         if (link.audioLevel() >= SPEAKING_LEVEL) speaking.add(link.peer.peerId);
       }
 
