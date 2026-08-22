@@ -1096,6 +1096,18 @@ class VoiceEngine(private val context: Context) {
         private val transceivers = LinkedHashMap<Slot, RtpTransceiver>()
 
         /**
+         * Video slots that have decoded at least one frame. See [liveVideo].
+         *
+         * A latch, and the reason incoming video used to flicker: a stats
+         * report that happens not to carry this slot's `inbound-rtp` entry -
+         * one arrives empty after a renegotiation, and a mid can change under
+         * one - read as nought frames decoded, which took the track away and
+         * put it back a beat later. The desktop client has held the same latch
+         * since the same bug was fixed there.
+         */
+        private val decodedOnce = HashSet<Slot>()
+
+        /**
          * What this client wants to be sending, held for the answering side: it
          * has no senders until the offer arrives, and a camera turned on before
          * that would otherwise never reach anybody.
@@ -1838,16 +1850,18 @@ class VoiceEngine(private val context: Context) {
          * every time. Whether a slot is still *on* is what its owner says on
          * the data channel - `screenDeclared` and `cameraDeclared`.
          *
-         * `framesDecoded` only ever grows, so this only ever goes from nothing
-         * to a track.
+         * Latched by [decodedOnce], so this only ever goes from nothing to a
+         * track. `framesDecoded` only grows, but the *report* is not a promise:
+         * a slot missing from one poll is not a slot that stopped, and reading
+         * it as one is what made an arriving camera flicker.
          */
         private fun liveVideo(slot: Slot, decoded: Map<String, Long>): VideoTrack? {
             val transceiver = transceivers[slot] ?: return null
             val track = transceiver.receiver.track() as? VideoTrack ?: return null
-            val mid = transceiver.mid ?: return null
+            val mid = transceiver.mid
 
-            if ((decoded[mid] ?: 0L) == 0L) return null
-            return track
+            if (mid != null && (decoded[mid] ?: 0L) > 0L) decodedOnce += slot
+            return if (slot in decodedOnce) track else null
         }
 
         private fun problem(message: String) {
