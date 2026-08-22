@@ -39,6 +39,7 @@ import com.aatech.betweenus.feature.remote.RemoteSessionScreen
 import com.aatech.betweenus.core.store.PendingChannel
 import com.aatech.betweenus.core.store.PendingInvite
 import com.aatech.betweenus.core.store.PendingPlace
+import com.aatech.betweenus.core.store.PendingShare
 import com.aatech.betweenus.feature.servers.InviteSheet
 import com.aatech.betweenus.feature.servers.ServerSettingsScreen
 import com.aatech.betweenus.feature.settings.BetweenUsPermissions
@@ -209,6 +210,24 @@ fun Shell(user: PublicUser) {
                 openChannel(landing.id, target.serverId)
             }
         }
+    }
+
+    /**
+     * Somebody shared files into BetweenUs from another app.
+     *
+     * They wait in [PendingShare] until a chat screen takes them into the send
+     * preview, so all this has to do is put a chat screen in front of them.
+     * The last conversation if there is one, and otherwise the drawer - which
+     * is already the app's answer to "which conversation". Nothing is picked
+     * here: the share sheet chose the app, not the channel.
+     */
+    val shareWaiting by PendingShare.uris.collectAsState()
+    LaunchedEffect(shareWaiting.isNotEmpty(), channelId) {
+        if (shareWaiting.isEmpty()) return@LaunchedEffect
+        val open = channelId
+        // A share can arrive over anything - settings, a call, the friends
+        // list - and only the chat screen knows what to do with it.
+        if (open != null) openChannel(open, serverId) else drawer.open()
     }
 
     ModalNavigationDrawer(

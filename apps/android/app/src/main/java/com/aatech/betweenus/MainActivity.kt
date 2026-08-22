@@ -14,6 +14,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.core.content.IntentCompat
 import androidx.lifecycle.lifecycleScope
 import com.aatech.betweenus.core.data.AuthPhase
 import com.aatech.betweenus.core.data.InviteLink
@@ -22,6 +23,7 @@ import com.aatech.betweenus.core.data.Session
 import com.aatech.betweenus.core.store.PendingChannel
 import com.aatech.betweenus.core.store.PendingInvite
 import com.aatech.betweenus.core.store.PendingPlace
+import com.aatech.betweenus.core.store.PendingShare
 import com.aatech.betweenus.core.store.Workspace
 import com.aatech.betweenus.feature.auth.LoginScreen
 import com.aatech.betweenus.feature.shell.Shell
@@ -39,8 +41,10 @@ class MainActivity : ComponentActivity() {
         // by whichever screen happens to make the first request.
         lifecycleScope.launch { Session.restore() }
 
-        // A link may be what started this process at all.
+        // A link - or a share from another app - may be what started this
+        // process at all.
         handleLink(intent?.data)
+        handleShare(intent)
 
         setContent {
             BetweenUsTheme {
@@ -60,6 +64,39 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         handleLink(intent.data)
+        handleShare(intent)
+    }
+
+    /**
+     * Files another app sent here through the system share sheet.
+     *
+     * Read off the intent and left in [PendingShare]; nothing is opened,
+     * decided about or uploaded here. A share names files, not a conversation,
+     * and choosing the conversation is the shell's job - so this ends at the
+     * send preview with a Send button somebody still has to press.
+     *
+     * The read permission on these URIs is this activity's, for as long as it
+     * lives. That is why the list is memory-only and why the preview is the
+     * next thing on screen rather than something to come back to later.
+     */
+    private fun handleShare(intent: Intent?) {
+        if (intent == null) return
+        val shared = when (intent.action) {
+            Intent.ACTION_SEND ->
+                listOfNotNull(IntentCompat.getParcelableExtra(intent, Intent.EXTRA_STREAM, Uri::class.java))
+            Intent.ACTION_SEND_MULTIPLE ->
+                IntentCompat.getParcelableArrayListExtra(intent, Intent.EXTRA_STREAM, Uri::class.java)
+                    .orEmpty()
+                    .filterNotNull()
+            else -> emptyList()
+        }
+        // Handled once. `singleTask` redelivers the intent that started the
+        // task on every later launch, which would re-share the same photo
+        // every time the app is reopened from the launcher.
+        if (shared.isNotEmpty()) {
+            intent.removeExtra(Intent.EXTRA_STREAM)
+            PendingShare.offer(shared)
+        }
     }
 
     /**

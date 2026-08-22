@@ -136,6 +136,38 @@
                  the phone. Android does not promise a scheme is ours alone,
                  which is why the sign-in that comes back through it is bound to
                  a secret this app keeps - see OAuthFlow. -->
+            <!-- The system share sheet. BetweenUs is a place to send a photo
+                 to somebody, so it belongs in the list a gallery offers.
+                 What arrives is a list of content URIs and nothing else
+                 happens to them here: the chat screen puts them in the send
+                 preview, and the preview is what sends. See PendingShare.
+
+                 Media and documents only. `text/plain` is deliberately absent
+                 - a shared link would have to land in the composer rather than
+                 the attachment preview, and offering the app for something it
+                 would then have nowhere to put is worse than not being
+                 offered. -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+
+                <category android:name="android.intent.category.DEFAULT" />
+
+                <data android:mimeType="image/*" />
+                <data android:mimeType="video/*" />
+                <data android:mimeType="audio/*" />
+                <data android:mimeType="application/*" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND_MULTIPLE" />
+
+                <category android:name="android.intent.category.DEFAULT" />
+
+                <data android:mimeType="image/*" />
+                <data android:mimeType="video/*" />
+                <data android:mimeType="audio/*" />
+                <data android:mimeType="application/*" />
+            </intent-filter>
+
             <intent-filter android:autoVerify="false">
                 <action android:name="android.intent.action.VIEW" />
 

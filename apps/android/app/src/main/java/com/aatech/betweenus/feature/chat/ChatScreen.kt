@@ -54,6 +54,7 @@ import com.aatech.betweenus.core.crypto.E2ee
 import com.aatech.betweenus.core.data.MessageReply
 import com.aatech.betweenus.core.data.PublicUser
 import com.aatech.betweenus.core.store.Conversation
+import com.aatech.betweenus.core.store.PendingShare
 import com.aatech.betweenus.core.store.Presence
 import com.aatech.betweenus.core.store.ReadableMessage
 import com.aatech.betweenus.core.store.Workspace
@@ -270,6 +271,25 @@ fun ChatScreen(
         replyingTo = null
         previewing = emptyList()
         previewCaption = ""
+    }
+
+    /**
+     * Something another app shared into BetweenUs.
+     *
+     * It lands in the same preview a paperclip does, on the conversation that
+     * is open - which is what makes the flow from the system share sheet
+     * "pick BetweenUs, look at what you are sending, send it" rather than a
+     * photo appearing in a channel nobody chose. Taken once; see [PendingShare].
+     */
+    val shared by PendingShare.uris.collectAsState()
+    LaunchedEffect(shared) {
+        if (shared.isEmpty()) return@LaunchedEffect
+        // Described first, cleared last. Clearing is a state change this
+        // effect is keyed on, so doing it first would cancel this coroutine
+        // in the middle of reading the names off the content resolver.
+        val described = shared.map { describePicked(context, it) }
+        previewing = previewing + described
+        PendingShare.clear()
     }
 
     var permissionTick by remember { mutableIntStateOf(0) }
