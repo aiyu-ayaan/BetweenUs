@@ -29,7 +29,13 @@ const config: Config = {
   ],
 
   url: 'https://aiyu-ayaan.github.io',
-  baseUrl: '/Nexora/',
+  // GitHub Pages project pages (this repo isn't the special
+  // aiyu-ayaan.github.io one, and there's no custom domain) can only serve
+  // from /Nexora/ - that's a GitHub Pages rule, not a Docusaurus setting.
+  // `docusaurus build` sets NODE_ENV=production, so production keeps the
+  // real path while `docusaurus start` (NODE_ENV=development) runs at the
+  // plain localhost:3000/ root for local convenience.
+  baseUrl: process.env.NODE_ENV === 'production' ? '/Nexora/' : '/',
 
   organizationName: 'aiyu-ayaan',
   projectName: 'Nexora',

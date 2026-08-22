@@ -2,6 +2,8 @@
 sidebar_position: 5
 ---
 
+import useBaseUrl from '@docusaurus/useBaseUrl';
+
 # Android Client
 
 `apps/android` — native Kotlin + Jetpack Compose, three Gradle modules. It
@@ -11,7 +13,7 @@ implementation to match, that's `apps/desktop/src/...` and the shared
 contract in `packages/shared-types`.
 
 <p style={{textAlign: 'center'}}>
-  <img src="/Nexora/img/home-android.jpeg" alt="BetweenUs Android client" style={{maxWidth: '360px', width: '100%', borderRadius: '12px', border: '1px solid var(--ifm-toc-border-color)'}} />
+  <img src={useBaseUrl('img/home-android.jpeg')} alt="BetweenUs Android client" style={{maxWidth: '360px', width: '100%', borderRadius: '12px', border: '1px solid var(--ifm-toc-border-color)'}} />
 </p>
 
 ## Status

@@ -3,6 +3,8 @@ sidebar_position: 1
 slug: /intro
 ---
 
+import useBaseUrl from '@docusaurus/useBaseUrl';
+
 # BetweenUs
 
 BetweenUs is a Discord-like communication platform with secure remote desktop
@@ -11,7 +13,7 @@ permissioned remote control of another machine — across a desktop client
 today, with web and Android planned in the same backend.
 
 <p>
-  <img src="/Nexora/img/home.png" alt="BetweenUs desktop client" style={{maxWidth: '100%', borderRadius: '8px'}} />
+  <img src={useBaseUrl('img/home.png')} alt="BetweenUs desktop client" style={{maxWidth: '100%', borderRadius: '8px'}} />
 </p>
 
 ## What's in these docs

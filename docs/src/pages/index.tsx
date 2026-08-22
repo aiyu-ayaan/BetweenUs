@@ -2,6 +2,7 @@ import type {ReactNode} from 'react';
 import clsx from 'clsx';
 import Link from '@docusaurus/Link';
 import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
+import useBaseUrl from '@docusaurus/useBaseUrl';
 import Layout from '@theme/Layout';
 import HomepageFeatures from '@site/src/components/HomepageFeatures';
 
@@ -54,14 +55,11 @@ function HomepageHeader() {
 }
 
 function Screenshot() {
+  const src = useBaseUrl('img/home.png');
   return (
     <div className={styles.screenshotWrap}>
       <div className={styles.screenshotFrame}>
-        <img
-          src="/Nexora/img/home.png"
-          alt="BetweenUs desktop client"
-          className={styles.screenshot}
-        />
+        <img src={src} alt="BetweenUs desktop client" className={styles.screenshot} />
       </div>
     </div>
   );
