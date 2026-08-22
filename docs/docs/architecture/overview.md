@@ -61,7 +61,7 @@ flowchart TB
 | Desktop | Electron + React + TypeScript + Tailwind + Zustand | Primary, shipping |
 | Web | Same React UI (`apps/desktop/src/App`) mounted by a Vite bundle, served at `/` by the gateway | Shipping |
 | Admin panel | Separate React app, served at `/admin` | Shipping |
-| Android | Kotlin, Jetpack Compose | In progress |
+| [Android](/architecture/android-client) | Kotlin, Jetpack Compose | In progress |
 
 The web client is not a second codebase — `apps/web` imports the desktop
 app's entry point directly. Anything the browser cannot do (screen capture by

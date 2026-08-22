@@ -17,7 +17,8 @@ today, with web and Android planned in the same backend.
 ## What's in these docs
 
 - **[Architecture](/architecture/overview)** — the microservices, the
-  peer-to-peer media design, and why there is no media server.
+  peer-to-peer media design, why there is no media server, and the
+  [Android client](/architecture/android-client).
 - **[System Design](/system-design/auth-and-permissions)** — auth, RBAC,
   events, ingress through Cloudflare Tunnel.
 - **[Database](/database/schema)** — the Prisma schema, model by model, with
