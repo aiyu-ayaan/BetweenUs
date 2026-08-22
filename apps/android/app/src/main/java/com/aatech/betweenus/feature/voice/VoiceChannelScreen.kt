@@ -178,6 +178,21 @@ fun VoiceChannelScreen(
     val leaveScreen = { if (!(inCallNow && CallPip.enter(context))) onBack() }
     BackHandler(enabled = inCallNow && !inPip) { leaveScreen() }
 
+    // Who the little window shows: whoever spoke last, and never yourself.
+    //
+    // A picture-in-picture window is one tile's worth of room, and the one tile
+    // worth giving it is the person talking - your own camera is the one face
+    // in the call you are not there to watch. Sticky, because a call is mostly
+    // gaps: falling back to somebody else between two sentences would make the
+    // window flick between faces for the whole conversation.
+    var lastSpeaker by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(participants) {
+        participants.firstOrNull { it.speaking }?.let { lastSpeaker = it.peer.peerId }
+    }
+    val pipTile = participants.firstOrNull { it.peer.peerId == lastSpeaker }
+        ?: participants.firstOrNull { it.video != null }
+        ?: participants.firstOrNull()
+
     val watching = participants.firstOrNull { it.visibleScreen != null }
     var dismissed by remember { mutableStateOf<String?>(null) }
     var pickingDevices by remember { mutableStateOf(false) }
@@ -371,6 +386,43 @@ fun VoiceChannelScreen(
                         },
                 ) {
                     when {
+                        // Picture-in-picture: one tile, and it is whoever is
+                        // talking. No self-view, no filmstrip, no chrome -
+                        // there is no room for any of it, and a thumbnail of
+                        // your own face is the least useful thing to spend the
+                        // window on. See `pipTile`.
+                        inPip -> {
+                            val shown = pipTile
+                            if (shown != null) {
+                                CallTile(
+                                    label = shown.peer.username,
+                                    id = shown.peer.userId,
+                                    track = shown.video,
+                                    eglContext = engine.eglBase.eglBaseContext,
+                                    muted = !shown.micEnabled,
+                                    speaking = shown.speaking,
+                                    connected = shown.connected,
+                                    status = statusOf(shown),
+                                    fit = RendererCommon.ScalingType.SCALE_ASPECT_FILL,
+                                    modifier = Modifier.fillMaxSize(),
+                                )
+                            } else {
+                                // Alone in the call, so your own camera is the
+                                // only thing there is to show.
+                                CallTile(
+                                    label = self.label,
+                                    id = self.id,
+                                    track = localVideo,
+                                    speaking = selfSpeaking,
+                                    eglContext = engine.eglBase.eglBaseContext,
+                                    muted = muted,
+                                    isLocal = true,
+                                    fit = RendererCommon.ScalingType.SCALE_ASPECT_FILL,
+                                    modifier = Modifier.fillMaxSize(),
+                                )
+                            }
+                        }
+
                         // 0 remote participants (Waiting for others)
                         participants.isEmpty() -> {
                             Box(
@@ -422,8 +474,12 @@ fun VoiceChannelScreen(
                                 status = statusOf(remote),
                                 fit = RendererCommon.ScalingType.SCALE_ASPECT_FILL,
                                 // Clear of the floating dock, which is drawn
-                                // over the bottom of this tile.
-                                labelBottomPadding = 92.dp,
+                                // over the bottom of this tile - but only while
+                                // the dock is there. Held up against nothing,
+                                // the name floated in the middle of somebody's
+                                // chest instead of sitting where a caption
+                                // sits.
+                                labelBottomPadding = if (chrome) 92.dp else 12.dp,
                                 modifier = Modifier.fillMaxSize(),
                             )
 
@@ -1079,13 +1135,13 @@ private fun FloatingPipTile(
             ),
     ) {
         if (track != null) {
-            VideoSurface(
+            // A TextureView rather than the surface renderer: this tile floats
+            // over whoever else is in the call, so its corners have to show
+            // them rather than a block of its own background. See ClippedVideo.
+            ClippedVideo(
                 track = track,
                 eglContext = eglContext,
-                overlay = true,
                 mirror = true,
-                corner = PIP_CORNER,
-                cornerColor = Surface900,
                 modifier = Modifier.fillMaxSize(),
             )
         } else {
