@@ -37,6 +37,15 @@
         android:maxSdkVersion="28"
         tools:ignore="ScopedStorage" />
 
+    <!-- The app updates itself from its own GitHub releases: there is no store
+         in the loop for a self-hosted app distributed as an APK. This is what
+         lets it hand the downloaded APK to Android's package installer, which
+         is the screen that actually asks - nothing here installs anything on
+         its own. From API 26 the grant is a per-app setting rather than a
+         device-wide one, and declaring it is not holding it: see
+         Updates.canInstall. -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+
     <!-- A call has to survive the screen going off, which on Android means a
          foreground service with an ongoing notification saying so. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />

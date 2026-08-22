@@ -16,6 +16,9 @@
          process and cannot be handed a bitmap, so the decrypted thumbnail is
          written here and granted to it for as long as the notification lives. -->
     <cache-path name="notifications" path="notifications/" />
+    <!-- The APK of a newer release, on its way to Android's package
+         installer - which is another process and has to be granted the file. -->
+    <cache-path name="updates" path="updates/" />
     <!-- The last crash, when somebody has asked for one to be kept, on its
          way to whatever they choose to share it with. -->
     <files-path name="crash" path="crash/" />

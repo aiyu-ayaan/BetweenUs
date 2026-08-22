@@ -18,6 +18,7 @@ import com.aatech.betweenus.core.store.LastPlace
 import com.aatech.betweenus.feature.chat.Outbox
 import com.aatech.betweenus.feature.notifications.Push
 import com.aatech.betweenus.feature.settings.CrashReports
+import com.aatech.betweenus.feature.update.Updates
 import com.aatech.betweenus.feature.voice.AudioPrefs
 import com.aatech.betweenus.feature.voice.CallTones
 
@@ -42,6 +43,9 @@ class BetweenUsApp : Application(), ImageLoaderFactory {
         Cache.init(this)
         CallTones.init(this)
         AudioPrefs.init(this)
+        // What channel this device follows, and whether it has been asked
+        // recently. Read on every launch by the shell.
+        Updates.init(this)
         // The queue that carries a message with files in it. Started here so a
         // send survives the screen it was started from - which is the whole
         // reason it exists.
