@@ -20,6 +20,13 @@ object PendingPlace {
 
         /** Added to a server: its first text channel is where anybody lands. */
         data class Server(val serverId: String) : Place
+
+        /**
+         * A newer release, found by the daily check while the app was closed.
+         * It leads to the auto update screen rather than straight to an
+         * install: the decision is still somebody's to make.
+         */
+        data object AutoUpdate : Place
     }
 
     private val _place = MutableStateFlow<Place?>(null)

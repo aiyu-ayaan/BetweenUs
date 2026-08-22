@@ -195,6 +195,13 @@
             </intent-filter>
         </service>
 
+        <!-- How an install ended. Not exported: the only thing that may send
+             this is the platform, answering a PackageInstaller session this
+             app created. -->
+        <receiver
+            android:name=".feature.update.UpdateInstallReceiver"
+            android:exported="false" />
+
         <!-- Reply, mark as read, and swipe-away. Not exported: the only thing
              that may press these is the system UI drawing our own
              notification. -->

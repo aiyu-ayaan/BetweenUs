@@ -29,6 +29,10 @@ ksp = "2.2.10-2.0.2"
 # google-services.json into the build.
 firebaseBom = "34.4.0"
 googleServices = "4.4.4"
+# The daily update check, which has to survive reboots, doze and the process
+# being killed. That is the whole hard part of a background job and WorkManager
+# is the platform's answer to it.
+work = "2.10.1"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -70,6 +74,7 @@ firebase-bom = { group = "com.google.firebase", name = "firebase-bom", version.r
 # gone from BoM 34. The version comes from the BoM, which is why there is none.
 firebase-messaging = { group = "com.google.firebase", name = "firebase-messaging" }
 # `Task.await()`. Firebase hands out Tasks and the app is written in coroutines.
+androidx-work-runtime-ktx = { group = "androidx.work", name = "work-runtime-ktx", version.ref = "work" }
 kotlinx-coroutines-play-services = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-play-services", version.ref = "coroutines" }
 
 [plugins]

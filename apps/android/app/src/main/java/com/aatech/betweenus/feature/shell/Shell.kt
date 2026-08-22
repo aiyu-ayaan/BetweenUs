@@ -47,6 +47,7 @@ import com.aatech.betweenus.feature.settings.SettingsScreen
 import com.aatech.betweenus.feature.update.AutoUpdateScreen
 import com.aatech.betweenus.feature.update.UpdateSheet
 import com.aatech.betweenus.feature.update.UpdateState
+import com.aatech.betweenus.feature.update.UpdateWorker
 import com.aatech.betweenus.feature.update.Updates
 import com.aatech.betweenus.feature.voice.VoiceChannelScreen
 import com.aatech.betweenus.ui.theme.Ground
@@ -122,7 +123,12 @@ fun Shell(user: PublicUser) {
      * honours the snooze - see `Updates`.
      */
     var offeringUpdate by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) { offeringUpdate = Updates.check() is UpdateState.Available }
+    LaunchedEffect(Unit) {
+        offeringUpdate = Updates.check() is UpdateState.Available
+        // Whatever the daily check left in the shade is about to be said on
+        // screen, and saying it twice is one time too many.
+        if (offeringUpdate) UpdateWorker.clearNotification(context)
+    }
 
     val identity by E2ee.status.collectAsState()
     var unlocking by remember { mutableStateOf(false) }
@@ -187,6 +193,13 @@ fun Shell(user: PublicUser) {
                 PendingPlace.clear()
                 serverId = null
                 navigation.navigate(Route.Friends) { launchSingleTop = true }
+            }
+            is PendingPlace.Place.AutoUpdate -> {
+                PendingPlace.clear()
+                // It has been acted on; leaving it in the shade would have it
+                // tapped again tomorrow.
+                UpdateWorker.clearNotification(context)
+                navigation.navigate(Route.AutoUpdate) { launchSingleTop = true }
             }
             is PendingPlace.Place.Server -> {
                 val landing = Workspace.channelsOf(target.serverId)

@@ -103,6 +103,11 @@ class MainActivity : ComponentActivity() {
             PendingPlace.offer(PendingPlace.Place.Friends)
             return
         }
+        // The daily update check found something while the app was closed.
+        if (uri.host == "update") {
+            PendingPlace.offer(PendingPlace.Place.AutoUpdate)
+            return
+        }
         if (uri.host == "server") {
             uri.pathSegments.firstOrNull()?.let {
                 PendingPlace.offer(PendingPlace.Place.Server(it))

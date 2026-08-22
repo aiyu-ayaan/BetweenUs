@@ -236,7 +236,10 @@ fun AutoUpdateScreen(onBack: () -> Unit) {
                     action = "Install",
                     onAction = {
                         if (Updates.canInstall(context)) {
-                            Updates.install(context, current.file)
+                            scope.launch {
+                                runCatching { Updates.install(context, current.file) }
+                                    .onFailure { Updates.fail(it.message ?: "The install failed") }
+                            }
                         } else {
                             Updates.requestInstallPermission(context)
                         }

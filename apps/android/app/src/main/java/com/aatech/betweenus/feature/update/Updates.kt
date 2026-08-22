@@ -2,11 +2,12 @@ package com.aatech.betweenus.feature.update
 
 import android.content.Context
 import android.content.Intent
+import android.app.PendingIntent
 import android.content.SharedPreferences
+import android.content.pm.PackageInstaller
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
-import androidx.core.content.FileProvider
 import com.aatech.betweenus.BuildConfig
 import com.aatech.betweenus.core.data.Http
 import kotlinx.coroutines.Dispatchers
@@ -32,10 +33,13 @@ import java.io.File
  * app that is not the device owner, and it should not: the last screen is
  * always the system's, showing what is about to replace what.
  *
+ * The check runs when the app is opened, and once a day while it is not - see
+ * [UpdateWorker], which exists because the launch check reaches everybody
+ * except the phone that has not opened BetweenUs in three weeks, and that is
+ * precisely the phone running a three-week-old build.
+ *
  * ponytail: SharedPreferences and one in-memory state, like the endpoint and
- * the audio settings. Six values do not need a database, and a WorkManager job
- * would buy a background check nobody asked for - the check happens when the
- * app is opened, which is the only moment an update can be acted on anyway.
+ * the audio settings. Six values do not need a database.
  */
 object Updates {
 
@@ -54,6 +58,13 @@ object Updates {
     private lateinit var prefs: SharedPreferences
     private lateinit var downloads: File
 
+    /**
+     * The application context, held only so the switch can start and stop the
+     * daily job. Nothing else here keeps a context: a settings screen turning
+     * auto update off has no business passing one in.
+     */
+    private var scheduler: Context? = null
+
     /** What this build is, or null for a hand-built one that carries `0.0.0`. */
     val installed: Version? by lazy { Version.parse(BuildConfig.VERSION_NAME) }
 
@@ -64,8 +75,13 @@ object Updates {
 
     fun init(context: Context) {
         val app = context.applicationContext
+        scheduler = app
         prefs = app.getSharedPreferences(FILE, Context.MODE_PRIVATE)
         downloads = File(app.cacheDir, "updates")
+        // Idempotent: KEEP leaves an already-running period alone, so this is
+        // safe to call on every launch and is the only place it has to be
+        // called at all.
+        runCatching { UpdateWorker.schedule(app) }
     }
 
     private val ready: Boolean get() = ::prefs.isInitialized
@@ -79,6 +95,9 @@ object Updates {
         set(value) {
             if (ready) prefs.edit().putBoolean(KEY_ENABLED, value).apply()
             if (!value) _state.value = UpdateState.Idle
+            // A switch that says "no" and leaves a daily job running is a
+            // switch that lied. [scheduler] is set by the application.
+            scheduler?.let { context -> runCatching { UpdateWorker.schedule(context) } }
         }
 
     /**
@@ -259,20 +278,55 @@ object Updates {
     }
 
     /**
-     * Hand the file to Android, which shows what is about to replace what and
-     * asks. That screen is the system's and is not skippable, which is the
-     * correct end to this: nothing here installs anything behind anybody's
-     * back.
+     * Hand the APK to Android's package installer, which shows what is about to
+     * replace what and asks. That screen is the system's and is not skippable,
+     * which is the correct end to this: nothing here installs anything behind
+     * anybody's back.
+     *
+     * A `PackageInstaller` session rather than an `ACTION_VIEW` intent on a
+     * `content://` URI. Both end at the same confirmation dialog, and the
+     * difference is entirely what happens afterwards: the intent form is fire
+     * and forget, so the most likely failure of all - an APK signed with a
+     * different key from the installed build, which is what somebody
+     * sideloading their first release hits - came back as a dialog that closed
+     * and an app that had not changed. A session reports its outcome to
+     * [UpdateInstallReceiver], and the reason can be said out loud.
+     *
+     * Suspending because it copies tens of megabytes into the session, which is
+     * not something to do while a finger is still on the button.
      */
-    fun install(context: Context, apk: File) {
-        val uri = FileProvider.getUriForFile(context, "${context.packageName}.files", apk)
-        context.startActivity(
-            Intent(Intent.ACTION_VIEW)
-                .setDataAndType(uri, "application/vnd.android.package-archive")
-                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-        )
+    suspend fun install(context: Context, apk: File): Unit = withContext(Dispatchers.IO) {
+        val installer = context.applicationContext.packageManager.packageInstaller
+        val parameters = PackageInstaller.SessionParams(
+            PackageInstaller.SessionParams.MODE_FULL_INSTALL,
+        ).apply {
+            setAppPackageName(context.packageName)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) setRequireUserAction(
+                PackageInstaller.SessionParams.USER_ACTION_REQUIRED,
+            )
+        }
+
+        val sessionId = installer.createSession(parameters)
+        installer.openSession(sessionId).use { session ->
+            session.openWrite(SESSION_FILE, 0, apk.length()).use { sink ->
+                apk.inputStream().use { it.copyTo(sink) }
+                session.fsync(sink)
+            }
+            // The receiver is where the answer arrives - including the one that
+            // matters, which is "user action required": the system dialog is
+            // handed back rather than shown, and something has to start it.
+            val status = PendingIntent.getBroadcast(
+                context.applicationContext,
+                sessionId,
+                Intent(context.applicationContext, UpdateInstallReceiver::class.java)
+                    .setAction(UpdateInstallReceiver.ACTION_STATUS),
+                PendingIntent.FLAG_MUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+            )
+            session.commit(status.intentSender)
+        }
     }
+
+    private const val SESSION_FILE = "betweenus.apk"
 
     fun fail(message: String) {
         _state.value = UpdateState.Failed(message)

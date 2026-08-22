@@ -197,6 +197,8 @@ dependencies {
     // to re-read what is granted on the way back from the system settings.
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.navigation.compose)
+    // The daily update check, while the app is closed. See feature/update.
+    implementation(libs.androidx.work.runtime.ktx)
     // Voice, video, screen share and the remote screen. A mesh, never an SFU.
     implementation(libs.webrtc)
     // Transcoding a picked video before it is sent. A phone writes 4K at 50
