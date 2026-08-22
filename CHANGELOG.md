@@ -1,5 +1,46 @@
 # Changelog
 
+## [0.0.1-alpha.6](https://github.com/aiyu-ayaan/BetweenUs/compare/v0.0.1-alpha.5...v0.0.1-alpha.6) (2026-08-22)
+
+### Features
+
+* A platform a release skips keeps the last one's artifacts
+* A marker can name the platforms it is for
+* Reconnect a dropped call, and end one that cannot be reconnected
+* A notification read on one device takes itself down on the others
+* The connection panel, ported from the desktop
+* The green speaking ring lights for your own tile too
+* Do not wake a phone for a message being read on another device
+* A daily update check, and an install that reports what happened
+* The auto update screen, and the prompt on launch
+* Fetch, download and hand over a newer release
+* The rules for which release a device should install
+
+### Bug fixes
+
+* The self-view snaps to a corner, and the chrome gets out of the way
+* Video has the rounded corners it appears to have
+* Every attachment goes out under the foreground service
+
+### Other changes
+
+* Done with the enhancement
+* The call-screen pass recorded in TRACK.md
+* RELEASING.md, and the pass recorded in TRACK.md
+* Remove outdated Android chat notification suppression and PiP design documents
+* Catch every doc up to push suppression, self-update, and the send-path fix
+* One send path for every attachment
+* The daily check and the installer session
+* Record the self-update phase
+
+### Artifacts
+
+| Platform | This release |
+| --- | --- |
+| Server images | Built here |
+| Desktop (Windows) | Built here |
+| Android | Built here |
+
 ## [0.0.1-alpha.5](https://github.com/aiyu-ayaan/BetweenUs/compare/v0.0.1-alpha.4...v0.0.1-alpha.5) (2026-08-21)
 
 ### Features
