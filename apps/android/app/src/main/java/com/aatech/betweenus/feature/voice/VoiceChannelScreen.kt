@@ -34,7 +34,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.systemBarsPadding
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.systemBarsIgnoringVisibility
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -126,6 +129,7 @@ private const val CHROME_IDLE_MS = 4_000L
  * - 5+ person: Active speaker hero view with horizontal thumbnail strip.
  * - Floating glassmorphic control dock with camera flip, mute, video, share, speaker, and end call.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun VoiceChannelScreen(
     channelId: String?,
@@ -298,7 +302,13 @@ fun VoiceChannelScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(Ground)
-            .systemBarsPadding(),
+            // `systemBarsIgnoringVisibility`, not `systemBarsPadding`. A call
+            // hides the bars, which takes the insets to zero - so the padding
+            // vanished and the header slid up under a status bar that is still
+            // drawn over us the moment it comes back on a swipe, or never went
+            // away at all on a device that refuses to hide it. The size the
+            // bars have when they are visible is the size to keep clear.
+            .windowInsetsPadding(WindowInsets.systemBarsIgnoringVisibility),
     ) {
         // --- STAGE CONTENT ---
         when {
