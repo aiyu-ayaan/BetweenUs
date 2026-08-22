@@ -387,14 +387,36 @@ runs a single client against a running backend.
 Everything in containers instead:
 
 ```bash
-pnpm prod:up                      # starts the full production container stack
-# Or: docker compose --env-file .env -f infrastructure/docker/docker-compose.yml up -d --build
+pnpm prod:up                      # pulls the published images and starts the stack
+# Or: docker compose --env-file .env -f infrastructure/docker/docker-compose.yml up -d
+# Building them here instead: -f infrastructure/docker/docker-compose.build.yml up -d --build
 ```
 
 Default ports: gateway `8080`, auth `3001`, server `3003`, chat `3004`,
 presence `3005`, notification `3006`, call `3007`, renderer `5173`, admin panel
 `5174`, web client `5175`. Nothing listens for media: it goes directly between
 clients, on ports negotiated per call.
+
+## Deploying without cloning
+
+A deployment runs published images, so a server needs the compose file, the two
+files it mounts and a `.env` - not a checkout of source no container reads. One
+command fetches those and starts the stack:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/aiyu-ayaan/BetweenUs/master/scripts/install.sh | sh
+```
+
+It writes `./betweenus` in the repository's own layout, generates the secrets,
+pulls the images and brings everything up. `--dir /srv/betweenus` puts it
+elsewhere, `--version alpha` follows a release channel instead of `latest`, and
+`--no-start` writes the files without starting anything. Re-running it in the
+same directory is the upgrade: the three fetched files are refreshed, `.env` is
+left exactly as it was, and the images are pulled again.
+
+Cloning still works and is what you want to build the images yourself or to
+develop against them. `DEPLOYMENT.md` covers both paths, and everything after
+the first step is identical.
 
 ## Production app builds & packaging
 
@@ -621,6 +643,7 @@ apps/
 packages/                 shared-types, database, auth, permissions, events,
                           nest-common, storage, websocket, logger, config
 infrastructure/           docker compose, nginx, cloudflare
+scripts/install.sh        one-command deployment, no clone required
 development/              planning, MVP, E2EE design, API security, testing guide, TODO, Android roadmap
 DEPLOYMENT.md             putting it on a server, end to end
 ```

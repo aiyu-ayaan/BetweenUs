@@ -96,17 +96,75 @@ have to find a path to each other, and a minority of network pairs cannot
 without a relay. §4 is that decision, and it is the only media question this
 deployment has.
 
-**Building on the host or pulling images.** `docker compose ... up -d --build`
-builds every image on the box, which needs a few GB of RAM. All nine images come
-from one multi-stage `infrastructure/docker/Dockerfile` - see §17 for what that
-buys and how to keep rebuilds short.
-`.github/workflows/images.yml` builds and pushes one image per service to GHCR
-on a `v*` tag, so a deployment can pin something built once - but nothing in
-this repository deploys those images for you yet.
+**Pulling images or building them.** The default is pulling.
+`docker-compose.yml` runs the images the release workflow pushed to Docker Hub,
+one repository told apart by a tag prefix (`aiyuayaan/betweenus:chat-service-0.0.1`),
+and `BETWEENUS_VERSION` picks the release or the channel. That is what makes §3's
+installer possible at all: no source has to be on the host, because nothing on
+the host compiles anything.
+
+`docker-compose.build.yml` is the same stack built from a checkout instead -
+what you want for a commit no release was cut from, or while working on it. It
+needs a clone and a few GB of RAM; all nine images come from one multi-stage
+`infrastructure/docker/Dockerfile`, and §17 is what that buys.
 
 ---
 
 ## 3. Step 1 - the code and the environment
+
+There are two ways to get a host ready, and they differ only in this step.
+
+### Either: the installer, with no clone
+
+The stack runs published images, so a host needs four files - the compose file,
+the Nginx config and the backup script it mounts, and a `.env`. Nothing in a
+checkout of the source is read by any container. One command fetches those four
+and starts the stack:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/aiyu-ayaan/BetweenUs/master/scripts/install.sh | sh
+```
+
+| Flag | Effect |
+| --- | --- |
+| `--dir PATH` | Where to install. Default `./betweenus` |
+| `--version TAG` | Sets `BETWEENUS_VERSION` - a release like `0.0.1`, or a channel: `alpha`, `beta`, `latest` |
+| `--ref REF` | Which branch or tag the compose files come from. Default `master` |
+| `--no-start` | Write the files, start nothing |
+
+Pass flags through the pipe with `sh -s --`:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/aiyu-ayaan/BetweenUs/master/scripts/install.sh \
+  | sh -s -- --dir /srv/betweenus --version alpha
+```
+
+It writes the repository's own layout, so every command in the rest of this
+document works unchanged inside that directory:
+
+```text
+/srv/betweenus/
+├── .env                                        generated, mode 600
+└── infrastructure/
+    ├── docker/docker-compose.yml
+    ├── docker/backup.sh
+    └── nginx/nginx.conf
+```
+
+`.env` is `.env.example` with `POSTGRES_PASSWORD`, `JWT_SECRET`,
+`JWT_REFRESH_SECRET` and `SETTINGS_SECRET` generated, `DATABASE_URL` and
+`REDIS_URL` pointed at the compose hostnames, and `NODE_ENV=production`. Two
+things it cannot decide for you: `PUBLIC_API_URL`, which the OAuth callback is
+built from, and the first administrator (§6). The table below is the rest.
+
+**Re-running it in the same directory is the upgrade.** The three fetched files
+are refreshed, `.env` is left exactly as it is, and the images are pulled again -
+so an upgrade is one command and no merge.
+
+### Or: a clone
+
+What you want in order to build the images on the host, to run a commit no
+release was cut from, or to develop against the stack.
 
 ```bash
 git clone <your-fork> betweenus
@@ -121,6 +179,11 @@ Generate every secret. Never reuse the example values.
 # run once per value.
 node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
 ```
+
+A clone brings `docker-compose.build.yml` with it, which is the same stack built
+from the checkout rather than pulled; §17 is what that build does. Everything
+else - the variables below, the commands in every later section - is identical
+either way.
 
 ### What must change from `.env.example`
 
@@ -228,7 +291,11 @@ away.
 pnpm prod:up
 
 # Direct compose command:
-docker compose --env-file .env -f infrastructure/docker/docker-compose.yml up -d --build
+docker compose --env-file .env -f infrastructure/docker/docker-compose.yml pull
+docker compose --env-file .env -f infrastructure/docker/docker-compose.yml up -d
+
+# Building the images here instead of pulling them (needs a clone):
+docker compose --env-file .env -f infrastructure/docker/docker-compose.build.yml up -d --build
 ```
 
 What happens, in order:
@@ -677,12 +744,21 @@ their devices still hold their keys**. A user who loses every device loses that
 history, and no server-side backup changes that. This is the intended property,
 and `development/E2EE.md` states its limits plainly.
 
-**Upgrades.**
+**Upgrades.** Installed with §3's installer, re-run it in the deployment's
+directory: it refreshes the compose file and the two files it mounts, leaves
+`.env` alone, and pulls again.
 
 ```bash
-git pull
-docker compose --env-file .env -f infrastructure/docker/docker-compose.yml \
-  up -d --build
+curl -fsSL https://raw.githubusercontent.com/aiyu-ayaan/BetweenUs/master/scripts/install.sh \
+  | sh -s -- --dir /srv/betweenus
+```
+
+Without it - a clone, or a pinned `BETWEENUS_VERSION` you are moving by hand:
+
+```bash
+git pull                                              # a clone only
+docker compose --env-file .env -f infrastructure/docker/docker-compose.yml pull
+docker compose --env-file .env -f infrastructure/docker/docker-compose.yml up -d
 ```
 
 The `migrate` one-shot runs again before any service takes traffic, so schema
@@ -739,8 +815,10 @@ than useless. All of these are tracked in `development/TODO.md`.
   `<root>/backup` somewhere else is the operator's own job.
 - **Secrets are `.env` files.** No Docker secrets, no external manager, no
   rotation.
-- **Nothing deploys.** Images are built and pushed by CI on a tag; putting them
-  on a machine is manual.
+- **Nothing deploys itself.** CI builds and pushes the images on a tag, and
+  `scripts/install.sh` puts them on a host in one command - but somebody has to
+  run it. There is no rollout, no health-gated cutover and no rollback beyond
+  pinning `BETWEENUS_VERSION` back and pulling again.
 - **No TLS between Cloudflare and Nginx.** The tunnel is the encrypted hop, and
   there is no supported way to give Nginx a certificate of its own here.
 - **`remote-agent` and `user-service` are scaffolds.** On a desktop the agent is
