@@ -412,6 +412,8 @@ private fun FilmstripTile(
                 fit = RendererCommon.ScalingType.SCALE_ASPECT_FILL,
                 // The strip sits over the share's own renderer.
                 overlay = true,
+                corner = 10.dp,
+                cornerColor = Surface900,
                 modifier = Modifier.fillMaxSize(),
             )
         } else {
