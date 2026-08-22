@@ -111,7 +111,13 @@ export function AudioSink({
   useEffect(() => {
     const element = ref.current as (HTMLAudioElement & { setSinkId?: (id: string) => Promise<void> }) | null;
     if (!element?.setSinkId) return;
-    void element.setSinkId(outputDeviceId ?? 'default').catch(() => undefined);
+    // A `setSinkId` for a device that is no longer connected rejects, and the
+    // element is left on whatever it was on - which is how the call after a
+    // headset was unplugged came out of speakers nobody was near, or out of
+    // nothing at all. The fallback is asked for explicitly instead.
+    void element.setSinkId(outputDeviceId ?? 'default').catch(() => {
+      void element.setSinkId('default').catch(() => undefined);
+    });
   }, [outputDeviceId]);
 
   return <audio ref={ref} autoPlay />;

@@ -775,6 +775,81 @@ Documentation:
 - [x] **Post-SFU corrections** across `TODO.md`, and phase 27 opened for push.
 - [x] **This pass**, recorded here and in `ANDROID_TODO.md`.
 
+Calls — the second pass over the call screen:
+
+- [x] **The speaking ring on desktop and the web, which had never once
+      appeared.** It was driven by `RTCRtpReceiver.getSynchronizationSources()`,
+      which reports a level only for sources Chromium considers current and is
+      routinely empty on a connection carrying perfectly good audio - so the
+      number behind the ring was almost always zero. `inbound-rtp.audioLevel`
+      carries the same reading and is always there; it is what the Android
+      client has been reading all along, which is exactly why the ring worked
+      there and only there. Read asynchronously, so the poll uses the previous
+      tick's answer - 200 ms behind a syllable, which nobody can see.
+- [x] **Video that is actually inside its rounded corners.** A
+      `SurfaceViewRenderer` is a `SurfaceView`: a separate surface composited by
+      the system rather than pixels in the window, so nothing in the window
+      clips it and `Modifier.clip` does nothing at all. The corner mask that
+      worked around it paints the four slivers in the tile's own background,
+      which is only correct when the tile sits on something opaque - and the
+      floating self-view floats over whoever else is in the call. It now renders
+      through a `TextureView` (`ClippedVideo.kt`), which is drawn by the window,
+      so it clips, composites with what is under it, and stacks by ordinary view
+      order instead of `setZOrderMediaOverlay`. The full-screen tiles and the
+      share stage keep the surface renderer: it costs a copy per frame and they
+      have an opaque background to mask against.
+- [x] **The caller's name sits where a caption sits.** It was held 92dp clear of
+      the control dock whether or not the dock was there, so with the chrome
+      gone it floated in the middle of somebody's chest. It follows the dock now.
+- [x] **Picture-in-picture shows whoever is talking.** One tile's worth of room
+      goes to the person speaking, never to your own camera - the one face in
+      the call you are not there to watch. Sticky on the last speaker, because a
+      conversation is mostly gaps and a window that flicked between faces
+      through every pause would be worse than a fixed one.
+- [x] **Incoming video that stopped flickering.** Android read "no `inbound-rtp`
+      entry in this stats report" as "no frames decoded" and took the track away
+      until the next poll put it back. `framesDecoded` only grows, but the
+      report is not a promise - one arrives empty after a renegotiation, and a
+      mid can change under one. Latched per slot, which is what the desktop
+      client has done since the same bug was fixed there.
+- [x] **Audio devices that follow what is plugged in.** A device id is
+      remembered forever and the operating system's default is not, which is the
+      whole of having to set the microphone and the speakers again every call:
+      choose a headset once and every later call is pinned to it, connected or
+      not. `Follow whatever is plugged in` (Settings → Voice & Video, on by
+      default) drops the pin when the hardware changes, so the system default -
+      which is the thing that was just plugged in - wins. A `setSinkId` for a
+      device that has gone now falls back to `default` instead of leaving the
+      element wherever it was.
+- [x] **The tile stuck on "Connecting…" after a call moves between devices.**
+      Two faults, both of them a link that can never recover, and both on every
+      client. The first: the channel-key re-read was allowed **once per peer**
+      and then never again, so a link could survive exactly one epoch change.
+      One is normal - joining a channel you hold no key for mints the next
+      epoch, which is precisely what a device arriving does - and burning it on
+      the first description left every one after that refused against a key
+      known to be stale, with nothing left that would ever look again. It is a
+      cooldown now, which keeps the property the latch was there for: a proof
+      that is simply wrong still cannot make a client hammer the key directory.
+      The second: **nothing chases an offer that is never answered.**
+      `connectionState` only reaches `failed` once ICE has a remote description
+      to fail against, so a refused offer leaves the connection in `new` with no
+      event ever fired and no recovery path to enter - the desktop's ICE-restart
+      path and Android's recovery loop both hang off a failure that never
+      happens. The offering side now re-offers from `new`, four times, re-reading
+      the key first; only the impolite side, and only from `new`, so a link that
+      is genuinely negotiating on a slow network is left alone. And on desktop a
+      refused description no longer *drops* the link: nothing re-adds one, so the
+      far end's next offer arrived for a peer that no longer existed, and one
+      refusal ended that pair for the life of the call.
+- [x] **The same on Android, for the whole call rather than for the sheet.** The
+      `AudioDeviceCallback` lived in `rememberCallDevices`, which only exists
+      while the device picker is open - so the one gesture it was meant to
+      serve, putting a headset on mid-call, moved nothing unless the picker
+      happened to be up at that moment. It is registered for the length of the
+      call now, and a route or input pinned to a device that has just been
+      unplugged goes back to `Automatic` rather than to silence.
+
 ---
 
 ## Open
@@ -1053,3 +1128,42 @@ The cases most worth putting a person in front of, in order:
     the server's own emoji must be offered above both, and picking one
     mid-sentence must put it where the cursor was rather than at the end.
 
+
+32. **The speaking ring, on the two clients that never had one.** A call between
+    a desktop or web client and anybody else: the ring must light on the other
+    person's tile while they talk and go out when they stop, within about a
+    fifth of a second, and it must do it whether or not the far end is Android.
+    Then mute yourself: your own ring must go out immediately rather than a
+    beat later. The reading now comes from `getStats`, so the case worth being
+    suspicious of is a call with more than two people - one poll per peer per
+    tick - on a laptop with something else running.
+
+33. **The floating self-view over somebody's face.** In a one-to-one video call
+    on the phone, the small tile's corners must show the person behind it,
+    rounded, with no square edge and no block of dark. Then drag it to each of
+    the four corners, flip the camera, turn the camera off and on, and start and
+    stop a share: the picture must survive all of it and stay clipped. This is a
+    different renderer from the one the full-screen tiles use, so a tile that
+    looks right is not evidence about the other.
+
+34. **Devices that follow what is plugged in.** On desktop, join a call, then
+    plug in a headset: both directions must move to it without touching a menu,
+    and unplugging it must move them back. Do it again with `Follow whatever is
+    plugged in` turned off - nothing must move. Then the phone: put a Bluetooth
+    headset on mid-call with no sheet open, which is the case that never worked,
+    and take it off again. Last, the failure that has no sound to it - pick a
+    wired headset explicitly, unplug it, and confirm the call comes out of the
+    phone rather than out of nothing.
+
+35. **A call moved between devices, which is the one with a report behind it.**
+    Two accounts in a call from the web client; one of them joins the same call
+    from the phone. The person who stayed put must see the newcomer's tile go
+    from "Connecting…" to a live one within a few seconds - and if it does not,
+    it must recover on its own within about half a minute rather than staying
+    there. Do it the other way round as well, phone first and web second,
+    because who offers is a peer-id comparison and only one of the two orderings
+    was ever the visible failure. Then the harder version: move a call between
+    devices twice in a row, and move it while a third person is in it. What is
+    being watched for is a link that comes back late, which now happens and did
+    not before, and a call that renegotiates when it did not need to, which is
+    what the "only from `new`" rule exists to prevent.

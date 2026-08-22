@@ -163,6 +163,65 @@ turns a track into pixels. `key(track)` is the first fix and the overlay flag
 the second; the self-view is mirrored there too, which is what a front camera
 should look like to the person in front of it.
 
+### The corners the self-view never had
+
+A `SurfaceView` is not clipped by anything in the window: it is a separate
+surface the system composites, so `Modifier.clip` above it does nothing and
+every rounded tile had square video corners inside a rounded border.
+`VideoSurface` works around it by painting the four corner slivers back in over
+the surface - which is correct only while the tile sits on a known, opaque
+background. The floating self-view does not: it floats over whoever else is in
+the call, so its corners came out as four blocks of the tile's own background
+instead of the picture behind it.
+
+`ClippedVideo.kt` is the fix, and it is a different renderer rather than a
+different mask. A `TextureView` is drawn by the window like any other view, so
+it clips, it composites with what is under it, and it stacks by ordinary view
+order instead of needing `setZOrderMediaOverlay`. `EglRenderer` drives it
+directly, with the view's own aspect handed to `setLayoutAspectRatio`, which is
+what makes it crop rather than letterbox.
+
+It costs a copy per frame, so only the small floating tile uses it. The
+full-screen tiles and the share stage keep `SurfaceViewRenderer`: they have an
+opaque background for the mask to work against, and they are the ones where the
+per-frame cost would be paid on the whole screen.
+
+### The tile that said "connecting…" for the life of the call
+
+Two faults, both of them a link with no way back.
+
+The channel-key re-read was allowed once per peer and then never again, so a
+link could survive exactly one epoch change. One is normal - joining a channel
+you hold no key for mints the next epoch, which is what a device arriving does -
+and burning it on the first description left every one after that refused
+against a key known to be stale, with nothing left that would ever look again.
+It is a five-second cooldown now, which keeps what the latch was for: a proof
+that is simply wrong still cannot make this client hammer the key directory.
+
+And nothing chased an offer that was never answered. `onConnectionChange` only
+reaches `FAILED` once ICE has a remote description to fail against, so a refused
+offer leaves the connection in `NEW` with no callback ever fired - and both the
+recovery loop and the ICE restart hang off a failure that never happens. The
+offering side now re-offers from `NEW`, up to `CallRecovery.MAX_ATTEMPTS` times,
+re-reading the key first. Only the impolite side, because only it may offer, and
+only from `NEW`: a connection with a remote description is negotiating, and
+offering over the top of a slow network would break the calls that were about to
+work.
+
+### Incoming video that flickered
+
+A video slot counts as live once a frame has actually been decoded on it, because
+a receiver unmutes on the padding Chromium sends to probe for bandwidth - so a
+camera nobody turned on would otherwise be a black rectangle where an avatar
+goes.
+
+The reading was taken fresh from every `getStats` report, and a report is not a
+promise: one arrives without this slot's `inbound-rtp` entry after a
+renegotiation, and a mid can change under one. Missing read as nought frames
+decoded, which took the track away and put it back a poll later - the flicker.
+`framesDecoded` only grows, so the answer is latched per slot, which is what the
+desktop client has done since the same bug was fixed there.
+
 ### The call is the whole screen, and survives leaving it
 
 Three things a phone call is expected to do, and did not:
@@ -172,14 +231,20 @@ Three things a phone call is expected to do, and did not:
   brings them back transiently, which is the only way out of a full-screen app
   the platform guarantees.
 - The peer's name pill was underneath the floating control dock. It is lifted
-  clear of it.
+  clear of it - but only while the dock is there. Held up against nothing, it
+  floated in the middle of somebody's chest instead of sitting where a caption
+  sits, so the lift follows the chrome.
 - Back ended the call. It now shrinks the activity into system
   picture-in-picture - `CallPip.kt`, and `supportsPictureInPicture` on the
   activity - so the call carries on in a floating window with no peer
   connection rebuilt and no renderer recreated. Back means what it usually
   means only if the system refuses. In that window there is room for the
   picture and nothing else, so the header, the dock and the problem banner are
-  not drawn.
+  not drawn - and neither is the self-view, or the grid. One tile's worth of
+  room goes to whoever is talking, which is never you: your own camera is the
+  one face in the call you are not there to watch. It is sticky on the last
+  speaker, because a conversation is mostly gaps and a window that flicked
+  between faces through every pause would be worse than a fixed one.
 
 The self-view can also be dragged anywhere on the stage, clamped to the screen
 so it cannot be thrown off an edge. There is no snap-to-corner.
@@ -621,6 +686,15 @@ Four separate reasons a paired headset was invisible, all of them fixed in
 The device lists are live rather than read once, through an `AudioDeviceCallback`
 - a headset is put on *during* a call more often than before one, and a call on
 `AUTO` follows the change.
+
+That callback used to live in `rememberCallDevices`, which exists only while the
+device sheet is open - so the one gesture it was for, putting a headset on
+mid-call, moved nothing unless the picker happened to be up at that moment. It
+is registered by `CallAudio.start` and torn down by `CallAudio.stop` now, for
+the length of the call. A route or an input pinned to a device that has since
+been unplugged cannot be honoured, so it goes back to `Automatic` and
+re-resolves rather than asking for something that is not there - which is the
+failure with no sound to it.
 
 Android routes a call as one communication device, not as a pair, so choosing a
 headset's microphone puts playback in that headset too. The sheet says so rather

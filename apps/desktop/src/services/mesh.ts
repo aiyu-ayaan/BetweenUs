@@ -89,6 +89,27 @@ const SLOT_KIND: Record<Slot, 'audio' | 'video'> = {
 /** How often remote audio levels are read, for the speaking ring. */
 const SPEAKING_POLL_MS = 200;
 
+/**
+ * How long an offer may go unanswered before it is sent again. See `chase`.
+ *
+ * Long enough that a slow answer is not chased - the far end has a key read and
+ * an `adopt` to do first - and short enough that nobody sits looking at
+ * "Connecting…" wondering whether to leave.
+ */
+const CONNECT_DEADLINE_MS = 8_000;
+
+/** How many times an unanswered offer is sent again before giving up. */
+const CONNECT_ATTEMPTS = 4;
+
+/**
+ * The shortest gap between two re-reads of the channel key for one peer.
+ *
+ * The re-read exists for an epoch that changed under a live call. The cooldown
+ * exists so a proof that is simply wrong cannot turn every arriving description
+ * into a request to the key directory.
+ */
+const KEY_REREAD_COOLDOWN_MS = 5_000;
+
 /** Speaking polls per check of whether video is really arriving - so, a second. */
 const VIDEO_POLL_EVERY = 5;
 
@@ -262,8 +283,11 @@ class PeerLink {
   /** Perfect negotiation bookkeeping. */
   private makingOffer = false;
   private ignoreOffer = false;
-  /** One re-read of the channel key per peer. See `verify`. */
-  private retriedKey = false;
+  /** When the channel key was last re-read for this peer. See `verify`. */
+  private keyReadAt = 0;
+  /** Offers sent for a link that never got an answer. See `chase`. */
+  private connectAttempts = 0;
+  private connectTimer: number | null = null;
   private readonly polite: boolean;
   private micEncoding: MicEncoding | null = null;
   private sharePublish: SharePublish | null = null;
@@ -278,6 +302,8 @@ class PeerLink {
   private shareCodec: SharePublish['videoCodec'] | null = null;
   /** Video slots that have decoded at least one frame. See `pollVideo`. */
   private readonly liveVideo = new Set<Slot>();
+  /** How loud this peer is, 0..1. See `pollAudioLevel`. */
+  private level = 0;
   /**
    * Candidates that arrived before there was a remote description to attach
    * them to.
@@ -420,8 +446,12 @@ class PeerLink {
     };
 
     this.pc.onconnectionstatechange = () => {
+      if (this.pc.connectionState === 'connected') this.stopChasing();
       if (this.pc.connectionState === 'failed' && !this.closed) this.events.onFailed();
     };
+
+    // An offer that is never answered fires no event at all. See `chase`.
+    this.chase();
   }
 
   /**
@@ -574,11 +604,71 @@ class PeerLink {
     this.events.onProblem(`${this.peer.username}: ${what} - ${reason}`);
   }
 
-  /** One re-read per peer: see `verifyFingerprintWithRefresh`. */
+  /**
+   * Verifies, re-reading the channel key when it has not just been read.
+   *
+   * The re-read used to be allowed once per peer and then never again, which is
+   * a link that can only survive one epoch change and is the likeliest way a
+   * tile ends up on "Connecting…" for good. One key change is normal - somebody
+   * joining a channel they hold no key for mints the next epoch - and burning
+   * the only re-read on the first description means every description after it
+   * is refused against a key that is known to be stale, with nothing left that
+   * would ever look again.
+   *
+   * A cooldown keeps the property the latch was there for: a proof that is
+   * simply wrong still cannot make this client hammer the key directory,
+   * because a wrong proof arriving twice a second re-reads once.
+   */
   private async verify(sdp: string, proof: string): Promise<boolean> {
-    if (this.retriedKey) return verifyFingerprint(await this.channelKey(), sdp, proof);
-    this.retriedKey = true;
-    return verifyFingerprintWithRefresh((refresh) => this.channelKey(refresh), sdp, proof);
+    if (await verifyFingerprint(await this.channelKey(), sdp, proof)) return true;
+    if (Date.now() - this.keyReadAt < KEY_REREAD_COOLDOWN_MS) return false;
+    this.keyReadAt = Date.now();
+    return verifyFingerprint(await this.channelKey(true), sdp, proof);
+  }
+
+  /**
+   * Offers again when an offer was never answered.
+   *
+   * Nothing else does. `connectionState` only reaches `failed` once ICE has had
+   * a remote description to fail against, so an offer that the far end refused
+   * - a fingerprint signed with an epoch it had not caught up to, most often -
+   * leaves this connection sitting in `new` with no event ever fired and no
+   * recovery path to enter. That is the whole of a tile that says "Connecting…"
+   * until somebody leaves the call.
+   *
+   * Only the impolite side, because only it may offer, and only from `new`: a
+   * link that has a remote description is negotiating, and offering over the
+   * top of a slow network would break the calls that were about to work.
+   * Re-reading the key first is not incidental - it is the fix for the case
+   * this is most often chasing.
+   */
+  private chase(): void {
+    if (this.closed || this.polite) return;
+
+    this.connectTimer = window.setTimeout(() => {
+      this.connectTimer = null;
+      if (this.closed) return;
+      if (this.pc.connectionState !== 'new') return;
+
+      if (++this.connectAttempts > CONNECT_ATTEMPTS) {
+        this.events.onProblem(
+          `${this.peer.username}: could not be connected to. They may need to rejoin.`,
+        );
+        return;
+      }
+
+      void (async () => {
+        await this.channelKey(true).catch(() => undefined);
+        await this.offer();
+        this.chase();
+      })();
+    }, CONNECT_DEADLINE_MS);
+  }
+
+  private stopChasing(): void {
+    if (this.connectTimer !== null) window.clearTimeout(this.connectTimer);
+    this.connectTimer = null;
+    this.connectAttempts = 0;
   }
 
   private async sendDescription(): Promise<void> {
@@ -634,10 +724,16 @@ class PeerLink {
         // The honest cause is almost always the two devices holding different
         // channel-key epochs, not an attack - but the connection is refused
         // either way, because the two cases look identical from here.
+        //
+        // The link is kept. Dropping it used to be permanent: nothing re-adds a
+        // link, and the far end's next offer would then arrive for a peer this
+        // client no longer has - so one refusal, which an epoch change makes
+        // ordinary, ended that pair for the life of the call. Refusing this
+        // description is all that is meant; the next one is verified afresh
+        // against a key that may by then have been re-read.
         this.events.onProblem(
           `${this.peer.username}: refused - their media key does not match this channel's`,
         );
-        this.events.onFailed();
         return;
       }
 
@@ -854,16 +950,47 @@ class PeerLink {
     return now;
   }
 
-  /** Audio levels this peer is producing on their microphone right now, 0..1. */
+  /** How loud this peer is, 0..1, as of the last `pollAudioLevel`. */
   audioLevel(): number {
-    let loudest = 0;
+    return this.level;
+  }
+
+  /**
+   * Reads how loud this peer is.
+   *
+   * `getSynchronizationSources()` is the obvious way to ask and is why nobody
+   * ever saw a speaking ring on desktop or the web: it reports a level only for
+   * sources it considers current, and in Chromium it is routinely empty on a
+   * connection carrying perfectly good audio - so the ring was driven by a
+   * number that was almost always zero. `inbound-rtp` carries the same reading
+   * and is always there; it is what the Android client has been reading, which
+   * is why the ring works there and only there.
+   *
+   * Asynchronous, so the poll reads the previous tick's answer. 200 ms behind a
+   * syllable is not something a person can see.
+   */
+  async pollAudioLevel(): Promise<void> {
     const receiver = this.transceivers.get('mic')?.receiver;
-    if (receiver?.getSynchronizationSources) {
-      for (const source of receiver.getSynchronizationSources()) {
-        loudest = Math.max(loudest, source.audioLevel ?? 0);
-      }
+    if (!receiver) {
+      this.level = 0;
+      return;
     }
-    return loudest;
+
+    let loudest = 0;
+    for (const source of receiver.getSynchronizationSources?.() ?? []) {
+      loudest = Math.max(loudest, source.audioLevel ?? 0);
+    }
+
+    if (loudest === 0) {
+      const report = await receiver.getStats().catch(() => null);
+      report?.forEach((entry) => {
+        const stat = entry as { type?: string; kind?: string; audioLevel?: number };
+        if (stat.type !== 'inbound-rtp' || stat.kind !== 'audio') return;
+        loudest = Math.max(loudest, Number(stat.audioLevel ?? 0));
+      });
+    }
+
+    this.level = Number.isFinite(loudest) ? loudest : 0;
   }
 
   send_(payload: unknown): void {
@@ -877,6 +1004,7 @@ class PeerLink {
 
   close(): void {
     this.closed = true;
+    this.stopChasing();
     this.channel.onmessage = null;
     this.channel.onopen = null;
     this.pc.ontrack = null;
@@ -1228,6 +1356,9 @@ export class Mesh {
       const speaking = new Set<string>();
       if (this.localSpeaking) speaking.add('local');
       for (const link of this.links.values()) {
+        // Started here, read next tick: the level comes from `getStats`, which
+        // is a promise. See `pollAudioLevel`.
+        void link.pollAudioLevel();
         if (link.audioLevel() >= SPEAKING_LEVEL) speaking.add(link.peer.peerId);
       }
 

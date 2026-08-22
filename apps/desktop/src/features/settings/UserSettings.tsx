@@ -547,6 +547,12 @@ function VoiceSection(): JSX.Element {
           value={settings.outputDeviceId}
           onChange={(outputDeviceId) => update({ outputDeviceId })}
         />
+        <Switch
+          label="Follow whatever is plugged in"
+          hint="Plugging in a headset moves the call to it, and unplugging it moves the call back. Off keeps the two choices above whatever happens."
+          checked={settings.followSystemDevices}
+          onChange={(followSystemDevices) => update({ followSystemDevices })}
+        />
       </div>
 
       <h2 className="mt-8 text-base font-semibold text-slate-50">Input sensitivity</h2>

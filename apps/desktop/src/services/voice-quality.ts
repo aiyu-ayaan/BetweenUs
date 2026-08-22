@@ -88,6 +88,21 @@ export interface VoiceSettings {
   /** `null` means the system default device, which is what most people want. */
   inputDeviceId: string | null;
   outputDeviceId: string | null;
+  /**
+   * Move to a headset the moment it is plugged in, and off it the moment it is
+   * unplugged.
+   *
+   * A device id is remembered forever and the operating system's idea of the
+   * default is not, which is the whole of "I have to change my microphone and
+   * my speakers again every call": pick a headset once, and every later call is
+   * pinned to it whether or not it is the thing that is actually connected. On
+   * by default, because plugging something in *is* the instruction - it is what
+   * the phone does, and what the operating system's own default does.
+   *
+   * Off is for the machine with a microphone that must not be picked, where the
+   * choice really is a choice rather than a snapshot.
+   */
+  followSystemDevices: boolean;
   echoCancellation: boolean;
   noiseSuppression: boolean;
   autoGainControl: boolean;
@@ -127,6 +142,7 @@ export const DEFAULT_VOICE_SETTINGS: VoiceSettings = {
   mode: 'clear',
   inputDeviceId: null,
   outputDeviceId: null,
+  followSystemDevices: true,
   echoCancellation: true,
   noiseSuppression: true,
   autoGainControl: true,

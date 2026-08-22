@@ -1096,6 +1096,18 @@ class VoiceEngine(private val context: Context) {
         private val transceivers = LinkedHashMap<Slot, RtpTransceiver>()
 
         /**
+         * Video slots that have decoded at least one frame. See [liveVideo].
+         *
+         * A latch, and the reason incoming video used to flicker: a stats
+         * report that happens not to carry this slot's `inbound-rtp` entry -
+         * one arrives empty after a renegotiation, and a mid can change under
+         * one - read as nought frames decoded, which took the track away and
+         * put it back a beat later. The desktop client has held the same latch
+         * since the same bug was fixed there.
+         */
+        private val decodedOnce = HashSet<Slot>()
+
+        /**
          * What this client wants to be sending, held for the answering side: it
          * has no senders until the offer arrives, and a camera turned on before
          * that would otherwise never reach anybody.
@@ -1113,8 +1125,8 @@ class VoiceEngine(private val context: Context) {
 
         private var makingOffer = false
         private var closed = false
-        /** One re-read of the channel key per peer. See `verifyFingerprint`. */
-        private var retriedKey = false
+        /** When the channel key was last re-read for this peer. See [verifyFingerprint]. */
+        private var keyReadAt = 0L
 
         private val pc: PeerConnection = factory.createPeerConnection(
             PeerConnection.RTCConfiguration(iceServers).apply {
@@ -1257,7 +1269,35 @@ class VoiceEngine(private val context: Context) {
             }
             // Only the impolite side offers first. Both offering at once is the
             // glare the polite rule exists to settle.
-            if (!polite) scope.launch { offer() }
+            if (!polite) scope.launch { offer(); chase() }
+        }
+
+        /**
+         * Offers again when an offer was never answered.
+         *
+         * Nothing else does. `onConnectionChange` only reaches `FAILED` once ICE
+         * has had a remote description to fail against, so an offer the far end
+         * refused - a fingerprint signed with an epoch it had not caught up to,
+         * most often - leaves this connection in `NEW` with no callback ever
+         * fired and no recovery path to enter. That is the whole of a tile that
+         * says "connecting…" until somebody leaves the call.
+         *
+         * Only from `NEW`: a connection with a remote description is
+         * negotiating, and offering over the top of a slow network would break
+         * the calls that were about to work. Re-reading the key first is not
+         * incidental - it is the fix for the case this is most often chasing.
+         */
+        private suspend fun chase() {
+            var attempts = 0
+            while (!closed && attempts < CallRecovery.MAX_ATTEMPTS) {
+                delay(CONNECT_DEADLINE_MS)
+                if (closed) return
+                if (pc.connectionState() != PeerConnection.PeerConnectionState.NEW) return
+
+                attempts += 1
+                refreshChannelKey()
+                offer()
+            }
         }
 
         fun setTrack(slot: Slot, track: MediaStreamTrack?) {
@@ -1512,19 +1552,31 @@ class VoiceEngine(private val context: Context) {
 
         /**
          * Whether the far side signed this fingerprint with the channel's key,
-         * re-reading the key once before giving up.
+         * re-reading the key when it has not just been read.
          *
-         * The retry is the point: two people joining at the same moment, or a
+         * The re-read is the point: two people joining at the same moment, or a
          * member removed mid-call, rotate the epoch under a connection that is
          * already open, and this device would otherwise refuse a peer for
-         * holding the *newer* key. Once only - a proof that is simply wrong
-         * must not become a way to make this client hammer the key directory.
+         * holding the *newer* key.
+         *
+         * It used to be allowed once per peer and then never again, which is a
+         * link that can survive exactly one epoch change. One is normal, and
+         * burning it on the first description - the description most likely to
+         * arrive mid-rotation - left every one after it refused against a key
+         * known to be stale, with nothing left that would ever look again. That
+         * is a tile on "Connecting…" for the life of the call.
+         *
+         * A cooldown keeps what the latch was for: a proof that is simply wrong
+         * still cannot make this client hammer the key directory, because a
+         * wrong proof arriving twice a second re-reads once.
          */
         private suspend fun verifyFingerprint(sdp: String, proof: String): Boolean {
             val fingerprint = fingerprintOf(sdp) ?: return false
             if (Crypto.signFingerprint(channelKey, fingerprint) == proof) return true
-            if (retriedKey) return false
-            retriedKey = true
+
+            val now = System.currentTimeMillis()
+            if (now - keyReadAt < KEY_REREAD_COOLDOWN_MS) return false
+            keyReadAt = now
             refreshChannelKey()
             return Crypto.signFingerprint(channelKey, fingerprint) == proof
         }
@@ -1838,16 +1890,18 @@ class VoiceEngine(private val context: Context) {
          * every time. Whether a slot is still *on* is what its owner says on
          * the data channel - `screenDeclared` and `cameraDeclared`.
          *
-         * `framesDecoded` only ever grows, so this only ever goes from nothing
-         * to a track.
+         * Latched by [decodedOnce], so this only ever goes from nothing to a
+         * track. `framesDecoded` only grows, but the *report* is not a promise:
+         * a slot missing from one poll is not a slot that stopped, and reading
+         * it as one is what made an arriving camera flicker.
          */
         private fun liveVideo(slot: Slot, decoded: Map<String, Long>): VideoTrack? {
             val transceiver = transceivers[slot] ?: return null
             val track = transceiver.receiver.track() as? VideoTrack ?: return null
-            val mid = transceiver.mid ?: return null
+            val mid = transceiver.mid
 
-            if ((decoded[mid] ?: 0L) == 0L) return null
-            return track
+            if (mid != null && (decoded[mid] ?: 0L) > 0L) decodedOnce += slot
+            return if (slot in decodedOnce) track else null
         }
 
         private fun problem(message: String) {
@@ -1905,6 +1959,22 @@ class VoiceEngine(private val context: Context) {
 
         /** The desktop waits the same fifteen seconds before giving up on a join. */
         private const val JOIN_TIMEOUT_MS = 15_000L
+
+        /**
+         * How long an offer may go unanswered before it is sent again. The
+         * desktop uses the same number - see `chase` in both.
+         *
+         * Long enough that a slow answer is not chased: the far end has a key
+         * read and an `adopt` to do first. Short enough that nobody sits
+         * looking at "connecting…" wondering whether to leave.
+         */
+        private const val CONNECT_DEADLINE_MS = 8_000L
+
+        /**
+         * The shortest gap between two re-reads of the channel key for one
+         * peer. See `verifyFingerprint`.
+         */
+        private const val KEY_REREAD_COOLDOWN_MS = 5_000L
 
         /**
          * Audio level above which somebody counts as speaking. About -40 dBFS:
