@@ -7,10 +7,17 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.VectorConverter
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -42,17 +49,21 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.findRootCoordinates
+import androidx.compose.ui.layout.onPlaced
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
@@ -61,6 +72,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.toSize
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -90,9 +102,19 @@ import com.aatech.betweenus.ui.theme.StatusOnline
 import com.aatech.betweenus.ui.theme.Surface800
 import com.aatech.betweenus.ui.theme.Surface900
 import com.aatech.betweenus.ui.theme.Surface950
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import org.webrtc.RendererCommon
 import org.webrtc.VideoTrack
 import kotlin.math.roundToInt
+
+/**
+ * How long the header and the control dock stay up with nothing happening.
+ *
+ * Long enough to find a button that has just appeared, short enough that a
+ * call left alone is the picture and nothing else.
+ */
+private const val CHROME_IDLE_MS = 4_000L
 
 /**
  * A WhatsApp/modern-style voice & video call screen.
@@ -161,6 +183,15 @@ fun VoiceChannelScreen(
     var pickingDevices by remember { mutableStateOf(false) }
     var showingConnection by remember { mutableStateOf(false) }
 
+    // The header and the dock get out of the way on their own, and a tap
+    // anywhere on the stage brings them back - the same gesture the share
+    // stage already uses, and what every other call app does with a video
+    // filling the screen.
+    var chrome by remember { mutableStateOf(true) }
+    // Bumped by a tap, so asking for the chrome back restarts the countdown
+    // even though `chrome` was already true.
+    var woken by remember { mutableStateOf(0) }
+
     // Worked out once here rather than twice: it tints the button that opens
     // the sheet as well as heading the sheet itself, so a bad link is visible
     // without opening anything.
@@ -168,6 +199,23 @@ fun VoiceChannelScreen(
 
     LaunchedEffect(watching?.peer?.peerId) {
         if (watching == null) dismissed = null
+    }
+
+    // Anything the user might be reading or reaching for pins the chrome open:
+    // a sheet on top of it, a problem to explain, or a control they have just
+    // pressed - the toggles are keys here, so pressing one restarts the
+    // countdown without every button having to say so.
+    LaunchedEffect(
+        chrome, woken, inCallNow, pickingDevices, showingConnection, problem,
+        muted, cameraOn, sharing,
+    ) {
+        if (!inCallNow || pickingDevices || showingConnection || problem != null) {
+            chrome = true
+            return@LaunchedEffect
+        }
+        if (!chrome) return@LaunchedEffect
+        delay(CHROME_IDLE_MS)
+        chrome = false
     }
 
     val microphone = rememberPermissions(
@@ -307,7 +355,21 @@ fun VoiceChannelScreen(
 
             else -> {
                 // ACTIVE CALL - Adaptive WhatsApp / Modern Video Stage
-                Box(modifier = Modifier.fillMaxSize()) {
+                //
+                // The tap that brings the chrome back is on the stage rather
+                // than on a layer over it: the tiles do not consume taps, and
+                // the PiP tile and the dock do, so a drag or a button press is
+                // still theirs.
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .pointerInput(Unit) {
+                            detectTapGestures {
+                                chrome = !chrome
+                                woken++
+                            }
+                        },
+                ) {
                     when {
                         // 0 remote participants (Waiting for others)
                         participants.isEmpty() -> {
@@ -636,69 +698,25 @@ fun VoiceChannelScreen(
         }
 
         // --- TOP TRANSLUCENT HEADER BAR ---
-        // Nothing but the picture fits in a PiP window.
-        if (!inPip) Row(
-            modifier = Modifier
-                .align(Alignment.TopCenter)
-                .fillMaxWidth()
-                .background(
-                    Brush.verticalGradient(
-                        colors = listOf(Color.Black.copy(alpha = 0.85f), Color.Transparent),
-                    ),
-                )
-                .padding(horizontal = 14.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
+        // Nothing but the picture fits in a PiP window, and nothing at all
+        // once the chrome has gone quiet.
+        AnimatedVisibility(
+            visible = !inPip && chrome,
+            enter = fadeIn() + slideInVertically { -it },
+            exit = fadeOut() + slideOutVertically { -it },
+            modifier = Modifier.align(Alignment.TopCenter),
         ) {
-            Box(
+            Row(
                 modifier = Modifier
-                    .size(38.dp)
-                    .clip(CircleShape)
-                    .background(Color.Black.copy(alpha = 0.45f))
-                    .border(1.dp, Color.White.copy(alpha = 0.15f), CircleShape)
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null,
-                        onClick = leaveScreen,
-                    ),
-                contentAlignment = Alignment.Center,
+                    .fillMaxWidth()
+                    .background(
+                        Brush.verticalGradient(
+                            colors = listOf(Color.Black.copy(alpha = 0.85f), Color.Transparent),
+                        ),
+                    )
+                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                BetweenUsIcon(BetweenUsIcons.ChevronLeft, tint = Slate100, size = 20.dp)
-            }
-
-            Spacer(Modifier.width(12.dp))
-
-            Column(Modifier.weight(1f)) {
-                Text(
-                    text = channel?.name ?: "Voice Call",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = Slate50,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Text(
-                    text = when (val current = state) {
-                        VoiceEngine.CallState.Idle -> "Not connected"
-                        is VoiceEngine.CallState.Connecting -> "Connecting…"
-                        is VoiceEngine.CallState.Live -> when {
-                            // Said before the head count, because it is the
-                            // thing that explains everything else on screen.
-                            !signalling -> "Reconnecting to the call server…"
-                            participants.any { it.reconnecting } -> "Reconnecting…"
-                            else -> "${participants.size + 1} in call · E2EE"
-                        }
-                        is VoiceEngine.CallState.Failed -> current.reason
-                    },
-                    style = MaterialTheme.typography.bodySmall,
-                    color = when {
-                        state is VoiceEngine.CallState.Failed -> Danger
-                        state is VoiceEngine.CallState.Live && !signalling -> Amber200
-                        else -> Slate400
-                    },
-                )
-            }
-
-            if (isInCall) {
                 Box(
                     modifier = Modifier
                         .size(38.dp)
@@ -708,11 +726,62 @@ fun VoiceChannelScreen(
                         .clickable(
                             interactionSource = remember { MutableInteractionSource() },
                             indication = null,
-                            onClick = { pickingDevices = true },
+                            onClick = leaveScreen,
                         ),
                     contentAlignment = Alignment.Center,
                 ) {
-                    BetweenUsIcon(BetweenUsIcons.Speaker, tint = Slate100, size = 18.dp)
+                    BetweenUsIcon(BetweenUsIcons.ChevronLeft, tint = Slate100, size = 20.dp)
+                }
+
+                Spacer(Modifier.width(12.dp))
+
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        text = channel?.name ?: "Voice Call",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Slate50,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        text = when (val current = state) {
+                            VoiceEngine.CallState.Idle -> "Not connected"
+                            is VoiceEngine.CallState.Connecting -> "Connecting…"
+                            is VoiceEngine.CallState.Live -> when {
+                                // Said before the head count, because it is the
+                                // thing that explains everything else on screen.
+                                !signalling -> "Reconnecting to the call server…"
+                                participants.any { it.reconnecting } -> "Reconnecting…"
+                                else -> "${participants.size + 1} in call · E2EE"
+                            }
+                            is VoiceEngine.CallState.Failed -> current.reason
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = when {
+                            state is VoiceEngine.CallState.Failed -> Danger
+                            state is VoiceEngine.CallState.Live && !signalling -> Amber200
+                            else -> Slate400
+                        },
+                    )
+                }
+
+                if (isInCall) {
+                    Box(
+                        modifier = Modifier
+                            .size(38.dp)
+                            .clip(CircleShape)
+                            .background(Color.Black.copy(alpha = 0.45f))
+                            .border(1.dp, Color.White.copy(alpha = 0.15f), CircleShape)
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null,
+                                onClick = { pickingDevices = true },
+                            ),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        BetweenUsIcon(BetweenUsIcons.Speaker, tint = Slate100, size = 18.dp)
+                    }
                 }
             }
         }
@@ -729,10 +798,14 @@ fun VoiceChannelScreen(
         }
 
         // --- FLOATING BOTTOM ACTION BAR (WhatsApp style) ---
-        if (isInCall && !inPip) {
+        AnimatedVisibility(
+            visible = isInCall && !inPip && chrome,
+            enter = fadeIn() + slideInVertically { it },
+            exit = fadeOut() + slideOutVertically { it },
+            modifier = Modifier.align(Alignment.BottomCenter),
+        ) {
             Box(
                 modifier = Modifier
-                    .align(Alignment.BottomCenter)
                     .padding(bottom = 20.dp),
             ) {
                 Row(
@@ -875,6 +948,45 @@ private fun CallCircleButton(
 
 private val PIP_WIDTH = 108.dp
 private val PIP_HEIGHT = 154.dp
+private val PIP_CORNER = 18.dp
+
+/**
+ * How close a corner the PiP tile may get to the edge of the stage.
+ *
+ * Not four equal margins: the top of the stage is under the header bar and the
+ * bottom is under the control dock, and a tile that snapped to the true corner
+ * would settle underneath one of them.
+ */
+private val PIP_INSET_SIDE = 14.dp
+private val PIP_INSET_TOP = 68.dp
+private val PIP_INSET_BOTTOM = 110.dp
+
+/**
+ * Where the top-left of the PiP tile is allowed to be, in stage pixels.
+ *
+ * A rectangle of positions rather than of pixels: `left`/`top` is the tile
+ * resting in the top-left corner and `right`/`bottom` is it resting in the
+ * bottom-right, so the four corners of the result *are* the four places it can
+ * settle. A stage too small for the insets collapses to one position rather
+ * than to a backwards range.
+ */
+internal fun pipBounds(stage: Size, tile: Size, side: Float, top: Float, bottom: Float): Rect {
+    val right = (stage.width - tile.width - side).coerceAtLeast(side)
+    val floor = (stage.height - tile.height - bottom).coerceAtLeast(top)
+    return Rect(side, top, right, floor)
+}
+
+/**
+ * The corner of [bounds] the tile settles into from [position], its current
+ * top-left: whichever quadrant of the stage its own centre is in.
+ */
+internal fun pipNearestCorner(bounds: Rect, stage: Size, tile: Size, position: Offset): Offset {
+    val centre = position + Offset(tile.width / 2f, tile.height / 2f)
+    return Offset(
+        if (centre.x < stage.width / 2f) bounds.left else bounds.right,
+        if (centre.y < stage.height / 2f) bounds.top else bounds.bottom,
+    )
+}
 
 /**
  * Floating Picture-in-Picture (PiP) card showing the user's camera/avatar.
@@ -890,38 +1002,80 @@ private fun FloatingPipTile(
     modifier: Modifier = Modifier,
     speaking: Boolean = false,
 ) {
-    // Dragged anywhere on the stage, the way every other phone does it. The
-    // tile is laid out at the top-right, so the offset runs left and down from
-    // there and is clamped to what is left of the screen.
-    // ponytail: free drag, no snap-to-corner. Add one if it feels loose.
-    val metrics = LocalConfiguration.current
-    var drag by remember { mutableStateOf(Offset.Zero) }
-    val slackX = with(LocalDensity.current) { (metrics.screenWidthDp.dp - PIP_WIDTH - 28.dp).toPx() }
-    val slackY = with(LocalDensity.current) { (metrics.screenHeightDp.dp - PIP_HEIGHT - 160.dp).toPx() }
+    // Dragged anywhere on the stage and let go, and it settles into whichever
+    // corner it was nearest - the way WhatsApp does it, and the reason it is
+    // never left half over somebody's face.
+    //
+    // The corners are worked out from where the tile was actually placed
+    // rather than from the screen, because the callers do not agree on where
+    // that is: most anchor it top-end, the four-person layout anchors it
+    // bottom-end. The old arithmetic assumed the first and clamped the second
+    // into dragging itself off the bottom of the screen.
+    val density = LocalDensity.current
+    val scope = rememberCoroutineScope()
+    val drag = remember { Animatable(Offset.Zero, Offset.VectorConverter) }
+    // Where the layout put us, and how big the screen is, both in root
+    // coordinates. The root rather than the parent because the parent of this
+    // node is the caller's own padding, which is the size of the tile plus a
+    // margin and says nothing about the room there is to move in. Zero until
+    // the first placement, which is why the drag does nothing until then.
+    var anchor by remember { mutableStateOf(Offset.Zero) }
+    var stage by remember { mutableStateOf(Size.Zero) }
+
+    val tile = with(density) { Size(PIP_WIDTH.toPx(), PIP_HEIGHT.toPx()) }
+    val bounds = with(density) {
+        pipBounds(
+            stage = stage,
+            tile = tile,
+            side = PIP_INSET_SIDE.toPx(),
+            top = PIP_INSET_TOP.toPx(),
+            bottom = PIP_INSET_BOTTOM.toPx(),
+        )
+    }
+    val placed = stage.width > 0f && stage.height > 0f
 
     Box(
         modifier = modifier
-            .offset { IntOffset(drag.x.roundToInt(), drag.y.roundToInt()) }
-            .pointerInput(Unit) {
-                detectDragGestures { change, moved ->
-                    change.consume()
-                    drag = Offset(
-                        (drag.x + moved.x).coerceIn(-slackX.coerceAtLeast(0f), 0f),
-                        (drag.y + moved.y).coerceIn(0f, slackY.coerceAtLeast(0f)),
-                    )
-                }
+            .onPlaced { coordinates ->
+                anchor = coordinates.localToRoot(Offset.Zero)
+                stage = coordinates.findRootCoordinates().size.toSize()
+            }
+            .offset { IntOffset(drag.value.x.roundToInt(), drag.value.y.roundToInt()) }
+            .pointerInput(placed) {
+                if (!placed) return@pointerInput
+                detectDragGestures(
+                    onDrag = { change, moved ->
+                        change.consume()
+                        scope.launch {
+                            drag.snapTo(
+                                Offset(
+                                    (drag.value.x + moved.x)
+                                        .coerceIn(bounds.left - anchor.x, bounds.right - anchor.x),
+                                    (drag.value.y + moved.y)
+                                        .coerceIn(bounds.top - anchor.y, bounds.bottom - anchor.y),
+                                ),
+                            )
+                        }
+                    },
+                    onDragEnd = {
+                        val corner = pipNearestCorner(bounds, stage, tile, anchor + drag.value)
+                        scope.launch {
+                            drag.animateTo(corner - anchor, spring(stiffness = Spring.StiffnessMediumLow))
+                        }
+                    },
+                )
             }
             .width(PIP_WIDTH)
             .height(PIP_HEIGHT)
-            .shadow(14.dp, RoundedCornerShape(18.dp))
-            .clip(RoundedCornerShape(18.dp))
+            .shadow(14.dp, RoundedCornerShape(PIP_CORNER))
+            .clip(RoundedCornerShape(PIP_CORNER))
             .background(Surface900)
             // The same green every other tile uses, so "that one is talking"
             // reads the same whoever it is.
             .border(
                 if (speaking) 2.5.dp else 1.5.dp,
                 if (speaking) StatusOnline else Color.White.copy(alpha = 0.22f),
-                RoundedCornerShape(18.dp),
+                RoundedCornerShape(PIP_CORNER),
             ),
     ) {
         if (track != null) {
@@ -930,6 +1084,8 @@ private fun FloatingPipTile(
                 eglContext = eglContext,
                 overlay = true,
                 mirror = true,
+                corner = PIP_CORNER,
+                cornerColor = Surface900,
                 modifier = Modifier.fillMaxSize(),
             )
         } else {
@@ -1048,6 +1204,8 @@ private fun CallTile(
                 fit = fit,
                 overlay = isLocal,
                 mirror = isLocal,
+                corner = if (isCompact) 12.dp else 18.dp,
+                cornerColor = Surface900,
                 modifier = Modifier.fillMaxSize(),
             )
         } else {
