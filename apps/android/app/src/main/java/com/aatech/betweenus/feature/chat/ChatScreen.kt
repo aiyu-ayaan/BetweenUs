@@ -169,25 +169,6 @@ fun ChatScreen(
     val outboxFailures by Outbox.failures.collectAsState()
     val sendingHere = outgoing?.takeIf { it.channelId == channelId }
 
-    // Opening a channel starts at the newest message, without an animation - a
-    // conversation you have just walked into has no "before" to scroll from.
-    // Keyed on whether there are messages at all, so the first page landing
-    // fires it once.
-    LaunchedEffect(channelId, messages.isNotEmpty()) {
-        if (messages.isNotEmpty()) listState.scrollToItem(messages.lastIndex, SCROLL_PAST_END)
-    }
-
-    // A message arrived. Keyed on the newest id rather than the count, because
-    // switching between two channels holding the same number of messages
-    // changes neither - which is why the list used to open somewhere in the
-    // middle of a conversation it had never shown before.
-    val newest = messages.lastOrNull()?.id
-    LaunchedEffect(newest) {
-        if (newest != null && following) {
-            listState.animateScrollToItem(messages.lastIndex, SCROLL_PAST_END)
-        }
-    }
-
     /**
      * Rows grow after they have been laid out.
      *
@@ -211,6 +192,23 @@ fun ChatScreen(
      * `messages.isNotEmpty()` off that and did nothing for the rest of the
      * session: no re-anchoring when a picture decoded, and none when the
      * keyboard came up.
+     *
+     * It is also the *only* thing that scrolls the list to the bottom, and
+     * that is deliberate. There used to be two more: one on opening a channel
+     * and one on every new message. A `LazyListState` serialises scrolls
+     * through a mutex where the newcomer cancels the incumbent, and being
+     * cancelled here does not mean "that scroll was skipped" - it means this
+     * coroutine dies, taking the correction and the latch with it for the rest
+     * of the channel. Which is what "the chat stops following after a while"
+     * was: send a message, the new-message scroll cancels the correction
+     * mid-flight, and nothing scrolls to the bottom again.
+     *
+     * Both are covered by the rule already here. A channel opening is a list
+     * whose end is off screen, and a message arriving is a list whose end has
+     * moved past the bottom; either way the gap is positive and the view is
+     * still following. The remaining cancellations come from somewhere the
+     * reader asked to go - jumping to a quote - so the scroll is caught rather
+     * than allowed to end the collection.
      */
     LaunchedEffect(listState, channelId) {
         var previous = listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset
@@ -229,7 +227,9 @@ fun ChatScreen(
             previous = position
             val last = listState.layoutInfo.totalItemsCount - 1
             if (following && gap > 0 && last >= 0) {
-                listState.scrollToItem(last, SCROLL_PAST_END)
+                // Cancelled by a scroll the reader started - a jump to a quote.
+                // Theirs wins; this collection carries on.
+                runCatching { listState.scrollToItem(last, SCROLL_PAST_END) }
             }
         }
     }
