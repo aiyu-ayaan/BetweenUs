@@ -711,8 +711,37 @@ Calls:
       the spelling or the feature; it now offers what it finds, friends-only,
       with those already in the server filtered out.
 
+Release:
+
+- [x] **A release can be for one platform.** A marker may name what it is for -
+      `!alpha(android)`, `!fix(android,desktop)`, `!feat(docker)` - and only
+      that is built. The names are read as platforms only when the whole scope
+      is platform names, so `!feat(chat)` is still a scoped feature that builds
+      everything; half a platform list is not one, and treating it as one would
+      ship a release with two thirds of it missing.
+- [x] **What a release skips is carried into it, not left behind.** The images
+      of the last release are re-tagged under the new version - `imagetools
+      create` copies the manifest list whole, both architectures, no rebuild
+      and no pull - and its installers and APKs are re-attached. So
+      `<service>-<version>` exists for every service of every version, `latest`
+      never points at a partial set, and a Release always has a full download
+      list. It carries transitively: assets carried into v0.0.6 are v0.0.6
+      assets, and v0.0.7 takes them from there.
+- [x] **The notes say which is which.** Every entry ends with a table naming
+      each platform and either "Built here" or the release its artifacts came
+      from. It goes into `CHANGELOG.md`, not only into the GitHub Release, so it
+      is in the release PR's diff where it can still be argued with.
+- [x] **What a release builds survives the merge.** A merge commit's subject
+      says nothing and `git show --name-only` prints nothing for one, so the
+      target list is written to `.github/release-targets` by the release PR and
+      read back after it merges - the one shape that carries through a squash, a
+      rebase and a merge commit alike. Absent, it means everything, which is what
+      every release before this did.
+
 Documentation:
 
+- [x] **`RELEASING.md`** in `development/`: the two steps, the markers, the
+      per-platform scopes and what carrying forward actually does.
 - [x] **`FCM/`** in the repository root: the architecture and the setup in
       `README.md`, the wire format and the order of the gates in `PAYLOADS.md`,
       and what to try first in `TESTING.md`.
