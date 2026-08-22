@@ -4,7 +4,7 @@ sidebar_position: 1
 
 # Database Schema
 
-Source of truth: [`packages/database/prisma/schema.prisma`](https://github.com/aiyu-ayaan/Nexora/blob/master/packages/database/prisma/schema.prisma).
+Source of truth: [`packages/database/prisma/schema.prisma`](https://github.com/aiyu-ayaan/BetweenUs/blob/master/packages/database/prisma/schema.prisma).
 One Prisma schema for the MVP, shared by auth-, server- and chat-service —
 each service touches only the models it owns; splitting per service later is
 a migration, not a rewrite, because every model is already accessed only by

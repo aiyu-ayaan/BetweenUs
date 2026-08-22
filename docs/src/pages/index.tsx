@@ -38,7 +38,7 @@ function HomepageHeader() {
           </Link>
           <Link
             className="button button--secondary button--lg"
-            href="https://github.com/aiyu-ayaan/Nexora">
+            href="https://github.com/aiyu-ayaan/BetweenUs">
             View on GitHub
           </Link>
         </div>

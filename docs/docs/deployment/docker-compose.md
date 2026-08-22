@@ -5,7 +5,7 @@ sidebar_position: 1
 # Docker Compose
 
 All backend services are containerized, built from one shared
-[`infrastructure/docker/Dockerfile`](https://github.com/aiyu-ayaan/Nexora/blob/master/infrastructure/docker/Dockerfile)
+[`infrastructure/docker/Dockerfile`](https://github.com/aiyu-ayaan/BetweenUs/blob/master/infrastructure/docker/Dockerfile)
 with a `target` per service (it needs the whole workspace, the lockfile and
 `packages/`, not just one directory). Docker Compose is used for both dev
 and production; Kubernetes is a documented later option, not introduced

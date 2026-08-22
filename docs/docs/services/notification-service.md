@@ -30,5 +30,5 @@ The server answers what it can see: notifications off, a muted channel, a
 muted person. The device answers the rest: is this my own message, is the
 channel already on screen, are we inside quiet hours on this clock, does the
 message mention me — all of which require either window state or the
-channel key the server doesn't have. See [`FCM/README.md`](https://github.com/aiyu-ayaan/Nexora/blob/master/FCM/README.md)
+channel key the server doesn't have. See [`FCM/README.md`](https://github.com/aiyu-ayaan/BetweenUs/blob/master/FCM/README.md)
 for the push payload shape.

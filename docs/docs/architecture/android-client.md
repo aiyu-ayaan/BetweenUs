@@ -26,7 +26,7 @@ crypto (same epoch, a re-key, still readable both directions). **Media —
 calls and the remote-desktop viewer — is unverified**: a mesh needs two real
 ends, and nobody has yet put two physical devices in a call or driven a real
 agent's screen with this client. Full status, phase by phase:
-[`development/ANDROID_TODO.md`](https://github.com/aiyu-ayaan/Nexora/blob/master/development/ANDROID_TODO.md).
+[`development/ANDROID_TODO.md`](https://github.com/aiyu-ayaan/BetweenUs/blob/master/development/ANDROID_TODO.md).
 
 ## Modules
 
@@ -94,7 +94,7 @@ must produce the verifier itself to redeem the one-time code, so an app
 that merely intercepts the scheme (Android doesn't guarantee only one app
 can register it) holds a code it can't spend. Detail:
 [Auth & Permissions](/system-design/auth-and-permissions) and
-[`development/SECURITY.md`](https://github.com/aiyu-ayaan/Nexora/blob/master/development/SECURITY.md).
+[`development/SECURITY.md`](https://github.com/aiyu-ayaan/BetweenUs/blob/master/development/SECURITY.md).
 
 ## Push notifications
 
@@ -102,7 +102,7 @@ Firebase Cloud Messaging, data-only payloads — the server can't read a
 message body to put words in a push, so the notification is written on the
 device after it wakes. See
 [notification-service](/services/notification-service) and
-[`FCM/README.md`](https://github.com/aiyu-ayaan/Nexora/blob/master/FCM/README.md).
+[`FCM/README.md`](https://github.com/aiyu-ayaan/BetweenUs/blob/master/FCM/README.md).
 A direct call rings even with the app fully killed, via a `CallStyle`
 notification with a full-screen intent.
 

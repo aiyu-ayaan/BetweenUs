@@ -4,7 +4,7 @@ sidebar_position: 3
 
 # CI
 
-Source: [`.github/workflows/ci.yml`](https://github.com/aiyu-ayaan/Nexora/blob/master/.github/workflows/ci.yml).
+Source: [`.github/workflows/ci.yml`](https://github.com/aiyu-ayaan/BetweenUs/blob/master/.github/workflows/ci.yml).
 Runs on every push to `master` and every pull request.
 
 ## `verify`

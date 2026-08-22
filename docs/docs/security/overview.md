@@ -6,7 +6,7 @@ sidebar_position: 1
 
 Where the API decides who somebody is, what they may reach, and how much of
 it they may ask for — condensed from
-[`development/SECURITY.md`](https://github.com/aiyu-ayaan/Nexora/blob/master/development/SECURITY.md),
+[`development/SECURITY.md`](https://github.com/aiyu-ayaan/BetweenUs/blob/master/development/SECURITY.md),
 which is the full source and is kept current as the code changes.
 [E2EE](/security/e2ee) covers the other half: what the server can't read
 even when behaving perfectly.
@@ -113,4 +113,4 @@ tokens, secrets, and FCM push tokens are never logged.
   channel and when, and message size. See [E2EE](/security/e2ee).
 
 Full detail, including what to run to verify each of these (`pnpm -r
-check`): [`development/SECURITY.md`](https://github.com/aiyu-ayaan/Nexora/blob/master/development/SECURITY.md).
+check`): [`development/SECURITY.md`](https://github.com/aiyu-ayaan/BetweenUs/blob/master/development/SECURITY.md).

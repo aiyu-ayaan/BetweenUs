@@ -4,7 +4,7 @@ sidebar_position: 9
 
 # Testing
 
-Full source: [`development/TESTING.md`](https://github.com/aiyu-ayaan/Nexora/blob/master/development/TESTING.md).
+Full source: [`development/TESTING.md`](https://github.com/aiyu-ayaan/BetweenUs/blob/master/development/TESTING.md).
 
 ## Package self-checks
 

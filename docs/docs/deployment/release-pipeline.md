@@ -4,8 +4,8 @@ sidebar_position: 2
 
 # Release Pipeline
 
-Full source: [`development/RELEASING.md`](https://github.com/aiyu-ayaan/Nexora/blob/master/development/RELEASING.md)
-and [`.github/workflows/release.yml`](https://github.com/aiyu-ayaan/Nexora/blob/master/.github/workflows/release.yml).
+Full source: [`development/RELEASING.md`](https://github.com/aiyu-ayaan/BetweenUs/blob/master/development/RELEASING.md)
+and [`.github/workflows/release.yml`](https://github.com/aiyu-ayaan/BetweenUs/blob/master/.github/workflows/release.yml).
 
 One version number covers the server images, the Windows desktop build and
 the Android artifacts. A release doesn't have to rebuild all of it — what it

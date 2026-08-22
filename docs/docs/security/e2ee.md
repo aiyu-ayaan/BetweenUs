@@ -4,7 +4,7 @@ sidebar_position: 2
 
 # End-to-End Encryption
 
-Full source: [`development/E2EE.md`](https://github.com/aiyu-ayaan/Nexora/blob/master/development/E2EE.md).
+Full source: [`development/E2EE.md`](https://github.com/aiyu-ayaan/BetweenUs/blob/master/development/E2EE.md).
 
 ## Threat model
 

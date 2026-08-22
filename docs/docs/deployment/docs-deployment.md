@@ -5,7 +5,7 @@ sidebar_position: 4
 # Docs Deployment
 
 This site is built and deployed by
-[`.github/workflows/docs.yml`](https://github.com/aiyu-ayaan/Nexora/blob/master/.github/workflows/docs.yml),
+[`.github/workflows/docs.yml`](https://github.com/aiyu-ayaan/BetweenUs/blob/master/.github/workflows/docs.yml),
 following the same marker convention as [the release pipeline](/deployment/release-pipeline):
 a commit on `master` whose subject starts with `!docs` builds this
 Docusaurus site and publishes it. Unlike a release, there's no version to

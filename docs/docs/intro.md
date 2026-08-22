@@ -63,6 +63,6 @@ today, with web and Android planned in the same backend.
 | Containers | Docker Compose (dev + prod), one Dockerfile with multiple targets |
 
 Everything here is generated and maintained against the actual source in
-[github.com/aiyu-ayaan/Nexora](https://github.com/aiyu-ayaan/Nexora) — where a
+[github.com/aiyu-ayaan/BetweenUs](https://github.com/aiyu-ayaan/BetweenUs) — where a
 page and the code disagree, the code is right and this page is stale; open an
 issue.

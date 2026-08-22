@@ -13,7 +13,7 @@ sidebar_position: 8
 ## The backend, in a few commands
 
 ```bash
-git clone https://github.com/aiyu-ayaan/Nexora.git betweenus
+git clone https://github.com/aiyu-ayaan/BetweenUs.git betweenus
 cd betweenus
 cp .env.example .env
 

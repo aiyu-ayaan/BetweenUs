@@ -112,4 +112,4 @@ jobs:
         run: |
           echo "### Docs deployed" >> "$GITHUB_STEP_SUMMARY"
           echo "Pushed to \`gh-pages\` from \`${{ github.sha }}\`." >> "$GITHUB_STEP_SUMMARY"
-          echo "Served at https://aiyu-ayaan.github.io/Nexora/ once Pages is set to deploy from that branch." >> "$GITHUB_STEP_SUMMARY"
+          echo "Served at https://aiyu-ayaan.github.io/BetweenUs/ once Pages is set to deploy from that branch." >> "$GITHUB_STEP_SUMMARY"

@@ -31,14 +31,14 @@ const config: Config = {
   url: 'https://aiyu-ayaan.github.io',
   // GitHub Pages project pages (this repo isn't the special
   // aiyu-ayaan.github.io one, and there's no custom domain) can only serve
-  // from /Nexora/ - that's a GitHub Pages rule, not a Docusaurus setting.
+  // from /BetweenUs/ - that's a GitHub Pages rule, not a Docusaurus setting.
   // `docusaurus build` sets NODE_ENV=production, so production keeps the
   // real path while `docusaurus start` (NODE_ENV=development) runs at the
   // plain localhost:3000/ root for local convenience.
-  baseUrl: process.env.NODE_ENV === 'production' ? '/Nexora/' : '/',
+  baseUrl: process.env.NODE_ENV === 'production' ? '/BetweenUs/' : '/',
 
   organizationName: 'aiyu-ayaan',
-  projectName: 'Nexora',
+  projectName: 'BetweenUs',
 
   onBrokenLinks: 'warn',
   onBrokenMarkdownLinks: 'warn',
@@ -65,7 +65,7 @@ const config: Config = {
         docs: {
           sidebarPath: './sidebars.ts',
           routeBasePath: '/',
-          editUrl: 'https://github.com/aiyu-ayaan/Nexora/tree/master/docs/',
+          editUrl: 'https://github.com/aiyu-ayaan/BetweenUs/tree/master/docs/',
         },
         blog: false,
         theme: {
@@ -99,7 +99,7 @@ const config: Config = {
           label: 'Docs',
         },
         {
-          href: 'https://github.com/aiyu-ayaan/Nexora',
+          href: 'https://github.com/aiyu-ayaan/BetweenUs',
           label: 'GitHub',
           position: 'right',
         },
@@ -119,7 +119,7 @@ const config: Config = {
         {
           title: 'Project',
           items: [
-            {label: 'GitHub', href: 'https://github.com/aiyu-ayaan/Nexora'},
+            {label: 'GitHub', href: 'https://github.com/aiyu-ayaan/BetweenUs'},
             {label: 'Changelog', to: '/changelog'},
           ],
         },
