@@ -1,5 +1,6 @@
 package com.aatech.betweenus.feature.chat
 
+import android.net.Uri
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.expandVertically
@@ -7,7 +8,12 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.content.MediaType
+import androidx.compose.foundation.content.consume
+import androidx.compose.foundation.content.contentReceiver
+import androidx.compose.foundation.content.hasMediaType
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -80,8 +86,10 @@ import com.aatech.betweenus.ui.theme.Surface950
  *   chip on this bar: nothing is uploaded until the preview is sent from)
  * - Quick Camera button (automatically hidden when keyboard is open or when typing)
  * - Circular Accent Send button
+ * - A pasted or keyboard-inserted picture, which goes to the send preview
+ *   rather than into the text - see [onPasteMedia]
  */
-@OptIn(ExperimentalLayoutApi::class)
+@OptIn(ExperimentalLayoutApi::class, ExperimentalFoundationApi::class)
 @Composable
 fun Composer(
     channelId: String,
@@ -91,6 +99,16 @@ fun Composer(
     onCancelReply: () -> Unit,
     onPickFile: () -> Unit,
     onCameraClick: () -> Unit,
+    /**
+     * A picture that arrived through the text field rather than the paperclip:
+     * pasted from the clipboard, or inserted by the keyboard - a Gboard sticker
+     * or GIF comes down the same path.
+     *
+     * It is handed on rather than handled here, because it is not text and this
+     * bar has nowhere to keep it. The screen puts it in the send preview, which
+     * is where everything about to be sent is looked at first.
+     */
+    onPasteMedia: (Uri) -> Unit,
     onSend: (String) -> Unit,
 ) {
     // A caret position, not just a string: the `:` menu has to know what is
@@ -290,7 +308,25 @@ fun Composer(
                             capitalization = KeyboardCapitalization.Sentences,
                             imeAction = ImeAction.Default,
                         ),
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .contentReceiver { received ->
+                                if (!received.hasMediaType(MediaType.Image)) {
+                                    return@contentReceiver received
+                                }
+                                // What is consumed here does not reach the
+                                // field; whatever is left - the text half of a
+                                // rich paste - still does.
+                                received.consume { item ->
+                                    val uri = item.uri
+                                    if (uri != null) {
+                                        onPasteMedia(uri)
+                                        true
+                                    } else {
+                                        false
+                                    }
+                                }
+                            },
                     )
                 }
 

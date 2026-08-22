@@ -557,6 +557,10 @@ fun ChatScreen(
             onCancelReply = { replyingTo = null },
             onPickFile = { showAttachmentSheet = true },
             onCameraClick = { cameraPermission.request() },
+            // A pasted picture is a picked picture. Same preview, same Send.
+            onPasteMedia = { uri ->
+                scope.launch { previewing = previewing + describePicked(context, uri) }
+            },
             onSend = { text ->
                 scope.launch {
                     val target = editing
