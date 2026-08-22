@@ -1,38 +1,43 @@
 #!/bin/sh
-# Install or upgrade a BetweenUs deployment without cloning the repository.
+# Fetch everything a BetweenUs deployment needs, without cloning the repository.
 #
 #   curl -fsSL https://raw.githubusercontent.com/aiyu-ayaan/BetweenUs/master/scripts/install.sh | sh
 #   curl -fsSL .../install.sh | sh -s -- --dir /srv/betweenus --version alpha
 #
 # The stack runs from published images, so the only things a host actually
 # needs are the compose file, the Nginx config it mounts, the backup script it
-# mounts, and a .env. This fetches those four and starts the stack. The layout
-# it writes is the repository's, so every command in DEPLOYMENT.md works
-# unchanged in the directory this creates.
+# mounts, and a .env. This copies those four in and stops there: you edit .env -
+# at minimum PUBLIC_API_URL - and start the stack yourself. It never starts
+# anything, so it cannot bring a half-configured deployment up.
 #
-# Re-running is the upgrade path: the three tracked files are refreshed, .env
-# is left exactly as it is, and the images are pulled again.
+# The layout it writes is the repository's, so every command in DEPLOYMENT.md
+# works unchanged in the directory it creates.
+#
+# Re-running is the upgrade path: the three tracked files are refreshed and
+# .env is left exactly as it is.
 set -eu
 
 REPO="${BETWEENUS_REPO:-aiyu-ayaan/BetweenUs}"
 REF="${BETWEENUS_REF:-master}"
 DIR=""
 VERSION=""
-START=1
+
+usage() {
+  cat <<'USAGE'
+install.sh - fetch a BetweenUs deployment's files. Starts nothing.
+
+  --dir PATH        where to put them        (default ./betweenus)
+  --version TAG     BETWEENUS_VERSION: a release, or alpha/beta/latest
+  --ref REF         branch or tag to fetch the files from (default master)
+USAGE
+}
 
 while [ $# -gt 0 ]; do
   case "$1" in
     --dir) DIR="${2:?--dir needs a path}"; shift 2 ;;
     --version) VERSION="${2:?--version needs a tag or channel}"; shift 2 ;;
     --ref) REF="${2:?--ref needs a branch or tag}"; shift 2 ;;
-    --no-start) START=0; shift ;;
-    -h|--help)
-      sed -n '2,14p' "$0" 2>/dev/null || true
-      echo "  --dir PATH        where to install        (default ./betweenus)"
-      echo "  --version TAG     BETWEENUS_VERSION       (default latest)"
-      echo "  --ref REF         branch/tag to fetch the compose files from"
-      echo "  --no-start        write the files, start nothing"
-      exit 0 ;;
+    -h|--help) usage; exit 0 ;;
     *) DIR="$1"; shift ;;
   esac
 done
@@ -41,9 +46,9 @@ DIR="${DIR:-${BETWEENUS_DIR:-./betweenus}}"
 die() { echo "install: $*" >&2; exit 1; }
 say() { echo "==> $*"; }
 
-command -v docker >/dev/null 2>&1 || die "docker is not installed"
-docker compose version >/dev/null 2>&1 || die "the docker compose plugin is missing (docker-compose v1 is not enough)"
 command -v curl >/dev/null 2>&1 || die "curl is required"
+command -v docker >/dev/null 2>&1 ||
+  echo "install: warning - docker is not on this machine's PATH. The files are still written." >&2
 
 RAW="https://raw.githubusercontent.com/$REPO/$REF"
 fetch() { curl -fsSL "$RAW/$1" -o "$2" || die "could not fetch $1 from $REPO@$REF"; }
@@ -102,41 +107,51 @@ fi
 
 [ -n "$VERSION" ] && set_env BETWEENUS_VERSION "$VERSION"
 
+HERE=$(pwd)
 C="docker compose --env-file .env -f infrastructure/docker/docker-compose.yml"
-
-if [ "$START" -eq 0 ]; then
-  say "files written to $(pwd). Start it with:"
-  echo "    $C pull && $C up -d"
-  exit 0
-fi
-
-say "pulling images"
-$C pull
-say "starting"
-$C up -d
 
 cat <<EOF
 
-BetweenUs is up in $(pwd).
+Files are in $HERE
 
-  health      curl -s http://localhost:8080/health
-  logs        $C logs -f
-  stop        $C down
-  upgrade     re-run this installer in this directory
+  .env                                    generated secrets, yours to edit
+  infrastructure/docker/docker-compose.yml
+  infrastructure/docker/backup.sh
+  infrastructure/nginx/nginx.conf
 
 EOF
 
 if [ "$FRESH" -eq 1 ]; then
-  cat <<'EOF'
-Two things left, both in DEPLOYMENT.md:
+  cat <<EOF
+Next, in that order:
 
-  1. Set PUBLIC_API_URL in .env to the public URL this deployment answers on,
-     then `docker compose ... up -d` again. OAuth callbacks are built from it.
-  2. Create the first administrator - there is no sign-up for the panel:
+  1. Edit .env. The secrets are generated; what only you can decide is
+     PUBLIC_API_URL - the public URL this deployment answers on, which the
+     OAuth callback is built from - and, if you are publishing it,
+     CLOUDFLARE_TUNNEL_TOKEN. DEPLOYMENT.md section 3 is the whole table.
 
-     docker compose --env-file .env -f infrastructure/docker/docker-compose.yml \
-       run --rm -w /repo/packages/database migrate \
-       ./node_modules/.bin/tsx prisma/create-admin.ts
+       cd $HERE && \${EDITOR:-nano} .env
+
+  2. Start the stack.
+
+       $C pull
+       $C up -d
+
+  3. Create the first administrator - there is no sign-up for the panel.
+
+       $C run --rm -w /repo/packages/database migrate ./node_modules/.bin/tsx prisma/create-admin.ts
+
+  4. Check it.
+
+       curl -s http://localhost:8080/health
+
+EOF
+else
+  cat <<EOF
+That was an upgrade: .env was left alone. Apply it with
+
+  $C pull
+  $C up -d
 
 EOF
 fi

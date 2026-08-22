@@ -401,18 +401,27 @@ clients, on ports negotiated per call.
 
 A deployment runs published images, so a server needs the compose file, the two
 files it mounts and a `.env` - not a checkout of source no container reads. One
-command fetches those and starts the stack:
+command copies those in:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/aiyu-ayaan/BetweenUs/master/scripts/install.sh | sh
 ```
 
-It writes `./betweenus` in the repository's own layout, generates the secrets,
-pulls the images and brings everything up. `--dir /srv/betweenus` puts it
-elsewhere, `--version alpha` follows a release channel instead of `latest`, and
-`--no-start` writes the files without starting anything. Re-running it in the
-same directory is the upgrade: the three fetched files are refreshed, `.env` is
-left exactly as it was, and the images are pulled again.
+It writes `./betweenus` in the repository's own layout and generates the
+secrets, then stops - **it starts nothing**. Edit `.env` (at minimum
+`PUBLIC_API_URL`), then bring the stack up yourself:
+
+```bash
+cd betweenus
+docker compose --env-file .env -f infrastructure/docker/docker-compose.yml pull
+docker compose --env-file .env -f infrastructure/docker/docker-compose.yml up -d
+```
+
+`--dir /srv/betweenus` puts the files elsewhere, `--version alpha` follows a
+release channel instead of `latest`, and `--ref` picks the branch or tag the
+files come from. Re-running it in the same directory is the upgrade: the three
+fetched files are refreshed, `.env` is left exactly as it was, and the same two
+compose commands apply it.
 
 Cloning still works and is what you want to build the images yourself or to
 develop against them. `DEPLOYMENT.md` covers both paths, and everything after

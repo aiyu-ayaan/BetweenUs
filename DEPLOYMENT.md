@@ -118,8 +118,8 @@ There are two ways to get a host ready, and they differ only in this step.
 
 The stack runs published images, so a host needs four files - the compose file,
 the Nginx config and the backup script it mounts, and a `.env`. Nothing in a
-checkout of the source is read by any container. One command fetches those four
-and starts the stack:
+checkout of the source is read by any container. One command copies those four
+in:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/aiyu-ayaan/BetweenUs/master/scripts/install.sh | sh
@@ -130,7 +130,10 @@ curl -fsSL https://raw.githubusercontent.com/aiyu-ayaan/BetweenUs/master/scripts
 | `--dir PATH` | Where to install. Default `./betweenus` |
 | `--version TAG` | Sets `BETWEENUS_VERSION` - a release like `0.0.1`, or a channel: `alpha`, `beta`, `latest` |
 | `--ref REF` | Which branch or tag the compose files come from. Default `master` |
-| `--no-start` | Write the files, start nothing |
+
+It **starts nothing**. It cannot: `PUBLIC_API_URL` is a decision only you can
+make, and a stack brought up without it has an OAuth callback pointing at the
+wrong host. Editing `.env` and running §5 is the next step, and both are yours.
 
 Pass flags through the pipe with `sh -s --`:
 
@@ -153,13 +156,14 @@ document works unchanged inside that directory:
 
 `.env` is `.env.example` with `POSTGRES_PASSWORD`, `JWT_SECRET`,
 `JWT_REFRESH_SECRET` and `SETTINGS_SECRET` generated, `DATABASE_URL` and
-`REDIS_URL` pointed at the compose hostnames, and `NODE_ENV=production`. Two
-things it cannot decide for you: `PUBLIC_API_URL`, which the OAuth callback is
-built from, and the first administrator (§6). The table below is the rest.
+`REDIS_URL` pointed at the compose hostnames, and `NODE_ENV=production`. What
+is left to you is the table below - `PUBLIC_API_URL` above all, and
+`CLOUDFLARE_TUNNEL_TOKEN` if the tunnel is to run as a container. Edit it, then
+§5 brings the stack up.
 
 **Re-running it in the same directory is the upgrade.** The three fetched files
-are refreshed, `.env` is left exactly as it is, and the images are pulled again -
-so an upgrade is one command and no merge.
+are refreshed and `.env` is left exactly as it is, so an upgrade is one command
+and no merge; §5's two commands then apply it.
 
 ### Or: a clone
 
@@ -745,21 +749,19 @@ history, and no server-side backup changes that. This is the intended property,
 and `development/E2EE.md` states its limits plainly.
 
 **Upgrades.** Installed with §3's installer, re-run it in the deployment's
-directory: it refreshes the compose file and the two files it mounts, leaves
-`.env` alone, and pulls again.
+directory to refresh the compose file and the two files it mounts - it leaves
+`.env` alone - and then pull:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/aiyu-ayaan/BetweenUs/master/scripts/install.sh \
   | sh -s -- --dir /srv/betweenus
-```
-
-Without it - a clone, or a pinned `BETWEENUS_VERSION` you are moving by hand:
-
-```bash
-git pull                                              # a clone only
+cd /srv/betweenus
 docker compose --env-file .env -f infrastructure/docker/docker-compose.yml pull
 docker compose --env-file .env -f infrastructure/docker/docker-compose.yml up -d
 ```
+
+From a clone it is `git pull` in place of the first command, and the same two
+after it.
 
 The `migrate` one-shot runs again before any service takes traffic, so schema
 changes apply in the right order - and `db-backup-once` runs before *it*, so the
