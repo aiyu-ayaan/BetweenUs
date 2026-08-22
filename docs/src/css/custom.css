@@ -45,6 +45,161 @@
   padding-bottom: 0.4rem;
 }
 
+.markdown h3 {
+  --ifm-h3-font-size: 1.15rem;
+}
+
 .navbar__title {
   font-weight: 700;
+}
+
+/* Navbar: an accent underline on the active top-level link instead of the
+   default flat highlight, and a tighter border under the whole bar. */
+.navbar {
+  border-bottom: 1px solid var(--ifm-toc-border-color);
+  box-shadow: none;
+}
+
+.navbar__link--active {
+  color: var(--betweenus-iris);
+}
+
+/* Sidebar: current page reads as a filled pill with a left accent bar,
+   not Infima's flat background-tint default. */
+.theme-doc-sidebar-container {
+  border-right: 1px solid var(--ifm-toc-border-color) !important;
+}
+
+.menu__link {
+  border-radius: 8px;
+  transition: background-color 0.12s ease, color 0.12s ease;
+}
+
+.menu__link:hover {
+  background-color: var(--betweenus-iris-soft);
+}
+
+.menu__link--active:not(.menu__link--sublist) {
+  background-color: var(--betweenus-iris-soft);
+  color: var(--betweenus-iris);
+  font-weight: 600;
+  box-shadow: inset 3px 0 0 0 var(--betweenus-iris);
+}
+
+.menu__list-item-collapsible:hover {
+  background: transparent;
+}
+
+.menu__list-item-collapsible--active .menu__link,
+.menu__list-item-collapsible--active .menu__link:hover {
+  background: transparent;
+  color: var(--betweenus-iris);
+}
+
+/* Table of contents: a left rail marker on the active heading. */
+.table-of-contents {
+  border-left: 1px solid var(--ifm-toc-border-color);
+  padding-left: 0.9rem;
+}
+
+.table-of-contents__link {
+  border-left: 2px solid transparent;
+  padding-left: 0.7rem;
+  margin-left: -0.9rem;
+  transition: color 0.12s ease, border-color 0.12s ease;
+}
+
+.table-of-contents__link--active,
+.table-of-contents__link:hover {
+  color: var(--betweenus-iris);
+  border-left-color: var(--betweenus-iris);
+}
+
+/* Breadcrumbs: quieter separators, accent on the current page. */
+.breadcrumbs__link {
+  border-radius: 6px;
+}
+
+.breadcrumbs__item--active .breadcrumbs__link {
+  background: var(--betweenus-iris-soft);
+  color: var(--betweenus-iris);
+}
+
+/* Inline code and fenced code blocks. */
+:not(pre) > code {
+  background: var(--betweenus-iris-soft);
+  color: var(--betweenus-iris);
+  border: 1px solid color-mix(in srgb, var(--betweenus-iris) 25%, transparent);
+  border-radius: 5px;
+  padding: 0.12em 0.4em;
+}
+
+div[class^='codeBlockContainer'] {
+  border: 1px solid var(--ifm-toc-border-color);
+  border-radius: 10px;
+}
+
+/* Tables: rounded frame instead of Infima's plain ruled grid. */
+table {
+  display: table;
+  border: 1px solid var(--ifm-toc-border-color);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+table thead tr {
+  background-color: var(--ifm-background-surface-color);
+}
+
+table tr:nth-child(2n) {
+  background-color: color-mix(
+    in srgb,
+    var(--ifm-background-surface-color) 60%,
+    transparent
+  );
+}
+
+/* Admonitions: iris-tinted "note" to match the rest of the site instead of
+   Infima's default blue. */
+.alert--secondary {
+  --ifm-alert-background-color: var(--betweenus-iris-soft);
+  --ifm-alert-border-color: var(--betweenus-iris);
+  --ifm-alert-color: var(--ifm-font-color-base);
+}
+
+/* Prev/next pagination cards at the bottom of every page. */
+.pagination-nav__link {
+  border: 1px solid var(--ifm-toc-border-color);
+  border-radius: 10px;
+  transition: border-color 0.12s ease, transform 0.12s ease;
+}
+
+.pagination-nav__link:hover {
+  border-color: var(--betweenus-iris);
+  transform: translateY(-2px);
+}
+
+.pagination-nav__sublabel {
+  color: var(--ifm-color-emphasis-600);
+}
+
+/* Mermaid diagrams: frame them like a card so they don't float loose on
+   the page background. */
+.docusaurus-mermaid-container {
+  border: 1px solid var(--ifm-toc-border-color);
+  border-radius: 10px;
+  padding: 1rem;
+  background: var(--ifm-background-surface-color);
+}
+
+/* "Generated index" category pages (Architecture, Services, etc.) */
+article a.card {
+  border: 1px solid var(--ifm-toc-border-color);
+  transition: border-color 0.12s ease, transform 0.12s ease;
+}
+
+article a.card:hover {
+  border-color: var(--betweenus-iris);
+  transform: translateY(-2px);
+  box-shadow: 0 12px 24px -16px var(--betweenus-glow);
 }
