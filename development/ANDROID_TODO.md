@@ -192,6 +192,18 @@ carries on under `UploadService` - a foreground service with an ongoing
 notification, which is both the disclosure Android requires and the progress
 bar somebody wants. The composer draws the same progress above it.
 
+**And that is now true of every attachment, not only the ones with a
+thumbnail.** A PDF, a spreadsheet or an audio file took a second path: read,
+sealed and uploaded inline in the chat screen the instant it was picked, in
+that screen's scope, which dies with the screen - so leaving the channel or
+taking a call killed the upload with its parts already in object storage. It
+also meant the one thing nobody could do was check what they had picked before
+it went. Everything now lands in the send preview, where a file with nothing to
+look at gets a card with its name and type, and sending hands the whole batch
+to `Outbox`. The composer's attachment chips and its spinner went with the old
+path, along with the preview's own busy state: a hand-off that returns at once
+has nothing to wait on.
+
 A video is re-encoded to 720p H.264 at 2.5 Mbps by Media3's Transformer before
 it is sealed, which is the difference between a clip arriving in seconds and a
 clip arriving in ten minutes. Every failure path ends in "send what was
@@ -204,7 +216,8 @@ the same photograph and have to agree what "the frame" means.
 
 **None of this has been in front of a human on a device.** The compression path
 is the one to try first, on a long 4K clip, and then with the app backgrounded
-mid-upload.
+mid-upload - and now the same test with a large PDF, which is the case that
+used to die and should not any more.
 
 Everything else that was open here is tracked in `TRACK.md` and is being worked
 through: markdown bodies, an emoji picker, audio
