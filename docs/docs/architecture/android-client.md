@@ -10,7 +10,7 @@ API exists on any service. Where the client needs a reference
 implementation to match, that's `apps/desktop/src/...` and the shared
 contract in `packages/shared-types`.
 
-<p>
+<p style={{textAlign: 'center'}}>
   <img src="/Nexora/img/home-android.jpeg" alt="BetweenUs Android client" style={{maxWidth: '360px', width: '100%', borderRadius: '12px', border: '1px solid var(--ifm-toc-border-color)'}} />
 </p>
 
