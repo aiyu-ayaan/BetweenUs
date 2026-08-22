@@ -123,33 +123,50 @@ EOF
 
 if [ "$FRESH" -eq 1 ]; then
   cat <<EOF
-Next, in that order:
+Next, in that order. Every command below is run from $HERE:
+
+  cd $HERE
 
   1. Edit .env. The secrets are generated; what only you can decide is
      PUBLIC_API_URL - the public URL this deployment answers on, which the
      OAuth callback is built from - and, if you are publishing it,
      CLOUDFLARE_TUNNEL_TOKEN. DEPLOYMENT.md section 3 is the whole table.
 
-       cd $HERE && \${EDITOR:-nano} .env
+       \${EDITOR:-nano} .env
 
   2. Start the stack.
 
        $C pull
        $C up -d
 
+     Bringing its own Cloudflare Tunnel up too, once CLOUDFLARE_TUNNEL_TOKEN
+     is set - leave this out when a cloudflared already runs on the host:
+
+       $C --profile public up -d
+
   3. Create the first administrator - there is no sign-up for the panel.
+     The password is printed once.
 
        $C run --rm -w /repo/packages/database migrate ./node_modules/.bin/tsx prisma/create-admin.ts
 
-  4. Check it.
+  4. Check it, and read the logs if it does not answer.
 
        curl -s http://localhost:8080/health
+       $C ps
+       $C logs -f --tail=100
+
+Day to day:
+
+  stop            $C down
+  one-off backup  $C run --rm -e BACKUP_ON_MIGRATE=1 db-backup-once
+  upgrade         re-run this installer, then $C pull && $C up -d
 
 EOF
 else
   cat <<EOF
 That was an upgrade: .env was left alone. Apply it with
 
+  cd $HERE
   $C pull
   $C up -d
 
