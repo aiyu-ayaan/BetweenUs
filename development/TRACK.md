@@ -821,6 +821,27 @@ Calls — the second pass over the call screen:
       which is the thing that was just plugged in - wins. A `setSinkId` for a
       device that has gone now falls back to `default` instead of leaving the
       element wherever it was.
+- [x] **The tile stuck on "Connecting…" after a call moves between devices.**
+      Two faults, both of them a link that can never recover, and both on every
+      client. The first: the channel-key re-read was allowed **once per peer**
+      and then never again, so a link could survive exactly one epoch change.
+      One is normal - joining a channel you hold no key for mints the next
+      epoch, which is precisely what a device arriving does - and burning it on
+      the first description left every one after that refused against a key
+      known to be stale, with nothing left that would ever look again. It is a
+      cooldown now, which keeps the property the latch was there for: a proof
+      that is simply wrong still cannot make a client hammer the key directory.
+      The second: **nothing chases an offer that is never answered.**
+      `connectionState` only reaches `failed` once ICE has a remote description
+      to fail against, so a refused offer leaves the connection in `new` with no
+      event ever fired and no recovery path to enter - the desktop's ICE-restart
+      path and Android's recovery loop both hang off a failure that never
+      happens. The offering side now re-offers from `new`, four times, re-reading
+      the key first; only the impolite side, and only from `new`, so a link that
+      is genuinely negotiating on a slow network is left alone. And on desktop a
+      refused description no longer *drops* the link: nothing re-adds one, so the
+      far end's next offer arrived for a peer that no longer existed, and one
+      refusal ended that pair for the life of the call.
 - [x] **The same on Android, for the whole call rather than for the sheet.** The
       `AudioDeviceCallback` lived in `rememberCallDevices`, which only exists
       while the device picker is open - so the one gesture it was meant to
@@ -849,25 +870,6 @@ blocked by anything outside this document.
       `user-service`.** The largest single item on this list and the one with
       the widest blast radius; profiles, avatars and friends are served by
       chat-service today.
-
-### Calls
-
-- [ ] **A tile stuck on "Connecting…" after the call moves between devices.**
-      Reported from a real call: two people on the web client, one of them then
-      joins from the phone, and the person who stayed put is left with the
-      newcomer's tile on "Connecting…" for the rest of the call - while the same
-      link looks connected from the other end. One call per account is enforced
-      by superseding the old socket, so the sequence the remaining peer sees is
-      `peer.left` for the old peer id and `peer.joined` for the new one, and
-      every part of that is handled on both clients when read on its own.
-      Nothing in the code says which half is wrong, and guessing at perfect
-      negotiation is how working calls get broken, so this wants the thing
-      neither client currently produces: the signalling and connection-state
-      trace from *both* ends of one reproduction. Suspects, in order - the
-      channel-key epoch re-read racing the offer that arrives during it; the
-      desktop's single ICE restart, after which `onFailed` drops the link for
-      good and nothing ever re-adds it; and a peer id that has moved on since
-      the polite comparison was made.
 
 ### Desktop and web
 
@@ -1152,3 +1154,16 @@ The cases most worth putting a person in front of, in order:
     and take it off again. Last, the failure that has no sound to it - pick a
     wired headset explicitly, unplug it, and confirm the call comes out of the
     phone rather than out of nothing.
+
+35. **A call moved between devices, which is the one with a report behind it.**
+    Two accounts in a call from the web client; one of them joins the same call
+    from the phone. The person who stayed put must see the newcomer's tile go
+    from "Connecting…" to a live one within a few seconds - and if it does not,
+    it must recover on its own within about half a minute rather than staying
+    there. Do it the other way round as well, phone first and web second,
+    because who offers is a peer-id comparison and only one of the two orderings
+    was ever the visible failure. Then the harder version: move a call between
+    devices twice in a row, and move it while a third person is in it. What is
+    being watched for is a link that comes back late, which now happens and did
+    not before, and a call that renegotiates when it did not need to, which is
+    what the "only from `new`" rule exists to prevent.

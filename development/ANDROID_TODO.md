@@ -186,6 +186,28 @@ full-screen tiles and the share stage keep `SurfaceViewRenderer`: they have an
 opaque background for the mask to work against, and they are the ones where the
 per-frame cost would be paid on the whole screen.
 
+### The tile that said "connecting…" for the life of the call
+
+Two faults, both of them a link with no way back.
+
+The channel-key re-read was allowed once per peer and then never again, so a
+link could survive exactly one epoch change. One is normal - joining a channel
+you hold no key for mints the next epoch, which is what a device arriving does -
+and burning it on the first description left every one after that refused
+against a key known to be stale, with nothing left that would ever look again.
+It is a five-second cooldown now, which keeps what the latch was for: a proof
+that is simply wrong still cannot make this client hammer the key directory.
+
+And nothing chased an offer that was never answered. `onConnectionChange` only
+reaches `FAILED` once ICE has a remote description to fail against, so a refused
+offer leaves the connection in `NEW` with no callback ever fired - and both the
+recovery loop and the ICE restart hang off a failure that never happens. The
+offering side now re-offers from `NEW`, up to `CallRecovery.MAX_ATTEMPTS` times,
+re-reading the key first. Only the impolite side, because only it may offer, and
+only from `NEW`: a connection with a remote description is negotiating, and
+offering over the top of a slow network would break the calls that were about to
+work.
+
 ### Incoming video that flickered
 
 A video slot counts as live once a frame has actually been decoded on it, because
