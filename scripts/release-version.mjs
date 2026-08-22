@@ -12,6 +12,25 @@
 //            0.0.2-beta.1  -> 0.0.2-beta.2
 //   !stable  0.0.2-beta.2 -> 0.0.2          promote to stable, no bump
 //
+// WHAT A RELEASE BUILDS
+//
+// A marker may name the platforms it is for, in the scope position:
+//
+//   !alpha(android)          only the Android artifacts are built
+//   !fix(android,desktop)    both clients, no server images
+//   !feat                    everything, which is what an unscoped marker means
+//
+// The names are `docker` (every server image, `web` and `admin-web` among
+// them), `desktop` and `android`, with a few aliases. Anything else in the
+// scope is a conventional-commit scope and not a platform: `!feat(chat): x`
+// builds all three, because `chat` is not a platform and guessing that it was
+// meant as one would silently ship a release with two thirds of it missing.
+//
+// A platform left out is not left behind. Its previous artifacts are carried
+// into the new release - the images are re-tagged under the new version, the
+// installers and APKs are attached to it - so every version is a complete set
+// whatever was rebuilt for it. See the table the notes carry.
+//
 // A push with no marker is not a release. When several pushed commits carry
 // markers the strongest wins, in the order listed above - a push containing
 // both !fix and !alpha is a stable fix, because the alpha it would have
@@ -34,6 +53,28 @@ const CHANNELS = { alpha: 1, beta: 2 };
 const MARKERS = ['major', 'feat', 'fix', 'stable', 'beta', 'alpha'];
 
 const VERSION_RE = /^(\d+)\.(\d+)\.(\d+)(?:-(alpha|beta)\.(\d+))?$/;
+
+// What a release can build, in the order the notes list them.
+export const TARGETS = ['docker', 'desktop', 'android'];
+
+// The spellings a human reaches for. `web` and `admin-web` are Docker images
+// like every other service, so they are the same target.
+const TARGET_ALIASES = {
+  docker: 'docker',
+  server: 'docker',
+  servers: 'docker',
+  images: 'docker',
+  backend: 'docker',
+  web: 'docker',
+  api: 'docker',
+  desktop: 'desktop',
+  windows: 'desktop',
+  win: 'desktop',
+  electron: 'desktop',
+  android: 'android',
+  apk: 'android',
+  mobile: 'android',
+};
 
 // A commit the release flow wrote itself. Ignored, so re-running over a range
 // that includes one does not release twice.
@@ -61,6 +102,35 @@ export function detectMarker(subjects) {
     if (match) found.add(match[1].toLowerCase());
   }
   return MARKERS.find((marker) => found.has(marker)) ?? '';
+}
+
+// The platforms a push asks for, from the scope of its markers.
+//
+// The scope is shared with conventional commits, so it is only read as a
+// platform list when EVERY name in it is one - `!feat(chat)` is a feature with
+// a scope, `!feat(android)` is a feature for one platform, and there is no
+// third reading. `all` is the explicit way to say what an empty scope means.
+export function parseTargets(subjects) {
+  const chosen = new Set();
+  for (const subject of subjects) {
+    const match = /^\s*!(?:major|feat|fix|stable|alpha|beta)\(([^)]*)\)/i.exec(String(subject).trim());
+    if (!match) continue;
+    const names = match[1]
+      .split(/[,+\s]+/)
+      .map((name) => name.trim().toLowerCase())
+      .filter(Boolean);
+    if (names.length === 0) continue;
+    // All or nothing: a scope holding one platform and one other word is a
+    // conventional scope, not a half-understood platform list.
+    if (!names.every((name) => name === 'all' || name in TARGET_ALIASES)) continue;
+    for (const name of names) {
+      if (name === 'all') TARGETS.forEach((target) => chosen.add(target));
+      else chosen.add(TARGET_ALIASES[name]);
+    }
+  }
+  // No marker named a platform: build the lot, which is what every release did
+  // before this existed.
+  return chosen.size === 0 ? [...TARGETS] : TARGETS.filter((target) => chosen.has(target));
 }
 
 export function nextVersion(current, marker) {
@@ -125,6 +195,23 @@ function selfCheck() {
   // A marker has to start the subject, and has to be the whole word.
   strictEqual(detectMarker(['fix: mentions !feat in passing']), '');
   strictEqual(detectMarker(['!feature: not a marker']), '');
+  // A scoped marker is still a marker.
+  strictEqual(detectMarker(['!alpha(android): x']), 'alpha');
+
+  const targets = (subjects) => parseTargets(subjects).join(',');
+  strictEqual(targets(['!alpha: everything']), 'docker,desktop,android');
+  strictEqual(targets(['!alpha(android): x']), 'android');
+  strictEqual(targets(['!fix(android,desktop): x']), 'desktop,android', 'listed in TARGETS order');
+  strictEqual(targets(['!feat(web): x']), 'docker', 'web is a Docker image');
+  strictEqual(targets(['!feat(all): x']), 'docker,desktop,android');
+  // A conventional scope is not a platform list, and half of one is not either.
+  strictEqual(targets(['!feat(chat): x']), 'docker,desktop,android');
+  strictEqual(targets(['!feat(android,chat): x']), 'docker,desktop,android');
+  // Two scoped markers in one push are the union of what they ask for.
+  strictEqual(targets(['!alpha(android): x', '!fix(desktop): y']), 'desktop,android');
+  // An unscoped marker beside a scoped one does not widen it: the scoped one
+  // is the only statement anybody made about platforms.
+  strictEqual(targets(['!alpha(android): x', 'fix: unrelated']), 'android');
 
   console.log('release-version self-check passed');
 }
@@ -149,6 +236,7 @@ function main(argv) {
         'release=true',
         `marker=${marker}`,
         `version=${nextVersion(current, marker)}`,
+        `targets=${parseTargets(subjects).join(',')}`,
       ]
     : ['release=false'];
 

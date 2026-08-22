@@ -32,6 +32,14 @@ const NOISE = [
 const MARKER = /^\s*!(major|feat|fix|stable|alpha|beta)(?![a-z0-9])(?:\([^)]*\))?[:\s-]*/i;
 const TYPE = /^(feat|fix|chore|docs|refactor|perf|test|build|ci|style|revert)(\([^)]*\))?(!)?:\s*/i;
 
+// The platforms a release builds, in the order the table lists them, and what
+// to call them in front of a reader.
+const TARGET_LABELS = [
+  ['docker', 'Server images'],
+  ['desktop', 'Desktop (Windows)'],
+  ['android', 'Android'],
+];
+
 const SECTIONS = [
   ['breaking', '### ⚠ Breaking changes'],
   ['features', '### Features'],
@@ -64,7 +72,29 @@ export function clean(subject) {
   return text ? text[0].toUpperCase() + text.slice(1) : text;
 }
 
-export function notes(subjects, { version, previous, repository, date } = {}) {
+/**
+ * The what-was-built table. `targets` is what this release rebuilt;
+ * everything else was carried forward from `carriedFrom`, the last release
+ * that has the artifact.
+ */
+export function artifacts({ targets, carriedFrom, repository } = {}) {
+  if (!targets || targets.length === 0) return '';
+  const link = (version) =>
+    repository
+      ? `[v${version}](https://github.com/${repository}/releases/tag/v${version})`
+      : `v${version}`;
+
+  const rows = TARGET_LABELS.map(([target, label]) => {
+    if (targets.includes(target)) return `| ${label} | Built here |`;
+    // Without a version to carry from there is nothing to say but the truth.
+    const from = carriedFrom ? `Carried forward from ${link(carriedFrom)}` : 'Not in this release';
+    return `| ${label} | ${from} |`;
+  });
+
+  return ['### Artifacts', '', '| Platform | This release |', '| --- | --- |', ...rows].join('\n');
+}
+
+export function notes(subjects, { version, previous, repository, date, targets, carriedFrom } = {}) {
   const kept = subjects
     .map((subject) => subject.trim())
     .filter((subject) => subject && !NOISE.some((pattern) => pattern.test(subject)));
@@ -92,6 +122,9 @@ export function notes(subjects, { version, previous, repository, date } = {}) {
     body += `${title}\n\n${items.map((item) => `* ${item}`).join('\n')}\n\n`;
   }
   if (!body) body = `### Notes\n\n* Release ${version}\n\n`;
+
+  const table = artifacts({ targets, carriedFrom, repository });
+  if (table) body += `${table}\n`;
 
   return { heading: `${heading} (${stamp})`, body: body.trimEnd() };
 }
@@ -158,6 +191,35 @@ function selfCheck() {
     'breaking comes first',
   );
 
+  // The artifacts table says what was rebuilt and where the rest came from.
+  const partial = notes(['!alpha(android): x'], {
+    version: '0.0.7-alpha.1',
+    repository: 'a/b',
+    targets: ['android'],
+    carriedFrom: '0.0.6',
+  });
+  assertOk(partial.body.includes('| Android | Built here |'), 'the built platform says so');
+  assertOk(
+    partial.body.includes('| Desktop (Windows) | Carried forward from [v0.0.6](https://github.com/a/b/releases/tag/v0.0.6) |'),
+    'a skipped platform names and links where its artifacts came from',
+  );
+  assertOk(partial.body.includes('| Server images | Carried forward'), 'server images too');
+  // A first release has nothing to carry from, and says that rather than
+  // linking a tag that does not exist.
+  assertOk(
+    notes(['!alpha(android): x'], { version: '0.0.1-alpha.1', targets: ['android'] }).body.includes(
+      '| Desktop (Windows) | Not in this release |',
+    ),
+    'no previous release means no carry-forward claim',
+  );
+  // No table at all when nobody said what was built - the old shape.
+  assertOk(!notes(['fix: x'], { version: '1.0.0' }).body.includes('### Artifacts'));
+  // The table is readable back out for the GitHub Release body.
+  assertOk(
+    section(insert('# Changelog\n\n', partial), '0.0.7-alpha.1').includes('| Android | Built here |'),
+    'the table survives the round trip through the CHANGELOG',
+  );
+
   // A release with nothing to say still says something.
   assertOk(notes(['chore(release): v1'], { version: '1.0.0' }).body.includes('Release 1.0.0'));
 
@@ -190,6 +252,8 @@ function main(argv) {
     previous: arg('--previous') || undefined,
     repository: arg('--repository') || undefined,
     date: arg('--date') || undefined,
+    targets: arg('--targets') ? arg('--targets').split(',').filter(Boolean) : undefined,
+    carriedFrom: arg('--carried-from') || undefined,
   });
 
   const path = arg('--changelog') || 'CHANGELOG.md';
