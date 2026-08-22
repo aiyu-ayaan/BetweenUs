@@ -122,6 +122,9 @@ fun VoiceChannelScreen(
     val sharing by engine.sharing.collectAsState()
     val screenHolder by engine.screenHolder.collectAsState()
     val localVideo by engine.localVideo.collectAsState()
+    // Your own microphone, so the green ring is not something that only ever
+    // happens to other people.
+    val selfSpeaking by engine.selfSpeaking.collectAsState()
     val problem by engine.problem.collectAsState()
 
     val channel = channelId?.let { Workspace.channel(it) }
@@ -194,6 +197,7 @@ fun VoiceChannelScreen(
             selfId = self.id,
             eglContext = engine.eglBase.eglBaseContext,
             muted = muted,
+            selfSpeaking = selfSpeaking,
             cameraOn = cameraOn,
             sharing = sharing,
             onToggleMute = engine::toggleMute,
@@ -310,6 +314,7 @@ fun VoiceChannelScreen(
                                     label = "${self.label} (you)",
                                     id = self.id,
                                     track = localVideo,
+                                    speaking = selfSpeaking,
                                     eglContext = engine.eglBase.eglBaseContext,
                                     muted = muted,
                                     isLocal = true,
@@ -354,6 +359,7 @@ fun VoiceChannelScreen(
                                 label = "${self.label} (you)",
                                 id = self.id,
                                 track = localVideo,
+                                speaking = selfSpeaking,
                                 eglContext = engine.eglBase.eglBaseContext,
                                 muted = muted,
                                 onFlipCamera = {
@@ -413,6 +419,7 @@ fun VoiceChannelScreen(
                                 label = "${self.label} (you)",
                                 id = self.id,
                                 track = localVideo,
+                                speaking = selfSpeaking,
                                 eglContext = engine.eglBase.eglBaseContext,
                                 muted = muted,
                                 onFlipCamera = {
@@ -504,6 +511,7 @@ fun VoiceChannelScreen(
                                             label = "${self.label} (you)",
                                             id = self.id,
                                             track = localVideo,
+                                            speaking = selfSpeaking,
                                             eglContext = engine.eglBase.eglBaseContext,
                                             muted = muted,
                                             isLocal = true,
@@ -521,6 +529,7 @@ fun VoiceChannelScreen(
                                     label = "${self.label} (you)",
                                     id = self.id,
                                     track = localVideo,
+                                    speaking = selfSpeaking,
                                     eglContext = engine.eglBase.eglBaseContext,
                                     muted = muted,
                                     onFlipCamera = {
@@ -590,6 +599,7 @@ fun VoiceChannelScreen(
                                     label = "${self.label} (you)",
                                     id = self.id,
                                     track = localVideo,
+                                    speaking = selfSpeaking,
                                     eglContext = engine.eglBase.eglBaseContext,
                                     muted = muted,
                                     onFlipCamera = {
@@ -837,6 +847,7 @@ private fun FloatingPipTile(
     muted: Boolean,
     onFlipCamera: () -> Unit,
     modifier: Modifier = Modifier,
+    speaking: Boolean = false,
 ) {
     // Dragged anywhere on the stage, the way every other phone does it. The
     // tile is laid out at the top-right, so the offset runs left and down from
@@ -864,7 +875,13 @@ private fun FloatingPipTile(
             .shadow(14.dp, RoundedCornerShape(18.dp))
             .clip(RoundedCornerShape(18.dp))
             .background(Surface900)
-            .border(1.5.dp, Color.White.copy(alpha = 0.22f), RoundedCornerShape(18.dp)),
+            // The same green every other tile uses, so "that one is talking"
+            // reads the same whoever it is.
+            .border(
+                if (speaking) 2.5.dp else 1.5.dp,
+                if (speaking) StatusOnline else Color.White.copy(alpha = 0.22f),
+                RoundedCornerShape(18.dp),
+            ),
     ) {
         if (track != null) {
             VideoSurface(

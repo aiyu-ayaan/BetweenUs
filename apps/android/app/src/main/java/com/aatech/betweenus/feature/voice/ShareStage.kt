@@ -102,6 +102,7 @@ fun ShareStage(
     selfId: String,
     eglContext: EglBase.Context,
     muted: Boolean,
+    selfSpeaking: Boolean,
     cameraOn: Boolean,
     sharing: Boolean,
     onToggleMute: () -> Unit,
@@ -231,7 +232,7 @@ fun ShareStage(
                             eglContext = eglContext,
                             track = null,
                             muted = muted,
-                            speaking = false,
+                            speaking = selfSpeaking,
                         )
                     }
                     items(participants, key = { it.peer.peerId }) { participant ->

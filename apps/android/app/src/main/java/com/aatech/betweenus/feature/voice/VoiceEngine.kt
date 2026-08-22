@@ -22,6 +22,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlin.math.sqrt
 import org.json.JSONObject
 import org.webrtc.AudioTrack
 import org.webrtc.Camera1Enumerator
@@ -170,6 +171,12 @@ class VoiceEngine(private val context: Context) {
         JavaAudioDeviceModule.builder(context)
             .setUseHardwareAcousticEchoCanceler(true)
             .setUseHardwareNoiseSuppressor(true)
+            // Where the green ring around your own tile comes from. Read off
+            // the microphone itself rather than off a peer connection's
+            // statistics, for one reason: the statistics only exist once
+            // somebody else is in the call, and the first thing anybody does
+            // in an empty channel is check whether they are being heard.
+            .setSamplesReadyCallback(::onMicrophoneSamples)
             .createAudioDeviceModule()
     }
 
@@ -195,6 +202,26 @@ class VoiceEngine(private val context: Context) {
 
     private val _muted = MutableStateFlow(false)
     val muted: StateFlow<Boolean> = _muted.asStateFlow()
+
+    /**
+     * Whether this microphone is hearing a voice right now.
+     *
+     * The same fact [Participant.speaking] carries for everybody else, for the
+     * one participant no peer connection reports on: yourself. Without it the
+     * green ring was something that happened to other people, and the question
+     * it answers - "is this thing picking me up?" - is the one you have about
+     * your own microphone and never about theirs.
+     */
+    private val _selfSpeaking = MutableStateFlow(false)
+    val selfSpeaking: StateFlow<Boolean> = _selfSpeaking.asStateFlow()
+
+    /**
+     * When the last frame loud enough to count arrived, so the ring does not
+     * strobe on the gaps between words.
+     *
+     * Written and read on the audio thread only.
+     */
+    private var lastLoudAt = 0L
 
     /**
      * What another app is doing to this call's audio.
@@ -424,6 +451,11 @@ class VoiceEngine(private val context: Context) {
         _participants.value = emptyList()
         _localVideo.value = null
         _sharing.value = false
+        // The microphone has stopped being read, so no buffer is coming to
+        // turn this off; a ring left lit on the way out of a call is the sort
+        // of thing that survives into the next one.
+        lastLoudAt = 0L
+        _selfSpeaking.value = false
     }
 
     /**
@@ -465,6 +497,40 @@ class VoiceEngine(private val context: Context) {
      * Doing only the first is why a muted phone sharing its screen still sent
      * audio.
      */
+    /**
+     * One 10ms buffer of microphone audio, on the audio thread.
+     *
+     * Root-mean-square across the buffer, normalised to the same 0..1 scale
+     * WebRTC's own `audioLevel` uses, so it can be compared against the same
+     * [SPEAKING_LEVEL] every remote tile is judged by - one threshold, one
+     * meaning, whichever side of the call somebody is on.
+     *
+     * This runs several hundred times a second and must stay cheap: an integer
+     * pass over the buffer, and a write to the flow only when the answer
+     * actually changes.
+     */
+    private fun onMicrophoneSamples(samples: JavaAudioDeviceModule.AudioSamples) {
+        // Muted is not quiet - it is muted. The device module zeroes the buffer
+        // for us, but a ring that waits for the next buffer to catch up would
+        // stay green for a moment after the button, which reads as the mute
+        // having not worked.
+        if (_muted.value || _interruption.value == Interruption.HOLD) {
+            lastLoudAt = 0L
+            _selfSpeaking.value = false
+            return
+        }
+
+        val level = rootMeanSquare(samples.data)
+        val now = System.currentTimeMillis()
+        if (level >= SPEAKING_LEVEL) lastLoudAt = now
+
+        // Held briefly after the last loud buffer. Speech is mostly gaps at
+        // this timescale - every stop consonant is one - and a ring that
+        // followed the buffers exactly would flicker through a sentence.
+        val speaking = now - lastLoudAt < SPEAKING_HOLD_MS
+        if (_selfSpeaking.value != speaking) _selfSpeaking.value = speaking
+    }
+
     private fun applyMute() {
         // Held means muted whatever the button says, and the button is left
         // alone: coming back from a phone call must not unmute somebody who
@@ -1487,6 +1553,38 @@ class VoiceEngine(private val context: Context) {
          * below a voice, above the residue a suppressor leaves.
          */
         private const val SPEAKING_LEVEL = 0.01
+
+        /**
+         * How long the local ring stays lit after the last loud buffer.
+         *
+         * A remote tile gets this for free - its level is read once a second,
+         * so a gap shorter than that is invisible. The microphone is read every
+         * ten milliseconds and needs the smoothing done explicitly.
+         */
+        private const val SPEAKING_HOLD_MS = 250L
+
+        /**
+         * 16-bit little-endian PCM to a 0..1 level, the scale WebRTC's own
+         * `audioLevel` reports on.
+         *
+         * Squares are accumulated in a `Long` rather than a `Double`: a buffer
+         * is a few hundred samples of at most 32768 squared, which fits, and
+         * the audio thread should not be doing floating-point work it does not
+         * have to.
+         */
+        internal fun rootMeanSquare(pcm: ByteArray): Double {
+            val count = pcm.size / 2
+            if (count == 0) return 0.0
+            var sum = 0L
+            var index = 0
+            while (index + 1 < pcm.size) {
+                // Little-endian: low byte unsigned, high byte signed.
+                val sample = ((pcm[index + 1].toInt() shl 8) or (pcm[index].toInt() and 0xFF)).toShort()
+                sum += sample.toLong() * sample.toLong()
+                index += 2
+            }
+            return sqrt(sum.toDouble() / count) / Short.MAX_VALUE
+        }
     }
 }
 
