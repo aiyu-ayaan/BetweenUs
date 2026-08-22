@@ -1031,6 +1031,28 @@ useAudioSettings.subscribe((state, previous) => {
 const DEVICE_SETTLE_MS = 400;
 let deviceSettleTimer: number | null = null;
 
+/**
+ * Lets go of a pinned device when the hardware changes.
+ *
+ * A device id is remembered forever; the operating system's default is not.
+ * Choose a headset once and every later call is pinned to it, so the call after
+ * the headset is put away opens a microphone that is in a drawer - which is why
+ * these two menus had to be set again and again. With `followSystemDevices` on,
+ * a change in the hardware drops the pin and the system default wins, which is
+ * the device that was just plugged in.
+ *
+ * Dropping the pin is all this does: the settings subscription below recaptures
+ * the microphone, and `MediaSink` re-points the speakers, both because the
+ * setting changed. It runs whether or not a call is up, so the choice is
+ * already right when the next one starts.
+ */
+function unpinDevices(): void {
+  const { settings, update } = useAudioSettings.getState();
+  if (!settings.followSystemDevices) return;
+  if (!settings.inputDeviceId && !settings.outputDeviceId) return;
+  update({ inputDeviceId: null, outputDeviceId: null });
+}
+
 async function followDeviceChange(): Promise<void> {
   const { status, micEnabled } = useVoiceStore.getState();
   if (!mesh || status !== 'connected' || !micEnabled) return;
@@ -1051,6 +1073,9 @@ if (typeof navigator !== 'undefined' && navigator.mediaDevices) {
     if (deviceSettleTimer !== null) window.clearTimeout(deviceSettleTimer);
     deviceSettleTimer = window.setTimeout(() => {
       deviceSettleTimer = null;
+      // Before the recapture, so the recapture picks up the new choice rather
+      // than reopening the device that has just been unplugged.
+      unpinDevices();
       void followDeviceChange();
     }, DEVICE_SETTLE_MS);
   });

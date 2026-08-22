@@ -82,6 +82,19 @@ object CallAudio {
     private var held = false
     private var scoStarted = false
 
+    /**
+     * Registered for the length of the call, so plugging a headset in follows
+     * the call wherever the user is looking.
+     *
+     * This used to live in `rememberCallDevices`, which only exists while the
+     * device sheet is open - so the one gesture it was meant to serve, putting
+     * a headset on mid-call, moved nothing unless the picker happened to be up
+     * at that moment. Plugging in *is* the instruction; a call on `AUTO`
+     * follows it, and a call pinned to a device that has just been unplugged
+     * goes back to `AUTO` rather than to silence.
+     */
+    private var following: AudioDeviceCallback? = null
+
     fun start(context: Context) {
         if (held) return
         val manager = context.getSystemService(AudioManager::class.java) ?: return
@@ -117,6 +130,50 @@ object CallAudio {
         }
 
         held = true
+        applyTo(manager)
+        follow(manager)
+    }
+
+    /**
+     * Re-routes the live call whenever the hardware changes.
+     *
+     * Both directions matter. A device arriving is the common one - a headset
+     * put on, a car connecting - and a call on `AUTO` should move to it. A
+     * device leaving is the one that used to end the call in silence: an
+     * explicit choice of a headset that has just been unplugged can no longer
+     * be honoured, and the honest answer is to go back to `AUTO` and re-resolve
+     * rather than to keep asking for something that is not there.
+     */
+    private fun follow(manager: AudioManager) {
+        if (following != null) return
+        val callback = object : AudioDeviceCallback() {
+            override fun onAudioDevicesAdded(added: Array<out AudioDeviceInfo>?) = reroute(manager)
+            override fun onAudioDevicesRemoved(removed: Array<out AudioDeviceInfo>?) =
+                reroute(manager)
+        }
+        following = callback
+        manager.registerAudioDeviceCallback(callback, null)
+    }
+
+    private fun reroute(manager: AudioManager) {
+        if (!held) return
+
+        val routes = presentRoutes(manager)
+        if (AudioPrefs.route != AudioPrefs.Route.AUTO && AudioPrefs.route !in routes) {
+            AudioPrefs.route = AudioPrefs.Route.AUTO
+        }
+
+        val inputs = manager.getDevices(AudioManager.GET_DEVICES_INPUTS)
+            .mapNotNull { inputOf(it.type) }
+            .toSet()
+        if (AudioPrefs.input != AudioPrefs.Input.AUTO && AudioPrefs.input !in inputs) {
+            AudioPrefs.input = AudioPrefs.Input.AUTO
+        }
+
+        // SCO is torn down first: it is held against a device that may have
+        // just gone, and starting it again on a stale handle is a call that
+        // routes nowhere.
+        stopSco(manager)
         applyTo(manager)
     }
 
@@ -312,6 +369,9 @@ object CallAudio {
     fun stop(context: Context) {
         if (!held) return
         val manager = context.getSystemService(AudioManager::class.java) ?: return
+
+        following?.let { manager.unregisterAudioDeviceCallback(it) }
+        following = null
 
         stopSco(manager)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
