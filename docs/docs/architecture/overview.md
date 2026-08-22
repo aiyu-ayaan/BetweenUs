@@ -53,6 +53,10 @@ flowchart TB
   HTTP and WebSocket outbound from the server; nothing listens for an inbound
   connection anywhere in the stack. See
   [Ingress and the Cloudflare Tunnel](/system-design/ingress).
+- **`notification-service` raises no notifications.** Only a running client
+  knows what's on its own screen; the service owns mutes, quiet hours and
+  read markers, and wakes a backgrounded phone with a data-only push it
+  can't put words in. See [Notifications](/architecture/notifications).
 
 ## Clients, one backend
 

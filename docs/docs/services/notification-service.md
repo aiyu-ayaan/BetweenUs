@@ -6,7 +6,8 @@ sidebar_position: 6
 
 Raises no notifications itself. Owns the preferences and state that outlive
 any single client: mutes, quiet hours, unread markers, and registered push
-devices.
+devices. Full design and the client/server decision split:
+[Notifications](/architecture/notifications).
 
 ## `/api/v1/notifications`
 
