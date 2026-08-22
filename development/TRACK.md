@@ -711,6 +711,33 @@ Calls:
       the spelling or the feature; it now offers what it finds, friends-only,
       with those already in the server filtered out.
 
+Call screen on the phone:
+
+- [x] **The chrome gets out of the way.** The header and the control dock fade
+      out after four seconds with nothing happening and come back on a tap
+      anywhere on the stage - the gesture the share stage already had, and what
+      the picture filling the screen was asking for. A sheet, a problem to
+      explain, or a control that was just pressed pins them open: the toggles
+      are keys of the countdown, so pressing one restarts it without every
+      button having to say so.
+- [x] **The self-view snaps to a corner.** It was a free drag that left the
+      tile anywhere, including half over somebody's face. It settles into the
+      nearest corner now, chosen by which quadrant of the stage its own centre
+      ended in, with the top and bottom insets keeping it clear of the header
+      and the dock. The corners come from where the tile was actually placed
+      rather than from the screen: the callers do not agree on where that is -
+      most anchor it top-end, the four-person layout anchors it bottom-end -
+      and the old arithmetic assumed the first and clamped the second into
+      dragging itself off the bottom of the screen. `pipBounds` and
+      `pipNearestCorner` are the whole of it and are tested.
+- [x] **Video actually has the rounded corners it appears to have.** A
+      `SurfaceView` is its own surface composited under the window, so
+      `Modifier.clip` above it does nothing: every tile in a call had square
+      video inside a rounded border and a rounded shadow. `VideoSurface` now
+      masks the four corner slivers with the tile's own colour, which the
+      window does draw over the surface - the same reason the name pill and
+      the flip button are visible on top of the video.
+
 Release:
 
 - [x] **A release can be for one platform.** A marker may name what it is for -
