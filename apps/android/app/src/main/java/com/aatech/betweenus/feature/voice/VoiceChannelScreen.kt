@@ -125,6 +125,7 @@ fun VoiceChannelScreen(
     // Your own microphone, so the green ring is not something that only ever
     // happens to other people.
     val selfSpeaking by engine.selfSpeaking.collectAsState()
+    val linkStats by engine.stats.collectAsState()
     val problem by engine.problem.collectAsState()
 
     val channel = channelId?.let { Workspace.channel(it) }
@@ -156,6 +157,12 @@ fun VoiceChannelScreen(
     val watching = participants.firstOrNull { it.visibleScreen != null }
     var dismissed by remember { mutableStateOf<String?>(null) }
     var pickingDevices by remember { mutableStateOf(false) }
+    var showingConnection by remember { mutableStateOf(false) }
+
+    // Worked out once here rather than twice: it tints the button that opens
+    // the sheet as well as heading the sheet itself, so a bad link is visible
+    // without opening anything.
+    val linkHealth = CallStats.healthWarning(linkStats)
 
     LaunchedEffect(watching?.peer?.peerId) {
         if (watching == null) dismissed = null
@@ -216,6 +223,7 @@ fun VoiceChannelScreen(
             onClose = { dismissed = watching.peer.peerId },
         )
         if (pickingDevices) CallDeviceSheet(onDismiss = { pickingDevices = false })
+    if (showingConnection) ConnectionSheet(linkStats) { showingConnection = false }
         return
     }
 
@@ -774,7 +782,20 @@ fun VoiceChannelScreen(
                         },
                     )
 
-                    // 5. Leave Call (Prominent Red Button)
+                    // 5. Connection - what the link is doing, in numbers. The
+                    // one thing a phone in a bad call has no other way to find
+                    // out, since there is no webrtc-internals to open.
+                    CallCircleButton(
+                        icon = BetweenUsIcons.Activity,
+                        contentDescription = "Connection",
+                        active = showingConnection,
+                        activeColor = Accent,
+                        tint = if (linkHealth != null) Danger else Slate400,
+                        size = 48.dp,
+                        onClick = { showingConnection = true },
+                    )
+
+                    // 6. Leave Call (Prominent Red Button)
                     Box(
                         modifier = Modifier
                             .size(54.dp)

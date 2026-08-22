@@ -27,6 +27,7 @@ import com.aatech.betweenus.ui.theme.Slate400
  * Generated from that file rather than redrawn; regenerate when it changes.
  */
 object BetweenUsIcons {
+    val Activity = R.drawable.ic_activity
     val Bell = R.drawable.ic_bell
     val BellOff = R.drawable.ic_bell_off
     val Check = R.drawable.ic_check

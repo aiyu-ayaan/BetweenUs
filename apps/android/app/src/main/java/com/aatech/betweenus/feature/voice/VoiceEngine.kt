@@ -216,6 +216,17 @@ class VoiceEngine(private val context: Context) {
     val selfSpeaking: StateFlow<Boolean> = _selfSpeaking.asStateFlow()
 
     /**
+     * What each link is doing, in numbers, for the connection panel.
+     *
+     * Rebuilt from the same one-second poll that decides who is speaking - the
+     * report is already being fetched and parsed, so this costs the parse and
+     * nothing else. Empty until somebody else is in the call: media is peer to
+     * peer, so with nobody to measure against there is nothing to measure.
+     */
+    private val _stats = MutableStateFlow<List<LinkStats>>(emptyList())
+    val stats: StateFlow<List<LinkStats>> = _stats.asStateFlow()
+
+    /**
      * When the last frame loud enough to count arrived, so the ring does not
      * strobe on the gaps between words.
      *
@@ -456,6 +467,7 @@ class VoiceEngine(private val context: Context) {
         // of thing that survives into the next one.
         lastLoudAt = 0L
         _selfSpeaking.value = false
+        _stats.value = emptyList()
     }
 
     /**
@@ -915,6 +927,21 @@ class VoiceEngine(private val context: Context) {
     private fun update(peerId: String, change: (Participant) -> Participant) {
         _participants.update { list ->
             list.map { if (it.peer.peerId == peerId) change(it) else it }
+        }
+    }
+
+    /**
+     * One link's reading, folded into the list the panel shows.
+     *
+     * Ordered by the roster rather than by whichever connection answered
+     * `getStats` first, so the rows do not swap places under a finger every
+     * second. A peer that has left takes its row with it.
+     */
+    private fun publishStats(peerId: String, link: LinkStats) {
+        val roster = _participants.value.map { it.peer.peerId }
+        _stats.update { previous ->
+            val merged = previous.filter { it.peerId != peerId } + link
+            merged.filter { it.peerId in roster }.sortedBy { roster.indexOf(it.peerId) }
         }
     }
 
@@ -1431,26 +1458,79 @@ class VoiceEngine(private val context: Context) {
                 )
             }
 
+        /** The last reading, so the next one can be a rate rather than a total. */
+        private var lastSample: LinkSample? = null
+
         /**
          * Whether a camera and a share are really arriving, by counting frames,
-         * and who is speaking, by reading audio levels.
+         * who is speaking, by reading audio levels, and what the link is doing,
+         * by reading byte counters.
          *
          * Nothing a video receiver says is trustworthy: it unmutes on the
          * padding sent to probe for bandwidth and stays unmuted after the far
          * end stops, so both a share that never started and one that has ended
          * look live. Frames decoded since the last look do not lie.
+         *
+         * One walk of the report answers all three. The report is the expensive
+         * part and it was already being fetched.
          */
         fun poll() {
             if (closed) return
             pc.getStats { report ->
                 val decoded = HashMap<String, Long>()
                 val levels = HashMap<String, Double>()
+
+                var inboundAudio = 0L
+                var inboundVideo = 0L
+                var outboundAudio = 0L
+                var outboundVideo = 0L
+                var packetsLost = 0L
+                var packetsReceived = 0L
+                var roundTrip: Double? = null
+                var picture: Triple<Int?, Int?, Double?> = Triple(null, null, null)
+
                 for (stats in report.statsMap.values) {
-                    if (stats.type != "inbound-rtp") continue
-                    val mid = stats.members["mid"] as? String ?: continue
-                    when (stats.members["kind"] as? String) {
-                        "video" -> decoded[mid] = (stats.members["framesDecoded"] as? Number)?.toLong() ?: 0L
-                        "audio" -> levels[mid] = (stats.members["audioLevel"] as? Number)?.toDouble() ?: 0.0
+                    val members = stats.members
+                    val kind = members["kind"] as? String
+                    when (stats.type) {
+                        "inbound-rtp" -> {
+                            val bytes = (members["bytesReceived"] as? Number)?.toLong() ?: 0L
+                            if (kind == "audio") inboundAudio += bytes else inboundVideo += bytes
+                            packetsLost += (members["packetsLost"] as? Number)?.toLong() ?: 0L
+                            packetsReceived += (members["packetsReceived"] as? Number)?.toLong() ?: 0L
+
+                            val mid = members["mid"] as? String
+                            if (kind == "video") {
+                                if (mid != null) {
+                                    decoded[mid] = (members["framesDecoded"] as? Number)?.toLong() ?: 0L
+                                }
+                                picture = CallStats.larger(
+                                    picture,
+                                    (members["frameWidth"] as? Number)?.toInt() ?: 0,
+                                    (members["frameHeight"] as? Number)?.toInt() ?: 0,
+                                    (members["framesPerSecond"] as? Number)?.toDouble() ?: 0.0,
+                                )
+                            } else if (kind == "audio" && mid != null) {
+                                levels[mid] = (members["audioLevel"] as? Number)?.toDouble() ?: 0.0
+                            }
+                        }
+
+                        "outbound-rtp" -> {
+                            val bytes = (members["bytesSent"] as? Number)?.toLong() ?: 0L
+                            if (kind == "audio") outboundAudio += bytes else outboundVideo += bytes
+                        }
+
+                        // Only the pair actually carrying the call. The losers
+                        // of the ICE race stay in the report and their round
+                        // trip means nothing.
+                        "candidate-pair" -> {
+                            val nominated = members["nominated"] as? Boolean ?: false
+                            val succeeded = (members["state"] as? String) == "succeeded"
+                            if (nominated && succeeded) {
+                                (members["currentRoundTripTime"] as? Number)?.toDouble()
+                                    ?.let { roundTrip = it }
+                            }
+                        }
                     }
                 }
 
@@ -1458,10 +1538,27 @@ class VoiceEngine(private val context: Context) {
                 val screen = liveVideo(Slot.SCREEN, decoded)
                 val speaking = (levels[transceivers[Slot.MIC]?.mid] ?: 0.0) >= SPEAKING_LEVEL
 
+                val sample = LinkSample(
+                    at = System.currentTimeMillis(),
+                    inboundAudioBytes = inboundAudio,
+                    inboundVideoBytes = inboundVideo,
+                    outboundAudioBytes = outboundAudio,
+                    outboundVideoBytes = outboundVideo,
+                    packetsLost = packetsLost,
+                    packetsReceived = packetsReceived,
+                    roundTripSeconds = roundTrip,
+                    frameWidth = picture.first,
+                    frameHeight = picture.second,
+                    framesPerSecond = picture.third,
+                )
+                val link = CallStats.toStats(peer.peerId, peer.username, sample, lastSample)
+                lastSample = sample
+
                 scope.launch {
                     update(peer.peerId) {
                         it.copy(camera = camera, screen = screen, speaking = speaking)
                     }
+                    publishStats(peer.peerId, link)
                 }
             }
         }
