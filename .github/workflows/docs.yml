@@ -1,0 +1,115 @@
+# Docs site build and deploy, following the same marker convention as
+# release.yml: a commit whose subject starts with `!docs` builds this
+# Docusaurus site (docs/) and publishes it to the `gh-pages` branch, which
+# GitHub Pages serves from.
+#
+# Unlike release.yml this is one step, not two: there is no version to bump
+# and no compiled artifact worth reviewing in a PR before it ships, so a
+# `!docs` push builds and deploys directly. `workflow_dispatch` is the manual
+# escape hatch - a redeploy after a docs change that landed without the
+# marker, or after a Pages outage.
+#
+# `gh-pages` is created (or updated) by peaceiris/actions-gh-pages, the same
+# shape `npm run deploy` in a Docusaurus project uses under the hood: one
+# force-pushed commit per run, containing only the built site, authored by
+# the Actions bot. It never carries history and is never merged - it exists
+# purely as what Pages serves from (Settings -> Pages -> Deploy from a
+# branch -> gh-pages).
+
+name: Docs
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: docs-deploy
+  cancel-in-progress: false
+
+jobs:
+  check-marker:
+    name: Check for a !docs marker
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'push'
+    runs-on: ubuntu-latest
+    outputs:
+      publish: ${{ steps.marker.outputs.publish }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Same idea as release.yml's marker check: every subject pushed, not
+      # just the head commit, so a push of several commits where the middle
+      # one asks for a docs deploy still deploys.
+      - name: Collect pushed commit subjects
+        if: github.event_name == 'push'
+        env:
+          BEFORE_SHA: ${{ github.event.before }}
+          AFTER_SHA: ${{ github.sha }}
+        run: |
+          if [ -n "$BEFORE_SHA" ] && [ "$(echo "$BEFORE_SHA" | tr -d 0)" != "" ] \
+             && git cat-file -e "$BEFORE_SHA^{commit}" 2>/dev/null; then
+            git log "$BEFORE_SHA..$AFTER_SHA" --format=%s > subjects.txt
+          else
+            git log -1 --format=%s > subjects.txt
+          fi
+          cat subjects.txt
+
+      - name: Decide whether to publish
+        id: marker
+        run: |
+          publish=false
+          if [ "${{ github.event_name }}" = workflow_dispatch ]; then
+            publish=true
+            echo "Dispatched by hand: publishing regardless of marker."
+          elif [ -f subjects.txt ] && grep -qE '^!docs\b' subjects.txt; then
+            publish=true
+            echo "Found a !docs marker."
+          else
+            echo "No !docs marker on this push; nothing is published."
+          fi
+          echo "publish=$publish" >> "$GITHUB_OUTPUT"
+
+  build-and-deploy:
+    name: Build and deploy the docs site
+    needs: check-marker
+    if: needs.check-marker.outputs.publish == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: docs/package-lock.json
+
+      - name: Install dependencies
+        working-directory: docs
+        run: npm ci
+
+      - name: Build
+        working-directory: docs
+        run: npm run build
+
+      # Force-pushes the built site to gh-pages as one commit, the same way
+      # a classic GitHub Pages deploy works. Nothing here touches master.
+      - name: Deploy to gh-pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: docs/build
+          publish_branch: gh-pages
+          user_name: 'github-actions[bot]'
+          user_email: 'github-actions[bot]@users.noreply.github.com'
+          commit_message: 'docs: deploy ${{ github.sha }}'
+
+      - name: Summary
+        run: |
+          echo "### Docs deployed" >> "$GITHUB_STEP_SUMMARY"
+          echo "Pushed to \`gh-pages\` from \`${{ github.sha }}\`." >> "$GITHUB_STEP_SUMMARY"
+          echo "Served at https://aiyu-ayaan.github.io/Nexora/ once Pages is set to deploy from that branch." >> "$GITHUB_STEP_SUMMARY"
