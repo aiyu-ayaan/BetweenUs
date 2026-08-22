@@ -51,7 +51,6 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.aatech.betweenus.core.data.MessageAttachment
 import com.aatech.betweenus.core.data.MessageReply
 import com.aatech.betweenus.core.data.EmojiNames
 import com.aatech.betweenus.core.store.Presence
@@ -77,7 +76,8 @@ import com.aatech.betweenus.ui.theme.Surface950
  * WhatsApp-style Composer with:
  * - Emoji picker button on the left of input well
  * - Text input field with typing indicator dispatch
- * - Attachment paperclip button
+ * - Attachment paperclip button (what it picks goes to the preview, never to a
+ *   chip on this bar: nothing is uploaded until the preview is sent from)
  * - Quick Camera button (automatically hidden when keyboard is open or when typing)
  * - Circular Accent Send button
  */
@@ -87,11 +87,8 @@ fun Composer(
     channelId: String,
     editing: ReadableMessage?,
     replyingTo: MessageReply?,
-    attachments: List<MessageAttachment>,
-    uploading: Boolean,
     onCancelEdit: () -> Unit,
     onCancelReply: () -> Unit,
-    onRemoveAttachment: (MessageAttachment) -> Unit,
     onPickFile: () -> Unit,
     onCameraClick: () -> Unit,
     onSend: (String) -> Unit,
@@ -129,7 +126,7 @@ fun Composer(
     }
 
     val isImeVisible = WindowInsets.isImeVisible
-    val canSend = text.isNotBlank() || attachments.isNotEmpty()
+    val canSend = text.isNotBlank()
     val showCamera = !isImeVisible && text.isEmpty()
 
     Column(
@@ -218,72 +215,6 @@ fun Composer(
                     onClick = onCancelReply,
                     tint = Slate400,
                 )
-            }
-        }
-
-        // Attachments preview tray
-        AnimatedVisibility(
-            visible = attachments.isNotEmpty() || uploading,
-            enter = fadeIn() + expandVertically(),
-            exit = fadeOut() + shrinkVertically(),
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(Surface900.copy(alpha = 0.6f))
-                    .padding(horizontal = 12.dp, vertical = 6.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                attachments.forEach { attachment ->
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(Surface800)
-                            .border(1.dp, Edge, RoundedCornerShape(8.dp))
-                            .padding(horizontal = 8.dp, vertical = 4.dp),
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        ) {
-                            BetweenUsIcon(
-                                icon = if (attachment.isImage) BetweenUsIcons.Image else BetweenUsIcons.File,
-                                tint = Accent,
-                                size = 14.dp,
-                            )
-                            Text(
-                                text = attachment.name,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = Slate100,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.heightIn(max = 18.dp),
-                            )
-                            Box(
-                                modifier = Modifier
-                                    .clip(CircleShape)
-                                    .clickable { onRemoveAttachment(attachment) }
-                                    .padding(2.dp),
-                            ) {
-                                BetweenUsIcon(BetweenUsIcons.X, tint = Slate400, size = 12.dp)
-                            }
-                        }
-                    }
-                }
-
-                if (uploading) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(16.dp),
-                        strokeWidth = 2.dp,
-                        color = Accent,
-                    )
-                    Text(
-                        text = "Encrypting attachment…",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = Slate500,
-                    )
-                }
             }
         }
 

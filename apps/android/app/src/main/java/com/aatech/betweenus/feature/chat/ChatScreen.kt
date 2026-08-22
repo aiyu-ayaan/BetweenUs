@@ -51,7 +51,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.aatech.betweenus.core.crypto.E2ee
-import com.aatech.betweenus.core.data.MessageAttachment
 import com.aatech.betweenus.core.data.MessageReply
 import com.aatech.betweenus.core.data.PublicUser
 import com.aatech.betweenus.core.store.Conversation
@@ -111,10 +110,7 @@ fun ChatScreen(
     var highlighted by remember { mutableStateOf<String?>(null) }
     var showPins by remember { mutableStateOf(false) }
     var failure by remember { mutableStateOf<String?>(null) }
-    var pending by remember { mutableStateOf<List<MessageAttachment>>(emptyList()) }
-    var uploading by remember { mutableStateOf(false) }
-    /** 0..1 across the file being uploaded, or null while nothing is going up. */
-    var uploadProgress by remember { mutableStateOf<Float?>(null) }
+
     var showAttachmentSheet by remember { mutableStateOf(false) }
     /**
      * Media that has been picked but not yet looked at. Nothing is read off
@@ -537,11 +533,8 @@ fun ChatScreen(
             channelId = channelId,
             editing = editing,
             replyingTo = replyingTo,
-            attachments = pending,
-            uploading = uploading,
             onCancelEdit = { editing = null },
             onCancelReply = { replyingTo = null },
-            onRemoveAttachment = { pending = pending - it },
             onPickFile = { showAttachmentSheet = true },
             onCameraClick = { cameraPermission.request() },
             onSend = { text ->
@@ -552,8 +545,7 @@ fun ChatScreen(
                             Conversation.edit(target.message, text)
                             editing = null
                         } else {
-                            Conversation.send(channelId, text, pending, replyingTo)
-                            pending = emptyList()
+                            Conversation.send(channelId, text, emptyList(), replyingTo)
                             replyingTo = null
                         }
                         null
@@ -569,34 +561,12 @@ fun ChatScreen(
             onDismiss = { showAttachmentSheet = false },
             onPicked = { uris ->
                 scope.launch {
-                    val described = uris.map { describePicked(context, it) }
-                    // Photos and video are looked at first; a spreadsheet has
-                    // nothing to look at, so it uploads as it always did.
-                    val (media, documents) = described.partition { it.isPreviewable }
-                    previewing = previewing + media
-                    if (documents.isNotEmpty()) {
-                        uploading = true
-                        uploadProgress = 0f
-                        failure = runCatching {
-                            documents.forEach { item ->
-                                val picked = readPicked(context, item.uri)
-                                require(picked.bytes.size <= MAX_ATTACHMENT_BYTES) {
-                                    "${picked.name} is larger than " +
-                                        "${MAX_ATTACHMENT_BYTES / (1024 * 1024)} MB"
-                                }
-                                pending = pending + Conversation.uploadAttachment(
-                                    channelId = channelId,
-                                    name = picked.name,
-                                    contentType = picked.contentType,
-                                    bytes = picked.bytes,
-                                    onProgress = { uploadProgress = it },
-                                )
-                            }
-                            null
-                        }.exceptionOrNull()?.message
-                        uploading = false
-                        uploadProgress = null
-                    }
+                    // Everything picked goes to the preview and then to
+                    // [Outbox], a PDF as much as a photo. A document used to be
+                    // read, sealed and uploaded here instead, in this screen's
+                    // own scope - so it was never checked before it went, and
+                    // leaving the channel killed it halfway.
+                    previewing = previewing + uris.map { describePicked(context, it) }
                 }
             },
         )
@@ -606,15 +576,6 @@ fun ChatScreen(
     SendPreviewDialog(
         items = previewing,
         caption = previewCaption,
-        busy = uploading,
-        note = when {
-            !uploading -> null
-            // A percentage only once there is one worth reading: a small file
-            // is sealed and gone before a number would settle.
-            uploadProgress != null && uploadProgress!! > 0f ->
-                "Encrypting and uploading… ${(uploadProgress!! * 100).toInt()}%"
-            else -> "Encrypting and uploading…"
-        },
         onCaption = { previewCaption = it },
         onRemove = { previewing = previewing - it },
         onReplace = { original, edited ->

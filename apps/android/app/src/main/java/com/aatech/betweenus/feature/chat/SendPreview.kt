@@ -40,6 +40,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -69,14 +70,20 @@ import com.aatech.betweenus.ui.theme.Surface950
  * ordinary mistake there is.
  *
  * Nothing here is encrypted or uploaded yet: these are local content URIs the
- * picker just handed back. Sending is what reads, seals and uploads them.
+ * picker just handed back. Sending hands the batch to [Outbox], which does the
+ * reading, sealing and uploading under a foreground service - so this screen
+ * closes at once and never has to show a spinner of its own.
+ *
+ * Everything picked comes through here, a PDF as much as a photo. A file with
+ * nothing to look at gets a card with its name on it, because the question the
+ * screen asks - "is this the one you meant?" - is the same question either way,
+ * and it used to be asked of pictures only while a document was uploaded the
+ * instant it was picked.
  */
 @Composable
 fun SendPreviewDialog(
     items: List<PickedPreview>,
     caption: String,
-    busy: Boolean,
-    note: String?,
     onCaption: (String) -> Unit,
     onRemove: (PickedPreview) -> Unit,
     /** A picture that came back from the crop screen, in place of the original. */
@@ -113,7 +120,7 @@ fun SendPreviewDialog(
     }
 
     Dialog(
-        onDismissRequest = { if (!busy) onCancel() },
+        onDismissRequest = onCancel,
         properties = DialogProperties(usePlatformDefaultWidth = false),
     ) {
         Column(
@@ -130,7 +137,7 @@ fun SendPreviewDialog(
                     .padding(horizontal = 6.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                IconAction(BetweenUsIcons.X, "Back to the message box", { if (!busy) onCancel() })
+                IconAction(BetweenUsIcons.X, "Back to the message box", onCancel)
                 Column(Modifier.weight(1f).padding(start = 6.dp)) {
                     Text(
                         text = if (items.size == 1) current.name else "${items.size} files",
@@ -140,7 +147,7 @@ fun SendPreviewDialog(
                         overflow = TextOverflow.Ellipsis,
                     )
                     Text(
-                        text = note ?: "Encrypted before it leaves this phone",
+                        text = "Encrypted before it leaves this phone",
                         style = MaterialTheme.typography.bodySmall,
                         fontSize = 11.sp,
                         color = Slate500,
@@ -149,10 +156,10 @@ fun SendPreviewDialog(
                     )
                 }
                 if (current.isImage) {
-                    IconAction(BetweenUsIcons.Crop, "Crop and rotate", { if (!busy) cropping = true })
+                    IconAction(BetweenUsIcons.Crop, "Crop and rotate", { cropping = true })
                 }
-                IconAction(BetweenUsIcons.Paperclip, "Add another file", { if (!busy) onAdd() })
-                IconAction(BetweenUsIcons.Trash, "Remove this one", { if (!busy) onRemove(current) })
+                IconAction(BetweenUsIcons.Paperclip, "Add another file", onAdd)
+                IconAction(BetweenUsIcons.Trash, "Remove this one", { onRemove(current) })
             }
 
             Box(
@@ -181,12 +188,34 @@ fun SendPreviewDialog(
                         modifier = Modifier.fillMaxSize(),
                     )
 
-                    else -> AsyncImage(
+                    current.isImage -> AsyncImage(
                         model = current.uri,
                         contentDescription = current.name,
                         contentScale = ContentScale.Fit,
                         modifier = Modifier.fillMaxSize(),
                     )
+
+                    // A spreadsheet has nothing to look at. It still has a name
+                    // and a type, which is the whole of what can be checked
+                    // about it before it goes.
+                    else -> Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier.padding(32.dp),
+                    ) {
+                        BetweenUsIcon(BetweenUsIcons.File, tint = Slate400, size = 48.dp)
+                        Spacer(Modifier.height(12.dp))
+                        Text(
+                            text = current.name,
+                            style = MaterialTheme.typography.titleSmall,
+                            color = Slate100,
+                            textAlign = TextAlign.Center,
+                        )
+                        Text(
+                            text = current.contentType,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Slate500,
+                        )
+                    }
                 }
             }
 
@@ -212,15 +241,19 @@ fun SendPreviewDialog(
                                 .clickable { at = items.indexOf(item) },
                             contentAlignment = Alignment.Center,
                         ) {
-                            if (item.isVideo) {
-                                BetweenUsIcon(BetweenUsIcons.Play, tint = Slate400, size = 20.dp)
-                            } else {
-                                AsyncImage(
+                            when {
+                                item.isVideo ->
+                                    BetweenUsIcon(BetweenUsIcons.Play, tint = Slate400, size = 20.dp)
+
+                                item.isImage -> AsyncImage(
                                     model = item.uri,
                                     contentDescription = item.name,
                                     contentScale = ContentScale.Crop,
                                     modifier = Modifier.fillMaxSize(),
                                 )
+
+                                else ->
+                                    BetweenUsIcon(BetweenUsIcons.File, tint = Slate400, size = 20.dp)
                             }
                         }
                     }
@@ -252,7 +285,6 @@ fun SendPreviewDialog(
                     BasicTextField(
                         value = caption,
                         onValueChange = onCaption,
-                        enabled = !busy,
                         textStyle = TextStyle(color = Slate100, fontSize = 16.sp),
                         cursorBrush = SolidColor(Accent),
                         modifier = Modifier.fillMaxWidth(),
@@ -263,19 +295,14 @@ fun SendPreviewDialog(
                     modifier = Modifier
                         .size(48.dp)
                         .clip(CircleShape)
-                        .background(if (busy) Surface800 else Accent)
-                        .clickable(enabled = !busy) { onSend() },
+                        .background(Accent)
+                        .clickable { onSend() },
                     contentAlignment = Alignment.Center,
                 ) {
-                    if (busy) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(20.dp),
-                            strokeWidth = 2.dp,
-                            color = Accent,
-                        )
-                    } else {
-                        BetweenUsIcon(BetweenUsIcons.Send, tint = Color.White, size = 20.dp)
-                    }
+                    // No spinner. Sending is a hand-off to [Outbox] that
+                    // returns at once, and the progress lives in the ongoing
+                    // notification and the bar above the conversation.
+                    BetweenUsIcon(BetweenUsIcons.Send, tint = Color.White, size = 20.dp)
                 }
             }
 
@@ -288,7 +315,4 @@ fun SendPreviewDialog(
 data class PickedPreview(val uri: Uri, val name: String, val contentType: String) {
     val isVideo: Boolean get() = contentType.startsWith("video/")
     val isImage: Boolean get() = contentType.startsWith("image/")
-
-    /** True for what this screen can show rather than only name. */
-    val isPreviewable: Boolean get() = isVideo || isImage
 }
