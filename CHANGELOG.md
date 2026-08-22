@@ -1,5 +1,32 @@
 # Changelog
 
+## [0.0.1-alpha.7](https://github.com/aiyu-ayaan/BetweenUs/compare/v0.0.1-alpha.6...v0.0.1-alpha.7) (2026-08-22)
+
+### Features
+
+* Audio devices follow whatever is plugged in
+
+### Bug fixes
+
+* Add caching for Electron build and implement retry logic for packaging
+* A link that is refused or unanswered can now recover
+* The self-view is inside its corners, and PiP shows the speaker
+* Incoming video stops flickering
+* The speaking ring reads a level that is actually there
+
+### Other changes
+
+* Done with the enhancement
+* The second call-screen pass, and the one bug it did not close
+
+### Artifacts
+
+| Platform | This release |
+| --- | --- |
+| Server images | Built here |
+| Desktop (Windows) | Built here |
+| Android | Built here |
+
 ## [0.0.1-alpha.6](https://github.com/aiyu-ayaan/BetweenUs/compare/v0.0.1-alpha.5...v0.0.1-alpha.6) (2026-08-22)
 
 ### Features
