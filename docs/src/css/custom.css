@@ -1,30 +1,50 @@
 /**
- * Any CSS included here will be global. The classic template
- * bundles Infima by default. Infima is a CSS framework designed to
- * work well for content-centric websites.
+ * BetweenUs docs theme. Overrides Infima's default green with the client's
+ * own iris accent (see development/PLANNING.md, "the workbench", phase 26)
+ * so the docs don't read as a stock Docusaurus site.
  */
 
-/* You can override the default Infima variables here. */
 :root {
-  --ifm-color-primary: #2e8555;
-  --ifm-color-primary-dark: #29784c;
-  --ifm-color-primary-darker: #277148;
-  --ifm-color-primary-darkest: #205d3b;
-  --ifm-color-primary-light: #33925d;
-  --ifm-color-primary-lighter: #359962;
-  --ifm-color-primary-lightest: #3cad6e;
+  --ifm-color-primary: #6c47fa;
+  --ifm-color-primary-dark: #5730f7;
+  --ifm-color-primary-darker: #4d24f5;
+  --ifm-color-primary-darkest: #3f1dcb;
+  --ifm-color-primary-light: #8164fb;
+  --ifm-color-primary-lighter: #8c71fc;
+  --ifm-color-primary-lightest: #ac98fd;
   --ifm-code-font-size: 95%;
-  --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.1);
+  --docusaurus-highlighted-code-line-bg: rgba(124, 92, 255, 0.1);
+
+  --betweenus-iris: #7c5cff;
+  --betweenus-iris-soft: rgba(124, 92, 255, 0.14);
+  --betweenus-glow: rgba(124, 92, 255, 0.35);
 }
 
-/* For readability concerns, you should choose a lighter palette in dark mode. */
 [data-theme='dark'] {
-  --ifm-color-primary: #25c2a0;
-  --ifm-color-primary-dark: #21af90;
-  --ifm-color-primary-darker: #1fa588;
-  --ifm-color-primary-darkest: #1a8870;
-  --ifm-color-primary-light: #29d5b0;
-  --ifm-color-primary-lighter: #32d8b4;
-  --ifm-color-primary-lightest: #4fddbf;
-  --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.3);
+  --ifm-color-primary: #9c8cff;
+  --ifm-color-primary-dark: #8874ff;
+  --ifm-color-primary-darker: #7c65ff;
+  --ifm-color-primary-darkest: #5b41f0;
+  --ifm-color-primary-light: #b0a3ff;
+  --ifm-color-primary-lighter: #b9adff;
+  --ifm-color-primary-lightest: #ded6ff;
+  --docusaurus-highlighted-code-line-bg: rgba(156, 140, 255, 0.15);
+
+  --betweenus-iris: #9c8cff;
+  --betweenus-iris-soft: rgba(156, 140, 255, 0.14);
+  --betweenus-glow: rgba(156, 140, 255, 0.28);
+  --ifm-background-color: #0b0c12;
+  --ifm-background-surface-color: #12131c;
+  --ifm-navbar-background-color: #0e0f17;
+  --ifm-footer-background-color: #0b0c12;
+}
+
+.markdown h2 {
+  --ifm-h2-font-size: 1.5rem;
+  border-bottom: 1px solid var(--ifm-toc-border-color);
+  padding-bottom: 0.4rem;
+}
+
+.navbar__title {
+  font-weight: 700;
 }
