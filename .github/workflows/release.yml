@@ -9,6 +9,27 @@
 #   !beta    0.0.2-alpha.3 -> 0.0.2-beta.1    promote, same base version
 #   !stable  0.0.2-beta.2  -> 0.0.2           promote to stable, no bump
 #
+# A marker may name the platforms the release is for, in the scope position:
+#
+#   !alpha(android)          builds the Android artifacts and nothing else
+#   !fix(android,desktop)    both clients, no server images
+#   !feat                    builds everything, which is what no scope means
+#
+# The names are `docker` (every server image, `web` and `admin-web` among
+# them), `desktop` and `android`, plus a few aliases and `all`. A scope that is
+# not entirely platform names is a conventional-commit scope and changes
+# nothing: `!feat(chat)` builds all three.
+#
+# A platform left out is not left behind. Its artifacts from the last release
+# are carried into this one - the images are re-tagged under the new version,
+# the installers and the APKs are re-attached - so `<service>-<version>` exists
+# for every service of every version, `latest` never points at a partial set,
+# and a GitHub Release always has a full download list. The notes carry a table
+# saying which half of that each platform is.
+#
+# The first release cannot carry anything forward, so a scoped marker with no
+# previous tag behind it quietly builds everything instead.
+#
 # A push with no marker is not a release and this workflow does nothing. The
 # rules live in scripts/release-version.mjs and the notes in
 # scripts/release-notes.mjs; `pnpm check` runs both self-tests, so a change to
@@ -70,6 +91,11 @@ on:
         default: alpha
         type: choice
         options: [alpha, beta, stable, fix, feat, major]
+      targets:
+        description: 'What to build (pr mode only): all, or any of docker/desktop/android, comma-separated'
+        required: false
+        default: all
+        type: string
 
 permissions:
   contents: write
@@ -96,6 +122,8 @@ jobs:
       marker: ${{ steps.next.outputs.marker }}
       version: ${{ steps.next.outputs.version }}
       current: ${{ steps.current.outputs.version }}
+      targets: ${{ steps.targets.outputs.targets }}
+      carry: ${{ steps.targets.outputs.carry }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -123,8 +151,12 @@ jobs:
 
       - name: Use the dispatched marker
         if: github.event_name == 'workflow_dispatch'
+        env:
+          TARGETS: ${{ inputs.targets }}
         run: |
-          echo "!${{ inputs.marker }}: manual release" > subjects.txt
+          scope="$(printf '%s' "${TARGETS:-all}" | tr -d ' ')"
+          echo "!${{ inputs.marker }}(${scope:-all}): manual release" > subjects.txt
+          cat subjects.txt
 
       - id: current
         run: echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
@@ -135,6 +167,30 @@ jobs:
           node scripts/release-version.mjs \
             --current "${{ steps.current.outputs.version }}" \
             --subjects-file subjects.txt | tee -a "$GITHUB_OUTPUT"
+
+      # What a skipped platform carries its artifacts from: the last release
+      # that exists. There is nothing to carry from before the first one, so a
+      # scoped marker widens to everything rather than cutting a release with
+      # holes in it.
+      - name: What to build, and what to carry forward
+        id: targets
+        if: steps.next.outputs.release == 'true'
+        env:
+          TARGETS: ${{ steps.next.outputs.targets }}
+        run: |
+          carry="$(git describe --tags --abbrev=0 --match 'v*' 2>/dev/null || true)"
+          carry="${carry#v}"
+          targets="$TARGETS"
+          if [ -z "$carry" ] && [ "$targets" != "docker,desktop,android" ]; then
+            echo "::notice::No previous release to carry artifacts from; building everything."
+            targets="docker,desktop,android"
+          fi
+          {
+            echo "targets=$targets"
+            echo "carry=$carry"
+          } >> "$GITHUB_OUTPUT"
+          echo "building: $targets"
+          echo "carrying from: ${carry:-<nothing>}"
 
       - name: Nothing to release
         if: steps.next.outputs.release != 'true'
@@ -178,6 +234,8 @@ jobs:
         env:
           VERSION: ${{ needs.version.outputs.version }}
           PREVIOUS: ${{ needs.version.outputs.current }}
+          TARGETS: ${{ needs.version.outputs.targets }}
+          CARRY: ${{ needs.version.outputs.carry }}
         run: |
           if git rev-parse -q --verify "refs/tags/v${PREVIOUS}" > /dev/null; then
             git log "v${PREVIOUS}..HEAD" --format=%s > subjects.txt
@@ -188,6 +246,8 @@ jobs:
             --version "$VERSION" \
             --previous "$PREVIOUS" \
             --repository "$GITHUB_REPOSITORY" \
+            --targets "$TARGETS" \
+            --carried-from "$CARRY" \
             --subjects-file subjects.txt > CHANGELOG.next.md
           mv CHANGELOG.next.md CHANGELOG.md
           rm -f subjects.txt
@@ -208,8 +268,17 @@ jobs:
             | From | `${{ needs.version.outputs.current }}` |
             | To | `${{ needs.version.outputs.version }}` |
             | Marker | `!${{ needs.version.outputs.marker }}` |
+            | Builds | `${{ needs.version.outputs.targets }}` |
+            | Carries the rest from | `${{ needs.version.outputs.carry || 'nothing - first release' }}` |
 
-            Changed here: `package.json`, `apps/desktop/package.json`, `CHANGELOG.md`.
+            Anything not in **Builds** keeps the artifacts of the release named
+            above: its images are re-tagged under this version and its
+            installers and APKs are re-attached, so this release is still a
+            complete set. The CHANGELOG table below says the same thing to
+            whoever reads the release.
+
+            Changed here: `package.json`, `apps/desktop/package.json`,
+            `CHANGELOG.md`, `.github/release-targets`.
             The CHANGELOG diff is the release note — edit it in this branch if it
             reads badly, that is what this PR is for.
 
@@ -245,12 +314,15 @@ jobs:
       version: ${{ steps.detect.outputs.version }}
       channel: ${{ steps.detect.outputs.channel }}
       prerelease: ${{ steps.detect.outputs.prerelease }}
+      targets: ${{ steps.detect.outputs.targets }}
+      carry: ${{ steps.detect.outputs.carry }}
     steps:
-      # Two, because HEAD^ is what the version is compared against - and on a
-      # merge commit that is master as it stood before the PR went in.
+      # The whole history: HEAD^ is what the version is compared against - on a
+      # merge commit that is master as it stood before the PR went in - and the
+      # tags are what a carried-forward artifact is taken from.
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 2
+          fetch-depth: 0
 
       - uses: actions/setup-node@v4
         with:
@@ -309,12 +381,30 @@ jobs:
             *-beta.*)  channel=beta ;;
             *)         channel=latest ;;
           esac
+          # What the release PR wrote down. Absent - a release cut before this
+          # file existed, or a hand-made bump - means everything, which is what
+          # every release did until then.
+          targets="$(head -1 .github/release-targets 2>/dev/null | tr -d '[:space:]')"
+          [ -n "$targets" ] || targets=docker,desktop,android
+
+          # The last release that exists, which is where a platform this one
+          # skips takes its artifacts from. HEAD is not tagged yet.
+          carry="$(git describe --tags --abbrev=0 --match 'v*' 2>/dev/null || true)"
+          carry="${carry#v}"
+          if [ -z "$carry" ] && [ "$targets" != docker,desktop,android ]; then
+            echo "::notice::No previous release to carry from; building everything."
+            targets=docker,desktop,android
+          fi
+
           {
             echo "version=$current"
             echo "channel=$channel"
             echo "prerelease=$([ "$channel" = latest ] && echo false || echo true)"
+            echo "targets=$targets"
+            echo "carry=$carry"
           } >> "$GITHUB_OUTPUT"
           echo "Releasing v$current on the $channel channel."
+          echo "Building: $targets; carrying the rest from ${carry:-<nothing>}."
 
   # amd64 and arm64, one runner each, both native. QEMU was the other option
   # and it is the wrong one here: every image runs `pnpm install` and `tsc`
@@ -329,7 +419,7 @@ jobs:
   images:
     name: ${{ matrix.target }} image (${{ matrix.arch }})
     needs: merged
-    if: needs.merged.outputs.release == 'true'
+    if: needs.merged.outputs.release == 'true' && contains(needs.merged.outputs.targets, 'docker')
     runs-on: ${{ matrix.runner }}
     strategy:
       # One failure should not hide the rest; every image is independent.
@@ -411,10 +501,20 @@ jobs:
   # silicon Mac with no Rosetta - fails the pull outright:
   #
   #   no matching manifest for linux/arm64/v8 in the manifest list entries
+  #
+  # It also runs when nothing was built, because a release that skips `docker`
+  # still has to have `<service>-<version>` for every service: `promote` points
+  # the channel tags at that name and the deployment bundle pins it. In that
+  # case the tag is put on the images of the release being carried forward -
+  # the same manifest list under a second name, no rebuild and no pull.
   manifest:
-    name: Multi-arch tags for v${{ needs.merged.outputs.version }}
+    name: Image tags for v${{ needs.merged.outputs.version }}
     needs: [merged, images]
-    if: needs.merged.outputs.release == 'true'
+    # `images` is skipped, not failed, when this release is not for docker, and
+    # a skipped need would otherwise take this job with it.
+    if: >-
+      !cancelled() && needs.merged.outputs.release == 'true'
+      && !contains(needs.*.result, 'failure')
     runs-on: ubuntu-latest
     steps:
       - uses: docker/setup-buildx-action@v3
@@ -426,12 +526,14 @@ jobs:
       # merge-multiple keeps the per-target directory each job uploaded, so
       # what lands is digests/<target>/<digest>: two files per target.
       - uses: actions/download-artifact@v4
+        if: needs.images.result == 'success'
         with:
           path: digests
           pattern: digest-*
           merge-multiple: true
 
       - name: Name both architectures with one tag
+        if: needs.images.result == 'success'
         env:
           VERSION: ${{ needs.merged.outputs.version }}
         run: |
@@ -458,10 +560,32 @@ jobs:
               | grep -E '^(Name|  Platform):' || true
           done
 
+      # No images were built for this release, so this version's tags are a
+      # second name for the ones the last release built. `imagetools create`
+      # from an existing tag copies the manifest list whole, both architectures
+      # with it, and pulls nothing.
+      - name: Carry the last release's images into this version
+        if: needs.images.result != 'success'
+        env:
+          VERSION: ${{ needs.merged.outputs.version }}
+          CARRY: ${{ needs.merged.outputs.carry }}
+        run: |
+          if [ -z "$CARRY" ]; then
+            echo "::error::Nothing to carry the images forward from."
+            exit 1
+          fi
+          for target in auth-service server-service chat-service presence-service \
+                        notification-service call-service remote-gateway web admin-web; do
+            docker buildx imagetools create \
+              --tag "${IMAGE_REPO}:${target}-${VERSION}" \
+              "${IMAGE_REPO}:${target}-${CARRY}"
+          done
+          echo "Images for v${VERSION} are v${CARRY}'s, re-tagged."
+
   desktop:
     name: Windows installer and portable exe
     needs: merged
-    if: needs.merged.outputs.release == 'true'
+    if: needs.merged.outputs.release == 'true' && contains(needs.merged.outputs.targets, 'desktop')
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -493,7 +617,7 @@ jobs:
   android:
     name: Android APKs and AAB
     needs: merged
-    if: needs.merged.outputs.release == 'true'
+    if: needs.merged.outputs.release == 'true' && contains(needs.merged.outputs.targets, 'android')
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -614,7 +738,12 @@ jobs:
   promote:
     name: Point ${{ needs.merged.outputs.channel }} and latest at this release
     needs: [merged, images, manifest, desktop, android, publish]
-    if: needs.merged.outputs.release == 'true'
+    # A platform this release skipped leaves its job skipped rather than
+    # failed, and the tags still move: `manifest` has made sure every service
+    # has a tag for this version whether it was rebuilt or carried forward.
+    if: >-
+      !cancelled() && needs.merged.outputs.release == 'true'
+      && !contains(needs.*.result, 'failure')
     runs-on: ubuntu-latest
     steps:
       - uses: docker/setup-buildx-action@v3
@@ -657,7 +786,9 @@ jobs:
   publish:
     name: Publish v${{ needs.merged.outputs.version }}
     needs: [merged, images, manifest, desktop, android]
-    if: needs.merged.outputs.release == 'true'
+    if: >-
+      !cancelled() && needs.merged.outputs.release == 'true'
+      && !contains(needs.*.result, 'failure')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -673,14 +804,47 @@ jobs:
       # nothing here wants them, and one of them failing its fifth retry is
       # what took a release down after every artifact had already been built.
       - uses: actions/download-artifact@v4
+        if: needs.desktop.result == 'success'
         with:
           name: desktop
           path: artifacts/desktop
 
       - uses: actions/download-artifact@v4
+        if: needs.android.result == 'success'
         with:
           name: android
           path: artifacts/android
+
+      # A platform this release did not build still ships: its artifacts are
+      # the ones attached to the release being carried forward, downloaded and
+      # attached again under their own names. The names keep the version they
+      # were built for, which is the honest answer to "which build is this" -
+      # the table in the notes says the same thing in words.
+      #
+      # It carries transitively without trying to: if v0.0.6 carried the APKs
+      # from v0.0.5, they are attached to v0.0.6 like any other asset, and this
+      # takes them from there.
+      - name: Carry the last release's artifacts forward
+        if: needs.desktop.result != 'success' || needs.android.result != 'success'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CARRY: ${{ needs.merged.outputs.carry }}
+          DESKTOP: ${{ needs.desktop.result }}
+          ANDROID: ${{ needs.android.result }}
+        run: |
+          if [ -z "$CARRY" ]; then
+            echo "::error::Nothing to carry the artifacts forward from."
+            exit 1
+          fi
+          if [ "$DESKTOP" != success ]; then
+            mkdir -p artifacts/desktop
+            gh release download "v${CARRY}" --repo "$GITHUB_REPOSITORY"               --pattern '*.exe' --dir artifacts/desktop
+          fi
+          if [ "$ANDROID" != success ]; then
+            mkdir -p artifacts/android
+            gh release download "v${CARRY}" --repo "$GITHUB_REPOSITORY"               --pattern '*.apk' --pattern '*.aab' --dir artifacts/android
+          fi
+          ls -la artifacts/desktop artifacts/android
 
       # A drop-in deployment folder: compose pinned to this exact version, plus
       # the two files it mounts. The paths are flattened because the release
@@ -721,6 +885,12 @@ jobs:
             ${{ steps.notes.outputs.body }}
 
             ## Install
+
+            Not every release rebuilds every platform. The **Artifacts** table
+            above says which of these were built here and which are the last
+            release's, re-attached unchanged - a download whose file name
+            carries an older version is that, and it is the current build for
+            its platform.
 
             **Desktop (Windows)** — `BetweenUs-${{ needs.merged.outputs.version }}-Setup.exe`
             installs; `-Portable.exe` needs nothing.
