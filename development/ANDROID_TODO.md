@@ -567,6 +567,28 @@ showing the conversation. Both decisions are made here.
       asked for alongside the microphone: without the grant the platform reports
       no Bluetooth device at all, which is what "the headset is not detected"
       turned out to mean. See the note below.
+- [x] **The connection panel.** Bitrate, loss, round trip and frame size per
+      peer, and the sentence saying which of them is bad enough to be what
+      somebody is hearing. `CallStats.kt` is a port of the desktop's
+      `services/call-stats.ts`, with `CallStatsTest` mirroring its self-check -
+      two clients in one call must not disagree about what 5% loss is. It rides
+      on the `getStats` poll that was already running.
+- [x] **Reconnection, and the deadlines that end a call.** A link that stops
+      carrying media is retried with an ICE restart and a re-offer, backed off,
+      four attempts inside thirty seconds. Before this the single
+      `restartIce()` on `FAILED` did nothing whatsoever: a restart recovers
+      nothing unless somebody offers, and nothing acts on
+      `onRenegotiationNeeded` here. Only the impolite side restarts, for the
+      same reason it is the only side that offers. Tiles say "Reconnecting…"
+      and then "No connection"; the peer connection is left open, because who
+      is in a call is the roster's answer. Above that, two whole-call
+      deadlines: forty-five seconds with no signalling, and five minutes alone.
+      `CallRecovery` is the policy and is tested.
+- [x] **The speaking ring on your own tile.** It read a peer connection's
+      inbound statistics, and no peer connection carries your own microphone,
+      so every self tile passed a hardcoded `false`. The level comes off the
+      microphone itself now, which also works alone in a channel - where there
+      are no statistics and where "is this picking me up?" is the question.
 
 ### Finding a Bluetooth headset
 

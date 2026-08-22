@@ -77,6 +77,7 @@ import com.aatech.betweenus.ui.components.BetweenUsIcons
 import com.aatech.betweenus.ui.components.EmptyState
 import com.aatech.betweenus.ui.components.Notice
 import com.aatech.betweenus.ui.theme.Accent
+import com.aatech.betweenus.ui.theme.Amber200
 import com.aatech.betweenus.ui.theme.Danger
 import com.aatech.betweenus.ui.theme.Edge
 import com.aatech.betweenus.ui.theme.Ground
@@ -126,6 +127,7 @@ fun VoiceChannelScreen(
     // happens to other people.
     val selfSpeaking by engine.selfSpeaking.collectAsState()
     val linkStats by engine.stats.collectAsState()
+    val signalling by engine.signalling.collectAsState()
     val problem by engine.problem.collectAsState()
 
     val channel = channelId?.let { Workspace.channel(it) }
@@ -355,6 +357,7 @@ fun VoiceChannelScreen(
                                 muted = !remote.micEnabled,
                                 speaking = remote.speaking,
                                 connected = remote.connected,
+                                status = statusOf(remote),
                                 fit = RendererCommon.ScalingType.SCALE_ASPECT_FILL,
                                 // Clear of the floating dock, which is drawn
                                 // over the bottom of this tile.
@@ -401,6 +404,7 @@ fun VoiceChannelScreen(
                                         muted = !participants[0].micEnabled,
                                         speaking = participants[0].speaking,
                                         connected = participants[0].connected,
+                                        status = statusOf(participants[0]),
                                         fit = RendererCommon.ScalingType.SCALE_ASPECT_FILL,
                                         modifier = Modifier
                                             .weight(1f)
@@ -414,6 +418,7 @@ fun VoiceChannelScreen(
                                         muted = !participants[1].micEnabled,
                                         speaking = participants[1].speaking,
                                         connected = participants[1].connected,
+                                        status = statusOf(participants[1]),
                                         fit = RendererCommon.ScalingType.SCALE_ASPECT_FILL,
                                         modifier = Modifier
                                             .weight(1f)
@@ -461,6 +466,7 @@ fun VoiceChannelScreen(
                                         muted = !participants[0].micEnabled,
                                         speaking = participants[0].speaking,
                                         connected = participants[0].connected,
+                                        status = statusOf(participants[0]),
                                         fit = RendererCommon.ScalingType.SCALE_ASPECT_FILL,
                                         modifier = Modifier
                                             .weight(1f)
@@ -474,6 +480,7 @@ fun VoiceChannelScreen(
                                         muted = !participants[1].micEnabled,
                                         speaking = participants[1].speaking,
                                         connected = participants[1].connected,
+                                        status = statusOf(participants[1]),
                                         fit = RendererCommon.ScalingType.SCALE_ASPECT_FILL,
                                         modifier = Modifier
                                             .weight(1f)
@@ -494,6 +501,7 @@ fun VoiceChannelScreen(
                                         muted = !participants[2].micEnabled,
                                         speaking = participants[2].speaking,
                                         connected = participants[2].connected,
+                                        status = statusOf(participants[2]),
                                         fit = RendererCommon.ScalingType.SCALE_ASPECT_FILL,
                                         modifier = Modifier
                                             .weight(1f)
@@ -508,6 +516,7 @@ fun VoiceChannelScreen(
                                             muted = !participants[3].micEnabled,
                                             speaking = participants[3].speaking,
                                             connected = participants[3].connected,
+                                            status = statusOf(participants[3]),
                                             fit = RendererCommon.ScalingType.SCALE_ASPECT_FILL,
                                             modifier = Modifier
                                                 .weight(1f)
@@ -566,6 +575,7 @@ fun VoiceChannelScreen(
                                     muted = !activeSpeaker.micEnabled,
                                     speaking = activeSpeaker.speaking,
                                     connected = activeSpeaker.connected,
+                                    status = statusOf(activeSpeaker),
                                     fit = RendererCommon.ScalingType.SCALE_ASPECT_FILL,
                                     modifier = Modifier.fillMaxSize(),
                                 )
@@ -594,6 +604,7 @@ fun VoiceChannelScreen(
                                                 muted = !participant.micEnabled,
                                                 speaking = participant.speaking,
                                                 connected = participant.connected,
+                                                status = statusOf(participant),
                                                 isCompact = true,
                                                 fit = RendererCommon.ScalingType.SCALE_ASPECT_FILL,
                                                 modifier = Modifier.fillMaxSize(),
@@ -669,12 +680,21 @@ fun VoiceChannelScreen(
                     text = when (val current = state) {
                         VoiceEngine.CallState.Idle -> "Not connected"
                         is VoiceEngine.CallState.Connecting -> "Connecting…"
-                        is VoiceEngine.CallState.Live ->
-                            "${participants.size + 1} in call · E2EE"
+                        is VoiceEngine.CallState.Live -> when {
+                            // Said before the head count, because it is the
+                            // thing that explains everything else on screen.
+                            !signalling -> "Reconnecting to the call server…"
+                            participants.any { it.reconnecting } -> "Reconnecting…"
+                            else -> "${participants.size + 1} in call · E2EE"
+                        }
                         is VoiceEngine.CallState.Failed -> current.reason
                     },
                     style = MaterialTheme.typography.bodySmall,
-                    color = if (state is VoiceEngine.CallState.Failed) Danger else Slate400,
+                    color = when {
+                        state is VoiceEngine.CallState.Failed -> Danger
+                        state is VoiceEngine.CallState.Live && !signalling -> Amber200
+                        else -> Slate400
+                    },
                 )
             }
 
@@ -963,6 +983,18 @@ private fun FloatingPipTile(
 }
 
 /**
+ * What a tile says about a link that is not carrying anything.
+ *
+ * Null while everything is fine, which is almost always - a tile with a
+ * permanent status line is a tile nobody reads.
+ */
+private fun statusOf(participant: VoiceEngine.Participant): String? = when {
+    participant.lost -> "No connection"
+    participant.reconnecting -> "Reconnecting…"
+    else -> null
+}
+
+/**
  * Standard call participant tile with smooth video rendering, speaking ring,
  * frosted glass user badge, and muted indicators.
  */
@@ -976,6 +1008,13 @@ private fun CallTile(
     muted: Boolean = false,
     speaking: Boolean = false,
     connected: Boolean = true,
+    /**
+     * "Reconnecting…" or "No connection", when there is something to say.
+     *
+     * A greyed name was the only sign a link had died, which reads as somebody
+     * being quiet rather than as somebody being gone.
+     */
+    status: String? = null,
     isLocal: Boolean = false,
     isCompact: Boolean = false,
     fit: RendererCommon.ScalingType = RendererCommon.ScalingType.SCALE_ASPECT_FILL,
@@ -1038,7 +1077,7 @@ private fun CallTile(
             horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             Text(
-                text = label,
+                text = if (status != null) "$label · $status" else label,
                 style = if (isCompact) MaterialTheme.typography.labelSmall else MaterialTheme.typography.bodySmall,
                 color = if (connected) Slate100 else Slate500,
                 fontSize = if (isCompact) 10.sp else 12.sp,

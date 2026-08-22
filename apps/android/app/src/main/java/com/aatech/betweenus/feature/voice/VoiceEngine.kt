@@ -141,6 +141,18 @@ class VoiceEngine(private val context: Context) {
         val screenDeclared: Boolean? = null,
         val speaking: Boolean = false,
         val connected: Boolean = false,
+        /**
+         * The link is down and being retried.
+         *
+         * Kept apart from `connected` rather than folded into it, because a
+         * tile has three things to say and not two: connecting for the first
+         * time, carrying media, and having carried it a moment ago. Only the
+         * third is worth a spinner, and only the third is worth apologising
+         * for.
+         */
+        val reconnecting: Boolean = false,
+        /** Retried until [CallRecovery] ran out of patience. */
+        val lost: Boolean = false,
     ) {
         /** What a tile shows. A share wins over a camera; a phone has one tile. */
         val video: VideoTrack? get() = visibleScreen ?: visibleCamera
@@ -227,6 +239,19 @@ class VoiceEngine(private val context: Context) {
     val stats: StateFlow<List<LinkStats>> = _stats.asStateFlow()
 
     /**
+     * Whether the switchboard is reachable, for the one line at the top of the
+     * call screen.
+     *
+     * Not the same question as whether media is flowing: signalling can be down
+     * for a minute while two peers carry on talking perfectly, because nothing
+     * about an established connection goes through the server. It still has to
+     * be said, because in that state nobody new can join and the roster
+     * everybody else sees no longer has this device in it.
+     */
+    private val _signalling = MutableStateFlow(true)
+    val signalling: StateFlow<Boolean> = _signalling.asStateFlow()
+
+    /**
      * When the last frame loud enough to count arrived, so the ring does not
      * strobe on the gaps between words.
      *
@@ -286,6 +311,23 @@ class VoiceEngine(private val context: Context) {
     private var detach: (() -> Unit)? = null
     private var pollJob: Job? = null
     private var joinTimeout: Job? = null
+
+    /**
+     * The two ways a call ends without anybody pressing anything: its
+     * switchboard became unreachable, or everybody else left and nobody came
+     * back. See [startWatchdogs].
+     */
+    private var watchdog: Job? = null
+
+    /** Stops listening to the signalling socket's ups and downs. */
+    private var socketWatch: (() -> Unit)? = null
+
+    /** When the signalling socket last went away, while in a call. */
+    @Volatile
+    private var signallingLostAt: Long? = null
+
+    /** When this device was last the only one in the call. */
+    private var aloneSince: Long? = null
 
     /**
      * Offers and candidates that arrived before the peer they belong to was on
@@ -359,6 +401,7 @@ class VoiceEngine(private val context: Context) {
                 PresenceSocket.joinVoice(channelId)
 
                 startJoinTimeout(channelId)
+                startWatchdogs()
 
                 // From here the call has to survive the screen going off, and
                 // the earpiece is not where a call this app starts belongs.
@@ -410,6 +453,90 @@ class VoiceEngine(private val context: Context) {
     }
 
     /**
+     * The two ways a call ends with nobody pressing anything.
+     *
+     * **The switchboard went away.** The signalling socket reconnects itself
+     * and rejoins, and a tunnel is a real thing that ends - so a drop is not an
+     * ending. But past [CallRecovery.SIGNALLING_DEADLINE_MS] the roster has
+     * long since dropped this device, nobody else can see it in the call, and
+     * an open microphone with a foreground service is a lie told to its owner.
+     *
+     * **Everybody else left.** Being alone is normal - it is how every call
+     * starts and how every meeting ends - so it is timed rather than acted on.
+     * What is not normal is holding a microphone open for the rest of the
+     * afternoon because a call was never left.
+     *
+     * One coroutine for both, ticking once a second, because two would be two
+     * things to cancel and this is not expensive.
+     */
+    private fun startWatchdogs() {
+        watchdog?.cancel()
+        socketWatch?.invoke()
+
+        signallingLostAt = if (CallSocket.connected) null else System.currentTimeMillis()
+        aloneSince = null
+        _signalling.value = CallSocket.connected
+
+        socketWatch = CallSocket.onConnection { up ->
+            signallingLostAt = if (up) null else System.currentTimeMillis()
+            _signalling.value = up
+        }
+
+        watchdog = scope.launch {
+            while (isActive) {
+                delay(1_000)
+                if (!inCall()) continue
+                val now = System.currentTimeMillis()
+
+                signallingLostAt?.let { lostAt ->
+                    if (now - lostAt >= CallRecovery.SIGNALLING_DEADLINE_MS) {
+                        _problem.value = "The call server could not be reached, so the call ended."
+                        leave()
+                        return@launch
+                    }
+                }
+
+                // Only once the call is actually up. A `Connecting` call has
+                // nobody in it yet by definition, and the join timeout is what
+                // covers that.
+                if (_state.value is CallState.Live && _participants.value.isEmpty()) {
+                    val since = aloneSince ?: now.also { aloneSince = it }
+                    if (now - since >= CallRecovery.ALONE_MS) {
+                        _problem.value = "You were the only one here, so the call ended."
+                        leave()
+                        return@launch
+                    }
+                } else {
+                    aloneSince = null
+                }
+            }
+        }
+    }
+
+    private fun stopWatchdogs() {
+        watchdog?.cancel()
+        watchdog = null
+        socketWatch?.invoke()
+        socketWatch = null
+        signallingLostAt = null
+        aloneSince = null
+        // Not a call any more, so not a call with a problem either.
+        _signalling.value = true
+    }
+
+    /**
+     * A link this device could not get back, said once.
+     *
+     * Once per call rather than once per peer: in a mesh a network bad enough
+     * to lose one link usually loses all of them at the same moment, and four
+     * banners saying the same thing is how a banner gets ignored.
+     */
+    private fun noteLostLink() {
+        if (_problem.value != null) return
+        _problem.value = "Lost the connection to somebody in this call."
+    }
+
+    /**
      * A failure has to leave as little behind as a clean exit does. Without
      * this a half-started call kept its microphone track and its socket
      * listener, and every retry added another listener to the pile.
@@ -436,6 +563,7 @@ class VoiceEngine(private val context: Context) {
         pollJob = null
         joinTimeout?.cancel()
         joinTimeout = null
+        stopWatchdogs()
         CallAudio.stop(context)
         CallService.stop(context)
         CallService.detach()
@@ -1013,16 +1141,43 @@ class VoiceEngine(private val context: Context) {
                     )
                 }
 
+                /**
+                 * The one callback that says whether media is flowing, and the
+                 * only place recovery starts.
+                 *
+                 * `DISCONNECTED` and `FAILED` are different problems. The first
+                 * is usually a handover and usually fixes itself, so it is
+                 * given [CallRecovery.GRACE_MS] to do that. The second means
+                 * ICE has exhausted every candidate it had and nothing will
+                 * happen without a restart.
+                 */
                 override fun onConnectionChange(state: PeerConnection.PeerConnectionState) {
-                    val up = state == PeerConnection.PeerConnectionState.CONNECTED
-                    scope.launch { update(peer.peerId) { it.copy(connected = up) } }
+                    when (state) {
+                        PeerConnection.PeerConnectionState.CONNECTED -> recovered()
+
+                        PeerConnection.PeerConnectionState.DISCONNECTED ->
+                            startRecovery(CallRecovery.GRACE_MS)
+
+                        PeerConnection.PeerConnectionState.FAILED ->
+                            startRecovery(0L)
+
+                        // Closed is this side hanging up, and there is nothing
+                        // to recover from a decision.
+                        PeerConnection.PeerConnectionState.CLOSED ->
+                            scope.launch {
+                                update(peer.peerId) {
+                                    it.copy(connected = false, reconnecting = false)
+                                }
+                            }
+
+                        else -> Unit
+                    }
                 }
 
-                override fun onIceConnectionChange(state: PeerConnection.IceConnectionState) {
-                    // One restart, then leave it. A mesh with one dead link is a
-                    // call with one silent tile, not a call that ends.
-                    if (state == PeerConnection.IceConnectionState.FAILED) pc.restartIce()
-                }
+                // Everything this used to do now happens in onConnectionChange,
+                // which is the state that includes DTLS rather than only ICE -
+                // a connection can have ICE up and still be carrying nothing.
+                override fun onIceConnectionChange(state: PeerConnection.IceConnectionState) = Unit
 
                 // Tracks are read off the slots after negotiation instead: the
                 // transceiver handed to this callback is a fresh wrapper, so it
@@ -1461,6 +1616,110 @@ class VoiceEngine(private val context: Context) {
         /** The last reading, so the next one can be a rate rather than a total. */
         private var lastSample: LinkSample? = null
 
+        // --- recovery ---
+
+        /** The retry loop, while one is running. */
+        private var recovery: Job? = null
+
+        /** When the media stopped, so the deadline is measured from the fault. */
+        private var downSince: Long? = null
+
+        private var attempts = 0
+
+        /**
+         * Media is flowing again - either it never really stopped, or a restart
+         * worked.
+         *
+         * The counters reset, so a call that drops once an hour on a train gets
+         * the full budget each time rather than spending its way to "lost" over
+         * an afternoon.
+         */
+        fun recovered() {
+            recovery?.cancel()
+            recovery = null
+            downSince = null
+            attempts = 0
+            scope.launch {
+                update(peer.peerId) {
+                    it.copy(connected = true, reconnecting = false, lost = false)
+                }
+            }
+        }
+
+        /**
+         * Start trying, after [initialDelay].
+         *
+         * Idempotent: a connection flapping between DISCONNECTED and FAILED
+         * calls this repeatedly, and each call must not start a second loop
+         * racing the first.
+         */
+        fun startRecovery(initialDelay: Long) {
+            if (closed) return
+            if (recovery?.isActive == true) return
+            if (downSince == null) downSince = System.currentTimeMillis()
+
+            recovery = scope.launch {
+                delay(initialDelay)
+                // The grace period is exactly the case where nothing more is
+                // needed: ICE climbed out on its own while we waited.
+                if (closed || connectedNow()) return@launch
+
+                scope.launch {
+                    update(peer.peerId) { it.copy(connected = false, reconnecting = true) }
+                }
+
+                while (isActive && !closed && !connectedNow()) {
+                    val downFor = System.currentTimeMillis() - (downSince ?: break)
+                    if (CallRecovery.spent(attempts, downFor)) {
+                        giveUp()
+                        return@launch
+                    }
+
+                    attempts += 1
+                    delay(CallRecovery.backoffMs(attempts))
+                    if (closed || connectedNow()) return@launch
+
+                    // Only the impolite side, and both halves are needed: the
+                    // restart marks the connection as wanting fresh candidates
+                    // and the offer is what actually asks for them. The old
+                    // code called restartIce alone, and since nothing here acts
+                    // on onRenegotiationNeeded, it did nothing at all.
+                    if (CallRecovery.restarts(polite)) {
+                        runCatching { pc.restartIce() }
+                        offer()
+                    }
+
+                    // Long enough for a restart to have landed, short enough
+                    // that four of them fit inside the deadline.
+                    delay(CallRecovery.GRACE_MS)
+                }
+            }
+        }
+
+        private fun connectedNow(): Boolean =
+            pc.connectionState() == PeerConnection.PeerConnectionState.CONNECTED
+
+        /**
+         * Out of attempts, or out of time.
+         *
+         * The connection is left open rather than closed. Who is in the call is
+         * the roster's answer and never this side's guess: a peer whose phone
+         * really has gone is removed by `call.roster` a moment later, and one
+         * whose link is merely unrecoverable from *here* may still be perfectly
+         * present to everybody else. Closing it would also throw away the only
+         * thing that can still report a late recovery.
+         */
+        private fun giveUp() {
+            recovery = null
+            scope.launch {
+                update(peer.peerId) {
+                    it.copy(connected = false, reconnecting = false, lost = true)
+                }
+                noteLostLink()
+            }
+        }
+
+
         /**
          * Whether a camera and a share are really arriving, by counting frames,
          * who is speaking, by reading audio levels, and what the link is doing,
@@ -1597,6 +1856,8 @@ class VoiceEngine(private val context: Context) {
 
         fun close() {
             closed = true
+            recovery?.cancel()
+            recovery = null
             runCatching { data.unregisterObserver() }
             runCatching { data.close() }
             runCatching { pc.close() }

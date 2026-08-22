@@ -579,6 +579,23 @@ Android, calls:
       in one call must not disagree about what 5% loss is. It costs no extra
       work: the one-second `getStats` poll that decides who is speaking now
       reads the byte counters on the same walk of the report.
+- [x] **A dropped link is reconnected, and a call that cannot be reconnected
+      ends itself.** The old code called `pc.restartIce()` once on
+      `IceConnectionState.FAILED` and stopped - and that single call did
+      nothing at all, because a restart only becomes a recovery when somebody
+      offers, and nothing here acts on `onRenegotiationNeeded`. Recovery now
+      hangs off `PeerConnectionState`, which includes DTLS rather than only
+      ICE: `DISCONNECTED` is given four seconds to fix itself (it usually
+      does, on a handover), `FAILED` is acted on at once, and the impolite side
+      - the only one that offers - restarts and re-offers on a backoff, four
+      attempts inside a thirty-second deadline. Past that the tile says "No
+      connection" instead of a hopeful spinner, and the peer connection is left
+      open rather than closed: who is in a call is the roster's answer, never
+      this side's guess. Two whole-call deadlines sit above it: forty-five
+      seconds with no signalling ends the call, because by then nobody else can
+      see this device in it, and five minutes alone ends it too, because a
+      microphone and a foreground service running all afternoon is not a call.
+      `CallRecovery` is the policy, pure and tested.
 - [x] **The speaking ring lights for your own tile.** It never had: `speaking`
       is read from a peer connection's inbound statistics and no peer
       connection carries your own microphone, so every self tile passed a

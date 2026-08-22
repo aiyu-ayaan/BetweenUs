@@ -101,6 +101,7 @@ Electron preload bridge, and a browser tab has none of them.
 | Be driven while sharing your screen | ✅ | — | — |
 | Manual quality override | ✅ | ✅ | ⚠️ automatic |
 | Connection panel: bitrate, loss, round trip, frame size | ✅ | ✅ | ✅ |
+| Reconnects a dropped link, and ends a call it cannot recover | — | — | ✅ |
 | Push to talk | ✅ | ✅ | — |
 | Picture-in-picture while minimised | ✅ | — | — |
 | Join and leave tones | ✅ | ✅ | ✅ |
@@ -722,6 +723,13 @@ was built the way it was; this is the short version.
   explain what somebody is hearing. A port of the desktop's, arithmetic for
   arithmetic, because two clients in the same call must not disagree about what
   5% loss is.
+- **Call reconnection on Android, and the deadlines that end one.** A link that
+  stops carrying media is retried with an ICE restart on a backoff - which is
+  new: the old single `restartIce()` did nothing, because a restart only
+  recovers anything when somebody offers. Tiles say "Reconnecting…" and then
+  "No connection" rather than only going grey. A call whose server has been
+  unreachable for forty-five seconds ends itself, and so does one left alone
+  for five minutes.
 - **Every attachment sends under the foreground service, not only pictures and
   video.** A document used to upload inline in the chat screen's own scope,
   which died the moment the screen did - leaving the channel mid-upload left
