@@ -1034,6 +1034,57 @@ swallows - and the daily job, which is the one that cannot be watched: force it
 with `adb shell cmd jobscheduler run -f com.aatech.betweenus <id>` rather than
 waiting a day for it, and check that turning the switch off stops it.
 
+## Sharing in, pasting in, and two things that were wrong on screen
+
+Four items from a phone, in one pass.
+
+- **BetweenUs is in the system share sheet.** `ACTION_SEND` and
+  `ACTION_SEND_MULTIPLE` for media and documents land on `MainActivity`, which
+  reads the URIs and leaves them in `PendingShare` - the shape `PendingChannel`
+  and `PendingInvite` already use, because an intent is not a screen and cannot
+  choose a conversation. The shell puts a chat screen in front of them (the
+  last conversation, or the drawer to pick one) and the chat screen takes them
+  into the same send preview a paperclip fills. So the flow is share sheet →
+  preview → send, and nothing is read, sealed or uploaded before somebody has
+  looked at it. `text/plain` is deliberately not declared: a shared link
+  belongs in the composer, and offering the app for something it would have
+  nowhere to put is worse than not being offered.
+
+- **A picture can be pasted into the composer.** The text field is a content
+  receiver and consumes the image half of what arrives - clipboard paste, and a
+  Gboard sticker or GIF, which come down the same path - handing it to the send
+  preview rather than into the text. Anything else in the same paste still
+  lands as text.
+
+- **The call header no longer sits under the status bar.** A call hides the
+  system bars, which takes their insets to zero, and `systemBarsPadding`
+  faithfully reported nothing to keep clear - so the header slid up under a
+  status bar that is still drawn over the app, transiently after an edge swipe
+  and permanently on a device that declines to hide it. It uses
+  `systemBarsIgnoringVisibility` now: how much room the bars take when they are
+  there, whether or not they are there right now.
+
+- **The message list follows the conversation again.** Three coroutines scrolled
+  it: one on opening a channel, one on every new message, and the correction in
+  `ChatScreen` that puts the view back on the bottom when a row grows
+  underneath it. A `LazyListState` serialises scrolls through a mutex in which
+  the newcomer cancels the incumbent, and being cancelled inside the
+  correction's `collect` does not skip one scroll - it ends the collection, so
+  the latch and the correction were gone for the rest of the channel. The first
+  message sent could be the last one the list ever followed. The correction
+  already covers the other two - a channel opening is a list whose end is off
+  screen, a message arriving is a list whose end has moved past the bottom, and
+  both leave a positive gap with the view still following - so it is now the
+  only thing that scrolls, and it catches the cancellations that remain rather
+  than dying of them. The rules themselves are unchanged in `Follow.kt`.
+
+**None of the four has been on a device.** The share sheet is the one to try
+first, and in three states: the app dead, the app in the background on a
+conversation, and the app open on settings or a call. The second thing to check
+is that reopening BetweenUs from the launcher afterwards does *not* re-share the
+same photo - `singleTask` redelivers the intent that started the task, which is
+why `EXTRA_STREAM` is removed once it has been taken.
+
 ---
 
 ## Deliberately out of scope
