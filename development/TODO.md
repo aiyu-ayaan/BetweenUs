@@ -10,7 +10,10 @@ the top honest — it is what a new session reads first.
 documented in `FCM/`; a swiped-away phone is now reachable. What is still open
 is Web Push, and the fan-out for remote sessions. The call half is answered by
 `call.roster`, and Android rings from it: a direct call raises a full-screen
-answer screen with the app dead. See the phase-27 section below.
+answer screen with the app dead. Cross-device suppression has also landed - a
+message does not wake a phone whose owner has the same channel open on another
+device, desktop or a second phone (`docs/push-suppression.md`). See the
+phase-27 section below.
 
 **None of it has been in front of a human.** `FCM/TESTING.md` is the order to
 try it in, and the four things most likely to be wrong are: the token arriving
@@ -83,10 +86,11 @@ sessions have not. **All of it is documented in `FCM/`** - the architecture in
 
 The rule the whole design turns on: **the push is data-only and carries no
 words.** A message body is sealed with the channel key, so no service could
-write a notification worth reading; and no service knows whether the recipient
-is looking at that conversation right now. Both are decided on the device, which
-is why a message arriving in the channel already on screen makes no sound - the
-same behaviour WhatsApp has, for the same reason.
+write a notification worth reading. Whether the recipient is looking at that
+conversation *right now* is decided in two places: locally, on the device that
+already has it open - that is why a message never sounds on the screen showing
+it - and now on the server too, for every *other* device the same account owns.
+See `docs/push-suppression.md` for the second half.
 
 Backend (`notification-service`):
 
@@ -116,6 +120,13 @@ Backend (`notification-service`):
       whole roster is what makes a notification that keeps up as people arrive
       and *goes away* when the last one leaves, which a "started" event cannot
       do. Android rings from it.
+- [x] **Cross-device suppression.** The foreground check below is local: it
+      silences a channel already on *this* screen and cannot see anybody else's.
+      `/ws/presence` now carries `channel.focus` / `channel.blur`, kept in Redis
+      the same way `presence:online` is, and `message.created` asks
+      `presence-service` who is reading before it fans out at all - so a message
+      does not buzz a phone whose owner has that exact channel open on a laptop.
+      See `docs/push-suppression.md`.
 - [ ] Fan-out on `remote.session.started`
 
 Web:

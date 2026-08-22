@@ -312,10 +312,10 @@ death costs the older lines and nothing else.
 
 ## Not done yet
 
-- **Calls.** A push with the app dead is the whole reason a phone needs this and
-  a desktop does not, and it is not wired: `call.started` raises no push. Tracked
-  in `development/TODO.md` (phase 27) and `development/ANDROID_TODO.md` (phase 5).
-- **Remote access.** Same: `remote.session.started` raises no push.
+- **Remote access.** `remote.session.started` raises no push, unlike a call:
+  `onCallRoster` in `push.service.ts` wakes a phone for a channel it can hear,
+  but nothing does the same for a remote session somebody is trying to start.
+  Tracked in `development/TODO.md` (phase 27).
 - **Web Push.** The registry and the fan-out are transport-agnostic on purpose —
   the platform column and `MessagePushData` already allow for it — but no service
   worker exists.

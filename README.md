@@ -27,7 +27,7 @@ A modern, secure communication platform with end-to-end encrypted messaging, pee
 
 Messages, attachments, and call media are end-to-end encrypted: the server stores and routes ciphertext, never holding any key that can decrypt it. Voice, video, and screen sharing stream directly between participants via a peer-to-peer WebRTC mesh with DTLS-SRTP encryption — requiring zero media server infrastructure.
 
-`CLAUDE.md` is the target architecture. `development/` tracks what is built, why each decision was taken, and what is deliberately left open. `DEPLOYMENT.md` is the step-by-step guide for deploying on a server with Docker Compose, Cloudflare Tunnels, and STUN/TURN relays.
+`CLAUDE.md` is the target architecture. `development/` tracks what is built, why each decision was taken, and what is deliberately left open. `docs/` holds a small number of deep dives on one cross-cutting feature each, linked from wherever that feature is mentioned. `DEPLOYMENT.md` is the step-by-step guide for deploying on a server with Docker Compose, Cloudflare Tunnels, and STUN/TURN relays.
 
 ---
 
@@ -86,6 +86,7 @@ Electron preload bridge, and a browser tab has none of them.
 | Search within a channel | ✅ | ✅ | — |
 | Quick switcher (Ctrl+K) | ✅ | ✅ | — |
 | Attachments of any type, up to 100 MB | ✅ | ✅ | ✅ |
+| Sending survives leaving the screen | — | — | ✅ foreground service |
 | HEIC photos converted, photos re-encoded on the way out | ✅ | ✅ | ✅ |
 | Preview before sending, multi-select, captions | ✅ | ✅ | ✅ |
 | Drag and drop into the composer | ✅ | ✅ | — |
@@ -107,9 +108,11 @@ Electron preload bridge, and a browser tab has none of them.
 | Online, idle, do not disturb, invisible | ✅ | ✅ | ✅ |
 | Typing indicators, voice rosters | ✅ | ✅ | ✅ |
 | Unread counts and the unread line | ✅ | ✅ | ✅ |
-| Notifications for messages, mentions and calls | ✅ | ✅ | ⚠️ preferences only |
-| Per-channel and per-person mute, quiet hours | ✅ | ✅ | ⚠️ on or off |
+| Notifications for messages, mentions and calls | ✅ | ✅ | ✅ FCM, app dead or alive |
+| Per-channel and per-person mute, quiet hours | ✅ | ✅ | ✅ |
+| Not woken for a chat open on another of your devices | ✅ | ✅ | ✅ |
 | System tray, start with the system | ✅ | — | — |
+| Self-updates from GitHub Releases (alpha / beta / stable) | — | — | ✅ |
 | **Remote desktop** | | | |
 | Offer this machine to be controlled | ✅ | — | — |
 | View and control another machine | ✅ | — | ✅ |
@@ -119,9 +122,10 @@ Electron preload bridge, and a browser tab has none of them.
 \* The admin panel is its own bundle at `/admin`, so it is a browser page
 whichever client you arrived from.
 
-⚠️ **Android notifications**: the preferences are there and sync with the other
-clients, but nothing is delivered while the app is closed - that needs Firebase
-Cloud Messaging, which is the next phase in `development/ANDROID_TODO.md`.
+**Push suppression** works the same way WhatsApp's does: if any of your
+windows has a channel open and focused, none of your devices is woken for a
+message in it. A different channel still buzzes normally, even in the same
+server. See `docs/push-suppression.md`.
 
 ---
 
@@ -495,6 +499,18 @@ A native Android mobile application built with **Kotlin 2.2**, **Jetpack Compose
   - **Integrated Video Player**: Fullscreen playback with standard media playback controls.
   - **Direct Gallery Storage Saving**: "Save to Gallery" action saves media directly into the device's public media albums under `Pictures/BetweenUs` and `Movies/BetweenUs` using modern Android Scoped Storage (`MediaStore`).
 - **WebRTC Voice & Video**: Peer-to-peer audio and video calls.
+- **Push notifications**: FCM, data-only and sealed - the server never writes a
+  notification, only the phone can. Messages, mentions, calls (a `CallStyle`
+  full-screen intent that rings with the app dead), friend requests and being
+  added to a server. Suppressed for a channel any of your other devices already
+  has open and focused - see `docs/push-suppression.md`.
+- **Attachments send under a foreground service**: leaving the channel, taking
+  a call or locking the phone no longer kills an upload halfway.
+- **Self-updating**: checks its own GitHub releases on launch and once a day in
+  the background, on a channel of alpha / beta / stable, downloads the APK
+  built for the device's ABI (never the universal one), and hands it to
+  Android's package installer - install now or snooze a day. See
+  `development/ANDROID_TODO.md` (phase 15).
 
 ```bash
 # Build and verify the Android client:
@@ -684,6 +700,26 @@ Errors share one shape everywhere:
 Newest first. Every one of these is in `development/TRACK.md` with the reason it
 was built the way it was; this is the short version.
 
+### Notifications & Android self-update
+
+- **Push suppression across devices.** A message no longer buzzes a phone
+  whose owner has that exact channel open and focused on another device -
+  desktop, web or a second phone. Per account, per exact channel: a different
+  server still notifies normally everywhere. Clients report focus over
+  `/ws/presence`; `notification-service` asks `presence-service` before every
+  fan-out and drops the readers. `docs/push-suppression.md`.
+- **Every attachment sends under the foreground service, not only pictures and
+  video.** A document used to upload inline in the chat screen's own scope,
+  which died the moment the screen did - leaving the channel mid-upload left
+  its parts in object storage and nothing to finish them. Everything picked
+  now goes through the same preview and the same `Outbox` queue.
+- **Android updates itself.** Checks its own GitHub releases on launch and once
+  a day in the background (`WorkManager`, unmetered network), on a channel of
+  alpha / beta / stable, downloads the APK built for the device's ABI and hands
+  it to a `PackageInstaller` session - which reports what happened, including a
+  refusal from a build signed with a different key. Install now, or snooze a
+  day by default. `development/ANDROID_TODO.md` (phase 15).
+
 ### Deployment & Backups
 
 - **Single Point Datapath (`BETWEENUS_DATA_PATH`).** `pnpm data:path <path>` sets up a unified storage root for `data/postgres`, `data/redis`, `data/media` (`pictures/` and `attachments/`), and `backup/`. Derived path environment variables (`POSTGRES_DATA_PATH`, `REDIS_DATA_PATH`, `UPLOAD_DATA_PATH`, `BACKUP_DATA_PATH`) are written directly to `.env` while preserving fallback to Docker named volumes.
@@ -790,3 +826,6 @@ Third-party dependencies keep their own licences.
 | `development/TESTING.md` | Running two clients locally, and what to try |
 | `development/TODO.md` | Ordered backlog, including what each phase left open |
 | `development/ANDROID_TODO.md` | Native Android client architecture, roadmap, and completed phases |
+| `development/TRACK.md` | The current track: what has landed this pass, and why it was built the way it was |
+| `FCM/README.md` | Push notification design: why it is data-only, what the server can decide and what only the client can |
+| `docs/push-suppression.md` | Why a phone is not woken for a chat already open on another of your devices, end to end |

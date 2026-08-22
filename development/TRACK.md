@@ -535,6 +535,30 @@ Android, self-update:
       phone that has not been opened in three weeks. See phase 15 of
       `ANDROID_TODO.md`.
 
+Notifications:
+
+- [x] **Not woken for a chat open on another device.** The foreground check
+      (`AppForeground.visible && Conversation.visibleChannelId == channelId`)
+      only ever saw this screen. `/ws/presence` now carries `channel.focus` /
+      `channel.blur`, permission-checked like `typing.start`, held in a Redis
+      sorted set scored the same way `presence:online` is - so a client that
+      dies without saying goodbye ages out rather than silencing a channel
+      forever. `notification-service` asks `presence-service` once per message,
+      after the mute filter, and drops the readers from the fan-out. Per
+      account and per exact channel: any window on #general silences every
+      device for #general and nothing else. Every failure of the lookup -
+      timeout, refused connection, bad body - answers "nobody is reading",
+      because a missed notification is worse than a redundant one. Full design
+      and a two-device test in `docs/push-suppression.md`.
+- [x] **Every attachment sends under the foreground service, not only what the
+      preview could draw.** A document, a spreadsheet, an audio file took a
+      second path from the one above: read, sealed and uploaded inline in the
+      chat screen's own coroutine scope the instant it was picked, which dies
+      with the screen exactly as the original bug did - so leaving the channel
+      mid-upload still lost it. Everything picked now lands in the send preview
+      (a file with nothing to look at gets a card with its name and type) and
+      goes to `Outbox` like a photo does.
+
 End-to-end encryption:
 
 - [x] **A second machine reads history.** The key directory answers one more

@@ -141,6 +141,7 @@ node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
 | `LOG_LEVEL` | `info` | `debug` is noisy and logs more request detail than a public deployment wants |
 | `STORAGE_DRIVER` and the `S3_*` block | see §13 | Empty means uploads live on a Docker volume |
 | `BETWEENUS_DATA_PATH` | a path you choose, or empty | Where this deployment's data lives - `pnpm data:path /srv/x/betweenus` creates the tree and writes the four bind paths Compose mounts. Empty keeps everything in Docker named volumes, as before. See §18 |
+| `FIREBASE_PROJECT_ID` / `FIREBASE_CLIENT_EMAIL` / `FIREBASE_PRIVATE_KEY` (or `FIREBASE_SERVICE_ACCOUNT`) | empty, unless you want Android push | Push notifications for the Android client - messages, calls, friend requests. Off by default: with none of these set, `notification-service` logs it once at boot and the app still works, it just is not woken while closed. See `FCM/README.md` for the whole design and how to get the key |
 | `BACKUP_INTERVAL_HOURS` / `BACKUP_KEEP` | `168` / `8` | Weekly dumps, eight kept. A dump also runs before every migration, and the migration will not start if it fails (§18) |
 
 > [!IMPORTANT]
@@ -746,6 +747,11 @@ than useless. All of these are tracked in `development/TODO.md`.
   the app itself; user routes are served by chat-service.
 - **No version negotiation.** Nothing checks that a client's version matches the
   deployment's; a client too old finds out through a failing request.
+- **Push is off unless you configure Firebase.** No `FIREBASE_*` variables
+  means Android is never woken while closed; everything else about the app
+  still works. The Android client also checks GitHub itself for a newer build
+  once a day regardless - that needs no configuration on this host, since it
+  talks to GitHub directly rather than through this deployment.
 - **Remote input injection is Windows-only.** Elsewhere a session can watch but
   not touch.
 
