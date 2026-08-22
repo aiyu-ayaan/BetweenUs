@@ -881,8 +881,27 @@ nothing tells a phone that a newer one exists unless the app does. It now does.
       a runtime permission - it cannot be asked for with a dialog - so
       `Updates.canInstall` checks the grant and the settings page is offered
       instead of a prompt that would never appear.
+- [x] **A `PackageInstaller` session, not an `ACTION_VIEW` intent.** Both end at
+      the same confirmation dialog and the difference is what happens after it.
+      The intent form is fire and forget, so the likeliest failure of the lot -
+      `INSTALL_FAILED_UPDATE_INCOMPATIBLE`, an APK signed with a different key
+      from the installed build - was a dialog that closed and an app that had
+      not changed. The session answers to `UpdateInstallReceiver`, which starts
+      the confirmation the platform hands back and says what went wrong when
+      something does.
 - [x] **The check runs on every launch**, once per process, from the shell. It
       is silent unless there is something to offer.
+- [x] **And once a day while the app is closed.** `UpdateWorker`, a WorkManager
+      `PeriodicWorkRequest` on unmetered network with the battery not low. The
+      launch check reaches everybody who opens BetweenUs regularly and nobody
+      else, and "nobody else" is exactly who a security fix has to reach: a
+      phone that has not opened the app in three weeks is running a
+      three-week-old build. It downloads nothing - that would spend somebody's
+      storage on a decision they have not made - and draws one low-importance
+      notification leading to the screen through `betweenus://update`. Enqueued
+      with `KEEP` so an app opened daily still reaches the end of a period, and
+      cancelled the moment the switch goes off: a switch that says "no" and
+      leaves a daily job running is a switch that lied.
 - [x] **Install or snooze.** The sheet has two answers, and the snooze defaults
       to one day (1, 3 or 7 on the screen). There is no "never" button: the
       version being refused is superseded next week, and a permanent refusal is
@@ -896,12 +915,15 @@ nothing tells a phone that a newer one exists unless the app does. It now does.
       silently when they are wrong: ordering across pre-releases, what each
       channel accepts, and which asset matches which ABI.
 
-**What has not happened: any of it on a phone.** The three things to try first
+**What has not happened: any of it on a phone.** The four things to try first
 are the install hand-off on a device where "install unknown apps" has never been
 granted, an update across a channel change (alpha to stable, which must offer
-nothing until the stable release passes the alpha), and an install over a build
+nothing until the stable release passes the alpha), an install over a build
 signed with a different key - which Android refuses, and which is the failure a
-person sideloading their first release will hit.
+person sideloading their first release will hit, and now reports rather than
+swallows - and the daily job, which is the one that cannot be watched: force it
+with `adb shell cmd jobscheduler run -f com.aatech.betweenus <id>` rather than
+waiting a day for it, and check that turning the switch off stops it.
 
 ---
 

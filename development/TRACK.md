@@ -527,8 +527,13 @@ Android, self-update:
       sees the stable release that supersedes it. It downloads the build for the
       device's ABI rather than the universal one, and hands it to Android's
       package installer, which is the screen that actually asks; nothing
-      installs itself. The prompt offers install or a snooze, one day by
-      default. See phase 15 of `ANDROID_TODO.md`.
+      installs itself - the install is a `PackageInstaller` session, so a
+      refusal comes back with its reason rather than as a dialog that closed and
+      an app that did not change. The prompt offers install or a snooze, one day
+      by default. A WorkManager job repeats the check once a day while the app
+      is closed, on unmetered network, which is the only thing that reaches a
+      phone that has not been opened in three weeks. See phase 15 of
+      `ANDROID_TODO.md`.
 
 End-to-end encryption:
 
