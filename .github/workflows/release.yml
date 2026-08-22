@@ -601,12 +601,32 @@ jobs:
       # and resolves them through their built declarations.
       - run: pnpm build
 
+      # The Electron zip is 111 MB from GitHub's release CDN, which is the one
+      # step of this job that fails for reasons that have nothing to do with us.
+      # Once a run has it, later runs take it from here and never ask again.
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/AppData/Local/electron/Cache
+            ~/AppData/Local/electron-builder/Cache
+          key: electron-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: electron-${{ runner.os }}-
+
       - name: Package
         env:
           # No code-signing certificate here. electron-builder would otherwise
           # go looking for one in the machine store and fail on what it finds.
           CSC_IDENTITY_AUTO_DISCOVERY: false
-        run: pnpm --filter @betweenus/desktop exec electron-builder --config electron-builder.yml --win
+        # And when the cache is cold, the download still drops often enough to
+        # sink a release on its own. Three tries.
+        run: |
+          for ($i = 1; $i -le 3; $i++) {
+            pnpm --filter @betweenus/desktop exec electron-builder --config electron-builder.yml --win
+            if ($LASTEXITCODE -eq 0) { exit 0 }
+            Write-Host "Package attempt $i failed; retrying."
+            Start-Sleep -Seconds 15
+          }
+          exit 1
 
       - uses: actions/upload-artifact@v4
         with:
