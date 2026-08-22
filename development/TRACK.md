@@ -519,6 +519,17 @@ Android faults found against a real deployment:
 - [x] **One avatar control in settings**, not two: the account row already drew
       the picture the picker was drawing again beside its buttons.
 
+Android, self-update:
+
+- [x] **The app updates itself from its own GitHub releases.** There is no store
+      to notice a new APK for a self-hosted app, so the client checks on every
+      launch, on a channel of alpha, beta or stable - cumulative, so beta also
+      sees the stable release that supersedes it. It downloads the build for the
+      device's ABI rather than the universal one, and hands it to Android's
+      package installer, which is the screen that actually asks; nothing
+      installs itself. The prompt offers install or a snooze, one day by
+      default. See phase 15 of `ANDROID_TODO.md`.
+
 End-to-end encryption:
 
 - [x] **A second machine reads history.** The key directory answers one more

@@ -50,6 +50,12 @@ notification with a full-screen intent onto its own activity - and that is the
 one thing on this list most in need of a real phone: a full-screen intent is
 the feature manufacturers differ most about.
 
+Phase 15 has landed: the app checks its own GitHub releases on every launch,
+on a channel of alpha, beta or stable, downloads the APK built for the device's
+ABI rather than the universal one, and hands it to Android's installer. Install
+or snooze, a day by default. **Not on a device yet** - the rules are unit
+tested and the rest compiles.
+
 Phase 13 has landed apart from the light theme. The refresh token is sealed by
 the Keystore and keyed per deployment, a private CA is handled by trusting what
 the phone's owner installed, signing reads a keystore from the environment or a
@@ -833,6 +839,69 @@ drew was fetched fresh on each launch and held only in memory.
 phase: AGP 9's built-in Kotlin rejects source sets added through the `kotlin`
 DSL, which is how KSP registers what Room generates. It goes when KSP starts
 registering through `android.sourceSets`.
+
+---
+
+## Phase 15 — Auto update ✅ (compiles and is unit tested; never on a device)
+
+There is no store in the loop. BetweenUs is self-hosted and its Android builds
+are APKs attached to a GitHub Release by `.github/workflows/release.yml`, so
+nothing tells a phone that a newer one exists unless the app does. It now does.
+
+- [x] `feature/update/Releases.kt` — the rules, and all of them pure: a version
+      parser for the shapes the release workflow produces (`1.2.3`,
+      `1.2.3-alpha.4`, `1.2.3-beta.4`, with or without the `v`), which releases
+      a channel may see, and which of a release's APKs belongs to this device.
+      Anything it cannot parse is skipped rather than guessed at.
+- [x] **Three channels, cumulative.** Stable takes finished releases; beta takes
+      betas *and* stable releases; alpha takes everything. Cumulative is the
+      point: somebody on beta who saw only betas would never be offered the
+      stable release that supersedes the build they are running. The default is
+      the channel the installed build came from - an alpha install asks for
+      alphas - and it is changeable on the screen.
+- [x] **"Newer" is by version, never by publish date.** A stable release cut
+      after an alpha is not an upgrade for the person running that alpha, and
+      dates say it is.
+- [x] **The ABI-specific APK, not the universal one.** `Build.SUPPORTED_ABIS` in
+      the device's own order, matched on the asset-name suffix so `-x86.apk`
+      cannot match `-x86_64.apk`. The universal build carries every ABI's native
+      libraries and is roughly three times the download; it is the fallback for
+      a device whose ABI has no asset, and never the choice.
+- [x] `feature/update/Updates.kt` — the state around the rules. The GitHub call,
+      the APK streamed to the cache with progress, the snooze, and the hand-off.
+      `SharedPreferences` and one `StateFlow`; six values do not need a
+      database, and a `WorkManager` job would buy a background check nobody
+      asked for. The check happens when the app is opened, which is the only
+      moment an update can be acted on anyway.
+- [x] **Nothing installs itself.** Android has no silent install for an app that
+      is not the device owner, and it should not: the last screen is always the
+      system's, showing what is about to replace what.
+      `REQUEST_INSTALL_PACKAGES` is what lets the app reach that screen. From
+      API 26 it is a per-app setting rather than a device-wide one and is *not*
+      a runtime permission - it cannot be asked for with a dialog - so
+      `Updates.canInstall` checks the grant and the settings page is offered
+      instead of a prompt that would never appear.
+- [x] **The check runs on every launch**, once per process, from the shell. It
+      is silent unless there is something to offer.
+- [x] **Install or snooze.** The sheet has two answers, and the snooze defaults
+      to one day (1, 3 or 7 on the screen). There is no "never" button: the
+      version being refused is superseded next week, and a permanent refusal is
+      what the switch on the screen is for.
+- [x] `feature/update/AutoUpdateScreen.kt` — the switch, the three channels, the
+      snooze length, a check-now button, and whatever the last check found. A
+      screen rather than four rows in settings, because choosing alpha is
+      choosing builds nobody has finished testing and that belongs beside the
+      paragraph saying so. Reached from **Settings → Auto update**.
+- [x] `ReleasesTest` covers the three decisions that install the wrong build
+      silently when they are wrong: ordering across pre-releases, what each
+      channel accepts, and which asset matches which ABI.
+
+**What has not happened: any of it on a phone.** The three things to try first
+are the install hand-off on a device where "install unknown apps" has never been
+granted, an update across a channel change (alpha to stable, which must offer
+nothing until the stable release passes the alpha), and an install over a build
+signed with a different key - which Android refuses, and which is the failure a
+person sideloading their first release will hit.
 
 ---
 
