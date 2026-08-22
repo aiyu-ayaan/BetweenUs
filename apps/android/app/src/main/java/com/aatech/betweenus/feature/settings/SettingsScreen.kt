@@ -86,6 +86,7 @@ fun SettingsScreen(
     onBack: () -> Unit,
     onServerSettings: () -> Unit,
     onPermissions: () -> Unit,
+    onAutoUpdate: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -533,6 +534,13 @@ fun SettingsScreen(
                     },
                 )
             }
+
+            ListRow(
+                title = "Auto update",
+                subtitle = "Channel, and whether this app updates itself from GitHub",
+                leading = { BetweenUsIcon(BetweenUsIcons.Download) },
+                onClick = onAutoUpdate,
+            )
 
             // --- deployment ---
             SectionLabel("Deployment")

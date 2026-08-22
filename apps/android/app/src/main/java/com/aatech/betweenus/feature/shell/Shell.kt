@@ -44,6 +44,10 @@ import com.aatech.betweenus.feature.servers.ServerSettingsScreen
 import com.aatech.betweenus.feature.settings.BetweenUsPermissions
 import com.aatech.betweenus.feature.settings.PermissionsScreen
 import com.aatech.betweenus.feature.settings.SettingsScreen
+import com.aatech.betweenus.feature.update.AutoUpdateScreen
+import com.aatech.betweenus.feature.update.UpdateSheet
+import com.aatech.betweenus.feature.update.UpdateState
+import com.aatech.betweenus.feature.update.Updates
 import com.aatech.betweenus.feature.voice.VoiceChannelScreen
 import com.aatech.betweenus.ui.theme.Ground
 import com.aatech.betweenus.ui.theme.Surface950
@@ -107,6 +111,18 @@ fun Shell(user: PublicUser) {
     LaunchedEffect(serverId, channelId) { LastPlace.remember(serverId, channelId) }
 
     val invited by PendingInvite.code.collectAsState()
+
+    /**
+     * The update check, on every launch and only on launch.
+     *
+     * There is no store to notice a new build for a self-hosted app shipped as
+     * an APK, so the app has to. Once per process: a check on every trip back
+     * from the background would be a network call for a thing that changes
+     * every few days. It is quiet unless there is something to offer, and it
+     * honours the snooze - see `Updates`.
+     */
+    var offeringUpdate by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { offeringUpdate = Updates.check() is UpdateState.Available }
 
     val identity by E2ee.status.collectAsState()
     var unlocking by remember { mutableStateOf(false) }
@@ -302,7 +318,11 @@ fun Shell(user: PublicUser) {
                         onBack = { navigation.popBackStack() },
                         onServerSettings = { navigation.navigate(Route.ServerSettings) },
                         onPermissions = { navigation.navigate(Route.Permissions) },
+                        onAutoUpdate = { navigation.navigate(Route.AutoUpdate) },
                     )
+                }
+                composable(Route.AutoUpdate) {
+                    AutoUpdateScreen(onBack = { navigation.popBackStack() })
                 }
                 composable(Route.Permissions) {
                     PermissionsScreen(
@@ -328,6 +348,15 @@ fun Shell(user: PublicUser) {
                         onBack = { navigation.popBackStack() },
                     )
                 }
+            }
+
+            // A newer release, offered once the app is actually usable rather
+            // than over the loading mark. Install or be left alone for a day.
+            // Only the launch check opens this. A check started from the auto
+            // update screen shows its result on that screen, and a sheet over
+            // the top of it would be the same answer twice.
+            if (offeringUpdate) {
+                UpdateSheet(onDismiss = { offeringUpdate = false; Updates.dismiss() })
             }
 
             if (unlocking) {
@@ -364,6 +393,7 @@ object Route {
     const val Settings = "settings"
     const val ServerSettings = "server-settings"
     const val Permissions = "permissions"
+    const val AutoUpdate = "auto-update"
     const val Remote = "remote"
     const val RemoteSession = "remote-session"
 }
