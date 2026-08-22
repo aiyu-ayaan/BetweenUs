@@ -24,6 +24,12 @@ interface SocketState {
   userId: string;
   username: string;
   alive: boolean;
+  /**
+   * The channel this window has on screen, or null. One at a time: a window
+   * shows one conversation, and a second focus replaces the first rather than
+   * adding to it.
+   */
+  focused: string | null;
 }
 
 @Injectable()
@@ -52,7 +58,12 @@ export class PresenceGateway implements OnModuleDestroy {
         return;
       }
 
-      this.state.set(socket, { userId: user.id, username: user.username, alive: true });
+      this.state.set(socket, {
+        userId: user.id,
+        username: user.username,
+        alive: true,
+        focused: null,
+      });
       void this.onConnect(socket, user.id);
 
       socket.on('pong', () => {
@@ -86,6 +97,10 @@ export class PresenceGateway implements OnModuleDestroy {
         // A live socket is a live user; this is what keeps them out of the
         // stale window in Redis.
         void this.store.touch(state.userId);
+        // And a live socket still looking at a channel is still looking at it.
+        // Without this the focus ages out after 90 seconds and a phone starts
+        // buzzing for a conversation that is open on a desktop.
+        if (state.focused) void this.store.focus(state.focused, state.userId);
       }
     }, HEARTBEAT_INTERVAL_MS);
 
@@ -177,7 +192,19 @@ export class PresenceGateway implements OnModuleDestroy {
   }
 
   private async onDisconnect(socket: WebSocket, userId: string): Promise<void> {
+    const state = this.state.get(socket);
     this.state.delete(socket);
+
+    // Before the early return below: this window is gone whether or not the
+    // user has others, and a window that is gone is not reading anything.
+    //
+    // Focus is per user, so the entry is only removed if no *other* window of
+    // theirs is still on that channel. Removing it unconditionally would leave
+    // a gap - up to one heartbeat - in which a phone is woken for a
+    // conversation that is open on a second screen right now.
+    if (state?.focused && !this.stillFocused(userId, state.focused, socket)) {
+      await this.store.blur(state.focused, userId);
+    }
 
     // Another window of the same user may still be connected to this instance.
     if (this.hasOtherSocket(userId, socket)) return;
@@ -191,6 +218,17 @@ export class PresenceGateway implements OnModuleDestroy {
       user: { userId, status: 'offline' },
     });
     this.logger.info('Presence disconnected', { userId });
+  }
+
+  /** Has this user another live window on `channelId`? See `onDisconnect`. */
+  private stillFocused(userId: string, channelId: string, except: WebSocket): boolean {
+    for (const socket of this.server?.clients ?? []) {
+      if (socket === except) continue;
+      if (socket.readyState !== WebSocket.OPEN) continue;
+      const state = this.state.get(socket);
+      if (state?.userId === userId && state.focused === channelId) return true;
+    }
+    return false;
   }
 
   /** Is this user connected through some socket other than `except`? */
@@ -237,6 +275,31 @@ export class PresenceGateway implements OnModuleDestroy {
         await this.store.touch(state.userId);
         this.send(socket, { type: 'pong' });
         return;
+
+      /**
+       * The window is showing this channel and has the user's attention.
+       *
+       * Permission is checked, like typing: focus suppresses notifications, so
+       * an unchecked one would let anybody silence a channel they cannot even
+       * see for everybody who can.
+       */
+      case 'channel.focus': {
+        if (!(await this.canAccessChannel(state.userId, event.channelId))) return;
+        // One channel per window. Leaving the old one behind would have a
+        // window that has moved on still suppressing the conversation it left.
+        if (state.focused && state.focused !== event.channelId) {
+          await this.store.blur(state.focused, state.userId);
+        }
+        state.focused = event.channelId;
+        await this.store.focus(event.channelId, state.userId);
+        return;
+      }
+
+      case 'channel.blur': {
+        if (state.focused === event.channelId) state.focused = null;
+        await this.store.blur(event.channelId, state.userId);
+        return;
+      }
 
       case 'typing.start':
         if (!(await this.canAccessChannel(state.userId, event.channelId))) return;

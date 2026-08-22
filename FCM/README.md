@@ -67,6 +67,12 @@ That is not a style preference, it is forced twice over:
    device. A push that Android draws on its own would fire while you are reading
    the very message it is announcing.
 
+   The server does know one half of it, and only because clients tell it: which
+   channel each *window* has focused. That is what stops a phone buzzing for a
+   conversation being read on a laptop, and it is the one thing here no client
+   can decide, because a client only ever sees its own screen. See
+   `docs/push-suppression.md`.
+
 So the push wakes the app, and the app writes the notification. This is exactly
 how WhatsApp behaves and for the same reason.
 
@@ -78,12 +84,14 @@ how WhatsApp behaves and for the same reason.
 | Muted channel | Server | On the envelope |
 | Muted person | Server | The author is on the envelope |
 | My own message | Client | Cheap, and the id is right there |
-| Channel already on screen | Client | The server cannot know |
+| Channel already on screen *here* | Client | Cheapest where the screen is |
+| Channel on screen on *another* device | Server | Only the server sees the other devices — `docs/push-suppression.md` |
 | Quiet hours | Client | Minutes on *this* phone's clock, no timezone on the server |
 | Mentions-only | Client | The mention is inside the ciphertext |
 
-The rule of thumb: if answering it would need the plaintext or the phone's
-state, it is a client decision, and the push still goes out.
+The rule of thumb: if answering it would need the plaintext, it is a client
+decision and the push still goes out. If it needs to know about a device that is
+not this one, only the server can answer it.
 
 ---
 

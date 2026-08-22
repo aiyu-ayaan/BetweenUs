@@ -963,6 +963,17 @@ export interface VoiceState {
 export type ClientPresenceEvent =
   | { type: 'status.set'; status: ActiveStatus }
   | { type: 'typing.start'; channelId: string }
+  /**
+   * "This channel is on screen in front of me, in a focused window."
+   *
+   * Sent when a channel is opened in a focused window and again on a heartbeat
+   * while it stays that way; `channel.blur` is sent when the window loses
+   * focus or the channel is left. It is what stops a push waking a phone for a
+   * conversation its owner is already reading somewhere else - see
+   * `docs/push-suppression.md`.
+   */
+  | { type: 'channel.focus'; channelId: string }
+  | { type: 'channel.blur'; channelId: string }
   | { type: 'voice.join'; channelId: string }
   | { type: 'voice.leave'; channelId: string }
   | { type: 'ping' };

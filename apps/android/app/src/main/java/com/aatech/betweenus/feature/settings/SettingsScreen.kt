@@ -587,6 +587,9 @@ fun SettingsScreen(
                             .clearAll(context)
                         com.aatech.betweenus.feature.notifications.PushGate.forgetPreferences()
                         com.aatech.betweenus.feature.chat.Outbox.forgetPending()
+                        // And this account stops reading whatever was on
+                        // screen, or the next one inherits its silence.
+                        com.aatech.betweenus.core.store.ChannelFocus.forget()
                         Session.signOut()
                     }
                 },

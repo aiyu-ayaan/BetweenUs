@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useAuthStore } from './stores/auth';
 import { useChatStore } from './stores/chat';
 import { captureInviteFromUrl } from './services/invite-link';
+import { startChannelFocus } from './services/channel-focus';
 import { useFriendsStore } from './stores/friends';
 import { usePresenceStore } from './stores/presence';
 import {
@@ -110,6 +111,12 @@ function Session(): JSX.Element {
       document.removeEventListener('visibilitychange', read);
     };
   }, []);
+
+  /**
+   * Which conversation is in front of this person, told to the server so it
+   * does not wake their phone for it. See services/channel-focus.ts.
+   */
+  useEffect(() => startChannelFocus(), []);
 
   // Clicking a notification brings the window back and opens what it was about.
   useEffect(

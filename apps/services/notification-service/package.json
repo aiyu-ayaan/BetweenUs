@@ -8,7 +8,7 @@
     "dev": "nest start --watch",
     "start": "node dist/main.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "check": "tsx src/push/roster.check.ts",
+    "check": "tsx src/push/roster.check.ts && tsx src/push/focus.check.ts",
     "smoke": "node smoke.mjs"
   },
   "dependencies": {

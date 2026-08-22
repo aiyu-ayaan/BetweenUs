@@ -22,6 +22,7 @@ const ONLINE_KEY = 'presence:online';
 const STATUS_KEY = 'presence:status';
 const VOICE_KEY = (channelId: string): string => `presence:voice:${channelId}`;
 const VOICE_INDEX = 'presence:voice:channels';
+const FOCUS_KEY = (channelId: string): string => `presence:focus:${channelId}`;
 
 /** Anything else in the hash is a status this build does not know; ignore it. */
 const ACTIVE_STATUSES: ActiveStatus[] = ['online', 'idle', 'dnd', 'invisible'];
@@ -108,6 +109,45 @@ export class PresenceStore implements OnModuleDestroy {
   // arrives whole from call-service, so there is nothing to add, nothing to
   // remove, and no need to ask which channels somebody is in so that a
   // disconnect can guess its way out of them.
+
+  /**
+   * Who has this channel on screen, scored by when they last said so.
+   *
+   * The same shape as `presence:online` and for the same reason: a client that
+   * dies without saying goodbye has to age out rather than suppress that
+   * channel's notifications forever. The gateway clears the entry on a clean
+   * disconnect, the score handles the unclean one, and the TTL on the key
+   * itself means a channel nobody is reading leaves nothing behind in Redis.
+   *
+   * Per user, not per device. If any of somebody's windows is looking at the
+   * channel, none of their devices needs to be woken for it.
+   */
+  async focus(channelId: string, userId: string): Promise<void> {
+    const key = FOCUS_KEY(channelId);
+    await this.redis
+      .multi()
+      .zadd(key, Date.now(), userId)
+      .pexpire(key, STALE_AFTER_MS)
+      .exec();
+  }
+
+  async blur(channelId: string, userId: string): Promise<void> {
+    await this.redis.zrem(FOCUS_KEY(channelId), userId);
+  }
+
+  /**
+   * Which of [userIds] are reading [channelId] right now.
+   *
+   * Stale entries are dropped as a side effect of the read, exactly as
+   * `onlineUsers` does - there is no sweeper for either.
+   */
+  async focusedAmong(channelId: string, userIds: string[]): Promise<string[]> {
+    if (userIds.length === 0) return [];
+    const key = FOCUS_KEY(channelId);
+    await this.redis.zremrangebyscore(key, '-inf', Date.now() - STALE_AFTER_MS);
+    const reading = new Set(await this.redis.zrange(key, 0, -1));
+    return userIds.filter((userId) => reading.has(userId));
+  }
 
   async voiceState(channelId: string): Promise<VoiceState> {
     return { channelId, userIds: await this.redis.smembers(VOICE_KEY(channelId)) };

@@ -128,6 +128,9 @@ object Conversation {
     /** Opens a channel: history, key sync, and the read marker. */
     fun open(channelId: String) {
         visibleChannelId = channelId
+        // The server is told too: it is what keeps this account's other devices
+        // from being woken for a conversation being read here.
+        ChannelFocus.apply()
         Workspace.markRead(channelId)
         if (_messages.value.containsKey(channelId)) return
         scope.launch {
@@ -159,6 +162,7 @@ object Conversation {
 
     fun close(channelId: String) {
         if (visibleChannelId == channelId) visibleChannelId = null
+        ChannelFocus.apply()
     }
 
     fun loadOlder(channelId: String) {

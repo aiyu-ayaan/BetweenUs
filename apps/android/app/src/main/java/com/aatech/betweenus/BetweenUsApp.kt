@@ -13,6 +13,7 @@ import com.aatech.betweenus.core.data.NetworkWatch
 import com.aatech.betweenus.core.data.OAuthFlow
 import com.aatech.betweenus.core.data.Session
 import com.aatech.betweenus.core.store.Cache
+import com.aatech.betweenus.core.store.ChannelFocus
 import com.aatech.betweenus.core.store.AppForeground
 import com.aatech.betweenus.core.store.LastPlace
 import com.aatech.betweenus.feature.chat.Outbox
@@ -54,6 +55,10 @@ class BetweenUsApp : Application(), ImageLoaderFactory {
         // have to exist before the first push, which can arrive before any
         // activity does.
         AppForeground.init(this)
+        // Which conversation is on screen, told to the server so it does not
+        // wake this account's other devices for it. After AppForeground,
+        // because it reads what that tracks.
+        ChannelFocus.init()
         Push.init(this)
     }
 

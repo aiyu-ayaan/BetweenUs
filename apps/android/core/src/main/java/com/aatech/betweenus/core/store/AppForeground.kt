@@ -29,10 +29,14 @@ object AppForeground {
             object : Application.ActivityLifecycleCallbacks {
                 override fun onActivityResumed(activity: Activity) {
                     resumed += 1
+                    // A phone that has come back to the app is a phone reading
+                    // whatever is on screen, and the server has to hear so.
+                    ChannelFocus.apply()
                 }
 
                 override fun onActivityPaused(activity: Activity) {
                     resumed = (resumed - 1).coerceAtLeast(0)
+                    ChannelFocus.apply()
                 }
 
                 override fun onActivityCreated(activity: Activity, state: Bundle?) = Unit

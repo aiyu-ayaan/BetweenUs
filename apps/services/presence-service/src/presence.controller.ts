@@ -11,7 +11,7 @@
  * on the internal Docker network and nowhere else. That is also why there is no
  * guard: there is no user here to authenticate, only another service.
  */
-import { Controller, Get } from '@nestjs/common';
+import { Controller, Get, Query } from '@nestjs/common';
 import { PresenceStore } from './presence.store';
 
 @Controller('internal/presence')
@@ -23,6 +23,28 @@ export class PresenceController {
    * the store, so they are not in this list - being counted as present is
    * exactly what invisible means you are not.
    */
+  /**
+   * Which of these users is reading this channel right now.
+   *
+   * `notification-service` asks once per message, with the audience it has
+   * already worked out, and drops the answer from the fan-out: a phone is not
+   * worth waking for a conversation its owner is reading on a laptop. The
+   * userIds come as one comma-separated parameter because a fan-out is a batch
+   * and a request per recipient would be a request per recipient.
+   *
+   * Empty answer for an empty or missing list, which is the honest reading of
+   * "none of nobody is looking".
+   */
+  @Get('focus')
+  async focus(
+    @Query('channelId') channelId?: string,
+    @Query('userIds') userIds?: string,
+  ): Promise<{ focused: string[] }> {
+    const audience = (userIds ?? '').split(',').filter(Boolean);
+    if (!channelId || audience.length === 0) return { focused: [] };
+    return { focused: await this.store.focusedAmong(channelId, audience) };
+  }
+
   @Get('online')
   async online(): Promise<{ userIds: string[] }> {
     const states = await this.store.onlineUsers();

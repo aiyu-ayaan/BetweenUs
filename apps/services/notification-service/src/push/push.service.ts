@@ -22,6 +22,12 @@
  * mention is inside the ciphertext, so both are decided on the client - the
  * push still goes, and the client drops it. See FCM/README.md.
  *
+ * One more is decided here for a different reason: whether the recipient is
+ * *already reading the channel on another device*. A client can only ever see
+ * its own screen, so only a server can answer that one - it asks
+ * presence-service, and drops those recipients from the fan-out. See
+ * `docs/push-suppression.md`.
+ *
  * Five things are worth waking a phone for, and only the first carries words:
  *
  * - `message.created` - somebody said something.
@@ -51,6 +57,7 @@ import type {
 } from '@betweenus/shared-types';
 import { DevicesService } from '../modules/devices/devices.service';
 import { messaging } from './firebase';
+import { focusedAmong } from './focus';
 import { namesOf, rosterChanged } from './roster';
 
 /** FCM's own ceiling for one `sendEach` call. */
@@ -125,8 +132,27 @@ export class PushService implements OnModuleInit {
     const recipients = await this.allowed(audience, message);
     if (recipients.length === 0) return;
 
+    /**
+     * Anybody with this conversation open, on any of their devices, in a
+     * focused window.
+     *
+     * They are reading it as it arrives, so none of their devices is woken -
+     * including the ones that are asleep, which is the whole point: the rule is
+     * per account, not per device. A different channel is a different key and
+     * still buzzes everywhere, which is what makes this bearable.
+     *
+     * Asked after the preference filter rather than before it, so a channel
+     * everybody has muted costs no request at all.
+     */
+    const reading = await focusedAmong(
+      message.channelId,
+      recipients.map((one) => one.userId),
+    );
+    const woken = recipients.filter((one) => !reading.has(one.userId));
+    if (woken.length === 0) return;
+
     await this.deliver(
-      recipients.map((one) => ({
+      woken.map((one) => ({
         userId: one.userId,
         data: this.payload(message, one.mentionsOnly),
       })),

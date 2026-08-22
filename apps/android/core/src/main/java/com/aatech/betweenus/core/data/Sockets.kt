@@ -227,10 +227,23 @@ object ChatSocket : JsonSocket("/ws/chat") {
 object PresenceSocket : JsonSocket("/ws/presence") {
     private var status: PresenceStatus = PresenceStatus.ONLINE
 
+    /**
+     * Run on every connection, after the status has been re-sent.
+     *
+     * `ChannelFocus` sets it, and a callback rather than a direct call because
+     * that lives in `core.store` and this is `core.data`: the socket is not
+     * allowed to know what a channel focus is.
+     */
+    @Volatile
+    var onReconnect: (() -> Unit)? = null
+
     override fun onConnected() {
         // The server defaults a new connection to online; say so explicitly, so
         // a status chosen before a reconnect survives it.
         setStatus(status)
+        // Nothing survives a reconnect on the server side, so anything this
+        // client had claimed has to be claimed again.
+        onReconnect?.invoke()
     }
 
     fun setStatus(next: PresenceStatus) {
@@ -241,6 +254,18 @@ object PresenceSocket : JsonSocket("/ws/presence") {
 
     fun typing(channelId: String) =
         send(JSONObject().put("type", "typing.start").put("channelId", channelId))
+
+    /**
+     * "This conversation is on screen in front of me."
+     *
+     * What stops a push waking this account's other devices for a message it
+     * is already reading here. See `core/store/ChannelFocus.kt`.
+     */
+    fun focus(channelId: String) =
+        send(JSONObject().put("type", "channel.focus").put("channelId", channelId))
+
+    fun blur(channelId: String) =
+        send(JSONObject().put("type", "channel.blur").put("channelId", channelId))
 
     fun joinVoice(channelId: String) =
         send(JSONObject().put("type", "voice.join").put("channelId", channelId))
