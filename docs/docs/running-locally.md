@@ -104,11 +104,22 @@ a default — the login screen's server picker overrides it at runtime.
 
 ## Docs site
 
+From the repo root (`docs/` is a standalone npm project, not a pnpm
+workspace member, so these wrap `npm --prefix docs`):
+
+```bash
+pnpm docs:install
+pnpm docs           # http://localhost:3000, live reload
+pnpm docs:build      # static site into docs/build/
+```
+
+Or directly:
+
 ```bash
 cd docs
 npm install
-npm start        # http://localhost:3000, live reload
-npm run build     # static site into docs/build/
+npm start
+npm run build
 npm run serve      # serve the production build locally
 ```
 
