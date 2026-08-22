@@ -1,3 +1,8 @@
+# Claude Code git worktrees - each is its own repo checkout, and getting one
+# committed as a bare gitlink (no .gitmodules entry) breaks any checkout that
+# fetches submodules, e.g. GitHub's default Pages/Jekyll workflow.
+.claude/worktrees
+
 node_modules
 dist
 build
