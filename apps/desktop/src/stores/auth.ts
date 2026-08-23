@@ -233,6 +233,14 @@ function refreshSession(): Promise<string | null> {
       // times. The token is kept, the login screen says why, and the next
       // start signs back in on its own.
       const rejected = error instanceof ApiError && error.status === 401;
+      if (!rejected && useAuthStore.getState().user) {
+        // A session that is already running stays running. The credential was
+        // never refused - the network was - so ending the session here threw
+        // people back to a login form over a lift, a sleeping laptop or a
+        // gateway restart, which is the sign-out nobody could explain. The
+        // stored token is untouched and the next request refreshes again.
+        return null;
+      }
       if (rejected) localStorage.removeItem(STORAGE_KEY);
       useAuthStore.setState({
         user: null,

@@ -189,6 +189,14 @@ object Session {
             tokens.accessToken
         } catch (error: Exception) {
             val rejected = error is ApiError && error.status == 401
+            if (!rejected && _state.value is AuthPhase.SignedIn) {
+                // A session that is already running stays running. The
+                // credential was never refused - the network was - so ending it
+                // here threw people back to the sign-in form over a lift, a
+                // handover or a gateway restart. The stored token is untouched
+                // and the next request refreshes again.
+                return@withLock null
+            }
             if (rejected) refreshToken = null
             accessToken = null
             _state.value = AuthPhase.SignedOut(if (rejected) null else messageOf(error))
