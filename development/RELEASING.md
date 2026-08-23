@@ -9,6 +9,10 @@ The rules live in `scripts/release-version.mjs` and `scripts/release-notes.mjs`,
 both of which self-check under `pnpm check`, and the flow in
 `.github/workflows/release.yml`.
 
+How the clients then *notice* a release and take it - the two Windows flavours,
+the web reload, the Android APK - is `UPDATES.md`. The asset names below are the
+contract between the two.
+
 ---
 
 ## Two steps, not one

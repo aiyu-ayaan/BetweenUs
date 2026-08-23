@@ -669,6 +669,38 @@ Android, self-update:
       is closed, on unmetered network, which is the only thing that reaches a
       phone that has not been opened in three weeks. See phase 15 of
       `ANDROID_TODO.md`.
+- [x] **It was asking the wrong repository.** `Releases.REPOSITORY` said
+      `aiyu-ayaan/Nexora`; the releases are at `aiyu-ayaan/BetweenUs`. The check
+      ran, found nothing, and said so - so the feature had never once offered an
+      update.
+
+Desktop and web, self-update:
+
+- [x] **The desktop app updates itself, per Windows flavour.** Same shape as
+      Android and for the same reason: a self-hosted app has no store to notice
+      a build for it. The flavour is what decides everything - an installed copy
+      is only ever offered `-Setup.exe` and a portable one only ever
+      `-Portable.exe`, with no fallback between them, because handing a portable
+      copy the installer does not update it, it installs a second BetweenUs into
+      Program Files and leaves the portable one running and stale.
+      `PORTABLE_EXECUTABLE_FILE` is the only runtime difference between the two
+      builds. Installed applies by running the NSIS installer; portable swaps
+      its own exe - rename the running one aside, which Windows permits, copy
+      the new one into its place, relaunch, and sweep the `.old` file next
+      launch - so the copy stays exactly where the user put it. A failure there
+      opens the file manager on the download rather than losing it. Channels,
+      version ordering and the default channel mirror Android. No
+      electron-updater: it would want a `latest.yml` and a publish block and
+      still could not update the portable build. See `UPDATES.md`.
+- [x] **A browser tab is offered a reload when the deployment moves under it.**
+      A tab cannot install anything, so the whole update is a reload; the part
+      worth building is noticing. It compares the hashed asset names in
+      `index.html` against the ones it actually loaded, which moves exactly when
+      the build does and needs nothing bumped at release time - unlike the web
+      client's package version, which the release workflow does not touch.
+      Either fingerprint coming back empty is "cannot tell" rather than
+      "changed", so a 502, a proxy holding page or an offline tab cannot start a
+      reload loop.
 
 Notifications:
 
