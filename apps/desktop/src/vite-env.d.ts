@@ -59,12 +59,21 @@ interface Window {
     getAppSettings: () => Promise<{
       launchOnStartup: boolean;
       closeToTray: boolean;
+      updateChannel: DesktopUpdateChannel;
       /** False in a development window, which must not register auto-start. */
       canManageAutoStart: boolean;
     }>;
     setAppSettings: (
-      patch: Partial<{ launchOnStartup: boolean; closeToTray: boolean }>,
-    ) => Promise<{ launchOnStartup: boolean; closeToTray: boolean }>;
+      patch: Partial<{
+        launchOnStartup: boolean;
+        closeToTray: boolean;
+        updateChannel: DesktopUpdateChannel;
+      }>,
+    ) => Promise<{
+      launchOnStartup: boolean;
+      closeToTray: boolean;
+      updateChannel: DesktopUpdateChannel;
+    }>;
     /** OS-keychain-backed storage for E2EE private keys. */
     secureGet: (key: string) => Promise<string | null>;
     secureSet: (key: string, value: string) => Promise<void>;
@@ -125,6 +134,40 @@ interface Window {
     onPipAction?: (handler: (action: { type: string }) => void) => () => void;
     onWindowMinimize?: (handler: () => void) => () => void;
     onWindowRestore?: (handler: () => void) => () => void;
+
+    /** Updates. See electron/updates.ts and services/updates.ts. */
+    updateInfo?: () => Promise<DesktopUpdateInfo>;
+    updateCheck?: () => Promise<DesktopUpdateOffer | null>;
+    updateDownload?: (offer: DesktopUpdateOffer) => Promise<string>;
+    /** Fraction downloaded, or -1 while the total size is unknown. */
+    onUpdateProgress?: (handler: (fraction: number) => void) => () => void;
+    updateInstall?: () => Promise<{ started: boolean; reason?: string }>;
   };
+}
+
+/** Which builds this copy is willing to be offered. */
+type DesktopUpdateChannel = 'stable' | 'beta' | 'alpha';
+
+/**
+ * Which Windows build this is. `portable` is a single exe the user keeps
+ * wherever they put it, and is only ever offered `-Portable.exe`; `unpacked` is
+ * a development run and is offered nothing.
+ */
+type DesktopUpdateFlavor = 'installer' | 'portable' | 'unpacked';
+
+interface DesktopUpdateInfo {
+  version: string;
+  flavor: DesktopUpdateFlavor;
+  channel: DesktopUpdateChannel;
+  /** A build already downloaded and waiting to be applied. */
+  downloaded: { version: string; file: string } | null;
+}
+
+interface DesktopUpdateOffer {
+  version: string;
+  name: string;
+  notes: string;
+  publishedAt: string;
+  asset: { name: string; url: string; size: number };
 }
 

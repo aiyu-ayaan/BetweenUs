@@ -27,6 +27,17 @@ import {
   setInputDisplay,
   stopInputBackend,
 } from './remote-input';
+import { spawn } from 'node:child_process';
+import {
+  channelOf,
+  downloadAsset,
+  findUpdate,
+  flavorFrom,
+  isChannel,
+  type Channel,
+  type Flavor,
+  type UpdateOffer,
+} from './updates';
 
 const dirname = path.dirname(fileURLToPath(import.meta.url));
 const rendererDevUrl = process.env.VITE_DEV_SERVER_URL;
@@ -113,21 +124,39 @@ let quitting = false;
 interface AppSettings {
   launchOnStartup: boolean;
   closeToTray: boolean;
+  /**
+   * Which builds this install is willing to be offered. Machine-local for the
+   * same reason as the other two: it is a property of this copy of the app, and
+   * the same account on a stable install and an alpha one wants each of them
+   * left where it is.
+   */
+  updateChannel: Channel;
 }
 
-const DEFAULT_SETTINGS: AppSettings = { launchOnStartup: true, closeToTray: true };
+/**
+ * The channel defaults to the one this build belongs to - an alpha install
+ * wants alphas, and defaulting it to stable would strand it until the version
+ * it is running is released.
+ */
+const defaultSettings = (): AppSettings => ({
+  launchOnStartup: true,
+  closeToTray: true,
+  updateChannel: channelOf(app.getVersion()),
+});
 
 const settingsFile = (): string => path.join(app.getPath('userData'), 'betweenus-settings.json');
 
 function readSettings(): AppSettings {
+  const defaults = defaultSettings();
   try {
     const stored = JSON.parse(fs.readFileSync(settingsFile(), 'utf8')) as Partial<AppSettings>;
     return {
-      launchOnStartup: stored.launchOnStartup ?? DEFAULT_SETTINGS.launchOnStartup,
-      closeToTray: stored.closeToTray ?? DEFAULT_SETTINGS.closeToTray,
+      launchOnStartup: stored.launchOnStartup ?? defaults.launchOnStartup,
+      closeToTray: stored.closeToTray ?? defaults.closeToTray,
+      updateChannel: isChannel(stored.updateChannel) ? stored.updateChannel : defaults.updateChannel,
     };
   } catch {
-    return { ...DEFAULT_SETTINGS };
+    return defaults;
   }
 }
 
@@ -1251,6 +1280,7 @@ ipcMain.handle('settings:set', (_event, patch: unknown): AppSettings => {
     settings.launchOnStartup = incoming.launchOnStartup;
   }
   if (typeof incoming.closeToTray === 'boolean') settings.closeToTray = incoming.closeToTray;
+  if (isChannel(incoming.updateChannel)) settings.updateChannel = incoming.updateChannel;
 
   writeSettings(settings);
   applyAutoStart(settings.launchOnStartup);
@@ -1396,6 +1426,8 @@ void app.whenReady().then(() => {
   createTray();
   // Auto-start is on by default; the first run is what registers it.
   applyAutoStart(readSettings().launchOnStartup);
+  // The exe a portable update replaced, now that nothing is running it.
+  sweepRetiredPortable();
 
   createWindow(startedHidden());
 
@@ -1403,6 +1435,124 @@ void app.whenReady().then(() => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
     else showMainWindow();
   });
+});
+
+// --- Updates ----------------------------------------------------------------
+//
+// The renderer drives the UI; everything that touches the network, the disk or
+// the process lives here. See electron/updates.ts for why this is hand-rolled
+// rather than electron-updater, and for the rule that decides which of the two
+// Windows builds a copy is offered.
+
+const updateFlavor = (): Flavor => flavorFrom(process.env, app.isPackaged);
+
+/**
+ * The exe the user double-clicked, for a portable copy. `process.execPath` is
+ * no use here: the portable build unpacks itself to a temp directory and runs
+ * from there, so that is the copy, not the file being kept.
+ */
+const portableExe = (): string | null => process.env.PORTABLE_EXECUTABLE_FILE ?? null;
+
+/** Where a downloaded build waits. Cleared of last time's on the way past. */
+function updateDirectory(): string {
+  const directory = path.join(app.getPath('userData'), 'updates');
+  fs.mkdirSync(directory, { recursive: true });
+  return directory;
+}
+
+/**
+ * The previous portable exe, left behind by the swap below.
+ *
+ * Windows will rename a running executable but not delete one, which is what
+ * makes the swap possible at all - and what leaves this behind until the next
+ * launch, when the file is no longer anybody's process.
+ */
+function sweepRetiredPortable(): void {
+  const current = portableExe();
+  if (!current) return;
+  try {
+    fs.rmSync(`${current}.old`, { force: true });
+  } catch {
+    // Still running, still locked, or not ours to delete. It is one stale file
+    // next to the app; trying again next launch is the whole recovery.
+  }
+}
+
+/** The last download, so `update:install` needs no argument from the renderer. */
+let downloadedUpdate: { version: string; file: string } | null = null;
+
+ipcMain.handle('update:info', () => ({
+  version: app.getVersion(),
+  flavor: updateFlavor(),
+  channel: readSettings().updateChannel,
+  downloaded: downloadedUpdate,
+}));
+
+ipcMain.handle('update:check', async (): Promise<UpdateOffer | null> => {
+  const settings = readSettings();
+  const offer = await findUpdate(app.getVersion(), settings.updateChannel, updateFlavor());
+  // A download from before a channel change, or from an older check, is not
+  // what would be installed now.
+  if (offer && downloadedUpdate?.version !== offer.version) downloadedUpdate = null;
+  return offer;
+});
+
+ipcMain.handle('update:download', async (_event, offer: unknown): Promise<string> => {
+  const { version, asset } = (offer ?? {}) as UpdateOffer;
+  if (!asset?.url || !asset?.name) throw new Error('No asset to download');
+  const file = await downloadAsset(asset, updateDirectory(), (fraction: number) => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('update:progress', fraction);
+    }
+  });
+  downloadedUpdate = { version, file };
+  return file;
+});
+
+/**
+ * Hands the machine over to the new build and gets out of the way.
+ *
+ * Two different jobs behind one button:
+ *
+ * - **Installed.** Start the NSIS installer and quit. It closes the running app
+ *   itself, replaces the installation and starts it again.
+ * - **Portable.** There is no installer, so this does the swap: rename the exe
+ *   the user keeps out of the way, copy the new one into its place, start it,
+ *   quit. Renaming is what makes it work on a file that is running; copying
+ *   rather than renaming the download is what makes it work when the temp
+ *   directory and the user's folder are on different volumes.
+ *
+ * If any of that fails the download is still on the disk and perfectly
+ * runnable, so the file is shown in the file manager rather than lost.
+ */
+ipcMain.handle('update:install', (): { started: boolean; reason?: string } => {
+  const pending = downloadedUpdate;
+  if (!pending) return { started: false, reason: 'Nothing has been downloaded yet.' };
+
+  try {
+    let launch = pending.file;
+
+    if (updateFlavor() === 'portable') {
+      const current = portableExe();
+      if (!current) throw new Error('This portable copy could not find its own exe.');
+      fs.rmSync(`${current}.old`, { force: true });
+      fs.renameSync(current, `${current}.old`);
+      fs.copyFileSync(pending.file, current);
+      fs.rmSync(pending.file, { force: true });
+      launch = current;
+    }
+
+    spawn(launch, [], { detached: true, stdio: 'ignore' }).unref();
+    quitting = true;
+    app.quit();
+    return { started: true };
+  } catch (error) {
+    shell.showItemInFolder(pending.file);
+    return {
+      started: false,
+      reason: `${(error as Error).message} The download is in your file manager; run it yourself.`,
+    };
+  }
 });
 
 app.on('before-quit', () => {

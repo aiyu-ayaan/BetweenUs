@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron';
+import type { Channel, UpdateOffer } from './updates';
 
 /**
  * The only bridge between renderer and main. Keep this surface small and
@@ -36,11 +37,12 @@ const api = {
   getAppSettings: (): Promise<{
     launchOnStartup: boolean;
     closeToTray: boolean;
+    updateChannel: Channel;
     canManageAutoStart: boolean;
   }> => ipcRenderer.invoke('settings:get'),
   setAppSettings: (
-    patch: Partial<{ launchOnStartup: boolean; closeToTray: boolean }>,
-  ): Promise<{ launchOnStartup: boolean; closeToTray: boolean }> =>
+    patch: Partial<{ launchOnStartup: boolean; closeToTray: boolean; updateChannel: Channel }>,
+  ): Promise<{ launchOnStartup: boolean; closeToTray: boolean; updateChannel: Channel }> =>
     ipcRenderer.invoke('settings:set', patch),
   /**
    * Encrypted-at-rest storage for E2EE private keys. The main process seals the
@@ -188,6 +190,37 @@ const api = {
     ipcRenderer.on('pip:action', listener);
     return () => ipcRenderer.removeListener('pip:action', listener);
   },
+
+  /**
+   * Updates. `updateInfo` says what this copy is - the version, whether it is
+   * the installed or the portable build, and which channel it watches - so the
+   * UI never has to guess which download it would be offered. See
+   * electron/updates.ts.
+   */
+  updateInfo: (): Promise<{
+    version: string;
+    flavor: 'installer' | 'portable' | 'unpacked';
+    channel: 'stable' | 'beta' | 'alpha';
+    /** A build already downloaded and waiting to be applied, if there is one. */
+    downloaded: { version: string; file: string } | null;
+  }> => ipcRenderer.invoke('update:info'),
+  /** Asks GitHub. Null means there is nothing newer on this channel. */
+  updateCheck: (): Promise<UpdateOffer | null> => ipcRenderer.invoke('update:check'),
+  /** Downloads the offered asset; resolves with where it landed. */
+  updateDownload: (offer: UpdateOffer): Promise<string> =>
+    ipcRenderer.invoke('update:download', offer),
+  /** Fraction downloaded, or -1 while the total size is unknown. */
+  onUpdateProgress: (handler: (fraction: number) => void): (() => void) => {
+    const listener = (_event: unknown, fraction: number): void => handler(fraction);
+    ipcRenderer.on('update:progress', listener);
+    return () => ipcRenderer.removeListener('update:progress', listener);
+  },
+  /**
+   * Applies the download and quits. Answers rather than throws when it could
+   * not: the file is still there, and the reason says what to do about it.
+   */
+  updateInstall: (): Promise<{ started: boolean; reason?: string }> =>
+    ipcRenderer.invoke('update:install'),
 
   /** Window state change listeners for auto Picture-in-Picture */
   onWindowMinimize: (handler: () => void): (() => void) => {
