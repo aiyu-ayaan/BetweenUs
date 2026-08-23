@@ -300,6 +300,12 @@ Chat and media, across all three clients:
 
 Fixed in the same pass:
 
+- [x] **The packaged desktop app died before it opened a window.** Three
+      display listeners were registered at the top level of `main.ts`, and
+      touching `screen` is what builds it - which Electron refuses to do before
+      `ready`. In the packaged ESM build the throw happened while the entry
+      module was still evaluating: a dialog saying "A JavaScript error occurred
+      in the main process", and no app. They are in the `whenReady` handler now.
 - [x] **A share from another app had nowhere to land.** `ACTION_SEND` names
       files and not a conversation, and the app answered that itself - the
       channel that happened to be open, or the drawer if there was not one - so
