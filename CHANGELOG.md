@@ -1,5 +1,36 @@
 # Changelog
 
+## [0.0.1-alpha.11](https://github.com/aiyu-ayaan/BetweenUs/compare/v0.0.1-alpha.10...v0.0.1-alpha.11) (2026-08-23)
+
+### Features
+
+* Ring somebody into the call from the call controls
+* Add somebody to a call from inside the call
+* A Calls & data screen, and a phone that reports what it moved
+* A Calls & Data page, and per-link measurement to fill it
+* Record what each link in a call moved, and add up a month of them
+
+### Bug fixes
+
+* Size the surface to the frame, so "fit" actually fits
+* Show a whole camera, and give the call dock room to breathe
+* Drop an answer that arrives after the connection is already settled
+
+### Other changes
+
+* Changes done for new release
+* Note why the scaling type alone did not stop the crop
+* Record the in-call ring on the web, and the phone showing a whole frame
+* Record the per-link call data, the analytics page and the Android screens
+
+### Artifacts
+
+| Platform | This release |
+| --- | --- |
+| Server images | Built here |
+| Desktop (Windows) | Built here |
+| Android | Built here |
+
 ## [0.0.1-alpha.10](https://github.com/aiyu-ayaan/BetweenUs/compare/v0.0.1-alpha.9...v0.0.1-alpha.10) (2026-08-23)
 
 ### Features
