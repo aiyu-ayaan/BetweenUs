@@ -14,6 +14,8 @@ import { LayoutSidebarIcon, BetweenUsLogoIcon, SearchIcon } from '../../componen
  * The whole bar is a drag region in Electron except the controls in it, so the
  * window still moves when it is grabbed anywhere that is not a button.
  */
+const isMac = window.betweenus?.platform === 'darwin';
+
 export function TopBar({
   onOpenSwitcher,
   sidebarOpen,
@@ -45,7 +47,7 @@ export function TopBar({
       {/* Each toggle sits on the side it acts on. Both of them together in one
           corner is what the layout controls in most apps look like, and it
           leaves you guessing which button hides which column. */}
-      <div className="flex w-32 shrink-0 items-center gap-1.5 pl-1">
+      <div className={`flex w-36 shrink-0 items-center gap-1.5 ${isMac ? 'pl-[72px]' : 'pl-1'}`}>
         <BetweenUsLogoIcon className="h-[18px] w-[18px] shrink-0 text-accent" aria-hidden="true" />
         <span className="truncate text-[13px] font-semibold tracking-tight text-slate-300">
           BetweenUs
@@ -71,7 +73,10 @@ export function TopBar({
         </button>
       </div>
 
-      <div className="flex w-32 shrink-0 items-center justify-end" />
+      {/* Windows and Linux draw the minimise/maximise/close overlay into this
+          gap; macOS puts its buttons on the left, so there the gap is only the
+          counterweight that keeps the command field centred. */}
+      <div className={`shrink-0 ${isMac ? 'w-36' : 'w-[146px]'}`} />
     </header>
   );
 }

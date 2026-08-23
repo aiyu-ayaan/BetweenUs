@@ -190,6 +190,16 @@ function createWindow(hidden = false): BrowserWindow {
     x: numberFromEnv('BETWEENUS_WINDOW_X'),
     y: numberFromEnv('BETWEENUS_WINDOW_Y'),
     title: windowLabel ? `BetweenUs - ${windowLabel}` : 'BetweenUs',
+    // No native title bar: the workbench paints its own top bar, and the only
+    // thing Windows keeps is the three buttons, drawn as an overlay in the
+    // right end of that bar. Keeping them native rather than redrawing them
+    // keeps Snap Layouts, the hover previews and the system hit-testing.
+    titleBarStyle: 'hidden',
+    titleBarOverlay: {
+      color: '#06070a',
+      symbolColor: '#94a3b8',
+      height: 40,
+    },
     // The workbench ground, so the frame Windows paints before the renderer
     // does is the colour the app is about to be rather than a flash of navy.
     backgroundColor: '#06070a',
