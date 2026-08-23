@@ -269,12 +269,12 @@ is a wasted send per message forever.
 | --- | --- |
 | Credentials from the environment | `apps/services/notification-service/src/push/firebase.ts` |
 | The Firestore handle and the document id | `apps/services/notification-service/src/push/firestore.ts` |
-| Fan-out, all five kinds | `apps/services/notification-service/src/push/push.service.ts` |
+| Fan-out, every kind | `apps/services/notification-service/src/push/push.service.ts` |
 | Whether a call roster is news, and how it reads | `apps/services/notification-service/src/push/roster.ts` (+ `roster.check.ts`) |
 | Device registry | `apps/services/notification-service/src/modules/devices/` |
 | Table (the authority) | `packages/database/prisma/schema.prisma` → `DeviceToken` |
 | Collection (the mirror) | `deviceTokens/{uid}_{deviceId}` in Firestore |
-| Wire types | `packages/shared-types` → `PushData` (five kinds), `RegisterDeviceRequest` |
+| Wire types | `packages/shared-types` → `PushData`, `RegisterDeviceRequest` |
 | Key → env helper | `scripts/firebase-env.mjs` (`pnpm firebase:env`) |
 | Token plumbing (transport-agnostic) | `apps/android/core/.../data/PushTokens.kt` |
 | Firebase, the only file that knows | `apps/android/app/.../feature/notifications/Push.kt` |
