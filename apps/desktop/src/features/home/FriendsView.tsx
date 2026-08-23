@@ -34,19 +34,72 @@ export function FriendsView({ onOpenMenu }: { onOpenMenu?: () => void } = {}): J
 
   return (
     <section className="panel flex min-w-0 flex-1 flex-col bg-surface-900">
-      <header className="flex h-12 md:h-11 shrink-0 items-center gap-2 md:gap-4 border-b border-edge px-2 md:px-4 overflow-x-auto no-scrollbar">
-        {onOpenMenu && (
-          <button
-            type="button"
-            onClick={onOpenMenu}
-            aria-label="Open navigation menu"
-            title="Open menu"
-            className="flex h-9 w-9 min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 sm:h-8 sm:w-8 cursor-pointer items-center justify-center rounded-md text-slate-400 transition-colors duration-150 hover:bg-white/[0.07] hover:text-slate-100 md:hidden shrink-0"
-          >
-            <MenuIcon className="h-5 w-5" />
-          </button>
-        )}
+      {/* Mobile Header (md:hidden) */}
+      <header className="flex h-12 shrink-0 items-center justify-between border-b border-edge px-2.5 md:hidden">
+        <div className="flex items-center gap-2">
+          {onOpenMenu && (
+            <button
+              type="button"
+              onClick={onOpenMenu}
+              aria-label="Open navigation menu"
+              title="Open menu"
+              className="flex h-9 w-9 min-h-[44px] min-w-[44px] cursor-pointer items-center justify-center rounded-md text-slate-300 transition-colors duration-150 hover:bg-white/[0.07] hover:text-slate-100"
+            >
+              <MenuIcon className="h-5 w-5" />
+            </button>
+          )}
+          <span className="flex items-center gap-2 font-semibold text-slate-50 text-[15px]">
+            <UsersIcon className="h-5 w-5 text-accent" />
+            Friends
+          </span>
+        </div>
 
+        <button
+          type="button"
+          onClick={() => setTab('add')}
+          aria-selected={tab === 'add'}
+          className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors duration-200 ${
+            tab === 'add'
+              ? 'bg-status-online text-white shadow-sm'
+              : 'bg-status-online/15 text-status-online hover:bg-status-online/25'
+          }`}
+        >
+          <UserPlusIcon className="h-3.5 w-3.5" />
+          <span>Add friend</span>
+        </button>
+      </header>
+
+      {/* Mobile Tab Strip (md:hidden) */}
+      <div
+        role="tablist"
+        aria-label="Friends"
+        className="flex items-center gap-1.5 border-b border-edge/60 bg-surface-950/40 px-2.5 py-2 overflow-x-auto no-scrollbar md:hidden"
+      >
+        {TABS.map((entry) => (
+          <button
+            key={entry.id}
+            type="button"
+            role="tab"
+            aria-selected={tab === entry.id}
+            onClick={() => setTab(entry.id)}
+            className={`min-h-[36px] cursor-pointer whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-medium transition-colors duration-200 shrink-0 ${
+              tab === entry.id
+                ? 'bg-surface-700 text-slate-100 shadow-sm'
+                : 'text-slate-400 hover:bg-white/[0.05] hover:text-slate-200'
+            }`}
+          >
+            {entry.label}
+            {entry.id === 'pending' && pending.length > 0 && (
+              <span className="ml-1.5 rounded-full bg-danger px-1.5 py-0.2 text-[10px] font-bold text-white">
+                {pending.length}
+              </span>
+            )}
+          </button>
+        ))}
+      </div>
+
+      {/* Desktop Header (hidden md:flex) */}
+      <header className="hidden md:flex h-11 shrink-0 items-center gap-4 border-b border-edge px-4">
         <span className="flex items-center gap-2 font-semibold text-slate-50 shrink-0">
           <UsersIcon className="h-5 w-5 text-slate-400" />
           Friends

@@ -10,7 +10,7 @@ import { useRemoteStore } from '../../stores/remote';
 import { useAuthStore } from '../../stores/auth';
 import { api } from '../../services/api';
 import { Avatar } from '../../components/Avatar';
-import { MonitorIcon, ShieldIcon, XIcon } from '../../components/icons';
+import { MenuIcon, MonitorIcon, ShieldIcon, XIcon } from '../../components/icons';
 
 /** Labels, and the order they read in: what you can see, then what you can do. */
 const PERMISSION_LABELS: Array<{ id: RemotePermission; label: string; hint: string }> = [
@@ -26,7 +26,7 @@ const PERMISSION_LABELS: Array<{ id: RemotePermission; label: string; hint: stri
   { id: 'REMOTE_ADMIN', label: 'Manage access', hint: 'Hand this machine out to other people' },
 ];
 
-export function RemoteView(): JSX.Element {
+export function RemoteView({ onOpenMenu }: { onOpenMenu?: () => void } = {}): JSX.Element {
   const machines = useRemoteStore((state) => state.machines);
   const loading = useRemoteStore((state) => state.loading);
   const error = useRemoteStore((state) => state.error);
@@ -44,13 +44,24 @@ export function RemoteView(): JSX.Element {
   // list to take over.
   return (
     <div className="panel flex min-w-0 flex-1 flex-col bg-surface-900">
-      <header className="flex h-12 shrink-0 items-center gap-2 border-b border-edge px-4">
+      <header className="flex h-12 shrink-0 items-center gap-2 border-b border-edge px-2.5 md:px-4">
+        {onOpenMenu && (
+          <button
+            type="button"
+            onClick={onOpenMenu}
+            aria-label="Open navigation menu"
+            title="Open menu"
+            className="flex h-9 w-9 min-h-[44px] min-w-[44px] cursor-pointer items-center justify-center rounded-md text-slate-300 transition-colors duration-150 hover:bg-white/[0.07] hover:text-slate-100 md:hidden"
+          >
+            <MenuIcon className="h-5 w-5" />
+          </button>
+        )}
         <MonitorIcon className="h-5 w-5 text-slate-400" />
         <h1 className="font-semibold text-slate-100">Remote machines</h1>
         <button
           type="button"
           onClick={() => void load()}
-          className="ml-auto cursor-pointer rounded px-3 py-1 text-sm text-slate-300 transition-colors duration-200 hover:bg-white/[0.1]"
+          className="ml-auto cursor-pointer rounded px-3 py-1.5 text-sm text-slate-300 transition-colors duration-200 hover:bg-white/[0.1] min-h-[36px]"
         >
           Refresh
         </button>

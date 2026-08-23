@@ -450,7 +450,6 @@ function Workbench(): JSX.Element {
         onOpenSwitcher={() => setSwitcher(true)}
         sidebarOpen={sidebarOpen}
         onToggleSidebar={() => setSidebarOpen((open) => !open)}
-        onOpenMenu={() => setShowDrawer(true)}
       />
 
       <div className="flex min-h-0 flex-1 gap-1.5 px-1.5 pb-1.5">
@@ -475,7 +474,7 @@ function Workbench(): JSX.Element {
           ))}
 
         {view === 'home' && homeScreen === 'remote' ? (
-          <RemoteView />
+          <RemoteView onOpenMenu={() => setShowDrawer(true)} />
         ) : view === 'home' && homeScreen === 'friends' ? (
           <FriendsView onOpenMenu={() => setShowDrawer(true)} />
         ) : channel?.type === 'VOICE' ? (
