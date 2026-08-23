@@ -1,5 +1,61 @@
 # Changelog
 
+## [0.0.1-alpha.9](https://github.com/aiyu-ayaan/BetweenUs/compare/v0.0.1-alpha.8...v0.0.1-alpha.9) (2026-08-23)
+
+### Features
+
+* Show how long the call has been running
+* Input sensitivity, which was not blocked after all
+* Tell the owner when somebody is on their machine
+* Web push, so a closed tab is still reachable
+* Safety numbers, so a lying key directory can be caught
+* Implement file transfer functionality over data channel
+* A share sheet hand-off now asks where it is going
+
+### Bug fixes
+
+* The packaged app died before it opened a window
+* A copied image could not be pasted into a message
+* A socket whose token expired gave up instead of refreshing
+* A network blip during refresh signed you out
+* A voice channel stopped listing people who had left
+* Stop throwing away the microphone you picked
+* The microphone gate was refused by CSP, so it never ran
+* Correct every Nexora reference to the real repo name, BetweenUs
+* Stop tracking .claude/worktrees, unbreak recursive-submodule checkouts
+
+### Other changes
+
+* Changes done for new release
+* Record the main-process crash in the packaged desktop app
+* Record the share picker and clipboard paste on Android
+* Record the two faults that ended live sessions
+* !docs : Docs is done
+* Add the missing Notifications architecture page
+* Make localhost:3000/ work for dev, keep /Nexora/ in production
+* Match the desktop client's exact theme
+* Center the Android screenshot
+* Embed the Android screenshot, add offline local search
+* Redesign the doc pages, not just the landing page
+* Redesign the landing page
+* Add Android client architecture page
+* Split the one giant ERD into per-section diagrams
+* Add pnpm docs / docs:build / docs:install root scripts
+* Replace default Docusaurus README with a project-specific one
+* Add docs deploy workflow, triggered by a !docs marker
+* Deployment, CI, security, testing and local-run guides
+* Per-service REST/WebSocket reference
+* Architecture, system design and database schema content
+* Scaffold Docusaurus site under docs/
+
+### Artifacts
+
+| Platform | This release |
+| --- | --- |
+| Server images | Built here |
+| Desktop (Windows) | Built here |
+| Android | Built here |
+
 ## [0.0.1-alpha.8](https://github.com/aiyu-ayaan/BetweenUs/compare/v0.0.1-alpha.7...v0.0.1-alpha.8) (2026-08-22)
 
 ### Features
