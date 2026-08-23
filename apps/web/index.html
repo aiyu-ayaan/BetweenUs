@@ -20,12 +20,17 @@
       no say over it, which is as well: the addresses it reaches are the other
       participants', discovered at the time and nameable in advance by nobody.
 
-      worker-src allows blob: for the microphone gate, which is an AudioWorklet
-      compiled from a string - see services/mic-gate.ts.
+      script-src allows blob: for the microphone gate, which is an AudioWorklet
+      compiled from a string - see services/mic-gate.ts. It has to be script-src
+      and not worker-src: CSP puts worklets under script-src, and worker-src
+      governs Worker/SharedWorker/ServiceWorker only. With blob: named on the
+      wrong directive the gate's module was refused, so the gate never ran - no
+      sensitivity, no push-to-talk silence, and no local speaking indicator,
+      because the level the ring is drawn from is measured inside it.
     -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: http: https:; media-src 'self' blob:; connect-src 'self' http: https: ws: wss:"
+      content="default-src 'self'; script-src 'self' blob:; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: http: https:; media-src 'self' blob:; connect-src 'self' http: https: ws: wss:"
     />
     <title>BetweenUs</title>
   </head>
