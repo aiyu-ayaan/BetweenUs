@@ -796,11 +796,30 @@ says so too; both halves are needed.
       one buys. It is a disclosure and not a gate - each is still requested at
       the moment it is needed, so anything skipped there can be granted by
       tapping the thing that wanted it.
-- [ ] Input-sensitivity setting. **Blocked, and not by effort:** Android's
-      WebRTC has no insertion point on the capture path short of a custom audio
-      device module, and the desktop's gate is a Web Audio worklet on the
-      captured track. A level meter driving a mute toggle would be a different
-      thing wearing the same name. See `TRACK.md`.
+- [x] Input-sensitivity setting. **Was written down as blocked, and the
+      reasoning was right about the two hooks it knew about.**
+      `setSamplesReadyCallback` hands over a copy, after the buffer has gone to
+      the encoder - good for a meter, useless for a gate. `setMicrophoneMute`
+      zeroes the buffer *before* that copy is taken, so a gate driven from the
+      meter would read its own silence the moment it closed and could never
+      decide to open again: it latches shut. That trap is why "a level meter
+      driving a mute toggle" was the honest description of what was available.
+
+      `setAudioBufferCallback` is the third hook and it is the real one: the
+      live capture buffer, in place, before it reaches the encoder. So the gate
+      is a gate in the same sense the desktop's worklet is one - it measures the
+      signal as it arrived and then attenuates the samples that are about to be
+      sent, which is also what keeps it able to reopen.
+
+      Same numbers as the desktop, so a threshold means the same thing on both:
+      300 ms hold, 6 dB hysteresis, 5 ms attack and 150 ms release, ramped per
+      sample because a buffer-wide gain step is audible as zipper noise. The
+      settings screen draws the *pre-gate* level beside the slider - a meter of
+      the gated signal would sit at silence exactly when somebody is trying to
+      find the threshold that stops it doing that. It only moves during a call:
+      Android does not reliably allow a second capture of one microphone, so the
+      row says so rather than showing a bar that is dead for an invisible
+      reason. `MicGateTest` covers the latching, the ramp and the sign.
 - [ ] Theme: dark is the design. A light variant is open and the obstacle is
       the palette, not the taste - see phase 13.
 - [x] Server switcher reachable from settings, not just from the login screen.

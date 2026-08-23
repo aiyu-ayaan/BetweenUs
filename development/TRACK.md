@@ -119,6 +119,35 @@ Chat, on desktop and web:
       explicitly opened via the channel header member toggle. The duplicate
       TopBar right sidebar toggle was removed.
 
+Android:
+
+- [x] **Input sensitivity on the phone**, which was the one item here written
+      down as blocked by the platform rather than by time. The reasoning was
+      right about the two hooks it knew about and wrong that they were all of
+      them.
+
+      `setSamplesReadyCallback` hands over a copy, after the buffer has already
+      gone to the encoder. `setMicrophoneMute` zeroes the buffer *before* that
+      copy is taken - so a gate driven from the meter reads its own silence the
+      moment it closes and can never decide to open again. It latches shut, and
+      that is exactly why "a level meter driving a mute toggle" was the honest
+      description of what those two could build.
+
+      `setAudioBufferCallback` is the third: the live capture buffer, in place,
+      before it reaches the encoder. Measured first and attenuated second,
+      which is the ordering the whole thing depends on. Same constants as the
+      desktop so a threshold means the same on both - 300 ms hold, 6 dB
+      hysteresis, 5 ms attack, 150 ms release, ramped per sample because a
+      buffer-wide gain step is audible as zipper noise.
+
+      The meter beside the slider is pre-gate, because a meter of the gated
+      signal sits at silence exactly when somebody is trying to find the
+      threshold that stops it doing that. It only moves during a call: Android
+      does not reliably allow a second capture of one microphone, so the row
+      says so rather than showing a dead bar. The three things with a bug in
+      them have a test each - the latching, the ramp arriving, and a negative
+      sample read with the wrong sign.
+
 Encryption:
 
 - [x] **Safety numbers**, so a lying key directory is detectable. The last of
@@ -982,13 +1011,7 @@ blocked by anything outside this document.
 
 ### Android
 
-- [ ] **Input sensitivity on the phone.** The two modes, the processing switches
-      and an output route landed; the gate did not, and this is the one item on
-      the list blocked by the platform rather than by time. The desktop gates
-      the captured track in a Web Audio worklet, and Android's WebRTC has no
-      insertion point on the capture path short of a custom audio device
-      module. A level meter driving a mute toggle would be a different thing
-      wearing the same name.
+
 - [ ] **Remote file transfer on the phone**, gated on `REMOTE_FILE_TRANSFER`.
       No longer blocked on a wire that does not exist: the gateway has the
       offer, the desktop agent receives, and a session negotiates a data

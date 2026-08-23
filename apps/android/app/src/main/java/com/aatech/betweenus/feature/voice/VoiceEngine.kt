@@ -189,6 +189,12 @@ class VoiceEngine(private val context: Context) {
             // somebody else is in the call, and the first thing anybody does
             // in an empty channel is check whether they are being heard.
             .setSamplesReadyCallback(::onMicrophoneSamples)
+            // Input sensitivity. This is the hook that is handed the live
+            // capture buffer *before* it reaches the encoder, which is what
+            // makes a real gate possible rather than a mute toggle driven by a
+            // meter - see [MicGate], which explains why the other two hooks
+            // cannot do it.
+            .setAudioBufferCallback(::onCaptureBuffer)
             .createAudioDeviceModule()
     }
 
@@ -228,6 +234,21 @@ class VoiceEngine(private val context: Context) {
     val selfSpeaking: StateFlow<Boolean> = _selfSpeaking.asStateFlow()
 
     /**
+     * How loud the microphone is *before* the gate, in dBFS, and whether the
+     * gate is letting it through.
+     *
+     * Before the gate on purpose: this is what the settings screen draws a
+     * meter from, and a meter that showed the gated signal would sit at
+     * silence exactly when somebody is trying to find the threshold that stops
+     * it doing that.
+     */
+    private val _micLevelDb = MutableStateFlow(-100.0)
+    val micLevelDb: StateFlow<Double> = _micLevelDb.asStateFlow()
+
+    private val _gateOpen = MutableStateFlow(true)
+    val gateOpen: StateFlow<Boolean> = _gateOpen.asStateFlow()
+
+    /**
      * What each link is doing, in numbers, for the connection panel.
      *
      * Rebuilt from the same one-second poll that decides who is speaking - the
@@ -258,6 +279,12 @@ class VoiceEngine(private val context: Context) {
      * Written and read on the audio thread only.
      */
     private var lastLoudAt = 0L
+
+    /** The gate's state, touched only on the audio thread. */
+    private var gateState = MicGate.CLOSED
+    private var gateGain = 1.0
+    /** Throttles the meter: the flow does not need three hundred writes a second. */
+    private var levelReportedAt = 0L
 
     /**
      * What another app is doing to this call's audio.
@@ -669,6 +696,57 @@ class VoiceEngine(private val context: Context) {
         // followed the buffers exactly would flicker through a sentence.
         val speaking = now - lastLoudAt < SPEAKING_HOLD_MS
         if (_selfSpeaking.value != speaking) _selfSpeaking.value = speaking
+    }
+
+    /**
+     * One 10 ms buffer of microphone audio, in place, on the audio thread,
+     * before it reaches the encoder.
+     *
+     * Measured first and attenuated second, which is the ordering the whole
+     * feature depends on: the level has to be read from the signal as it
+     * arrived, or a closed gate would read its own silence and never open
+     * again. That is exactly the trap `setMicrophoneMute` falls into, and why
+     * it is not what closes this gate.
+     *
+     * Returns 0 to keep the capture timestamp the device module worked out.
+     * Anything else here would be this thread claiming to know better than the
+     * audio stack about when the sound arrived.
+     */
+    private fun onCaptureBuffer(
+        buffer: java.nio.ByteBuffer,
+        @Suppress("UNUSED_PARAMETER") audioFormat: Int,
+        @Suppress("UNUSED_PARAMETER") channelCount: Int,
+        sampleRate: Int,
+        bytesRead: Int,
+        @Suppress("UNUSED_PARAMETER") captureTimeNs: Long,
+    ): Long {
+        val threshold = AudioPrefs.sensitivityDb
+
+        val level = MicGate.amplitudeToDb(MicGate.rootMeanSquare(buffer, bytesRead))
+        val now = System.currentTimeMillis()
+        // Twenty a second is more than a meter can be read at and a twentieth
+        // of the writes every buffer would make.
+        if (now - levelReportedAt >= METER_INTERVAL_MS) {
+            levelReportedAt = now
+            _micLevelDb.value = level
+        }
+
+        if (threshold == null) {
+            // No gate. The buffer is left exactly as it arrived rather than
+            // multiplied by one, which would be a pass over it for nothing.
+            if (gateGain < 1.0) gateGain = 1.0
+            gateState = MicGate.CLOSED.copy(open = true)
+            if (!_gateOpen.value) _gateOpen.value = true
+            return 0L
+        }
+
+        gateState = MicGate.step(gateState, level, threshold.toDouble(), now)
+        if (_gateOpen.value != gateState.open) _gateOpen.value = gateState.open
+
+        val samples = bytesRead / 2
+        val target = MicGate.rampTo(gateGain, gateState.open, samples, sampleRate)
+        gateGain = MicGate.applyRamp(buffer, bytesRead, gateGain, target)
+        return 0L
     }
 
     private fun applyMute() {
@@ -1990,6 +2068,14 @@ class VoiceEngine(private val context: Context) {
          * ten milliseconds and needs the smoothing done explicitly.
          */
         private const val SPEAKING_HOLD_MS = 250L
+
+        /**
+         * How often the microphone level reaches the settings screen.
+         *
+         * Twenty a second is faster than a meter can be read and a twentieth
+         * of the writes a flow would take if every buffer published one.
+         */
+        private const val METER_INTERVAL_MS = 50L
 
         /**
          * 16-bit little-endian PCM to a 0..1 level, the scale WebRTC's own

@@ -12,13 +12,12 @@ import android.content.SharedPreferences
  * ruins a call held at arm's length on a train, and which of those you are in
  * is a property of where you are sitting.
  *
- * One of the desktop's controls is deliberately not here:
- *
- * - **Input sensitivity.** The desktop gates the captured track in a Web Audio
- *   worklet before it reaches the encoder. Android's WebRTC has no insertion
- *   point on the capture path short of a custom audio device module, so a gate
- *   here would be a mute toggle driven by a level meter - which is a different
- *   thing wearing the same name. It stays open until the ADM work is done.
+ * Every one of the desktop's controls is here now, input sensitivity included.
+ * That one was written down as blocked for a long time and the reasoning is
+ * worth keeping: the two hooks anybody finds first - a samples-ready callback
+ * that hands over a copy after the fact, and a microphone mute that zeroes the
+ * buffer before that copy is taken - cannot make a gate between them. See
+ * [MicGate] for what the third hook is and why it can.
  */
 object AudioPrefs {
     private const val PREFS = "betweenus.audio"
@@ -66,6 +65,20 @@ object AudioPrefs {
         get() = runCatching { Input.valueOf(prefs.getString("input", null) ?: "AUTO") }
             .getOrDefault(Input.AUTO)
         set(value) = prefs.edit().putString("input", value.name).apply()
+
+    /**
+     * Input sensitivity, in dBFS: below this the microphone is closed.
+     *
+     * Null is an open microphone, which is what the phone did before the gate
+     * existed and is still the right answer for a headset in a quiet room. The
+     * value is the same scale the desktop uses, so a threshold that means
+     * "ignore the fan" on a laptop means it here too.
+     */
+    var sensitivityDb: Int?
+        get() = if (prefs.contains("gate")) prefs.getInt("gate", -50) else null
+        set(value) = prefs.edit().apply {
+            if (value == null) remove("gate") else putInt("gate", value)
+        }.apply()
 
     var echoCancellation: Boolean
         get() = prefs.getBoolean("aec", true)

@@ -2,18 +2,23 @@ package com.aatech.betweenus.feature.settings
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
@@ -29,7 +34,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.flow.MutableStateFlow
 import com.aatech.betweenus.core.crypto.BackupSecret
 import com.aatech.betweenus.core.crypto.E2ee
 import com.aatech.betweenus.core.crypto.IdentityStatus
@@ -46,6 +54,7 @@ import com.aatech.betweenus.feature.voice.inputLabel
 import com.aatech.betweenus.feature.voice.rememberCallDevices
 import com.aatech.betweenus.feature.voice.routeLabel
 import com.aatech.betweenus.feature.voice.CallTones
+import com.aatech.betweenus.feature.voice.MicGate
 import com.aatech.betweenus.feature.voice.VoiceEngine
 import com.aatech.betweenus.core.store.LastPlace
 import com.aatech.betweenus.core.store.Presence
@@ -113,6 +122,7 @@ fun SettingsScreen(
     var echoCancellation by remember { mutableStateOf(AudioPrefs.echoCancellation) }
     var noiseSuppression by remember { mutableStateOf(AudioPrefs.noiseSuppression) }
     var autoGainControl by remember { mutableStateOf(AudioPrefs.autoGainControl) }
+    var sensitivity by remember { mutableStateOf(AudioPrefs.sensitivityDb) }
     // Live, not read once: a headset connected while this screen is open used
     // to leave a list saying there was none.
     val devices by rememberCallDevices()
@@ -424,6 +434,14 @@ fun SettingsScreen(
                 }
             }
 
+            InputSensitivity(
+                threshold = sensitivity,
+                onChange = {
+                    sensitivity = it
+                    AudioPrefs.sensitivityDb = it
+                },
+            )
+
             ListRow(
                 title = "Join and leave tones",
                 subtitle = "Two notes when somebody arrives or goes - up for one, down for the other",
@@ -611,6 +629,128 @@ private fun switchColours() = SwitchDefaults.colors(
     uncheckedBorderColor = Surface700,
     uncheckedThumbColor = Slate400,
 )
+
+/**
+ * Input sensitivity: the threshold, and a meter to set it against.
+ *
+ * The meter is the point. A threshold in dBFS is a number nobody has an
+ * intuition for, and setting one blind means either a gate that never opens or
+ * one that never closes - both of which read as "the feature does not work"
+ * rather than as "it is set wrong". With a live level beside it the setting
+ * takes about four seconds: talk, watch where the bar sits, put the line under
+ * it.
+ *
+ * The meter shows the level *before* the gate, which is the only way round it
+ * can be: a meter of the gated signal would sit at silence exactly when
+ * somebody is trying to find the threshold that stops it doing that.
+ *
+ * It only moves during a call. Opening a second capture just for this screen is
+ * what the desktop does, and Android does not reliably allow two captures of
+ * one microphone - so the row says so rather than showing a bar that is dead
+ * for a reason nobody can see.
+ */
+@Composable
+private fun InputSensitivity(threshold: Int?, onChange: (Int?) -> Unit) {
+    // The engine only exists once somebody has been in a call. No engine is a
+    // dead meter and a subtitle that says why, rather than a crash on a screen
+    // that is mostly about other things.
+    val engine = VoiceEngine.current()
+    val level by (engine?.micLevelDb ?: remember { MutableStateFlow(-100.0) }).collectAsState()
+    val open by (engine?.gateOpen ?: remember { MutableStateFlow(true) }).collectAsState()
+    val call by (engine?.state ?: remember {
+        MutableStateFlow<VoiceEngine.CallState>(VoiceEngine.CallState.Idle)
+    }).collectAsState()
+    val live = call is VoiceEngine.CallState.Live
+
+    ListRow(
+        title = "Input sensitivity",
+        subtitle = when {
+            threshold == null -> "Off: everything the microphone hears is sent"
+            live -> "Below ${'$'}threshold dB the microphone is closed"
+            else -> "Below ${'$'}threshold dB the microphone is closed. Join a call to see the meter."
+        },
+        leading = { BetweenUsIcon(BetweenUsIcons.Mic, tint = Slate400) },
+        trailing = {
+            Switch(
+                checked = threshold != null,
+                // -50 dBFS is under a normal speaking voice and over a quiet
+                // room, which is the setting most people would arrive at.
+                onCheckedChange = { on -> onChange(if (on) -50 else null) },
+                colors = switchColours(),
+            )
+        },
+    )
+
+    if (threshold == null) return
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp, vertical = 4.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        MicMeter(levelDb = level, thresholdDb = threshold, open = open, live = live)
+        Slider(
+            value = threshold.toFloat(),
+            onValueChange = { onChange(it.toInt()) },
+            valueRange = MicGate.MIN_THRESHOLD_DB.toFloat()..MicGate.MAX_THRESHOLD_DB.toFloat(),
+            colors = SliderDefaults.colors(
+                thumbColor = Accent,
+                activeTrackColor = Accent,
+                inactiveTrackColor = Surface700,
+            ),
+        )
+    }
+}
+
+/**
+ * The level, the threshold, and whether the gate is open, in one bar.
+ *
+ * Green when what you are saying is getting through and grey when it is not,
+ * because "is anybody hearing me" is the only question this screen is being
+ * asked. The line is where the threshold sits, so the two are read together
+ * rather than as a number and a picture.
+ */
+@Composable
+private fun MicMeter(levelDb: Double, thresholdDb: Int, open: Boolean, live: Boolean) {
+    // dBFS is logarithmic and the interesting part is the top; -80 to 0 across
+    // the bar puts a speaking voice around two thirds of the way along, which
+    // is where a meter is easiest to read.
+    fun position(db: Double): Float = ((db + 80.0) / 80.0).coerceIn(0.0, 1.0).toFloat()
+
+    val filled = if (live) position(levelDb) else 0f
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(10.dp)
+            .clip(RoundedCornerShape(5.dp))
+            .background(Surface700),
+    ) {
+        if (filled > 0f) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth(filled)
+                    .fillMaxHeight()
+                    .background(if (open) StatusOnline else Slate500),
+            )
+        }
+        // The threshold, drawn over the level rather than beside it.
+        Box(
+            modifier = Modifier
+                .fillMaxWidth(position(thresholdDb.toDouble()))
+                .fillMaxHeight(),
+            contentAlignment = Alignment.CenterEnd,
+        ) {
+            Box(
+                modifier = Modifier
+                    .width(2.dp)
+                    .fillMaxHeight()
+                    .background(Slate100),
+            )
+        }
+    }
+}
 
 /** One of the three microphone-processing switches. */
 @Composable

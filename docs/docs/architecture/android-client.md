@@ -96,6 +96,48 @@ can register it) holds a code it can't spend. Detail:
 [Auth & Permissions](/system-design/auth-and-permissions) and
 [`development/SECURITY.md`](https://github.com/aiyu-ayaan/BetweenUs/blob/master/development/SECURITY.md).
 
+## Input sensitivity, and the hook that makes it possible
+
+Noise suppression cleans up a signal; it does not decide that nobody is
+talking, so a suppressed fan is a quieter fan, still in the call. What makes a
+call silent between sentences is a **gate**: below a threshold the microphone
+is closed. It is the single control that most changes what other people hear,
+and it was the last of the desktop's audio controls the phone did not have.
+
+It was written down as blocked by the platform for a long time, and the
+reasoning was right about the two hooks anybody finds first:
+
+| Hook | What it gives you | Why it cannot gate |
+| --- | --- | --- |
+| `setSamplesReadyCallback` | A **copy** of the buffer, after it has gone to the encoder | Too late to change what was sent. Fine for a meter. |
+| `setMicrophoneMute` | Zeroes the buffer before the encoder | It zeroes it before that copy is taken too — so a gate driven from the meter reads its own silence the moment it closes and **can never reopen**. It latches shut. |
+
+That latch is the trap, and it is why "a level meter driving a mute toggle"
+was the honest description of what those two could build together.
+
+`setAudioBufferCallback` is the third hook and it is the real one: it is handed
+the **live capture buffer, in place, before it reaches the encoder**. So the
+gate on Android is a gate in the same sense the desktop's AudioWorklet is one.
+It measures the signal as it arrived, then attenuates the samples that are
+about to be sent — and measuring first is exactly what keeps it able to open
+again.
+
+The constants are the desktop's, so a threshold set on a laptop means the same
+thing on a phone: a 300 ms hold (speech is mostly gaps at this timescale —
+every stop consonant is one), 6 dB of hysteresis (a voice sitting exactly on
+the threshold would otherwise flutter the gate), a 5 ms attack (slower eats the
+consonant that tells "bat" from "cat") and a 150 ms release (faster is an
+audible click, because a waveform cut mid-cycle is a step edge). The ramp is
+applied per sample; a buffer-wide gain step is a 10 ms staircase and a
+staircase in the amplitude envelope is audible as zipper noise.
+
+The settings screen draws the **pre-gate** level beside the slider. That is the
+only way round it can be: a meter of the gated signal would sit at silence
+exactly when somebody is trying to find the threshold that stops it doing that.
+The meter only moves during a call — Android does not reliably allow a second
+capture of one microphone, so the row says so rather than showing a bar that is
+dead for a reason nobody can see.
+
 ## Push notifications
 
 Firebase Cloud Messaging, data-only payloads — the server can't read a
