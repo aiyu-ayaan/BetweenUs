@@ -100,3 +100,54 @@ ciphertext), but a **compromised running server** could capture a password
 in use and open that user's backup afterward. Anyone whose threat model
 includes the running deployment should set a recovery passphrase instead —
 it is never sent anywhere in any form.
+
+## Safety numbers
+
+Everything above protects a message from whoever reads the database. None of
+it protects against the server **handing out the wrong public key** — a client
+has no way to tell a stranger's key from a substituted one, because it asked
+the server and the server answered.
+
+A safety number is the answer to that. Two people compare sixty digits over
+something that is not this app — a phone call, a room — and a match means they
+hold each other's real keys. It's in a member's menu, under **Verify safety
+number**.
+
+### What the number is over
+
+The directory holds one key per *machine*, so a per-device number would mean
+comparing n×m strings with somebody who owns a laptop and a phone. The number
+is over a user's whole active device set instead: every published key, sorted
+by device id, as raw curve points rather than JWK text — two clients that
+serialise the same key with fields in a different order would otherwise compute
+different numbers for the same person, and that failure would look exactly like
+an attack.
+
+That gives the property the feature exists for. **A server that adds a device
+to somebody's directory changes their safety number**, which is exactly how it
+would go about reading their messages. So does genuinely buying a phone, and
+the client cannot tell those apart — which is why a changed number says what
+happened rather than what it means, and asks the two people to check again.
+
+The algorithm is Signal's numeric fingerprint and deliberately not something
+invented here: iterated SHA-512 over the key material and the user id,
+truncated to 30 bytes, read as six groups of five decimal digits, with the two
+halves sorted so neither person has to go first. The 5200 iterations are the
+point of it — a 30-digit truncation is short enough to read aloud, so making
+each guess cost 5200 hashes is what stops somebody grinding out a key that
+collides with a number you already trust.
+
+### Two limits
+
+- **Verification is stored per machine and never on the server.** A server that
+  could mark somebody verified could substitute their key and then reassure the
+  person about it. A second device verifies for itself.
+- **There is no badge in the member list.** The iteration count that makes a
+  fingerprint hard to forge also makes it too slow to compute for every row of a
+  column. A key that changed since it was checked is reported when the dialog is
+  next opened, not the moment it changes.
+
+No endpoint was added for any of this. The dialog reads the same
+`GET /api/v1/e2ee/devices?channelId=` the channel already uses — asking about
+somebody through a channel you share is a question you were already entitled to
+ask, and a per-user lookup would have been a new one.

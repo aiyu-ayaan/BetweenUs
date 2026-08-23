@@ -324,22 +324,29 @@ joining under one that is days dead.
 
 ## Known limits
 
-1. **One identity per user, copied to each machine.** Signing in elsewhere
-   restores the same key pair rather than enrolling a second device, so the
-   directory stays one public key per user and a sender wraps once per member.
-   The costs are the ones that model has: there is no per-device revocation (a
-   machine that had the account had the account key), the account password is
-   as strong as the backup is, and a device cannot be un-enrolled without
-   rotating the identity and re-sealing every channel key — which nothing does
-   yet. Per-device identities with a wrap per device is the upgrade, and it is
-   a bigger one than it looks: every `channel_keys` row becomes per device.
-2. **No key rotation on member removal.** The epoch mechanism exists and the
-   server enforces its ordering, but nothing mints epoch 2 yet, so a removed
-   member who kept the key can still read future messages they can fetch.
-   Rotation on removal is the next step.
-3. **No identity verification.** Nobody compares safety numbers, so a server
-   that lies about a public key could read new messages. Fingerprint display
-   and verification is not built.
+1. ~~**One identity per user, copied to each machine.**~~ Closed: the directory
+   is one key per machine and a channel key is wrapped once per device. See
+   "One key per machine, not one per account" above. What is still open is
+   rotating the *account* identity after a lost device, for the case where the
+   backup itself is suspect.
+2. ~~**No key rotation on member removal.**~~ Closed: `rekeyNeeded` is derived
+   by comparing who holds the epoch with who is a member now, and the first
+   holder to sync mints the next epoch. See "Revoking" above.
+3. **Identity verification is built, and it is opt-in by nature.** Safety
+   numbers exist — a member's menu offers "Verify safety number", and the
+   dialog shows the sixty digits to read to them over something that is not
+   this app. What no software can do is make anybody look: an unverified
+   contact is still an unverified contact, and this closes the *capability*
+   gap rather than the human one.
+
+   Two limits are worth naming. Verification is stored **per machine**, never
+   on the server — a server that could set "verified" could substitute a key
+   and then reassure the person about it, so a second device verifies for
+   itself. And there is **no badge in the member list**: computing a
+   fingerprint is 5200 iterations of SHA-512 on purpose, which is cheap once
+   for a dialog and far too slow for every row of a column. So a key that has
+   changed since it was checked is reported when somebody next opens the
+   dialog, not the moment it changes.
 4. **Packaged builds load over `file://`**, which is not a secure context, so
    insertable streams may be unavailable there. Development (`http://localhost`)
    is a secure context and works.

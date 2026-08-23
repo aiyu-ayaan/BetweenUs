@@ -119,6 +119,33 @@ Chat, on desktop and web:
       explicitly opened via the channel header member toggle. The duplicate
       TopBar right sidebar toggle was removed.
 
+Encryption:
+
+- [x] **Safety numbers**, so a lying key directory is detectable. The last of
+      the E2EE three, and it needed no endpoint: the dialog reads the same
+      `GET /e2ee/devices?channelId=` the channel already uses, because asking
+      about somebody through a channel you share is a question you were already
+      entitled to ask.
+
+      The number is over a user's whole active device set rather than one
+      machine - a per-device number would be n by m strings with somebody who
+      owns a laptop and a phone, which is a feature people stop using rather
+      than report. Keys are hashed as raw curve points and not as JWK text,
+      which is the part with a bug in it: two clients serialising the same key
+      with their JSON fields in a different order would compute different
+      numbers for the same person, and the failure would look exactly like an
+      attack. Signal's numeric fingerprint, 5200 iterations of SHA-512, and the
+      iteration count is not the number to shave for a faster dialog - it is
+      the only thing between a 30-digit truncation and somebody grinding out a
+      key that collides with a number already trusted.
+
+      Verification is stored per machine and never on the server, because a
+      server that could set "verified" could substitute a key and then reassure
+      the person about it. What is stored is the number rather than a boolean,
+      so a key that changed since it was checked reads as changed. There is no
+      badge in the member list: the iteration count that makes a fingerprint
+      hard to forge also makes it too slow for every row of a column.
+
 Remote desktop:
 
 - [x] **`REMOTE_FILE_TRANSFER` and `REMOTE_AUDIO`.** Both were vocabulary and
@@ -926,8 +953,7 @@ blocked by anything outside this document.
       revoking a device already re-keys every channel it could read - what is
       left is rotating the *account* identity when the backup itself is
       suspect.
-- [ ] **Safety numbers**, so a lying key directory is detectable. The last of
-      the E2EE three and the one with the most UI in it.
+
 - [ ] **Split the shared Prisma schema per service, and stand up
       `user-service`.** The largest single item on this list and the one with
       the widest blast radius; profiles, avatars and friends are served by

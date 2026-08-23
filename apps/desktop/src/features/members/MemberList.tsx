@@ -10,6 +10,7 @@ import {
   onPreferencesChanged,
   setUserMuted,
 } from '../../services/notifications';
+import { SafetyNumberDialog } from './SafetyNumberDialog';
 
 /**
  * The right-hand column in a server: who is here, online first. Members are
@@ -26,6 +27,8 @@ export function MemberList(): JSX.Element {
   const [menu, setMenu] = useState<{ member: ServerMember; at: { x: number; y: number } } | null>(
     null,
   );
+  const [verifying, setVerifying] = useState<ServerMember | null>(null);
+  const channelId = useChatStore((state) => state.activeChannelId);
 
   const here = members.filter((member) => online.has(member.userId));
   const away = members.filter((member) => !online.has(member.userId));
@@ -49,7 +52,26 @@ export function MemberList(): JSX.Element {
       />
 
       {menu && (
-        <MemberMenu member={menu.member} at={menu.at} onClose={() => setMenu(null)} />
+        <MemberMenu
+          member={menu.member}
+          at={menu.at}
+          onClose={() => setMenu(null)}
+          onVerify={(member) => {
+            setMenu(null);
+            setVerifying(member);
+          }}
+        />
+      )}
+
+      {/* The directory read the dialog needs is scoped to a channel, so there
+          is nothing to show without one. In this column there always is one. */}
+      {verifying && channelId && (
+        <SafetyNumberDialog
+          userId={verifying.userId}
+          displayName={verifying.displayName}
+          channelId={channelId}
+          onClose={() => setVerifying(null)}
+        />
       )}
     </aside>
   );
@@ -135,10 +157,12 @@ function MemberMenu({
   member,
   at,
   onClose,
+  onVerify,
 }: {
   member: ServerMember;
   at: { x: number; y: number };
   onClose: () => void;
+  onVerify: (member: ServerMember) => void;
 }): JSX.Element | null {
   const me = useAuthStore((state) => state.user);
   const friends = useFriendsStore((state) => state.friends);
@@ -224,6 +248,15 @@ function MemberMenu({
         label={muted ? 'Unmute notifications' : 'Mute notifications'}
         hint={muted ? undefined : 'Silences them wherever they write, including mentions'}
         onClick={() => act(setUserMuted(member.userId, !muted), muted ? 'Unmuted' : 'Muted')}
+      />
+
+      {/* The only thing in this app that catches a server lying about a public
+          key, which is why it sits with the everyday actions rather than
+          somewhere in settings nobody opens. */}
+      <Item
+        label="Verify safety number"
+        hint="Compare sixty digits with them, over something that is not this app"
+        onClick={() => onVerify(member)}
       />
 
       <Item
