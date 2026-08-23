@@ -5,6 +5,7 @@ import { usePresenceStore } from '../../stores/presence';
 import { Avatar } from '../../components/Avatar';
 import {
   CheckIcon,
+  MenuIcon,
   MessageIcon,
   UserPlusIcon,
   UsersIcon,
@@ -20,7 +21,7 @@ const TABS: Array<{ id: Tab; label: string }> = [
 ];
 
 /** Discord's friends screen: the tabs, and the "add friend" form behind one. */
-export function FriendsView(): JSX.Element {
+export function FriendsView({ onOpenMenu }: { onOpenMenu?: () => void } = {}): JSX.Element {
   const [tab, setTab] = useState<Tab>('online');
   const friends = useFriendsStore((state) => state.friends);
   const isOnline = usePresenceStore((state) => state.online);
@@ -33,14 +34,26 @@ export function FriendsView(): JSX.Element {
 
   return (
     <section className="panel flex min-w-0 flex-1 flex-col bg-surface-900">
-      <header className="flex h-12 shrink-0 items-center gap-4 border-b border-edge px-4">
-        <span className="flex items-center gap-2 font-semibold text-slate-50">
+      <header className="flex h-12 md:h-11 shrink-0 items-center gap-2 md:gap-4 border-b border-edge px-2 md:px-4 overflow-x-auto no-scrollbar">
+        {onOpenMenu && (
+          <button
+            type="button"
+            onClick={onOpenMenu}
+            aria-label="Open navigation menu"
+            title="Open menu"
+            className="flex h-9 w-9 min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 sm:h-8 sm:w-8 cursor-pointer items-center justify-center rounded-md text-slate-400 transition-colors duration-150 hover:bg-white/[0.07] hover:text-slate-100 md:hidden shrink-0"
+          >
+            <MenuIcon className="h-5 w-5" />
+          </button>
+        )}
+
+        <span className="flex items-center gap-2 font-semibold text-slate-50 shrink-0">
           <UsersIcon className="h-5 w-5 text-slate-400" />
           Friends
         </span>
-        <span aria-hidden="true" className="h-6 w-px bg-surface-700" />
+        <span aria-hidden="true" className="h-6 w-px bg-surface-700 shrink-0" />
 
-        <div role="tablist" aria-label="Friends" className="flex items-center gap-1">
+        <div role="tablist" aria-label="Friends" className="flex items-center gap-1 shrink-0 overflow-x-auto no-scrollbar py-1">
           {TABS.map((entry) => (
             <button
               key={entry.id}
@@ -48,7 +61,7 @@ export function FriendsView(): JSX.Element {
               role="tab"
               aria-selected={tab === entry.id}
               onClick={() => setTab(entry.id)}
-              className={`cursor-pointer rounded px-2.5 py-1 text-sm transition-colors duration-200 ${
+              className={`cursor-pointer whitespace-nowrap rounded px-2.5 py-1 text-sm transition-colors duration-200 shrink-0 ${
                 tab === entry.id
                   ? 'row-active'
                   : 'text-slate-300 hover:bg-white/[0.05]'
@@ -67,7 +80,7 @@ export function FriendsView(): JSX.Element {
             role="tab"
             aria-selected={tab === 'add'}
             onClick={() => setTab('add')}
-            className={`ml-1 cursor-pointer rounded px-2.5 py-1 text-sm font-medium transition-colors duration-200 ${
+            className={`ml-1 cursor-pointer whitespace-nowrap rounded px-2.5 py-1 text-sm font-medium transition-colors duration-200 shrink-0 ${
               tab === 'add'
                 ? 'bg-surface-700 text-status-online'
                 : 'bg-status-online text-white hover:opacity-90'
@@ -104,7 +117,7 @@ function FriendList({ friends, tab }: { friends: Friend[]; tab: Tab }): JSX.Elem
   }
 
   return (
-    <div className="flex-1 overflow-y-auto px-6 py-4">
+    <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-4">
       <p className="mb-3 text-xs font-bold uppercase tracking-wide text-slate-400">
         {tab === 'pending' ? 'Pending' : tab === 'online' ? 'Online' : 'All friends'} —{' '}
         {friends.length}
@@ -131,7 +144,7 @@ function FriendList({ friends, tab }: { friends: Friend[]; tab: Tab }): JSX.Elem
               </p>
             </div>
 
-            <div className="flex shrink-0 items-center gap-2">
+            <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
               {friend.status === 'ACCEPTED' && (
                 <IconButton
                   label={`Message ${friend.user.displayName}`}
@@ -188,13 +201,13 @@ function AddFriend(): JSX.Element {
   };
 
   return (
-    <div className="flex-1 overflow-y-auto px-8 py-6">
+    <div className="flex-1 overflow-y-auto px-4 sm:px-8 py-6">
       <h2 className="text-base font-bold uppercase tracking-wide text-slate-100">Add friend</h2>
       <p className="mt-1 text-sm text-slate-400">
         You can add a friend with their BetweenUs username.
       </p>
 
-      <div className="mt-4 flex items-center gap-2 rounded-lg border border-edge bg-surface-950 px-4 py-2.5 transition-colors focus-within:border-accent/60">
+      <div className="mt-4 flex flex-col sm:flex-row items-stretch sm:items-center gap-2 rounded-lg border border-edge bg-surface-950 p-2 sm:px-4 sm:py-2.5 transition-colors focus-within:border-accent/60">
         <input
           value={query}
           autoFocus
@@ -207,13 +220,13 @@ function AddFriend(): JSX.Element {
           }}
           placeholder="Enter a username"
           aria-label="Username"
-          className="flex-1 bg-transparent text-slate-100 placeholder-slate-500 focus:outline-none"
+          className="flex-1 bg-transparent px-2 py-1 sm:p-0 text-slate-100 placeholder-slate-500 focus:outline-none min-h-[36px]"
         />
         <button
           type="button"
           disabled={query.trim().length === 0}
           onClick={() => void send(query.trim())}
-          className="cursor-pointer rounded bg-accent px-4 py-1.5 text-sm font-medium text-white transition-colors duration-200 hover:bg-accent-hover active:scale-[0.98] disabled:opacity-40"
+          className="cursor-pointer rounded bg-accent px-4 py-2 sm:py-1.5 text-sm font-medium text-white transition-colors duration-200 hover:bg-accent-hover active:scale-[0.98] disabled:opacity-40 min-h-[40px] sm:min-h-0"
         >
           Send request
         </button>
@@ -283,7 +296,7 @@ function IconButton({
       onClick={onClick}
       title={label}
       aria-label={label}
-      className={`cursor-pointer rounded-full bg-surface-850 p-2.5 text-slate-300 transition-colors duration-200 hover:bg-white/[0.06] ${hoverClasses}`}
+      className={`flex min-h-[40px] min-w-[40px] items-center justify-center cursor-pointer rounded-full bg-surface-850 p-2.5 text-slate-300 transition-colors duration-200 hover:bg-white/[0.06] ${hoverClasses}`}
     >
       {children}
     </button>

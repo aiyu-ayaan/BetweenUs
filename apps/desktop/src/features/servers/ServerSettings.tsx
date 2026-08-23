@@ -32,6 +32,7 @@ import { ServerIcon } from '../../components/ServerIcon';
 import { useChatStore } from '../../stores/chat';
 import { Avatar } from '../../components/Avatar';
 import {
+  ChevronLeftIcon,
   HashIcon,
   LockIcon,
   ShieldIcon,
@@ -84,11 +85,53 @@ export function ServerSettings({ onClose }: { onClose: () => void }): JSX.Elemen
       role="dialog"
       aria-modal="true"
       aria-label={`${server.name} settings`}
-      className="fixed inset-0 z-50 flex animate-fade gap-1.5 bg-ground p-1.5"
+      className="fixed inset-0 z-50 flex flex-col md:flex-row animate-fade gap-0 md:gap-1.5 bg-ground p-0 md:p-1.5"
     >
+      {/* Mobile sticky top bar */}
+      <div className="md:hidden flex h-12 shrink-0 items-center justify-between border-b border-edge bg-surface-850 px-3 z-10">
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Back to server"
+          className="flex min-h-[40px] items-center gap-1.5 rounded-md px-2.5 py-1 text-sm font-medium text-slate-300 transition-colors duration-150 hover:bg-white/[0.07] hover:text-white"
+        >
+          <ChevronLeftIcon className="h-4 w-4" />
+          <span>Back</span>
+        </button>
+        <span className="font-semibold text-sm text-slate-100 truncate max-w-[160px]">{server.name}</span>
+        <div className="flex items-center">
+          <DangerButton compact />
+        </div>
+      </div>
+
+      {/* Mobile horizontal section tabs */}
+      <div
+        role="tablist"
+        aria-label="Server settings sections"
+        className="md:hidden flex items-center gap-1.5 overflow-x-auto no-scrollbar border-b border-edge bg-surface-800 px-3 py-2 shrink-0"
+      >
+        {SECTIONS.map((entry) => (
+          <button
+            key={entry.id}
+            type="button"
+            role="tab"
+            onClick={() => setSection(entry.id)}
+            aria-selected={section === entry.id}
+            className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-xs font-medium transition-colors duration-200 min-h-[36px] ${
+              section === entry.id
+                ? 'bg-accent text-white'
+                : 'bg-surface-700/60 text-slate-300 hover:bg-white/[0.06]'
+            }`}
+          >
+            <entry.icon className="h-3.5 w-3.5 shrink-0" />
+            <span>{entry.label}</span>
+          </button>
+        ))}
+      </div>
+
       <nav
         aria-label="Server settings sections"
-        className="panel flex w-[232px] shrink-0 flex-col items-end overflow-y-auto bg-surface-800 py-8 pr-2"
+        className="panel hidden md:flex w-[232px] shrink-0 flex-col items-end overflow-y-auto bg-surface-800 py-8 pr-2"
       >
         <div className="w-[192px]">
           <p className="truncate px-2.5 pb-1 text-xs font-bold uppercase tracking-wide text-slate-400">
@@ -116,7 +159,7 @@ export function ServerSettings({ onClose }: { onClose: () => void }): JSX.Elemen
         </div>
       </nav>
 
-      <div className="panel relative flex-1 overflow-y-auto bg-surface-900 px-10 py-10">
+      <div className="panel relative flex-1 overflow-y-auto bg-surface-900 px-4 py-6 md:px-10 md:py-10 rounded-none md:rounded-panel border-0 md:border border-edge">
         <div className="max-w-[740px]">
           {section === 'overview' && <Overview />}
           {section === 'roles' && <Roles />}
@@ -130,7 +173,7 @@ export function ServerSettings({ onClose }: { onClose: () => void }): JSX.Elemen
           type="button"
           onClick={onClose}
           aria-label="Close server settings"
-          className="absolute right-8 top-8 flex h-9 w-9 cursor-pointer items-center justify-center rounded-full border-2 border-slate-500 text-slate-400 transition-colors duration-200 hover:bg-white/[0.07] hover:text-slate-100"
+          className="hidden md:flex absolute right-8 top-8 h-9 w-9 cursor-pointer items-center justify-center rounded-full border-2 border-slate-500 text-slate-400 transition-colors duration-200 hover:bg-white/[0.07] hover:text-slate-100"
         >
           <XIcon className="h-4 w-4" />
         </button>
@@ -139,7 +182,7 @@ export function ServerSettings({ onClose }: { onClose: () => void }): JSX.Elemen
   );
 }
 
-function DangerButton(): JSX.Element {
+function DangerButton({ compact = false }: { compact?: boolean } = {}): JSX.Element {
   const servers = useChatStore((state) => state.servers);
   const activeServerId = useChatStore((state) => state.activeServerId);
   const deleteServer = useChatStore((state) => state.deleteServer);
@@ -152,14 +195,26 @@ function DangerButton(): JSX.Element {
 
   return (
     <>
-      <button
-        type="button"
-        onClick={() => setConfirming(true)}
-        className="flex w-full cursor-pointer items-center justify-between rounded px-2.5 py-1.5 text-left text-[15px] text-danger transition-colors duration-200 hover:bg-danger hover:text-white"
-      >
-        {label}
-        <TrashIcon className="h-4 w-4" />
-      </button>
+      {compact ? (
+        <button
+          type="button"
+          onClick={() => setConfirming(true)}
+          aria-label={label}
+          title={label}
+          className="flex min-h-[36px] min-w-[36px] items-center justify-center rounded-md p-1.5 text-danger hover:bg-danger hover:text-white transition-colors duration-150"
+        >
+          <TrashIcon className="h-4 w-4" />
+        </button>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setConfirming(true)}
+          className="flex w-full cursor-pointer items-center justify-between rounded px-2.5 py-1.5 text-left text-[15px] text-danger transition-colors duration-200 hover:bg-danger hover:text-white"
+        >
+          {label}
+          <TrashIcon className="h-4 w-4" />
+        </button>
+      )}
 
       {confirming && (
         <div
@@ -364,8 +419,8 @@ function Roles(): JSX.Element {
         canManage={canManageRoles}
       />
 
-      <div className="mt-6 flex gap-6">
-        <ul className="w-56 shrink-0 space-y-0.5 rounded-lg bg-surface-800 p-2">
+      <div className="mt-6 flex flex-col md:flex-row gap-4 md:gap-6">
+        <ul className="w-full md:w-56 shrink-0 flex md:flex-col overflow-x-auto md:overflow-y-auto no-scrollbar gap-1 rounded-lg bg-surface-800 p-2">
           {editable.map((member) => (
             <li key={member.userId}>
               <button

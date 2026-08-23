@@ -11,6 +11,8 @@
   body,
   #root {
     height: 100%;
+    min-height: 100%;
+    min-height: 100dvh;
   }
 
   body {
@@ -119,6 +121,16 @@
 
   .no-drag {
     -webkit-app-region: no-drag;
+  }
+}
+
+@layer utilities {
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
   }
 }
 

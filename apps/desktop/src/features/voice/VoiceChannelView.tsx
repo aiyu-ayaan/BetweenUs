@@ -770,10 +770,10 @@ function ControlButtons({ share }: { share: VoiceShare }): JSX.Element {
 /** Compute responsive grid layout based on number of participants */
 function getGridClass(count: number): string {
   if (count === 1) return 'grid grid-cols-1 w-full max-w-4xl h-full max-h-[70vh] aspect-video';
-  if (count === 2) return 'grid grid-cols-1 md:grid-cols-2 gap-4 w-full max-w-6xl h-full max-h-[66vh]';
-  if (count <= 4) return 'grid grid-cols-2 gap-4 w-full max-w-6xl h-full max-h-[72vh]';
-  if (count <= 6) return 'grid grid-cols-2 lg:grid-cols-3 gap-3 w-full max-w-7xl h-full max-h-[74vh]';
-  return 'grid grid-cols-3 gap-3 w-full max-w-7xl h-full max-h-[78vh]';
+  if (count === 2) return 'grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 w-full max-w-6xl h-full max-h-[66vh]';
+  if (count <= 4) return 'grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 w-full max-w-6xl h-full max-h-[72vh]';
+  if (count <= 6) return 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 sm:gap-3 w-full max-w-7xl h-full max-h-[74vh]';
+  return 'grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5 sm:gap-3 w-full max-w-7xl h-full max-h-[78vh]';
 }
 
 /** Modern adaptive call grid with paging when participants exceed PAGE_SIZE */
@@ -853,7 +853,7 @@ function PagerButton({
 function StageTile({ tile }: { tile: Stage }): JSX.Element {
   return (
     <div
-      className={`relative flex min-h-[160px] w-full h-full items-center justify-center overflow-hidden rounded-2xl bg-surface-900/90 border border-white/10 shadow-2xl transition-all duration-300 ring-2 ${
+      className={`relative flex min-h-[140px] sm:min-h-[160px] w-full h-full items-center justify-center overflow-hidden rounded-xl sm:rounded-2xl bg-surface-900/90 border border-white/10 shadow-2xl transition-all duration-300 ring-2 ${
         tile.speaking
           ? 'ring-emerald-400 shadow-[0_0_20px_rgba(52,211,153,0.3)]'
           : 'ring-transparent'
@@ -875,7 +875,7 @@ function StageTile({ tile }: { tile: Stage }): JSX.Element {
           <div className="relative">
             <span
               aria-hidden="true"
-              className="flex h-20 w-20 sm:h-24 sm:w-24 items-center justify-center rounded-full bg-gradient-to-br from-indigo-600/80 to-purple-600/80 text-2xl sm:text-3xl font-bold text-white shadow-xl border border-white/20 select-none"
+              className="flex h-16 w-16 sm:h-24 sm:w-24 items-center justify-center rounded-full bg-gradient-to-br from-indigo-600/80 to-purple-600/80 text-xl sm:text-3xl font-bold text-white shadow-xl border border-white/20 select-none"
             >
               {tile.name.charAt(0).toUpperCase()}
             </span>
@@ -890,7 +890,7 @@ function StageTile({ tile }: { tile: Stage }): JSX.Element {
       )}
 
       {/* Bottom User info pill badge */}
-      <div className="absolute bottom-3 left-3 z-20 flex items-center gap-1.5 rounded-xl bg-black/65 px-2.5 py-1 text-xs font-medium text-slate-200 backdrop-blur-md border border-white/10 shadow-md">
+      <div className="absolute bottom-2 left-2 sm:bottom-3 sm:left-3 z-20 flex items-center gap-1.5 rounded-lg sm:rounded-xl bg-black/65 px-2 py-0.5 sm:px-2.5 sm:py-1 text-xs font-medium text-slate-200 backdrop-blur-md border border-white/10 shadow-md">
         {!tile.micEnabled && <MicOffIcon className="h-3.5 w-3.5 text-red-400 shrink-0" />}
         <span className="truncate max-w-[140px]">
           {tile.name}

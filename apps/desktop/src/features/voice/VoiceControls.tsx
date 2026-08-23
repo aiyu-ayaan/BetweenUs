@@ -56,7 +56,7 @@ export function VoiceControls({ size = 'sm' }: { size?: 'sm' | 'lg' }): JSX.Elem
 
   const disabled = status !== 'connected';
   const icon = size === 'lg' ? 'h-5 w-5' : 'h-4 w-4';
-  const pad = size === 'lg' ? 'p-3' : 'p-2';
+  const pad = size === 'lg' ? 'p-3 min-h-[44px] min-w-[44px]' : 'p-2 min-h-[36px] min-w-[36px]';
 
   return (
     <div className={`flex items-center ${size === 'lg' ? 'gap-2' : 'gap-1'}`}>

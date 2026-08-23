@@ -117,14 +117,14 @@ export function QuickSwitcher({ onClose }: { onClose: () => void }): JSX.Element
       role="dialog"
       aria-modal="true"
       aria-label="Go to"
-      className="fixed inset-0 z-50 flex animate-fade justify-center bg-black/50 px-4 pt-[12vh]"
+      className="fixed inset-0 z-50 flex animate-fade justify-center bg-black/50 px-2 sm:px-4 pt-[6vh] sm:pt-[12vh]"
       onClick={onClose}
     >
       <div
         className="h-fit w-full max-w-xl animate-pop overflow-hidden rounded-xl border border-edge bg-surface-900 shadow-pop"
         onClick={(event) => event.stopPropagation()}
       >
-        <div className="flex items-center gap-2.5 border-b border-edge px-3.5">
+        <div className="flex items-center gap-2.5 border-b border-edge px-3 sm:px-3.5">
           <SearchIcon className="h-4 w-4 shrink-0 text-slate-500" aria-hidden="true" />
           <input
             autoFocus
@@ -150,7 +150,7 @@ export function QuickSwitcher({ onClose }: { onClose: () => void }): JSX.Element
           />
         </div>
 
-        <ul ref={listRef} className="max-h-80 overflow-y-auto p-1.5" role="listbox">
+        <ul ref={listRef} className="max-h-[60vh] sm:max-h-80 overflow-y-auto p-1.5" role="listbox">
           {entries.length === 0 && (
             <li className="px-2.5 py-6 text-center text-sm text-slate-500">Nothing matches that.</li>
           )}
@@ -160,7 +160,7 @@ export function QuickSwitcher({ onClose }: { onClose: () => void }): JSX.Element
                 type="button"
                 onMouseEnter={() => setCursor(index)}
                 onClick={() => run(entry)}
-                className={`flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-left transition-colors duration-100 ${
+                className={`flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2.5 sm:py-2 text-left min-h-[44px] sm:min-h-0 transition-colors duration-100 ${
                   index === cursor ? 'bg-accent/20 text-slate-50' : 'text-slate-300'
                 }`}
               >

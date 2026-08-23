@@ -350,7 +350,7 @@ function Session(): JSX.Element {
 
   if (booting) {
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-4 bg-ground" aria-busy="true">
+      <div className="flex h-full h-[100dvh] flex-col items-center justify-center gap-4 bg-ground" aria-busy="true">
         <div className="flex h-14 w-14 animate-pulse items-center justify-center rounded-2xl border border-edge bg-accent/15 p-3">
           <BetweenUsLogoIcon className="h-full w-full text-accent" />
         </div>
@@ -443,7 +443,7 @@ function Workbench(): JSX.Element {
   }, []);
 
   return (
-    <div className="flex h-full flex-col overflow-hidden">
+    <div className="flex h-full h-[100dvh] flex-col overflow-hidden">
       <VersionNotice />
       <UpdateNotice />
       <TopBar
@@ -477,7 +477,7 @@ function Workbench(): JSX.Element {
         {view === 'home' && homeScreen === 'remote' ? (
           <RemoteView />
         ) : view === 'home' && homeScreen === 'friends' ? (
-          <FriendsView />
+          <FriendsView onOpenMenu={() => setShowDrawer(true)} />
         ) : channel?.type === 'VOICE' ? (
           <VoiceChannelView channel={channel} />
         ) : (

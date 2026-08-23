@@ -30,6 +30,7 @@ import { Avatar } from '../../components/Avatar';
 import { PicturePicker } from '../../components/PicturePicker';
 import {
   BellIcon,
+  ChevronLeftIcon,
   DownloadIcon,
   LogOutIcon,
   MicIcon,
@@ -77,11 +78,58 @@ export function UserSettings({ onClose }: { onClose: () => void }): JSX.Element 
       role="dialog"
       aria-modal="true"
       aria-label="User settings"
-      className="fixed inset-0 z-50 flex animate-fade gap-1.5 bg-ground p-1.5"
+      className="fixed inset-0 z-50 flex flex-col md:flex-row animate-fade gap-0 md:gap-1.5 bg-ground p-0 md:p-1.5"
     >
+      {/* Mobile sticky top bar */}
+      <div className="md:hidden flex h-12 shrink-0 items-center justify-between border-b border-edge bg-surface-850 px-3 z-10">
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Back to chat"
+          className="flex min-h-[40px] items-center gap-1.5 rounded-md px-2.5 py-1 text-sm font-medium text-slate-300 transition-colors duration-150 hover:bg-white/[0.07] hover:text-white"
+        >
+          <ChevronLeftIcon className="h-4 w-4" />
+          <span>Back</span>
+        </button>
+        <span className="font-semibold text-sm text-slate-100">User Settings</span>
+        <button
+          type="button"
+          onClick={() => void logout()}
+          aria-label="Log out"
+          className="flex min-h-[40px] min-w-[40px] items-center justify-center rounded-md p-1.5 text-slate-400 hover:bg-danger hover:text-white transition-colors duration-150"
+        >
+          <LogOutIcon className="h-4 w-4" />
+        </button>
+      </div>
+
+      {/* Mobile horizontal section tabs */}
+      <div
+        role="tablist"
+        aria-label="Settings sections"
+        className="md:hidden flex items-center gap-1.5 overflow-x-auto no-scrollbar border-b border-edge bg-surface-800 px-3 py-2 shrink-0"
+      >
+        {SECTIONS.map((entry) => (
+          <button
+            key={entry.id}
+            type="button"
+            role="tab"
+            onClick={() => setSection(entry.id)}
+            aria-selected={section === entry.id}
+            className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-xs font-medium transition-colors duration-200 min-h-[36px] ${
+              section === entry.id
+                ? 'bg-accent text-white'
+                : 'bg-surface-700/60 text-slate-300 hover:bg-white/[0.06]'
+            }`}
+          >
+            <entry.icon className="h-3.5 w-3.5 shrink-0" />
+            <span>{entry.label}</span>
+          </button>
+        ))}
+      </div>
+
       <nav
         aria-label="Settings sections"
-        className="panel flex w-[232px] shrink-0 flex-col items-end overflow-y-auto bg-surface-800 py-8 pr-2"
+        className="panel hidden md:flex w-[232px] shrink-0 flex-col items-end overflow-y-auto bg-surface-800 py-8 pr-2"
       >
         <div className="w-[192px]">
           <p className="px-2.5 pb-1 text-xs font-bold uppercase tracking-wide text-slate-400">
@@ -117,7 +165,7 @@ export function UserSettings({ onClose }: { onClose: () => void }): JSX.Element 
         </div>
       </nav>
 
-      <div className="panel relative flex-1 overflow-y-auto bg-surface-900 px-10 py-10">
+      <div className="panel relative flex-1 overflow-y-auto bg-surface-900 px-4 py-6 md:px-10 md:py-10 rounded-none md:rounded-panel border-0 md:border border-edge">
         <div className="max-w-[660px]">
           {section === 'account' && <AccountSection />}
           {section === 'voice' && <VoiceSection />}
@@ -131,11 +179,11 @@ export function UserSettings({ onClose }: { onClose: () => void }): JSX.Element 
           type="button"
           onClick={onClose}
           aria-label="Close settings"
-          className="absolute right-8 top-8 flex h-9 w-9 cursor-pointer flex-col items-center justify-center rounded-full border-2 border-slate-500 text-slate-400 transition-colors duration-200 hover:bg-white/[0.07] hover:text-slate-100"
+          className="hidden md:flex absolute right-8 top-8 h-9 w-9 cursor-pointer flex-col items-center justify-center rounded-full border-2 border-slate-500 text-slate-400 transition-colors duration-200 hover:bg-white/[0.07] hover:text-slate-100"
         >
           <XIcon className="h-4 w-4" />
         </button>
-        <span className="absolute right-8 top-24 text-[11px] font-bold text-slate-500">ESC</span>
+        <span className="hidden md:block absolute right-8 top-24 text-[11px] font-bold text-slate-500">ESC</span>
       </div>
     </div>
   );
@@ -1056,11 +1104,11 @@ function Switch({
 }): JSX.Element {
   return (
     <label
-      className={`flex items-start justify-between gap-6 py-2 ${
+      className={`flex min-h-[44px] items-start justify-between gap-4 py-2.5 sm:py-2 ${
         disabled ? 'opacity-50' : 'cursor-pointer'
       }`}
     >
-      <span>
+      <span className="min-w-0 flex-1">
         <span className="block text-slate-100">{label}</span>
         {hint && <span className="mt-0.5 block text-sm text-slate-400">{hint}</span>}
       </span>
@@ -1445,7 +1493,7 @@ function TextField({
         type={type}
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="mt-2 w-full rounded-lg border border-edge bg-surface-950 px-3 py-2.5 text-slate-100 outline-none transition-colors focus:border-accent/60"
+        className="mt-2 w-full min-h-[44px] rounded-lg border border-edge bg-surface-950 px-3 py-2.5 text-slate-100 outline-none transition-colors focus:border-accent/60"
       />
     </label>
   );
