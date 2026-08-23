@@ -832,9 +832,20 @@ function broadcastDisplays(): void {
   displayChangeTimer.unref?.();
 }
 
-screen.on('display-added', broadcastDisplays);
-screen.on('display-removed', broadcastDisplays);
-screen.on('display-metrics-changed', broadcastDisplays);
+/**
+ * Subscribed after `ready`, not at import.
+ *
+ * Touching `screen` at all is what builds it, and Electron refuses to build it
+ * before the app is ready - "The 'screen' module can't be used before the app
+ * 'ready' event", thrown out of the module's own getter, which in a packaged
+ * ESM build is an uncaught exception on the first line that mentions it and a
+ * dialog instead of an app.
+ */
+function watchDisplays(): void {
+  screen.on('display-added', broadcastDisplays);
+  screen.on('display-removed', broadcastDisplays);
+  screen.on('display-metrics-changed', broadcastDisplays);
+}
 
 ipcMain.handle('screen:select', (_event, id: unknown, audio: unknown): void => {
   pendingShare = typeof id === 'string' ? { id, audio: audio === true } : null;
@@ -1291,6 +1302,8 @@ void app.whenReady().then(() => {
       callback(withAudio ? { video: source, audio: 'loopback' } : { video: source });
     });
   });
+
+  watchDisplays();
 
   createTray();
   // Auto-start is on by default; the first run is what registers it.
