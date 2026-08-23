@@ -3,6 +3,7 @@ import type {
   ApiErrorBody,
   AuthResponse,
   AuthTokens,
+  CallHistoryEntry,
   CallIceResponse,
   Channel,
   InvitePreview,
@@ -639,6 +640,12 @@ export const api = {
    * "Come into this call." Answers 204, or a 403 saying why not - they are not
    * in this channel, or they were rung a moment ago and the cooldown holds.
    */
+  /**
+   * This account's own call log, newest first. The server decides whose, so
+   * there is nothing to pass and nothing to get wrong.
+   */
+  callHistory: (): Promise<CallHistoryEntry[]> => request('/api/v1/calls/history'),
+
   callRing: (channelId: string, userId: string): Promise<void> =>
     request('/api/v1/calls/ring', {
       method: 'POST',

@@ -1041,6 +1041,13 @@ export class Mesh {
   private lastSpeaking = '';
   /** The previous reading per peer, so a rate can be worked out from a total. */
   private readonly lastSamples = new Map<string, LinkSample>();
+  /**
+   * What the peers who have already left moved, kept because their counters go
+   * with them: a closed `RTCPeerConnection` answers `getStats` with nothing, so
+   * the last reading has to be taken before it is closed rather than asked for
+   * at the end of the call. See `drop`.
+   */
+  private retiredBytes = 0;
   private closed = false;
   /** The channel key as last read, shared by every link. See `channelKey`. */
   private key: Promise<string> | null = null;
@@ -1146,13 +1153,9 @@ export class Mesh {
         this.announcePeers();
         return;
 
-      case 'peer.left': {
-        this.links.get(event.peerId)?.close();
-        this.links.delete(event.peerId);
-        for (const slot of SLOTS) this.options.onTrack(event.peerId, slot, null);
-        this.announcePeers();
+      case 'peer.left':
+        this.drop(event.peerId);
         return;
-      }
 
       case 'signal': {
         await this.links.get(event.from)?.accept(event.data);
@@ -1212,12 +1215,7 @@ export class Mesh {
         onTrack: (slot, track) => this.options.onTrack(peer.peerId, slot, track),
         onData: (payload) => this.options.onData(peer, payload),
         onDataOpen: () => this.options.onDataOpen?.(peer),
-        onFailed: () => {
-          this.links.get(peer.peerId)?.close();
-          this.links.delete(peer.peerId);
-          for (const slot of SLOTS) this.options.onTrack(peer.peerId, slot, null);
-          this.announcePeers();
-        },
+        onFailed: () => this.drop(peer.peerId),
         onProblem: (message) => this.options.onProblem(message),
       },
     );
@@ -1371,6 +1369,32 @@ export class Mesh {
     }, SPEAKING_POLL_MS);
   }
 
+  /**
+   * Takes one peer out of the mesh: their tracks, their link and their meter.
+   *
+   * The reading is taken before the connection is closed, because after it is
+   * closed there is nothing left to read - which is how a call that lost four
+   * people one at a time used to report the traffic of only the last one.
+   */
+  private drop(peerId: string): void {
+    const link = this.links.get(peerId);
+    this.links.delete(peerId);
+    for (const slot of SLOTS) this.options.onTrack(peerId, slot, null);
+    this.announcePeers();
+    if (!link) return;
+
+    void link
+      .sample()
+      .then((sample) => {
+        this.retiredBytes += bytesOf(sample);
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        this.lastSamples.delete(peerId);
+        link.close();
+      });
+  }
+
   private send(event: ClientCallEvent): void {
     if (this.socket?.readyState === WebSocket.OPEN) this.socket.send(JSON.stringify(event));
   }
@@ -1379,12 +1403,35 @@ export class Mesh {
     this.closed = true;
     if (this.speakingTimer !== null) window.clearInterval(this.speakingTimer);
     this.speakingTimer = null;
-    for (const link of this.links.values()) link.close();
+
+    // The last reading of every live link, taken before it is closed and before
+    // the socket goes, because both of those destroy the only counters there
+    // are: the gateway is not in the media path and has nothing of its own to
+    // count. Everything else about the call is torn down now; only the goodbye
+    // waits, and `closed` already stops anything else being sent.
+    const live = [...this.links.values()];
     this.links.clear();
     this.lastSamples.clear();
     this.local.clear();
-    this.send({ type: 'leave' });
-    this.socket?.close();
-    this.socket = null;
+
+    void Promise.all(live.map((link) => link.sample().catch(() => null)))
+      .then((samples) => samples.reduce((total, s) => total + (s ? bytesOf(s) : 0), 0))
+      .catch(() => 0)
+      .then((bytes) => {
+        this.send({ type: 'leave', bytes: this.retiredBytes + bytes });
+        for (const link of live) link.close();
+        this.socket?.close();
+        this.socket = null;
+      });
   }
+}
+
+/** Everything one reading has moved, both directions, both kinds. */
+function bytesOf(sample: LinkSample): number {
+  return (
+    sample.inboundAudioBytes +
+    sample.inboundVideoBytes +
+    sample.outboundAudioBytes +
+    sample.outboundVideoBytes
+  );
 }
