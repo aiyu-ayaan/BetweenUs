@@ -292,7 +292,7 @@ fun VoiceChannelScreen(
             onClose = { dismissed = watching.peer.peerId },
         )
         if (pickingDevices) CallDeviceSheet(onDismiss = { pickingDevices = false })
-    if (showingConnection) ConnectionSheet(linkStats) { showingConnection = false }
+        if (showingConnection) ConnectionSheet(linkStats) { showingConnection = false }
         return
     }
 
@@ -980,6 +980,7 @@ fun VoiceChannelScreen(
     }
 
     if (pickingDevices) CallDeviceSheet(onDismiss = { pickingDevices = false })
+    if (showingConnection) ConnectionSheet(linkStats) { showingConnection = false }
 }
 
 /**
