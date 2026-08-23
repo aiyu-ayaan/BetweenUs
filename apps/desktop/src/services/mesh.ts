@@ -738,6 +738,15 @@ class PeerLink {
         return;
       }
 
+      // An answer is the reply to one offer, and only the side with that offer
+      // still outstanding can apply it. A second answer - which a re-offer
+      // chasing a connection that never came up will produce, since each offer
+      // is answered - arrives when this side is already `stable`, and applying
+      // it throws "Called in wrong state: stable" at somebody who is looking at
+      // a call, not at a state machine. Dropping it is right: the description
+      // that settled the connection is already in place.
+      if (signal.kind === 'answer' && this.pc.signalingState !== 'have-local-offer') return;
+
       const offerCollision =
         signal.kind === 'offer' &&
         (this.makingOffer || this.pc.signalingState !== 'stable');

@@ -1576,6 +1576,20 @@ class VoiceEngine(private val context: Context) {
 
             val kind = payload.optString("kind")
 
+            // An answer is the reply to one offer, and only the side with that
+            // offer still outstanding can apply it. A second answer - which
+            // `chase` produces whenever it re-offers a connection that never
+            // came up, since each offer is answered - arrives when this side is
+            // already STABLE, and applying it fails with "Failed to set remote
+            // answer sdp: Called in wrong state: stable", in red, across a call
+            // that is otherwise fine. Dropping it is right: the description that
+            // settled the connection is already in place.
+            if (kind == "answer" &&
+                pc.signalingState() != PeerConnection.SignalingState.HAVE_LOCAL_OFFER
+            ) {
+                return
+            }
+
             // Perfect negotiation: on a collision the impolite side ignores the
             // offer and its own wins. The polite side applies it.
             val collision = kind == "offer" &&
