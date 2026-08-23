@@ -119,7 +119,7 @@ function PanelButton({
   return (
     <button
       type="button"
-      onClick={() => showPanel(open ? 'members' : panel)}
+      onClick={() => showPanel(open ? 'none' : panel)}
       aria-pressed={open}
       aria-label={label}
       title={label}
@@ -242,15 +242,22 @@ export function ChatView({
           <PanelButton panel="search" label="Search" icon={<SearchIcon className="h-5 w-5" />} />
           <MuteButton channelId={channel.id} />
 
-          {onToggleMembers && !isDirect && (
+          {!isDirect && (
             <button
               type="button"
-              onClick={onToggleMembers}
+              onClick={() => {
+                if (onToggleMembers) {
+                  onToggleMembers();
+                } else {
+                  const current = useChatStore.getState().rightPanel;
+                  useChatStore.getState().showPanel(current === 'members' ? 'none' : 'members');
+                }
+              }}
               aria-label="Toggle member list"
-              aria-pressed={showMembers}
+              aria-pressed={showMembers || useChatStore.getState().rightPanel === 'members'}
               title="Members"
               className={`flex h-9 w-9 min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 sm:h-8 sm:w-8 cursor-pointer items-center justify-center rounded-md p-1.5 transition-colors duration-150 ${
-                showMembers
+                showMembers || useChatStore.getState().rightPanel === 'members'
                   ? 'bg-white/[0.08] text-slate-100'
                   : 'text-slate-400 hover:bg-white/[0.07] hover:text-slate-100'
               }`}

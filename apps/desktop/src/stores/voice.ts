@@ -451,6 +451,18 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
       screenHolder: null,
       error: reason ?? null,
     });
+
+    // Switch to server's text channel if currently viewing a voice channel
+    const activeChannel = useChatStore.getState().activeChannel();
+    if (activeChannel?.type === 'VOICE') {
+      const channels = useChatStore.getState().channels;
+      const textChannel = channels.find(
+        (c) => c.serverId === activeChannel.serverId && c.type === 'TEXT',
+      );
+      if (textChannel) {
+        void useChatStore.getState().selectChannel(textChannel.id);
+      }
+    }
   },
 
   toggleMic: async () => {

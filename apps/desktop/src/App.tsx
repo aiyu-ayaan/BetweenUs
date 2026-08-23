@@ -385,7 +385,6 @@ function Workbench(): JSX.Element {
 
   const [settings, setSettings] = useState<'none' | 'user' | 'server'>('none');
   const [homeScreen, setHomeScreen] = useState<'friends' | 'remote' | null>('friends');
-  const [showMembers, setShowMembers] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [switcher, setSwitcher] = useState(false);
   const [showDrawer, setShowDrawer] = useState(false);
@@ -393,10 +392,9 @@ function Workbench(): JSX.Element {
   const isRightPanelOpen =
     rightPanel === 'pins' ||
     rightPanel === 'search' ||
-    (rightPanel === 'members' && view === 'server' && showMembers);
+    (rightPanel === 'members' && view === 'server');
 
   const handleCloseRightPanel = () => {
-    setShowMembers(false);
     useChatStore.getState().showPanel('none');
   };
 
@@ -478,19 +476,15 @@ function Workbench(): JSX.Element {
         ) : view === 'home' && homeScreen === 'friends' ? (
           <FriendsView onOpenMenu={() => setShowDrawer(true)} />
         ) : channel?.type === 'VOICE' ? (
-          <VoiceChannelView channel={channel} />
+          <VoiceChannelView channel={channel} onOpenMenu={() => setShowDrawer(true)} />
         ) : (
           <>
             <ChatView
               onToggleMembers={() => {
-                if (rightPanel !== 'members') {
-                  useChatStore.getState().showPanel('members');
-                  setShowMembers(true);
-                } else {
-                  setShowMembers((value) => !value);
-                }
+                const current = useChatStore.getState().rightPanel;
+                useChatStore.getState().showPanel(current === 'members' ? 'none' : 'members');
               }}
-              showMembers={showMembers && rightPanel === 'members'}
+              showMembers={rightPanel === 'members'}
               onOpenMenu={() => setShowDrawer(true)}
             />
             {/* Desktop right-hand panels (side-by-side) */}
@@ -498,7 +492,7 @@ function Workbench(): JSX.Element {
               <>
                 {rightPanel === 'pins' && <PinnedPanel onClose={handleCloseRightPanel} />}
                 {rightPanel === 'search' && <SearchPanel onClose={handleCloseRightPanel} />}
-                {rightPanel === 'members' && view === 'server' && showMembers && (
+                {rightPanel === 'members' && view === 'server' && (
                   <MemberList onClose={handleCloseRightPanel} />
                 )}
               </>
@@ -531,7 +525,7 @@ function Workbench(): JSX.Element {
             {rightPanel === 'search' && (
               <SearchPanel onClose={handleCloseRightPanel} className="h-full w-full border-none bg-surface-900" />
             )}
-            {rightPanel === 'members' && view === 'server' && showMembers && (
+            {rightPanel === 'members' && view === 'server' && (
               <MemberList onClose={handleCloseRightPanel} className="h-full w-full border-none bg-surface-900 flex" />
             )}
           </div>

@@ -30,7 +30,7 @@ export interface MemberListProps {
  */
 export function MemberList({
   onClose,
-  className = 'hidden w-60 shrink-0 lg:flex',
+  className = 'w-60 shrink-0 flex',
 }: MemberListProps = {}): JSX.Element {
   const members = useChatStore((state) => state.members);
   const online = usePresenceStore((state) => state.online);

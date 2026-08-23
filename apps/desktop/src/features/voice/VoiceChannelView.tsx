@@ -36,10 +36,12 @@ import { ShareStage } from './ShareStage';
 import {
   ChevronLeftIcon,
   ChevronRightIcon,
+  HashIcon,
   LayoutBottomIcon,
   LayoutSidebarIcon,
   LockIcon,
   MaximizeIcon,
+  MenuIcon,
   MicOffIcon,
   MinimizeIcon,
   ScreenShareIcon,
@@ -62,7 +64,13 @@ interface Stage {
   lastSpokeAt: number;
 }
 
-export function VoiceChannelView({ channel }: { channel: Channel }): JSX.Element {
+export function VoiceChannelView({
+  channel,
+  onOpenMenu,
+}: {
+  channel: Channel;
+  onOpenMenu?: () => void;
+}): JSX.Element {
   const members = useChatStore((state) => state.members);
   const occupants = usePresenceStore((state) => state.voice.get(channel.id) ?? []);
 
@@ -100,10 +108,21 @@ export function VoiceChannelView({ channel }: { channel: Channel }): JSX.Element
 
   return (
     <section className="panel flex min-w-0 flex-1 flex-col bg-surface-950">
-      <header className="flex h-12 shrink-0 items-center gap-2 border-b border-edge px-4">
-        <SpeakerIcon className="h-5 w-5 text-slate-500" />
+      <header className="flex h-12 shrink-0 items-center gap-2 border-b border-edge px-2.5 md:px-4">
+        {onOpenMenu && (
+          <button
+            type="button"
+            onClick={onOpenMenu}
+            aria-label="Open navigation menu"
+            title="Open menu"
+            className="flex h-9 w-9 min-h-[44px] min-w-[44px] cursor-pointer items-center justify-center rounded-md text-slate-300 transition-colors duration-150 hover:bg-white/[0.07] hover:text-slate-100 md:hidden"
+          >
+            <MenuIcon className="h-5 w-5" />
+          </button>
+        )}
+        <SpeakerIcon className="h-5 w-5 text-slate-400 shrink-0" />
         <h1 className="truncate font-semibold text-slate-100">{channel.name}</h1>
-        {stage.length > 0 && <span className="text-sm text-slate-400">- {stage.length} in voice</span>}
+        {stage.length > 0 && <span className="hidden sm:inline text-sm text-slate-400">- {stage.length} in voice</span>}
         {/* Only while *this* client is in the call: a clock counting somebody
             else's call, in a channel being looked at from outside it, would be
             a number with no meaning to whoever is reading it. */}
@@ -121,6 +140,24 @@ export function VoiceChannelView({ channel }: { channel: Channel }): JSX.Element
             E2EE
           </span>
         )}
+
+        <button
+          type="button"
+          onClick={() => {
+            const channels = useChatStore.getState().channels;
+            const textChannel = channels.find(
+              (c) => c.serverId === channel.serverId && c.type === 'TEXT',
+            );
+            if (textChannel) {
+              void useChatStore.getState().selectChannel(textChannel.id);
+            }
+          }}
+          className={`${connected ? 'ml-2' : 'ml-auto'} flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-slate-300 transition-colors hover:bg-white/[0.08] hover:text-white min-h-[36px] cursor-pointer`}
+          title="Back to text channel"
+        >
+          <HashIcon className="h-3.5 w-3.5 text-slate-400" />
+          <span className="hidden sm:inline">Text chat</span>
+        </button>
       </header>
 
       <div className="flex min-h-0 flex-1 flex-col gap-3 p-4">
