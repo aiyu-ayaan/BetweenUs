@@ -30,6 +30,7 @@ import { Avatar } from '../../components/Avatar';
 import { PicturePicker } from '../../components/PicturePicker';
 import {
   BellIcon,
+  DownloadIcon,
   LogOutIcon,
   MicIcon,
   MonitorIcon,
@@ -37,8 +38,9 @@ import {
   UserIcon,
   XIcon,
 } from '../../components/icons';
+import { useUpdateStore } from '../../stores/updates';
 
-type Section = 'account' | 'voice' | 'notifications' | 'remote' | 'appearance';
+type Section = 'account' | 'voice' | 'notifications' | 'remote' | 'appearance' | 'updates';
 
 // Remote Access is about *this machine* offering itself, which a browser tab
 // cannot do - so the web client has no such section. See services/platform.ts.
@@ -50,6 +52,7 @@ const SECTIONS: Array<{ id: Section; label: string; icon: typeof UserIcon }> = [
     ? [{ id: 'remote' as const, label: 'Remote Access', icon: MonitorIcon }]
     : []),
   { id: 'appearance', label: 'Appearance', icon: PaletteIcon },
+  { id: 'updates', label: 'Updates', icon: DownloadIcon },
 ];
 
 /**
@@ -121,6 +124,7 @@ export function UserSettings({ onClose }: { onClose: () => void }): JSX.Element 
           {section === 'notifications' && <NotificationsSection />}
           {section === 'remote' && <RemoteSection />}
           {section === 'appearance' && <AppearanceSection />}
+          {section === 'updates' && <UpdatesSection />}
         </div>
 
         <button
@@ -1213,6 +1217,179 @@ function statusLabel(status: 'off' | 'connecting' | 'online' | 'error'): string 
       return 'off';
   }
 }
+
+/**
+ * What this copy is, and how it gets the next one.
+ *
+ * The desktop app updates itself; a browser tab reloads. Both are drawn here
+ * because "am I current?" is the same question in both, and answering it in one
+ * place is what stops the web build growing a settings page of its own.
+ */
+function UpdatesSection(): JSX.Element {
+  const desktop = isDesktopRuntime();
+  const info = useUpdateStore((state) => state.info);
+  const stage = useUpdateStore((state) => state.stage);
+  const offer = useUpdateStore((state) => state.offer);
+  const progress = useUpdateStore((state) => state.progress);
+  const error = useUpdateStore((state) => state.error);
+  const reloadReady = useUpdateStore((state) => state.reloadReady);
+  const check = useUpdateStore((state) => state.check);
+  const download = useUpdateStore((state) => state.download);
+  const install = useUpdateStore((state) => state.install);
+  const setChannel = useUpdateStore((state) => state.setChannel);
+
+  const busy = stage === 'checking' || stage === 'downloading' || stage === 'installing';
+
+  return (
+    <>
+      <h1 className="text-xl font-semibold text-slate-50">Updates</h1>
+
+      {desktop ? (
+        <>
+          <p className="mt-2 text-sm text-slate-400">
+            This copy is BetweenUs{' '}
+            <span className="font-medium text-slate-200">{info?.version ?? '…'}</span>
+            {info ? `, the ${FLAVOR_LABEL[info.flavor]}.` : '.'}
+          </p>
+
+          {info?.flavor === 'portable' && (
+            <p className="mt-2 text-sm text-slate-400">
+              Updates download the portable exe and replace the one you are running, where it
+              already sits. The installer is never offered to a portable copy - it would leave you
+              with a second BetweenUs somewhere else on the disk.
+            </p>
+          )}
+
+          {info?.flavor === 'unpacked' && (
+            <p className="mt-3 rounded-md bg-amber-500/10 px-3 py-2 text-sm text-amber-200">
+              This is a development build. There is no release for it to update to.
+            </p>
+          )}
+
+          <h2 className="mt-6 text-xs font-bold uppercase tracking-wide text-slate-400">Channel</h2>
+          <p className="mt-1 text-sm text-slate-400">
+            A channel takes its own builds and everything steadier, so beta is offered the stable
+            releases too.
+          </p>
+          <div className="mt-3 flex gap-2">
+            {UPDATE_CHANNELS.map((entry) => (
+              <button
+                key={entry.id}
+                type="button"
+                onClick={() => void setChannel(entry.id)}
+                aria-pressed={info?.channel === entry.id}
+                className={`flex-1 cursor-pointer rounded-lg px-3 py-2 text-left transition-colors duration-200 ${
+                  info?.channel === entry.id
+                    ? 'bg-surface-700 ring-2 ring-accent'
+                    : 'bg-surface-800 hover:bg-surface-700'
+                }`}
+              >
+                <span className="block text-sm font-medium text-slate-100">{entry.label}</span>
+                <span className="mt-0.5 block text-xs text-slate-400">{entry.detail}</span>
+              </button>
+            ))}
+          </div>
+
+          <div className="mt-6 flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => void check()}
+              disabled={busy}
+              className="cursor-pointer rounded bg-surface-700 px-4 py-2 text-sm font-medium text-slate-100 transition-colors duration-200 hover:bg-surface-600 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {stage === 'checking' ? 'Checking…' : 'Check for updates'}
+            </button>
+
+            {stage === 'available' && (
+              <button
+                type="button"
+                onClick={() => void download()}
+                className="cursor-pointer rounded bg-accent px-4 py-2 text-sm font-medium text-white transition-colors duration-200 hover:bg-accent-hover"
+              >
+                Download {offer?.version}
+              </button>
+            )}
+
+            {stage === 'ready' && (
+              <button
+                type="button"
+                onClick={() => void install()}
+                className="cursor-pointer rounded bg-accent px-4 py-2 text-sm font-medium text-white transition-colors duration-200 hover:bg-accent-hover"
+              >
+                Restart and install
+              </button>
+            )}
+
+            {stage === 'downloading' && (
+              <span className="text-sm tabular-nums text-slate-300">
+                {progress < 0 ? 'Downloading…' : `Downloading… ${Math.round(progress * 100)}%`}
+              </span>
+            )}
+          </div>
+
+          {stage === 'idle' && info !== null && info.flavor !== 'unpacked' && !error && (
+            <p className="mt-3 text-sm text-slate-400">This is the newest build on this channel.</p>
+          )}
+
+          {offer && stage !== 'idle' && (
+            <div className="mt-5 rounded-lg bg-surface-800 p-4">
+              <p className="text-sm font-medium text-slate-100">{offer.name}</p>
+              <p className="mt-1 text-xs text-slate-400">
+                {offer.asset.name}
+                {offer.asset.size > 0 && ` · ${Math.round(offer.asset.size / 1_000_000)} MB`}
+              </p>
+              {offer.notes && (
+                <p className="mt-3 max-h-48 overflow-y-auto whitespace-pre-wrap text-xs text-slate-300">
+                  {offer.notes}
+                </p>
+              )}
+            </div>
+          )}
+        </>
+      ) : (
+        <>
+          <p className="mt-2 text-sm text-slate-400">
+            In a browser there is nothing to install: the deployment is updated by whoever runs it,
+            and this tab picks the new build up when it reloads. It watches for that on its own and
+            offers a reload at the top of the window.
+          </p>
+          <div className="mt-5 flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => location.reload()}
+              className="cursor-pointer rounded bg-accent px-4 py-2 text-sm font-medium text-white transition-colors duration-200 hover:bg-accent-hover"
+            >
+              Reload now
+            </button>
+            <span className="text-sm text-slate-400">
+              {reloadReady
+                ? 'A newer build is being served.'
+                : 'This tab is running the build being served.'}
+            </span>
+          </div>
+        </>
+      )}
+
+      {error && (
+        <p role="alert" className="mt-3 rounded-md bg-red-500/10 px-3 py-2 text-sm text-red-300">
+          {error}
+        </p>
+      )}
+    </>
+  );
+}
+
+const FLAVOR_LABEL: Record<DesktopUpdateFlavor, string> = {
+  installer: 'installed build',
+  portable: 'portable build',
+  unpacked: 'development build',
+};
+
+const UPDATE_CHANNELS: Array<{ id: DesktopUpdateChannel; label: string; detail: string }> = [
+  { id: 'stable', label: 'Stable', detail: 'Finished releases only.' },
+  { id: 'beta', label: 'Beta', detail: 'Release candidates, plus stable.' },
+  { id: 'alpha', label: 'Alpha', detail: 'Everything, as it is built.' },
+];
 
 function AppearanceSection(): JSX.Element {
   return (

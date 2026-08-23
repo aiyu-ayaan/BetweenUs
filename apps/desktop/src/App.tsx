@@ -41,6 +41,7 @@ import { ShareControlConsent } from './features/voice/ShareControlConsent';
 import { IncomingCall } from './features/voice/IncomingCall';
 import { TopBar } from './features/shell/TopBar';
 import { VersionNotice } from './components/VersionNotice';
+import { UpdateNotice } from './components/UpdateNotice';
 import { QuickSwitcher } from './features/shell/QuickSwitcher';
 import { useVoiceStore } from './stores/voice';
 import { BetweenUsLogoIcon } from './components/icons';
@@ -407,6 +408,7 @@ function Workbench(): JSX.Element {
   return (
     <div className="flex h-full flex-col overflow-hidden">
       <VersionNotice />
+      <UpdateNotice />
       <TopBar
         onOpenSwitcher={() => setSwitcher(true)}
         sidebarOpen={sidebarOpen}
