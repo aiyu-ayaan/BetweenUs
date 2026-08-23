@@ -814,6 +814,23 @@ async function openMicrophone(settings: VoiceSettings): Promise<void> {
   localTracks.mic = raw;
   await mesh.setMicEncoding(micEncoding(settings));
   await mesh.setTrack('mic', (await attachGate(raw, settings)) ?? raw);
+  // Opening the microphone *is* the button being on, so it is recorded here
+  // rather than by each caller afterwards.
+  //
+  // This is the whole of "I have to switch microphones every time I join".
+  // `applyTalking` below reads `micEnabled` to decide whether the capture may
+  // pass audio, and both callers that start a microphone - the join and the mic
+  // button - used to set it only after this function returned. So the capture
+  // at the top of every call was opened and immediately switched off against a
+  // flag that was still false, and stayed off: nothing re-runs `applyTalking`
+  // on its own. Changing the input device recaptured through here with the flag
+  // by then true, which is why switching devices "fixed" it and why which
+  // device was picked never mattered - the device was never the problem.
+  //
+  // Unless the call was left while the capture was still opening, in which case
+  // there is no call for the button to be on for.
+  if (useVoiceStore.getState().status === 'idle') return;
+  useVoiceStore.setState({ micEnabled: true });
   // A microphone opened while push to talk is on starts closed, which is what
   // push to talk means. Opening it live for the instant between capture and the
   // first key press is the bug this line exists to prevent.
