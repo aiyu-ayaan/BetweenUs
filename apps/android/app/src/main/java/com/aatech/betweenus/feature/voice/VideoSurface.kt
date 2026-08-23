@@ -2,9 +2,15 @@ package com.aatech.betweenus.feature.voice
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -43,6 +49,16 @@ import org.webrtc.VideoTrack
  *   rather than a clip - the four corner slivers painted in [cornerColor] by
  *   the window, which does draw over the surface. That is the same reason the
  *   name pill and the flip button are visible on top of the video.
+ * - **`SCALE_ASPECT_FIT` does nothing to a view that has already been given an
+ *   exact size.** The scaling type is only consulted in the renderer's own
+ *   `onMeasure`; what actually reaches the shader is a matrix built from the
+ *   *view's* aspect ratio, so a view stretched to fill its parent crops the
+ *   frame to that shape whatever the scaling type says. Asking for "fit" and
+ *   filling the parent is therefore a contradiction the renderer resolves by
+ *   cropping - which is how a landscape camera kept arriving as a portrait
+ *   close-up on a phone. The fix is to stop giving it an exact size: when
+ *   fitting, the surface is sized to the frame's own aspect ratio and centred,
+ *   and the letterbox is the tile's background showing through beside it.
  */
 @Composable
 internal fun VideoSurface(
@@ -59,12 +75,33 @@ internal fun VideoSurface(
     /** What the masked corners are painted with - the tile's own background. */
     cornerColor: Color = Color.Transparent,
 ) {
-    Box(modifier) {
+    // The shape of what is arriving, which only the frames can say. Null until
+    // the first one, and reset with the track - a flipped camera is a new track
+    // and can be a new shape.
+    var aspect by remember(track) { mutableStateOf<Float?>(null) }
+    val watch = remember(track, events) {
+        object : RendererCommon.RendererEvents {
+            override fun onFirstFrameRendered() {
+                events?.onFirstFrameRendered()
+            }
+
+            override fun onFrameResolutionChanged(width: Int, height: Int, rotation: Int) {
+                aspect = frameAspect(width, height, rotation)
+                events?.onFrameResolutionChanged(width, height, rotation)
+            }
+        }
+    }
+
+    // Only when fitting. Filling is the tile saying "cover this box, crop what
+    // does not sit in it", which is what a thumbnail wants and needs no help.
+    val ratio = aspect?.takeIf { fit == RendererCommon.ScalingType.SCALE_ASPECT_FIT }
+
+    Box(modifier, contentAlignment = Alignment.Center) {
         key(track) {
             AndroidView(
                 factory = { context ->
                     SurfaceViewRenderer(context).apply {
-                        init(eglContext, events)
+                        init(eglContext, watch)
                         setScalingType(fit)
                         setEnableHardwareScaler(hardwareScaler)
                         setMirror(mirror)
@@ -76,7 +113,11 @@ internal fun VideoSurface(
                     track.removeSink(renderer)
                     renderer.release()
                 },
-                modifier = Modifier.fillMaxSize(),
+                modifier = if (ratio != null) {
+                    Modifier.aspectRatio(ratio)
+                } else {
+                    Modifier.fillMaxSize()
+                },
             )
         }
 
@@ -94,4 +135,20 @@ internal fun VideoSurface(
             }
         }
     }
+}
+
+/**
+ * The shape of an arriving frame, as it will be drawn.
+ *
+ * A quarter turn swaps the two: a phone held upright sends 640x480 with a
+ * rotation of 90, and drawing that as four-by-three is the picture on its side.
+ * Null for a resolution that says nothing - a zero on either side happens
+ * between a track being made and its first frame.
+ */
+internal fun frameAspect(width: Int, height: Int, rotation: Int): Float? {
+    if (width <= 0 || height <= 0) return null
+    val quarterTurned = ((rotation % 180) + 180) % 180 != 0
+    val across = if (quarterTurned) height else width
+    val down = if (quarterTurned) width else height
+    return across.toFloat() / down
 }
