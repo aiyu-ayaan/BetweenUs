@@ -102,6 +102,8 @@ export class PresenceGateway implements OnModuleDestroy {
         // buzzing for a conversation that is open on a desktop.
         if (state.focused) void this.store.focus(state.focused, state.userId);
       }
+
+      void this.sweepVoice();
     }, HEARTBEAT_INTERVAL_MS);
 
     // Every one of these is scoped. A status change reaches the people who
@@ -145,6 +147,27 @@ export class PresenceGateway implements OnModuleDestroy {
     });
 
     this.logger.info('Presence WebSocket gateway ready', { path: '/ws/presence' });
+  }
+
+  /**
+   * Empties the voice channels `call-service` has stopped speaking for.
+   *
+   * Its rosters expire now (see `replaceVoice`), which is what makes a call
+   * that outlived its own service stop being a room full of ghosts. Expiring in
+   * Redis fixes the next client to connect; this is what fixes the ones already
+   * looking at it, which is where the ghost was actually being seen.
+   */
+  private async sweepVoice(): Promise<void> {
+    try {
+      for (const channelId of await this.store.expireVoice()) {
+        await this.broadcastTo(audienceOfChannel(channelId), {
+          type: 'voice.changed',
+          voice: { channelId, userIds: [] },
+        });
+      }
+    } catch (error) {
+      this.logger.warn('Could not expire the call rosters', { reason: String(error) });
+    }
   }
 
   private async onConnect(socket: WebSocket, userId: string): Promise<void> {

@@ -177,6 +177,20 @@ export class CallGateway implements OnModuleDestroy {
         state.alive = false;
         socket.ping();
       }
+
+      // Said again, unchanged, on every beat.
+      //
+      // A roster is a replacement for one channel, so a channel that stops
+      // being mentioned keeps whatever was last said about it - and if this
+      // process restarted mid-call, what was last said about it was true of a
+      // process that no longer exists. That is the ghost in a voice channel's
+      // member list: somebody who left hours ago, listed forever, because the
+      // only thing that could correct it never spoke about that channel again.
+      //
+      // Re-announcing turns the roster into something with a heartbeat, which
+      // is what presence-service ages out. Nobody in this call means nothing is
+      // published for it, which is exactly what "empty" has to look like.
+      for (const channelId of this.calls.keys()) this.announceRoster(channelId);
     }, HEARTBEAT_INTERVAL_MS);
 
     this.logger.info('Call signalling gateway ready', { path: '/ws/call' });

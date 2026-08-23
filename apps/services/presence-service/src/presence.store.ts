@@ -17,6 +17,7 @@ import type {
   PresenceStatus,
   VoiceState,
 } from '@betweenus/shared-types';
+import { voiceLifetime } from './voice-lifetime';
 
 const ONLINE_KEY = 'presence:online';
 const STATUS_KEY = 'presence:status';
@@ -89,6 +90,13 @@ export class PresenceStore implements OnModuleDestroy {
    * A replace rather than an add or a remove, because the authority sends the
    * whole roster: anything left in Redis that is not in it is a client that
    * said it joined and never did, or one that died without saying goodbye.
+   *
+   * And it expires, for the same reason `presence:online` does. A roster is
+   * only ever replaced per channel, so a channel `call-service` never mentions
+   * again keeps whatever it last said - which after that service restarts
+   * mid-call is a room full of people who left. `call-service` re-announces
+   * every live call on its heartbeat, three times inside this window, so a
+   * roster that stops being refreshed is a roster nothing is behind any more.
    */
   async replaceVoice(channelId: string, userIds: string[]): Promise<VoiceState> {
     const key = VOICE_KEY(channelId);
@@ -100,8 +108,50 @@ export class PresenceStore implements OnModuleDestroy {
 
     // Delete and rewrite in one round trip, so a reader never sees the empty
     // moment in between.
-    await this.redis.multi().del(key).sadd(key, ...userIds).sadd(VOICE_INDEX, channelId).exec();
+    await this.redis
+      .multi()
+      .del(key)
+      .sadd(key, ...userIds)
+      .pexpire(key, STALE_AFTER_MS)
+      .sadd(VOICE_INDEX, channelId)
+      .exec();
     return { channelId, userIds };
+  }
+
+  /**
+   * Rosters nothing has refreshed, dropped from the index and named.
+   *
+   * The key expires by itself; this is what notices, so the people looking at
+   * that channel can be told rather than left on a stale list until they
+   * reconnect. The gateway calls it on its heartbeat.
+   */
+  async expireVoice(): Promise<string[]> {
+    const channels = await this.redis.smembers(VOICE_INDEX);
+    const lifetimes = await Promise.all(
+      channels.map((channelId) => this.redis.pttl(VOICE_KEY(channelId))),
+    );
+
+    const gone: string[] = [];
+    await Promise.all(
+      channels.map(async (channelId, index) => {
+        switch (voiceLifetime(lifetimes[index] ?? -2)) {
+          case 'gone':
+            gone.push(channelId);
+            return;
+          // A roster written before rosters had a lifetime. Put on the same
+          // clock rather than deleted outright, so a call that is genuinely
+          // running is re-announced onto it instead of blinking empty.
+          case 'adopt':
+            await this.redis.pexpire(VOICE_KEY(channelId), STALE_AFTER_MS);
+            return;
+          case 'live':
+            return;
+        }
+      }),
+    );
+
+    if (gone.length > 0) await this.redis.srem(VOICE_INDEX, ...gone);
+    return gone;
   }
 
   // There were `joinVoice`, `leaveVoice` and `voiceChannelsOf` here, one per
@@ -155,7 +205,11 @@ export class PresenceStore implements OnModuleDestroy {
 
   async allVoiceStates(): Promise<VoiceState[]> {
     const channels = await this.redis.smembers(VOICE_INDEX);
-    return Promise.all(channels.map((channelId) => this.voiceState(channelId)));
+    const states = await Promise.all(channels.map((channelId) => this.voiceState(channelId)));
+    // An expired roster leaves its channel in the index until the sweep gets to
+    // it. Sending it as an empty room would be harmless; sending nothing is
+    // what a client already understands as "nobody is in there".
+    return states.filter((state) => state.userIds.length > 0);
   }
 
   async onModuleDestroy(): Promise<void> {
