@@ -7,6 +7,22 @@ import type {
 
 import { wsUrl } from './endpoint';
 
+/**
+ * Mints a fresh access token, set by the auth store on startup.
+ *
+ * A socket carries the access token in its URL, so the token it opened with
+ * expires while it is open - fifteen minutes in, or over any sleep longer than
+ * that. The next reconnect is then refused with 4401, and a socket that gave up
+ * there stayed down until the app was restarted: no messages, no presence, an
+ * app that looks signed out while the session behind it is fine. Refreshing is
+ * what fixes it, and nothing else was going to ask.
+ */
+let renewToken: (() => Promise<unknown>) | null = null;
+
+export function onSocketTokenRejected(renew: () => Promise<unknown>): void {
+  renewToken = renew;
+}
+
 // Same host as the REST base, ws scheme: both sockets are behind the gateway
 // this window is pointed at, so there is no second address to configure.
 
@@ -65,8 +81,12 @@ export class ChatSocket {
 
     socket.onclose = (event) => {
       this.socket = null;
-      // 4401 means the token was rejected - reconnecting would just loop.
-      if (this.closedByUs || event.code === 4401) return;
+      if (this.closedByUs) return;
+      // 4401 is the token being rejected, not the connection failing. Ask for a
+      // fresh one - a successful refresh reconnects both sockets itself - and
+      // fall through to the backoff so a refresh that cannot happen right now
+      // is retried rather than being the end of it.
+      if (event.code === 4401) void renewToken?.();
       this.scheduleReconnect();
     };
 
@@ -199,7 +219,12 @@ export class PresenceSocket {
 
     socket.onclose = (event) => {
       this.socket = null;
-      if (this.closedByUs || event.code === 4401) return;
+      if (this.closedByUs) return;
+      // 4401 is the token being rejected, not the connection failing. Ask for a
+      // fresh one - a successful refresh reconnects both sockets itself - and
+      // fall through to the backoff so a refresh that cannot happen right now
+      // is retried rather than being the end of it.
+      if (event.code === 4401) void renewToken?.();
       this.scheduleReconnect();
     };
 

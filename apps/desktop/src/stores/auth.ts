@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import type { PublicUser } from '@betweenus/shared-types';
 import { ApiError, api, apiBaseUrl, configureApi } from '../services/api';
-import { chatSocket, presenceSocket } from '../services/socket';
+import { chatSocket, onSocketTokenRejected, presenceSocket } from '../services/socket';
 import { initIdentity, resetE2ee, type BackupSecret } from '../services/e2ee';
 import { cache } from '../services/cache';
 
@@ -259,3 +259,7 @@ function refreshSession(): Promise<string | null> {
 
 // Rotating refresh: the API client asks for a fresh access token on a 401.
 configureApi(() => useAuthStore.getState().accessToken, refreshSession);
+
+// And so does a socket whose token was rejected: it carries the access token in
+// its URL, so it outlives it, and nothing else would have asked.
+onSocketTokenRejected(refreshSession);

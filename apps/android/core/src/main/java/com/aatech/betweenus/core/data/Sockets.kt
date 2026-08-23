@@ -94,9 +94,16 @@ open class JsonSocket(private val path: String) {
         socket = null
         connected = false
         connectionListeners.forEach { it(false) }
-        // 4401 is the token being rejected. Reconnecting would loop; the session
-        // refresh is what fixes it, and it will call connect() again.
-        if (closedByUs || code == 4401) return
+        if (closedByUs) return
+        // 4401 is the token being rejected, not the connection failing. A socket
+        // carries the access token in its URL, so it outlives it - fifteen
+        // minutes in, or over any doze longer than that - and a socket that gave
+        // up here stayed down until the app was restarted: no messages, no
+        // presence, an app that looks signed out while the session behind it is
+        // fine. Ask for a fresh token (a refresh that works calls connect()
+        // itself) and still fall through to the backoff, so a refresh that
+        // cannot happen right now is retried rather than being the end of it.
+        if (code == 4401) Session.renewAccessToken()
         scheduleReconnect()
     }
 

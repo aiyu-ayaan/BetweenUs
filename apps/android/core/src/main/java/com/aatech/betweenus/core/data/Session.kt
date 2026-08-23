@@ -205,6 +205,17 @@ object Session {
     }
 
     /**
+     * Fire-and-forget refresh, for a caller with no coroutine of its own.
+     *
+     * A socket whose token was rejected is the only one that needs this: it is
+     * the one thing holding an access token that nothing else will notice has
+     * expired.
+     */
+    fun renewAccessToken() {
+        scope.launch { runCatching { refreshAccessToken() } }
+    }
+
+    /**
      * Ends the session on the server while it can still be reached, then
      * locally regardless - a sign-out that fails because the network is down
      * still has to sign this device out.
