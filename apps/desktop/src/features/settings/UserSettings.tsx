@@ -549,7 +549,7 @@ function VoiceSection(): JSX.Element {
         />
         <Switch
           label="Follow whatever is plugged in"
-          hint="Plugging in a headset moves the call to it, and unplugging it moves the call back. Off keeps the two choices above whatever happens."
+          hint="When a device chosen above is unplugged, fall back to the system default instead of opening something that is not there. Off keeps the two choices whatever happens."
           checked={settings.followSystemDevices}
           onChange={(followSystemDevices) => update({ followSystemDevices })}
         />

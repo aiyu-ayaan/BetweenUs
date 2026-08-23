@@ -24,10 +24,30 @@ export function refreshDevices(): void {
   void navigator.mediaDevices
     .enumerateDevices()
     .then((found) => {
-      devices = found;
-      for (const listener of listeners) listener(found);
+      devices = realDevices(found);
+      for (const listener of listeners) listener(devices);
     })
     .catch(() => undefined);
+}
+
+/**
+ * The hardware, with the stand-in for "you have not been asked yet" removed.
+ *
+ * Before the microphone has ever been granted, `enumerateDevices` does not
+ * return nothing - it returns one entry per kind with an empty id and an empty
+ * label, which is the browser saying a device of that kind exists and declining
+ * to say which. Kept, that placeholder is indistinguishable from a real list of
+ * one, and every question asked of the list gets the wrong answer from it: a
+ * chosen microphone is reported missing because the placeholder is not it, the
+ * picker falls back to showing "System default" over a choice that is still
+ * there, and the warning about an unplugged device appears on a machine with
+ * nothing unplugged.
+ *
+ * Dropped, the list is empty until permission - and empty already means "not
+ * enumerated yet" everywhere below, which is the truth.
+ */
+export function realDevices(found: MediaDeviceInfo[]): MediaDeviceInfo[] {
+  return found.filter((device) => device.deviceId !== '');
 }
 
 /** Calls back on every change, and returns the unsubscribe. */

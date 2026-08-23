@@ -6,7 +6,7 @@
  * itself needs a browser and is not worth faking.
  */
 import assert from 'node:assert/strict';
-import { captureIsStale, chosenIsMissing } from './audio-devices';
+import { captureIsStale, chosenIsMissing, realDevices } from './audio-devices';
 
 const device = (deviceId: string, kind: MediaDeviceKind): MediaDeviceInfo =>
   ({ deviceId, kind, label: deviceId, groupId: '' }) as MediaDeviceInfo;
@@ -33,5 +33,17 @@ assert.equal(captureIsStale('headset', 'headset', [headset, webcamMic]), false);
 assert.equal(captureIsStale('headset', 'webcam', [headset, webcamMic]), true);
 // Chosen and still absent: recapturing would land on the same fallback.
 assert.equal(captureIsStale('headset', 'webcam', [webcamMic]), false);
+
+// Before the microphone is granted, `enumerateDevices` answers with one empty
+// entry per kind rather than with nothing. Left in, it is a list of one that is
+// not your device, so every chosen device reads as unplugged - which is the
+// spurious "the device you chose is not connected" and the fallback behind it.
+const unasked = [device('', 'audioinput'), device('', 'audiooutput')];
+assert.deepEqual(realDevices(unasked), []);
+assert.equal(chosenIsMissing(unasked, 'audioinput', 'headset'), true, 'the bug this guards');
+assert.equal(chosenIsMissing(realDevices(unasked), 'audioinput', 'headset'), false);
+
+// A real list is passed through untouched.
+assert.deepEqual(realDevices([headset, webcamMic]), [headset, webcamMic]);
 
 console.log('audio-devices.check.ts ok');

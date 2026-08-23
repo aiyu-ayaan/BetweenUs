@@ -89,18 +89,19 @@ export interface VoiceSettings {
   inputDeviceId: string | null;
   outputDeviceId: string | null;
   /**
-   * Move to a headset the moment it is plugged in, and off it the moment it is
-   * unplugged.
+   * Fall back to the system default when a chosen device is unplugged.
    *
-   * A device id is remembered forever and the operating system's idea of the
-   * default is not, which is the whole of "I have to change my microphone and
-   * my speakers again every call": pick a headset once, and every later call is
-   * pinned to it whether or not it is the thing that is actually connected. On
-   * by default, because plugging something in *is* the instruction - it is what
-   * the phone does, and what the operating system's own default does.
+   * A device id is remembered forever and the hardware is not: pick a headset
+   * once and every later call is pinned to it, so the call after it is put away
+   * opens a microphone that is in a drawer. On by default, because a device
+   * that is gone is not a choice.
    *
-   * Off is for the machine with a microphone that must not be picked, where the
-   * choice really is a choice rather than a snapshot.
+   * It is only ever the *chosen* device going away that drops the choice. This
+   * used to drop it on any device change at all, which made an explicit choice
+   * impossible to keep: see `unpinDevices` in stores/voice.ts.
+   *
+   * Off is for the machine where the fallback is worse than the failure - one
+   * whose system default is a microphone that must never be picked.
    */
   followSystemDevices: boolean;
   echoCancellation: boolean;

@@ -27,7 +27,7 @@ import { startPushToTalk, stopPushToTalk } from '../services/push-to-talk';
 import { notBeingHeard, type LinkStats } from '../services/call-stats';
 import { visibleVideo } from '../services/media-presence';
 import { NoiseGate } from '../services/mic-gate';
-import { captureIsStale } from '../services/audio-devices';
+import { captureIsStale, chosenIsMissing, realDevices } from '../services/audio-devices';
 import { playCallTone, rosterChange, setToneOutput } from '../services/call-tones';
 import { micCapture, micEncoding, micProcessing, type VoiceSettings } from '../services/voice-quality';
 import { shareOptions, type ShareIntent, type ShareSize } from '../services/share-quality';
@@ -1032,36 +1032,47 @@ const DEVICE_SETTLE_MS = 400;
 let deviceSettleTimer: number | null = null;
 
 /**
- * Lets go of a pinned device when the hardware changes.
+ * Lets go of a pinned device once that device is actually gone.
  *
  * A device id is remembered forever; the operating system's default is not.
  * Choose a headset once and every later call is pinned to it, so the call after
- * the headset is put away opens a microphone that is in a drawer - which is why
- * these two menus had to be set again and again. With `followSystemDevices` on,
- * a change in the hardware drops the pin and the system default wins, which is
- * the device that was just plugged in.
+ * the headset is put away opens a microphone that is in a drawer. With
+ * `followSystemDevices` on, the pin is dropped when the pinned device is no
+ * longer connected and the system default wins.
+ *
+ * *That device*, and not merely "the hardware changed", which is what this used
+ * to test and is the whole of "I have to pick my microphone again every time".
+ * A device change is not a signal about the chosen device: a webcam arriving, a
+ * monitor with speakers waking, a headset pairing - and, on the first call of
+ * every session, the microphone permission being granted, which turns the
+ * pre-permission placeholder list into the real one and is itself a
+ * `devicechange`. Every one of those used to throw away a perfectly good
+ * choice and fall back to a system default that, on the machine where the
+ * system default is the wrong microphone, is silence.
  *
  * Dropping the pin is all this does: the settings subscription below recaptures
  * the microphone, and `MediaSink` re-points the speakers, both because the
  * setting changed. It runs whether or not a call is up, so the choice is
  * already right when the next one starts.
  */
-function unpinDevices(): void {
+function unpinDevices(devices: MediaDeviceInfo[]): void {
   const { settings, update } = useAudioSettings.getState();
   if (!settings.followSystemDevices) return;
-  if (!settings.inputDeviceId && !settings.outputDeviceId) return;
-  update({ inputDeviceId: null, outputDeviceId: null });
+
+  const patch: Partial<VoiceSettings> = {};
+  if (chosenIsMissing(devices, 'audioinput', settings.inputDeviceId)) patch.inputDeviceId = null;
+  if (chosenIsMissing(devices, 'audiooutput', settings.outputDeviceId)) patch.outputDeviceId = null;
+  if (Object.keys(patch).length === 0) return;
+
+  update(patch);
 }
 
-async function followDeviceChange(): Promise<void> {
+async function followDeviceChange(devices: MediaDeviceInfo[]): Promise<void> {
   const { status, micEnabled } = useVoiceStore.getState();
   if (!mesh || status !== 'connected' || !micEnabled) return;
 
   const settings = useAudioSettings.getState().settings;
   const captured = localTracks.mic?.getSettings().deviceId ?? null;
-  // Enumerated here rather than read from the shared list: that list is
-  // refreshed by the same event and may not have answered yet.
-  const devices = await navigator.mediaDevices.enumerateDevices().catch(() => []);
   if (!captureIsStale(settings.inputDeviceId, captured, devices)) return;
 
   await closeMicrophone();
@@ -1073,10 +1084,19 @@ if (typeof navigator !== 'undefined' && navigator.mediaDevices) {
     if (deviceSettleTimer !== null) window.clearTimeout(deviceSettleTimer);
     deviceSettleTimer = window.setTimeout(() => {
       deviceSettleTimer = null;
-      // Before the recapture, so the recapture picks up the new choice rather
-      // than reopening the device that has just been unplugged.
-      unpinDevices();
-      void followDeviceChange();
+      void (async () => {
+        // Enumerated once here rather than read from the shared list: that list
+        // is refreshed by the same event and may not have answered yet. Both
+        // decisions below need it, and they have to agree about what is
+        // plugged in.
+        const devices = realDevices(
+          await navigator.mediaDevices.enumerateDevices().catch(() => []),
+        );
+        // Before the recapture, so the recapture picks up the new choice rather
+        // than reopening the device that has just been unplugged.
+        unpinDevices(devices);
+        await followDeviceChange(devices);
+      })();
     }, DEVICE_SETTLE_MS);
   });
 }
