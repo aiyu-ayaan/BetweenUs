@@ -19,7 +19,7 @@ import { ServerIcon } from '../../components/ServerIcon';
  * edge, the way an editor marks its active activity-bar item: it costs no
  * horizontal space and it does not turn the tile into a different shape.
  */
-export function ServerRail(): JSX.Element {
+export function ServerRail({ className }: { className?: string } = {}): JSX.Element {
   const { servers, view, activeServerId, selectServer, showHome, createServer } = useChatStore();
   const [dialog, setDialog] = useState<'none' | 'create' | 'join'>('none');
   const [value, setValue] = useState('');
@@ -77,7 +77,7 @@ export function ServerRail(): JSX.Element {
   return (
     <nav
       aria-label="Servers"
-      className="flex w-14 shrink-0 flex-col items-center gap-1 overflow-y-auto overflow-x-hidden py-0.5"
+      className={`flex w-14 shrink-0 flex-col items-center gap-1 overflow-y-auto overflow-x-hidden py-0.5 ${className ?? ''}`}
     >
       {/* Not the BetweenUs mark: that is in the top bar, and a second copy of it
           one row below reads as branding rather than as the button it is. A

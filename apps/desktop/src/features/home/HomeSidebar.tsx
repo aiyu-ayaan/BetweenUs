@@ -18,12 +18,14 @@ export function HomeSidebar({
   showingRemote,
   onShowRemote,
   onOpenUserSettings,
+  className = 'w-60',
 }: {
   showingFriends: boolean;
   onShowFriends: () => void;
   showingRemote: boolean;
   onShowRemote: () => void;
   onOpenUserSettings: () => void;
+  className?: string;
 }): JSX.Element {
   const directChannels = useFriendsStore((state) => state.directChannels);
   const openDirect = useFriendsStore((state) => state.openDirect);
@@ -35,7 +37,7 @@ export function HomeSidebar({
   );
 
   return (
-    <aside className="panel flex w-60 shrink-0 flex-col bg-surface-800">
+    <aside className={`panel flex shrink-0 flex-col bg-surface-800 ${className}`}>
       <header className="flex h-11 shrink-0 items-center border-b border-edge px-3">
         <h2 className="text-xs font-semibold uppercase tracking-[0.08em] text-slate-400">
           Messages

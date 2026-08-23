@@ -20,9 +20,11 @@ import {
 export function ChannelSidebar({
   onOpenUserSettings,
   onOpenServerSettings,
+  className = 'w-60',
 }: {
   onOpenUserSettings: () => void;
   onOpenServerSettings: () => void;
+  className?: string;
 }): JSX.Element {
   const { servers, channels, activeServerId, activeChannelId, unread, selectChannel } =
     useChatStore();
@@ -37,7 +39,7 @@ export function ChannelSidebar({
   const voiceChannels = channels.filter((channel) => channel.type === 'VOICE');
 
   return (
-    <aside className="panel flex w-60 shrink-0 flex-col bg-surface-800">
+    <aside className={`panel flex shrink-0 flex-col bg-surface-800 ${className}`}>
       <ServerHeader
         name={server?.name ?? 'No server'}
         open={menuOpen}
