@@ -221,6 +221,24 @@ message on Android, so an attachment opened twice is fetched once.
 - [ ] Light theme. The ramp is defined once now, which is what would make one
       possible; nothing else about it has been designed.
 
+### Call history
+
+Landed; the detail is in `TRACK.md`. What it deliberately left open:
+
+- [ ] Android and the admin panel do not draw the log. The endpoint is
+      `GET /api/v1/calls/history` and answers any client that asks
+- [ ] No retention. Rows live until the account does, which is right while a
+      deployment is one household and wrong at any size — a "keep the last N
+      days" sweep is the fix, not a smaller page
+- [ ] Data used is missing for a call the client was killed in: the total is
+      reported on the way out, and a process that dies has no way out. The
+      entry says so rather than saying zero. Sampling periodically into the row
+      would fix it and would also be a database write per client per minute of
+      every call, which is the trade being refused for now
+- [ ] Nothing has been in front of a human. Worth checking: the duration
+      against a clock, the peers list after somebody joins and leaves mid-call,
+      and the size against what the OS says the machine moved
+
 ### Phase 25 — the call follows the account
 
 - [x] `CallAudio`: every remote audio track mounted once at the root of the

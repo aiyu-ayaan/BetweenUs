@@ -136,6 +136,31 @@ Calls:
       clock. Shown only while *this* client is in the call - a duration for
       somebody else's call, read from outside it, is a number with no meaning.
 
+- [x] **A call log per person.** `call_sessions` is one row per person per stay
+      in a call, opened and closed by the gateway - the thing that holds the
+      sockets and therefore the only thing that knows when somebody really
+      arrived and left. It carries the channel and the server, how long it ran,
+      everybody who was in it at any point while they were, and how much data
+      the call moved. Settings has a Call History section reading
+      `GET /api/v1/calls/history`, with the month's two totals at the top.
+
+      The channel and server names are copied into the row rather than joined at
+      read time. A log is history: the entry somebody most wants back is the
+      channel that has since been deleted or the server they have since left,
+      and a foreign key would take exactly those rows away at the moment they
+      became worth reading. The one key is to the account, which is right -
+      deleting an account takes its log with it.
+
+      Data used is the client's own figure and cannot be anything else: media is
+      peer to peer, so no service is in the path to count a byte, and asking one
+      to be would be the media-server mistake wearing a meter. It is clamped
+      before it is written, so the worst a broken client does is write a wrong
+      number in its own row. The mesh takes each peer's last reading *before*
+      closing the link, because a closed `RTCPeerConnection` answers `getStats`
+      with nothing - without that, a call that lost four people one at a time
+      reported only the traffic of the last one. A window killed mid-call
+      reports nothing at all, and that entry says so rather than saying zero.
+
 Android:
 
 - [x] **Input sensitivity on the phone**, which was the one item here written

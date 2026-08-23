@@ -518,6 +518,29 @@ outliving the screen it was started on.
    without a word. The Electron window is deliberately not in this — it has a
    tray behind it.
 
+## The call log
+
+Settings → Call History, after at least one call has been had and *left* — the
+entry is written on the way out, so a call still up is a row with no ending yet.
+
+1. **The duration.** Time a short call against a clock. The number in the log is
+   the gateway's, taken from when the socket joined and left, not the client's
+   own idea of it: a window put to sleep mid-call must not shorten its own
+   entry.
+2. **Who was in it.** Have a third account join partway through and leave before
+   the end. They belong in the entry — "who was in it while I was", not "who was
+   in it at the end".
+3. **Where it was.** The channel and its server are named. Delete the channel
+   afterwards: the entry stays and still names it, which is the whole reason
+   those names are copied into the row instead of joined.
+4. **What it cost.** Talk with a camera on for a minute or two and compare the
+   size against what the OS reports the machine moved. Nothing on the server
+   measures this — media never touches one — so the number is the client's, and
+   a client killed mid-call (end the process rather than hanging up) writes an
+   entry that says no data was recorded rather than an entry that says zero.
+5. **Only yours.** `GET /api/v1/calls/history` takes no user id. Signing in as
+   the other account shows that account's calls and nothing of the first's.
+
 ## The workbench
 
 Phase 26 is layout and paint only — nothing here changes what the client does,
