@@ -145,7 +145,6 @@ fun VoiceChannelScreen(
     val participants by engine.participants.collectAsState()
     val muted by engine.muted.collectAsState()
     val cameraOn by engine.cameraOn.collectAsState()
-    val isFrontCamera by engine.isFrontCamera.collectAsState()
     val sharing by engine.sharing.collectAsState()
     val screenHolder by engine.screenHolder.collectAsState()
     val localVideo by engine.localVideo.collectAsState()
@@ -495,7 +494,6 @@ fun VoiceChannelScreen(
                                 speaking = remote.speaking,
                                 connected = remote.connected,
                                 status = statusOf(remote),
-                                fit = RendererCommon.ScalingType.SCALE_ASPECT_FILL,
                                 // Clear of the floating dock, which is drawn
                                 // over the bottom of this tile - but only while
                                 // the dock is there. Held up against nothing,
@@ -546,7 +544,6 @@ fun VoiceChannelScreen(
                                         speaking = participants[0].speaking,
                                         connected = participants[0].connected,
                                         status = statusOf(participants[0]),
-                                        fit = RendererCommon.ScalingType.SCALE_ASPECT_FILL,
                                         modifier = Modifier
                                             .weight(1f)
                                             .fillMaxHeight(),
@@ -560,7 +557,6 @@ fun VoiceChannelScreen(
                                         speaking = participants[1].speaking,
                                         connected = participants[1].connected,
                                         status = statusOf(participants[1]),
-                                        fit = RendererCommon.ScalingType.SCALE_ASPECT_FILL,
                                         modifier = Modifier
                                             .weight(1f)
                                             .fillMaxHeight(),
@@ -608,7 +604,6 @@ fun VoiceChannelScreen(
                                         speaking = participants[0].speaking,
                                         connected = participants[0].connected,
                                         status = statusOf(participants[0]),
-                                        fit = RendererCommon.ScalingType.SCALE_ASPECT_FILL,
                                         modifier = Modifier
                                             .weight(1f)
                                             .fillMaxHeight(),
@@ -622,7 +617,6 @@ fun VoiceChannelScreen(
                                         speaking = participants[1].speaking,
                                         connected = participants[1].connected,
                                         status = statusOf(participants[1]),
-                                        fit = RendererCommon.ScalingType.SCALE_ASPECT_FILL,
                                         modifier = Modifier
                                             .weight(1f)
                                             .fillMaxHeight(),
@@ -643,7 +637,6 @@ fun VoiceChannelScreen(
                                         speaking = participants[2].speaking,
                                         connected = participants[2].connected,
                                         status = statusOf(participants[2]),
-                                        fit = RendererCommon.ScalingType.SCALE_ASPECT_FILL,
                                         modifier = Modifier
                                             .weight(1f)
                                             .fillMaxHeight(),
@@ -658,7 +651,6 @@ fun VoiceChannelScreen(
                                             speaking = participants[3].speaking,
                                             connected = participants[3].connected,
                                             status = statusOf(participants[3]),
-                                            fit = RendererCommon.ScalingType.SCALE_ASPECT_FILL,
                                             modifier = Modifier
                                                 .weight(1f)
                                                 .fillMaxHeight(),
@@ -717,7 +709,6 @@ fun VoiceChannelScreen(
                                     speaking = activeSpeaker.speaking,
                                     connected = activeSpeaker.connected,
                                     status = statusOf(activeSpeaker),
-                                    fit = RendererCommon.ScalingType.SCALE_ASPECT_FILL,
                                     modifier = Modifier.fillMaxSize(),
                                 )
 
@@ -893,23 +884,17 @@ fun VoiceChannelScreen(
                         .clip(RoundedCornerShape(36.dp))
                         .background(Color(0xFF131824).copy(alpha = 0.92f))
                         .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(36.dp))
-                        .padding(horizontal = 14.dp, vertical = 10.dp),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        .padding(horizontal = 18.dp, vertical = 14.dp),
+                    horizontalArrangement = Arrangement.spacedBy(14.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    // 1. Flip Camera (visible when camera is on)
-                    AnimatedVisibility(visible = cameraOn, enter = fadeIn(), exit = fadeOut()) {
-                        CallCircleButton(
-                            icon = BetweenUsIcons.RotateRight,
-                            contentDescription = "Flip camera (${if (isFrontCamera) "Front" else "Back"})",
-                            active = false,
-                            tint = Slate100,
-                            size = 46.dp,
-                            onClick = { engine.switchCamera() },
-                        )
-                    }
+                    // Flipping the camera is not here: it is on the self tile,
+                    // which is the thing being flipped, and is the only place
+                    // it means anything at all while the camera is off. Seven
+                    // buttons in a row on a phone is how each of them ends up
+                    // too small and too close to the next.
 
-                    // 2. Camera Toggle
+                    // 1. Camera Toggle
                     CallCircleButton(
                         icon = if (cameraOn) BetweenUsIcons.Video else BetweenUsIcons.VideoOff,
                         contentDescription = if (cameraOn) "Turn camera off" else "Turn camera on",
@@ -920,18 +905,18 @@ fun VoiceChannelScreen(
                         onClick = { if (cameraOn) engine.stopVideo() else camera.request() },
                     )
 
-                    // 3. Microphone Toggle
+                    // 2. Microphone Toggle
                     CallCircleButton(
                         icon = if (muted) BetweenUsIcons.MicOff else BetweenUsIcons.Mic,
                         contentDescription = if (muted) "Unmute" else "Mute",
                         active = muted,
                         activeColor = Danger.copy(alpha = 0.25f),
                         tint = if (muted) Danger else Color.White,
-                        size = 52.dp,
+                        size = 48.dp,
                         onClick = engine::toggleMute,
                     )
 
-                    // 4. Screen Share Toggle
+                    // 3. Screen Share Toggle
                     CallCircleButton(
                         icon = BetweenUsIcons.ScreenShare,
                         contentDescription = when {
@@ -954,7 +939,7 @@ fun VoiceChannelScreen(
                         },
                     )
 
-                    // 5. Add somebody to the call. The roster announcement
+                    // 4. Add somebody to the call. The roster announcement
                     // tells the channel a call is happening and rings nobody;
                     // this is the aimed half, and the only way to reach it from
                     // a phone that is showing a call rather than a member list.
@@ -968,7 +953,7 @@ fun VoiceChannelScreen(
                         onClick = { inviting = true },
                     )
 
-                    // 6. Connection - what the link is doing, in numbers. The
+                    // 5. Connection - what the link is doing, in numbers. The
                     // one thing a phone in a bad call has no other way to find
                     // out, since there is no webrtc-internals to open.
                     CallCircleButton(
@@ -981,7 +966,7 @@ fun VoiceChannelScreen(
                         onClick = { showingConnection = true },
                     )
 
-                    // 7. Leave Call (Prominent Red Button)
+                    // 6. Leave Call (Prominent Red Button)
                     Box(
                         modifier = Modifier
                             .size(54.dp)
@@ -1277,7 +1262,21 @@ private fun CallTile(
     status: String? = null,
     isLocal: Boolean = false,
     isCompact: Boolean = false,
-    fit: RendererCommon.ScalingType = RendererCommon.ScalingType.SCALE_ASPECT_FILL,
+    /**
+     * How a frame that is not the shape of its tile is dealt with.
+     *
+     * The whole frame by default. A laptop camera is landscape and a phone
+     * screen is portrait, so filling one with the other throws away the sides
+     * of the picture - which on a call is where the room, the second person and
+     * whatever is being pointed at all are. Somebody on the web client and
+     * somebody on a phone should be looking at the same picture.
+     *
+     * The tiles that stay `SCALE_ASPECT_FILL` are the ones too small to read a
+     * whole frame in anyway: the Android picture-in-picture window, the
+     * filmstrip thumbnails, and your own preview - a letterboxed self-view is
+     * a tile mostly made of black bars.
+     */
+    fit: RendererCommon.ScalingType = RendererCommon.ScalingType.SCALE_ASPECT_FIT,
     labelBottomPadding: Dp = 0.dp,
 ) {
     Box(
