@@ -1,5 +1,54 @@
 # Changelog
 
+## [0.0.1-alpha.10](https://github.com/aiyu-ayaan/BetweenUs/compare/v0.0.1-alpha.9...v0.0.1-alpha.10) (2026-08-23)
+
+### Features
+
+* Show a call log in settings, and count what a call moved
+* Record a per-person call log in call-service
+* Optimize full-screen views, settings, and voice for mobile viewports
+* Convert right panels to mobile slide-over sheets
+* Add mobile header and hamburger navigation toggle
+* Offer a reload when a newer build is being served
+* Create android-style workspace navigation drawer
+* Check for, download and apply updates, per Windows flavor
+* Add responsive hooks and breakpoint utilities
+* Answer a ring without leaving the window
+* Answer a ring from the lock screen
+* Carry a ring to every device the person has
+* Ring one person into a call
+
+### Bug fixes
+
+* Add ensure-electron script to prevent MODULE_NOT_FOUND during install
+* Fix server members slide-over panel and auto-navigate to text on voice disconnect
+* Remove duplicate mobile TopBar header and fix friends tab clipping
+* Point the updater at the repository that publishes the APKs
+* Correct indentation for ConnectionSheet visibility in VoiceChannelScreen
+* Add drag region to LoginScreen for better window interaction
+* Auto-extract and configure electron binary on install and dev
+* The microphone is on when it is opened, not a moment later
+
+### Other changes
+
+* Changes done for new release
+* Record the call log in TRACK, TODO and TESTING
+* Remove obsolete SDD progress ledger file
+* How each client notices a release and takes it
+* Add implementation plan for mobile web responsive UI adaptation
+* Add design spec for mobile web responsive UI adaptation
+* A ring is not channel-scoped news, so focus does not swallow it
+* Write down what a ring is and why it may be loud
+* Desktop installers point at the deployment, not at localhost
+
+### Artifacts
+
+| Platform | This release |
+| --- | --- |
+| Server images | Built here |
+| Desktop (Windows) | Built here |
+| Android | Built here |
+
 ## [0.0.1-alpha.9](https://github.com/aiyu-ayaan/BetweenUs/compare/v0.0.1-alpha.8...v0.0.1-alpha.9) (2026-08-23)
 
 ### Features
