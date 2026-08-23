@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useVoiceStore, type VoiceTile } from '../../stores/voice';
 import { usePeerAudio } from '../../stores/peerAudio';
+import { CallDuration } from './CallDuration';
 import { VoiceControls } from './VoiceControls';
 import { NotHeardNotice } from './NotHeardNotice';
 import { LockIcon, MicOffIcon, SpeakerIcon, SpeakerOffIcon } from '../../components/icons';
@@ -48,6 +49,11 @@ export function VoicePanel(): JSX.Element | null {
             / {channelName}
           </button>
         )}
+        {/* Pushed to the end, so the channel name can be as long as it likes
+            without the clock moving around under it. */}
+        <span className="ml-auto">
+          <CallDuration />
+        </span>
       </p>
 
       {error && (

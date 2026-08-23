@@ -8,6 +8,7 @@
  */
 import assert from 'node:assert/strict';
 import {
+  formatCallDuration,
   healthWarning,
   kbpsBetween,
   lossPercent,
@@ -115,5 +116,28 @@ const slow = { ...second, roundTripMs: 420 };
 assert.match(healthWarning([slow]) ?? '', /420 ms/);
 // Loss is the louder complaint when both are true: it is what breaks speech.
 assert.match(healthWarning([{ ...lossy, roundTripMs: 420 }]) ?? '', /%/);
+
+// --- The call clock --------------------------------------------------------
+
+assert.equal(formatCallDuration(0), '00:00');
+assert.equal(formatCallDuration(9), '00:09');
+assert.equal(formatCallDuration(59), '00:59');
+// The minute rolls over, which is the boundary a modulo gets wrong.
+assert.equal(formatCallDuration(60), '01:00');
+assert.equal(formatCallDuration(61), '01:01');
+assert.equal(formatCallDuration(599), '09:59');
+assert.equal(formatCallDuration(3599), '59:59');
+// The hour appears and the minutes keep their padding; the hour does not get
+// any, because "01:02:03" on a two-hour call is a leading zero for nothing.
+assert.equal(formatCallDuration(3600), '1:00:00');
+assert.equal(formatCallDuration(3661), '1:01:01');
+assert.equal(formatCallDuration(36000), '10:00:00');
+// A fraction of a second is not a second yet.
+assert.equal(formatCallDuration(0.9), '00:00');
+assert.equal(formatCallDuration(59.99), '00:59');
+// A clock that ran backwards, and a number that is not one. Both read as zero
+// rather than as "-1:-1" on somebody's screen.
+assert.equal(formatCallDuration(-5), '00:00');
+assert.equal(formatCallDuration(Number.NaN), '00:00');
 
 console.log('call-stats check ok');

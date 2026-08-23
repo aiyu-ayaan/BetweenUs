@@ -165,3 +165,29 @@ export function toStats(
     sendingAudio: before ? now.outboundAudioBytes > before.outboundAudioBytes : true,
   };
 }
+
+/**
+ * How long the call has been running, as a clock.
+ *
+ * The phone has had this since the beginning and neither of the other two
+ * clients did - not because anybody chose that, but because on Android it is
+ * free: an ongoing-call notification with `setUsesChronometer` is counted by
+ * the system. A desktop window and a browser tab have no notification to hang
+ * it on, so the number has to be drawn.
+ *
+ * `mm:ss` until an hour, `h:mm:ss` after it. Never `00:` hours, because a
+ * leading pair of zeroes on every call is two characters that only ever say
+ * "this is not a long call".
+ */
+export function formatCallDuration(seconds: number): string {
+  // A clock that has not started, or one whose start is somehow in the future -
+  // a machine's clock moving backwards is a thing that happens - reads as zero
+  // rather than as a negative duration.
+  const total = Number.isFinite(seconds) ? Math.max(0, Math.floor(seconds)) : 0;
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  const secs = total % 60;
+
+  const mmss = `${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+  return hours > 0 ? `${hours}:${mmss}` : mmss;
+}

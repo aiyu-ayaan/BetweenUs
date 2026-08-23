@@ -119,6 +119,23 @@ Chat, on desktop and web:
       explicitly opened via the channel header member toggle. The duplicate
       TopBar right sidebar toggle was removed.
 
+Calls:
+
+- [x] **The call duration on the desktop and in a browser.** The phone has had
+      it from the beginning and neither of the others did, which was never a
+      decision: on Android an ongoing-call notification counts itself, and a
+      window or a tab has no notification to hang that on, so nobody noticed
+      the number was missing rather than switched off.
+
+      Ticked locally rather than kept in the voice store: a running count there
+      would be a state write a second for the length of every call, waking the
+      participants list, the controls and every tile to redraw one line of
+      text. It reads the wall clock each tick instead of counting its own,
+      because a background window's timers are throttled hard and a call clock
+      that runs slow while the window is behind another one is worse than no
+      clock. Shown only while *this* client is in the call - a duration for
+      somebody else's call, read from outside it, is a number with no meaning.
+
 Android:
 
 - [x] **Input sensitivity on the phone**, which was the one item here written

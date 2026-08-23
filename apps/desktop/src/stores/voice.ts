@@ -72,6 +72,19 @@ export interface VoiceShare {
 
 interface VoiceState {
   status: 'idle' | 'connecting' | 'connected';
+  /**
+   * When the call became a call, as a wall clock, for the duration on screen.
+   *
+   * The phone has shown this from the beginning and neither of the other two
+   * clients did - not by choice: on Android an ongoing-call notification counts
+   * itself, and a window or a tab has no notification to hang that on. So the
+   * moment is recorded here and the clock is drawn.
+   *
+   * Set when the mesh comes up rather than when the join was asked for, because
+   * a call that took four seconds to connect did not last four seconds longer
+   * than it did.
+   */
+  connectedAt: number | null;
   channelId: string | null;
   /**
    * Where the call is, remembered rather than looked up.
@@ -201,6 +214,7 @@ let joinCounter = 0;
 
 export const useVoiceStore = create<VoiceState>((set, get) => ({
   status: 'idle',
+  connectedAt: null,
   channelId: null,
   channelName: null,
   callServerId: null,
@@ -381,6 +395,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
       set({
         error: micProblem,
         status: 'connected',
+        connectedAt: Date.now(),
         encrypted: true,
         micEnabled,
         cameraEnabled: false,
@@ -397,6 +412,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
       teardown();
       set({
         status: 'idle',
+        connectedAt: null,
         channelId: null,
         channelName: null,
         callServerId: null,
@@ -420,6 +436,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
     void window.betweenus?.closePip();
     set({
       status: 'idle',
+      connectedAt: null,
       channelId: null,
       channelName: null,
       callServerId: null,

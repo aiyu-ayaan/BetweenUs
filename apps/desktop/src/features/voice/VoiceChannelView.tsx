@@ -28,6 +28,7 @@ import { useRemoteStore } from '../../stores/remote';
 import { isDesktopRuntime } from '../../services/platform';
 import { useShareControlStore } from '../../stores/shareControl';
 import { useVoiceStore, type VoiceShare, type VoiceTile } from '../../stores/voice';
+import { CallDuration } from './CallDuration';
 import { VoiceControls } from './VoiceControls';
 import { NotHeardNotice } from './NotHeardNotice';
 import { VideoSink } from './MediaSink';
@@ -103,10 +104,18 @@ export function VoiceChannelView({ channel }: { channel: Channel }): JSX.Element
         <SpeakerIcon className="h-5 w-5 text-slate-500" />
         <h1 className="truncate font-semibold text-slate-100">{channel.name}</h1>
         {stage.length > 0 && <span className="text-sm text-slate-400">- {stage.length} in voice</span>}
+        {/* Only while *this* client is in the call: a clock counting somebody
+            else's call, in a channel being looked at from outside it, would be
+            a number with no meaning to whoever is reading it. */}
+        {connected && (
+          <span className="ml-auto text-xs">
+            <CallDuration />
+          </span>
+        )}
         {connected && encrypted && (
           <span
             title="Voice media is encrypted on this device"
-            className="ml-auto flex items-center gap-1 text-xs text-emerald-300"
+            className="flex items-center gap-1 text-xs text-emerald-300"
           >
             <LockIcon className="h-3.5 w-3.5" />
             E2EE
