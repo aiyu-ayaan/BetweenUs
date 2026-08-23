@@ -520,7 +520,7 @@ outliving the screen it was started on.
 
 ## The call log
 
-Settings → Call History, after at least one call has been had and *left* — the
+Settings → Calls & data, after at least one call has been had and *left* — the
 entry is written on the way out, so a call still up is a row with no ending yet.
 
 1. **The duration.** Time a short call against a clock. The number in the log is
@@ -540,6 +540,43 @@ entry is written on the way out, so a call still up is a row with no ending yet.
    entry that says no data was recorded rather than an entry that says zero.
 5. **Only yours.** `GET /api/v1/calls/history` takes no user id. Signing in as
    the other account shows that account's calls and nothing of the first's.
+
+## Calls & data: the page over the log
+
+Same section, above the list. Two accounts, at least one call between them, and
+worth doing once on each client — the page is drawn from the same two endpoints
+on desktop, web and Android, so a disagreement between them is a real bug.
+
+1. **The window.** 7, 30 and 90 days each redraw. Every day in the window has a
+   place on the chart, including the days with no calls in them: a series with
+   holes draws a week as five points and nobody reading it can see that.
+2. **Sent and received are different numbers.** Share a screen for a minute from
+   one side only. The sharer's up should dwarf its down and the watcher's the
+   reverse; if the two look alike, the split is not being reported.
+3. **Open a call.** Tap or click a row. One line per person it held a connection
+   to, with path, up, down, ping and loss. An older row — one written before
+   this landed — says it has no connection detail rather than showing zeros.
+4. **Direct or relayed.** With no TURN configured every link reads `direct` on
+   the same LAN. Configure TURN and force a relay (two networks behind
+   symmetric NAT, or block UDP on one side) and the same call reads `relayed`
+   with the relay counted in the summary at the top.
+5. **A phone and a laptop are one log.** Take a call on Android and open the
+   page on the desktop. The entry is there, with data on it — a phone that
+   reports nothing is the bug this replaced.
+
+## Ringing somebody into a call from a phone
+
+Android, in a call, the button between screen share and the connection panel.
+
+1. Everybody in the server who is not already in the call is listed, with their
+   presence. Somebody already in it is absent rather than greyed out.
+2. Tapping rings them wherever they are signed in — a locked phone gets the
+   full-screen incoming call, a desktop gets the modal.
+3. Tapping the same person again does nothing: the row says "Rung" and stops
+   being tappable, because the service holds a cooldown per pair and a second
+   tap would earn a 403 rather than a second ring.
+4. In a direct conversation the sheet says so instead of listing anybody —
+   there is no third person to add.
 
 ## The workbench
 

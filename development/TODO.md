@@ -223,10 +223,17 @@ message on Android, so an attachment opened twice is fetched once.
 
 ### Call history
 
-Landed; the detail is in `TRACK.md`. What it deliberately left open:
+Landed; the detail is in `TRACK.md`. Since then: per-link detail, a data-usage
+page over a window of days, and the Android screen. What is still open:
 
-- [ ] Android and the admin panel do not draw the log. The endpoint is
-      `GET /api/v1/calls/history` and answers any client that asks
+- [x] Android draws the log — Settings → Calls & data, the same page the desktop
+      and web clients draw, from the same two endpoints
+- [ ] The admin panel does not draw anything from it. Nothing deployment-wide is
+      queryable either: `links` is JSON read per row by the one person it
+      belongs to, and a report across every account wants a join table instead
+- [ ] The analytics window is added up in the service rather than in SQL. A
+      month of one account's calls is hundreds of rows; `groupBy` is the fix if
+      it is ever thousands, and the response shape does not change when it is
 - [ ] No retention. Rows live until the account does, which is right while a
       deployment is one household and wrong at any size — a "keep the last N
       days" sweep is the fix, not a smaller page

@@ -161,6 +161,42 @@ Calls:
       reported only the traffic of the last one. A window killed mid-call
       reports nothing at all, and that entry says so rather than saying zero.
 
+- [x] **Calls & Data, and what a call actually did.** The log said a call cost
+      400 MB and nothing about why - which is the half somebody on a metered
+      connection can act on. A mesh call is not one connection but one per other
+      person, and they do not behave alike: the link that went through a relay
+      is usually the whole answer.
+
+      `call_sessions` now carries the total split by direction and a `links`
+      column - one entry per peer connection, with who it was with, what it
+      moved each way, its round trip, its loss, and whether ICE settled on a
+      direct path or on TURN. The split is kept beside the old total rather than
+      derived from it: an older client reports only the total, and halves that
+      were guessed at would read as measurement.
+
+      Both clients take the transport from the nominated candidate pair, which
+      is the only place either end can learn it - the server is not in the path
+      to know, and never will be. Nothing reported is checkable, so it is
+      clamped on the way in and again on the way out: the rows outlive the code
+      that wrote them.
+
+      `GET /api/v1/calls/analytics?days=30` reads the same rows added up - a
+      point per day with the empty days present, where the time went, who it was
+      spent with, and how many links ever needed a relay. Same rows as the log,
+      so the page and the list cannot disagree. Desktop, web and Android all
+      draw it; the log itself is per account, so a call taken on a phone and one
+      taken on a laptop are in one list.
+
+- [x] **An answer that arrives late is dropped, not applied.** A call on Android
+      showed "Failed to set remote answer sdp: Called in wrong state: stable" in
+      red across the stage while the tiles said nobody had joined. An unanswered
+      offer is re-offered - that is what recovers a link refused over a stale
+      channel key - and every offer is answered, so a chased connection gets two
+      answers and the second lands after this side has gone to STABLE. WebRTC
+      throws rather than ignoring it. Both clients now apply an answer only in
+      `have-local-offer`; the desktop had the same hole with no message drawn
+      for it.
+
 Android:
 
 - [x] **Input sensitivity on the phone**, which was the one item here written

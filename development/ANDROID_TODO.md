@@ -1122,6 +1122,30 @@ why `EXTRA_STREAM` is removed once it has been taken.
 
 ---
 
+## Calls & data, and adding somebody to a call ✅ (compiles and is unit tested)
+
+Two holes that only existed on the phone:
+
+- **The log was written with zeroes from here.** A phone said goodbye with no
+  figures at all, so every call joined on Android read back as "no data
+  recorded" - on the desktop too, since it is one log per account. `CallUsage`
+  is the port of the desktop's arithmetic, per link, including whether ICE
+  settled on a direct path or a relay; it goes out with the leave. A link's
+  counters go with its connection, so the reading is taken as a peer leaves
+  rather than asked for at the end.
+- **There was no way to ring anybody.** `/api/v1/calls/ring` had no caller in
+  this client. It is now a button in the dock, opening a sheet of everybody in
+  the server who is not already here. Inside the call rather than in the member
+  list: "who else should be here" is a thought somebody has while looking at a
+  call, and a phone in a call is not showing a member list.
+
+Settings gains **Calls & data**: the window, the chart, where the time went, and
+the log with one row per connection behind each call.
+
+**Not on a device yet.** Worth checking first: that a call taken on the phone
+shows a real size on the desktop's page afterwards, and that ringing somebody
+reaches a locked phone.
+
 ## Deliberately out of scope
 
 - **Live streaming.** Out of scope on every client while media is peer-to-peer.

@@ -17,6 +17,9 @@ between two peers in the same channel's call.
 | Method | Path | What it does |
 | --- | --- | --- |
 | POST | `/ice` | Mint ICE server configuration (STUN always; short-lived TURN credentials when a TURN provider is configured) |
+| POST | `/ring` | Ring one person into a call in a channel both can see. Rate-limited per pair |
+| GET | `/history` | This account's own call log, newest first (last 50). Takes no user id |
+| GET | `/analytics?days=30` | The same rows added up: a point per day, busiest channels, most time with, direct/relay split |
 
 ## One call per account
 
@@ -26,3 +29,31 @@ putting the same person in the room twice. The evicted device receives
 `superseded` before being dropped, so it can say the call moved rather than
 reporting a lost connection — and its socket stays open, so joining again
 simply moves the call back.
+
+## The call log
+
+`call_sessions` is one row per person per stay in a call, opened and closed by
+`/ws/call` — the only thing holding the sockets, and therefore the only thing
+that knows when somebody really arrived and left. The channel and server names
+are **copied into the row** rather than joined at read time: the entry somebody
+most wants back is the channel that has since been deleted.
+
+### Data usage is the client's figure, and can only be
+
+Media is peer to peer, so no service is in the path to count a byte. Each client
+measures its own peer connections and reports on the way out, per link:
+
+| Field | Meaning |
+| --- | --- |
+| `bytesSent` / `bytesReceived` | This client's totals for the whole call |
+| `links[]` | One entry per peer connection: who it was with, its bytes, round trip, loss |
+| `links[].transport` | `direct`, `relay`, or `null` — whether ICE settled on a direct path or on TURN |
+
+Nothing here is checkable, so it is **clamped rather than trusted**, on the way
+in and again on the way out (`usage.ts`): the worst a broken or hostile client
+can do is write a wrong number into its own row. A client killed mid-call
+reports nothing at all, and the entry says so rather than saying zero.
+
+The reading of a link is taken **before** its connection is closed — a closed
+`RTCPeerConnection` answers `getStats` with nothing, which is why a call that
+lost four people one at a time used to report only the last one's traffic.

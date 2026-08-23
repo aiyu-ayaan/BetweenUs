@@ -213,6 +213,19 @@ Append-only. Nothing in the application updates or deletes a row. Records
 enrollment, renames, permission changes, session start/end, and refused
 attempts.
 
+### `CallSession`
+One row per person per stay in a call, written by `call-service`'s gateway.
+`channelName` / `serverName` are snapshots, not joins — a call log is history,
+and the entry worth reading back is often the channel that has since been
+deleted; a foreign key would remove exactly those rows. The only key is to the
+account, so deleting an account takes its log with it.
+
+`bytes`, `bytesSent`, `bytesReceived` and `links` (JSON, one entry per peer
+connection) are the **client's own measurements**: media is peer to peer, so
+nothing server-side is in the path to count. They are clamped before they are
+written. `endedAt` is `null` for a call still running and for a row whose
+process died mid-call.
+
 ### `AdminAudit`
 Same append-only shape, for the admin panel: role changes, disable/enable,
 deletion, OAuth provider config changes. `targetId` goes `null` when the
