@@ -246,6 +246,46 @@ shape that turned out to be right.
 
 ---
 
+## `call.ring`
+
+Sent on the Redis `call.ring` event, which `call-service` publishes when one
+person rings another into a call. It goes to **that one account** and to nobody
+else.
+
+```jsonc
+{
+  "data": {
+    "type": "call.ring",
+    "channelId": "9b41…",
+    "channelName": "general",
+    "callerId": "88a1…",
+    "callerName": "Ada Lovelace",
+    "callerAvatarUrl": "https://…"      // omitted when unset
+  },
+  "android": { "priority": "high", "ttl": 86400000 }
+}
+```
+
+- **Aimed, where `call.roster` is broadcast.** That is the whole difference, and
+  it is what earns the full-screen answer screen for a server's voice channel
+  too: a person pressed a button with this account's name under it, where a
+  roster is a fact about a room everybody in it is told.
+- **Always urgent.** A ring that lands when the phone next wakes is not a ring,
+  it is a missed-call notice, and `call.roster` already says that better.
+- **A muted channel does not silence it.** Muting a room says you do not want to
+  hear about the room, not that a colleague may never call you from it. A muted
+  *person* does silence it, and so does turning notifications off entirely -
+  both are decided on the server. Quiet hours are decided on the phone, as
+  always.
+- **It rings for 45 seconds and then stops.** What normally takes the
+  notification away is the roster going empty, and somebody who rings without
+  joining produces no roster at all.
+- **The server refuses a repeat inside 30 seconds.** A ring is the one push
+  allowed past a quiet setting, so something other than the recipient's
+  preferences has to stop the button being pressed forty times.
+
+---
+
 ## `remote.session`
 
 Sent on the Redis `remote.session` event, which `remote-gateway` publishes when

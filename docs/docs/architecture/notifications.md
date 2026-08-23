@@ -58,6 +58,40 @@ what it is telling you is that you may want to end it.
 The audit trail records every session either way. The push is what makes it
 something anybody finds out about at the time rather than afterwards.
 
+## The one push that rings
+
+There are two notifications about a call and they are different things.
+
+`call.roster` is ambient. It is broadcast to everybody who can hear a channel
+and is not in the call, and it says who is in there. It is quiet on purpose for
+a server's voice channel — a phone that rings whenever anybody joins anything
+is a phone somebody turns notifications off on.
+
+`call.ring` is aimed. Somebody pressed a button with one account's name under
+it, and that is what earns the full-screen answer screen over a locked phone,
+the ringtone on the desktop and the modal in front of whatever was on screen.
+A person is waiting for an answer, which is not true of anything else this app
+raises.
+
+Because it is loud, three things stand between the button and a lock screen:
+
+- **The recipient has to be able to see the channel.** Without that check the
+  endpoint is a way to make any account's phone ring by naming a channel they
+  have never heard of.
+- **A muted person still silences it, and so does turning notifications off.**
+  A muted *channel* does not: muting a room is saying you do not want to hear
+  about the room, not that a colleague may never call you from it. Quiet hours
+  and Do Not Disturb hold, because those are things a person sets about
+  themselves rather than about a room.
+- **The same pair cannot ring again inside thirty seconds.** This is the one
+  push allowed past a quiet setting, so the recipient's preferences cannot be
+  the only brake on it.
+
+It rings for forty-five seconds and then stops, on every client. What normally
+takes a call notification away is the roster going empty, and somebody who
+rings and then does not join produces no roster at all — which would otherwise
+leave an ongoing incoming-call notification for a call that never existed.
+
 ## The push carries no words
 
 The payload is **data-only** — no `notification` block, so Android never

@@ -97,6 +97,12 @@ notification they are talking about.
 - `call.roster` carries the whole roster of a call rather than a join or a
   leave. A roster of nobody is the call ending, and it is the only thing that
   can cancel the notification.
+- `call.ring` sits beside `call.roster` rather than inside it. A roster is a
+  fact about a channel and is broadcast to everybody who can hear it; a ring is
+  aimed at one account by somebody who chose to aim it, and that difference is
+  the whole reason a ring is allowed to wake a locked phone where a roster is
+  not. One event per person rung, so its two subscribers — the push fan-out and
+  the presence gateway — never have to agree about how to split a list.
 - `remote.session` carries `state: 'started' | 'ended'` in place of
   `remote.session.started` and `remote.session.ended`. It also carries the
   machine name, its owner and who is driving it, so the subscriber makes no
