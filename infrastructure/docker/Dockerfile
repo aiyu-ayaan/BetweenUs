@@ -29,6 +29,10 @@ COPY pnpm-workspace.yaml package.json pnpm-lock.yaml ./
 COPY --parents packages/*/package.json apps/admin/package.json apps/web/package.json apps/services/*/package.json ./
 # @betweenus/database runs `prisma generate` on postinstall, which needs the schema.
 COPY packages/database/prisma ./packages/database/prisma
+# The root package's postinstall hook. It is a no-op here - it configures the
+# Electron binary for apps/desktop, which no image installs - but pnpm still
+# runs it, and a missing file is MODULE_NOT_FOUND and a failed install.
+COPY scripts/ensure-electron.mjs ./scripts/ensure-electron.mjs
 # The store survives between builds, so a lockfile change re-links rather than
 # re-downloads. apps/desktop's *manifest* is deliberately absent - its Electron
 # binary would dominate the install, and nothing here packages the desktop app.
@@ -83,6 +87,7 @@ FROM base AS prod-deps
 COPY pnpm-workspace.yaml package.json pnpm-lock.yaml ./
 COPY --parents packages/*/package.json apps/admin/package.json apps/web/package.json apps/services/*/package.json ./
 COPY packages/database/prisma ./packages/database/prisma
+COPY scripts/ensure-electron.mjs ./scripts/ensure-electron.mjs
 RUN --mount=type=cache,id=betweenus-pnpm-store,target=/pnpm/store     pnpm config set store-dir /pnpm/store &&     pnpm install --frozen-lockfile --prod
 
 # ---------------------------------------------------------------------------

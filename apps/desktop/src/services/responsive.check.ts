@@ -33,7 +33,10 @@ try {
   (globalThis as any).window = { ontouchstart: null };
   assert.equal(isTouchDevice(), true, 'ontouchstart in window should detect touch');
 
-  // Test touch device detection via navigator.maxTouchPoints
+  // Test touch device detection via navigator.maxTouchPoints. Node only grew a
+  // `navigator` global in v21, and CI still runs 20, so stub one when it is absent.
+  const hadNavigator = 'navigator' in globalThis;
+  if (!hadNavigator) (globalThis as any).navigator = {};
   const originalMaxTouchPoints = Object.getOwnPropertyDescriptor(globalThis.navigator, 'maxTouchPoints');
   try {
     Object.defineProperty(globalThis.navigator, 'maxTouchPoints', {
@@ -54,6 +57,7 @@ try {
     } else {
       delete (globalThis.navigator as any).maxTouchPoints;
     }
+    if (!hadNavigator) delete (globalThis as any).navigator;
   }
 } finally {
   (globalThis as any).window = originalWindow;
