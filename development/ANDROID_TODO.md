@@ -1146,6 +1146,17 @@ the log with one row per connection behind each call.
 shows a real size on the desktop's page afterwards, and that ringing somebody
 reaches a locked phone.
 
+## The stage, after seeing it on a device
+
+- **A landscape camera was cropped into a portrait screen.** `CallTile` defaults
+  to `SCALE_ASPECT_FIT` now, so a phone and a laptop in the same call are
+  looking at the same picture. `SCALE_ASPECT_FILL` is kept where a whole frame
+  cannot be read anyway: the Android PiP window, the filmstrip thumbnails, and
+  the self preview.
+- **The dock was seven buttons wide with 10dp between them**, the mic 4dp larger
+  than its neighbours. Flip came out - it is on the self tile - and what is left
+  is one size with room around it.
+
 ## Deliberately out of scope
 
 - **Live streaming.** Out of scope on every client while media is peer-to-peer.

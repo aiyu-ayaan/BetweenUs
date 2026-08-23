@@ -197,6 +197,20 @@ Calls:
       `have-local-offer`; the desktop had the same hole with no message drawn
       for it.
 
+- [x] **The ring is in the call, on every client.** It existed only in the
+      member-list menu, which is the one place it cannot be reached from when it
+      is wanted: the full-screen voice view has no member list on it. Both the
+      desktop dock and the Android dock now open a list of everybody in the
+      server who is not already here.
+
+- [x] **A whole camera, on a phone.** A landscape laptop camera was cropped into
+      a portrait screen: the desktop letterboxed the frame and the phone filled
+      its tile with the middle of it, so two people in the same call were
+      looking at different pictures and the phone was missing the sides - which
+      is where the room and anything being pointed at are. Stage tiles fit; the
+      ones that still fill are the ones too small to read a whole frame in
+      anyway (the PiP window, the filmstrip, your own preview).
+
 Android:
 
 - [x] **Input sensitivity on the phone**, which was the one item here written

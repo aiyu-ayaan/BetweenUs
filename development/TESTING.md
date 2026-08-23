@@ -564,9 +564,15 @@ on desktop, web and Android, so a disagreement between them is a real bug.
    page on the desktop. The entry is there, with data on it — a phone that
    reports nothing is the bug this replaced.
 
-## Ringing somebody into a call from a phone
+## Ringing somebody into a call
 
-Android, in a call, the button between screen share and the connection panel.
+Desktop and web: in a call, the person-plus button between screen share and the
+connection panel — a popover, dismissed by Escape or a click away. Android: the
+same button in the call dock.
+
+The call view and the sidebar controls are the same component, so check it in
+both — a popover that opens off the top of the sidebar is the failure worth
+looking for.
 
 1. Everybody in the server who is not already in the call is listed, with their
    presence. Somebody already in it is absent rather than greyed out.
@@ -577,6 +583,21 @@ Android, in a call, the button between screen share and the connection panel.
    tap would earn a 403 rather than a second ring.
 4. In a direct conversation the sheet says so instead of listing anybody —
    there is no third person to add.
+
+## A camera the shape it was captured
+
+One landscape camera (a laptop) and one phone in the same call.
+
+1. **The phone shows the whole frame.** Letterboxed top and bottom, matching
+   what the web client shows in its tile. A picture that fills the phone's
+   screen edge to edge with the sides missing is the bug this replaced.
+2. **Your own preview still fills.** The floating self tile and the filmstrip
+   thumbnails crop rather than letterbox — they are too small to read a whole
+   frame in, and bars would be most of them.
+3. **The dock.** Six controls, one size, with space between them; flipping the
+   camera is on the self tile and not in the dock. Turn the camera off: the
+   flip control goes with the preview, which is correct — there is nothing to
+   flip.
 
 ## The workbench
 
