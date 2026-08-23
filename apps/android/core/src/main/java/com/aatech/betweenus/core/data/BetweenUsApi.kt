@@ -668,6 +668,29 @@ object BetweenUsApi {
             .optJSONArray("iceServers")?.map { IceServer.from(it) }.orEmpty()
     }
 
+    /**
+     * "Come into this call."
+     *
+     * Answers 204, or a 403 saying why not: they cannot see the channel, or
+     * they were rung a moment ago and the cooldown holds.
+     */
+    suspend fun callRing(channelId: String, userId: String): Unit = io {
+        authed("POST", "/api/v1/calls/ring", obj("channelId" to channelId, "userId" to userId))
+    }
+
+    /**
+     * This account's own call log, newest first. Whose is never a parameter -
+     * the server decides, so there is nothing here to get wrong.
+     */
+    suspend fun callHistory(): List<CallHistoryEntry> = io {
+        authedArray("GET", "/api/v1/calls/history").map { CallHistoryEntry.from(it) }
+    }
+
+    /** The same calls added up over a window of days. */
+    suspend fun callAnalytics(days: Int = 30): CallAnalytics = io {
+        CallAnalytics.from(authed("GET", "/api/v1/calls/analytics?days=$days"))
+    }
+
     // --- remote desktop ---
 
     suspend fun machines(): List<RemoteMachine> = io {

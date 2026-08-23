@@ -96,6 +96,7 @@ fun SettingsScreen(
     onServerSettings: () -> Unit,
     onPermissions: () -> Unit,
     onAutoUpdate: () -> Unit,
+    onCallUsage: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -552,6 +553,13 @@ fun SettingsScreen(
                     },
                 )
             }
+
+            ListRow(
+                title = "Calls & data",
+                subtitle = "Every call this account has been in, and what each one moved",
+                leading = { BetweenUsIcon(BetweenUsIcons.Phone) },
+                onClick = onCallUsage,
+            )
 
             ListRow(
                 title = "Auto update",

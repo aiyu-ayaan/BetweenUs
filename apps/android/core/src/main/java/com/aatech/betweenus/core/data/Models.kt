@@ -861,6 +861,194 @@ data class CallPeer(val peerId: String, val userId: String, val username: String
     }
 }
 
+/**
+ * One call this account was in, as its own log reads it back.
+ *
+ * The times and the roster are the gateway's own knowledge of when the socket
+ * joined and left. The data figures are not: media is peer to peer, so no
+ * server is in the path to count a byte and the client reports its own on the
+ * way out. A call the app was killed in has none, which is a real answer and is
+ * drawn as one.
+ */
+data class CallHistoryEntry(
+    val id: String,
+    val channelId: String,
+    val channelName: String,
+    val serverId: String?,
+    val serverName: String?,
+    val joinedAt: String,
+    val endedAt: String?,
+    val durationSeconds: Int?,
+    val peers: List<CallHistoryPeer>,
+    val bytes: Long,
+    val bytesSent: Long,
+    val bytesReceived: Long,
+    val links: List<CallLinkReport>,
+) {
+    companion object {
+        fun from(json: JSONObject) = CallHistoryEntry(
+            id = json.optString("id"),
+            channelId = json.optString("channelId"),
+            channelName = json.optString("channelName"),
+            serverId = json.stringOrNull("serverId"),
+            serverName = json.stringOrNull("serverName"),
+            joinedAt = json.optString("joinedAt"),
+            endedAt = json.stringOrNull("endedAt"),
+            durationSeconds =
+                if (json.isNull("durationSeconds")) null else json.optInt("durationSeconds"),
+            peers = json.optJSONArray("peers")?.map { CallHistoryPeer.from(it) }.orEmpty(),
+            bytes = json.optLong("bytes"),
+            bytesSent = json.optLong("bytesSent"),
+            bytesReceived = json.optLong("bytesReceived"),
+            links = json.optJSONArray("links")?.map { CallLinkReport.from(it) }.orEmpty(),
+        )
+    }
+}
+
+data class CallHistoryPeer(val id: String, val username: String, val displayName: String) {
+    val label: String get() = displayName.ifBlank { username }
+
+    companion object {
+        fun from(json: JSONObject) = CallHistoryPeer(
+            id = json.optString("id"),
+            username = json.optString("username"),
+            displayName = json.optString("displayName"),
+        )
+    }
+}
+
+/**
+ * What one peer connection in a call did.
+ *
+ * The unit of a mesh call is the link and not the call: two people in the same
+ * call can have completely different answers about whether it went direct, and
+ * an expensive call is nearly always one link doing something the others were
+ * not.
+ */
+data class CallLinkReport(
+    val userId: String,
+    val username: String,
+    val bytesSent: Long,
+    val bytesReceived: Long,
+    val roundTripMs: Int?,
+    val packetsLost: Long,
+    val packetsReceived: Long,
+    /** "direct", "relay", or null when the client never worked it out. */
+    val transport: String?,
+) {
+    companion object {
+        fun from(json: JSONObject) = CallLinkReport(
+            userId = json.optString("userId"),
+            username = json.optString("username"),
+            bytesSent = json.optLong("bytesSent"),
+            bytesReceived = json.optLong("bytesReceived"),
+            roundTripMs = if (json.isNull("roundTripMs")) null else json.optInt("roundTripMs"),
+            packetsLost = json.optLong("packetsLost"),
+            packetsReceived = json.optLong("packetsReceived"),
+            transport = json.stringOrNull("transport"),
+        )
+    }
+}
+
+/** The same calls added up over a window of days. */
+data class CallAnalytics(
+    val days: Int,
+    val totals: CallUsageTotals,
+    /**
+     * Oldest first, one per day including the empty ones - so a chart drawn
+     * from it has no gaps to invent.
+     */
+    val daily: List<CallUsageDay>,
+    val channels: List<CallUsageChannel>,
+    val peers: List<CallUsagePeer>,
+    val transport: CallTransportSplit,
+) {
+    companion object {
+        fun from(json: JSONObject) = CallAnalytics(
+            days = json.optInt("days"),
+            totals = CallUsageTotals.from(json.optJSONObject("totals") ?: JSONObject()),
+            daily = json.optJSONArray("daily")?.map { CallUsageDay.from(it) }.orEmpty(),
+            channels = json.optJSONArray("channels")?.map { CallUsageChannel.from(it) }.orEmpty(),
+            peers = json.optJSONArray("peers")?.map { CallUsagePeer.from(it) }.orEmpty(),
+            transport = CallTransportSplit.from(json.optJSONObject("transport") ?: JSONObject()),
+        )
+    }
+}
+
+data class CallUsageTotals(
+    val calls: Int,
+    val seconds: Int,
+    val bytesSent: Long,
+    val bytesReceived: Long,
+) {
+    val bytes: Long get() = bytesSent + bytesReceived
+
+    companion object {
+        fun from(json: JSONObject) = CallUsageTotals(
+            calls = json.optInt("calls"),
+            seconds = json.optInt("seconds"),
+            bytesSent = json.optLong("bytesSent"),
+            bytesReceived = json.optLong("bytesReceived"),
+        )
+    }
+}
+
+data class CallUsageDay(val date: String, val totals: CallUsageTotals) {
+    companion object {
+        fun from(json: JSONObject) =
+            CallUsageDay(date = json.optString("date"), totals = CallUsageTotals.from(json))
+    }
+}
+
+data class CallUsageChannel(
+    val channelId: String,
+    val channelName: String,
+    val serverName: String?,
+    val totals: CallUsageTotals,
+) {
+    companion object {
+        fun from(json: JSONObject) = CallUsageChannel(
+            channelId = json.optString("channelId"),
+            channelName = json.optString("channelName"),
+            serverName = json.stringOrNull("serverName"),
+            totals = CallUsageTotals.from(json),
+        )
+    }
+}
+
+data class CallUsagePeer(
+    val id: String,
+    val username: String,
+    val displayName: String,
+    val calls: Int,
+    val seconds: Int,
+) {
+    val label: String get() = displayName.ifBlank { username }
+
+    companion object {
+        fun from(json: JSONObject) = CallUsagePeer(
+            id = json.optString("id"),
+            username = json.optString("username"),
+            displayName = json.optString("displayName"),
+            calls = json.optInt("calls"),
+            seconds = json.optInt("seconds"),
+        )
+    }
+}
+
+/** How the media got there, across every link reported in the window. */
+data class CallTransportSplit(val direct: Int, val relay: Int, val unknown: Int) {
+    val known: Int get() = direct + relay
+
+    companion object {
+        fun from(json: JSONObject) = CallTransportSplit(
+            direct = json.optInt("direct"),
+            relay = json.optInt("relay"),
+            unknown = json.optInt("unknown"),
+        )
+    }
+}
+
 // --- remote desktop ---
 
 /**

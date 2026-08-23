@@ -43,6 +43,7 @@ import com.aatech.betweenus.core.store.PendingShare
 import com.aatech.betweenus.feature.servers.InviteSheet
 import com.aatech.betweenus.feature.servers.ServerSettingsScreen
 import com.aatech.betweenus.feature.settings.BetweenUsPermissions
+import com.aatech.betweenus.feature.settings.CallUsageScreen
 import com.aatech.betweenus.feature.settings.PermissionsScreen
 import com.aatech.betweenus.feature.settings.SettingsScreen
 import com.aatech.betweenus.feature.update.AutoUpdateScreen
@@ -358,7 +359,11 @@ fun Shell(user: PublicUser) {
                         onServerSettings = { navigation.navigate(Route.ServerSettings) },
                         onPermissions = { navigation.navigate(Route.Permissions) },
                         onAutoUpdate = { navigation.navigate(Route.AutoUpdate) },
+                        onCallUsage = { navigation.navigate(Route.CallUsage) },
                     )
+                }
+                composable(Route.CallUsage) {
+                    CallUsageScreen(onBack = { navigation.popBackStack() })
                 }
                 composable(Route.AutoUpdate) {
                     AutoUpdateScreen(onBack = { navigation.popBackStack() })
@@ -451,6 +456,7 @@ object Route {
     const val ServerSettings = "server-settings"
     const val Permissions = "permissions"
     const val AutoUpdate = "auto-update"
+    const val CallUsage = "call-usage"
     const val Remote = "remote"
     const val RemoteSession = "remote-session"
 }

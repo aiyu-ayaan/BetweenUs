@@ -215,6 +215,9 @@ dependencies {
     implementation(libs.firebase.messaging)
     implementation(libs.kotlinx.coroutines.play.services)
     testImplementation(libs.junit)
+    // The real org.json, so a test that builds a wire payload builds the payload
+    // rather than Android's stub, which throws on every method.
+    testImplementation(libs.json)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
     androidTestImplementation(libs.androidx.espresso.core)

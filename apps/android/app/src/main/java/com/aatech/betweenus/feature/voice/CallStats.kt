@@ -38,6 +38,13 @@ data class LinkSample(
     val frameWidth: Int? = null,
     val frameHeight: Int? = null,
     val framesPerSecond: Double? = null,
+    /**
+     * "direct" or "relay" once ICE has settled on a pair, null before that.
+     *
+     * Costs an operator nothing when it is direct and relay bandwidth when it
+     * is not, and nowhere else can see which: the server is not in the path.
+     */
+    val transport: String? = null,
 )
 
 /** What a person is shown about one other person in the call. */

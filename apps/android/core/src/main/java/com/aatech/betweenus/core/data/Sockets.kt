@@ -311,9 +311,17 @@ object CallSocket : JsonSocket("/ws/call") {
         if (connected) send(JSONObject().put("type", "join").put("channelId", channelId))
     }
 
-    fun leave() {
+    /**
+     * Goodbye, with what this client measured on it.
+     *
+     * The report is built by the caller because the caller is the only thing
+     * holding the peer connections: media is peer to peer, so a byte counted
+     * anywhere else does not exist. A leave with no report - an older path, or
+     * a call nothing was measured in - is still a leave.
+     */
+    fun leave(report: JSONObject? = null) {
         channelId = null
-        send(JSONObject().put("type", "leave"))
+        send(report ?: JSONObject().put("type", "leave"))
     }
 
     /**

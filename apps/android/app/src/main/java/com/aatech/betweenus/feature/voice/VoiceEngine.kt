@@ -450,7 +450,10 @@ class VoiceEngine(private val context: Context) {
         // Only for a call that was up: leaving one that never connected has
         // nothing to say goodbye to.
         if (_state.value is CallState.Live) CallTones.play(CallTones.Tone.LEAVE)
-        CallSocket.leave()
+        // The report goes with the goodbye, which is the only way the server can
+        // ever know it: it is not in the media path and has nothing to count.
+        CallSocket.leave(CallUsage.leaveEvent(usageReport()))
+        retiredLinks.clear()
         channelId?.let { PresenceSocket.leaveVoice(it) }
         // The state goes first, and it matters. See `teardown`.
         _state.value = CallState.Idle
@@ -1013,7 +1016,13 @@ class VoiceEngine(private val context: Context) {
                 // moment later builds them again against the identity everybody
                 // else can actually see.
                 if (CallIdentity.changed(selfPeerId, announced)) {
-                    connections.values.forEach { it.close() }
+                    // Their counters are read before the links go: this is the
+                    // same call from the log's point of view, and a rebuilt link
+                    // starts counting from zero.
+                    connections.values.forEach { link ->
+                        link.usage()?.let(retiredLinks::add)
+                        link.close()
+                    }
                     connections.clear()
                     earlySignals.clear()
                     _participants.value = emptyList()
@@ -1064,7 +1073,10 @@ class VoiceEngine(private val context: Context) {
                 val peerId = event.optString("peerId")
                 earlySignals.remove(peerId)
                 earlyPeers.removeAll { it.peerId == peerId }
-                connections.remove(peerId)?.close()
+                connections.remove(peerId)?.let { link ->
+                    link.usage()?.let(retiredLinks::add)
+                    link.close()
+                }
                 _participants.update { list -> list.filterNot { it.peer.peerId == peerId } }
                 CallTones.play(CallTones.Tone.LEAVE)
             }
@@ -1157,6 +1169,19 @@ class VoiceEngine(private val context: Context) {
      * rather than events, because WebRTC offers no event for either that can be
      * trusted.
      */
+    /**
+     * What the people who have already left moved.
+     *
+     * Kept because their counters go with their connection: once a peer link is
+     * closed there is nothing left to read, so the reading has to be taken as
+     * they go rather than asked for at the end.
+     */
+    private val retiredLinks = mutableListOf<LinkUsage>()
+
+    /** Everything measured this call: the links still open, and the ones gone. */
+    private fun usageReport(): List<LinkUsage> =
+        retiredLinks + connections.values.mapNotNull { it.usage() }
+
     private fun startPolling() {
         pollJob?.cancel()
         pollJob = scope.launch {
@@ -1760,6 +1785,18 @@ class VoiceEngine(private val context: Context) {
         /** The last reading, so the next one can be a rate rather than a total. */
         private var lastSample: LinkSample? = null
 
+        /**
+         * What this link has moved, for the call log.
+         *
+         * The last poll rather than a fresh one: a closed peer connection
+         * answers `getStats` with nothing, so a reading taken at the end of a
+         * call is a reading of the links that happen to still be open - which
+         * is how a call that lost four people one at a time reports the traffic
+         * of only the last. Null before the first poll, which is a link that
+         * never carried anything.
+         */
+        fun usage(): LinkUsage? = lastSample?.let { CallUsage.of(peer.userId, peer.username, it) }
+
         // --- recovery ---
 
         /** The retry loop, while one is running. */
@@ -1891,6 +1928,8 @@ class VoiceEngine(private val context: Context) {
                 var packetsReceived = 0L
                 var roundTrip: Double? = null
                 var picture: Triple<Int?, Int?, Double?> = Triple(null, null, null)
+                var pair: Map<String, Any>? = null
+                val candidateTypes = HashMap<String, String>()
 
                 for (stats in report.statsMap.values) {
                     val members = stats.members
@@ -1932,8 +1971,15 @@ class VoiceEngine(private val context: Context) {
                             if (nominated && succeeded) {
                                 (members["currentRoundTripTime"] as? Number)?.toDouble()
                                     ?.let { roundTrip = it }
+                                pair = members
                             }
                         }
+
+                        // Kept by id whatever they are: the pair that names them
+                        // is not guaranteed to have been walked yet.
+                        "local-candidate", "remote-candidate" ->
+                            candidateTypes[stats.id] = members["candidateType"] as? String ?: ""
+
                     }
                 }
 
@@ -1953,6 +1999,12 @@ class VoiceEngine(private val context: Context) {
                     frameWidth = picture.first,
                     frameHeight = picture.second,
                     framesPerSecond = picture.third,
+                    transport = pair?.let { selected ->
+                        CallUsage.transportOf(
+                            candidateTypes[selected["localCandidateId"] as? String ?: ""],
+                            candidateTypes[selected["remoteCandidateId"] as? String ?: ""],
+                        )
+                    },
                 )
                 val link = CallStats.toStats(peer.peerId, peer.username, sample, lastSample)
                 lastSample = sample
