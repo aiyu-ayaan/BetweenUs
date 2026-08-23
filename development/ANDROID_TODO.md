@@ -1152,7 +1152,9 @@ reaches a locked phone.
   to `SCALE_ASPECT_FIT` now, so a phone and a laptop in the same call are
   looking at the same picture. `SCALE_ASPECT_FILL` is kept where a whole frame
   cannot be read anyway: the Android PiP window, the filmstrip thumbnails, and
-  the self preview.
+  the self preview. The scaling type alone did nothing - it is read only in
+  `onMeasure`, and the crop comes from the view's own aspect ratio - so
+  `VideoSurface` sizes the surface to the frame instead of filling the tile.
 - **The dock was seven buttons wide with 10dp between them**, the mic 4dp larger
   than its neighbours. Flip came out - it is on the self tile - and what is left
   is one size with room around it.

@@ -211,6 +211,14 @@ Calls:
       ones that still fill are the ones too small to read a whole frame in
       anyway (the PiP window, the filmstrip, your own preview).
 
+      Setting the scaling type was not enough, and the picture stayed cropped
+      after it: a `SurfaceViewRenderer` consults its scaling type only in
+      `onMeasure`, and what reaches the shader is a matrix built from the
+      *view's* aspect ratio - so a surface stretched to fill its parent crops to
+      that shape whatever it was told. `VideoSurface` now reads the frames' own
+      resolution through `RendererEvents` and sizes the renderer to it, and the
+      letterbox is the tile's background showing through.
+
 Android:
 
 - [x] **Input sensitivity on the phone**, which was the one item here written
