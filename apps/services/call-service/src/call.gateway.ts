@@ -36,7 +36,7 @@ import type {
   ServerCallEvent,
 } from '@betweenus/shared-types';
 import { otherDevicesInCall } from './devices';
-import { CallsService } from './modules/calls/calls.service';
+import { CallsService, type ReportedUsage } from './modules/calls/calls.service';
 
 const HEARTBEAT_INTERVAL_MS = 30_000;
 
@@ -59,7 +59,7 @@ interface SocketState extends CallPeer {
   /** Everybody else who has been in the call since this socket joined it. */
   metUserIds: Set<string>;
   /** What the client says it moved, reported on the way out. See `leave`. */
-  bytes: number;
+  usage: ReportedUsage;
 }
 
 @Injectable()
@@ -155,7 +155,7 @@ export class CallGateway implements OnModuleDestroy {
         alive: true,
         sessionId: null,
         metUserIds: new Set<string>(),
-        bytes: 0,
+        usage: noUsage(),
       };
       this.state.set(socket, state);
       this.send(socket, { type: 'ready', peerId: state.peerId });
@@ -229,7 +229,12 @@ export class CallGateway implements OnModuleDestroy {
         // The only number in the log the server cannot take for itself: media
         // is peer to peer, so the client's own counters are the only counters.
         // It is clamped where it is written - see `usage.ts`.
-        if (typeof event.bytes === 'number') state.bytes = event.bytes;
+        state.usage = {
+          bytes: typeof event.bytes === 'number' ? event.bytes : 0,
+          bytesSent: typeof event.bytesSent === 'number' ? event.bytesSent : 0,
+          bytesReceived: typeof event.bytesReceived === 'number' ? event.bytesReceived : 0,
+          links: event.links,
+        };
         this.depart(socket);
         return;
 
@@ -349,7 +354,7 @@ export class CallGateway implements OnModuleDestroy {
     // forever, which is what an unattended `endedAt` of null means.
     state.sessionId = await this.history.startSession(state.userId, channelId);
     if (state.sessionId && state.channelId !== channelId) {
-      void this.history.endSession(state.sessionId, [...state.metUserIds], state.bytes);
+      void this.history.endSession(state.sessionId, [...state.metUserIds], state.usage);
       state.sessionId = null;
     }
 
@@ -439,12 +444,12 @@ export class CallGateway implements OnModuleDestroy {
     // an entry that reads as a call that never ended.
     if (sessionId) {
       state.sessionId = null;
-      void this.history.endSession(sessionId, [...state.metUserIds], state.bytes);
+      void this.history.endSession(sessionId, [...state.metUserIds], state.usage);
     }
     // A socket that stays open to join elsewhere starts a fresh log entry, so
     // it starts with a fresh idea of who it has met and what it has moved.
     state.metUserIds = new Set<string>();
-    state.bytes = 0;
+    state.usage = noUsage();
 
     if (!keepOpen) this.state.delete(socket);
     if (!channelId) return;
@@ -489,4 +494,9 @@ export class CallGateway implements OnModuleDestroy {
     if (this.heartbeat) clearInterval(this.heartbeat);
     this.server?.close();
   }
+}
+
+/** A stay nobody reported on: a window closed mid-call, or an older client. */
+function noUsage(): ReportedUsage {
+  return { bytes: 0, bytesSent: 0, bytesReceived: 0, links: [] };
 }

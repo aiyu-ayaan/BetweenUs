@@ -896,6 +896,84 @@ export interface CallHistoryEntry {
   peers: Array<{ id: string; username: string; displayName: string }>;
   /** Sent plus received, as this person's client counted it. */
   bytes: number;
+  /** The same total split by direction. Both zero when nothing was reported. */
+  bytesSent: number;
+  bytesReceived: number;
+  /**
+   * One entry per peer connection this client held during the call, empty for a
+   * call whose client never reported - an older build, or one that was killed.
+   */
+  links: CallLinkReport[];
+}
+
+/**
+ * What one peer connection did, as the client at this end measured it.
+ *
+ * The unit of a mesh call is the link, not the call: two people in the same
+ * call can have completely different answers about whether it went direct, and
+ * "why was that one call bad" is a question only a per-link reading answers.
+ * Nothing on the server can check any of it, so it is clamped rather than
+ * trusted - see `usage.ts` in call-service.
+ */
+export interface CallLinkReport {
+  /** Who the connection was with. Resolved to a current name when read back. */
+  userId: string;
+  /** How they were named at the time, so a deleted account still reads. */
+  username: string;
+  bytesSent: number;
+  bytesReceived: number;
+  /** Round trip on the pair that carried the call, when it was ever known. */
+  roundTripMs: number | null;
+  packetsLost: number;
+  packetsReceived: number;
+  /**
+   * `direct` when the media went straight between the two machines, `relay`
+   * when it went through TURN, null when the client never worked it out. It is
+   * the difference between a call that cost the network nothing and one that
+   * cost an operator's relay bandwidth, and it is invisible without this.
+   */
+  transport: CallTransport | null;
+}
+
+export type CallTransport = 'direct' | 'relay';
+
+/**
+ * The account's own calls, added up: what a month of them cost.
+ *
+ * Read from the same rows the log is, so the two can never disagree. Bucketed
+ * by local date on the server's clock - a day boundary an hour out is not worth
+ * a timezone round trip on a page about roughly how much data a week used.
+ */
+export interface CallAnalytics {
+  /** How far back this covers, in days, ending today. */
+  days: number;
+  totals: CallUsageTotals;
+  /** Oldest first, one entry per day in the window - including empty ones, so a
+   * chart drawn straight from this has no gaps to invent. */
+  daily: Array<{ date: string } & CallUsageTotals>;
+  /** Where the time went, busiest first. */
+  channels: Array<{
+    channelId: string;
+    channelName: string;
+    serverName: string | null;
+  } & CallUsageTotals>;
+  /** Who it was spent with, most first. */
+  peers: Array<{
+    id: string;
+    username: string;
+    displayName: string;
+    calls: number;
+    seconds: number;
+  }>;
+  /** How the media got there, across every link reported in the window. */
+  transport: { direct: number; relay: number; unknown: number };
+}
+
+export interface CallUsageTotals {
+  calls: number;
+  seconds: number;
+  bytesSent: number;
+  bytesReceived: number;
 }
 
 /** One entry of a WebRTC `RTCConfiguration.iceServers`. */
@@ -947,7 +1025,7 @@ export type ClientCallEvent =
    * media path and has nothing to count - so it is reported on the way out and
    * clamped by the server, which treats it as the cosmetic number it is.
    */
-  | { type: 'leave'; bytes?: number }
+  | { type: 'leave'; bytes?: number; bytesSent?: number; bytesReceived?: number; links?: CallLinkReport[] }
   | { type: 'signal'; to: string; data: CallSignal }
   /**
    * "I am about to share my screen" / "I have stopped".

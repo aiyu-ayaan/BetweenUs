@@ -1,6 +1,6 @@
-import { Body, Controller, Get, HttpCode, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Post, Query, UseGuards } from '@nestjs/common';
 import { CurrentUser, JwtAuthGuard, type AuthenticatedUser } from '@betweenus/auth';
-import type { CallHistoryEntry, CallIceResponse } from '@betweenus/shared-types';
+import type { CallAnalytics, CallHistoryEntry, CallIceResponse } from '@betweenus/shared-types';
 import { CallsService } from './calls.service';
 import { CallIceDto, CallRingDto } from './dto';
 
@@ -33,6 +33,21 @@ export class CallsController {
   @Get('history')
   history(@CurrentUser() user: AuthenticatedUser): Promise<CallHistoryEntry[]> {
     return this.calls.history(user.id);
+  }
+
+  /**
+   * The same rows added up, for the page the log hangs under.
+   *
+   * `days` is a hint and not a promise: the service clamps it, because a client
+   * asking for a hundred thousand days is a client asking for every row it has
+   * ever written.
+   */
+  @Get('analytics')
+  analytics(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query('days') days?: string,
+  ): Promise<CallAnalytics> {
+    return this.calls.analytics(user.id, Number(days));
   }
 
   @Post('ring')

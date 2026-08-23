@@ -791,6 +791,20 @@ model CallSession {
   /// client counted them - nothing else is in the media path to count. Zero
   /// when the client never got to report, which a window closed mid-call does.
   bytes       BigInt    @default(0)
+  /// The same total split by direction. Kept beside `bytes` rather than derived
+  /// from it because an older client reports only the total, and a split that
+  /// guessed at halves would read as measurement rather than as the guess it is.
+  bytesSent     BigInt @default(0)
+  bytesReceived BigInt @default(0)
+  /// One entry per person this client held a peer connection to: what that link
+  /// moved, how it got there (direct or through a relay), its round trip and its
+  /// loss. A `CallLinkReport[]` from shared-types, written verbatim after
+  /// clamping - see `usage.ts`.
+  ///
+  /// ponytail: JSON rather than a table. It is read whole, per row, by the one
+  /// person it belongs to, and nothing ever queries across it. A join table is
+  /// the upgrade if a report is ever wanted for a whole deployment.
+  links       Json?
 
   user User @relation("CallSessionUser", fields: [userId], references: [id], onDelete: Cascade)
 

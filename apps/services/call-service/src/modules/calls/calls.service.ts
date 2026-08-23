@@ -13,12 +13,18 @@
  */
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { iceServers } from '@betweenus/config';
-import { prisma, resolveChannelAccess } from '@betweenus/database';
+import { Prisma, prisma, resolveChannelAccess } from '@betweenus/database';
 import { EVENTS, EventBus } from '@betweenus/events';
 import { PERMISSIONS } from '@betweenus/permissions';
-import type { CallHistoryEntry, CallIceResponse } from '@betweenus/shared-types';
+import type {
+  CallAnalytics,
+  CallHistoryEntry,
+  CallIceResponse,
+  CallLinkReport,
+  CallUsageTotals,
+} from '@betweenus/shared-types';
 import { ringIsAllowed, ringKey } from './ring-cooldown';
-import { clampReportedBytes } from './usage';
+import { clampReportedBytes, clampReportedLinks } from './usage';
 
 /** How far back a person's own call log goes when they open it. */
 const HISTORY_LIMIT = 50;
@@ -157,14 +163,25 @@ export class CallsService {
    * `bytes` is the client's own count and nothing here can check it - the
    * service is not in the media path - so it is clamped rather than trusted.
    */
-  async endSession(sessionId: string, peerIds: string[], bytes: number): Promise<void> {
+  async endSession(sessionId: string, peerIds: string[], usage: ReportedUsage): Promise<void> {
+    const links = clampReportedLinks(usage.links);
+    const sent = clampReportedBytes(usage.bytesSent);
+    const received = clampReportedBytes(usage.bytesReceived);
+
     await prisma.callSession
       .update({
         where: { id: sessionId },
         data: {
           endedAt: new Date(),
           peerIds,
-          bytes: BigInt(clampReportedBytes(bytes)),
+          // The total is still the total the client reported, not the sum of
+          // the halves: a client that reports one and not the other should read
+          // back as the number it actually gave rather than as a repair.
+          bytes: BigInt(clampReportedBytes(usage.bytes)),
+          bytesSent: BigInt(sent),
+          bytesReceived: BigInt(received),
+          // Prisma's JSON input type does not accept a typed array as itself.
+          links: links as unknown as Prisma.InputJsonValue,
         },
       })
       .catch(() => undefined);
@@ -212,7 +229,101 @@ export class CallsService {
         return person ? [person] : [];
       }),
       bytes: Number(session.bytes),
+      bytesSent: Number(session.bytesSent),
+      bytesReceived: Number(session.bytesReceived),
+      links: readLinks(session.links),
     }));
+  }
+
+  /**
+   * The same rows, added up: what calls have cost this account lately.
+   *
+   * Read from `call_sessions` rather than from a counter kept somewhere else,
+   * so the totals and the log can never disagree - there is one set of rows and
+   * two readings of it. The window is bounded and the rows are one person's, so
+   * this is a small scan rather than the aggregate query it looks like.
+   *
+   * ponytail: added up in this process. A month of one account's calls is
+   * hundreds of rows; `groupBy` in SQL is the fix if it is ever thousands, and
+   * the shape of what comes back does not change when it is.
+   */
+  async analytics(userId: string, days: number): Promise<CallAnalytics> {
+    const window = Math.min(Math.max(Math.round(days) || DEFAULT_ANALYTICS_DAYS, 1), MAX_ANALYTICS_DAYS);
+    const since = startOfDay(new Date());
+    since.setDate(since.getDate() - (window - 1));
+
+    const sessions = await prisma.callSession.findMany({
+      where: { userId, joinedAt: { gte: since } },
+      orderBy: { joinedAt: 'asc' },
+    });
+
+    // Every day in the window, including the empty ones. A chart drawn from a
+    // series with holes in it either invents the missing days or draws a week
+    // as five points, and both are wrong in a way nobody reading it can see.
+    const daily = new Map<string, CallUsageTotals>();
+    for (let day = 0; day < window; day += 1) {
+      const at = new Date(since);
+      at.setDate(at.getDate() + day);
+      daily.set(dayKey(at), emptyTotals());
+    }
+
+    const totals = emptyTotals();
+    const channels = new Map<string, { channelId: string; channelName: string; serverName: string | null } & CallUsageTotals>();
+    const peerSeconds = new Map<string, { calls: number; seconds: number }>();
+    const transport = { direct: 0, relay: 0, unknown: 0 };
+
+    for (const session of sessions) {
+      const seconds = session.endedAt
+        ? Math.max(0, Math.round((session.endedAt.getTime() - session.joinedAt.getTime()) / 1000))
+        : 0;
+      const sent = Number(session.bytesSent);
+      const received = Number(session.bytesReceived);
+
+      add(totals, seconds, sent, received);
+      const day = daily.get(dayKey(session.joinedAt));
+      if (day) add(day, seconds, sent, received);
+
+      const channel = channels.get(session.channelId) ?? {
+        channelId: session.channelId,
+        channelName: session.channelName,
+        serverName: session.serverName,
+        ...emptyTotals(),
+      };
+      add(channel, seconds, sent, received);
+      channels.set(session.channelId, channel);
+
+      for (const peerId of new Set(session.peerIds)) {
+        const peer = peerSeconds.get(peerId) ?? { calls: 0, seconds: 0 };
+        peer.calls += 1;
+        peer.seconds += seconds;
+        peerSeconds.set(peerId, peer);
+      }
+
+      for (const link of readLinks(session.links)) {
+        if (link.transport === 'direct') transport.direct += 1;
+        else if (link.transport === 'relay') transport.relay += 1;
+        else transport.unknown += 1;
+      }
+    }
+
+    const people = peerSeconds.size
+      ? await prisma.user.findMany({
+          where: { id: { in: [...peerSeconds.keys()] } },
+          select: { id: true, username: true, displayName: true },
+        })
+      : [];
+
+    return {
+      days: window,
+      totals,
+      daily: [...daily.entries()].map(([date, entry]) => ({ date, ...entry })),
+      channels: [...channels.values()].sort((a, b) => b.seconds - a.seconds).slice(0, TOP_N),
+      peers: people
+        .map((person) => ({ ...person, ...(peerSeconds.get(person.id) ?? { calls: 0, seconds: 0 }) }))
+        .sort((a, b) => b.seconds - a.seconds)
+        .slice(0, TOP_N),
+      transport,
+    };
   }
 
   /**
@@ -233,4 +344,53 @@ export class CallsService {
       });
     }
   }
+}
+
+/** What a client says one stay in a call moved. Nothing here is checkable. */
+export interface ReportedUsage {
+  bytes: number;
+  bytesSent: number;
+  bytesReceived: number;
+  links: unknown;
+}
+
+/** How far back the analytics page looks when nothing says otherwise. */
+const DEFAULT_ANALYTICS_DAYS = 30;
+/** And the furthest it will, so one request cannot ask for every row ever. */
+const MAX_ANALYTICS_DAYS = 365;
+/** How many channels and people the page names before it stops being a list. */
+const TOP_N = 5;
+
+/**
+ * The per-link detail back out of the JSON column.
+ *
+ * Clamped again on the way out rather than trusted because it was clamped on
+ * the way in: the rows outlive the code that wrote them, and a shape this
+ * version never wrote is exactly what an older one might have.
+ */
+function readLinks(value: unknown): CallLinkReport[] {
+  return clampReportedLinks(value);
+}
+
+function emptyTotals(): CallUsageTotals {
+  return { calls: 0, seconds: 0, bytesSent: 0, bytesReceived: 0 };
+}
+
+function add(totals: CallUsageTotals, seconds: number, sent: number, received: number): void {
+  totals.calls += 1;
+  totals.seconds += seconds;
+  totals.bytesSent += sent;
+  totals.bytesReceived += received;
+}
+
+/** Local date, because a day is what somebody reading a chart means by one. */
+function dayKey(at: Date): string {
+  const local = new Date(at.getTime() - at.getTimezoneOffset() * 60_000);
+  return local.toISOString().slice(0, 10);
+}
+
+function startOfDay(at: Date): Date {
+  const day = new Date(at);
+  day.setHours(0, 0, 0, 0);
+  return day;
 }
