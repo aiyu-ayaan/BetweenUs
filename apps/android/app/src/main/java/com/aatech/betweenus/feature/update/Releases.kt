@@ -106,7 +106,7 @@ object Releases {
      * install over this one anyway - Android refuses an update signed by a
      * different key.
      */
-    const val REPOSITORY = "aiyu-ayaan/Nexora"
+    const val REPOSITORY = "aiyu-ayaan/BetweenUs"
 
     const val API = "https://api.github.com/repos/$REPOSITORY/releases?per_page=30"
 
