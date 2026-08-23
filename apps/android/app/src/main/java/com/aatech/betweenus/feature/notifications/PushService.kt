@@ -9,6 +9,7 @@ import com.aatech.betweenus.core.data.PushTokens
 import com.aatech.betweenus.core.data.Session
 import com.aatech.betweenus.core.store.Conversation
 import com.aatech.betweenus.core.store.Workspace
+import com.aatech.betweenus.feature.voice.CallService
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 import kotlinx.coroutines.CoroutineScope
@@ -64,6 +65,7 @@ class PushService : FirebaseMessagingService() {
                     "friend.accepted" -> handleFriend(data, accepted = true)
                     "server.member.added" -> handleServerAdded(data)
                     "call.roster" -> handleCallRoster(data)
+                    "call.ring" -> handleCallRing(data)
                     "remote.session" -> handleRemoteSession(data)
                     else -> Unit
                 }
@@ -210,6 +212,39 @@ class PushService : FirebaseMessagingService() {
             channelName = Workspace.channel(channelId)?.name ?: "a channel",
             participants = data["participants"].orEmpty(),
             count = count,
+        )
+    }
+
+    /**
+     * Somebody is ringing this phone into a call.
+     *
+     * The aimed version of [handleCallRoster], and the difference is what
+     * earns the full-screen answer screen for a server's voice channel too: a
+     * person pressed a button with this account's name under it, where a
+     * roster is a fact about a room that everybody in it gets told.
+     *
+     * Two things stop it. Being in a call already - a ringer over your own
+     * call is a way to be hung up on by accident - and the ordinary gates:
+     * quiet hours are minutes on this phone's clock, so the server sent this
+     * and left the decision here. Muting the *caller* was decided on the
+     * server, which is where the preference lives.
+     *
+     * A muted channel deliberately does not stop it: muting a room is saying
+     * you do not want to hear about the room, not that a colleague may never
+     * call you from it.
+     */
+    private suspend fun handleCallRing(data: Map<String, String>) {
+        val channelId = data["channelId"] ?: return
+        if (CallService.inCall) return
+        if (!wanted()) return
+        // So the channel exists by the time Answer hands it to MainActivity.
+        runCatching { withTimeoutOrNull(REFRESH_MS) { Workspace.refresh() } }
+
+        SocialNotifications.ringing(
+            context = applicationContext,
+            channelId = channelId,
+            caller = data["callerName"].orEmpty().ifBlank { "Someone" },
+            callerPicture = avatar(data["callerAvatarUrl"]),
         )
     }
 

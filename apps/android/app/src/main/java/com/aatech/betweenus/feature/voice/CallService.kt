@@ -184,6 +184,14 @@ class CallService : Service() {
             this.onToggleMute = onToggleMute
         }
 
+        /**
+         * Whether this phone is in a call right now.
+         *
+         * Read by the ring handler: being rung into the call you are already
+         * sitting in is a full-screen answer screen over your own call.
+         */
+        val inCall: Boolean get() = onHangUp != null
+
         fun detach() {
             onHangUp = null
             onToggleMute = null

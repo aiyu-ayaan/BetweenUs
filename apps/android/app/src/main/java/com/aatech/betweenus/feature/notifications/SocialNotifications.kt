@@ -166,6 +166,13 @@ object SocialNotifications {
             // exactly what it decides for a phone that is in somebody's pocket.
             .setFullScreenIntent(ring, true)
             .setContentIntent(answer)
+            // A phone stops ringing on its own, and this one has to as well.
+            // What normally takes the notification away is the roster going
+            // empty, and there are ways for that never to arrive: somebody who
+            // rings and then does not join produces no roster at all, so
+            // without this there is an ongoing incoming-call notification for a
+            // call that never existed, and no swipe will remove it.
+            .setTimeoutAfter(RING_SECONDS * 1000L)
             .build()
 
         posted.add(id)
@@ -371,5 +378,11 @@ object SocialNotifications {
     private const val SERVER_BASE = 4_000_000
     private const val CALL_BASE = 5_000_000
     private const val REMOTE_BASE = 7_500_000
+    /**
+     * How long a ring rings for. The length of a phone call going unanswered,
+     * which is what somebody expects when they press the button.
+     */
+    const val RING_SECONDS = 45
+
     private const val RING_BASE = 6_000_000
 }
