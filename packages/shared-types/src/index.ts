@@ -854,6 +854,25 @@ export interface CallIceResponse {
   iceServers: IceServer[];
 }
 
+/**
+ * "Come into this call" - a ring aimed at one person.
+ *
+ * The roster announcement (`CallPushData`) is the ambient half: it says a call
+ * is happening in a channel somebody can hear, and it deliberately does not
+ * ring a phone for a server's voice channel, because a phone that rings every
+ * time anybody joins any channel is a phone somebody turns notifications off
+ * on.
+ *
+ * This is the other half, and the difference is that a person chose to send it.
+ * It rings - a full-screen incoming call on a locked phone, a modal on the
+ * desktop - because it was aimed rather than broadcast.
+ */
+export interface CallRingRequest {
+  channelId: string;
+  /** Who to ring. Must be able to see the channel; the server checks. */
+  userId: string;
+}
+
 /** One entry of a WebRTC `RTCConfiguration.iceServers`. */
 export interface IceServer {
   urls: string[];
@@ -990,6 +1009,23 @@ export type ServerPresenceEvent =
   | { type: 'presence.changed'; user: PresenceState }
   | { type: 'typing'; channelId: string; userId: string; username: string }
   | { type: 'voice.changed'; voice: VoiceState }
+  /**
+   * Somebody is ringing this account into a call, right now.
+   *
+   * The same thing `CallRingPushData` carries, delivered to the clients that
+   * are already running. A push exists for the ones that are not; a client
+   * that is up would otherwise find out about a ring only if it happened to be
+   * a phone, which is the wrong way round for the client somebody is sitting
+   * in front of.
+   */
+  | {
+      type: 'call.ring';
+      channelId: string;
+      channelName: string;
+      callerId: string;
+      callerName: string;
+      callerAvatarUrl?: string;
+    }
   | { type: 'pong' }
   | { type: 'error'; code: string; message: string };
 
@@ -1236,6 +1272,27 @@ export interface CallPushData {
 }
 
 /**
+ * Somebody is ringing this account into a call.
+ *
+ * Directed, unlike `CallPushData`: one person pressed a button with this
+ * account's name under it, which is what earns the full-screen ringer, the
+ * ringtone and the Doze exemption that `call.roster` deliberately does not get
+ * for a server's voice channel.
+ *
+ * It carries no words to seal - a name, a channel and who is calling - so
+ * every client, including a service worker holding no keys, can draw it in
+ * full.
+ */
+export interface CallRingPushData {
+  type: 'call.ring';
+  channelId: string;
+  channelName: string;
+  callerId: string;
+  callerName: string;
+  callerAvatarUrl?: string;
+}
+
+/**
  * Somebody is on one of this account's machines.
  *
  * Sent to the machine's owner and to nobody else - the person driving it
@@ -1267,6 +1324,7 @@ export type PushData =
   | FriendPushData
   | ServerMemberPushData
   | CallPushData
+  | CallRingPushData
   | RemoteSessionPushData;
 
 // --- Chat WebSocket protocol (/ws/chat) ---

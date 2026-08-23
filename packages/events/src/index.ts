@@ -30,6 +30,18 @@ export const EVENTS = {
    * call moved elsewhere.
    */
   CALL_ROSTER: 'call.roster',
+  /**
+   * One person ringing another into a call.
+   *
+   * Deliberately not part of `call.roster`: a roster is a fact about a channel
+   * and is broadcast to everybody who can hear it, where this is aimed at one
+   * account by somebody who chose to aim it. That difference is the whole
+   * reason it may ring a locked phone.
+   *
+   * One event per person rung, so the two subscribers - the push fan-out and
+   * the presence gateway - never have to agree about how to split a list.
+   */
+  CALL_RING: 'call.ring',
   MESSAGE_CREATED: 'message.created',
   MESSAGE_UPDATED: 'message.updated',
   MESSAGE_DELETED: 'message.deleted',
@@ -76,6 +88,20 @@ export interface EventPayloads {
   [EVENTS.PRESENCE_TYPING]: { channelId: string; userId: string; username: string };
   [EVENTS.PRESENCE_VOICE]: { voice: VoiceState };
   [EVENTS.CALL_ROSTER]: { voice: VoiceState };
+  /**
+   * Everything a ring needs, so neither subscriber reads a table of its own -
+   * `call-service` has already resolved the channel and the caller, and has
+   * already decided that both ends are allowed to be in this conversation.
+   */
+  [EVENTS.CALL_RING]: {
+    channelId: string;
+    channelName: string;
+    callerId: string;
+    callerName: string;
+    callerAvatarUrl?: string;
+    /** Who is being rung. */
+    targetId: string;
+  };
   [EVENTS.MESSAGE_CREATED]: { message: Message };
   [EVENTS.MESSAGE_UPDATED]: { message: Message };
   /** Carries the tombstone, because a deleted message still renders as one. */

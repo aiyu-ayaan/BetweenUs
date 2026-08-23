@@ -13,15 +13,100 @@
  */
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { iceServers } from '@betweenus/config';
-import { resolveChannelAccess } from '@betweenus/database';
+import { prisma, resolveChannelAccess } from '@betweenus/database';
+import { EVENTS, EventBus } from '@betweenus/events';
 import { PERMISSIONS } from '@betweenus/permissions';
 import type { CallIceResponse } from '@betweenus/shared-types';
+import { ringIsAllowed, ringKey } from './ring-cooldown';
 
 @Injectable()
 export class CallsService {
+  constructor(private readonly events: EventBus) {}
+
+  /**
+   * When each pair last rang.
+   *
+   * ponytail: in memory, so two instances of this service would each allow one
+   * ring per window. One instance is what the compose file runs - the same
+   * assumption `push.service.ts` makes about its roster cache. Move both to
+   * Redis together if there is ever a second.
+   */
+  private readonly lastRing = new Map<string, number>();
+
   async ice(userId: string, channelId: string): Promise<CallIceResponse> {
     await this.requireChannelAccess(userId, channelId);
     return { iceServers: await iceServers() };
+  }
+
+  /**
+   * Rings one person into a call in a channel both of them can see.
+   *
+   * Three questions, and they are separate: may the caller start a call here,
+   * may the person being rung be in this conversation at all, and have they
+   * been rung too recently. The middle one is the one worth being careful
+   * about - without it this endpoint is a way to make an arbitrary account's
+   * phone ring by naming a channel they have never heard of.
+   *
+   * It does not require the caller to already be in the call. Ringing somebody
+   * and then joining is a normal order to do it in, and refusing it would only
+   * mean the client had to join first - which is a rule with no one behind it.
+   */
+  async ring(callerId: string, channelId: string, targetId: string): Promise<void> {
+    if (callerId === targetId) {
+      throw new ForbiddenException({
+        code: 'CANNOT_RING_SELF',
+        message: 'You cannot ring yourself',
+      });
+    }
+
+    // The caller's access first, so somebody probing for channels they cannot
+    // see gets the same 404 they would get from anything else.
+    await this.requireChannelAccess(callerId, channelId);
+
+    // And the recipient's, which is what stops this being a way to ring any
+    // account in the deployment. `VIEW_CHANNEL` rather than `START_CALL`:
+    // being able to hear the conversation is what makes an invitation into it
+    // meaningful, and somebody who may not start a call may certainly be
+    // invited to one.
+    const target = await resolveChannelAccess(targetId, channelId);
+    if (!target?.permissions.includes(PERMISSIONS.VIEW_CHANNEL)) {
+      throw new ForbiddenException({
+        code: 'CANNOT_RING_USER',
+        message: 'They are not in this channel',
+      });
+    }
+
+    const key = ringKey(callerId, targetId);
+    const now = Date.now();
+    if (!ringIsAllowed(this.lastRing.get(key), now)) {
+      throw new ForbiddenException({
+        code: 'RING_TOO_SOON',
+        message: 'You just rang them. Give them a moment.',
+      });
+    }
+    this.lastRing.set(key, now);
+
+    const [channel, caller] = await Promise.all([
+      prisma.channel.findUnique({ where: { id: channelId }, select: { name: true } }),
+      prisma.user.findUnique({
+        where: { id: callerId },
+        select: { username: true, displayName: true, avatarUrl: true },
+      }),
+    ]);
+    if (!channel || !caller) {
+      throw new NotFoundException({ code: 'CHANNEL_NOT_FOUND', message: 'Channel not found' });
+    }
+
+    // Everything a subscriber could need is on the event, so neither the push
+    // fan-out nor the presence gateway reads a table this service owns.
+    await this.events.publish(EVENTS.CALL_RING, {
+      channelId,
+      channelName: channel.name,
+      callerId,
+      callerName: caller.displayName || caller.username,
+      ...(caller.avatarUrl ? { callerAvatarUrl: caller.avatarUrl } : {}),
+      targetId,
+    });
   }
 
   /**
