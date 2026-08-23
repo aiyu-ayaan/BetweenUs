@@ -46,6 +46,7 @@ const sample = (patch: Partial<LinkSample>): LinkSample => ({
   frameWidth: null,
   frameHeight: null,
   framesPerSecond: null,
+  transport: null,
   ...patch,
 });
 

@@ -12,6 +12,8 @@
  * only thing holding a peer connection to ask.
  */
 
+import type { CallTransport } from '@betweenus/shared-types';
+
 /** One `getStats` sample of one peer connection, already reduced to numbers. */
 export interface LinkSample {
   at: number;
@@ -30,6 +32,14 @@ export interface LinkSample {
   frameWidth: number | null;
   frameHeight: number | null;
   framesPerSecond: number | null;
+  /**
+   * Whether the media went straight to the other machine or through a relay.
+   *
+   * Null until ICE has settled on a pair. It costs an operator nothing when it
+   * is direct and relay bandwidth when it is not, and there is no way to see
+   * which from anywhere else - the server is not in the path to look.
+   */
+  transport: CallTransport | null;
 }
 
 /** What a person is shown about one other person in the call. */

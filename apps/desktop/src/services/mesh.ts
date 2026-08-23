@@ -58,6 +58,7 @@
  * `onPeerFailed` and the rest of the mesh carries on.
  */
 import type {
+  CallLinkReport,
   CallPeer,
   CallSignal,
   ClientCallEvent,
@@ -901,11 +902,17 @@ class PeerLink {
       frameWidth: null,
       frameHeight: null,
       framesPerSecond: null,
+      transport: null,
     };
     if (this.closed) return now;
 
     const reports = await this.pc.getStats().catch(() => null);
     if (!reports) return now;
+
+    // The candidate pair carrying the call, and every candidate by id, so
+    // "direct or relayed" can be answered after the whole report is walked.
+    let nominated: Record<string, unknown> | null = null;
+    const candidates = new Map<string, string>();
 
     reports.forEach((report) => {
       const entry = report as RTCStats & Record<string, number | string | undefined>;
@@ -944,8 +951,25 @@ class PeerLink {
       if (entry.type === 'candidate-pair' && entry.state === 'succeeded' && entry.nominated) {
         const rtt = Number(entry.currentRoundTripTime ?? Number.NaN);
         if (Number.isFinite(rtt)) now.roundTripSeconds = rtt;
+        nominated = entry as Record<string, unknown>;
+        return;
+      }
+
+      // Kept whatever they are, because the pair that names them is not
+      // guaranteed to have been walked yet - `getStats` has no order.
+      if (entry.type === 'local-candidate' || entry.type === 'remote-candidate') {
+        candidates.set(String(entry.id), String(entry.candidateType ?? ''));
       }
     });
+
+    if (nominated) {
+      // Either end being a relay candidate means the media is relayed: TURN is
+      // in the path once, whichever side put it there.
+      const pair = nominated as Record<string, unknown>;
+      const local = candidates.get(String(pair.localCandidateId ?? ''));
+      const remote = candidates.get(String(pair.remoteCandidateId ?? ''));
+      if (local && remote) now.transport = local === 'relay' || remote === 'relay' ? 'relay' : 'direct';
+    }
 
     return now;
   }
@@ -1046,8 +1070,12 @@ export class Mesh {
    * with them: a closed `RTCPeerConnection` answers `getStats` with nothing, so
    * the last reading has to be taken before it is closed rather than asked for
    * at the end of the call. See `drop`.
+   *
+   * One entry per person rather than a running total, because the log's whole
+   * point is that a mesh call is several connections and they do not behave
+   * alike - the one that went through a relay is the one worth finding.
    */
-  private retiredBytes = 0;
+  private readonly retiredLinks: CallLinkReport[] = [];
   private closed = false;
   /** The channel key as last read, shared by every link. See `channelKey`. */
   private key: Promise<string> | null = null;
@@ -1386,7 +1414,7 @@ export class Mesh {
     void link
       .sample()
       .then((sample) => {
-        this.retiredBytes += bytesOf(sample);
+        this.retiredLinks.push(reportOf(link.peer, sample));
       })
       .catch(() => undefined)
       .finally(() => {
@@ -1414,11 +1442,21 @@ export class Mesh {
     this.lastSamples.clear();
     this.local.clear();
 
-    void Promise.all(live.map((link) => link.sample().catch(() => null)))
-      .then((samples) => samples.reduce((total, s) => total + (s ? bytesOf(s) : 0), 0))
-      .catch(() => 0)
-      .then((bytes) => {
-        this.send({ type: 'leave', bytes: this.retiredBytes + bytes });
+    void Promise.all(
+      live.map((link) =>
+        link
+          .sample()
+          .then((sample) => reportOf(link.peer, sample))
+          .catch(() => null),
+      ),
+    )
+      .catch(() => [])
+      .then((reports) => {
+        const links = [...this.retiredLinks, ...reports.flatMap((report) => (report ? [report] : []))];
+        const bytesSent = links.reduce((total, link) => total + link.bytesSent, 0);
+        const bytesReceived = links.reduce((total, link) => total + link.bytesReceived, 0);
+
+        this.send({ type: 'leave', bytes: bytesSent + bytesReceived, bytesSent, bytesReceived, links });
         for (const link of live) link.close();
         this.socket?.close();
         this.socket = null;
@@ -1426,12 +1464,23 @@ export class Mesh {
   }
 }
 
-/** Everything one reading has moved, both directions, both kinds. */
-function bytesOf(sample: LinkSample): number {
-  return (
-    sample.inboundAudioBytes +
-    sample.inboundVideoBytes +
-    sample.outboundAudioBytes +
-    sample.outboundVideoBytes
-  );
+/**
+ * One link's last reading, as the log stores it.
+ *
+ * By `userId` rather than by peer id: a peer id lives as long as a socket and
+ * means nothing a month later, and the question the log answers is who the call
+ * was with.
+ */
+function reportOf(peer: CallPeer, sample: LinkSample): CallLinkReport {
+  return {
+    userId: peer.userId,
+    username: peer.username,
+    bytesSent: sample.outboundAudioBytes + sample.outboundVideoBytes,
+    bytesReceived: sample.inboundAudioBytes + sample.inboundVideoBytes,
+    roundTripMs:
+      sample.roundTripSeconds === null ? null : Math.round(sample.roundTripSeconds * 1000),
+    packetsLost: sample.packetsLost,
+    packetsReceived: sample.packetsReceived,
+    transport: sample.transport,
+  };
 }

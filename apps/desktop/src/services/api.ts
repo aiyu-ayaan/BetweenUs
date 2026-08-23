@@ -3,6 +3,7 @@ import type {
   ApiErrorBody,
   AuthResponse,
   AuthTokens,
+  CallAnalytics,
   CallHistoryEntry,
   CallIceResponse,
   Channel,
@@ -645,6 +646,14 @@ export const api = {
    * there is nothing to pass and nothing to get wrong.
    */
   callHistory: (): Promise<CallHistoryEntry[]> => request('/api/v1/calls/history'),
+
+  /**
+   * The same calls added up over a window of days. Read separately from the log
+   * because the log is the last 50 calls and this is the last 30 days, and one
+   * is not a slice of the other.
+   */
+  callAnalytics: (days = 30): Promise<CallAnalytics> =>
+    request(`/api/v1/calls/analytics?days=${days}`),
 
   callRing: (channelId: string, userId: string): Promise<void> =>
     request('/api/v1/calls/ring', {

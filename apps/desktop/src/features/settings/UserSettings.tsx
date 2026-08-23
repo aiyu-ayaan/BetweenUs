@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { ActiveStatus, CallHistoryEntry, DeviceKey } from '@betweenus/shared-types';
+import type { ActiveStatus, DeviceKey } from '@betweenus/shared-types';
 import { useAuthStore } from '../../stores/auth';
 import { useChatStore } from '../../stores/chat';
 import { usePresenceStore } from '../../stores/presence';
@@ -8,8 +8,7 @@ import { useAudioSettings } from '../../stores/audioSettings';
 import { monitorMic, type MicLevel } from '../../services/mic-gate';
 import { describeKey } from '../../services/talk-key';
 import { playCallTone } from '../../services/call-tones';
-import { formatCallDuration } from '../../services/call-stats';
-import { formatBytes } from '../../services/attachments';
+import { CallUsageSection } from './CallUsage';
 import { DeviceSelect, useDevices } from '../../components/DeviceSelect';
 import { DEFAULT_VOICE_SETTINGS, GATE_RANGE } from '../../services/voice-quality';
 import { BITRATE_RANGE, FRAME_RATES, type CodecChoice } from '../../services/share-quality';
@@ -58,7 +57,7 @@ type Section =
 const SECTIONS: Array<{ id: Section; label: string; icon: typeof UserIcon }> = [
   { id: 'account', label: 'My Account', icon: UserIcon },
   { id: 'voice', label: 'Voice & Video', icon: MicIcon },
-  { id: 'calls', label: 'Call History', icon: PhoneIcon },
+  { id: 'calls', label: 'Calls & Data', icon: PhoneIcon },
   { id: 'notifications', label: 'Notifications', icon: BellIcon },
   ...(isDesktopRuntime()
     ? [{ id: 'remote' as const, label: 'Remote Access', icon: MonitorIcon }]
@@ -180,7 +179,7 @@ export function UserSettings({ onClose }: { onClose: () => void }): JSX.Element 
         <div className="max-w-[660px]">
           {section === 'account' && <AccountSection />}
           {section === 'voice' && <VoiceSection />}
-          {section === 'calls' && <CallHistorySection />}
+          {section === 'calls' && <CallUsageSection />}
           {section === 'notifications' && <NotificationsSection />}
           {section === 'remote' && <RemoteSection />}
           {section === 'appearance' && <AppearanceSection />}
@@ -930,134 +929,6 @@ function LevelMeter({
       )}
     </div>
   );
-}
-
-/**
- * Every call this account has been in, and what each one cost.
- *
- * Read from the server rather than kept here: a call joined on a phone is one
- * of your calls, and a log that only knew about this window would be a log that
- * disagreed with itself on every device.
- */
-function CallHistorySection(): JSX.Element {
-  const [entries, setEntries] = useState<CallHistoryEntry[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let live = true;
-    api
-      .callHistory()
-      .then((history) => {
-        if (live) setEntries(history);
-      })
-      .catch((cause: unknown) => {
-        if (live) setError(cause instanceof Error ? cause.message : 'Could not load your calls');
-      });
-    return () => {
-      live = false;
-    };
-  }, []);
-
-  // The totals a person actually wants off a page like this: how much of their
-  // month went into calls, and how much of their allowance did.
-  const finished = (entries ?? []).filter((entry) => entry.durationSeconds !== null);
-  const totalSeconds = finished.reduce((sum, entry) => sum + (entry.durationSeconds ?? 0), 0);
-  const totalBytes = (entries ?? []).reduce((sum, entry) => sum + entry.bytes, 0);
-
-  return (
-    <>
-      <h1 className="text-xl font-semibold text-slate-50">Call History</h1>
-      <p className="mt-2 text-sm text-slate-400">
-        Your last {HISTORY_SHOWN} calls: how long each ran, who was in it, and how much data your
-        machine moved. Media goes directly between the people in a call, so the size is measured
-        here rather than by any server - a call the app was killed in has none to report.
-      </p>
-
-      {error && (
-        <p role="alert" className="mt-4 rounded-md bg-red-500/10 px-3 py-2 text-sm text-red-300">
-          {error}
-        </p>
-      )}
-
-      {entries === null && !error && <p className="mt-5 text-sm text-slate-500">Loading…</p>}
-
-      {entries?.length === 0 && (
-        <p className="mt-5 text-sm text-slate-500">
-          No calls yet. Join a voice channel and this fills itself in.
-        </p>
-      )}
-
-      {entries !== null && entries.length > 0 && (
-        <>
-          <div className="mt-5 flex gap-3">
-            <Total label="Time in calls" value={formatCallDuration(totalSeconds)} />
-            <Total label="Data used" value={formatBytes(totalBytes)} />
-          </div>
-
-          <ul className="mt-4 space-y-2">
-            {entries.map((entry) => (
-              <li key={entry.id} className="rounded-lg bg-surface-800 p-4">
-                <div className="flex items-baseline justify-between gap-3">
-                  <p className="truncate text-sm font-medium text-slate-100">
-                    {entry.serverName ? `${entry.serverName} · ` : ''}
-                    {entry.channelName}
-                  </p>
-                  <span className="shrink-0 text-xs tabular-nums text-slate-400">
-                    {entry.durationSeconds === null
-                      ? 'no ending recorded'
-                      : formatCallDuration(entry.durationSeconds)}
-                  </span>
-                </div>
-                <p className="mt-1 text-xs text-slate-400">
-                  {describeWhen(entry.joinedAt)} · {describeWho(entry.peers)} ·{' '}
-                  {entry.bytes > 0 ? formatBytes(entry.bytes) : 'no data recorded'}
-                </p>
-              </li>
-            ))}
-          </ul>
-        </>
-      )}
-    </>
-  );
-}
-
-/** What the server sends back, said here so the sentence above is not a guess. */
-const HISTORY_SHOWN = 50;
-
-function Total({ label, value }: { label: string; value: string }): JSX.Element {
-  return (
-    <div className="flex-1 rounded-lg bg-surface-800 px-4 py-3">
-      <p className="text-xs text-slate-400">{label}</p>
-      <p className="mt-0.5 text-lg font-semibold tabular-nums text-slate-100">{value}</p>
-    </div>
-  );
-}
-
-function describeWhen(iso: string): string {
-  const at = new Date(iso);
-  const sameDay = new Date().toDateString() === at.toDateString();
-  return sameDay
-    ? at.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
-    : at.toLocaleString([], {
-        month: 'short',
-        day: 'numeric',
-        hour: 'numeric',
-        minute: '2-digit',
-      });
-}
-
-/**
- * Who else was there, by name up to three of them.
- *
- * "Alone" is a real answer and worth saying: a call somebody sat in by
- * themselves waiting for anybody to join is the entry they are most likely to
- * be looking for when they ask why nothing happened.
- */
-function describeWho(peers: CallHistoryEntry['peers']): string {
-  if (peers.length === 0) return 'alone';
-  const names = peers.map((peer) => peer.displayName || peer.username);
-  if (names.length <= 3) return `with ${names.join(', ')}`;
-  return `with ${names.slice(0, 3).join(', ')} and ${names.length - 3} more`;
 }
 
 function NotificationsSection(): JSX.Element {
