@@ -33,7 +33,10 @@ export function LoginScreen(): JSX.Element {
   };
 
   return (
-    <div className="flex h-full items-center justify-center bg-ground px-4">
+    <div className="relative flex h-full items-center justify-center bg-ground px-4">
+      {/* The window has no native title bar, and this screen has no top bar of
+          its own, so without this strip there is nowhere to grab the window. */}
+      <div className="drag-region absolute inset-x-0 top-0 h-10" />
       <div className="w-full max-w-md animate-pop rounded-2xl border border-edge bg-surface-900 p-8 shadow-pop">
         <div className="mb-6 text-center">
           <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl border border-edge bg-accent/15 p-2.5">
