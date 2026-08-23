@@ -300,6 +300,19 @@ Chat and media, across all three clients:
 
 Fixed in the same pass:
 
+- [x] **A share from another app had nowhere to land.** `ACTION_SEND` names
+      files and not a conversation, and the app answered that itself - the
+      channel that happened to be open, or the drawer if there was not one - so
+      a shared photo either arrived somewhere nobody chose or looked as though
+      it had been swallowed. `ShareTargetScreen` asks instead: every direct
+      message and every text channel, searchable, over whatever was on screen.
+      The files still land in the send preview and are still sent by hand.
+- [x] **A copied image could not be pasted into a message on Android.** The
+      composer caught what the keyboard inserts and only that; a screenshot or
+      an image copied from a browser goes on the clipboard, where Android
+      offers no Paste at all for a clip with no text in it. A clip holding an
+      image now raises a bar with a Paste on it, and only the clip's
+      description is read to decide whether to offer it.
 - [x] **Sessions that ended themselves, on all three clients.** Two separate
       faults, both of which read as being logged out of a session that was still
       valid. Refreshing the access token ended the session whenever the *request*

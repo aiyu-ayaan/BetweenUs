@@ -1042,19 +1042,35 @@ Four items from a phone, in one pass.
   `ACTION_SEND_MULTIPLE` for media and documents land on `MainActivity`, which
   reads the URIs and leaves them in `PendingShare` - the shape `PendingChannel`
   and `PendingInvite` already use, because an intent is not a screen and cannot
-  choose a conversation. The shell puts a chat screen in front of them (the
-  last conversation, or the drawer to pick one) and the chat screen takes them
-  into the same send preview a paperclip fills. So the flow is share sheet →
-  preview → send, and nothing is read, sealed or uploaded before somebody has
-  looked at it. `text/plain` is deliberately not declared: a shared link
-  belongs in the composer, and offering the app for something it would have
-  nowhere to put is worse than not being offered.
+  choose a conversation. `ShareTargetScreen` is what asks which one (see below),
+  and the chat screen then takes the files into the same send preview a
+  paperclip fills. So the flow is share sheet → pick a conversation → preview →
+  send, and nothing is read, sealed or uploaded before somebody has looked at
+  it. `text/plain` is deliberately not declared: a shared link belongs in the
+  composer, and offering the app for something it would have nowhere to put is
+  worse than not being offered.
 
-- **A picture can be pasted into the composer.** The text field is a content
-  receiver and consumes the image half of what arrives - clipboard paste, and a
-  Gboard sticker or GIF, which come down the same path - handing it to the send
-  preview rather than into the text. Anything else in the same paste still
-  lands as text.
+- **The share asks where it is going.** The first version answered that itself -
+  the channel that happened to be open, or the drawer if there was not one -
+  and both readings were wrong from the sharer's side: the files either landed
+  somewhere nobody chose or looked as though the app had swallowed them.
+  `ShareTargetScreen` is WhatsApp's answer and now this app's: every direct
+  message and every text channel in one searchable list, drawn over whatever
+  was on screen rather than as a route, so a call in progress is not torn down
+  to ask a question about a photo. Back cancels and drops the URIs, which is
+  the only honest thing to do with a lend that nobody chose a home for.
+
+- **A picture can be pasted into the composer.** Two paths, because there are
+  two. The text field is a content receiver and consumes the image half of what
+  the *keyboard* inserts - a Gboard sticker or GIF - handing it to the send
+  preview rather than into the text; anything else in the same insertion still
+  lands as text. A screenshot or an image copied from a browser is not that: it
+  goes on the clipboard, where the text field's paste is text and Android does
+  not offer Paste at all for a clip with no text in it, so there was no gesture
+  that could send one. A clip holding an image now raises a bar above the
+  composer with a **Paste** on it. Only the clip's description is read to decide
+  whether to offer it - metadata, not content - and the picture itself is read
+  when the button is pressed.
 
 - **The call header no longer sits under the status bar.** A call hides the
   system bars, which takes their insets to zero, and `systemBarsPadding`
