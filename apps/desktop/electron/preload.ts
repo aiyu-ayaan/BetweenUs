@@ -156,6 +156,21 @@ const api = {
   remoteInputStop: (): void => {
     ipcRenderer.send('remote:stop');
   },
+  /**
+   * A file arriving over a remote session, written to the downloads folder as
+   * its chunks come off the data channel.
+   *
+   * Three calls rather than one, so nothing ever holds the whole file: open,
+   * write each chunk, close. `remoteFileOpen` answers with where it will land,
+   * or null when it could not be opened at all; `remoteFileClose(id, false)`
+   * throws the partial file away, which is what a cancel does.
+   */
+  remoteFileOpen: (id: string, name: string): Promise<string | null> =>
+    ipcRenderer.invoke('remote:file-open', id, name),
+  remoteFileWrite: (id: string, chunk: Uint8Array): Promise<boolean> =>
+    ipcRenderer.invoke('remote:file-write', id, chunk),
+  remoteFileClose: (id: string, keep: boolean): Promise<string | null> =>
+    ipcRenderer.invoke('remote:file-close', id, keep),
   /** The machine's name as the operating system knows it, for enrolment. */
   machineName: (): Promise<string> => ipcRenderer.invoke('remote:machine-name'),
 

@@ -119,6 +119,38 @@ Chat, on desktop and web:
       explicitly opened via the channel header member toggle. The duplicate
       TopBar right sidebar toggle was removed.
 
+Remote desktop:
+
+- [x] **`REMOTE_FILE_TRANSFER` and `REMOTE_AUDIO`.** Both were vocabulary and
+      nothing else, and both turned out to be one missing thing: the session's
+      peer connection carried a video track and had no data channel and no
+      audio transceiver. Adding all three up front - for every session, whether
+      or not it may use them - is what makes turning either on cost no
+      renegotiation, which is a black screen on the controller's side for as
+      long as it takes.
+
+      Audio is the machine's own output, asked for at the display capture
+      because Electron's loopback is a property of that capture and there is no
+      separate device to open. Windows only, and elsewhere the capture hands
+      back no track and the session is silent rather than broken.
+
+      A file's *offer* goes over the gateway and its bytes do not. That split
+      is the whole design and not an optimisation: a permission nothing sees a
+      message for cannot be enforced, so the gateway checks and audits the
+      thing that asks, and the bulk that follows is meaningless without it.
+      The channel then carries bare bytes - no header, no transfer id per chunk
+      - because the offer already said how many to expect, which is what buys
+      one transfer at a time. Neither end ever holds the file: the sender walks
+      it with `File.slice`, the receiver streams each chunk to disk through the
+      main process, and the send buffer is watched so a slow link paces the
+      sender rather than growing a buffer until the tab dies.
+
+      Three things the self-check exists for: a file one byte short must never
+      report itself whole, a sender past its declared size is cut off rather
+      than written, and the name is cleaned on both sides - it is the one part
+      of a transfer that arrives as an instruction rather than as data.
+      Pulling a file *back* needs a remote file browser and is not this.
+
 Backlog worked down, this pass:
 
 - [x] **Multi-device E2EE.** A key list per user, one wrap per device, and a
@@ -917,8 +949,6 @@ blocked by anything outside this document.
       100 MB ceiling; the second means ffmpeg in the client.
 - [ ] **Input injection on macOS and Linux.** CGEventPost and XTEST/uinput, one
       backend each behind the same three-function interface.
-- [ ] **`REMOTE_FILE_TRANSFER` and `REMOTE_AUDIO`.** Both exist in the
-      vocabulary and do nothing.
 - [ ] **The headless `remote-agent`.** Still a scaffold. A server has no BetweenUs
       window to run the agent inside, which is what it is for.
 - [ ] **Decide whether the shared UI moves to `packages/ui`.** Worth a rename
@@ -933,13 +963,13 @@ blocked by anything outside this document.
       insertion point on the capture path short of a custom audio device
       module. A level meter driving a mute toggle would be a different thing
       wearing the same name.
-- [ ] **Remote file transfer**, gated on `REMOTE_FILE_TRANSFER`. Blocked on a
-      wire that does not exist anywhere: the gateway has no file message, the
-      desktop agent has nothing that would receive one, and a remote session
-      negotiates a video track and no data channel. The permission does nothing
-      on every client, which is why this sits beside the desktop's own entry
-      rather than under Android alone. The clipboard, which shares the item it
-      used to be half of, landed - see below.
+- [ ] **Remote file transfer on the phone**, gated on `REMOTE_FILE_TRANSFER`.
+      No longer blocked on a wire that does not exist: the gateway has the
+      offer, the desktop agent receives, and a session negotiates a data
+      channel - see the desktop entry above. What is left is Android's own end
+      of it, which is a file picker, a `Uri` read in chunks and the same
+      offer-then-bytes order the desktop uses. The clipboard, which shares the
+      item it used to be half of, landed - see below.
 - [ ] **A light theme on the phone**, which is the same item the desktop has and
       is open for the same reason: the ramp is forty top-level constants used
       directly by thirty-five files, and nothing about a light BetweenUs has
@@ -995,6 +1025,17 @@ The cases most worth putting a person in front of, in order:
 3. A chord on a remote session: Ctrl+C and Ctrl+V across the link, then
    Alt+Tab away mid-chord and type a letter - it must arrive as a letter and
    not as a shortcut, which is the whole point of the reconciliation.
+3a. A file over a remote session, which has never had a byte through it. Drop
+   one on the screen, watch it land in the machine's downloads folder, then
+   drop the *same* file again - it must become `name (2).ext` and not an
+   overwrite. Then cancel one part way and confirm nothing is left behind: a
+   truncated file that looks whole is the failure nobody notices. A file large
+   enough to make the progress bar move is the only way to see the backpressure
+   working at all.
+3b. `REMOTE_AUDIO` on Windows: play something on the machine and confirm the
+   sound button appears and does what it says. On any other platform the
+   correct outcome is no button, because the capture hands back no track - the
+   thing to check there is that the session is silent rather than broken.
 4. The roles screen: invent a role, colour it, give it one capability, hand it
    to somebody, and watch their name change colour in the member list. Then
    try to put a capability into it that you do not hold yourself - it must be

@@ -23,6 +23,7 @@ import { api } from './api';
 import { wsUrl } from './endpoint';
 import { secureGet, secureSet } from './e2ee';
 import { ScreenLink } from './remote-peer';
+import { TransferSink, safeFileName } from './remote-transfer';
 import { shareOptions } from './share-quality';
 import { useAudioSettings } from '../stores/audioSettings';
 
@@ -85,6 +86,8 @@ let unwatchDisplays: (() => void) | null = null;
 let link: ScreenLink | null = null;
 /** The capture behind it, so switching monitors can stop the old one. */
 let captured: MediaStreamTrack | null = null;
+/** This machine's own sound, when the session was granted `REMOTE_AUDIO`. */
+let capturedAudio: MediaStreamTrack | null = null;
 let reconnectTimer: number | null = null;
 let reconnectAttempt = 0;
 let consentTimer: number | null = null;
@@ -336,6 +339,21 @@ async function onEvent(event: ServerRemoteEvent): Promise<void> {
       window.betweenus?.clipboardWrite(event.text);
       return;
 
+    // A file on its way here. The gateway has already checked the permission
+    // and written the attempt down; this decides whether the machine can take
+    // it right now, and where it lands.
+    case 'file.offer': {
+      const session = useAgentStore.getState().session;
+      if (session) await onFileOffer(session.sessionId, event);
+      return;
+    }
+
+    case 'file.cancel':
+      if (incoming && incoming.transferId === event.transferId) {
+        await finishIncoming(false);
+      }
+      return;
+
     // The controller's answer, and its ICE candidates. Relayed by the gateway,
     // which reads none of it.
     case 'rtc.signal':
@@ -345,6 +363,11 @@ async function onEvent(event: ServerRemoteEvent): Promise<void> {
     default:
       return;
   }
+}
+
+/** What the live session may do right now, for the paths that re-capture. */
+function sessionPermissions(): RemotePermission[] {
+  return useAgentStore.getState().session?.permissions ?? [];
 }
 
 /** Session id -> how to reach the controller that opened it. */
@@ -385,6 +408,7 @@ async function startPublishing(pending: PendingSession): Promise<void> {
     const next = new ScreenLink(true, {
       iceServers: credentials.iceServers,
       send: (data) => send({ type: 'rtc.signal', sessionId: pending.sessionId, data }),
+      onData: onFileChunk,
       onFailed: (reason) => {
         send({ type: 'session.ended', sessionId: pending.sessionId });
         void teardown(reason);
@@ -392,7 +416,7 @@ async function startPublishing(pending: PendingSession): Promise<void> {
     });
     link = next;
 
-    await publishDisplay(next, display);
+    await publishDisplay(next, display, pending.permissions);
 
     useAgentStore.setState({
       session: {
@@ -426,6 +450,11 @@ async function startPublishing(pending: PendingSession): Promise<void> {
  * rectangle - so exactly one release has to follow every capture that started.
  */
 function stopCapture(): void {
+  // The sound is stopped whether or not there is a picture: they come from one
+  // capture, and an audio track left running is a machine that is still being
+  // listened to after the screen went dark.
+  capturedAudio?.stop();
+  capturedAudio = null;
   if (!captured) return;
   captured.stop();
   captured = null;
@@ -439,8 +468,18 @@ function stopCapture(): void {
  * clicks on the first, which is the multi-monitor version of the bug that made
  * clicks land short on a scaled display.
  */
-async function publishDisplay(target: ScreenLink, display: DisplayInfo): Promise<void> {
-  await window.betweenus?.selectScreenSource(display.sourceId, false);
+async function publishDisplay(
+  target: ScreenLink,
+  display: DisplayInfo,
+  permissions: RemotePermission[],
+): Promise<void> {
+  // `REMOTE_AUDIO` is asked for at the capture, because that is the only place
+  // it can be: Electron's loopback is a property of the display capture and
+  // there is no separate device to open. A machine without loopback - which is
+  // everything that is not Windows today - simply hands back no audio track,
+  // and the session is a silent one rather than a failed one.
+  const wantAudio = permissions.includes('REMOTE_AUDIO');
+  await window.betweenus?.selectScreenSource(display.sourceId, wantAudio);
   // The same encoder settings a screen share in a call uses - a remote desktop
   // is the 'detail' case of the same problem, and there is no reason for two
   // sets of numbers. `share-quality.ts` says why they are what they are.
@@ -459,16 +498,20 @@ async function publishDisplay(target: ScreenLink, display: DisplayInfo): Promise
       height: { ideal: options.capture.video.height, max: Math.max(2160, options.capture.video.height) },
       frameRate: { ideal: options.capture.video.frameRate, max: 60 },
     },
-    audio: false,
+    audio: wantAudio,
   });
 
   const track = stream.getVideoTracks()[0];
   if (!track) throw new Error('the capture handed back no video');
   track.contentHint = options.capture.contentHint;
 
+  const audio = stream.getAudioTracks()[0] ?? null;
+
   stopCapture();
   captured = track;
+  capturedAudio = audio;
   await target.setDisplay(track, options.publish);
+  await target.setAudio(audio);
 
   activeDisplayId = display.id;
   window.betweenus?.remoteTarget(display.id, 'session');
@@ -490,7 +533,7 @@ async function switchScreen(sessionId: string, screenId: string): Promise<void> 
   if (!current || !display || display.id === activeDisplayId) return;
 
   try {
-    await publishDisplay(current, display);
+    await publishDisplay(current, display, sessionPermissions());
   } catch {
     // The old screen is gone and the new one did not start. Say what is true
     // rather than leaving the controller looking at a stale label.
@@ -537,7 +580,7 @@ async function refreshDisplays(sessionId: string): Promise<void> {
     const fallback = displays.find((entry) => entry.primary) ?? displays[0];
     if (fallback) {
       try {
-        await publishDisplay(current, fallback);
+        await publishDisplay(current, fallback, sessionPermissions());
       } catch {
         // Nothing to send. The controller is told what is true rather than
         // being left with a label for a monitor that has gone.
@@ -600,9 +643,124 @@ function stopClipboardSync(): void {
   lastClipboard = '';
 }
 
+/**
+ * Files arriving on this machine.
+ *
+ * The offer came over the gateway, which checked `REMOTE_FILE_TRANSFER` and
+ * wrote it down; the bytes come off the data channel and are handed to the main
+ * process a chunk at a time, so a four-gigabyte file never exists in this
+ * renderer. Nothing here decides whether the transfer is allowed - it re-checks
+ * the permission anyway, because the agent knows what the session was granted
+ * and a second look costs one line.
+ *
+ * One at a time. A second offer while one is running is refused rather than
+ * queued: the channel carries bare bytes and two files on it at once would be
+ * indistinguishable. See `remote-transfer.ts`.
+ */
+interface Incoming {
+  transferId: string;
+  sessionId: string;
+  sink: TransferSink;
+  /** Writes are chained so chunks reach the disk in the order they arrived. */
+  writes: Promise<unknown>;
+}
+
+let incoming: Incoming | null = null;
+
+async function onFileOffer(
+  sessionId: string,
+  offer: { transferId: string; name: string; size: number },
+): Promise<void> {
+  const refuse = (reason: string): void => {
+    send({ type: 'file.refused', sessionId, transferId: offer.transferId, reason });
+  };
+
+  if (!sessionPermissions().includes('REMOTE_FILE_TRANSFER')) {
+    refuse('This session may not send files');
+    return;
+  }
+  if (incoming) {
+    refuse('Another file is already arriving');
+    return;
+  }
+
+  const path = await window.betweenus?.remoteFileOpen(
+    offer.transferId,
+    safeFileName(offer.name),
+  );
+  if (!path) {
+    refuse('This machine could not open the file');
+    return;
+  }
+
+  incoming = {
+    transferId: offer.transferId,
+    sessionId,
+    sink: new TransferSink(offer.size),
+    writes: Promise.resolve(),
+  };
+
+  // A file of no bytes never gets a chunk, so it has to be finished here or it
+  // would sit open until the session ended.
+  if (incoming.sink.complete) {
+    await finishIncoming(true);
+    return;
+  }
+  send({ type: 'file.accepted', sessionId, transferId: offer.transferId });
+}
+
+function onFileChunk(data: ArrayBuffer): void {
+  const current = incoming;
+  if (!current) return;
+
+  const verdict = current.sink.accept(data.byteLength);
+  if (verdict === 'overflow') {
+    // The far end is sending more than it declared. Nothing good comes of
+    // writing it: the file is thrown away and the controller is told.
+    send({
+      type: 'file.refused',
+      sessionId: current.sessionId,
+      transferId: current.transferId,
+      reason: 'More bytes arrived than the file said it had',
+    });
+    void finishIncoming(false);
+    return;
+  }
+
+  const chunk = new Uint8Array(data);
+  current.writes = current.writes.then(() =>
+    window.betweenus?.remoteFileWrite(current.transferId, chunk),
+  );
+
+  if (verdict === 'done') void finishIncoming(true);
+}
+
+/** Closes the file, keeping it only when every byte arrived. */
+async function finishIncoming(keep: boolean): Promise<void> {
+  const current = incoming;
+  if (!current) return;
+  incoming = null;
+
+  // The queued writes have to land before the stream is closed, or the last
+  // chunk is written to a file that is already gone.
+  await current.writes.catch(() => undefined);
+  const path = await window.betweenus?.remoteFileClose(current.transferId, keep);
+  if (keep && path) {
+    send({
+      type: 'file.done',
+      sessionId: current.sessionId,
+      transferId: current.transferId,
+      path,
+    });
+  }
+}
+
 async function teardown(_reason: string): Promise<void> {
   clearConsentTimer();
   stopClipboardSync();
+  // A transfer that was in flight leaves no part file behind: the session is
+  // over and nothing is going to finish it.
+  await finishIncoming(false);
   stopWatchingDisplays();
   link?.close();
   link = null;

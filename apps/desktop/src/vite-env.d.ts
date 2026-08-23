@@ -108,6 +108,14 @@ interface Window {
       source?: 'session' | 'call';
     }) => void;
     remoteInputStop: () => void;
+    /**
+     * A file arriving over a remote session, written straight to the downloads
+     * folder. Three calls so nothing ever holds the whole file: open, write
+     * each chunk, close. `remoteFileClose(id, false)` throws the partial away.
+     */
+    remoteFileOpen: (id: string, name: string) => Promise<string | null>;
+    remoteFileWrite: (id: string, chunk: Uint8Array) => Promise<boolean>;
+    remoteFileClose: (id: string, keep: boolean) => Promise<string | null>;
     machineName: () => Promise<string>;
     devLogin: () => Promise<DevLogin | null>;
     openPip: () => Promise<void>;

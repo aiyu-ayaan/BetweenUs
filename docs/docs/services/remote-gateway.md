@@ -4,14 +4,36 @@ sidebar_position: 8
 
 # remote-gateway
 
-Session handshake, input/clipboard relay, permission enforcement and audit
-for remote desktop. Never carries the screen — see
-[Remote Desktop](/architecture/remote-desktop).
+Session handshake, input/clipboard relay, file-transfer permission, and audit
+for remote desktop. Never carries the screen, the machine's sound, or a byte of
+a file — see [Remote Desktop](/architecture/remote-desktop).
 
 ## `/ws/remote`
 
-Session state, input events (mouse/keyboard), clipboard events, and the
-offer/answer/ICE exchange for the screen's WebRTC connection.
+Session state, input events (mouse/keyboard), clipboard events, file offers,
+and the offer/answer/ICE exchange for the session's WebRTC connection.
+
+| Event | Direction | Permission |
+| --- | --- | --- |
+| `input.mouse`, `input.key` | controller → agent | `REMOTE_CONTROL` |
+| `clipboard.set` | controller → agent | `REMOTE_CLIPBOARD` |
+| `clipboard.text` | agent → controller | `REMOTE_CLIPBOARD` |
+| `file.offer` | controller → agent | `REMOTE_FILE_TRANSFER`, audited as `file.offered` |
+| `file.cancel` | controller → agent | none — giving up is always allowed |
+| `file.accepted`, `file.refused` | agent → controller | the machine's answer |
+| `file.done` | agent → controller | audited as `file.received` |
+| `control.request`, `control.release` | controller → agent | none; the machine answers |
+| `screen.select` | controller → agent | none — a view-only session may look at the other monitor |
+| `rtc.signal` | both | none; relayed unread |
+
+`file.offer` is the only message a transfer sends through here. The bytes go
+down the session's data channel, directly between the two machines. That split
+is what makes the permission enforceable at all: the gateway checks the thing
+that *asks*, and the bulk that follows is meaningless without it.
+
+Every refusal is written to `RemoteAudit`, not only rejected — a client that
+keeps asking for something it was not granted is worth being able to see
+afterwards.
 
 ## `/api/v1/remote`
 

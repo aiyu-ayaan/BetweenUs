@@ -70,3 +70,11 @@ re-registering if the accounts already exist.
 - **Voice/video**: join the **lounge** voice channel from both windows.
 - **Remote desktop**: enroll a machine from Settings → Remote Access, grant
   a permission, request a session from the other window.
+- **File transfer**: grant `REMOTE_FILE_TRANSFER` and drop a file onto the
+  remote screen. Check three things, not one: it lands in the machine's
+  downloads folder; dropping the *same* file again produces `name (2).ext`
+  rather than an overwrite; and cancelling part way through leaves nothing
+  behind, not a truncated file that looks whole.
+- **Audio**: grant `REMOTE_AUDIO` and play something on the machine. Windows
+  only — anywhere else the capture hands back no track and the header shows
+  no sound button at all, which is the correct outcome rather than a failure.

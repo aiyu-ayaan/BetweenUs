@@ -981,6 +981,84 @@ ipcMain.on('clipboard:write', (_event, text: unknown) => {
   clipboard.writeText(text);
 });
 
+/**
+ * A file arriving over a remote session, written straight to disk.
+ *
+ * Streamed rather than handed over whole: the renderer reads the far end's
+ * chunks off a data channel and passes each one through, so a four-gigabyte
+ * file costs 64 KB of memory on this side instead of four gigabytes. That is
+ * the difference between a file transfer and a crash, and it is why this is
+ * three calls rather than one.
+ *
+ * The renderer has already cleaned the name - see `safeFileName` - and this
+ * refuses to be told a path anyway: only the base name is used, and only inside
+ * the downloads folder. A renderer is not the boundary; this is.
+ */
+interface IncomingFile {
+  stream: fs.WriteStream;
+  path: string;
+}
+
+const incomingFiles = new Map<string, IncomingFile>();
+
+/** `holiday.png`, `holiday (2).png`, `holiday (3).png` - never an overwrite. */
+function freePath(directory: string, name: string): string {
+  const extension = path.extname(name);
+  const stem = path.basename(name, extension);
+  let candidate = path.join(directory, name);
+  for (let n = 2; fs.existsSync(candidate); n += 1) {
+    candidate = path.join(directory, `${stem} (${n})${extension}`);
+  }
+  return candidate;
+}
+
+ipcMain.handle('remote:file-open', (_event, id: unknown, name: unknown): string | null => {
+  if (typeof id !== 'string' || typeof name !== 'string') return null;
+  if (incomingFiles.has(id)) return null;
+  try {
+    const directory = app.getPath('downloads');
+    fs.mkdirSync(directory, { recursive: true });
+    // `path.basename` again on this side: the renderer cleaning the name is a
+    // convenience, and a main process that trusts a renderer's string is one
+    // compromised renderer away from writing anywhere on the disk.
+    const target = freePath(directory, path.basename(name) || 'file');
+    incomingFiles.set(id, { stream: fs.createWriteStream(target), path: target });
+    return target;
+  } catch {
+    return null;
+  }
+});
+
+ipcMain.handle('remote:file-write', async (_event, id: unknown, chunk: unknown): Promise<boolean> => {
+  if (typeof id !== 'string') return false;
+  const file = incomingFiles.get(id);
+  if (!file || !(chunk instanceof Uint8Array)) return false;
+  // Resolves when the chunk is in the stream's buffer or the disk has caught
+  // up, so the renderer's await is what keeps the two paced together.
+  return new Promise<boolean>((resolve) => {
+    file.stream.write(chunk, (error) => resolve(!error));
+  });
+});
+
+ipcMain.handle('remote:file-close', async (_event, id: unknown, keep: unknown): Promise<string | null> => {
+  if (typeof id !== 'string') return null;
+  const file = incomingFiles.get(id);
+  if (!file) return null;
+  incomingFiles.delete(id);
+
+  await new Promise<void>((resolve) => file.stream.end(resolve));
+  if (keep === true) return file.path;
+
+  // A transfer that was cancelled or fell short leaves nothing behind. A part
+  // file that looks like the real one is the thing somebody opens next week.
+  try {
+    fs.rmSync(file.path, { force: true });
+  } catch {
+    // Already gone, or held open by something else. Nothing left to do.
+  }
+  return null;
+});
+
 ipcMain.handle('remote:machine-name', (): string => {
   try {
     return os.hostname();

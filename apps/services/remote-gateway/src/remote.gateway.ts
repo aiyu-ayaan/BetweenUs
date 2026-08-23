@@ -32,10 +32,11 @@ import { asRemotePermissions, prisma, recordRemoteAudit } from '@betweenus/datab
 import { Logger } from '@betweenus/logger';
 import { PERMISSIONS, type RemotePermission } from '@betweenus/permissions';
 import { SIGNAL_MAX_PAYLOAD, authenticateHandshake } from '@betweenus/websocket';
-import type {
-  AgentRemoteEvent,
-  ClientRemoteEvent,
-  ServerRemoteEvent,
+import {
+  REMOTE_TRANSFER_MAX_BYTES,
+  type AgentRemoteEvent,
+  type ClientRemoteEvent,
+  type ServerRemoteEvent,
 } from '@betweenus/shared-types';
 import { RemoteService } from './modules/remote/remote.service';
 import { RemoteRelay, type RelayTarget } from './remote.relay';
@@ -47,6 +48,10 @@ const REQUIRED_PERMISSION: Record<string, RemotePermission> = {
   'input.mouse': PERMISSIONS.REMOTE_CONTROL,
   'input.key': PERMISSIONS.REMOTE_CONTROL,
   'clipboard.set': PERMISSIONS.REMOTE_CLIPBOARD,
+  // `file.offer` is deliberately not here. It needs `REMOTE_FILE_TRANSFER`
+  // like the rest, but it is also audited and size-checked, so it is handled
+  // before this table is reached - and an entry here as well would be dead
+  // code that reads like the thing doing the work.
 };
 
 interface AgentSocket {
@@ -320,6 +325,44 @@ export class RemoteGateway implements OnModuleDestroy {
         return;
       }
 
+      // The machine's answer to an offered file, and the receipt when the last
+      // byte has landed. The `sessionId` the agent stamps is dropped here: a
+      // controller holds exactly one session and has no use for it, which is
+      // the same shape `screens` and `clipboard.set` already have.
+      case 'file.accepted':
+        this.toController(event.sessionId, {
+          type: 'file.accepted',
+          transferId: event.transferId,
+        });
+        return;
+
+      case 'file.refused':
+        this.toController(event.sessionId, {
+          type: 'file.refused',
+          transferId: event.transferId,
+          reason: event.reason,
+        });
+        return;
+
+      case 'file.done': {
+        // Written down on arrival rather than on the offer, so the trail says
+        // what reached the machine and not only what was aimed at it.
+        const session = await this.liveSession(event.sessionId);
+        await recordRemoteAudit({
+          machineId: state.machineId,
+          sessionId: event.sessionId,
+          actorId: session?.userId ?? null,
+          action: 'file.received',
+          detail: { transferId: event.transferId, path: event.path },
+        });
+        this.toController(event.sessionId, {
+          type: 'file.done',
+          transferId: event.transferId,
+          path: event.path,
+        });
+        return;
+      }
+
       // The agent's half of setting up the peer connection, on its way to that
       // session's controller. Forwarded without being read: an SDP this gateway
       // rewrote would be an SDP it could put itself in the middle of.
@@ -522,6 +565,49 @@ export class RemoteGateway implements OnModuleDestroy {
       return;
     }
 
+    // Giving up on a transfer needs no permission of its own. Refusing it
+    // would leave the machine writing a file nobody is still sending, which is
+    // worse than letting a session that may not send files cancel one it never
+    // started.
+    if (event.type === 'file.cancel') {
+      if (!(await this.requireAgent(socket, state.machineId))) return;
+      this.toAgent(state.machineId, event);
+      return;
+    }
+
+    // A file arriving on a machine is the event somebody reads the trail for
+    // afterwards, so it is written down before it is allowed rather than
+    // counted in the bytes that never come past here. The size is what the
+    // controller claims; the machine counts the bytes itself.
+    if (event.type === 'file.offer') {
+      if (!state.permissions.includes(PERMISSIONS.REMOTE_FILE_TRANSFER)) {
+        await this.refuse(socket, state, event.type, PERMISSIONS.REMOTE_FILE_TRANSFER);
+        return;
+      }
+      if (
+        !Number.isSafeInteger(event.size) ||
+        event.size <= 0 ||
+        event.size > REMOTE_TRANSFER_MAX_BYTES
+      ) {
+        this.send(socket, {
+          type: 'file.refused',
+          transferId: event.transferId,
+          reason: 'That file is too big to send',
+        });
+        return;
+      }
+      if (!(await this.requireAgent(socket, state.machineId))) return;
+      await recordRemoteAudit({
+        machineId: state.machineId,
+        sessionId: state.sessionId,
+        actorId: state.userId,
+        action: 'file.offered',
+        detail: { name: event.name, size: event.size, transferId: event.transferId },
+      });
+      this.toAgent(state.machineId, event);
+      return;
+    }
+
     const required = REQUIRED_PERMISSION[event.type];
     if (!required) {
       this.send(socket, { type: 'error', code: 'UNKNOWN_EVENT', message: 'Unsupported event' });
@@ -529,25 +615,40 @@ export class RemoteGateway implements OnModuleDestroy {
     }
 
     if (!state.permissions.includes(required)) {
-      // Refusals are audited, not only rejected: a client that keeps asking for
-      // something it was not granted is worth being able to see afterwards.
-      this.send(socket, {
-        type: 'error',
-        code: `${required}_REQUIRED`,
-        message: 'That is not permitted in this session',
-      });
-      await recordRemoteAudit({
-        machineId: state.machineId,
-        sessionId: state.sessionId,
-        actorId: state.userId,
-        action: 'input.refused',
-        detail: { event: event.type, required },
-      });
+      await this.refuse(socket, state, event.type, required);
       return;
     }
 
     if (!(await this.requireAgent(socket, state.machineId))) return;
     this.toAgent(state.machineId, event as ServerRemoteEvent);
+  }
+
+  /**
+   * Says no to one event, and writes down that it said no.
+   *
+   * Refusals are audited, not only rejected: a client that keeps asking for
+   * something it was not granted is worth being able to see afterwards. Every
+   * path that turns an event away goes through here, so a new permission cannot
+   * arrive with a refusal that leaves no trace.
+   */
+  private async refuse(
+    socket: WebSocket,
+    state: ControllerSocket,
+    event: string,
+    required: RemotePermission,
+  ): Promise<void> {
+    this.send(socket, {
+      type: 'error',
+      code: `${required}_REQUIRED`,
+      message: 'That is not permitted in this session',
+    });
+    await recordRemoteAudit({
+      machineId: state.machineId,
+      sessionId: state.sessionId,
+      actorId: state.userId,
+      action: 'input.refused',
+      detail: { event, required },
+    });
   }
 
   // --- Delivery -------------------------------------------------------------

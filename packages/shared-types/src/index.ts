@@ -1356,6 +1356,35 @@ export interface RemoteAuditEntry {
   createdAt: string;
 }
 
+/**
+ * A file on its way to the machine being controlled.
+ *
+ * The offer, the answer and the cancel travel over the gateway's socket, and
+ * the bytes do not: they go down the session's data channel, directly between
+ * the two machines, the same way the screen does. That split is not an
+ * optimisation - it is what keeps `REMOTE_FILE_TRANSFER` enforceable. A
+ * permission the gateway never sees a message for is a permission that does not
+ * exist, so the thing it can check is the thing that asks, and the bulk that
+ * follows is meaningless without it.
+ *
+ * One transfer at a time per session, which is what lets the data channel carry
+ * nothing but bytes: the receiver knows how many to expect from the offer it
+ * accepted, and counts. A second file waits for the first.
+ */
+export interface RemoteTransferOffer {
+  transferId: string;
+  name: string;
+  /** Bytes. The receiver counts up to exactly this and then closes the file. */
+  size: number;
+}
+
+/**
+ * The ceiling on one transfer. Generous rather than principled: the receiving
+ * side streams to disk and never holds the file, so this is a guard against a
+ * mistake and a hostile controller rather than a memory limit.
+ */
+export const REMOTE_TRANSFER_MAX_BYTES = 4 * 1024 * 1024 * 1024;
+
 /** Sent by a controller's socket. Input is refused unless the session allows it. */
 export type ClientRemoteEvent =
   | { type: 'input.mouse'; action: 'move' | 'down' | 'up' | 'wheel'; x: number; y: number; button?: 'left' | 'right' | 'middle'; deltaY?: number }
@@ -1374,6 +1403,14 @@ export type ClientRemoteEvent =
   | { type: 'screen.select'; screenId: string }
   /** Relayed straight to the agent; the gateway does not read it. */
   | { type: 'rtc.signal'; data: RemoteSignal }
+  /**
+   * Asks to send a file. Checked against `REMOTE_FILE_TRANSFER` and audited
+   * before it reaches the machine; the bytes follow on the data channel only
+   * once the machine has answered.
+   */
+  | ({ type: 'file.offer' } & RemoteTransferOffer)
+  /** Gives up on a transfer, from either end. Also sent when the file is short. */
+  | { type: 'file.cancel'; transferId: string; reason?: string }
   | { type: 'session.end' }
   | { type: 'ping' };
 
@@ -1390,6 +1427,11 @@ export type AgentRemoteEvent =
   | { type: 'control.denied'; sessionId: string; reason?: string }
   /** Relayed straight to that session's controller; the gateway does not read it. */
   | { type: 'rtc.signal'; sessionId: string; data: RemoteSignal }
+  /** The machine's answer to a `file.offer`. Bytes may start after this. */
+  | { type: 'file.accepted'; sessionId: string; transferId: string }
+  | { type: 'file.refused'; sessionId: string; transferId: string; reason: string }
+  /** Every byte arrived and the file is closed. `path` is where it landed. */
+  | { type: 'file.done'; sessionId: string; transferId: string; path: string }
   | { type: 'pong' };
 
 /** Sent by the gateway to either kind of socket. */
@@ -1426,6 +1468,17 @@ export type ServerRemoteEvent =
    * to a controller, which has exactly one.
    */
   | { type: 'rtc.signal'; sessionId?: string; data: RemoteSignal }
+  /**
+   * File transfer, relayed between the two ends. The shapes going to the agent
+   * are the controller's own, forwarded once the permission has been checked;
+   * the ones coming back are the machine's answer, with the `sessionId` the
+   * agent stamped stripped on the way to a controller that holds only one.
+   */
+  | ({ type: 'file.offer' } & RemoteTransferOffer)
+  | { type: 'file.cancel'; transferId: string; reason?: string }
+  | { type: 'file.accepted'; transferId: string }
+  | { type: 'file.refused'; transferId: string; reason: string }
+  | { type: 'file.done'; transferId: string; path: string }
   /**
    * To the controller: what this session may do now. Sent whenever control is
    * taken, granted, refused or released - the client renders from this rather

@@ -17,8 +17,12 @@ const PERMISSION_LABELS: Array<{ id: RemotePermission; label: string; hint: stri
   { id: 'REMOTE_VIEW', label: 'View the screen', hint: 'Always needed; everything else adds to it' },
   { id: 'REMOTE_CONTROL', label: 'Mouse and keyboard', hint: 'Full control of the machine' },
   { id: 'REMOTE_CLIPBOARD', label: 'Clipboard', hint: 'Copy and paste in both directions' },
-  { id: 'REMOTE_FILE_TRANSFER', label: 'File transfer', hint: 'Not implemented yet' },
-  { id: 'REMOTE_AUDIO', label: 'Audio', hint: 'Not implemented yet' },
+  {
+    id: 'REMOTE_FILE_TRANSFER',
+    label: 'File transfer',
+    hint: 'Send files to the machine; they land in its downloads folder',
+  },
+  { id: 'REMOTE_AUDIO', label: 'Audio', hint: "Hear the machine's own sound" },
   { id: 'REMOTE_ADMIN', label: 'Manage access', hint: 'Hand this machine out to other people' },
 ];
 

@@ -514,8 +514,17 @@ Left open on purpose:
 
 - [ ] Input injection is Windows-only. macOS (CGEventPost) and Linux (XTEST or
       uinput) are a backend each behind the same three-function interface
-- [ ] `REMOTE_FILE_TRANSFER` and `REMOTE_AUDIO` exist in the vocabulary and do
-      nothing: no file transfer, and the agent publishes no audio
+- [x] `REMOTE_FILE_TRANSFER` and `REMOTE_AUDIO` do something. Both were one
+      missing thing - the session's peer connection had a video track and
+      nothing else - so both landed together with a data channel and an audio
+      transceiver, created for every session so turning either on renegotiates
+      nothing. Audio is the machine's own output, Windows only, because
+      Electron's loopback is a property of the display capture. A file's offer
+      goes over the gateway, which checks the permission and audits it, and the
+      bytes go down the data channel; the split is what makes the permission
+      enforceable. One transfer at a time, and neither end ever holds the file.
+      Still open: pulling a file *back* from the machine, which needs a remote
+      file browser, and Android's end of it
 - [ ] Clipboard sync is text only and polled once a second - there is no
       reliable clipboard event on any platform. Files and images through a
       clipboard are a transfer mechanism, which is the file-transfer permission's

@@ -19,10 +19,21 @@ import type {
 import { api } from '../services/api';
 import { wsUrl } from '../services/endpoint';
 import { ScreenLink } from '../services/remote-peer';
+import { chunksOf, safeFileName, type TransferProgress } from '../services/remote-transfer';
 import { useAuthStore } from './auth';
 
 /** Mouse moves are sampled: a session does not need 500 events a second. */
 const MOVE_INTERVAL_MS = 25;
+
+/**
+ * How long the machine has to answer an offered file.
+ *
+ * Long enough for a machine that is busy, short enough that a controller is not
+ * left staring at a progress bar that will never move. An agent that has gone
+ * away answers nothing at all, and the session's own socket closing is the
+ * other way this ends.
+ */
+const TRANSFER_ANSWER_TIMEOUT_MS = 30_000;
 
 type SessionStatus = 'connecting' | 'waiting' | 'live' | 'ended';
 
@@ -38,6 +49,14 @@ interface RemoteState {
   /** The agent's screen, once it is publishing. */
   track: MediaStreamTrack | null;
   /**
+   * The machine's own sound, when the session was granted `REMOTE_AUDIO` and
+   * the machine can capture it. Null on a session without it, and on a machine
+   * whose platform has no loopback - which is everything but Windows today.
+   */
+  audioTrack: MediaStreamTrack | null;
+  /** Whether the controller is listening. Off by default: sound is a surprise. */
+  listening: boolean;
+  /**
    * What this session may do *now*. It starts as the session's frozen
    * permissions and changes when the machine lends or takes back control, so
    * the UI never renders from what it asked for.
@@ -51,6 +70,8 @@ interface RemoteState {
   screens: RemoteScreen[];
   /** Which of them is on the wire. The agent is the authority on this. */
   activeScreenId: string | null;
+  /** The file being sent to the machine, and how far it has got. One at a time. */
+  transfer: TransferProgress | null;
 
   load: () => Promise<void>;
   connect: (machineId: string) => Promise<void>;
@@ -69,6 +90,14 @@ interface RemoteState {
   /** Takes control, asking the machine for it when it was not granted up front. */
   requestControl: () => void;
   releaseControl: () => void;
+  /** Sends one file to the machine. Refused while another one is in flight. */
+  sendFile: (file: File) => Promise<void>;
+  /** Gives up on the file being sent; the machine throws away what arrived. */
+  cancelTransfer: () => void;
+  /** Clears a finished transfer off the panel. */
+  dismissTransfer: () => void;
+  /** Turns the machine's own sound on and off, locally. */
+  setListening: (listening: boolean) => void;
   reset: () => void;
 }
 
@@ -79,6 +108,20 @@ let lastMoveAt = 0;
 /** Set when the session was opened by "Request control"; fired once it is up. */
 let requestControlOnOpen = false;
 
+/**
+ * The machine's answer to the file currently being offered.
+ *
+ * A transfer is two things that happen in different places - a message over the
+ * gateway and a stream over the data channel - and this is the join between
+ * them: `sendFile` waits here, and the socket handler settles it.
+ */
+let answering: {
+  transferId: string;
+  settle: (accepted: boolean, reason?: string) => void;
+} | null = null;
+/** Set by a cancel, read by the sending loop between chunks. */
+let transferCancelled = false;
+
 export const useRemoteStore = create<RemoteState>((set, get) => ({
   machines: [],
   loading: false,
@@ -87,11 +130,14 @@ export const useRemoteStore = create<RemoteState>((set, get) => ({
   status: 'ended',
   endedReason: null,
   track: null,
+  audioTrack: null,
+  listening: false,
   permissions: [],
   controlling: false,
   requestingControl: false,
   screens: [],
   activeScreenId: null,
+  transfer: null,
 
   load: async () => {
     set({ loading: true, error: null });
@@ -128,6 +174,12 @@ export const useRemoteStore = create<RemoteState>((set, get) => ({
       requestingControl: false,
       screens: [],
       activeScreenId: null,
+      transfer: null,
+      audioTrack: null,
+      // A session that may listen starts listening. The machine's owner agreed
+      // to it when they granted the permission, and a toggle that has to be
+      // found before anything is heard is a feature nobody knows is there.
+      listening: session.permissions.includes('REMOTE_AUDIO'),
     });
     openSocket(session, set, get);
     openLink(session, set);
@@ -158,6 +210,11 @@ export const useRemoteStore = create<RemoteState>((set, get) => ({
   disconnect: async () => {
     const session = get().session;
     requestControlOnOpen = false;
+    // A transfer waiting for an answer that is never coming has to be let go
+    // before the socket does, or `sendFile` sits on a promise for its timeout.
+    answering?.settle(false, 'The session ended');
+    answering = null;
+    transferCancelled = true;
     socket?.close();
     socket = null;
 
@@ -172,11 +229,14 @@ export const useRemoteStore = create<RemoteState>((set, get) => ({
       session: null,
       status: 'ended',
       track: null,
+      audioTrack: null,
+      listening: false,
       permissions: [],
       controlling: false,
       requestingControl: false,
       screens: [],
       activeScreenId: null,
+      transfer: null,
     });
   },
 
@@ -225,13 +285,127 @@ export const useRemoteStore = create<RemoteState>((set, get) => ({
     send({ type: 'control.release' });
   },
 
+  /**
+   * Sends one file to the machine.
+   *
+   * Two channels, in this order and no other: the offer goes over the gateway,
+   * which is what checks `REMOTE_FILE_TRANSFER` and writes it down, and only
+   * when the machine has answered do the bytes go down the data channel
+   * directly. Sending first and asking afterwards would put a file on a machine
+   * whose permission nothing had checked.
+   */
+  sendFile: async (file) => {
+    const current = get().transfer;
+    if (current && (current.status === 'offering' || current.status === 'sending')) {
+      set({ error: 'One file at a time; that one is still going' });
+      return;
+    }
+    if (!get().can('REMOTE_FILE_TRANSFER')) {
+      set({ error: 'This session may not send files' });
+      return;
+    }
+    if (!link?.dataReady) {
+      set({ error: 'The link to the machine is not ready yet' });
+      return;
+    }
+
+    const transferId = crypto.randomUUID();
+    const name = safeFileName(file.name);
+    transferCancelled = false;
+    set({
+      error: null,
+      transfer: { transferId, name, size: file.size, moved: 0, status: 'offering' },
+    });
+    send({ type: 'file.offer', transferId, name, size: file.size });
+
+    // Waits for `file.accepted`, or for the machine to say no. An empty file is
+    // finished by the agent before it ever answers, and `file.done` settles
+    // this too - see the socket handler.
+    const answer = await new Promise<{ accepted: boolean; reason?: string }>((resolve) => {
+      const timer = window.setTimeout(
+        () => resolve({ accepted: false, reason: 'The machine did not answer' }),
+        TRANSFER_ANSWER_TIMEOUT_MS,
+      );
+      answering = {
+        transferId,
+        settle: (accepted, reason) => {
+          window.clearTimeout(timer);
+          answering = null;
+          resolve({ accepted, reason });
+        },
+      };
+    });
+
+    if (!answer.accepted) {
+      // `file.done` on an empty file settles this as refused-but-finished; the
+      // handler has already written the outcome, so nothing is overwritten here.
+      const now = get().transfer;
+      if (now?.transferId === transferId && now.status === 'offering') {
+        set({ transfer: { ...now, status: 'refused', detail: answer.reason } });
+      }
+      return;
+    }
+
+    set((state) =>
+      state.transfer?.transferId === transferId
+        ? { transfer: { ...state.transfer, status: 'sending' } }
+        : {},
+    );
+
+    try {
+      let moved = 0;
+      for await (const chunk of chunksOf(file)) {
+        if (transferCancelled || get().transfer?.transferId !== transferId) return;
+        // Awaited, so the loop is paced by the network rather than by how fast
+        // the disk can be read - see `sendBytes`.
+        await link.sendBytes(chunk);
+        moved += chunk.byteLength;
+        set((state) =>
+          state.transfer?.transferId === transferId
+            ? { transfer: { ...state.transfer, moved } }
+            : {},
+        );
+      }
+      // Not marked done here. The machine says when the last byte reached its
+      // disk, which is a different moment from the last byte leaving this one.
+    } catch (error) {
+      send({ type: 'file.cancel', transferId, reason: 'send failed' });
+      set((state) =>
+        state.transfer?.transferId === transferId
+          ? {
+              transfer: {
+                ...state.transfer,
+                status: 'failed',
+                detail: error instanceof Error ? error.message : 'The file could not be sent',
+              },
+            }
+          : {},
+      );
+    }
+  },
+
+  cancelTransfer: () => {
+    const current = get().transfer;
+    if (!current || current.status === 'done' || current.status === 'cancelled') return;
+    transferCancelled = true;
+    answering?.settle(false, 'Cancelled');
+    send({ type: 'file.cancel', transferId: current.transferId, reason: 'cancelled' });
+    set({ transfer: { ...current, status: 'cancelled' } });
+  },
+
+  dismissTransfer: () => set({ transfer: null }),
+
+  setListening: (listening) => set({ listening }),
+
   reset: () => {
     void get().disconnect();
     set({ machines: [], error: null, endedReason: null });
   },
 }));
 
-type Setter = (partial: Partial<RemoteState>) => void;
+type Setter = (
+  partial: Partial<RemoteState> | ((state: RemoteState) => Partial<RemoteState>),
+) => void;
 
 function openSocket(
   session: RemoteSessionResponse,
@@ -293,6 +467,46 @@ function openSocket(
         window.betweenus?.clipboardWrite(event.text);
         return;
 
+      // The machine's answer to an offered file, and the receipt when the last
+      // byte has landed on its disk.
+      case 'file.accepted':
+        if (answering?.transferId === event.transferId) answering.settle(true);
+        return;
+
+      case 'file.refused':
+        if (answering?.transferId === event.transferId) {
+          answering.settle(false, event.reason);
+          return;
+        }
+        // Refused part way through: the machine gave up on a file it had
+        // already taken, so the sending loop is stopped rather than left
+        // pushing bytes at a file that no longer exists.
+        transferCancelled = true;
+        set((state) =>
+          state.transfer?.transferId === event.transferId
+            ? { transfer: { ...state.transfer, status: 'refused', detail: event.reason } }
+            : {},
+        );
+        return;
+
+      case 'file.done':
+        // An empty file is finished before it is ever accepted, so this settles
+        // the wait as well as reporting the outcome.
+        if (answering?.transferId === event.transferId) answering.settle(false, undefined);
+        set((state) =>
+          state.transfer?.transferId === event.transferId
+            ? {
+                transfer: {
+                  ...state.transfer,
+                  moved: state.transfer.size,
+                  status: 'done',
+                  detail: event.path,
+                },
+              }
+            : {},
+        );
+        return;
+
       // The agent's offer, and its ICE candidates. Relayed by the gateway,
       // which reads none of it.
       case 'rtc.signal':
@@ -336,6 +550,9 @@ function openLink(session: RemoteSessionResponse, set: Setter): void {
       set(track ? { track, status: 'live' } : { track: null });
       if (track) startClipboardSync();
     },
+    // Only arrives when the machine put something on it, which it only does for
+    // a session granted `REMOTE_AUDIO` on a platform that can capture loopback.
+    onAudio: (track) => set({ audioTrack: track }),
     onFailed: (reason) => set({ status: 'ended', endedReason: reason, track: null }),
   });
 }

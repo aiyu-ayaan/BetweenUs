@@ -6,6 +6,14 @@
  * is no perfect negotiation here, because the agent is always the one with
  * something to send and therefore always the one that offers.
  *
+ * Three things travel on it, and they were three separate features until they
+ * turned out to be one: the screen, the machine's own sound
+ * (`REMOTE_AUDIO`), and files (`REMOTE_FILE_TRANSFER`). All three go
+ * peer to peer for the same reason - a Cloudflare Tunnel carries neither UDP
+ * nor a gigabyte, and a gateway that relayed either would be a hop in a path
+ * that is not supposed to have one. The messages that *ask* for a file still go
+ * through the gateway, because a permission nothing checks is not a permission.
+ *
  * `remote-gateway` relays the offer, the answer and the ICE candidates over the
  * `/ws/remote` socket both ends already hold, so this needs no signalling of
  * its own. The picture then goes directly between the two machines and never
@@ -35,14 +43,33 @@ export interface ScreenLinkOptions {
   send: (signal: RemoteSignal) => void;
   /** Controller side only: the agent's screen has arrived. */
   onTrack?: (track: MediaStreamTrack | null) => void;
+  /** Controller side only: the machine's own sound, when the session may hear it. */
+  onAudio?: (track: MediaStreamTrack | null) => void;
+  /** A chunk of a file arriving on the data channel. Bytes and nothing else. */
+  onData?: (data: ArrayBuffer) => void;
   /** Either side: the connection is not coming back. */
   onFailed?: (reason: string) => void;
 }
+
+/**
+ * How much may sit in the data channel's send buffer before the sender waits.
+ *
+ * A `send` that is never checked buffers the whole file in the browser and then
+ * dies, because a data channel accepts writes far faster than the network
+ * drains them. Eight megabytes is enough to keep a fast link saturated and
+ * small enough that a cancel is felt within a second on a slow one.
+ */
+const SEND_BUFFER_HIGH = 8 * 1024 * 1024;
+const SEND_BUFFER_LOW = 1 * 1024 * 1024;
 
 export class ScreenLink {
   private readonly pc: RTCPeerConnection;
   private sender: RTCRtpSender | null = null;
   private transceiver: RTCRtpTransceiver | null = null;
+  /** The machine's own sound. One transceiver whether or not anything is on it. */
+  private audioSender: RTCRtpSender | null = null;
+  /** Files, and only files. See `remote-transfer.ts` for what travels on it. */
+  private channel: RTCDataChannel | null = null;
   private closed = false;
 
   /**
@@ -67,7 +94,37 @@ export class ScreenLink {
     });
     if (sending) this.sender = this.transceiver.sender;
 
+    // An audio transceiver and a data channel exist for every session, whether
+    // or not this one may use them. Both are cheap when empty and neither can
+    // be added later without renegotiating, and a renegotiation part way
+    // through a session is a black picture on the controller's screen for as
+    // long as it takes. Permission decides what is *put* on them, which is
+    // checked on the machine and again at the gateway - not whether they are
+    // there.
+    const audio = this.pc.addTransceiver('audio', {
+      direction: sending ? 'sendonly' : 'recvonly',
+    });
+    if (sending) this.audioSender = audio.sender;
+
+    // Negotiated, with an id both ends agree on up front, so neither has to
+    // wait for `ondatachannel` and no second offer is needed to open it.
+    this.channel = this.pc.createDataChannel('remote', {
+      negotiated: true,
+      id: 0,
+      ordered: true,
+    });
+    this.channel.binaryType = 'arraybuffer';
+    this.channel.bufferedAmountLowThreshold = SEND_BUFFER_LOW;
+    this.channel.onmessage = (event) => {
+      if (event.data instanceof ArrayBuffer) this.options.onData?.(event.data);
+    };
+
     this.pc.ontrack = (event) => {
+      if (event.track.kind === 'audio') {
+        this.options.onAudio?.(event.track);
+        event.track.onended = () => this.options.onAudio?.(null);
+        return;
+      }
       // A desktop somebody is driving gets the smallest jitter buffer that
       // Chromium will accept. The default third of a second is the difference
       // between a usable session and an unusable one.
@@ -144,6 +201,58 @@ export class ScreenLink {
     this.preferCodec(publish.videoCodec);
   }
 
+  /**
+   * Puts the machine's own sound on the wire, or takes it off.
+   *
+   * `replaceTrack` on a transceiver that has been there since the connection
+   * was built, so turning audio on part way through a session costs nothing and
+   * renegotiates nothing.
+   */
+  async setAudio(track: MediaStreamTrack | null): Promise<void> {
+    if (!this.audioSender) return;
+    await this.audioSender.replaceTrack(track).catch(() => undefined);
+  }
+
+  /** True once the data channel will accept a write. */
+  get dataReady(): boolean {
+    return this.channel?.readyState === 'open';
+  }
+
+  /**
+   * Writes one chunk of a file, waiting when the buffer is full.
+   *
+   * The wait is the whole point: `send` never blocks and never fails on a slow
+   * link, it just grows a buffer inside the browser until the tab dies. This
+   * resolves when the chunk is queued and the queue is short enough to queue
+   * another - so a caller that awaits it in a loop is paced by the network.
+   */
+  async sendBytes(chunk: Uint8Array<ArrayBuffer>): Promise<void> {
+    const channel = this.channel;
+    if (!channel || channel.readyState !== 'open') {
+      throw new Error('The link to the machine is not open');
+    }
+
+    channel.send(chunk);
+    if (channel.bufferedAmount < SEND_BUFFER_HIGH) return;
+
+    await new Promise<void>((resolve, reject) => {
+      const done = (): void => {
+        channel.removeEventListener('bufferedamountlow', onLow);
+        channel.removeEventListener('close', onClose);
+      };
+      const onLow = (): void => {
+        done();
+        resolve();
+      };
+      const onClose = (): void => {
+        done();
+        reject(new Error('The link to the machine closed'));
+      };
+      channel.addEventListener('bufferedamountlow', onLow);
+      channel.addEventListener('close', onClose);
+    });
+  }
+
   /** Hardware H.264 where it exists, which is what makes 1080p60/4K affordable. */
   private preferCodec(codec: SharePublish['videoCodec']): void {
     if (!this.transceiver?.setCodecPreferences) return;
@@ -205,7 +314,13 @@ export class ScreenLink {
     this.pc.onnegotiationneeded = null;
     this.pc.onconnectionstatechange = null;
     this.pc.oniceconnectionstatechange = null;
+    if (this.channel) {
+      this.channel.onmessage = null;
+      this.channel.close();
+      this.channel = null;
+    }
     this.sender = null;
+    this.audioSender = null;
     this.transceiver = null;
     this.pc.close();
   }
