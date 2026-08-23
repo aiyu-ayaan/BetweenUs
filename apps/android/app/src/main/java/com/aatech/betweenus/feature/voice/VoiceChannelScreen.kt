@@ -201,6 +201,9 @@ fun VoiceChannelScreen(
     var dismissed by remember { mutableStateOf<String?>(null) }
     var pickingDevices by remember { mutableStateOf(false) }
     var showingConnection by remember { mutableStateOf(false) }
+    // "Who else should be here" is a thought somebody has while looking at a
+    // call with two people in it, so the way to act on it is in the call.
+    var inviting by remember { mutableStateOf(false) }
 
     // The header and the dock get out of the way on their own, and a tap
     // anywhere on the stage brings them back - the same gesture the share
@@ -225,10 +228,10 @@ fun VoiceChannelScreen(
     // pressed - the toggles are keys here, so pressing one restarts the
     // countdown without every button having to say so.
     LaunchedEffect(
-        chrome, woken, inCallNow, pickingDevices, showingConnection, problem,
+        chrome, woken, inCallNow, pickingDevices, showingConnection, inviting, problem,
         muted, cameraOn, sharing,
     ) {
-        if (!inCallNow || pickingDevices || showingConnection || problem != null) {
+        if (!inCallNow || pickingDevices || showingConnection || inviting || problem != null) {
             chrome = true
             return@LaunchedEffect
         }
@@ -293,6 +296,16 @@ fun VoiceChannelScreen(
         )
         if (pickingDevices) CallDeviceSheet(onDismiss = { pickingDevices = false })
         if (showingConnection) ConnectionSheet(linkStats) { showingConnection = false }
+        if (inviting && channelId != null) {
+            InviteToCallSheet(
+                channelId = channelId,
+                channelName = channel?.name ?: "the call",
+                serverId = channel?.serverId,
+                selfId = self.id,
+                inCall = participants.map { it.peer.userId }.toSet() + self.id,
+                onDismiss = { inviting = false },
+            )
+        }
         return
     }
 
@@ -941,7 +954,21 @@ fun VoiceChannelScreen(
                         },
                     )
 
-                    // 5. Connection - what the link is doing, in numbers. The
+                    // 5. Add somebody to the call. The roster announcement
+                    // tells the channel a call is happening and rings nobody;
+                    // this is the aimed half, and the only way to reach it from
+                    // a phone that is showing a call rather than a member list.
+                    CallCircleButton(
+                        icon = BetweenUsIcons.UserPlus,
+                        contentDescription = "Add someone to the call",
+                        active = inviting,
+                        activeColor = Accent,
+                        tint = Slate400,
+                        size = 48.dp,
+                        onClick = { inviting = true },
+                    )
+
+                    // 6. Connection - what the link is doing, in numbers. The
                     // one thing a phone in a bad call has no other way to find
                     // out, since there is no webrtc-internals to open.
                     CallCircleButton(
@@ -954,7 +981,7 @@ fun VoiceChannelScreen(
                         onClick = { showingConnection = true },
                     )
 
-                    // 6. Leave Call (Prominent Red Button)
+                    // 7. Leave Call (Prominent Red Button)
                     Box(
                         modifier = Modifier
                             .size(54.dp)
@@ -981,6 +1008,16 @@ fun VoiceChannelScreen(
 
     if (pickingDevices) CallDeviceSheet(onDismiss = { pickingDevices = false })
     if (showingConnection) ConnectionSheet(linkStats) { showingConnection = false }
+    if (inviting && channelId != null) {
+        InviteToCallSheet(
+            channelId = channelId,
+            channelName = channel?.name ?: "the call",
+            serverId = channel?.serverId,
+            selfId = self.id,
+            inCall = participants.map { it.peer.userId }.toSet() + self.id,
+            onDismiss = { inviting = false },
+        )
+    }
 }
 
 /**
