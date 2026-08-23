@@ -873,6 +873,31 @@ export interface CallRingRequest {
   userId: string;
 }
 
+/**
+ * One call somebody was in, as their own log reads it back.
+ *
+ * Written from the gateway's own knowledge of when the socket joined and left,
+ * so it is not a client's account of its own call. The one number that is the
+ * client's is `bytes`: nothing on the server is in the media path to measure.
+ */
+export interface CallHistoryEntry {
+  id: string;
+  channelId: string;
+  channelName: string;
+  /** Null for a direct message, which belongs to no server. */
+  serverId: string | null;
+  serverName: string | null;
+  joinedAt: string;
+  /** Null for a call that never got an ending written - the process died. */
+  endedAt: string | null;
+  /** Whole seconds, or null when there is no ending to measure to. */
+  durationSeconds: number | null;
+  /** Everybody else who was in it while this person was, as they are named now. */
+  peers: Array<{ id: string; username: string; displayName: string }>;
+  /** Sent plus received, as this person's client counted it. */
+  bytes: number;
+}
+
 /** One entry of a WebRTC `RTCConfiguration.iceServers`. */
 export interface IceServer {
   urls: string[];
@@ -916,7 +941,13 @@ export type CallSignal =
 
 export type ClientCallEvent =
   | { type: 'join'; channelId: string }
-  | { type: 'leave' }
+  /**
+   * `bytes` is what this client's peer connections moved over the whole call,
+   * sent plus received. Only the client can know it - the gateway is not in the
+   * media path and has nothing to count - so it is reported on the way out and
+   * clamped by the server, which treats it as the cosmetic number it is.
+   */
+  | { type: 'leave'; bytes?: number }
   | { type: 'signal'; to: string; data: CallSignal }
   /**
    * "I am about to share my screen" / "I have stopped".

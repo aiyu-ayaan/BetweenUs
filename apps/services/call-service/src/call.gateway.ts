@@ -36,6 +36,7 @@ import type {
   ServerCallEvent,
 } from '@betweenus/shared-types';
 import { otherDevicesInCall } from './devices';
+import { CallsService } from './modules/calls/calls.service';
 
 const HEARTBEAT_INTERVAL_MS = 30_000;
 
@@ -53,6 +54,12 @@ const MAX_PEERS_PER_CALL = 8;
 interface SocketState extends CallPeer {
   channelId: string | null;
   alive: boolean;
+  /** The open row in this person's call log, while they are in a call. */
+  sessionId: string | null;
+  /** Everybody else who has been in the call since this socket joined it. */
+  metUserIds: Set<string>;
+  /** What the client says it moved, reported on the way out. See `leave`. */
+  bytes: number;
 }
 
 @Injectable()
@@ -86,6 +93,8 @@ export class CallGateway implements OnModuleDestroy {
   constructor(
     private readonly logger: Logger,
     private readonly events: EventBus,
+    /** Where a call's log entry is opened and closed - `this.calls` is the roster. */
+    private readonly history: CallsService,
   ) {}
 
   /**
@@ -144,6 +153,9 @@ export class CallGateway implements OnModuleDestroy {
         username: user.username,
         channelId: null,
         alive: true,
+        sessionId: null,
+        metUserIds: new Set<string>(),
+        bytes: 0,
       };
       this.state.set(socket, state);
       this.send(socket, { type: 'ready', peerId: state.peerId });
@@ -214,6 +226,10 @@ export class CallGateway implements OnModuleDestroy {
         return;
 
       case 'leave':
+        // The only number in the log the server cannot take for itself: media
+        // is peer to peer, so the client's own counters are the only counters.
+        // It is clamped where it is written - see `usage.ts`.
+        if (typeof event.bytes === 'number') state.bytes = event.bytes;
         this.depart(socket);
         return;
 
@@ -300,6 +316,17 @@ export class CallGateway implements OnModuleDestroy {
       return peer ? [{ peerId: peer.peerId, userId: peer.userId, username: peer.username }] : [];
     });
 
+    // Who they are in the call with, recorded both ways: this join meets
+    // everybody already here, and everybody already here has now met them. A
+    // log entry is "who was in it while I was", so somebody who leaves before
+    // the end still belongs in it.
+    for (const member of members) {
+      const peer = this.state.get(member);
+      if (!peer || peer.userId === state.userId) continue;
+      state.metUserIds.add(peer.userId);
+      peer.metUserIds.add(state.userId);
+    }
+
     members.add(socket);
     this.calls.set(channelId, members);
     state.channelId = channelId;
@@ -315,6 +342,17 @@ export class CallGateway implements OnModuleDestroy {
     );
 
     this.announceRoster(channelId);
+
+    // The log row is opened here because here is where the join is known to
+    // have been allowed. If they left while this was being written - a socket
+    // that closes mid-await - it is closed straight away rather than left open
+    // forever, which is what an unattended `endedAt` of null means.
+    state.sessionId = await this.history.startSession(state.userId, channelId);
+    if (state.sessionId && state.channelId !== channelId) {
+      void this.history.endSession(state.sessionId, [...state.metUserIds], state.bytes);
+      state.sessionId = null;
+    }
+
     this.logger.info('Peer joined a call', {
       userId: state.userId,
       channelId,
@@ -393,8 +431,21 @@ export class CallGateway implements OnModuleDestroy {
     const state = this.state.get(socket);
     if (!state) return;
 
-    const { channelId } = state;
+    const { channelId, sessionId } = state;
     state.channelId = null;
+
+    // Closed before anything else can throw, and before the state is dropped:
+    // this is the only moment the duration is knowable, and a row left open is
+    // an entry that reads as a call that never ended.
+    if (sessionId) {
+      state.sessionId = null;
+      void this.history.endSession(sessionId, [...state.metUserIds], state.bytes);
+    }
+    // A socket that stays open to join elsewhere starts a fresh log entry, so
+    // it starts with a fresh idea of who it has met and what it has moved.
+    state.metUserIds = new Set<string>();
+    state.bytes = 0;
+
     if (!keepOpen) this.state.delete(socket);
     if (!channelId) return;
 

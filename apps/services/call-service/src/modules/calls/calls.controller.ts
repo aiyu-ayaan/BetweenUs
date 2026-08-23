@@ -1,6 +1,6 @@
-import { Body, Controller, HttpCode, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Post, UseGuards } from '@nestjs/common';
 import { CurrentUser, JwtAuthGuard, type AuthenticatedUser } from '@betweenus/auth';
-import type { CallIceResponse } from '@betweenus/shared-types';
+import type { CallHistoryEntry, CallIceResponse } from '@betweenus/shared-types';
 import { CallsService } from './calls.service';
 import { CallIceDto, CallRingDto } from './dto';
 
@@ -26,6 +26,15 @@ export class CallsController {
    * The caller is the authenticated user and never the body: a ring that could
    * name its own sender is a ring that could be sent as somebody else.
    */
+  /**
+   * This account's own call log. Whose is never a parameter: the only thing
+   * that could be wrong about a private history is reading somebody else's.
+   */
+  @Get('history')
+  history(@CurrentUser() user: AuthenticatedUser): Promise<CallHistoryEntry[]> {
+    return this.calls.history(user.id);
+  }
+
   @Post('ring')
   @HttpCode(204)
   ring(@CurrentUser() user: AuthenticatedUser, @Body() dto: CallRingDto): Promise<void> {

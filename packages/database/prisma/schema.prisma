@@ -82,6 +82,7 @@ model User {
   remoteAudit    RemoteAudit[]   @relation("RemoteAuditActor")
   adminAudit     AdminAudit[]    @relation("AdminAuditActor")
   attachments    Attachment[]    @relation("AttachmentUploader")
+  callSessions   CallSession[]   @relation("CallSessionUser")
 
   @@map("users")
 }
@@ -757,4 +758,42 @@ model RemoteAudit {
 
   @@index([machineId, createdAt])
   @@map("remote_audit")
+}
+
+/// One person's stay in one call: how long they were in it, who else was there
+/// while they were, and how much data their machine moved doing it.
+///
+/// Written by `call-service`, which holds the sockets and is therefore the only
+/// thing that knows when somebody actually arrived and left - a client's own
+/// account of that is a client that can write itself an hour-long call it never
+/// joined.
+///
+/// The names are snapshots rather than joins on purpose. A call log is history,
+/// and a channel that was deleted or a server that was left is exactly the
+/// entry somebody is trying to remember; a foreign key would take those rows
+/// away at the moment they became interesting.
+model CallSession {
+  id          String    @id @default(uuid())
+  userId      String
+  channelId   String
+  channelName String
+  /// Null for a direct message, which belongs to no server.
+  serverId    String?
+  serverName  String?
+  joinedAt    DateTime  @default(now())
+  /// Null while the call is still up, and for a row whose process died mid-call.
+  endedAt     DateTime?
+  /// Everybody else who was in the call at any point while this person was, by
+  /// user id. Resolved to current names when the log is read, so somebody who
+  /// changed their display name reads back as who they are now.
+  peerIds     String[]  @default([])
+  /// Bytes sent and received across every peer connection of this call, as the
+  /// client counted them - nothing else is in the media path to count. Zero
+  /// when the client never got to report, which a window closed mid-call does.
+  bytes       BigInt    @default(0)
+
+  user User @relation("CallSessionUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, joinedAt])
+  @@map("call_sessions")
 }
