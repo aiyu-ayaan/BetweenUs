@@ -300,6 +300,17 @@ Chat and media, across all three clients:
 
 Fixed in the same pass:
 
+- [x] **Sessions that ended themselves, on all three clients.** Two separate
+      faults, both of which read as being logged out of a session that was still
+      valid. Refreshing the access token ended the session whenever the *request*
+      failed - a lift, a laptop waking up, a gateway restarting, a backend still
+      coming up - when only a 401 means the credential was refused; a refresh
+      that fails for any other reason now leaves a running session alone. And
+      both sockets carry the access token in their URL, so it expires while the
+      socket is open and the reconnect came back 4401, which the socket treated
+      as final: no messages, no presence, an app that looked signed out until it
+      was restarted, because nothing else was going to ask for a new token. A
+      4401 now refreshes and still goes through the reconnect backoff.
 - [x] **Android could not change its server.** A modal bottom sheet composes
       into its own window, so `LocalContext.current as? Activity` was null and
       the `recreate()` after switching deployments went nowhere. `ShareStage.kt`

@@ -930,6 +930,22 @@ that has to be right for every future deployment is one that will be wrong.
   every live token for that account, because the server cannot tell victim from
   thief. The cost is a re-login after a genuine race (two windows refreshing at
   once), which the desktop client already avoids with single-flight refresh.
+- **Only a 401 ends a session; nothing else does.** A refresh that fails is
+  almost never a refused credential. It is a lift, a laptop waking up, a gateway
+  restarting, a backend that has not finished starting - and treating those the
+  same as a rejection signed people out of a session that was still perfectly
+  valid, on all three clients. A refresh that fails for any reason other than a
+  401 now leaves a running session alone: the stored token is untouched and the
+  next request tries again. Only the server saying *no* clears it.
+- **A socket whose token was rejected refreshes rather than giving up.** Both
+  realtime sockets carry the access token in their URL, so the token a socket
+  opened with expires while the socket is still open - fifteen minutes in, or
+  across any sleep or doze longer than that. The reconnect is then refused with
+  4401, and stopping there left an app with no messages and no presence, looking
+  signed out, until it was restarted: nothing else was going to ask for a new
+  token. A 4401 now triggers a refresh and still goes through the reconnect
+  backoff, so a refresh that cannot happen yet is retried at most once every
+  thirty seconds instead of being the end of the session.
 - **Rate limiting lives in Nginx and in the service.** The edge limit is the one
   that carries the load, but it only covers traffic that came through the edge.
   Credential endpoints keep a Redis-counted budget of their own so a container
