@@ -4,6 +4,11 @@ import { useAuthStore } from '../../stores/auth';
 import { Avatar } from '../../components/Avatar';
 import { SearchIcon, XIcon } from '../../components/icons';
 
+export interface SearchPanelProps {
+  onClose?: () => void;
+  className?: string;
+}
+
 /**
  * Search inside the open conversation.
  *
@@ -14,7 +19,10 @@ import { SearchIcon, XIcon } from '../../components/icons';
  * hidden - the footer says how far back the search reached, and scrolling the
  * conversation further back widens it.
  */
-export function SearchPanel(): JSX.Element {
+export function SearchPanel({
+  onClose,
+  className = 'w-60 shrink-0',
+}: SearchPanelProps = {}): JSX.Element {
   const me = useAuthStore((state) => state.user);
   const channelId = useChatStore((state) => state.activeChannelId);
   const history = useChatStore((state) => (channelId ? state.history[channelId] : undefined));
@@ -34,16 +42,24 @@ export function SearchPanel(): JSX.Element {
       .reverse();
   }, [query, searchable]);
 
+  const handleClose = () => {
+    if (onClose) {
+      onClose();
+    } else {
+      showPanel('members');
+    }
+  };
+
   return (
-    <aside className="panel flex w-60 shrink-0 flex-col bg-surface-850">
+    <aside className={`panel flex flex-col bg-surface-850 ${className}`}>
       <header className="flex h-12 shrink-0 items-center gap-2 border-b border-edge px-3">
         <SearchIcon className="h-4 w-4 text-slate-400" />
         <h2 className="flex-1 text-sm font-semibold text-slate-100">Search</h2>
         <button
           type="button"
-          onClick={() => showPanel('members')}
+          onClick={handleClose}
           aria-label="Close search"
-          className="cursor-pointer rounded-md p-1 text-slate-400 transition-colors duration-150 hover:bg-white/[0.07] hover:text-slate-100"
+          className="flex h-8 w-8 min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 sm:h-7 sm:w-7 cursor-pointer items-center justify-center rounded-md p-1 text-slate-400 transition-colors duration-150 hover:bg-white/[0.07] hover:text-slate-100"
         >
           <XIcon className="h-4 w-4" />
         </button>

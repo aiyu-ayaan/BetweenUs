@@ -40,6 +40,8 @@ import { CallAudio } from './features/voice/CallAudio';
 import { ShareControlConsent } from './features/voice/ShareControlConsent';
 import { IncomingCall } from './features/voice/IncomingCall';
 import { TopBar } from './features/shell/TopBar';
+import { MobileDrawer } from './features/shell/MobileDrawer';
+import { useIsMobile } from './services/responsive';
 import { VersionNotice } from './components/VersionNotice';
 import { UpdateNotice } from './components/UpdateNotice';
 import { QuickSwitcher } from './features/shell/QuickSwitcher';
@@ -379,12 +381,47 @@ function Workbench(): JSX.Element {
 
   const rightPanel = useChatStore((state) => state.rightPanel);
   const remoteSession = useRemoteStore((state) => state.session);
+  const isMobile = useIsMobile();
 
   const [settings, setSettings] = useState<'none' | 'user' | 'server'>('none');
   const [homeScreen, setHomeScreen] = useState<'friends' | 'remote' | null>('friends');
   const [showMembers, setShowMembers] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [switcher, setSwitcher] = useState(false);
+  const [showDrawer, setShowDrawer] = useState(false);
+
+  const isRightPanelOpen =
+    rightPanel === 'pins' ||
+    rightPanel === 'search' ||
+    (rightPanel === 'members' && view === 'server' && showMembers);
+
+  const handleCloseRightPanel = () => {
+    setShowMembers(false);
+    useChatStore.getState().showPanel('none');
+  };
+
+  // Lock body scroll while mobile right sheet is open
+  useEffect(() => {
+    if (isMobile && isRightPanelOpen) {
+      const originalOverflow = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+      return () => {
+        document.body.style.overflow = originalOverflow;
+      };
+    }
+  }, [isMobile, isRightPanelOpen]);
+
+  // Escape key closes mobile right sheet
+  useEffect(() => {
+    if (!isMobile || !isRightPanelOpen) return;
+    const onKeyDown = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape') {
+        handleCloseRightPanel();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [isMobile, isRightPanelOpen]);
 
   // Opening a conversation is what leaves the friends screen; nothing else has
   // to know about that flag.
@@ -413,10 +450,11 @@ function Workbench(): JSX.Element {
         onOpenSwitcher={() => setSwitcher(true)}
         sidebarOpen={sidebarOpen}
         onToggleSidebar={() => setSidebarOpen((open) => !open)}
+        onOpenMenu={() => setShowDrawer(true)}
       />
 
       <div className="flex min-h-0 flex-1 gap-1.5 px-1.5 pb-1.5">
-        <ServerRail />
+        <ServerRail className="hidden md:flex" />
 
         {sidebarOpen &&
           (view === 'home' ? (
@@ -426,11 +464,13 @@ function Workbench(): JSX.Element {
               showingRemote={homeScreen === 'remote'}
               onShowRemote={() => setHomeScreen('remote')}
               onOpenUserSettings={() => setSettings('user')}
+              className="hidden md:flex w-60"
             />
           ) : (
             <ChannelSidebar
               onOpenUserSettings={() => setSettings('user')}
               onOpenServerSettings={() => setSettings('server')}
+              className="hidden md:flex w-60"
             />
           ))}
 
@@ -452,16 +492,64 @@ function Workbench(): JSX.Element {
                 }
               }}
               showMembers={showMembers && rightPanel === 'members'}
+              onOpenMenu={() => setShowDrawer(true)}
             />
-            {/* One right-hand column, whatever is in it: pins and search are the
-                same kind of list about this channel as the member list, and two
-                of them open at once would leave nothing to read. */}
-            {rightPanel === 'pins' && <PinnedPanel />}
-            {rightPanel === 'search' && <SearchPanel />}
-            {rightPanel === 'members' && view === 'server' && showMembers && <MemberList />}
+            {/* Desktop right-hand panels (side-by-side) */}
+            {!isMobile && (
+              <>
+                {rightPanel === 'pins' && <PinnedPanel onClose={handleCloseRightPanel} />}
+                {rightPanel === 'search' && <SearchPanel onClose={handleCloseRightPanel} />}
+                {rightPanel === 'members' && view === 'server' && showMembers && (
+                  <MemberList onClose={handleCloseRightPanel} />
+                )}
+              </>
+            )}
           </>
         )}
       </div>
+
+      {/* Mobile Slide-Over Right Sheet (MemberList, PinnedPanel, SearchPanel) */}
+      {isMobile && (
+        <>
+          <div
+            onClick={handleCloseRightPanel}
+            aria-hidden="true"
+            className={`fixed inset-0 z-40 bg-black/60 backdrop-blur-sm transition-opacity duration-300 ${
+              isRightPanelOpen ? 'opacity-100' : 'pointer-events-none opacity-0'
+            }`}
+          />
+          <div
+            role="dialog"
+            aria-label="Details panel"
+            aria-modal="true"
+            className={`fixed inset-y-0 right-0 z-50 flex w-[320px] max-w-[85vw] flex-col bg-surface-900 border-l border-edge shadow-2xl transition-transform duration-300 ease-out ${
+              isRightPanelOpen ? 'translate-x-0' : 'translate-x-full pointer-events-none'
+            }`}
+          >
+            {rightPanel === 'pins' && (
+              <PinnedPanel onClose={handleCloseRightPanel} className="h-full w-full border-none bg-surface-900" />
+            )}
+            {rightPanel === 'search' && (
+              <SearchPanel onClose={handleCloseRightPanel} className="h-full w-full border-none bg-surface-900" />
+            )}
+            {rightPanel === 'members' && view === 'server' && showMembers && (
+              <MemberList onClose={handleCloseRightPanel} className="h-full w-full border-none bg-surface-900 flex" />
+            )}
+          </div>
+        </>
+      )}
+
+      {/* Mobile Navigation Drawer (Left Sheet) */}
+      <MobileDrawer
+        open={showDrawer}
+        onClose={() => setShowDrawer(false)}
+        onOpenUserSettings={() => setSettings('user')}
+        onOpenServerSettings={() => setSettings('server')}
+        onShowFriends={() => setHomeScreen('friends')}
+        onShowRemote={() => setHomeScreen('remote')}
+        showingFriends={homeScreen === 'friends'}
+        showingRemote={homeScreen === 'remote'}
+      />
 
       {switcher && <QuickSwitcher onClose={() => setSwitcher(false)} />}
 

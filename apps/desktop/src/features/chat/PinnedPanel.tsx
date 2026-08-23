@@ -4,6 +4,11 @@ import { useAuthStore } from '../../stores/auth';
 import { Avatar } from '../../components/Avatar';
 import { PinIcon, XIcon } from '../../components/icons';
 
+export interface PinnedPanelProps {
+  onClose?: () => void;
+  className?: string;
+}
+
 /**
  * Pinned messages, in the same column the member list uses - it is the same
  * kind of thing (a list about this channel), and two panels open at once would
@@ -12,7 +17,10 @@ import { PinIcon, XIcon } from '../../components/icons';
  * Clicking one scrolls the conversation to it rather than opening a copy: a pin
  * is a bookmark into the channel, not a separate document.
  */
-export function PinnedPanel(): JSX.Element {
+export function PinnedPanel({
+  onClose,
+  className = 'w-60 shrink-0',
+}: PinnedPanelProps = {}): JSX.Element {
   const me = useAuthStore((state) => state.user);
   const pins = useChatStore((state) => state.pins);
   const loadPins = useChatStore((state) => state.loadPins);
@@ -24,16 +32,24 @@ export function PinnedPanel(): JSX.Element {
     void loadPins();
   }, [loadPins, channelId]);
 
+  const handleClose = () => {
+    if (onClose) {
+      onClose();
+    } else {
+      showPanel('members');
+    }
+  };
+
   return (
-    <aside className="panel flex w-60 shrink-0 flex-col bg-surface-850">
+    <aside className={`panel flex flex-col bg-surface-850 ${className}`}>
       <header className="flex h-12 shrink-0 items-center gap-2 border-b border-edge px-3">
         <PinIcon className="h-4 w-4 text-slate-400" />
         <h2 className="flex-1 text-sm font-semibold text-slate-100">Pinned</h2>
         <button
           type="button"
-          onClick={() => showPanel('members')}
+          onClick={handleClose}
           aria-label="Close pinned messages"
-          className="cursor-pointer rounded-md p-1 text-slate-400 transition-colors duration-150 hover:bg-white/[0.07] hover:text-slate-100"
+          className="flex h-8 w-8 min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 sm:h-7 sm:w-7 cursor-pointer items-center justify-center rounded-md p-1 text-slate-400 transition-colors duration-150 hover:bg-white/[0.07] hover:text-slate-100"
         >
           <XIcon className="h-4 w-4" />
         </button>

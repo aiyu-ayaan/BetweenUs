@@ -12,7 +12,13 @@ import {
 } from '../../services/notifications';
 import { api } from '../../services/api';
 import { useVoiceStore } from '../../stores/voice';
+import { UsersIcon, XIcon } from '../../components/icons';
 import { SafetyNumberDialog } from './SafetyNumberDialog';
+
+export interface MemberListProps {
+  onClose?: () => void;
+  className?: string;
+}
 
 /**
  * The right-hand column in a server: who is here, online first. Members are
@@ -22,7 +28,10 @@ import { SafetyNumberDialog } from './SafetyNumberDialog';
  * in the colour of the highest-ranked role its holder has, which is the answer
  * the server already works out and sends as `colour`.
  */
-export function MemberList(): JSX.Element {
+export function MemberList({
+  onClose,
+  className = 'hidden w-60 shrink-0 lg:flex',
+}: MemberListProps = {}): JSX.Element {
   const members = useChatStore((state) => state.members);
   const online = usePresenceStore((state) => state.online);
   const statusOf = usePresenceStore((state) => state.statusOf);
@@ -41,17 +50,36 @@ export function MemberList(): JSX.Element {
   return (
     <aside
       aria-label="Members"
-      className="panel hidden w-60 shrink-0 flex-col overflow-y-auto bg-surface-800 px-2 py-4 lg:flex"
+      className={`panel flex flex-col bg-surface-800 ${className}`}
     >
-      <Group label={`Admins — ${staff.length}`} members={staff} statusOf={statusOf} onOpen={setMenu} />
-      <Group label={`Online — ${rest.length}`} members={rest} statusOf={statusOf} onOpen={setMenu} />
-      <Group
-        label={`Offline — ${away.length}`}
-        members={away}
-        statusOf={statusOf}
-        muted
-        onOpen={setMenu}
-      />
+      <header className="flex h-12 shrink-0 items-center gap-2 border-b border-edge px-3">
+        <UsersIcon className="h-4 w-4 text-slate-400" />
+        <h2 className="flex-1 text-sm font-semibold text-slate-100">
+          Members — {members.length}
+        </h2>
+        {onClose && (
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close member list"
+            className="flex h-8 w-8 min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 sm:h-7 sm:w-7 cursor-pointer items-center justify-center rounded-md p-1 text-slate-400 transition-colors duration-150 hover:bg-white/[0.07] hover:text-slate-100"
+          >
+            <XIcon className="h-4 w-4" />
+          </button>
+        )}
+      </header>
+
+      <div className="min-h-0 flex-1 overflow-y-auto px-2 py-4">
+        <Group label={`Admins — ${staff.length}`} members={staff} statusOf={statusOf} onOpen={setMenu} />
+        <Group label={`Online — ${rest.length}`} members={rest} statusOf={statusOf} onOpen={setMenu} />
+        <Group
+          label={`Offline — ${away.length}`}
+          members={away}
+          statusOf={statusOf}
+          muted
+          onOpen={setMenu}
+        />
+      </div>
 
       {menu && (
         <MemberMenu
@@ -110,7 +138,7 @@ function Group({
               onClick={(event) =>
                 onOpen({ member, at: { x: event.clientX, y: event.clientY } })
               }
-              className={`flex cursor-pointer items-center gap-3 rounded-md px-2 py-1.5 transition-colors duration-200 hover:bg-white/[0.05] ${
+              className={`flex min-h-[44px] sm:min-h-0 cursor-pointer items-center gap-3 rounded-md px-2 py-1.5 transition-colors duration-200 hover:bg-white/[0.05] ${
                 muted ? 'opacity-40' : ''
               }`}
             >

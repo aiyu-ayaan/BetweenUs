@@ -231,7 +231,7 @@ useAuthStore.subscribe((state, previous) => {
 
 // Indicators expire on a timer, not on the next event, so a stale "typing…"
 // disappears even when the typist goes quiet.
-setInterval(() => {
+const typingTimer = setInterval(() => {
   const { typing } = usePresenceStore.getState();
   const now = Date.now();
   let changed = false;
@@ -245,3 +245,5 @@ setInterval(() => {
 
   if (changed) usePresenceStore.setState({ typing: next });
 }, 1_000);
+typingTimer.unref?.();
+
