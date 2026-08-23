@@ -1,5 +1,5 @@
 import { useChatStore } from '../../stores/chat';
-import { LayoutSidebarIcon, BetweenUsLogoIcon, SearchIcon } from '../../components/icons';
+import { LayoutSidebarIcon, BetweenUsLogoIcon, SearchIcon, MenuIcon } from '../../components/icons';
 
 /**
  * The bar across the top of the workbench: the mark on the left, one command
@@ -14,16 +14,18 @@ import { LayoutSidebarIcon, BetweenUsLogoIcon, SearchIcon } from '../../componen
  * The whole bar is a drag region in Electron except the controls in it, so the
  * window still moves when it is grabbed anywhere that is not a button.
  */
-const isMac = window.betweenus?.platform === 'darwin';
+const isMac = typeof window !== 'undefined' && window.betweenus?.platform === 'darwin';
 
 export function TopBar({
   onOpenSwitcher,
   sidebarOpen,
   onToggleSidebar,
+  onOpenMenu,
 }: {
   onOpenSwitcher: () => void;
   sidebarOpen: boolean;
   onToggleSidebar: () => void;
+  onOpenMenu?: () => void;
 }): JSX.Element {
   const view = useChatStore((state) => state.view);
   const servers = useChatStore((state) => state.servers);
@@ -43,20 +45,33 @@ export function TopBar({
         : 'BetweenUs';
 
   return (
-    <header className="drag-region flex h-10 shrink-0 items-center gap-2 px-2.5">
+    <header className="drag-region flex h-10 shrink-0 items-center gap-1.5 px-2 md:gap-2 md:px-2.5">
       {/* Each toggle sits on the side it acts on. Both of them together in one
           corner is what the layout controls in most apps look like, and it
           leaves you guessing which button hides which column. */}
-      <div className={`flex w-36 shrink-0 items-center gap-1.5 ${isMac ? 'pl-[72px]' : 'pl-1'}`}>
+      <div className={`flex w-auto shrink-0 items-center gap-1.5 md:w-36 ${isMac ? 'pl-[72px]' : 'pl-1'}`}>
+        {onOpenMenu && (
+          <button
+            type="button"
+            onClick={onOpenMenu}
+            aria-label="Open navigation menu"
+            title="Open menu"
+            className="no-drag flex h-8 w-8 min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 sm:h-7 sm:w-7 cursor-pointer items-center justify-center rounded-md text-slate-300 transition-colors duration-150 hover:bg-white/[0.07] hover:text-slate-100 md:hidden"
+          >
+            <MenuIcon className="h-5 w-5" />
+          </button>
+        )}
         <BetweenUsLogoIcon className="h-[18px] w-[18px] shrink-0 text-accent" aria-hidden="true" />
         <span className="truncate text-[13px] font-semibold tracking-tight text-slate-300">
           BetweenUs
         </span>
-        <LayoutToggle
-          label={sidebarOpen ? 'Hide sidebar' : 'Show sidebar'}
-          on={sidebarOpen}
-          onClick={onToggleSidebar}
-        />
+        <div className="hidden md:flex items-center">
+          <LayoutToggle
+            label={sidebarOpen ? 'Hide sidebar' : 'Show sidebar'}
+            on={sidebarOpen}
+            onClick={onToggleSidebar}
+          />
+        </div>
       </div>
 
       <div className="flex min-w-0 flex-1 justify-center">
@@ -76,7 +91,7 @@ export function TopBar({
       {/* Windows and Linux draw the minimise/maximise/close overlay into this
           gap; macOS puts its buttons on the left, so there the gap is only the
           counterweight that keeps the command field centred. */}
-      <div className={`shrink-0 ${isMac ? 'w-36' : 'w-[146px]'}`} />
+      <div className={`hidden shrink-0 md:block ${isMac ? 'w-36' : 'w-[146px]'}`} />
     </header>
   );
 }

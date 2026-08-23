@@ -13,6 +13,7 @@ import { UNDECRYPTABLE } from '../../services/e2ee';
 import { api } from '../../services/api';
 import { useAuthStore } from '../../stores/auth';
 import { usePresenceStore } from '../../stores/presence';
+import { useIsMobile } from '../../services/responsive';
 import { Avatar } from '../../components/Avatar';
 import { AttachmentList } from './Attachments';
 import { EmojiPicker } from './EmojiPicker';
@@ -44,6 +45,7 @@ import {
   HashIcon,
   ImageIcon,
   LockIcon,
+  MenuIcon,
   MessageIcon,
   PaperclipIcon,
   PinIcon,
@@ -88,7 +90,7 @@ function MuteButton({ channelId }: { channelId: string }): JSX.Element {
       onClick={() => void setChannelLevel(channelId, next).catch(() => undefined)}
       aria-label={LEVEL_LABELS[level]}
       title={LEVEL_LABELS[level]}
-      className={`cursor-pointer rounded-md p-1.5 transition-colors duration-150 hover:bg-white/[0.07] hover:text-slate-100 ${
+      className={`flex h-9 w-9 min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 sm:h-8 sm:w-8 cursor-pointer items-center justify-center rounded-md p-1.5 transition-colors duration-150 hover:bg-white/[0.07] hover:text-slate-100 ${
         level === 'none' ? 'text-slate-600' : level === 'mentions' ? 'text-accent' : 'text-slate-400'
       }`}
     >
@@ -121,7 +123,7 @@ function PanelButton({
       aria-pressed={open}
       aria-label={label}
       title={label}
-      className={`cursor-pointer rounded-md p-1.5 transition-colors duration-150 hover:bg-white/[0.07] hover:text-slate-100 ${
+      className={`flex h-9 w-9 min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 sm:h-8 sm:w-8 cursor-pointer items-center justify-center rounded-md p-1.5 transition-colors duration-150 hover:bg-white/[0.07] hover:text-slate-100 ${
         open ? 'bg-white/[0.07] text-slate-100' : 'text-slate-400'
       }`}
     >
@@ -130,15 +132,20 @@ function PanelButton({
   );
 }
 
+export interface ChatViewProps {
+  onToggleMembers?: () => void;
+  showMembers?: boolean;
+  onOpenMenu?: () => void;
+}
+
 export function ChatView({
   onToggleMembers,
   showMembers = false,
-}: {
-  onToggleMembers?: () => void;
-  showMembers?: boolean;
-}): JSX.Element {
+  onOpenMenu,
+}: ChatViewProps): JSX.Element {
   const { messages, loadingMessages, error } = useChatStore();
   const channel = useChatStore((state) => state.activeChannel());
+  const isMobile = useIsMobile();
   /**
    * How a file dropped anywhere in the conversation reaches the composer that
    * owns the pending list. A ref rather than lifted state on purpose: the drop
@@ -195,24 +202,38 @@ export function ChatView({
         </div>
       )}
 
-      <header className="flex h-11 shrink-0 items-center gap-2 border-b border-edge px-3.5">
-        {isDirect ? (
-          <Avatar name={channel.name} size="sm" ringColour="border-surface-900" />
-        ) : channel.isPrivate ? (
-          <LockIcon className="h-5 w-5 text-slate-500" />
-        ) : (
-          <HashIcon className="h-5 w-5 text-slate-500" />
+      <header className="flex h-12 md:h-11 shrink-0 items-center gap-1.5 md:gap-2 border-b border-edge px-2 md:px-3.5">
+        {onOpenMenu && (
+          <button
+            type="button"
+            onClick={onOpenMenu}
+            aria-label="Open navigation menu"
+            title="Open menu"
+            className="flex h-9 w-9 min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 sm:h-8 sm:w-8 cursor-pointer items-center justify-center rounded-md text-slate-400 transition-colors duration-150 hover:bg-white/[0.07] hover:text-slate-100 md:hidden"
+          >
+            <MenuIcon className="h-5 w-5" />
+          </button>
         )}
-        <h1 className="truncate text-[15px] font-semibold text-slate-50">{channel.name}</h1>
 
-        {channel.topic && (
-          <>
+        <div className="flex min-w-0 items-center gap-1.5 md:gap-2">
+          {isDirect ? (
+            <Avatar name={channel.name} size="sm" ringColour="border-surface-900" />
+          ) : channel.isPrivate ? (
+            <LockIcon className="h-5 w-5 shrink-0 text-slate-500" />
+          ) : (
+            <HashIcon className="h-5 w-5 shrink-0 text-slate-500" />
+          )}
+          <h1 className="truncate text-[15px] font-semibold text-slate-50">{channel.name}</h1>
+        </div>
+
+        {channel.topic && !isMobile && (
+          <div className="hidden sm:flex min-w-0 items-center gap-2">
             <span aria-hidden="true" className="h-4 w-px bg-white/10" />
             <p className="truncate text-sm text-slate-400">{channel.topic}</p>
-          </>
+          </div>
         )}
 
-        <div className="ml-auto flex items-center gap-0.5">
+        <div className="ml-auto flex items-center gap-0.5 sm:gap-1">
           <PanelButton
             panel="pins"
             label="Pinned messages"
@@ -228,7 +249,7 @@ export function ChatView({
               aria-label="Toggle member list"
               aria-pressed={showMembers}
               title="Members"
-              className={`cursor-pointer rounded-md p-1.5 transition-colors duration-150 ${
+              className={`flex h-9 w-9 min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 sm:h-8 sm:w-8 cursor-pointer items-center justify-center rounded-md p-1.5 transition-colors duration-150 ${
                 showMembers
                   ? 'bg-white/[0.08] text-slate-100'
                   : 'text-slate-400 hover:bg-white/[0.07] hover:text-slate-100'
@@ -454,7 +475,7 @@ function MessageList({
         following.current = nextFollow(following.current, lastTop.current, box);
         lastTop.current = box.scrollTop;
       }}
-      className="relative flex-1 overflow-y-auto px-4 py-4"
+      className="relative flex-1 overflow-y-auto px-2 sm:px-4 py-4"
       role="log"
       aria-live="polite"
     >
@@ -546,7 +567,7 @@ function MessageList({
                   : message.pinnedAt
                     ? 'bg-amber-400/[0.04] hover:bg-white/[0.03]'
                     : 'hover:bg-white/[0.025]'
-              } ${grouped ? 'py-0.5 pl-[60px]' : 'mt-4 flex gap-3 py-0.5'}`}
+              } ${grouped ? 'py-0.5 pl-10 sm:pl-[60px]' : 'mt-4 flex gap-3 py-0.5'}`}
             >
               {!grouped && (
                 <Avatar
@@ -1105,9 +1126,16 @@ function MessageComposer({
   const [emoji, setEmoji] = useState<{ x: number; y: number } | null>(null);
   const picker = useRef<HTMLInputElement>(null);
   const box = useRef<HTMLTextAreaElement>(null);
+  const isMobile = useIsMobile();
 
   const placeholder =
-    channel.type === 'DM' ? `Message @${channel.name}` : `Message #${channel.name}`;
+    channel.type === 'DM'
+      ? isMobile
+        ? `@${channel.name}`
+        : `Message @${channel.name}`
+      : isMobile
+        ? `#${channel.name}`
+        : `Message #${channel.name}`;
 
   // Choosing "Reply" in the menu is choosing to type, so the caret goes to the
   // box rather than leaving one more click between the two.
@@ -1191,7 +1219,7 @@ function MessageComposer({
     /* Dropping is handled by the panel, not by this box: a file aimed at the
        conversation is aimed at the conversation, and a two-centimetre target at
        the bottom of it was never the intent. */
-    <form onSubmit={(event) => void submit(event)} className="relative shrink-0 px-3.5 pb-4">
+    <form onSubmit={(event) => void submit(event)} className="relative shrink-0 px-2 sm:px-3.5 pb-2 sm:pb-4">
       {failure && (
         <p role="alert" className="mb-2 text-sm text-danger">
           {failure}
@@ -1206,7 +1234,7 @@ function MessageComposer({
 
       <div className="rounded-xl border border-edge bg-surface-800 transition-colors duration-150 focus-within:border-white/[0.14]">
         {replyTo && (
-          <div className="flex items-center gap-2 border-b border-edge px-4 py-2">
+          <div className="flex items-center gap-2 border-b border-edge px-3 sm:px-4 py-2">
             <ReplyIcon className="h-3.5 w-3.5 shrink-0 text-slate-500" />
             <span className="shrink-0 text-xs text-slate-400">
               Replying to <span className="font-medium text-accent">{replyTo.author}</span>
@@ -1219,7 +1247,7 @@ function MessageComposer({
               onClick={() => setReplyTo(null)}
               aria-label="Cancel reply"
               title="Cancel reply"
-              className="ml-auto cursor-pointer text-slate-400 transition-colors duration-200 hover:text-danger"
+              className="ml-auto flex h-8 w-8 min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 sm:h-auto sm:w-auto cursor-pointer items-center justify-center text-slate-400 transition-colors duration-200 hover:text-danger"
             >
               <XIcon className="h-3.5 w-3.5" />
             </button>
@@ -1227,7 +1255,7 @@ function MessageComposer({
         )}
 
         {files.length > 0 && (
-          <ul className="flex flex-wrap gap-2 border-b border-edge px-4 py-2.5">
+          <ul className="flex flex-wrap gap-2 border-b border-edge px-3 sm:px-4 py-2.5">
             {files.map((file, index) => (
               <li
                 key={`${file.name}-${index}`}
@@ -1256,7 +1284,7 @@ function MessageComposer({
                   aria-label={`Remove ${file.name}`}
                   disabled={sending}
                   onClick={() => setFiles(files.filter((_, at) => at !== index))}
-                  className="cursor-pointer text-slate-400 transition-colors duration-200 hover:text-danger disabled:cursor-not-allowed"
+                  className="flex h-7 w-7 min-h-[36px] min-w-[36px] sm:min-h-0 sm:min-w-0 sm:h-auto sm:w-auto cursor-pointer items-center justify-center text-slate-400 transition-colors duration-200 hover:text-danger disabled:cursor-not-allowed"
                 >
                   <XIcon className="h-3.5 w-3.5" />
                 </button>
@@ -1265,7 +1293,7 @@ function MessageComposer({
           </ul>
         )}
 
-        <div className="flex items-end gap-2 px-4 py-2.5">
+        <div className="flex items-end gap-1 sm:gap-2 px-2.5 sm:px-4 py-2 sm:py-2.5">
           <input
             ref={picker}
             type="file"
@@ -1283,7 +1311,7 @@ function MessageComposer({
             disabled={sending}
             aria-label="Attach a file"
             title="Attach a file"
-            className="cursor-pointer rounded-md p-1 text-slate-300 transition-colors duration-200 hover:text-accent disabled:cursor-not-allowed disabled:text-slate-600"
+            className="flex h-9 w-9 min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 sm:h-auto sm:w-auto cursor-pointer items-center justify-center rounded-md p-1.5 text-slate-300 transition-colors duration-200 hover:text-accent disabled:cursor-not-allowed disabled:text-slate-600"
           >
             <PaperclipIcon className="h-5 w-5" />
           </button>
@@ -1294,7 +1322,7 @@ function MessageComposer({
             disabled={sending}
             aria-label="Insert an emoji"
             title="Emoji"
-            className="cursor-pointer rounded-md p-1 text-slate-300 transition-colors duration-200 hover:text-accent disabled:cursor-not-allowed disabled:text-slate-600"
+            className="flex h-9 w-9 min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 sm:h-auto sm:w-auto cursor-pointer items-center justify-center rounded-md p-1.5 text-slate-300 transition-colors duration-200 hover:text-accent disabled:cursor-not-allowed disabled:text-slate-600"
           >
             <SmileIcon className="h-5 w-5" />
           </button>
@@ -1329,13 +1357,13 @@ function MessageComposer({
               addFiles(pasted);
             }}
             placeholder={placeholder}
-            className="max-h-40 min-h-[24px] flex-1 resize-none bg-transparent py-0.5 text-slate-100 placeholder-slate-500 focus:outline-none"
+            className="max-h-40 min-h-[32px] sm:min-h-[24px] flex-1 resize-none bg-transparent py-1 sm:py-0.5 text-slate-100 placeholder-slate-500 focus:outline-none"
           />
           <button
             type="submit"
             disabled={sending || (content.trim().length === 0 && files.length === 0)}
             aria-label="Send message"
-            className="cursor-pointer rounded-md p-1 text-slate-300 transition-colors duration-200 hover:text-accent disabled:cursor-not-allowed disabled:text-slate-600"
+            className="flex h-9 w-9 min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 sm:h-auto sm:w-auto cursor-pointer items-center justify-center rounded-md p-1.5 text-slate-300 transition-colors duration-200 hover:text-accent disabled:cursor-not-allowed disabled:text-slate-600"
           >
             <SendIcon className="h-5 w-5" />
           </button>
