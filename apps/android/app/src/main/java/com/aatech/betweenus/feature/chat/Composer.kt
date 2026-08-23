@@ -1,5 +1,6 @@
 package com.aatech.betweenus.feature.chat
 
+import android.content.ClipboardManager
 import android.net.Uri
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandHorizontally
@@ -38,6 +39,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -46,6 +48,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
@@ -57,6 +60,7 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import com.aatech.betweenus.core.data.MessageReply
 import com.aatech.betweenus.core.data.EmojiNames
 import com.aatech.betweenus.core.store.Presence
@@ -118,6 +122,55 @@ fun Composer(
     var showEmojiPicker by remember { mutableStateOf(false) }
     val text = field.text
 
+    /**
+     * A picture sitting on the clipboard, offered as a button rather than
+     * waited for as a paste.
+     *
+     * [contentReceiver] below catches what the *keyboard* inserts - a Gboard
+     * sticker or GIF - and that is the only path it catches. A screenshot or a
+     * copied image goes on the clipboard instead, and the text field's paste is
+     * text: the menu does not even offer Paste for a clip with no text in it,
+     * so there was no gesture that could put a copied picture in a message.
+     * This is that gesture.
+     *
+     * Only the clip's *description* is read to decide whether to offer it,
+     * which is metadata and not the content - the picture itself is read when
+     * the button is pressed, which is the moment somebody asked for it.
+     */
+    val context = LocalContext.current
+    val clipboard = remember(context) { context.getSystemService(ClipboardManager::class.java) }
+    var clipboardImage by remember { mutableStateOf(false) }
+
+    fun readClipboardDescription() {
+        clipboardImage = clipboard?.primaryClipDescription?.hasMimeType("image/*") == true
+    }
+
+    DisposableEffect(clipboard) {
+        val listener = ClipboardManager.OnPrimaryClipChangedListener { readClipboardDescription() }
+        clipboard?.addPrimaryClipChangedListener(listener)
+        readClipboardDescription()
+        onDispose { clipboard?.removePrimaryClipChangedListener(listener) }
+    }
+    // Copying happens in another app, and Android stops delivering the change
+    // to one that is not in front. Coming back is therefore the other moment
+    // the clipboard can have turned into something worth offering.
+    LifecycleResumeEffect(Unit) {
+        readClipboardDescription()
+        onPauseOrDispose { }
+    }
+
+    /** Every image on the clip, into the send preview. */
+    fun pasteFromClipboard() {
+        val clip = clipboard?.primaryClip
+        for (index in 0 until (clip?.itemCount ?: 0)) {
+            clip?.getItemAt(index)?.uri?.let(onPasteMedia)
+        }
+        // Offered once. The clip is left alone - it is not this app's to empty -
+        // but a banner that stayed up after it had been acted on would be
+        // asking the same question for the rest of the conversation.
+        clipboardImage = false
+    }
+
     LaunchedEffect(editing?.id) {
         val body = editing?.text ?: ""
         field = TextFieldValue(body, TextRange(body.length))
@@ -155,6 +208,43 @@ fun Composer(
         EmojiSuggestBar(suggestions) { suggestion -> insert(suggestion.insert, query) }
 
         HorizontalDivider(color = Edge)
+
+        // A picture on the clipboard, and the one gesture that can send it.
+        AnimatedVisibility(
+            visible = clipboardImage,
+            enter = fadeIn() + expandVertically(),
+            exit = fadeOut() + shrinkVertically(),
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Surface900)
+                    .clickable { pasteFromClipboard() }
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                BetweenUsIcon(BetweenUsIcons.Image, tint = Accent, size = 16.dp)
+                Text(
+                    text = "Image on the clipboard",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Slate300,
+                    modifier = Modifier.weight(1f),
+                )
+                Text(
+                    text = "PASTE",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = Accent,
+                )
+                IconAction(
+                    icon = BetweenUsIcons.X,
+                    contentDescription = "Not this one",
+                    onClick = { clipboardImage = false },
+                    modifier = Modifier.size(28.dp),
+                )
+            }
+        }
 
         // Editing banner
         AnimatedVisibility(
