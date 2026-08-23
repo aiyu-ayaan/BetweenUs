@@ -19,6 +19,7 @@ import {
   type PushRoute,
 } from './services/web-push';
 import { useRemoteStore } from './stores/remote';
+import { useRingStore } from './stores/ring';
 import { LoginScreen } from './features/auth/LoginScreen';
 import { IdentityUnlock } from './features/auth/IdentityUnlock';
 import { ServerRail } from './features/servers/ServerRail';
@@ -37,6 +38,7 @@ import { UserSettings } from './features/settings/UserSettings';
 import { VoiceChannelView } from './features/voice/VoiceChannelView';
 import { CallAudio } from './features/voice/CallAudio';
 import { ShareControlConsent } from './features/voice/ShareControlConsent';
+import { IncomingCall } from './features/voice/IncomingCall';
 import { TopBar } from './features/shell/TopBar';
 import { VersionNotice } from './components/VersionNotice';
 import { QuickSwitcher } from './features/shell/QuickSwitcher';
@@ -147,7 +149,25 @@ function Session(): JSX.Element {
     const startup = takeStartupRoute();
     if (startup) followPushRoute(startup);
     return onPushMessage((message) => {
-      if (message.betweenus === 'open') followPushRoute(message.route);
+      if (message.betweenus === 'open') {
+        followPushRoute(message.route);
+        return;
+      }
+      // A ring that arrived as a push while this tab was open. The presence
+      // socket normally gets there first and this is the same ring by another
+      // road, which the store recognises - but a socket that has dropped and
+      // not yet reconnected is exactly when somebody rings, so the push is
+      // worth listening to rather than assuming the socket was up.
+      if (message.betweenus === 'push' && message.data.type === 'call.ring') {
+        const ring = message.data;
+        useRingStore.getState().show({
+          channelId: ring.channelId,
+          channelName: ring.channelName,
+          callerId: ring.callerId,
+          callerName: ring.callerName,
+          ...(ring.callerAvatarUrl ? { callerAvatarUrl: ring.callerAvatarUrl } : {}),
+        });
+      }
     });
   }, []);
 
@@ -465,6 +485,9 @@ function Workbench(): JSX.Element {
       <IdentityUnlock />
       <RemoteConsent />
       <ShareControlConsent />
+      {/* Above every other overlay, because it is the only one somebody is
+          waiting on the other end of. */}
+      <IncomingCall />
 
       {settings === 'user' && <UserSettings onClose={() => setSettings('none')} />}
       {settings === 'server' && <ServerSettings onClose={() => setSettings('none')} />}

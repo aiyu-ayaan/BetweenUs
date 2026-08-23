@@ -212,6 +212,28 @@ export function notifyVoiceJoin(channelId: string, channelName: string, who: str
   raise(`${who} joined ${channelName}`, 'Voice channel', channelId);
 }
 
+/**
+ * Somebody is ringing this account into a call.
+ *
+ * Whether the ring itself is *allowed* is not decided here - the server has
+ * already dropped it for an account with notifications off or with this person
+ * muted, and `useRingStore` decides whether it is worth showing at all. This
+ * only raises the operating system's half of it, for the window that is behind
+ * something else, which is most of the windows a ring arrives at.
+ *
+ * The channel's own notification level is deliberately not consulted. Muting a
+ * room is saying you do not want to hear about the room, not that a colleague
+ * may never call you from it - the same rule the server and the phone apply.
+ * Quiet hours and Do Not Disturb still hold: those are "not now", not "not
+ * this channel", and they are the two settings a person sets about themselves.
+ */
+export function notifyRing(channelId: string, channelName: string, caller: string): void {
+  if (!preferences.enabled) return;
+  if (inQuietHours()) return;
+  if (usePresenceStore.getState().selfStatus === 'dnd') return;
+  raise(`${caller} is calling`, `Ringing you into ${channelName}`, channelId);
+}
+
 /** Handlers waiting on a click, in the web client. Electron keeps its own. */
 const clickHandlers = new Set<(channelId: string) => void>();
 

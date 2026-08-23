@@ -634,4 +634,14 @@ export const api = {
    */
   callIce: (channelId: string): Promise<CallIceResponse> =>
     request('/api/v1/calls/ice', { method: 'POST', body: JSON.stringify({ channelId }) }),
+
+  /**
+   * "Come into this call." Answers 204, or a 403 saying why not - they are not
+   * in this channel, or they were rung a moment ago and the cooldown holds.
+   */
+  callRing: (channelId: string, userId: string): Promise<void> =>
+    request('/api/v1/calls/ring', {
+      method: 'POST',
+      body: JSON.stringify({ channelId, userId }),
+    }),
 };

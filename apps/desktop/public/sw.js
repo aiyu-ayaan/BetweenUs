@@ -43,6 +43,10 @@ const tagFor = (data) => {
       return `channel:${data.channelId}`;
     case 'call.roster':
       return `call:${data.channelId}`;
+    // Its own tag, not the roster's: a ring must not be replaced by the quiet
+    // announcement that arrives a second later when the caller joins.
+    case 'call.ring':
+      return `ring:${data.channelId}`;
     case 'remote.session':
       return `remote:${data.sessionId}`;
     case 'friend.request':
@@ -87,6 +91,15 @@ function present(data) {
             icon: '/icon.png',
             requireInteraction: true,
           };
+    case 'call.ring':
+      return {
+        title: `${data.callerName} is calling`,
+        body: `Ringing you into ${data.channelName}`,
+        icon: data.callerAvatarUrl || '/icon.png',
+        // It stays until it is answered or dismissed. Everything else here can
+        // be caught up with later; a person waiting for an answer cannot.
+        requireInteraction: true,
+      };
     case 'remote.session':
       return data.state === 'ended'
         ? null
@@ -184,6 +197,7 @@ function routeFor(data) {
     case 'message.created':
       return { kind: 'channel', channelId: data.channelId, url: `/?channel=${encodeURIComponent(data.channelId)}` };
     case 'call.roster':
+    case 'call.ring':
       return { kind: 'call', channelId: data.channelId, url: `/?call=${encodeURIComponent(data.channelId)}` };
     case 'remote.session':
       return { kind: 'remote', machineId: data.machineId, url: `/?remote=${encodeURIComponent(data.machineId)}` };

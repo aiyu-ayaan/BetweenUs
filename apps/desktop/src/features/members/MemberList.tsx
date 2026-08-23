@@ -10,6 +10,8 @@ import {
   onPreferencesChanged,
   setUserMuted,
 } from '../../services/notifications';
+import { api } from '../../services/api';
+import { useVoiceStore } from '../../stores/voice';
 import { SafetyNumberDialog } from './SafetyNumberDialog';
 
 /**
@@ -168,6 +170,14 @@ function MemberMenu({
   const friends = useFriendsStore((state) => state.friends);
   const addFriend = useFriendsStore((state) => state.add);
   const openDirect = useFriendsStore((state) => state.openDirect);
+  // The call this person is in right now, if any. Ringing somebody into a call
+  // you are not in is a message about a room you have not entered - so the
+  // action only exists while there is a call to pull them into.
+  const call = useVoiceStore((state) => (state.status === 'idle' ? null : state.channelId));
+  const callName = useVoiceStore((state) => state.channelName);
+  const inCall = usePresenceStore((state) =>
+    call ? (state.voice.get(call) ?? []).includes(member.userId) : false,
+  );
   const [muted, setMuted] = useState(() => isUserMuted(member.userId));
   const [note, setNote] = useState<string | null>(null);
 
@@ -243,6 +253,19 @@ function MemberMenu({
           onClick={() => act(addFriend(member.username), 'Friends')}
         />
       )}
+
+      {/* Discord's "invite to voice channel", and the reason the ring exists at
+          all: the roster announcement tells a whole channel that a call is
+          happening, which is why it may not ring anybody's phone. This is
+          aimed at one person, so it may. */}
+      {call && !inCall && (
+        <Item
+          label={callName ? `Ring into ${callName}` : 'Ring into the call'}
+          hint="Rings them, wherever they are signed in"
+          onClick={() => act(api.callRing(call, member.userId), 'Ringing them')}
+        />
+      )}
+      {call && inCall && <Item label="Already in the call" disabled />}
 
       <Item
         label={muted ? 'Unmute notifications' : 'Mute notifications'}

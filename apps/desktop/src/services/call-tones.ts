@@ -91,7 +91,74 @@ export function playCallTone(tone: CallTone): void {
   }
 }
 
-function note(ctx: AudioContext, frequency: number, at: number): void {
+// --- The ringtone -----------------------------------------------------------
+
+/**
+ * A ring is a different sound from a tone, and not because it is louder.
+ *
+ * The join and leave tones are told after the fact: they say something has
+ * happened, once, and then stop. A ring is a question - somebody is waiting
+ * for an answer - so it has to repeat until it is answered or given up on, and
+ * it has to be audible from another room, which is the whole reason anybody
+ * rings anybody.
+ *
+ * The same two-note shape as a join, an octave of separation, three times per
+ * burst, and a burst every few seconds. It stays synthesised for the same
+ * reasons the tones are: nothing to bundle, nothing to fetch, nothing to go
+ * missing from an Electron package.
+ */
+const RING_NOTES = [880, 1174.66] as const;
+/** Seconds between the start of one burst and the next. A telephone's cadence. */
+const RING_PERIOD_SECONDS = 3;
+const RING_NOTE_SECONDS = 0.18;
+/** Louder than a join tone. This one has to carry across a room. */
+const RING_GAIN = 0.3;
+
+let ringTimer: number | null = null;
+
+/**
+ * Starts ringing, and keeps ringing until [stopRinging].
+ *
+ * Idempotent: a second ring arriving while one is already sounding is one
+ * ringtone, not two overlapping ones an octave apart.
+ */
+export function startRinging(): void {
+  if (ringTimer !== null) return;
+
+  const burst = (): void => {
+    const ctx = audio();
+    if (!ctx) return;
+    try {
+      // Three rises, then silence until the next burst. A continuous tone is
+      // an alarm; the gap is what makes this a telephone.
+      for (let index = 0; index < 3; index += 1) {
+        const at = ctx.currentTime + index * RING_NOTE_SECONDS * 2;
+        note(ctx, RING_NOTES[0], at, RING_NOTE_SECONDS, RING_GAIN);
+        note(ctx, RING_NOTES[1], at + RING_NOTE_SECONDS, RING_NOTE_SECONDS, RING_GAIN);
+      }
+    } catch {
+      // A closed context or a device that went away: silence is the correct
+      // failure, exactly as it is for the tones.
+    }
+  };
+
+  burst();
+  ringTimer = window.setInterval(burst, RING_PERIOD_SECONDS * 1000);
+}
+
+/** Answered, declined, or given up on. Safe to call when nothing is ringing. */
+export function stopRinging(): void {
+  if (ringTimer !== null) window.clearInterval(ringTimer);
+  ringTimer = null;
+}
+
+function note(
+  ctx: AudioContext,
+  frequency: number,
+  at: number,
+  seconds: number = NOTE_SECONDS,
+  peak: number = PEAK_GAIN,
+): void {
   const oscillator = ctx.createOscillator();
   const gain = ctx.createGain();
 
@@ -100,13 +167,13 @@ function note(ctx: AudioContext, frequency: number, at: number): void {
 
   // Ramped rather than set: see the note about clicks at the top.
   gain.gain.setValueAtTime(0, at);
-  gain.gain.linearRampToValueAtTime(PEAK_GAIN, at + FADE_SECONDS);
-  gain.gain.setValueAtTime(PEAK_GAIN, at + NOTE_SECONDS - FADE_SECONDS);
-  gain.gain.linearRampToValueAtTime(0, at + NOTE_SECONDS);
+  gain.gain.linearRampToValueAtTime(peak, at + FADE_SECONDS);
+  gain.gain.setValueAtTime(peak, at + seconds - FADE_SECONDS);
+  gain.gain.linearRampToValueAtTime(0, at + seconds);
 
   oscillator.connect(gain).connect(ctx.destination);
   oscillator.start(at);
-  oscillator.stop(at + NOTE_SECONDS);
+  oscillator.stop(at + seconds);
   // Nodes are one-shot; letting them go is what keeps a long call from
   // accumulating one oscillator per arrival.
   oscillator.onended = () => {

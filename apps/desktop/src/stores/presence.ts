@@ -9,6 +9,7 @@ import { notifyVoiceJoin } from '../services/notifications';
 import { startIdleWatch, stopIdleWatch } from '../services/idle';
 import { useAuthStore } from './auth';
 import { useChatStore } from './chat';
+import { useRingStore } from './ring';
 import { useVoiceStore } from './voice';
 
 /** How long a typing indicator stays up after the last keystroke event. */
@@ -173,6 +174,21 @@ presenceSocket.on((event) => {
       });
       typing.set(event.channelId, forChannel);
       usePresenceStore.setState({ typing });
+      return;
+    }
+
+    case 'call.ring': {
+      // Straight through: the ring store owns every decision about whether it
+      // is worth showing - already in that call, already ringing, how long it
+      // rings for. A socket handler that decided any of that would be a second
+      // copy of those rules that the push path does not go through.
+      useRingStore.getState().show({
+        channelId: event.channelId,
+        channelName: event.channelName,
+        callerId: event.callerId,
+        callerName: event.callerName,
+        ...(event.callerAvatarUrl ? { callerAvatarUrl: event.callerAvatarUrl } : {}),
+      });
       return;
     }
 
