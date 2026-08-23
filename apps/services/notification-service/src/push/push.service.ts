@@ -50,6 +50,10 @@
  *   whole roster rather than the arrival, because it is one notification that
  *   is rewritten as people come and go, and because an empty roster is the
  *   only thing that can say the call is over.
+ * - `call.ring` - somebody is ringing this account into a call. The aimed
+ *   version of the one above, and the difference is what earns it a ringtone
+ *   and a full-screen ringer: a person pressed a button with this account's
+ *   name under it, where a roster is a fact about a room.
  * - `remote.session` - somebody is on one of this account's machines. The one
  *   notification here that exists because of what it means when it is
  *   unexpected, and the only one that ignores every preference: see below.
@@ -61,6 +65,7 @@ import type { EventName, EventPayloads } from '@betweenus/events';
 import { Logger } from '@betweenus/logger';
 import type {
   CallPushData,
+  CallRingPushData,
   ChannelReadPushData,
   FriendPushData,
   Message,
@@ -128,6 +133,7 @@ export class PushService implements OnModuleInit {
     await this.on(EVENTS.FRIEND_CHANGED, (payload) => this.onFriendChanged(payload));
     await this.on(EVENTS.SERVER_MEMBER_ADDED, (payload) => this.onServerMemberAdded(payload));
     await this.on(EVENTS.CALL_ROSTER, (payload) => this.onCallRoster(payload.voice));
+    await this.on(EVENTS.CALL_RING, (payload) => this.onCallRing(payload));
     await this.on(EVENTS.REMOTE_SESSION, (payload) => this.onRemoteSession(payload));
   }
 
@@ -344,6 +350,49 @@ export class PushService implements OnModuleInit {
       (await this.allowedInChannel(audience, channelId)).map((userId) => ({ userId, data })),
       { urgent: userIds.length > 0 },
     );
+  }
+
+  /**
+   * Somebody is ringing this account into a call.
+   *
+   * The filter is deliberately thinner than the roster's. A ring is directed -
+   * one person pressed a button with this account's name under it - so a muted
+   * *channel* does not silence it: muting #general is saying you do not want
+   * to hear about that room, not that a colleague may never call you from it.
+   *
+   * Two things still do. Notifications off entirely is the account saying it
+   * wants no pushes at all, and that includes this one. A muted *person* is
+   * the setting that exists for exactly this: somebody you do not want to hear
+   * from, however they reach you. Ringing is the loudest way to reach anybody,
+   * so it is the last thing that should get past it.
+   *
+   * Always urgent. A ring that arrives when the phone next wakes up is not a
+   * ring, it is a missed call notice - and the client draws that from the
+   * roster push it already gets.
+   */
+  private async onCallRing(payload: EventPayloads['call.ring']): Promise<void> {
+    if ((await this.enabled([payload.targetId])).length === 0) return;
+    if (await this.mutes(payload.targetId, payload.callerId)) return;
+
+    const data: CallRingPushData = {
+      type: 'call.ring',
+      channelId: payload.channelId,
+      channelName: payload.channelName,
+      callerId: payload.callerId,
+      callerName: payload.callerName,
+    };
+    if (payload.callerAvatarUrl) data.callerAvatarUrl = payload.callerAvatarUrl;
+
+    await this.deliver([{ userId: payload.targetId, data }], { urgent: true });
+  }
+
+  /** Whether `userId` has muted `otherId`, whatever channel they write in. */
+  private async mutes(userId: string, otherId: string): Promise<boolean> {
+    const row = await prisma.notificationSetting.findUnique({
+      where: { userId },
+      select: { mutedUserIds: true },
+    });
+    return row?.mutedUserIds.includes(otherId) ?? false;
   }
 
   /**

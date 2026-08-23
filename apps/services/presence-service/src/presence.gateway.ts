@@ -146,6 +146,26 @@ export class PresenceGateway implements OnModuleDestroy {
         });
     });
 
+    // Somebody is ringing somebody else into a call. Straight to the person
+    // being rung and to nobody else - a ring is directed, so it has no
+    // audience to scope to and there is nothing here to broadcast.
+    //
+    // Every instance receives this and delivers to its own sockets; an
+    // instance the target is not connected to does nothing, which is what
+    // `sendToUser` already means. The push fan-out covers the devices that are
+    // not connected to any of them.
+    await this.events.subscribe(EVENTS.CALL_RING, (envelope) => {
+      const ring = envelope.payload;
+      this.sendToUser(ring.targetId, {
+        type: 'call.ring',
+        channelId: ring.channelId,
+        channelName: ring.channelName,
+        callerId: ring.callerId,
+        callerName: ring.callerName,
+        ...(ring.callerAvatarUrl ? { callerAvatarUrl: ring.callerAvatarUrl } : {}),
+      });
+    });
+
     this.logger.info('Presence WebSocket gateway ready', { path: '/ws/presence' });
   }
 
