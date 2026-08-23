@@ -44,6 +44,21 @@ export const EVENTS = {
    * read marker was never used for here.
    */
   CHANNEL_READ: 'channel.read',
+  /**
+   * Somebody started or ended a remote session on a machine.
+   *
+   * One event with a state rather than the `remote.session.started` and
+   * `remote.session.ended` pair the architecture doc names, for the same
+   * reason `call.roster` is one event: what hangs off it is a single
+   * notification that appears and then has to be taken away again, and two
+   * events would be two subscriptions that must never disagree about which
+   * notification they are talking about.
+   *
+   * It carries everything a notification needs, so the subscriber makes no
+   * database call of its own - and in particular does not read remote-desktop
+   * tables that belong to another service.
+   */
+  REMOTE_SESSION: 'remote.session',
 } as const;
 
 export interface EventPayloads {
@@ -75,6 +90,17 @@ export interface EventPayloads {
    * checks - a subscriber with neither simply sends nothing.
    */
   [EVENTS.CHANNEL_READ]: { userId: string; channelId: string; at: string };
+  [EVENTS.REMOTE_SESSION]: {
+    sessionId: string;
+    machineId: string;
+    machineName: string;
+    /** Who owns the machine. The person a session on it is news for. */
+    ownerId: string;
+    /** Who is driving it. Told nothing: they are the one who started it. */
+    actorId: string;
+    actorName: string;
+    state: 'started' | 'ended';
+  };
   [EVENTS.FRIEND_CHANGED]: {
     userIds: string[];
     actorId?: string;

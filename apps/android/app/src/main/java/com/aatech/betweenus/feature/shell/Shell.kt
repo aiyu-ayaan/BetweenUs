@@ -195,6 +195,11 @@ fun Shell(user: PublicUser) {
                 serverId = null
                 navigation.navigate(Route.Friends) { launchSingleTop = true }
             }
+            is PendingPlace.Place.Remote -> {
+                PendingPlace.clear()
+                serverId = null
+                navigation.navigate(Route.Remote) { launchSingleTop = true }
+            }
             is PendingPlace.Place.AutoUpdate -> {
                 PendingPlace.clear()
                 // It has been acted on; leaving it in the shade would have it

@@ -24,6 +24,7 @@ import {
   resolveRemoteAccess,
   type RemoteAccess,
 } from '@betweenus/database';
+import { EVENTS, EventBus } from '@betweenus/events';
 import { PERMISSIONS, type RemotePermission } from '@betweenus/permissions';
 import type {
   EnrolMachineResponse,
@@ -47,6 +48,8 @@ export interface AgentPresence {
 
 @Injectable()
 export class RemoteService {
+  constructor(private readonly events: EventBus) {}
+
   /**
    * Set by the WebSocket gateway at boot. Online-ness is a property of a live
    * socket, not of a column, so the HTTP side asks rather than storing it.
@@ -312,7 +315,7 @@ export class RemoteService {
 
     const machine = await prisma.remoteMachine.findUniqueOrThrow({
       where: { id: machineId },
-      select: { name: true },
+      select: { name: true, ownerId: true },
     });
 
     const session = await prisma.remoteSession.create({
@@ -326,6 +329,12 @@ export class RemoteService {
       action: 'session.started',
       detail: { permissions: access.permissions },
     });
+
+    // Somebody is on this machine, and the person who owns it is very likely
+    // not sitting at it - that is what remote access is for. The audit trail
+    // records this either way; the push is what makes it something anybody
+    // finds out about at the time rather than afterwards.
+    await this.announceSession(session.id, machineId, machine.name, machine.ownerId, user, 'started');
 
     return {
       sessionId: session.id,
@@ -365,6 +374,56 @@ export class RemoteService {
       action: 'session.ended',
       detail: { reason },
     });
+
+    const machine = await prisma.remoteMachine.findUnique({
+      where: { id: session.machineId },
+      select: { name: true, ownerId: true },
+    });
+    const actor = await prisma.user.findUnique({
+      where: { id: session.userId },
+      select: { username: true, displayName: true },
+    });
+    if (machine && actor) {
+      await this.announceSession(
+        sessionId,
+        session.machineId,
+        machine.name,
+        machine.ownerId,
+        { id: session.userId, username: actor.displayName || actor.username },
+        'ended',
+      );
+    }
+  }
+
+  /**
+   * Tells the bus a session started or ended.
+   *
+   * Best effort, and deliberately after the row and the audit entry: a Redis
+   * that is unreachable must not be able to stop somebody reaching their own
+   * machine. The trail is the record; this is the notification.
+   */
+  private async announceSession(
+    sessionId: string,
+    machineId: string,
+    machineName: string,
+    ownerId: string,
+    actor: { id: string; username: string },
+    state: 'started' | 'ended',
+  ): Promise<void> {
+    try {
+      await this.events.publish(EVENTS.REMOTE_SESSION, {
+        sessionId,
+        machineId,
+        machineName,
+        ownerId,
+        actorId: actor.id,
+        actorName: actor.username,
+        state,
+      });
+    } catch {
+      // A session that happened and was not announced is still a session, and
+      // `remote_audit` has it.
+    }
   }
 
   /**

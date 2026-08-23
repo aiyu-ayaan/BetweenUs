@@ -50,6 +50,9 @@
  *   whole roster rather than the arrival, because it is one notification that
  *   is rewritten as people come and go, and because an empty roster is the
  *   only thing that can say the call is over.
+ * - `remote.session` - somebody is on one of this account's machines. The one
+ *   notification here that exists because of what it means when it is
+ *   unexpected, and the only one that ignores every preference: see below.
  */
 import { Injectable, OnModuleInit } from '@nestjs/common';
 import { channelAudience, prisma } from '@betweenus/database';
@@ -64,6 +67,7 @@ import type {
   MessageDeletedPushData,
   MessagePushData,
   PushData,
+  RemoteSessionPushData,
   ServerMemberPushData,
 } from '@betweenus/shared-types';
 import { DevicesService } from '../modules/devices/devices.service';
@@ -124,6 +128,7 @@ export class PushService implements OnModuleInit {
     await this.on(EVENTS.FRIEND_CHANGED, (payload) => this.onFriendChanged(payload));
     await this.on(EVENTS.SERVER_MEMBER_ADDED, (payload) => this.onServerMemberAdded(payload));
     await this.on(EVENTS.CALL_ROSTER, (payload) => this.onCallRoster(payload.voice));
+    await this.on(EVENTS.REMOTE_SESSION, (payload) => this.onRemoteSession(payload));
   }
 
   /**
@@ -338,6 +343,43 @@ export class PushService implements OnModuleInit {
     await this.deliver(
       (await this.allowedInChannel(audience, channelId)).map((userId) => ({ userId, data })),
       { urgent: userIds.length > 0 },
+    );
+  }
+
+  /**
+   * Somebody started or ended a remote session on a machine this account owns.
+   *
+   * **This one ignores the preferences, and that is deliberate.** Everywhere
+   * else a mute is somebody choosing not to be told about a conversation.
+   * Remote access is the one capability whose misuse is invisible to the person
+   * it happens to - they are, by definition, not sitting at the machine - so a
+   * notification that a mute could switch off would be a notification an
+   * attacker could arrange to be switched off. The only thing that stops it is
+   * turning notifications off entirely, which is the account saying it wants no
+   * pushes at all rather than "not this one".
+   *
+   * Only the owner is told. The person driving already knows what they did, and
+   * a session on somebody else's machine is not news anyone else is entitled to.
+   */
+  private async onRemoteSession(payload: EventPayloads['remote.session']): Promise<void> {
+    if (payload.ownerId === payload.actorId) return;
+
+    const data: RemoteSessionPushData = {
+      type: 'remote.session',
+      sessionId: payload.sessionId,
+      machineId: payload.machineId,
+      machineName: payload.machineName,
+      actorId: payload.actorId,
+      actorName: payload.actorName,
+      state: payload.state,
+    };
+
+    // A session starting is worth waking a phone for - it is the whole point.
+    // One ending is a notification being taken away, and lands whenever the
+    // device is next awake.
+    await this.deliver(
+      (await this.enabled([payload.ownerId])).map((userId) => ({ userId, data })),
+      { urgent: payload.state === 'started' },
     );
   }
 

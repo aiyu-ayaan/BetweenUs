@@ -85,3 +85,20 @@ remote.machine.registered      remote.machine.offline
 remote.session.started          remote.session.ended
 remote.permission.changed
 ```
+
+### Where the built events differ from that list
+
+Two of them are published as **one event with a state** rather than as a
+started/ended pair, and both for the same reason: what hangs off them is a
+single notification that appears and then has to be taken away again. Two
+events would be two subscriptions that must never disagree about which
+notification they are talking about.
+
+- `call.roster` carries the whole roster of a call rather than a join or a
+  leave. A roster of nobody is the call ending, and it is the only thing that
+  can cancel the notification.
+- `remote.session` carries `state: 'started' | 'ended'` in place of
+  `remote.session.started` and `remote.session.ended`. It also carries the
+  machine name, its owner and who is driving it, so the subscriber makes no
+  database call of its own — and in particular does not read remote-desktop
+  tables that belong to another service.

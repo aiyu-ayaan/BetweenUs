@@ -225,6 +225,43 @@ object SocialNotifications {
     }
 
     /**
+     * Somebody is on one of this account's machines.
+     *
+     * The one notification here that exists because of what it means when it
+     * is unexpected. Remote access is the capability whose misuse is invisible
+     * to the person it happens to - they are, by definition, not sitting at
+     * the machine - so this is loud, it stays until it is dismissed, and
+     * nothing but turning notifications off entirely can silence it.
+     *
+     * [started] false cancels it: the session is over and a standing
+     * notification saying somebody is on your machine when nobody is would be
+     * the same alarm, permanently, for nothing.
+     */
+    fun remoteSession(
+        context: Context,
+        sessionId: String,
+        machineName: String,
+        actorName: String,
+        started: Boolean,
+    ) {
+        val id = idOf(REMOTE_BASE, sessionId)
+        if (!started) {
+            NotificationManagerCompat.from(context).cancel(id)
+            return
+        }
+        post(
+            context = context,
+            id = id,
+            channel = CHANNEL_SOCIAL,
+            title = "Remote session on $machineName",
+            text = "$actorName connected to $machineName",
+            picture = null,
+            link = "betweenus://remote",
+            ongoing = true,
+        )
+    }
+
+    /**
      * Who is in a call in [channelId], or nobody - and nobody cancels it.
      *
      * The whole roster rather than the arrival, so three people joining one
@@ -333,5 +370,6 @@ object SocialNotifications {
     private const val FRIEND_BASE = 3_000_000
     private const val SERVER_BASE = 4_000_000
     private const val CALL_BASE = 5_000_000
+    private const val REMOTE_BASE = 7_500_000
     private const val RING_BASE = 6_000_000
 }

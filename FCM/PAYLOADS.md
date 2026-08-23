@@ -246,6 +246,47 @@ shape that turned out to be right.
 
 ---
 
+## `remote.session`
+
+Sent on the Redis `remote.session` event, which `remote-gateway` publishes when
+a session starts and again when it ends. It goes to the **owner of the machine**
+and to nobody else.
+
+```jsonc
+{
+  "data": {
+    "type": "remote.session",
+    "sessionId": "4c7e…",
+    "machineId": "1f20…",
+    "machineName": "Studio PC",
+    "actorId": "88a1…",
+    "actorName": "Ada Lovelace",
+    "state": "started"
+  },
+  "android": { "priority": "high", "ttl": 86400000 }
+}
+```
+
+- **It ignores every preference except "notifications off entirely".** Every
+  other push here can be muted, because a mute is somebody choosing not to be
+  told about a conversation. This one is somebody being told their machine is
+  being driven while they are not at it, and a notification a mute could switch
+  off is a notification an attacker could arrange to be switched off.
+- **Only the owner is told.** The person driving already knows what they did,
+  and a session on somebody else's machine is not news anyone else is entitled
+  to. An owner reaching their own machine is told nothing at all.
+- **`state: "ended"` cancels it.** A standing notification saying somebody is on
+  your machine when nobody is would be the same alarm, permanently, for nothing.
+  `priority: normal` on that one - taking a notification away is not worth
+  pulling a sleeping phone out of Doze for.
+- **It is ongoing while it stands**, and tapping it opens the machine list
+  rather than the session. A session that has already started is somebody
+  else's; what the notification is telling you is that you may want to end it.
+- `remote_audit` records every session either way. This is what makes it
+  something anybody finds out about at the time rather than afterwards.
+
+---
+
 ## Registering a device
 
 ```http

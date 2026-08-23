@@ -64,6 +64,7 @@ class PushService : FirebaseMessagingService() {
                     "friend.accepted" -> handleFriend(data, accepted = true)
                     "server.member.added" -> handleServerAdded(data)
                     "call.roster" -> handleCallRoster(data)
+                    "remote.session" -> handleRemoteSession(data)
                     else -> Unit
                 }
             }
@@ -140,6 +141,29 @@ class PushService : FirebaseMessagingService() {
             serverId = serverId,
             serverName = data["serverName"].orEmpty().ifBlank { "a server" },
             icon = avatar(data["serverIconUrl"]),
+        )
+    }
+
+    /**
+     * Somebody started or ended a remote session on a machine this account owns.
+     *
+     * **`wanted()` is not consulted, and that is the point.** Every other
+     * notification here can be muted, because a mute is somebody choosing not
+     * to be told about a conversation. This one is somebody being told that
+     * their machine is being driven while they are not at it, and a
+     * notification a mute could switch off is a notification an attacker could
+     * arrange to be switched off. The server already refuses to send it to an
+     * account that has turned notifications off entirely, which is the account
+     * saying it wants no pushes at all rather than "not this one".
+     */
+    private fun handleRemoteSession(data: Map<String, String>) {
+        val sessionId = data["sessionId"] ?: return
+        SocialNotifications.remoteSession(
+            context = applicationContext,
+            sessionId = sessionId,
+            machineName = data["machineName"].orEmpty().ifBlank { "your machine" },
+            actorName = data["actorName"].orEmpty().ifBlank { "Someone" },
+            started = data["state"] != "ended",
         )
     }
 

@@ -140,6 +140,11 @@ class MainActivity : ComponentActivity() {
             PendingPlace.offer(PendingPlace.Place.Friends)
             return
         }
+        // Somebody is on one of this account's machines.
+        if (uri.host == "remote") {
+            PendingPlace.offer(PendingPlace.Place.Remote)
+            return
+        }
         // The daily update check found something while the app was closed.
         if (uri.host == "update") {
             PendingPlace.offer(PendingPlace.Place.AutoUpdate)

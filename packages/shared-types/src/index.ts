@@ -1235,6 +1235,30 @@ export interface CallPushData {
   count: string;
 }
 
+/**
+ * Somebody is on one of this account's machines.
+ *
+ * Sent to the machine's owner and to nobody else - the person driving it
+ * already knows, and nobody else is entitled to know. This is the one
+ * notification in the app that exists because of what it would mean if it
+ * arrived unexpectedly: remote access is exactly the capability whose misuse
+ * is invisible to the person it happens to, since they are by definition not
+ * sitting at the machine.
+ *
+ * `state` carries the ending as well as the start, for the same reason
+ * `CallPushData` carries a roster of nobody: it is the only thing that can take
+ * the notification away again.
+ */
+export interface RemoteSessionPushData {
+  type: 'remote.session';
+  sessionId: string;
+  machineId: string;
+  machineName: string;
+  actorId: string;
+  actorName: string;
+  state: 'started' | 'ended';
+}
+
 /** Everything that can arrive as a data-only push. */
 export type PushData =
   | MessagePushData
@@ -1242,7 +1266,8 @@ export type PushData =
   | ChannelReadPushData
   | FriendPushData
   | ServerMemberPushData
-  | CallPushData;
+  | CallPushData
+  | RemoteSessionPushData;
 
 // --- Chat WebSocket protocol (/ws/chat) ---
 

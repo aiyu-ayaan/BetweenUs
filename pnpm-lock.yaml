@@ -514,6 +514,9 @@ importers:
       '@betweenus/database':
         specifier: workspace:*
         version: link:../../../packages/database
+      '@betweenus/events':
+        specifier: workspace:^
+        version: link:../../../packages/events
       '@betweenus/logger':
         specifier: workspace:*
         version: link:../../../packages/logger

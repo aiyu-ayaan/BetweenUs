@@ -131,7 +131,15 @@ Backend (`notification-service`):
       other devices, which cancel the conversation's notification and its
       unread badge. Suppression stops a push being sent; this is the half that
       deals with one already showing.
-- [ ] Fan-out on `remote.session.started`
+- [x] Fan-out on `remote.session`, to the machine's owner and nobody else. One
+      event with a `state` rather than a started/ended pair, the way
+      `call.roster` is one event: what hangs off it is a single notification
+      that has to be taken away again. It is the one push that ignores every
+      preference short of notifications-off - remote access is the capability
+      whose misuse is invisible to the person it happens to, so a notification
+      a mute could switch off is one an attacker could arrange to be switched
+      off. Android renders it, the service worker renders it, and tapping
+      either opens the machine list rather than the session
 
 Web:
 

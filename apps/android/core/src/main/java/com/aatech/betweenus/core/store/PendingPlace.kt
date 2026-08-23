@@ -22,6 +22,16 @@ object PendingPlace {
         data class Server(val serverId: String) : Place
 
         /**
+         * Somebody is on one of this account's machines.
+         *
+         * It leads to the machine list rather than to the session. A session
+         * that has already started is somebody else's, and joining it from a
+         * notification is not what the notification is telling you about -
+         * what it is telling you is that you may want to end it.
+         */
+        data object Remote : Place
+
+        /**
          * A newer release, found by the daily check while the app was closed.
          * It leads to the auto update screen rather than straight to an
          * install: the decision is still somebody's to make.

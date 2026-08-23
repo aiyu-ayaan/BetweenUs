@@ -34,6 +34,30 @@ sequenceDiagram
     Phone->>Phone: is it mine? channel on screen?<br/>quiet hours? mentions-only?<br/>then decrypt and write the shade
 ```
 
+## The one push that is not about a conversation
+
+`remote.session` tells the owner of a machine that somebody is on it. It is
+the only notification in the app that **ignores every preference except
+"notifications off entirely"**, and that is deliberate.
+
+Everywhere else a mute is somebody choosing not to be told about a
+conversation. Remote access is the one capability whose misuse is invisible to
+the person it happens to — they are, by definition, not sitting at the machine
+— so a notification a mute could switch off is a notification an attacker could
+arrange to be switched off. Turning notifications off altogether still silences
+it, because that is the account saying it wants no pushes at all rather than
+"not this one".
+
+Only the owner is told: the person driving already knows what they did, and a
+session on somebody else's machine is not news anyone else is entitled to. The
+`ended` state is what takes the notification away — a standing alarm saying
+somebody is on your machine when nobody is would be the same alarm,
+permanently, for nothing. Tapping it opens the machine list, not the session:
+what it is telling you is that you may want to end it.
+
+The audit trail records every session either way. The push is what makes it
+something anybody finds out about at the time rather than afterwards.
+
 ## The push carries no words
 
 The payload is **data-only** — no `notification` block, so Android never
