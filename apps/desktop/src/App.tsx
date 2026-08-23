@@ -12,6 +12,12 @@ import {
 } from './services/notifications';
 import { stopAgent, useAgentStore } from './services/remote-agent';
 import { isDesktopRuntime } from './services/platform';
+import {
+  onPushMessage,
+  startWebPush,
+  takeStartupRoute,
+  type PushRoute,
+} from './services/web-push';
 import { useRemoteStore } from './stores/remote';
 import { LoginScreen } from './features/auth/LoginScreen';
 import { IdentityUnlock } from './features/auth/IdentityUnlock';
@@ -126,6 +132,24 @@ function Session(): JSX.Element {
       ),
     [],
   );
+
+  /**
+   * The same thing for a browser, where the notification was drawn by the
+   * service worker and the tab may not have existed when it was tapped.
+   *
+   * Two ways in, because there are two situations. A tab that is already
+   * running is told over `postMessage`; one that had to be opened is told in
+   * the query string, which is the only channel a page that does not exist yet
+   * can be told anything on. Both end here, in one function, so a route can
+   * never work one way and not the other.
+   */
+  useEffect(() => {
+    const startup = takeStartupRoute();
+    if (startup) followPushRoute(startup);
+    return onPushMessage((message) => {
+      if (message.betweenus === 'open') followPushRoute(message.route);
+    });
+  }, []);
 
   // ─── Auto Picture-in-Picture on minimize ──────────────────────────────────
   // When minimized during an active voice call, open a floating PiP overlay.
@@ -275,6 +299,10 @@ function Session(): JSX.Element {
       // Preferences before unread: the badge is harmless either way, but a
       // notification raised in the half-second between them would ignore a mute.
       void loadNotificationPreferences().then(() => loadUnread());
+      // A browser tab is unreachable the moment it is closed, which is what
+      // this fixes and the desktop app never needed. It is a no-op in Electron
+      // and on a deployment with no VAPID keys.
+      void startWebPush();
       // The invite a link carried is not redeemed here any more, and not
       // redeemed automatically at all: `ServerRail` picks it up and asks. See
       // `InviteDialog`.
@@ -442,4 +470,44 @@ function Workbench(): JSX.Element {
       {settings === 'server' && <ServerSettings onClose={() => setSettings('none')} />}
     </div>
   );
+}
+
+/**
+ * Opens what a notification was about.
+ *
+ * One function for both ways in - a message to a running tab and a query
+ * string on a cold start - because a route that worked one way and not the
+ * other is a bug nobody would find: the two paths are taken by the same tap on
+ * two different days.
+ *
+ * A destination that no longer exists is not an error. The channel was
+ * deleted, the machine was removed, access lapsed - the app stays where it is
+ * rather than throwing, because the person tapped a notification and deserves
+ * a running app either way.
+ */
+function followPushRoute(route: PushRoute): void {
+  const chat = useChatStore.getState();
+  switch (route.kind) {
+    case 'channel':
+    case 'call':
+      // A call notification opens the channel it is in. Joining is still a
+      // decision somebody makes on the screen, not one a tap makes for them.
+      if (route.channelId) void chat.selectChannel(route.channelId).catch(() => undefined);
+      return;
+    case 'server':
+      if (route.serverId) void chat.selectServer(route.serverId).catch(() => undefined);
+      return;
+    case 'remote':
+      // The machine list rather than the session: a remote session that has
+      // already started is somebody else's, and reconnecting to it from a
+      // notification is not what the notification is telling you about.
+      chat.showHome();
+      void useRemoteStore.getState().load().catch(() => undefined);
+      return;
+    case 'friends':
+      chat.showHome();
+      return;
+    default:
+      return;
+  }
 }

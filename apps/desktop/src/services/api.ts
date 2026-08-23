@@ -21,6 +21,9 @@ import type {
   OAuthProviderSummary,
   Paginated,
   PublicUser,
+  PushKeyResponse,
+  RegisterDeviceRequest,
+  RegisteredDevice,
   CreateServerEmojiRequest,
   PublishChannelKeysRequest,
   ServerEmoji,
@@ -546,6 +549,20 @@ export const api = {
 
   notificationPreferences: (): Promise<NotificationPreferences> =>
     request('/api/v1/notifications/preferences'),
+
+  /**
+   * The application server key a browser needs before it can subscribe. Null
+   * on a deployment that has configured no VAPID keys, which is the answer
+   * that stops the client prompting for a permission it could not use.
+   */
+  pushKey: (): Promise<PushKeyResponse> => request('/api/v1/notifications/devices/key'),
+
+  /** Registers this browser's push subscription, or a phone's FCM token. */
+  registerPushDevice: (body: RegisterDeviceRequest): Promise<RegisteredDevice> =>
+    request('/api/v1/notifications/devices', { method: 'POST', body: JSON.stringify(body) }),
+
+  unregisterPushDevice: (device: string): Promise<{ ok: true }> =>
+    request(`/api/v1/notifications/devices/${encodeURIComponent(device)}`, { method: 'DELETE' }),
 
   updateNotificationPreferences: (
     body: UpdateNotificationPreferencesRequest,

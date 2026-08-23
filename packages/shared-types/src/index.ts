@@ -1069,7 +1069,13 @@ export type DevicePlatform = 'android' | 'ios' | 'web';
  * is installed.
  */
 export interface RegisterDeviceRequest {
-  /** The FCM registration token, or the Web Push endpoint. Never logged. */
+  /**
+   * How to reach this installation. Never logged.
+   *
+   * For `android` and `ios` it is the FCM registration token. For `web` it is
+   * a Web Push subscription, serialised - see `WebPushSubscription`, which
+   * says why one column carries both.
+   */
   token: string;
   platform: DevicePlatform;
   /** Client-minted, stable per installation - the same id `DeviceKey` uses. */
@@ -1078,6 +1084,46 @@ export interface RegisterDeviceRequest {
   label?: string;
   /** The client build, so a push that a version cannot render can be skipped. */
   appVersion?: string;
+}
+
+/**
+ * A browser's push subscription: where to send, and the keys to seal it with.
+ *
+ * This is what `PushManager.subscribe` hands back, and it is what stands in for
+ * an FCM token on the web. There is no Firebase in this path at all: a
+ * deployment with VAPID keys and no Firebase project can push to browsers and
+ * not to phones, and one with Firebase and no VAPID keys does the opposite.
+ * Neither is a broken deployment.
+ *
+ * **It is stored in the same column an FCM token is.** That column means "how
+ * to reach this installation", and for a browser the answer happens to be four
+ * fields rather than one, so it travels as JSON. The alternative was two more
+ * nullable columns and a migration that only ever applies to one platform.
+ *
+ * ponytail: a serialised object in a string column. If a third transport ever
+ * needs its own shape, that is the moment to give the registry a typed address
+ * rather than a string.
+ */
+export interface WebPushSubscription {
+  /** The push service's URL for this browser. Unique, so it keys the row. */
+  endpoint: string;
+  keys: {
+    /** The subscription's public key, base64url. */
+    p256dh: string;
+    /** The auth secret, base64url. */
+    auth: string;
+  };
+}
+
+/**
+ * The application server key a browser needs before it can subscribe.
+ *
+ * Null when the deployment has configured no VAPID keys, which is the same
+ * answer as "this deployment does not do web push" - the client asks once and
+ * stops rather than failing at `subscribe`.
+ */
+export interface PushKeyResponse {
+  vapidPublicKey: string | null;
 }
 
 /** What the registry answers with. Deliberately never the token itself. */

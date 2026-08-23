@@ -106,16 +106,84 @@ week. See [Database Schema](/database/schema#notifications--devices).
   only it knows if the window is focused on that channel. Closing the
   window hides it rather than quitting — the tray keeps the socket alive,
   which is what makes a closed-but-not-quit app still reachable at all.
-- **Web**: the Notifications API, permission requested at the first
-  notification worth raising rather than at sign-in (a prompt on the way
-  in is the one people refuse). Unread count goes in the tab title — the
-  only badge a tab owns. Covers an open tab only; a closed one needs a
-  service worker and Web Push, not built.
+- **Web, tab open**: the Notifications API, permission requested at the
+  first notification worth raising rather than at sign-in (a prompt on the
+  way in is the one people refuse). Unread count goes in the tab title —
+  the only badge a tab owns.
+- **Web, tab closed**: a service worker and Web Push — see below.
 - **Android**: `PushService` receives the data-only FCM message,
   `PushGate` applies the client-side half of the suppression rule, then
   `MessageNotifications` decrypts and posts. A direct call rings even with
   the app fully killed via a `CallStyle` notification with a full-screen
   intent (`SocialNotifications`) — see [Android Client](/architecture/android-client).
+
+## Web Push: what is left when the tab is closed
+
+A browser tab is unreachable the moment it is closed, which is the gap a
+service worker fills and the only reason one exists in this repo. There is no
+offline caching and no `fetch` handler: a cached shell of an end-to-end
+encrypted app that cannot reach its server is a login screen that does not
+work, which is worse than the browser's own offline page.
+
+**No Firebase in this path.** `PushManager.subscribe` is a browser API and
+VAPID is the standard that lets a deployment identify itself to whichever push
+service that browser uses. A deployment can configure Firebase, VAPID, both or
+neither; each combination decides which kinds of client stay reachable when
+they are not running, and none of them is broken. The subscription registers
+into the same `device_tokens` registry a phone's FCM token does, under
+`platform: 'web'`, keyed on the same client-minted device id the key directory
+uses.
+
+The subscription is stored in the column an FCM token lives in. That column
+means "how to reach this installation", and for a browser the answer is four
+fields rather than one, so it travels as JSON — which is a smaller thing than
+two more nullable columns that only ever apply to one platform.
+
+### The worker cannot read the words
+
+A message body is sealed with the channel key. That key is unwrapped with the
+account's identity key, which lives in the page, and the wrapped copies are
+behind an authenticated API call. None of that is reachable from a service
+worker, and building it there would put a second copy of the key ladder in a
+context the user cannot see.
+
+So a message notification drawn by the worker says **"Ayaan · Sent a
+message"** and not what was said. Opening it hands over to the app, which has
+the keys. Everything carrying no sealed content — a friend request, being added
+to a server, who is in a call, a remote session starting — is shown in full,
+because there is nothing to hide.
+
+This is a real difference from Android, where the app itself is woken and
+decrypts in a cold process. It is the price of the browser's sandbox, not an
+oversight.
+
+### An open tab wins
+
+If any client is already running, the push is handed to it over `postMessage`
+and the worker draws nothing. That client can decrypt, and it knows what is on
+screen. The worker only draws when nobody is there to do it better.
+
+### Tap-through
+
+Opening a notification focuses a running tab and tells it where to go; with
+nothing running it opens one with the destination in the query string, which is
+the only channel a page that does not exist yet can be told anything on. Both
+paths end in the same function in the client, so a route cannot work one way and
+not the other. A destination that no longer exists leaves the app where it is
+rather than failing — the person tapped a notification and deserves a running
+app either way.
+
+A call notification opens the channel; **joining is still a decision somebody
+makes on screen**, not one a tap makes for them.
+
+### Dead subscriptions
+
+`404` and `410` from a push service mean the subscription is gone — site data
+cleared, permission revoked, the browser expired it — and the row is dropped,
+because keeping it is a failed request per message forever. Anything else (a
+`429`, a `500`, a timeout) is the push service having a moment, and dropping a
+working subscription over one is how somebody silently stops getting
+notifications.
 
 ## Configuration
 
@@ -126,6 +194,15 @@ into the repo once is a private key in the history forever.
 into the three env vars and the file can be deleted. Full setup and the
 wire format of a push: [`FCM/README.md`](https://github.com/aiyu-ayaan/BetweenUs/blob/master/FCM/README.md)
 and [`FCM/PAYLOADS.md`](https://github.com/aiyu-ayaan/BetweenUs/blob/master/FCM/PAYLOADS.md).
+
+Web Push needs a VAPID key pair instead, and nothing else — mint one with
+`npx web-push generate-vapid-keys` and set `VAPID_PUBLIC_KEY`,
+`VAPID_PRIVATE_KEY` and `VAPID_SUBJECT`. `GET /api/v1/notifications/devices/key`
+hands browsers the public half; it answers `null` on a deployment that has
+configured none, which is what stops the client prompting for a permission it
+could not use. Changing the pair invalidates every subscription already issued:
+those browsers re-subscribe on their next sign-in and are unreachable until
+then.
 
 See also [notification-service](/services/notification-service) for its
 REST surface.

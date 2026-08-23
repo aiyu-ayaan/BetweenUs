@@ -3,8 +3,15 @@
  *
  * Everything already running - the desktop app, an open tab, a phone with the
  * app in front of somebody - is fed by `/ws/chat` and needs nothing from here.
- * This is only for the clients that are not running, which on Android means FCM
- * and is the whole reason phase 27 exists.
+ * This is only for the clients that are not running: a phone with the app
+ * swiped away, and a browser with the tab closed.
+ *
+ * **Two transports, one design.** Phones go through FCM, browsers through Web
+ * Push and VAPID, and the only thing that tells a row apart is its platform
+ * column. Everything above the transport is shared - the audience, the
+ * preference filter, the cross-device suppression, the data-only envelope - so
+ * a new kind of push is written once and reaches both. A deployment can
+ * configure either, both, or neither, and none of those is broken.
  *
  * Two rules shape every line below.
  *
@@ -63,6 +70,7 @@ import { DevicesService } from '../modules/devices/devices.service';
 import { messaging } from './firebase';
 import { focusedAmong } from './focus';
 import { namesOf, rosterChanged } from './roster';
+import { sendWebPush, webPushReady } from './webpush';
 
 /** FCM's own ceiling for one `sendEach` call. */
 const MAX_PER_BATCH = 500;
@@ -99,10 +107,15 @@ export class PushService implements OnModuleInit {
   private readonly rosters = new Map<string, string[]>();
 
   async onModuleInit(): Promise<void> {
+    // Said once, at boot, rather than per message. A deployment with neither
+    // transport configured is a running deployment without push, not an error -
+    // and one with a single transport reaches one kind of client, which is a
+    // deliberate deployment rather than a half-broken one.
     if (!messaging()) {
-      // Said once, at boot, rather than per message. A deployment with no
-      // Firebase project is a running deployment without push, not an error.
-      this.logger.info('Push disabled: no Firebase credentials in the environment');
+      this.logger.info('Push to phones disabled: no Firebase credentials in the environment');
+    }
+    if (!webPushReady()) {
+      this.logger.info('Push to browsers disabled: no VAPID keys in the environment');
     }
 
     await this.on(EVENTS.MESSAGE_CREATED, (payload) => this.onMessage(payload.message));
@@ -340,23 +353,57 @@ export class PushService implements OnModuleInit {
     recipients: { userId: string; data: PushData }[],
     options: { urgent?: boolean } = {},
   ): Promise<void> {
-    const transport = messaging();
-    if (!transport || recipients.length === 0) return;
+    if (recipients.length === 0) return;
 
     const byUser = await this.devices.tokensFor(recipients.map((one) => one.userId));
-    const messages = recipients.flatMap((recipient) =>
-      (byUser.get(recipient.userId) ?? []).map((token) => ({
-        token,
-        data: recipient.data as unknown as Record<string, string>,
-        android: {
-          // The point of the push is a phone that is asleep, and a normal
-          // priority data message is exactly what Doze holds back.
-          priority: (options.urgent === false ? 'normal' : 'high') as 'normal' | 'high',
-          ttl: TIME_TO_LIVE_SECONDS * 1000,
-        },
-      })),
+    const addresses = recipients.flatMap((recipient) =>
+      (byUser.get(recipient.userId) ?? []).map((address) => ({ ...address, data: recipient.data })),
     );
-    if (messages.length === 0) return;
+    if (addresses.length === 0) return;
+
+    // Two transports, split on the column that says which. Both halves run,
+    // because an account can have a phone and a browser and neither is a
+    // fallback for the other.
+    const [native, web] = await Promise.all([
+      this.deliverFcm(
+        addresses.filter((address) => address.platform !== 'web'),
+        options,
+      ),
+      sendWebPush(
+        addresses
+          .filter((address) => address.platform === 'web')
+          .map((address) => ({ stored: address.token, data: address.data })),
+        options,
+      ),
+    ]);
+
+    const forgotten = await this.devices.forget([...native.dead, ...web.dead]);
+    this.logger.info('Push sent', {
+      type: recipients[0]?.data.type,
+      recipients: recipients.length,
+      delivered: native.delivered + web.delivered,
+      forgotten,
+    });
+  }
+
+  /** Phones, through Firebase. Nothing here reaches a browser. */
+  private async deliverFcm(
+    addresses: { token: string; data: PushData }[],
+    options: { urgent?: boolean },
+  ): Promise<{ delivered: number; dead: string[] }> {
+    const transport = messaging();
+    if (!transport || addresses.length === 0) return { delivered: 0, dead: [] };
+
+    const messages = addresses.map((address) => ({
+      token: address.token,
+      data: address.data as unknown as Record<string, string>,
+      android: {
+        // The point of the push is a phone that is asleep, and a normal
+        // priority data message is exactly what Doze holds back.
+        priority: (options.urgent === false ? 'normal' : 'high') as 'normal' | 'high',
+        ttl: TIME_TO_LIVE_SECONDS * 1000,
+      },
+    }));
 
     const dead: string[] = [];
     let delivered = 0;
@@ -374,14 +421,7 @@ export class PushService implements OnModuleInit {
         else this.logger.warn('Push rejected', { code });
       });
     }
-
-    const forgotten = await this.devices.forget(dead);
-    this.logger.info('Push sent', {
-      type: recipients[0]?.data.type,
-      recipients: recipients.length,
-      delivered,
-      forgotten,
-    });
+    return { delivered, dead };
   }
 
   /** Accounts that have not turned notifications off altogether. */

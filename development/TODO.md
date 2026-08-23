@@ -135,10 +135,17 @@ Backend (`notification-service`):
 
 Web:
 
-- [ ] A service worker and a Web Push subscription per device, stored in the
-      registry above. What exists today is the Notifications API, which needs
-      the tab open
-- [ ] Tap-through into the channel, the call or the remote session
+- [x] A service worker and a Web Push subscription per device, stored in the
+      registry above. No Firebase in this path at all - VAPID and
+      `PushManager.subscribe`, so a deployment can reach browsers without a
+      Firebase project and phones without VAPID keys. The worker cannot read a
+      message body, because the channel key lives in the page: it says somebody
+      sent a message and the app shows what, which is the price of the sandbox
+- [x] Tap-through into the channel, the call or the remote session. Two ways
+      in and one function: a running tab is told over `postMessage`, a cold
+      start in the query string, because a page that does not exist yet has no
+      other channel. A call notification opens the channel and does not join
+      the call - that is still a decision somebody makes on screen
 
 Android:
 
@@ -421,7 +428,7 @@ a human in front of the app, and so does most of phase 12.
 - [x] Notifications in a tab: the Notifications API, permission asked at the
       first notification worth raising, and the unread count in the title -
       a tab has no tray and no dock
-- [ ] Web Push, so a *closed* tab is still reachable. The above only works
+- [x] Web Push, so a *closed* tab is still reachable. The above only worked
       while the app is open; it needs a service worker and a push subscription
       stored per device in `notification-service`
 

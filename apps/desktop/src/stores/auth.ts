@@ -4,6 +4,7 @@ import { ApiError, api, apiBaseUrl, configureApi } from '../services/api';
 import { chatSocket, onSocketTokenRejected, presenceSocket } from '../services/socket';
 import { initIdentity, resetE2ee, type BackupSecret } from '../services/e2ee';
 import { cache } from '../services/cache';
+import { stopWebPush } from '../services/web-push';
 
 /** Both realtime sockets carry the same access token and reconnect together. */
 function connectSockets(accessToken: string): void {
@@ -157,6 +158,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   logout: async () => {
     const stored = localStorage.getItem(STORAGE_KEY);
+    // First, while there is still an access token to make the call with. A
+    // push registration left behind sends this account's messages to whoever
+    // opens this browser next, and the request that removes it is
+    // authenticated - so it cannot be done after the session is torn down.
+    await stopWebPush();
     chatSocket.disconnect();
     presenceSocket.disconnect();
     resetE2ee();

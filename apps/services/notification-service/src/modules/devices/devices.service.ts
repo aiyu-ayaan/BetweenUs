@@ -29,6 +29,12 @@ import { Logger } from '@betweenus/logger';
 import type { RegisterDeviceRequest, RegisteredDevice } from '@betweenus/shared-types';
 import { DEVICE_COLLECTION, MAX_IN_CLAUSE, deviceDocumentId, firestore } from '../../push/firestore';
 
+/** One way to reach one installation, and which transport carries it. */
+export interface PushAddress {
+  token: string;
+  platform: RegisteredDevice['platform'];
+}
+
 @Injectable()
 export class DevicesService {
   constructor(private readonly logger: Logger) {}
@@ -88,18 +94,30 @@ export class DevicesService {
     await this.mirrorDelete([{ userId, deviceId }]);
   }
 
-  /** What this account can be reached on. Used by the fan-out, and nothing else. */
-  async tokensFor(userIds: string[]): Promise<Map<string, string[]>> {
+  /**
+   * What this account can be reached on. Used by the fan-out, and nothing else.
+   *
+   * The platform comes back with the address because there are two transports
+   * now: a phone's row is an FCM token and a browser's is a serialised Web Push
+   * subscription, and the only thing that tells them apart is this column. A
+   * fan-out that guessed from the string's shape would be one odd token away
+   * from posting a registration id at a push service.
+   */
+  async tokensFor(userIds: string[]): Promise<Map<string, PushAddress[]>> {
     if (userIds.length === 0) return new Map();
     const rows = await prisma.deviceToken.findMany({
       where: { userId: { in: userIds } },
-      select: { userId: true, token: true },
+      select: { userId: true, token: true, platform: true },
     });
-    const byUser = new Map<string, string[]>();
+    const byUser = new Map<string, PushAddress[]>();
     for (const row of rows) {
-      const tokens = byUser.get(row.userId);
-      if (tokens) tokens.push(row.token);
-      else byUser.set(row.userId, [row.token]);
+      const address: PushAddress = {
+        token: row.token,
+        platform: row.platform as RegisteredDevice['platform'],
+      };
+      const addresses = byUser.get(row.userId);
+      if (addresses) addresses.push(address);
+      else byUser.set(row.userId, [address]);
     }
     return byUser;
   }
