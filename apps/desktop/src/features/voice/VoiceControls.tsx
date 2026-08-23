@@ -12,6 +12,7 @@ import { healthWarning } from '../../services/call-stats';
 import { ConnectionPanel } from './ConnectionPanel';
 import { ScreenSharePicker } from './ScreenSharePicker';
 import { DevicePicker } from './DevicePicker';
+import { InvitePicker } from './InvitePicker';
 import {
   MicIcon,
   MicOffIcon,
@@ -19,6 +20,7 @@ import {
   ScreenShareIcon,
   ActivityIcon,
   SettingsIcon,
+  UserPlusIcon,
   VideoIcon,
   VideoOffIcon,
 } from '../../components/icons';
@@ -45,6 +47,9 @@ export function VoiceControls({ size = 'sm' }: { size?: 'sm' | 'lg' }): JSX.Elem
   // late is exactly when somebody goes looking for this.
   const [choosingDevices, setChoosingDevices] = useState(false);
   const [showingStats, setShowingStats] = useState(false);
+  // Ringing somebody in belongs where the call is, not only in the member list:
+  // the full-screen voice view has no member list on it to reach for.
+  const [inviting, setInviting] = useState(false);
   const warning = healthWarning(stats);
   // Whose screen it is, when it is not ours. The holder is a peer id; the name
   // comes from the tiles, and is absent for the instant between somebody
@@ -110,6 +115,19 @@ export function VoiceControls({ size = 'sm' }: { size?: 'sm' | 'lg' }): JSX.Elem
       </ControlButton>
 
       {picking && <ScreenSharePicker onClose={() => setPicking(false)} />}
+
+      <div className="relative">
+        <ControlButton
+          active={inviting}
+          disabled={disabled}
+          pad={pad}
+          label="Add someone to the call"
+          onClick={() => setInviting((open) => !open)}
+        >
+          <UserPlusIcon className={icon} />
+        </ControlButton>
+        {inviting && <InvitePicker onClose={() => setInviting(false)} />}
+      </div>
 
       {/* Amber when something is measurably wrong, so the numbers are worth
           opening before anybody has thought to ask for them. */}
