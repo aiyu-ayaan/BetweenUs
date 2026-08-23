@@ -597,9 +597,29 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      # A packaged renderer loads from `file://`, so it has no origin to infer
+      # a deployment from and ships with whatever `VITE_API_URL` was set at
+      # build time - see apps/desktop/src/services/endpoint.ts. Unset, that is
+      # `http://localhost:8080`, which is correct on a developer's machine and
+      # useless in an installer: every download points at a server that only
+      # the person who built it has.
+      #
+      # So the address is a repository variable, the same way the image repo is
+      # (Settings -> Secrets and variables -> Actions -> Variables). It is not a
+      # secret: a public address is public the moment anybody connects to it.
+      # Whoever installs the build can still point it elsewhere from the login
+      # screen; this is only what it starts on.
+      - name: Warn when this build has no deployment to point at
+        if: vars.BETWEENUS_API_URL == ''
+        shell: bash
+        run: |
+          echo "::warning title=Desktop build points at localhost::BETWEENUS_API_URL is not set, so the installers default to http://localhost:8080. Set it under Settings > Secrets and variables > Actions > Variables."
+
       # The whole workspace, because the renderer imports the shared packages
       # and resolves them through their built declarations.
       - run: pnpm build
+        env:
+          VITE_API_URL: ${{ vars.BETWEENUS_API_URL }}
 
       # The Electron zip is 111 MB from GitHub's release CDN, which is the one
       # step of this job that fails for reasons that have nothing to do with us.
