@@ -215,19 +215,21 @@ fun Shell(user: PublicUser) {
     /**
      * Somebody shared files into BetweenUs from another app.
      *
-     * They wait in [PendingShare] until a chat screen takes them into the send
-     * preview, so all this has to do is put a chat screen in front of them.
-     * The last conversation if there is one, and otherwise the drawer - which
-     * is already the app's answer to "which conversation". Nothing is picked
-     * here: the share sheet chose the app, not the channel.
+     * A share names files and not a conversation, so it asks. It used to
+     * answer itself - the last channel that happened to be open, or the drawer
+     * if there was not one - which meant the files either landed somewhere
+     * nobody chose or looked as though the app had swallowed them. The picker
+     * is what the share sheet hands off to now; the files stay in
+     * [PendingShare] across the trip and the chat screen takes them into the
+     * send preview, which is still where sending happens.
      */
     val shareWaiting by PendingShare.uris.collectAsState()
-    LaunchedEffect(shareWaiting.isNotEmpty(), channelId) {
-        if (shareWaiting.isEmpty()) return@LaunchedEffect
-        val open = channelId
-        // A share can arrive over anything - settings, a call, the friends
-        // list - and only the chat screen knows what to do with it.
-        if (open != null) openChannel(open, serverId) else drawer.open()
+    var choosingShareTarget by remember { mutableStateOf(false) }
+    LaunchedEffect(shareWaiting.isNotEmpty()) {
+        if (shareWaiting.isNotEmpty()) {
+            choosingShareTarget = true
+            drawer.close()
+        }
     }
 
     ModalNavigationDrawer(
@@ -400,6 +402,24 @@ fun Shell(user: PublicUser) {
 
             // An invite the app was opened by. The link left a code behind; the
             // card is what asks, and nothing is joined until it is accepted.
+            // Where a share is going. Over everything, because it is the
+            // only thing on screen that matters until it is answered, and an
+            // overlay rather than a route so a call in progress is not torn
+            // down to ask a question about a photo.
+            if (choosingShareTarget && shareWaiting.isNotEmpty()) {
+                ShareTargetScreen(
+                    count = shareWaiting.size,
+                    onPick = { picked, server ->
+                        choosingShareTarget = false
+                        openChannel(picked, server)
+                    },
+                    onCancel = {
+                        choosingShareTarget = false
+                        PendingShare.clear()
+                    },
+                )
+            }
+
             invited?.let { code ->
                 InviteSheet(
                     code = code,
