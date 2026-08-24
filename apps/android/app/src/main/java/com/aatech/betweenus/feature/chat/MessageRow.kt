@@ -51,7 +51,10 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.ui.input.pointer.changedToUpIgnoreConsumed
+import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.AnnotatedString
@@ -108,6 +111,7 @@ import com.aatech.betweenus.ui.theme.Surface950
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.roundToInt
 import java.time.Instant
@@ -162,21 +166,27 @@ fun MessageRow(
      * back - the row overshoots and settles, which is what makes the gesture
      * feel answered rather than merely undone.
      *
-     * **The gesture belongs to the bubble, not to the row.** It used to be on
-     * the full-width row with a guard that ignored drags starting near the left
-     * edge, so the drawer could still be pulled from there. That guard could
-     * not work: `detectHorizontalDragGestures` consumes the event that crosses
-     * the touch slop *before* it calls `onDragStart`, so by the time the guard
-     * saw where the finger had landed, the drag had already been taken from the
-     * drawer's draggable above it. Nothing moved and nothing replied, and the
-     * drawer never opened - the gesture was eaten by a row that had decided it
-     * did not want it.
+     * **The row is split down the middle.** A drag that starts on the left
+     * half is the drawer's and a drag that starts on the right half is the
+     * reply's. Half is generous on both sides on purpose: a drawer pulled from
+     * a 24dp edge is a gesture people miss, and a reply is a flick from
+     * wherever the thumb already rests on the message.
      *
-     * Ownership is a matter of layout instead. The pointer input sits on the
-     * bubble column, which begins after the avatar gutter, so a drag that
-     * starts in the gutter never reaches this node at all and travels up to the
-     * drawer untouched. Left of the bubble opens the drawer; on the bubble
-     * replies; and neither has to guess what the other meant.
+     * **Nothing is consumed until the gesture has been claimed**, and that is
+     * the whole reason this is written by hand rather than with
+     * `detectHorizontalDragGestures`. That detector consumes the event that
+     * crosses the touch slop *before* it reports where the finger landed, so
+     * any guard reading the start position reads it after the drag has already
+     * been taken off the drawer's draggable above. Both gestures lost: nothing
+     * opened and nothing replied.
+     *
+     * **A drag has to be horizontal to count.** Slop alone is not enough - a
+     * thumb travelling up the screen drifts sideways as it goes, crosses the
+     * horizontal slop somewhere in the middle of a scroll, and the list would
+     * lurch into reply mode. So the claim is made on the shape of the drag: it
+     * has to be going sideways at least twice as fast as it is going up or
+     * down, and once it is clearly vertical the row lets go for good and the
+     * list keeps it.
      */
     val scope = rememberCoroutineScope()
     val density = LocalDensity.current
@@ -215,6 +225,59 @@ fun MessageRow(
         Modifier
             .fillMaxWidth()
             .offset { IntOffset(slide.value.roundToInt(), 0) }
+            .pointerInput(message.id, message.deleted) {
+                if (message.deleted) return@pointerInput
+                val slop = viewConfiguration.touchSlop
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    // The left half is the drawer's. Leave without touching
+                    // anything, so the drag reaches the draggable above.
+                    if (down.position.x < size.width / 2f) return@awaitEachGesture
+
+                    var travelX = 0f
+                    var travelY = 0f
+                    var claimed = false
+                    while (true) {
+                        val event = awaitPointerEvent()
+                        val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                        if (change.changedToUpIgnoreConsumed()) break
+                        // Somebody above took it - the list, scrolling. It is
+                        // theirs now and this row has nothing to undo, because
+                        // it never moved.
+                        if (!claimed && change.isConsumed) break
+
+                        val delta = change.positionChange()
+                        travelX += delta.x
+                        travelY += delta.y
+
+                        if (!claimed) {
+                            // Clearly vertical: hand it over and stay out of
+                            // the way for the rest of this gesture.
+                            if (abs(travelY) > slop && abs(travelY) >= abs(travelX)) break
+                            // Clearly a rightward swipe: past the slop, and
+                            // going sideways at least twice as fast as it is
+                            // going up or down.
+                            claimed = travelX > slop && travelX > abs(travelY) * 2f
+                            if (!claimed) continue
+                        }
+
+                        val next = (slide.value + delta.x).coerceIn(0f, limit)
+                        if (next != slide.value) change.consume()
+                        if (!armed && next >= threshold) {
+                            armed = true
+                            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                        }
+                        scope.launch { slide.snapTo(next) }
+                    }
+
+                    if (claimed) {
+                        val fired = slide.value >= threshold
+                        armed = false
+                        scope.launch { slide.animateTo(0f, settle) }
+                        if (fired) onReply()
+                    }
+                }
+            }
             .background(
                 if (highlighted) {
                     MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
@@ -247,38 +310,7 @@ fun MessageRow(
                 Spacer(Modifier.width(8.dp))
             }
 
-            Column(
-                Modifier
-                    .weight(1f)
-                    // The gesture starts here, at the bubble, and not one pixel
-                    // further left - see the note on swipe-to-reply above. The
-                    // gutter to the left of this column is the drawer's.
-                    .pointerInput(message.id, message.deleted) {
-                        if (message.deleted) return@pointerInput
-                        detectHorizontalDragGestures(
-                            onDragEnd = {
-                                val fired = slide.value >= threshold
-                                armed = false
-                                scope.launch { slide.animateTo(0f, settle) }
-                                if (fired) onReply()
-                            },
-                            onDragCancel = {
-                                armed = false
-                                scope.launch { slide.animateTo(0f, settle) }
-                            },
-                        ) { change, dragAmount ->
-                            // Rightwards only, and never past the limit: a row
-                            // dragged off the screen has nothing left to say.
-                            val next = (slide.value + dragAmount).coerceIn(0f, limit)
-                            if (next != slide.value) change.consume()
-                            if (!armed && next >= threshold) {
-                                armed = true
-                                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                            }
-                            scope.launch { slide.snapTo(next) }
-                        }
-                    },
-            ) {
+            Column(Modifier.weight(1f)) {
                 if (!grouped) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,

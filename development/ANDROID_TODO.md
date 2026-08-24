@@ -1231,27 +1231,32 @@ keeps whatever is nearest the bottom of the screen, so the drawer opens by
 swipe from the lower part of the edge - where a thumb rests - and Back still
 works from the rest.
 
-**The message gets everything else - by layout, not by a guard.** The first
-version of this rule was a guard: the gesture sat on the full-width row and
-ignored drags whose `onDragStart` position was within 48dp of the edge. It
-could not work, and it took both gestures down with it.
-`detectHorizontalDragGestures` consumes the event that crosses the touch slop
-*before* it calls `onDragStart`, so by the time the guard read where the finger
-had landed, the drag had already been taken off the drawer's `anchoredDraggable`
-above it - which, since `ModalNavigationDrawer` puts that draggable on a
-full-size root box, is how the drawer is opened from anywhere. Nothing replied
-and nothing opened.
+**The row is split down the middle.** A drag beginning on the left half is the
+drawer's; one beginning on the right half is the reply's. Half is generous on
+both sides on purpose - a drawer pulled from a 24dp edge is a gesture people
+miss, and a reply is a flick from wherever the thumb is already resting on the
+message.
 
-So ownership is where the pointer input *is*. It sits on the bubble column,
-which begins after the avatar gutter, and a drag starting in the gutter never
-reaches the row at all: it travels up to the drawer untouched. Left of the
-bubble opens the drawer, on the bubble replies, and neither has to guess what
-the other meant.
+**Nothing is consumed until the gesture has been claimed**, which is why this
+is written by hand with `awaitEachGesture` rather than with
+`detectHorizontalDragGestures`. Two earlier attempts failed on exactly this.
+The detector consumes the event that crosses the touch slop *before* it reports
+where the finger landed, so a guard reading the start position reads it after
+the drag has already been taken off the drawer's `anchoredDraggable` above -
+and since `ModalNavigationDrawer` puts that draggable on a full-size root box,
+that event was the drawer's only chance. Both gestures lost.
 
-The gutter is 56dp on a grouped message and the same on an ungrouped one - 12dp
-of padding, a 36dp avatar and an 8dp gap - so about half of it is under the
-system's Back zone at the top of the screen and all of it is the app's within
-the exclusion strip near the bottom.
+**A drag has to be horizontal to count.** Slop alone is not enough, and this is
+what made a scroll turn into a reply: a thumb travelling up the screen drifts
+sideways as it goes, crosses the horizontal slop somewhere in the middle of the
+scroll, and the row claimed it. So the claim is on the *shape* of the drag - it
+has to be moving sideways at least twice as fast as it is moving up or down -
+and once the drag is clearly vertical the row breaks out for good and the list
+keeps it. Nothing was consumed, so there is nothing to undo.
+
+The outermost ~24dp is still the system's Back on a gesture-navigation phone,
+whatever this code decides; `Shell`'s exclusion strip claims back what Android
+allows, which is 200dp of height nearest the bottom.
 
 ## Getting back to the newest message
 
