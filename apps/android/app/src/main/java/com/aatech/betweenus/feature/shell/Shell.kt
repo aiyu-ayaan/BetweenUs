@@ -3,11 +3,13 @@ package com.aatech.betweenus.feature.shell
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ModalDrawerSheet
+import androidx.compose.foundation.systemGestureExclusion
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
@@ -19,6 +21,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -300,6 +303,28 @@ fun Shell(user: PublicUser) {
         },
     ) {
         Box(Modifier.fillMaxSize().background(Ground)) {
+            /**
+             * The left edge, asked for back from the system.
+             *
+             * On a gesture-navigation phone a swipe from the edge is Back, and
+             * the app never sees it - which is why the drawer would not open by
+             * swipe. `systemGestureExclusion` is the only way to ask for it,
+             * and Android caps the answer at 200dp of height per edge, keeping
+             * whatever is nearest the bottom of the screen. So the drawer opens
+             * by swipe from the lower part of the edge, where a thumb rests,
+             * and Back still works from the rest of it.
+             *
+             * Nothing is drawn and nothing is consumed here: the strip exists
+             * to claim the area, and the drag it lets through is the drawer's.
+             */
+            Box(
+                Modifier
+                    .align(Alignment.CenterStart)
+                    .width(24.dp)
+                    .fillMaxHeight()
+                    .systemGestureExclusion(),
+            )
+
             // Above everything rather than over it: a banner drawn on top of
             // the screen covers the one control - the menu button - somebody
             // reaching for it would want.

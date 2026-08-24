@@ -384,12 +384,12 @@ in front of a human.
 - On Android, swipe a row left to right, starting on the message itself. Short
   of about 64dp it springs back and nothing happens; past it there is a buzz
   and the composer quotes it. Swiping a deleted message does nothing.
-- On a gesture-navigation phone, swipe right starting on one of the newest
-  messages - the bottom 200dp of the list. It must reply, not go back: that is
-  the area `systemGestureExclusion` covers. Further up the list, Back wins,
-  which is the platform's cap and not a bug.
-- Swipe from the outermost sliver of the screen. The row must not move at all -
-  that gesture is the system's, and the drawer's on a phone with buttons.
+- On a gesture-navigation phone, swipe right from the left edge, low down the
+  screen: the drawer must open rather than the app going back. That is the
+  200dp `systemGestureExclusion` strip in `Shell`. Higher up the same edge,
+  Back wins - the platform caps the exclusion, and that is not a bug.
+- Swipe right starting on a message bubble: it must reply, and the drawer must
+  not come out with it.
 - On the web client, right-click anywhere: on a message the app's own menu
   opens, and everywhere else nothing at all. Chrome's menu should never appear.
 

@@ -172,15 +172,15 @@ fun MessageRow(
     /** True once this drag has passed the threshold, so the buzz happens once. */
     var armed by remember(message.id) { mutableStateOf(false) }
     /**
-     * A drag that began in the outermost sliver is not this row's.
+     * A drag that began at the left edge is not this row's.
      *
-     * Narrow on purpose. The list asks the system to keep its hands off this
-     * area - see `systemGestureExclusion` in `ChatScreen` - but that exclusion
-     * is capped at 200dp of height per edge, so the rows above it still lose an
-     * edge swipe to Back. Everything from 16dp inwards is the row's, which is
-     * where a thumb starting on a message already is.
+     * The edge is spoken for twice over: it is the system's Back on a
+     * gesture-navigation phone, and it is where the navigation drawer is pulled
+     * from - see the exclusion strip in `Shell`. Reply is a swipe *on the
+     * message*, which is where a thumb starting on a bubble already is, so
+     * nothing here moves or is consumed until the drag is clear of both.
      */
-    val edge = with(density) { 16.dp.toPx() }
+    val edge = with(density) { 48.dp.toPx() }
     var fromEdge by remember(message.id) { mutableStateOf(false) }
     val settle = spring<Float>(
         dampingRatio = Spring.DampingRatioMediumBouncy,

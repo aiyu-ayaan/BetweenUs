@@ -18,7 +18,6 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
-import androidx.compose.foundation.systemGestureExclusion
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -428,16 +427,7 @@ fun ChatScreen(
 
             LazyColumn(
                 state = listState,
-                modifier = Modifier
-                    .fillMaxSize()
-                    // Swipe-to-reply starts near the left edge, which on a
-                    // gesture-navigation phone is where Back lives - and the
-                    // system wins that fight unless it is asked not to. This is
-                    // the only way to ask. Android caps the exclusion at 200dp
-                    // of height per edge and keeps what is nearest the bottom,
-                    // so the newest messages - the ones anybody replies to -
-                    // are the part that gets it.
-                    .systemGestureExclusion(),
+                modifier = Modifier.fillMaxSize(),
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 10.dp),
             ) {
                 // Said once for the channel rather than once per message. A row

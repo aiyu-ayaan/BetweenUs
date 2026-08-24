@@ -1210,18 +1210,23 @@ and it is also the navigation drawer's. The first attempt at this turned the
 drawer's swipe off inside a conversation, which was the wrong end of the
 problem - it took the drawer away and the app still went back.
 
-Leaving the edge alone was not enough either: 40dp of dead zone took the reply
-swipe away without giving the back gesture anything it did not already have.
-The only way to ask the system to keep its hands off an area is
-`Modifier.systemGestureExclusion()`, and that is now on the message list.
+The edge is spoken for twice over, and the two claims settle differently.
 
-Android caps the exclusion at 200dp of height per edge and keeps what is
-nearest the bottom of the screen - so the newest messages, the ones anybody
-actually replies to, are the part that gets it. Rows above that still lose an
-edge swipe to Back, which is the platform's call and not something an app can
-overrule. The row's own dead zone is down to 16dp for the same reason: past
-that sliver the drag is the row's, and it consumes it, which is what stops the
-drawer coming out underneath it.
+**The drawer gets the edge.** On a gesture-navigation phone a swipe from the
+edge is Back and the app never sees it, which is why the drawer would not open
+by swipe at all. `Modifier.systemGestureExclusion()` is the only way to ask for
+that area back, and `Shell` now holds a 24dp strip down the left edge that does
+nothing but claim it. Android caps the answer at 200dp of height per edge and
+keeps whatever is nearest the bottom of the screen, so the drawer opens by
+swipe from the lower part of the edge - where a thumb rests - and Back still
+works from the rest.
+
+**The message gets everything else.** A drag starting within 48dp of the edge
+is not the row's: nothing moves and nothing is consumed, so it reaches the
+drawer or the system. Past that it is the row's and it consumes the drag, which
+is what stops the drawer coming out underneath the reply. 48dp is inside the
+bubble on every row - a grouped message starts at 56dp - so the gesture is
+"swipe the message", which is where a thumb already is.
 
 ## Coming back from the background
 
