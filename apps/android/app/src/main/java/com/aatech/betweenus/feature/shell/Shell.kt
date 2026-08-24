@@ -1,5 +1,9 @@
 package com.aatech.betweenus.feature.shell
 
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -8,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.DrawerValue
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.foundation.systemGestureExclusion
 import androidx.compose.material3.ModalNavigationDrawer
@@ -24,6 +29,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -56,8 +62,7 @@ import com.aatech.betweenus.feature.update.UpdateState
 import com.aatech.betweenus.feature.update.UpdateWorker
 import com.aatech.betweenus.feature.update.Updates
 import com.aatech.betweenus.feature.voice.VoiceChannelScreen
-import com.aatech.betweenus.ui.theme.Ground
-import com.aatech.betweenus.ui.theme.Surface950
+import com.aatech.betweenus.ui.theme.BetweenUsMotion
 import kotlinx.coroutines.launch
 
 /**
@@ -246,8 +251,8 @@ fun Shell(user: PublicUser) {
         drawerState = drawer,
         drawerContent = {
             ModalDrawerSheet(
-                drawerContainerColor = Surface950,
-                modifier = Modifier.width(320.dp),
+                drawerContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                modifier = Modifier.width(324.dp),
             ) {
                 WorkspaceDrawer(
                     user = user,
@@ -302,7 +307,7 @@ fun Shell(user: PublicUser) {
             }
         },
     ) {
-        Box(Modifier.fillMaxSize().background(Ground)) {
+        Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
             /**
              * The left edge, asked for back from the system.
              *
@@ -330,10 +335,42 @@ fun Shell(user: PublicUser) {
             // reaching for it would want.
             Column(Modifier.fillMaxSize()) {
                 ConnectionBanner()
+                /**
+                 * Screens arrive rather than appear.
+                 *
+                 * A forward move slides the new screen a short way in from the
+                 * right while the old one gives way to the left; Back is the
+                 * same movement reversed, so the stack has a direction you can
+                 * feel. The spring is the theme's, and it is a *spring*: an
+                 * interrupted transition - a second tap before the first has
+                 * settled - carries its velocity forward instead of snapping
+                 * back to the start.
+                 *
+                 * The slide is a quarter of the width, not the whole of it.
+                 * Expressive moves things a small distance quickly rather than
+                 * a long distance slowly.
+                 */
+                // Read here rather than inside the lambdas: a transition
+                // builder is not a composable, so the springs have to be picked
+                // up while the theme is still in scope.
+                val travel = BetweenUsMotion.spatial<IntOffset>()
+                val fade = BetweenUsMotion.effect<Float>()
                 NavHost(
                     navigation,
                     startDestination = start,
                     modifier = Modifier.weight(1f),
+                    enterTransition = {
+                        slideInHorizontally(travel) { it / 4 } + fadeIn(fade)
+                    },
+                    exitTransition = {
+                        slideOutHorizontally(travel) { -it / 6 } + fadeOut(fade)
+                    },
+                    popEnterTransition = {
+                        slideInHorizontally(travel) { -it / 6 } + fadeIn(fade)
+                    },
+                    popExitTransition = {
+                        slideOutHorizontally(travel) { it / 4 } + fadeOut(fade)
+                    },
                 ) {
                     composable(Route.Friends) {
                         FriendsScreen(

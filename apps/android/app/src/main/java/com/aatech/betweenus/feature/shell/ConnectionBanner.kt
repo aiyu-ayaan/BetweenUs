@@ -11,7 +11,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -20,12 +20,9 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.aatech.betweenus.core.data.Connectivity
-import com.aatech.betweenus.ui.theme.Danger
-import com.aatech.betweenus.ui.theme.Slate100
+import com.aatech.betweenus.ui.theme.BetweenUsMotion
 
 /**
  * What the realtime connection is doing, when it is not simply working.
@@ -40,39 +37,46 @@ import com.aatech.betweenus.ui.theme.Slate100
 fun ConnectionBanner(modifier: Modifier = Modifier) {
     val state by Connectivity.state.collectAsState()
 
+    val scheme = MaterialTheme.colorScheme
     AnimatedVisibility(
         visible = state != Connectivity.State.ONLINE,
-        enter = fadeIn() + slideInVertically { -it },
-        exit = fadeOut() + slideOutVertically { -it },
+        // The banner pushes the screen down rather than covering it, and it
+        // does so on the theme's spring: a bar that snaps into place reads as a
+        // layout bug, one that springs reads as an arrival.
+        enter = fadeIn(BetweenUsMotion.effect()) + slideInVertically(BetweenUsMotion.spatial()) { -it },
+        exit = fadeOut(BetweenUsMotion.effect()) + slideOutVertically(BetweenUsMotion.spatial()) { -it },
         modifier = modifier,
     ) {
         val reconnecting = state == Connectivity.State.RECONNECTING
+        // Trying is not failing. Reconnecting is the tertiary container - a
+        // state worth knowing about - and only a connection that has given up
+        // gets the error one.
+        val container = if (reconnecting) scheme.tertiaryContainer else scheme.errorContainer
+        val content = if (reconnecting) scheme.onTertiaryContainer else scheme.onErrorContainer
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(
-                    if (reconnecting) Color(0xFF3A2E12) else Danger.copy(alpha = 0.22f),
-                )
-                .padding(horizontal = 14.dp, vertical = 8.dp),
+                .background(container)
+                .padding(horizontal = 16.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             if (reconnecting) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(14.dp),
-                    strokeWidth = 2.dp,
-                    color = Slate100,
-                )
+                LoadingIndicator(color = content, modifier = Modifier.size(20.dp))
             }
             Text(
                 text = if (reconnecting) "Reconnecting…" else "Disconnected",
-                style = MaterialTheme.typography.bodySmall,
-                fontWeight = FontWeight.Medium,
-                color = Slate100,
+                style = MaterialTheme.typography.labelLargeEmphasized,
+                color = content,
+                modifier = Modifier.weight(1f),
             )
             if (!reconnecting) {
                 TextButton(onClick = { Connectivity.retry() }) {
-                    Text("Try again", style = MaterialTheme.typography.bodySmall, color = Slate100)
+                    Text(
+                        text = "Try again",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = content,
+                    )
                 }
             }
         }

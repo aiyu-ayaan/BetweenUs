@@ -51,13 +51,6 @@ import com.aatech.betweenus.ui.components.BetweenUsIcon
 import com.aatech.betweenus.ui.components.BetweenUsIcons
 import com.aatech.betweenus.ui.components.SectionLabel
 import com.aatech.betweenus.ui.components.ServerTile
-import com.aatech.betweenus.ui.theme.Accent
-import com.aatech.betweenus.ui.theme.Edge
-import com.aatech.betweenus.ui.theme.Slate400
-import com.aatech.betweenus.ui.theme.Slate50
-import com.aatech.betweenus.ui.theme.Slate500
-import com.aatech.betweenus.ui.theme.Surface800
-import com.aatech.betweenus.ui.theme.Surface950
 
 /**
  * The two left panels of the desktop, folded into one drawer: the server rail
@@ -105,27 +98,28 @@ fun WorkspaceDrawer(
             modifier = Modifier
                 .width(68.dp)
                 .fillMaxHeight()
-                .background(Surface950)
+                .background(MaterialTheme.colorScheme.surfaceContainerLowest)
                 .verticalScroll(rememberScrollState())
-                .padding(vertical = 8.dp),
+                .padding(vertical = 10.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            Box(
-                modifier = Modifier.clip(RoundedCornerShape(14.dp)),
-                contentAlignment = Alignment.Center,
-            ) {
-                IconAction(
-                    icon = BetweenUsIcons.Message,
-                    contentDescription = "Direct messages",
-                    onClick = onHome,
-                    tint = if (selectedServerId == null) Accent else Slate400,
-                )
-            }
-            HorizontalDivider(Modifier.width(28.dp), color = Edge)
+            // Home is the rail's first tile and reads as one: filled when it
+            // is where you are, quiet when it is not, so "which of these am I
+            // in" is answered the same way for the DM list as for a server.
+            IconAction(
+                icon = BetweenUsIcons.Message,
+                contentDescription = "Direct messages",
+                onClick = onHome,
+                prominent = selectedServerId == null,
+            )
+            HorizontalDivider(
+                Modifier.width(28.dp),
+                color = MaterialTheme.colorScheme.outlineVariant,
+            )
 
             servers.forEach { entry ->
-                Box(Modifier.clip(RoundedCornerShape(16.dp))) {
+                Box(Modifier.clip(RoundedCornerShape(24.dp))) {
                     ServerTile(
                         id = entry.id,
                         name = entry.name,
@@ -150,7 +144,12 @@ fun WorkspaceDrawer(
         }
 
         // --- channels of the selected server, or the DM list ---
-        Column(Modifier.weight(1f).fillMaxHeight().background(Surface800)) {
+        Column(
+            Modifier
+                .weight(1f)
+                .fillMaxHeight()
+                .background(MaterialTheme.colorScheme.surfaceContainerLow),
+        ) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -159,8 +158,10 @@ fun WorkspaceDrawer(
             ) {
                 Text(
                     text = server?.name ?: "Direct messages",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = Slate50,
+                    style = MaterialTheme.typography.titleLargeEmphasized,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f),
                 )
                 // Invites used to live two screens away - the drawer, then
@@ -182,8 +183,6 @@ fun WorkspaceDrawer(
                     )
                 }
             }
-            HorizontalDivider(color = Edge)
-
             LazyColumn(Modifier.weight(1f)) {
                 if (server == null) {
                     item { DirectMessageList(onSelectChannel = { onSelectChannel(it) }) }
@@ -224,7 +223,7 @@ fun WorkspaceDrawer(
                 }
             }
 
-            HorizontalDivider(color = Edge)
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             ListRow(
                 title = user.label,
                 subtitle = "@${user.username} · ${self.wire}",
@@ -278,7 +277,7 @@ private fun VoiceMember(name: String) {
         Text(
             text = name,
             style = MaterialTheme.typography.bodySmall,
-            color = Slate400,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
@@ -304,8 +303,12 @@ private fun ChannelRow(
                     channel.type == ChannelType.VOICE -> BetweenUsIcons.Speaker
                     else -> BetweenUsIcons.Hash
                 },
-                tint = if (selected) Slate50 else Slate500,
-                size = 18.dp,
+                tint = if (selected) {
+                    MaterialTheme.colorScheme.onSecondaryContainer
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                },
+                size = 20.dp,
             )
         },
         trailing = { if (unread > 0) Badge(unread) },
@@ -324,8 +327,8 @@ private fun DirectMessageList(onSelectChannel: (Channel) -> Unit) {
             Text(
                 text = "No conversations yet. Open one from the friends screen.",
                 style = MaterialTheme.typography.bodySmall,
-                color = Slate500,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
             )
         }
         directs.forEach { direct ->
