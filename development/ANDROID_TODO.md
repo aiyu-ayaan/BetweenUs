@@ -1231,12 +1231,40 @@ keeps whatever is nearest the bottom of the screen, so the drawer opens by
 swipe from the lower part of the edge - where a thumb rests - and Back still
 works from the rest.
 
-**The message gets everything else.** A drag starting within 48dp of the edge
-is not the row's: nothing moves and nothing is consumed, so it reaches the
-drawer or the system. Past that it is the row's and it consumes the drag, which
-is what stops the drawer coming out underneath the reply. 48dp is inside the
-bubble on every row - a grouped message starts at 56dp - so the gesture is
-"swipe the message", which is where a thumb already is.
+**The message gets everything else - by layout, not by a guard.** The first
+version of this rule was a guard: the gesture sat on the full-width row and
+ignored drags whose `onDragStart` position was within 48dp of the edge. It
+could not work, and it took both gestures down with it.
+`detectHorizontalDragGestures` consumes the event that crosses the touch slop
+*before* it calls `onDragStart`, so by the time the guard read where the finger
+had landed, the drag had already been taken off the drawer's `anchoredDraggable`
+above it - which, since `ModalNavigationDrawer` puts that draggable on a
+full-size root box, is how the drawer is opened from anywhere. Nothing replied
+and nothing opened.
+
+So ownership is where the pointer input *is*. It sits on the bubble column,
+which begins after the avatar gutter, and a drag starting in the gutter never
+reaches the row at all: it travels up to the drawer untouched. Left of the
+bubble opens the drawer, on the bubble replies, and neither has to guess what
+the other meant.
+
+The gutter is 56dp on a grouped message and the same on an ungrouped one - 12dp
+of padding, a 36dp avatar and an 8dp gap - so about half of it is under the
+system's Back zone at the top of the screen and all of it is the app's within
+the exclusion strip near the bottom.
+
+## Getting back to the newest message
+
+Reading back through a channel left no way to return but scrolling. There is a
+small button in the bottom corner now, and it is not new state: `following` -
+the latch in `Follow.kt` that stops the list dragging somebody back down every
+time a message arrives - is already the answer to "is the reader somewhere
+else", so the button is that latch drawn.
+
+Tapping it closes the latch *before* it scrolls. The correction inside the
+follow effect is the thing that actually pins the view to the bottom; a scroll
+on its own would land near the end and drift off it again the moment the next
+picture decoded.
 
 ## Coming back from the background
 
