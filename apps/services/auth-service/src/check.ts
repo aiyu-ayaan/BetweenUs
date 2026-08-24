@@ -18,6 +18,7 @@ process.env.DATABASE_URL ??= 'postgresql://check:check@127.0.0.1:5432/check';
 process.env.LOG_LEVEL = 'error';
 
 import { rateLimitBuckets } from '@betweenus/nest-common';
+import { hashToken as hashOf } from '@betweenus/auth';
 import { AuthService } from './modules/auth/auth.service';
 import type { AuthDb } from './modules/auth/auth.db';
 import { CREDENTIALS_RATE_LIMIT, LOGIN_RATE_LIMIT } from './modules/auth/rate-limits';
@@ -137,6 +138,7 @@ interface UserRow {
 interface TokenRow {
   id: string;
   userId: string;
+  familyId: string;
   tokenHash: string;
   expiresAt: Date;
   revokedAt: Date | null;
@@ -206,11 +208,12 @@ function fakeDb(): AuthDb & { users: UserRow[]; tokens: TokenRow[] } {
         return row;
       },
       updateMany: async ({ where, data }: never) => {
-        const clause = where as { id?: string; userId?: string; revokedAt: null };
+        const clause = where as { id?: string; userId?: string; familyId?: string; revokedAt: null };
         const matched = tokens.filter(
           (t) =>
             (clause.id === undefined || t.id === clause.id) &&
             (clause.userId === undefined || t.userId === clause.userId) &&
+            (clause.familyId === undefined || t.familyId === clause.familyId) &&
             t.revokedAt === null,
         );
         for (const row of matched) Object.assign(row, data);
@@ -388,13 +391,27 @@ async function main(): Promise<void> {
   // Outside it, the same replay is what it looks like: a leaked token.
   process.env.REFRESH_REPLAY_GRACE_MS = '0';
 
-  // Reuse detection: replaying a spent token kills every live session.
+  // Reuse detection: replaying a spent token kills the chain it belongs to.
+  const otherDevice = await auth.login({ email: 'ayaan@betweenus.local', password: 'hunter2000' });
+  const spentFamily = db.tokens.find((t) => t.tokenHash === hashOf(rotated.refreshToken))!.familyId;
   await rejects(auth.refresh(loggedIn.refreshToken), 'REFRESH_TOKEN_REUSED');
   assert.ok(
-    db.tokens.every((t) => t.revokedAt !== null),
+    db.tokens.filter((t) => t.familyId === spentFamily).every((t) => t.revokedAt !== null),
     'the whole token family is revoked on reuse',
   );
   await rejects(auth.refresh(rotated.refreshToken), 'REFRESH_TOKEN_REUSED');
+
+  // ...and nothing else. A second device stays signed in, which is the whole
+  // point of the family: one phone replaying a token must not sign a laptop
+  // out. Its own rotation still works and stays in its own family.
+  const otherRotated = await auth.refresh(otherDevice.refreshToken);
+  assert.ok(otherRotated.accessToken, 'another device survives a reuse elsewhere');
+  assert.equal(
+    db.tokens.find((t) => t.tokenHash === hashOf(otherRotated.refreshToken))?.familyId,
+    db.tokens.find((t) => t.tokenHash === hashOf(otherDevice.refreshToken))?.familyId,
+    'a rotation stays in the family it came from',
+  );
+  await auth.logout(otherRotated.refreshToken);
 
   // A garbage token is rejected without touching the family.
   await rejects(auth.refresh('not-a-jwt'), 'INVALID_REFRESH_TOKEN');

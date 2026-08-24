@@ -330,6 +330,11 @@ model RefreshToken {
   // `id` is the JWT `jti`, so revoking a token is a delete by id.
   id        String    @id
   userId    String
+  // The sign-in this token descends from: the `id` of the token that sign-in
+  // minted, carried forward by every rotation of it. One device is one family,
+  // so a token replayed on a phone cannot sign the same account out of a
+  // laptop - which is what revoking by `userId` did.
+  familyId  String
   tokenHash String
   expiresAt DateTime
   createdAt DateTime  @default(now())
@@ -338,6 +343,7 @@ model RefreshToken {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+  @@index([familyId])
   @@map("refresh_tokens")
 }
 

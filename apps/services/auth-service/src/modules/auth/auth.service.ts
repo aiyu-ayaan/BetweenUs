@@ -137,7 +137,7 @@ export class AuthService {
     // A forgery carrying a real jti is theft with no innocent explanation, so it
     // is fatal whatever else is true of the row.
     if (stored && stored.tokenHash !== hashToken(refreshToken)) {
-      await this.revokeFamily(stored.userId, 'forgery');
+      await this.revokeFamily(stored.familyId, 'forgery');
       throw new UnauthorizedException({
         code: 'REFRESH_TOKEN_REUSED',
         message: 'Refresh token was already used; all sessions have been signed out',
@@ -153,7 +153,7 @@ export class AuthService {
       const replayed = this.rotated.get(stored.id);
       if (replayed && Date.now() - replayed.at < replayGraceMs()) return replayed.tokens;
 
-      await this.revokeFamily(stored.userId, 'reuse');
+      await this.revokeFamily(stored.familyId, 'reuse');
       throw new UnauthorizedException({
         code: 'REFRESH_TOKEN_REUSED',
         message: 'Refresh token was already used; all sessions have been signed out',
@@ -180,7 +180,7 @@ export class AuthService {
       data: { revokedAt: new Date() },
     });
 
-    const tokens = await this.issueTokens(user);
+    const tokens = await this.issueTokens(user, stored.familyId);
     this.remember(stored.id, tokens);
     return tokens;
   }
@@ -251,7 +251,7 @@ export class AuthService {
         mustChangePassword: false,
       },
     });
-    await this.revokeFamily(userId, 'password-change');
+    await this.revokeEverySession(userId, 'password-change');
 
     // Every session died, including this one - hand back a fresh pair so the
     // caller who just proved they know the password stays signed in.
@@ -284,13 +284,34 @@ export class AuthService {
     return toPublicUser(updated);
   }
 
-  /** Signs out every session of an account. Used when a refresh token leaks. */
-  private async revokeFamily(userId: string, reason: string): Promise<void> {
+  /**
+   * Signs out one sign-in - the chain of tokens descended from it - and
+   * nothing else. Used when a refresh token leaks.
+   *
+   * Scoped to the family rather than the account because a person is signed in
+   * on more than one device, and the two chains have nothing to do with each
+   * other: a token replayed on a phone says nothing about the laptop. Revoking
+   * by `userId` here is what made a second device impossible to stay signed in
+   * on - every interrupted rotation anywhere signed every device out.
+   *
+   * A stolen token is still contained: the thief and the victim share one
+   * family, so both halves of the contested chain die together.
+   */
+  private async revokeFamily(familyId: string, reason: string): Promise<void> {
+    const { count } = await this.db.refreshToken.updateMany({
+      where: { familyId, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
+    // Audit trail: a reuse warning is the signal that a token was stolen.
+    logger.warn('Refresh token family revoked', { familyId, reason, revoked: count });
+  }
+
+  /** Signs out every device of an account. The password changing is the case. */
+  private async revokeEverySession(userId: string, reason: string): Promise<void> {
     const { count } = await this.db.refreshToken.updateMany({
       where: { userId, revokedAt: null },
       data: { revokedAt: new Date() },
     });
-    // Audit trail: a reuse warning is the signal that a token was stolen.
     logger.warn('Refresh tokens revoked', { userId, reason, revoked: count });
   }
 
@@ -299,7 +320,13 @@ export class AuthService {
     return this.issueTokens(user);
   }
 
-  private async issueTokens(user: User): Promise<AuthTokens> {
+  /**
+   * A new token, in [familyId]'s chain or starting one of its own.
+   *
+   * A sign-in starts a family; a rotation stays in the one it came from. That
+   * is the whole of what makes two devices independent.
+   */
+  private async issueTokens(user: User, familyId?: string): Promise<AuthTokens> {
     const accessToken = signAccessToken(user);
     const { token: refreshToken, jti } = signRefreshToken(user.id);
 
@@ -307,6 +334,7 @@ export class AuthService {
       data: {
         id: jti,
         userId: user.id,
+        familyId: familyId ?? jti,
         tokenHash: hashToken(refreshToken),
         expiresAt: new Date(Date.now() + REFRESH_DAYS * 24 * 60 * 60 * 1000),
       },
