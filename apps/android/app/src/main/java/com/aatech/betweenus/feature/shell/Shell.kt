@@ -2,6 +2,7 @@ package com.aatech.betweenus.feature.shell
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.width
@@ -299,98 +300,108 @@ fun Shell(user: PublicUser) {
         },
     ) {
         Box(Modifier.fillMaxSize().background(Ground)) {
-            NavHost(navigation, startDestination = start) {
-                composable(Route.Friends) {
-                    FriendsScreen(
-                        onOpenMenu = { scope.launch { drawer.open() } },
-                        onOpenChannel = { openChannel(it, null) },
-                    )
-                }
-                composable(Route.Chat) {
-                    val id = channelId
-                    if (id == null) {
+            // Above everything rather than over it: a banner drawn on top of
+            // the screen covers the one control - the menu button - somebody
+            // reaching for it would want.
+            Column(Modifier.fillMaxSize()) {
+                ConnectionBanner()
+                NavHost(
+                    navigation,
+                    startDestination = start,
+                    modifier = Modifier.weight(1f),
+                ) {
+                    composable(Route.Friends) {
                         FriendsScreen(
                             onOpenMenu = { scope.launch { drawer.open() } },
                             onOpenChannel = { openChannel(it, null) },
                         )
-                    } else {
-                        ChatScreen(
-                            channelId = id,
-                            self = user,
-                            onOpenMenu = { scope.launch { drawer.open() } },
-                            onOpenMembers = { navigation.navigate(Route.Members) },
-                            // The call button in a text channel means the voice
-                            // channel of the server it is in - a text channel
-                            // id is not something the call service will admit.
-                            onStartCall = {
-                                val voice = serverId
-                                    ?.let { Workspace.channelsOf(it) }
-                                    ?.firstOrNull { it.type == ChannelType.VOICE }
-                                if (voice != null) {
-                                    voiceChannelId = voice.id
-                                    joinOnArrival = true
-                                    navigation.navigate(Route.Voice)
-                                }
-                            },
+                    }
+                    composable(Route.Chat) {
+                        val id = channelId
+                        if (id == null) {
+                            FriendsScreen(
+                                onOpenMenu = { scope.launch { drawer.open() } },
+                                onOpenChannel = { openChannel(it, null) },
+                            )
+                        } else {
+                            ChatScreen(
+                                channelId = id,
+                                self = user,
+                                onOpenMenu = { scope.launch { drawer.open() } },
+                                onOpenMembers = { navigation.navigate(Route.Members) },
+                                // The call button in a text channel means the voice
+                                // channel of the server it is in - a text channel
+                                // id is not something the call service will admit.
+                                onStartCall = {
+                                    val voice = serverId
+                                        ?.let { Workspace.channelsOf(it) }
+                                        ?.firstOrNull { it.type == ChannelType.VOICE }
+                                    if (voice != null) {
+                                        voiceChannelId = voice.id
+                                        joinOnArrival = true
+                                        navigation.navigate(Route.Voice)
+                                    }
+                                },
+                            )
+                        }
+                    }
+                    composable(Route.Members) {
+                        MembersScreen(
+                            serverId = serverId,
+                            channelId = channelId,
+                            onBack = { navigation.popBackStack() },
+                            onOpenDirect = { openChannel(it, null) },
                         )
                     }
-                }
-                composable(Route.Members) {
-                    MembersScreen(
-                        serverId = serverId,
-                        channelId = channelId,
-                        onBack = { navigation.popBackStack() },
-                        onOpenDirect = { openChannel(it, null) },
-                    )
-                }
-                composable(Route.Voice) {
-                    VoiceChannelScreen(
-                        channelId = voiceChannelId,
-                        self = user,
-                        joinOnArrival = joinOnArrival,
-                        onJoined = { joinOnArrival = false },
-                        onBack = { navigation.popBackStack() },
-                    )
-                }
-                composable(Route.Settings) {
-                    SettingsScreen(
-                        user = user,
-                        onBack = { navigation.popBackStack() },
-                        onServerSettings = { navigation.navigate(Route.ServerSettings) },
-                        onPermissions = { navigation.navigate(Route.Permissions) },
-                        onAutoUpdate = { navigation.navigate(Route.AutoUpdate) },
-                        onCallUsage = { navigation.navigate(Route.CallUsage) },
-                    )
-                }
-                composable(Route.CallUsage) {
-                    CallUsageScreen(onBack = { navigation.popBackStack() })
-                }
-                composable(Route.AutoUpdate) {
-                    AutoUpdateScreen(onBack = { navigation.popBackStack() })
-                }
-                composable(Route.Permissions) {
-                    PermissionsScreen(
-                        onDone = { navigation.popBackStack() },
-                        onBack = { navigation.popBackStack() },
-                    )
-                }
-                composable(Route.ServerSettings) {
-                    ServerSettingsScreen(
-                        serverId = serverId,
-                        onBack = { navigation.popBackStack() },
-                    )
-                }
-                composable(Route.Remote) {
-                    RemoteMachinesScreen(
-                        onBack = { navigation.popBackStack() },
-                        onOpenSession = { navigation.navigate("${Route.RemoteSession}/$it") },
-                    )
-                }
-                composable("${Route.RemoteSession}/{machineId}") { entry ->
-                    RemoteSessionScreen(
-                        machineId = entry.arguments?.getString("machineId").orEmpty(),
-                        onBack = { navigation.popBackStack() },
-                    )
+                    composable(Route.Voice) {
+                        VoiceChannelScreen(
+                            channelId = voiceChannelId,
+                            self = user,
+                            joinOnArrival = joinOnArrival,
+                            onJoined = { joinOnArrival = false },
+                            onBack = { navigation.popBackStack() },
+                        )
+                    }
+                    composable(Route.Settings) {
+                        SettingsScreen(
+                            user = user,
+                            onBack = { navigation.popBackStack() },
+                            onServerSettings = { navigation.navigate(Route.ServerSettings) },
+                            onPermissions = { navigation.navigate(Route.Permissions) },
+                            onAutoUpdate = { navigation.navigate(Route.AutoUpdate) },
+                            onCallUsage = { navigation.navigate(Route.CallUsage) },
+                        )
+                    }
+                    composable(Route.CallUsage) {
+                        CallUsageScreen(onBack = { navigation.popBackStack() })
+                    }
+                    composable(Route.AutoUpdate) {
+                        AutoUpdateScreen(onBack = { navigation.popBackStack() })
+                    }
+                    composable(Route.Permissions) {
+                        PermissionsScreen(
+                            onDone = { navigation.popBackStack() },
+                            onBack = { navigation.popBackStack() },
+                        )
+                    }
+                    composable(Route.ServerSettings) {
+                        ServerSettingsScreen(
+                            serverId = serverId,
+                            onBack = { navigation.popBackStack() },
+                        )
+                    }
+                    composable(Route.Remote) {
+                        RemoteMachinesScreen(
+                            onBack = { navigation.popBackStack() },
+                            onOpenSession = { navigation.navigate("${Route.RemoteSession}/$it") },
+                        )
+                    }
+                    composable("${Route.RemoteSession}/{machineId}") { entry ->
+                        RemoteSessionScreen(
+                            machineId = entry.arguments?.getString("machineId").orEmpty(),
+                            onBack = { navigation.popBackStack() },
+                        )
+                    }
                 }
             }
 

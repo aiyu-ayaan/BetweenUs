@@ -26,6 +26,61 @@ export function onSocketTokenRejected(renew: () => Promise<unknown>): void {
 // Same host as the REST base, ws scheme: both sockets are behind the gateway
 // this window is pointed at, so there is no second address to configure.
 
+
+/**
+ * Whether this window can reach the backend, for the reconnecting banner.
+ *
+ * Both sockets report into it and the worst answer wins: presence being down
+ * with chat up is still a window that is missing events, and saying so is the
+ * whole point. `offline` is a deliberate stop rather than a slower retry - see
+ * `RECONNECT_DEADLINE_MS`.
+ */
+export type ConnectionState = 'online' | 'reconnecting' | 'offline';
+
+/**
+ * How long a socket is allowed to keep retrying before it is given up on.
+ *
+ * A backoff that never stops is a spinner that never stops, and thirty seconds
+ * of "Reconnecting…" is already longer than anybody waits before deciding the
+ * app is broken. Past it the window says so and offers the retry as a button:
+ * a person who has just walked back into wifi presses it and is back in a
+ * second, which an exponential backoff sitting on its thirty-second step is
+ * not.
+ */
+export const RECONNECT_DEADLINE_MS = 30_000;
+
+const socketStates = new Map<string, ConnectionState>();
+const connectionListeners = new Set<(state: ConnectionState) => void>();
+let lastPublished: ConnectionState = 'online';
+
+function reportSocket(name: string, state: ConnectionState): void {
+  socketStates.set(name, state);
+  const states = [...socketStates.values()];
+  const next: ConnectionState = states.includes('offline')
+    ? 'offline'
+    : states.includes('reconnecting')
+      ? 'reconnecting'
+      : 'online';
+  if (next === lastPublished) return;
+  lastPublished = next;
+  for (const listener of connectionListeners) listener(next);
+}
+
+export function connectionState(): ConnectionState {
+  return lastPublished;
+}
+
+export function onConnectionChange(listener: (state: ConnectionState) => void): () => void {
+  connectionListeners.add(listener);
+  return () => connectionListeners.delete(listener);
+}
+
+/** The button on the banner: start the ladder again, from the bottom. */
+export function retryConnection(): void {
+  chatSocket.retry();
+  presenceSocket.retry();
+}
+
 type Listener = (event: ServerChatEvent) => void;
 
 /**
@@ -44,10 +99,26 @@ export class ChatSocket {
   private reconnectAttempt = 0;
   private reconnectTimer: number | null = null;
   private closedByUs = false;
+  /** When this socket was last up, which is what the deadline measures from. */
+  private downSince: number | null = null;
 
   connect(token: string): void {
     this.token = token;
     this.closedByUs = false;
+    this.downSince ??= Date.now();
+    this.open();
+  }
+
+  /** Asked for by the banner. A retry starts the backoff ladder again. */
+  retry(): void {
+    if (!this.token || this.closedByUs) return;
+    this.reconnectAttempt = 0;
+    this.downSince = Date.now();
+    reportSocket('chat', 'reconnecting');
+    if (this.reconnectTimer !== null) {
+      window.clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
     this.open();
   }
 
@@ -60,6 +131,8 @@ export class ChatSocket {
 
     socket.onopen = () => {
       this.reconnectAttempt = 0;
+      this.downSince = null;
+      reportSocket('chat', 'online');
       // Re-subscribe: the server keeps no membership across connections.
       for (const channelId of this.channels) {
         this.send({ type: 'channel.subscribe', channelId });
@@ -95,6 +168,16 @@ export class ChatSocket {
 
   private scheduleReconnect(): void {
     if (this.reconnectTimer !== null) return;
+    this.downSince ??= Date.now();
+
+    // Given up on rather than retried more slowly: past the deadline the window
+    // says it is disconnected and waits to be told to try again.
+    if (Date.now() - this.downSince >= RECONNECT_DEADLINE_MS) {
+      reportSocket('chat', 'offline');
+      return;
+    }
+    reportSocket('chat', 'reconnecting');
+
     const delay = Math.min(1000 * 2 ** this.reconnectAttempt, 30_000);
     this.reconnectAttempt += 1;
     this.reconnectTimer = window.setTimeout(() => {
@@ -161,6 +244,8 @@ export class ChatSocket {
 
   disconnect(): void {
     this.closedByUs = true;
+    this.downSince = null;
+    reportSocket('chat', 'online');
     this.channels.clear();
     this.servers.clear();
     if (this.reconnectTimer !== null) {
@@ -189,10 +274,26 @@ export class PresenceSocket {
   private reconnectAttempt = 0;
   private reconnectTimer: number | null = null;
   private closedByUs = false;
+  /** When this socket was last up, which is what the deadline measures from. */
+  private downSince: number | null = null;
 
   connect(token: string): void {
     this.token = token;
     this.closedByUs = false;
+    this.downSince ??= Date.now();
+    this.open();
+  }
+
+  /** Asked for by the banner. A retry starts the backoff ladder again. */
+  retry(): void {
+    if (!this.token || this.closedByUs) return;
+    this.reconnectAttempt = 0;
+    this.downSince = Date.now();
+    reportSocket('presence', 'reconnecting');
+    if (this.reconnectTimer !== null) {
+      window.clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
     this.open();
   }
 
@@ -205,6 +306,8 @@ export class PresenceSocket {
 
     socket.onopen = () => {
       this.reconnectAttempt = 0;
+      this.downSince = null;
+      reportSocket('presence', 'online');
     };
 
     socket.onmessage = (raw) => {
@@ -233,6 +336,16 @@ export class PresenceSocket {
 
   private scheduleReconnect(): void {
     if (this.reconnectTimer !== null) return;
+    this.downSince ??= Date.now();
+
+    // Given up on rather than retried more slowly: past the deadline the window
+    // says it is disconnected and waits to be told to try again.
+    if (Date.now() - this.downSince >= RECONNECT_DEADLINE_MS) {
+      reportSocket('presence', 'offline');
+      return;
+    }
+    reportSocket('presence', 'reconnecting');
+
     const delay = Math.min(1000 * 2 ** this.reconnectAttempt, 30_000);
     this.reconnectAttempt += 1;
     this.reconnectTimer = window.setTimeout(() => {
@@ -252,6 +365,8 @@ export class PresenceSocket {
 
   disconnect(): void {
     this.closedByUs = true;
+    this.downSince = null;
+    reportSocket('presence', 'online');
     if (this.reconnectTimer !== null) {
       window.clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;

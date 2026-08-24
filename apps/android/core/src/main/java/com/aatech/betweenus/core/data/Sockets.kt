@@ -1,5 +1,8 @@
 package com.aatech.betweenus.core.data
 
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import okhttp3.Request
 import okhttp3.Response
 import okhttp3.WebSocket
@@ -28,6 +31,8 @@ open class JsonSocket(private val path: String) {
     private var token: String? = null
     private var attempt = 0
     private var closedByUs = false
+    /** When this socket was last up, which is what the deadline measures from. */
+    private var downSince: Long? = null
     private val listeners = CopyOnWriteArraySet<(JSONObject) -> Unit>()
     private val connectionListeners = CopyOnWriteArraySet<(Boolean) -> Unit>()
 
@@ -41,7 +46,23 @@ open class JsonSocket(private val path: String) {
     fun connect(token: String) {
         this.token = token
         closedByUs = false
+        if (downSince == null && !connected) downSince = System.currentTimeMillis()
         open()
+    }
+
+    /**
+     * Asked for by the reconnecting banner, and by a network that came back.
+     *
+     * Whatever the backoff had climbed to belonged to a network that has been
+     * replaced, so the ladder starts again at the bottom.
+     */
+    @Synchronized
+    fun retry() {
+        if (closedByUs || token == null) return
+        attempt = 0
+        downSince = System.currentTimeMillis()
+        Connectivity.report(path, Connectivity.State.RECONNECTING)
+        if (socket == null) open()
     }
 
     /**
@@ -63,7 +84,9 @@ open class JsonSocket(private val path: String) {
                 override fun onOpen(webSocket: WebSocket, response: Response) {
                     log("open")
                     attempt = 0
+                    downSince = null
                     connected = true
+                    Connectivity.report(path, Connectivity.State.ONLINE)
                     onConnected()
                     synchronized(this@JsonSocket) {
                         while (pending.isNotEmpty()) webSocket.send(pending.removeFirst())
@@ -108,6 +131,17 @@ open class JsonSocket(private val path: String) {
     }
 
     private fun scheduleReconnect() {
+        val since = downSince ?: System.currentTimeMillis().also { downSince = it }
+        // Given up on rather than retried more slowly: past the deadline the app
+        // says it is disconnected and waits to be told to try again. A backoff
+        // that never stops is a spinner that never stops.
+        if (System.currentTimeMillis() - since >= RECONNECT_DEADLINE_MS) {
+            log("gave up after ${RECONNECT_DEADLINE_MS}ms")
+            Connectivity.report(path, Connectivity.State.OFFLINE)
+            return
+        }
+        Connectivity.report(path, Connectivity.State.RECONNECTING)
+
         val delay = min(1000.0 * 2.0.pow(attempt), 30_000.0).toLong()
         attempt += 1
         Thread {
@@ -130,8 +164,12 @@ open class JsonSocket(private val path: String) {
         if (closedByUs || token == null || socket != null) return
         // The next failure starts the ladder from the bottom: whatever the
         // count had climbed to belonged to a network that has been replaced.
+        // The deadline restarts with it - a socket that had been given up on
+        // is exactly the one a returning network should try again.
         attempt = 0
+        downSince = System.currentTimeMillis()
         log("network returned")
+        Connectivity.report(path, Connectivity.State.RECONNECTING)
         open()
     }
 
@@ -167,10 +205,72 @@ open class JsonSocket(private val path: String) {
     @Synchronized
     fun disconnect() {
         closedByUs = true
+        downSince = null
         pending.clear()
         socket?.close(1000, null)
         socket = null
         connected = false
+        // A deliberate sign-out is not a connection problem, and a banner left
+        // up over the login form is a lie about a socket nothing wants open.
+        Connectivity.forget(path)
+    }
+
+    companion object {
+        /**
+         * How long a socket may keep retrying before it is given up on.
+         *
+         * Thirty seconds of "Reconnecting…" is already longer than anybody
+         * waits before deciding the app is broken. Past it the app says so and
+         * offers the retry as a button, which somebody who has just walked back
+         * into wifi presses and is back in a second - an exponential backoff
+         * sitting on its thirty-second step is not.
+         */
+        const val RECONNECT_DEADLINE_MS = 30_000L
+    }
+}
+
+/**
+ * Whether this app can reach the backend, for the reconnecting banner.
+ *
+ * Every socket reports into it and the worst answer wins: presence being down
+ * with chat up is still an app that is missing events, and saying so is the
+ * whole point. Call and remote sockets only exist during a session of their
+ * own, so they report too and stop counting the moment they are closed.
+ */
+object Connectivity {
+    enum class State { ONLINE, RECONNECTING, OFFLINE }
+
+    private val perSocket = mutableMapOf<String, State>()
+    private val _state = MutableStateFlow(State.ONLINE)
+    val state: StateFlow<State> = _state.asStateFlow()
+
+    @Synchronized
+    internal fun report(path: String, state: State) {
+        perSocket[path] = state
+        publish()
+    }
+
+    @Synchronized
+    internal fun forget(path: String) {
+        perSocket.remove(path)
+        publish()
+    }
+
+    private fun publish() {
+        val states = perSocket.values
+        _state.value = when {
+            states.contains(State.OFFLINE) -> State.OFFLINE
+            states.contains(State.RECONNECTING) -> State.RECONNECTING
+            else -> State.ONLINE
+        }
+    }
+
+    /** The button on the banner: every socket starts its ladder again. */
+    fun retry() {
+        ChatSocket.retry()
+        PresenceSocket.retry()
+        CallSocket.retry()
+        RemoteSocket.retry()
     }
 }
 

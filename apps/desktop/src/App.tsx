@@ -44,6 +44,7 @@ import { MobileDrawer } from './features/shell/MobileDrawer';
 import { useIsMobile } from './services/responsive';
 import { VersionNotice } from './components/VersionNotice';
 import { UpdateNotice } from './components/UpdateNotice';
+import { ConnectionNotice } from './components/ConnectionNotice';
 import { QuickSwitcher } from './features/shell/QuickSwitcher';
 import { useVoiceStore } from './stores/voice';
 import { BetweenUsLogoIcon } from './components/icons';
@@ -442,6 +443,7 @@ function Workbench(): JSX.Element {
 
   return (
     <div className="flex h-full h-[100dvh] flex-col overflow-hidden">
+      <ConnectionNotice />
       <VersionNotice />
       <UpdateNotice />
       <TopBar
