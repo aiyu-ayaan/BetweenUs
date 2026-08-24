@@ -54,6 +54,20 @@ object CallAudio {
     private var previousMode: Int = AudioManager.MODE_NORMAL
     private var previousSpeaker: Boolean = false
     private var focus: AudioFocusRequest? = null
+    /**
+     * The manager the live call is holding, so the focus can be asked for
+     * again without a `Context` the caller has no reason to be holding.
+     */
+    private var manager: AudioManager? = null
+    /**
+     * A focus loss the system will never take back.
+     *
+     * A transient loss - the ordinary cellular call - ends in `AUDIOFOCUS_GAIN`
+     * and the call resumes itself. A permanent one does not: nothing is coming,
+     * and a call that waits for it stays on hold for the rest of the afternoon.
+     * That is what [reclaimFocus] is for.
+     */
+    private var lostForGood = false
 
     /**
      * What the system says another app is doing to this call's audio.
@@ -73,8 +87,14 @@ object CallAudio {
                 // a second VoIP call, usually. The call is not ended here,
                 // because ending somebody's call on their behalf is worse than
                 // holding it: they come back to it muted and can unmute.
-                AudioManager.AUDIOFOCUS_LOSS -> VoiceEngine.Interruption.HOLD
-                AudioManager.AUDIOFOCUS_GAIN -> VoiceEngine.Interruption.NONE
+                AudioManager.AUDIOFOCUS_LOSS -> {
+                    lostForGood = true
+                    VoiceEngine.Interruption.HOLD
+                }
+                AudioManager.AUDIOFOCUS_GAIN -> {
+                    lostForGood = false
+                    VoiceEngine.Interruption.NONE
+                }
                 else -> VoiceEngine.Interruption.NONE
             },
         )
@@ -130,8 +150,45 @@ object CallAudio {
         }
 
         held = true
+        this.manager = manager
+        lostForGood = false
         applyTo(manager)
         follow(manager)
+    }
+
+    /**
+     * Asks for the audio back, for a call that is on hold with nothing coming.
+     *
+     * The phone call that took the focus is over, but a permanent loss has no
+     * "gain" to answer it - so the focus has to be requested again, and this is
+     * the only thing that does it. Called when the call screen comes back to
+     * the front, and by the Resume button on the hold banner.
+     *
+     * A no-op where the loss was transient: that case resumes itself, and
+     * requesting focus underneath a live cellular call would take the audio off
+     * the call somebody is actually on.
+     */
+    fun reclaimFocus(): Boolean {
+        if (!held || !lostForGood) return false
+        val manager = this.manager ?: return false
+
+        val granted = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val request = focus ?: return false
+            manager.requestAudioFocus(request)
+        } else {
+            @Suppress("DEPRECATION")
+            manager.requestAudioFocus(
+                onFocusChange,
+                AudioManager.STREAM_VOICE_CALL,
+                AudioManager.AUDIOFOCUS_GAIN_TRANSIENT,
+            )
+        } == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
+
+        if (granted) {
+            lostForGood = false
+            VoiceEngine.current()?.setInterruption(VoiceEngine.Interruption.NONE)
+        }
+        return granted
     }
 
     /**
@@ -390,6 +447,8 @@ object CallAudio {
         }
         focus = null
         held = false
+        this.manager = null
+        lostForGood = false
         // The call is over, so nothing is interrupting it any more. Leaving
         // this set would hold the microphone shut on the next call.
         VoiceEngine.current()?.setInterruption(VoiceEngine.Interruption.NONE)

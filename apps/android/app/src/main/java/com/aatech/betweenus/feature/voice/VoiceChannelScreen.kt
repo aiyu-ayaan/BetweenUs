@@ -154,6 +154,7 @@ fun VoiceChannelScreen(
     val linkStats by engine.stats.collectAsState()
     val signalling by engine.signalling.collectAsState()
     val problem by engine.problem.collectAsState()
+    val interruption by engine.interruption.collectAsState()
 
     val channel = channelId?.let { Workspace.channel(it) }
 
@@ -173,6 +174,20 @@ fun VoiceChannelScreen(
             bars.hide(WindowInsetsCompat.Type.systemBars())
         }
         onDispose { bars?.show(WindowInsetsCompat.Type.systemBars()) }
+    }
+
+    // Coming back to the call after a phone call is the moment to ask for the
+    // audio again. A transient loss resumes itself; a permanent one has no
+    // "gain" coming, and without this the call stays silently on hold. The
+    // reclaim is a no-op unless the loss was permanent, so this cannot take the
+    // audio off a cellular call still in progress.
+    val lifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
+    DisposableEffect(lifecycle) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) CallAudio.reclaimFocus()
+        }
+        lifecycle.addObserver(observer)
+        onDispose { lifecycle.removeObserver(observer) }
     }
 
     // Back during a call shrinks it rather than ending it. Only if the system
@@ -867,6 +882,41 @@ fun VoiceChannelScreen(
             )
         }
 
+        // On hold: something else has the audio - a phone call, almost always.
+        // The far end is told over the data channel and shows it on this
+        // person's tile; this is the half they see themselves, and the button
+        // is for the case the system never hands the audio back, which is what
+        // a permanent focus loss is.
+        if (!inPip && interruption == VoiceEngine.Interruption.HOLD) {
+            Row(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = 64.dp, start = 12.dp, end = 12.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(Amber200.copy(alpha = 0.16f))
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Text(
+                    text = "On hold - another call has the audio",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Amber200,
+                )
+                Text(
+                    text = "Resume",
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Slate50,
+                    modifier = Modifier.clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        onClick = { CallAudio.reclaimFocus() },
+                    ),
+                )
+            }
+        }
+
         // --- FLOATING BOTTOM ACTION BAR (WhatsApp style) ---
         AnimatedVisibility(
             visible = isInCall && !inPip && chrome,
@@ -874,18 +924,27 @@ fun VoiceChannelScreen(
             exit = fadeOut() + slideOutVertically { it },
             modifier = Modifier.align(Alignment.BottomCenter),
         ) {
+            // Sized to the screen rather than to its contents. Six fixed
+            // buttons and fixed gaps came to about 400dp, which is wider than
+            // the phone: the bar ran off the right-hand edge and took the
+            // hang-up button with it. The width is now the screen's, the gaps
+            // are whatever is left over, and the buttons are small enough that
+            // there is some.
             Box(
                 modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 10.dp)
                     .padding(bottom = 20.dp),
             ) {
                 Row(
                     modifier = Modifier
+                        .fillMaxWidth()
                         .shadow(16.dp, RoundedCornerShape(36.dp))
                         .clip(RoundedCornerShape(36.dp))
                         .background(Color(0xFF131824).copy(alpha = 0.92f))
                         .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(36.dp))
-                        .padding(horizontal = 18.dp, vertical = 14.dp),
-                    horizontalArrangement = Arrangement.spacedBy(14.dp),
+                        .padding(horizontal = 8.dp, vertical = 12.dp),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     // Flipping the camera is not here: it is on the self tile,
@@ -901,7 +960,7 @@ fun VoiceChannelScreen(
                         active = cameraOn,
                         activeColor = Accent,
                         tint = if (cameraOn) Color.White else Slate400,
-                        size = 48.dp,
+                        size = CONTROL_SIZE,
                         onClick = { if (cameraOn) engine.stopVideo() else camera.request() },
                     )
 
@@ -912,7 +971,7 @@ fun VoiceChannelScreen(
                         active = muted,
                         activeColor = Danger.copy(alpha = 0.25f),
                         tint = if (muted) Danger else Color.White,
-                        size = 48.dp,
+                        size = CONTROL_SIZE,
                         onClick = engine::toggleMute,
                     )
 
@@ -927,7 +986,7 @@ fun VoiceChannelScreen(
                         active = sharing,
                         activeColor = Accent,
                         tint = if (sharing) Color.White else Slate400,
-                        size = 48.dp,
+                        size = CONTROL_SIZE,
                         onClick = {
                             if (sharing) {
                                 engine.stopVideo()
@@ -949,7 +1008,7 @@ fun VoiceChannelScreen(
                         active = inviting,
                         activeColor = Accent,
                         tint = Slate400,
-                        size = 48.dp,
+                        size = CONTROL_SIZE,
                         onClick = { inviting = true },
                     )
 
@@ -962,14 +1021,14 @@ fun VoiceChannelScreen(
                         active = showingConnection,
                         activeColor = Accent,
                         tint = if (linkHealth != null) Danger else Slate400,
-                        size = 48.dp,
+                        size = CONTROL_SIZE,
                         onClick = { showingConnection = true },
                     )
 
                     // 6. Leave Call (Prominent Red Button)
                     Box(
                         modifier = Modifier
-                            .size(54.dp)
+                            .size(LEAVE_SIZE)
                             .clip(CircleShape)
                             .background(Danger)
                             .clickable(
@@ -1034,6 +1093,13 @@ private fun CallCircleButton(
         BetweenUsIcon(icon, tint = tint, size = 20.dp, contentDescription = contentDescription)
     }
 }
+
+/**
+ * The call controls, sized so six of them and their gaps fit the narrowest
+ * phone worth supporting (320dp): 5 x 44 + 50 leaves 50dp of gap over.
+ */
+private val CONTROL_SIZE = 44.dp
+private val LEAVE_SIZE = 50.dp
 
 private val PIP_WIDTH = 108.dp
 private val PIP_HEIGHT = 154.dp
@@ -1236,6 +1302,8 @@ private fun FloatingPipTile(
 private fun statusOf(participant: VoiceEngine.Participant): String? = when {
     participant.lost -> "No connection"
     participant.reconnecting -> "Reconnecting…"
+    // Not "muted": they were pulled into a phone call and are coming back.
+    participant.held -> "On hold"
     else -> null
 }
 
@@ -1353,7 +1421,10 @@ private fun CallTile(
                     size = if (isCompact) 10.dp else 13.dp,
                 )
             }
-            if (!connected) {
+            // Only when the status line has not already said it. The two
+            // together read as "Reconnecting… connecting…", which is one thing
+            // said twice and neither of them clearly.
+            if (!connected && status == null) {
                 Text(
                     text = "connecting…",
                     style = MaterialTheme.typography.labelSmall,

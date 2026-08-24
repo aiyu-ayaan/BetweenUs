@@ -37,7 +37,13 @@ export const LOCAL = 'local';
 
 /** Application state sent over each encrypted peer data channel. */
 const VOICE_STATE_TOPIC = 'betweenus.voice-state';
-type MediaState = Record<Slot, boolean>;
+/**
+ * `hold` is not one of the media slots: it says the sender has been pulled off
+ * the call by something else - a phone call, on a phone - rather than that they
+ * turned anything off. Optional, because a client too old to send it simply
+ * never holds.
+ */
+type MediaState = Record<Slot, boolean> & { hold?: boolean };
 
 interface MediaStateEnvelope {
   topic: typeof VOICE_STATE_TOPIC;
@@ -53,6 +59,14 @@ export interface VoiceTile {
   isLocal: boolean;
   speaking: boolean;
   micEnabled: boolean;
+  /**
+   * They are on another call and this one has their microphone shut.
+   *
+   * Different from `micEnabled`: they did not choose it, and it ends when the
+   * other call does - which is worth saying rather than showing them as having
+   * muted themselves.
+   */
+  held: boolean;
   videoTrack: MediaStreamTrack | null;
   audioTrack: MediaStreamTrack | null;
   /** Audio that came with a shared screen - a film's soundtrack, usually. */
@@ -710,6 +724,9 @@ function snapshot(): { tiles: VoiceTile[]; shares: VoiceShare[] } {
     isLocal: true,
     speaking: Boolean(state.micEnabled && speaking.has(LOCAL)),
     micEnabled: state.micEnabled,
+    // Nothing takes the audio off a desktop window the way a phone call takes
+    // it off a phone, so this end is never held.
+    held: false,
     videoTrack: localTracks.camera ?? null,
     // Never played back locally: hearing your own microphone is a howl.
     audioTrack: null,
@@ -735,6 +752,7 @@ function snapshot(): { tiles: VoiceTile[]; shares: VoiceShare[] } {
         // Track mute means packets are not arriving right now; it does not
         // reliably mean the participant pressed their microphone button.
         micEnabled,
+        held: media?.hold === true,
         videoTrack: camera,
         audioTrack: slots.mic ?? null,
         screenAudioTrack: slots.screenAudio ?? null,
@@ -805,6 +823,7 @@ function receiveMediaState(peer: CallPeer, payload: unknown): boolean {
     camera: media.camera === true,
     screen: media.screen === true,
     screenAudio: media.screenAudio === true,
+    hold: (media as { hold?: unknown }).hold === true,
   });
   refresh();
   return true;

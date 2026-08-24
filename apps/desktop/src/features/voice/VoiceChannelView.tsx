@@ -60,6 +60,8 @@ interface Stage {
   isLocal: boolean;
   speaking: boolean;
   micEnabled: boolean;
+  /** Pulled off the call by another one - see `VoiceTile.held`. */
+  held: boolean;
   videoTrack: MediaStreamTrack | null;
   lastSpokeAt: number;
 }
@@ -99,6 +101,7 @@ export function VoiceChannelView({
         isLocal: false,
         speaking: false,
         micEnabled: true,
+        held: false,
         videoTrack: null,
         lastSpokeAt: 0,
       }));
@@ -215,6 +218,7 @@ function toStage(tile: VoiceTile): Stage {
     isLocal: tile.isLocal,
     speaking: tile.speaking,
     micEnabled: tile.micEnabled,
+    held: tile.held,
     videoTrack: tile.videoTrack,
     lastSpokeAt: tile.lastSpokeAt,
   };
@@ -933,6 +937,9 @@ function StageTile({ tile }: { tile: Stage }): JSX.Element {
           {tile.name}
           {tile.isLocal && ' (you)'}
         </span>
+        {/* Said rather than shown as a mute: they did not choose it, and it
+            ends when the call that took them does. */}
+        {tile.held && <span className="shrink-0 text-amber-300">on hold</span>}
       </div>
 
       {/* Speaking status indicator */}

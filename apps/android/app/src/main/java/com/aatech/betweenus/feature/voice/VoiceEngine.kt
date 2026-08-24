@@ -125,6 +125,14 @@ class VoiceEngine(private val context: Context) {
         /** What they say their microphone is doing, over the data channel. */
         val micEnabled: Boolean = true,
         /**
+         * They are on a phone call, or something else took their audio.
+         *
+         * Different from muted on purpose: they did not choose it, and it ends
+         * when the other call does. Sent over the same data channel; false for
+         * a client too old to mention it.
+         */
+        val held: Boolean = false,
+        /**
          * What they say their camera and their screen share are doing, on the
          * same data channel.
          *
@@ -991,6 +999,12 @@ class VoiceEngine(private val context: Context) {
             .put(Slot.CAMERA.wire, _cameraOn.value)
             .put(Slot.SCREEN.wire, _sharing.value)
             .put(Slot.SCREEN_AUDIO.wire, false)
+            // Held is not muted, and a tile that says "muted" for somebody who
+            // has been pulled into a phone call is the wrong answer twice: they
+            // did not choose it, and it does not say when it ends. An older
+            // client that has never heard of the key reads the microphone as
+            // off, which is what it was before this.
+            .put(HOLD_WIRE, _interruption.value == Interruption.HOLD)
         val envelope = JSONObject().put("topic", VOICE_STATE_TOPIC).put("media", media)
         connections.values.forEach { it.sendData(envelope) }
     }
@@ -1488,6 +1502,7 @@ class VoiceEngine(private val context: Context) {
             update(peer.peerId) {
                 it.copy(
                     micEnabled = media.optBoolean(Slot.MIC.wire, true),
+                    held = if (media.has(HOLD_WIRE)) media.optBoolean(HOLD_WIRE, false) else it.held,
                     // A slot the sender did not mention stays as it was: an
                     // older client that only ever spoke about its microphone
                     // must not be read as having turned its camera off.
@@ -2098,6 +2113,9 @@ class VoiceEngine(private val context: Context) {
 
         /** The topic the desktop stamps its media state with. Must match. */
         private const val VOICE_STATE_TOPIC = "betweenus.voice-state"
+
+        /** The media-state key that says somebody has been pulled off the call. */
+        private const val HOLD_WIRE = "hold"
 
         private const val POLL_MS = 1_000L
 
