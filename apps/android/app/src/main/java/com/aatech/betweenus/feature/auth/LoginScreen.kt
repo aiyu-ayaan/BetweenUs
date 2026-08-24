@@ -43,15 +43,8 @@ import com.aatech.betweenus.core.data.OAuthFlow
 import com.aatech.betweenus.ui.components.BetweenUsButton
 import com.aatech.betweenus.ui.components.BetweenUsField
 import com.aatech.betweenus.ui.components.BetweenUsLogoTile
+import com.aatech.betweenus.ui.components.BetweenUsSecondaryButton
 import com.aatech.betweenus.ui.components.Notice
-import com.aatech.betweenus.ui.theme.Danger
-import com.aatech.betweenus.ui.theme.Edge
-import com.aatech.betweenus.ui.theme.Ground
-import com.aatech.betweenus.ui.theme.Slate100
-import com.aatech.betweenus.ui.theme.Slate400
-import com.aatech.betweenus.ui.theme.Slate50
-import com.aatech.betweenus.ui.theme.Slate500
-import com.aatech.betweenus.ui.theme.Surface900
 
 /**
  * Sign in, or register, against whichever deployment this install is pointed
@@ -72,7 +65,7 @@ fun LoginScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Ground)
+            .background(MaterialTheme.colorScheme.background)
             .systemBarsPadding()
             .imePadding()
             .verticalScroll(rememberScrollState())
@@ -83,23 +76,29 @@ fun LoginScreen(
             modifier = Modifier
                 .fillMaxWidth()
                 .widthIn(max = 420.dp)
-                .border(1.dp, Edge, RoundedCornerShape(20.dp))
-                .background(Surface900, RoundedCornerShape(20.dp))
-                .padding(24.dp),
+                // The one card on the one screen with nothing else on it, so
+                // it gets the widest corner in the scale and no border at all.
+                .background(
+                    MaterialTheme.colorScheme.surfaceContainer,
+                    MaterialTheme.shapes.extraLarge,
+                )
+                .padding(28.dp),
         ) {
             Column(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 BetweenUsLogoTile()
-                Spacer(Modifier.height(16.dp))
+                Spacer(Modifier.height(20.dp))
                 Text(
                     text = if (registering) "Create your account" else "Welcome back",
-                    style = MaterialTheme.typography.headlineSmall,
-                    color = Slate50,
+                    // Emphasized: this is the first line of the app and there
+                    // is nothing else on screen for it to compete with.
+                    style = MaterialTheme.typography.headlineSmallEmphasized,
+                    color = MaterialTheme.colorScheme.onSurface,
                     textAlign = TextAlign.Center,
                 )
-                Spacer(Modifier.height(4.dp))
+                Spacer(Modifier.height(6.dp))
                 Text(
                     text = if (registering) {
                         "Pick a username your teammates will see"
@@ -107,7 +106,7 @@ fun LoginScreen(
                         "Sign in to continue to BetweenUs"
                     },
                     style = MaterialTheme.typography.bodyMedium,
-                    color = Slate400,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center,
                 )
             }
@@ -157,13 +156,13 @@ fun LoginScreen(
                 Text(
                     text = "Must contain a letter and a number.",
                     style = MaterialTheme.typography.bodySmall,
-                    color = Slate500,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
 
             (form.error ?: signedOutReason)?.let { message ->
                 Spacer(Modifier.height(16.dp))
-                Notice(message, Danger)
+                Notice(message, MaterialTheme.colorScheme.error)
             }
 
             Spacer(Modifier.height(20.dp))
@@ -181,14 +180,20 @@ fun LoginScreen(
             if (form.providers.isNotEmpty()) {
                 Spacer(Modifier.height(16.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    HorizontalDivider(Modifier.weight(1f), color = Edge)
+                    HorizontalDivider(
+                        Modifier.weight(1f),
+                        color = MaterialTheme.colorScheme.outlineVariant,
+                    )
                     Text(
                         text = "or",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Slate500,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(horizontal = 12.dp),
                     )
-                    HorizontalDivider(Modifier.weight(1f), color = Edge)
+                    HorizontalDivider(
+                        Modifier.weight(1f),
+                        color = MaterialTheme.colorScheme.outlineVariant,
+                    )
                 }
                 Spacer(Modifier.height(16.dp))
 
@@ -220,13 +225,13 @@ fun LoginScreen(
             ) {
                 Text(
                     text = if (registering) "Already registered? Sign in" else "Need an account? Register",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = Slate400,
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.primary,
                 )
             }
 
             Spacer(Modifier.height(8.dp))
-            HorizontalDivider(color = Edge)
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             Spacer(Modifier.height(8.dp))
 
             // Which deployment this is. BetweenUs is meant to be self-hosted, so
@@ -242,18 +247,18 @@ fun LoginScreen(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    GlobeIcon(tint = Slate400)
+                    GlobeIcon(tint = MaterialTheme.colorScheme.onSurfaceVariant)
                     Text(
                         text = "Connect to a self-hosted instance",
                         style = MaterialTheme.typography.bodyMedium,
-                        color = Slate400,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }
             Text(
                 text = "Signing in to ${form.serverLabel}",
                 style = MaterialTheme.typography.bodySmall,
-                color = Slate500,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
                 modifier = Modifier.fillMaxWidth(),
             )
@@ -274,18 +279,10 @@ fun LoginScreen(
  */
 @Composable
 private fun ProviderButton(label: String, enabled: Boolean, onClick: () -> Unit) {
-    TextButton(
+    BetweenUsSecondaryButton(
+        text = "Continue with $label",
         onClick = onClick,
         enabled = enabled,
-        modifier = Modifier
-            .fillMaxWidth()
-            .heightIn(min = 48.dp)
-            .border(1.dp, Edge, RoundedCornerShape(10.dp)),
-    ) {
-        Text(
-            text = "Continue with $label",
-            style = MaterialTheme.typography.bodyMedium,
-            color = Slate100,
-        )
-    }
+        modifier = Modifier.fillMaxWidth(),
+    )
 }

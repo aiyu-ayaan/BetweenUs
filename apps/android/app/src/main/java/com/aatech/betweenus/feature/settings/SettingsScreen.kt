@@ -15,10 +15,8 @@ import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
-import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
@@ -69,17 +67,7 @@ import com.aatech.betweenus.ui.components.BetweenUsIcon
 import com.aatech.betweenus.ui.components.BetweenUsIcons
 import com.aatech.betweenus.ui.components.Notice
 import com.aatech.betweenus.ui.components.SectionLabel
-import com.aatech.betweenus.ui.theme.Accent
-import com.aatech.betweenus.ui.theme.Danger
-import com.aatech.betweenus.ui.theme.Edge
-import com.aatech.betweenus.ui.theme.Ground
-import com.aatech.betweenus.ui.theme.Slate100
-import com.aatech.betweenus.ui.theme.Slate400
-import com.aatech.betweenus.ui.theme.Slate50
-import com.aatech.betweenus.ui.theme.Slate500
 import com.aatech.betweenus.ui.theme.StatusOnline
-import com.aatech.betweenus.ui.theme.Surface700
-import com.aatech.betweenus.ui.theme.Surface950
 import kotlinx.coroutines.launch
 
 /**
@@ -145,20 +133,27 @@ fun SettingsScreen(
         }
     }
 
-    Column(Modifier.fillMaxSize().background(Ground).systemBarsPadding()) {
+    Column(
+        Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+            .systemBarsPadding(),
+    ) {
         Row(
-            modifier = Modifier.fillMaxWidth().background(Surface950).padding(4.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(MaterialTheme.colorScheme.surfaceContainer)
+                .padding(start = 4.dp, end = 12.dp, top = 6.dp, bottom = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             IconAction(BetweenUsIcons.ChevronLeft, "Back", onBack)
             Text(
                 text = "Settings",
-                style = MaterialTheme.typography.titleMedium,
-                color = Slate50,
+                style = MaterialTheme.typography.titleLargeEmphasized,
+                color = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.weight(1f).padding(start = 8.dp),
             )
         }
-        HorizontalDivider(color = Edge)
 
         Column(Modifier.verticalScroll(rememberScrollState()).padding(bottom = 40.dp)) {
             // --- account ---
@@ -174,11 +169,15 @@ fun SettingsScreen(
                     size = 56.dp,
                 )
                 Column {
-                    Text(user.label, style = MaterialTheme.typography.titleMedium, color = Slate50)
+                    Text(
+                        text = user.label,
+                        style = MaterialTheme.typography.titleMediumEmphasized,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
                     Text(
                         text = "@${user.username} · ${user.email}",
                         style = MaterialTheme.typography.bodySmall,
-                        color = Slate500,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }
@@ -264,7 +263,7 @@ fun SettingsScreen(
                         IdentityStatus.Absent -> "No identity key on this device yet."
                     },
                     style = MaterialTheme.typography.bodyMedium,
-                    color = Slate400,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Spacer(Modifier.height(10.dp))
                 BetweenUsField(
@@ -282,7 +281,7 @@ fun SettingsScreen(
                         "threat model includes the running server, which does see your password " +
                         "when you sign in.",
                     style = MaterialTheme.typography.bodySmall,
-                    color = Slate500,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Spacer(Modifier.height(10.dp))
                 BetweenUsButton(
@@ -324,7 +323,7 @@ fun SettingsScreen(
                     text = "Changing it signs every other session out, and re-seals your identity " +
                         "backup if it was keyed to the password.",
                     style = MaterialTheme.typography.bodySmall,
-                    color = Slate500,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Spacer(Modifier.height(10.dp))
                 BetweenUsButton(
@@ -479,13 +478,7 @@ fun SettingsScreen(
                                         BetweenUsApi.updateNotificationPreferences(enabled = enabled)
                                 }
                             },
-                            colors = SwitchDefaults.colors(
-                                checkedThumbColor = Slate100,
-                                checkedTrackColor = Accent,
-                                uncheckedTrackColor = Surface700,
-                                uncheckedBorderColor = Surface700,
-                                uncheckedThumbColor = Slate400,
-                            ),
+                            colors = switchColours(),
                         )
                     },
                 )
@@ -585,14 +578,14 @@ fun SettingsScreen(
 
             note?.let {
                 Spacer(Modifier.height(12.dp))
-                Notice(it, Danger, Modifier.padding(horizontal = 16.dp))
+                Notice(it, MaterialTheme.colorScheme.error, Modifier.padding(horizontal = 16.dp))
             }
 
             SectionLabel("Session")
             ListRow(
                 title = "Sign out",
-                titleColor = Danger,
-                leading = { BetweenUsIcon(BetweenUsIcons.LogOut, tint = Danger) },
+                titleColor = MaterialTheme.colorScheme.error,
+                leading = { BetweenUsIcon(BetweenUsIcons.LogOut, tint = MaterialTheme.colorScheme.error) },
                 // A call outlives every screen, so signing out is the one place
                 // that has to reach across and end one it did not start.
                 onClick = {
@@ -628,15 +621,16 @@ fun SettingsScreen(
     }
 }
 
-/** The one set of switch colours this screen uses, in one place. */
+/**
+ * The switch colours.
+ *
+ * The toolkit's own, now that the scheme is right: an expressive switch already
+ * draws its checked track from the primary and its unchecked one from the
+ * surface ramp, and the hand-written set this replaces was six lines of saying
+ * the same thing slightly worse.
+ */
 @Composable
-private fun switchColours() = SwitchDefaults.colors(
-    checkedThumbColor = Slate100,
-    checkedTrackColor = Accent,
-    uncheckedTrackColor = Surface700,
-    uncheckedBorderColor = Surface700,
-    uncheckedThumbColor = Slate400,
-)
+private fun switchColours() = SwitchDefaults.colors()
 
 /**
  * Input sensitivity: the threshold, and a meter to set it against.
@@ -677,7 +671,7 @@ private fun InputSensitivity(threshold: Int?, onChange: (Int?) -> Unit) {
             live -> "Below ${'$'}threshold dB the microphone is closed"
             else -> "Below ${'$'}threshold dB the microphone is closed. Join a call to see the meter."
         },
-        leading = { BetweenUsIcon(BetweenUsIcons.Mic, tint = Slate400) },
+        leading = { BetweenUsIcon(BetweenUsIcons.Mic, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
         trailing = {
             Switch(
                 checked = threshold != null,
@@ -702,11 +696,6 @@ private fun InputSensitivity(threshold: Int?, onChange: (Int?) -> Unit) {
             value = threshold.toFloat(),
             onValueChange = { onChange(it.toInt()) },
             valueRange = MicGate.MIN_THRESHOLD_DB.toFloat()..MicGate.MAX_THRESHOLD_DB.toFloat(),
-            colors = SliderDefaults.colors(
-                thumbColor = Accent,
-                activeTrackColor = Accent,
-                inactiveTrackColor = Surface700,
-            ),
         )
     }
 }
@@ -733,14 +722,16 @@ private fun MicMeter(levelDb: Double, thresholdDb: Int, open: Boolean, live: Boo
             .fillMaxWidth()
             .height(10.dp)
             .clip(RoundedCornerShape(5.dp))
-            .background(Surface700),
+            .background(MaterialTheme.colorScheme.surfaceContainerHighest),
     ) {
         if (filled > 0f) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth(filled)
                     .fillMaxHeight()
-                    .background(if (open) StatusOnline else Slate500),
+                    .background(
+                        if (open) StatusOnline else MaterialTheme.colorScheme.onSurfaceVariant,
+                    ),
             )
         }
         // The threshold, drawn over the level rather than beside it.
@@ -754,7 +745,7 @@ private fun MicMeter(levelDb: Double, thresholdDb: Int, open: Boolean, live: Boo
                 modifier = Modifier
                     .width(2.dp)
                     .fillMaxHeight()
-                    .background(Slate100),
+                    .background(MaterialTheme.colorScheme.onSurface),
             )
         }
     }
@@ -771,7 +762,7 @@ private fun AudioSwitch(
     ListRow(
         title = title,
         subtitle = subtitle,
-        leading = { BetweenUsIcon(BetweenUsIcons.Settings, tint = Slate400) },
+        leading = { BetweenUsIcon(BetweenUsIcons.Settings, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
         trailing = {
             Switch(checked = checked, onCheckedChange = onChange, colors = switchColours())
         },
@@ -793,7 +784,7 @@ private fun PermissionRow(
         } else {
             detail
         },
-        leading = { BetweenUsIcon(icon, tint = if (granted) StatusOnline else Slate400) },
+        leading = { BetweenUsIcon(icon, tint = if (granted) StatusOnline else MaterialTheme.colorScheme.onSurfaceVariant) },
         trailing = {
             when {
                 granted -> BetweenUsIcon(BetweenUsIcons.Check, tint = StatusOnline, size = 18.dp)

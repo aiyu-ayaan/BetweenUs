@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -47,12 +46,7 @@ import com.aatech.betweenus.ui.components.IconAction
 import com.aatech.betweenus.ui.components.ListRow
 import com.aatech.betweenus.ui.components.Notice
 import com.aatech.betweenus.ui.components.SectionLabel
-import com.aatech.betweenus.ui.theme.Danger
-import com.aatech.betweenus.ui.theme.Edge
-import com.aatech.betweenus.ui.theme.Ground
-import com.aatech.betweenus.ui.theme.Slate50
 import com.aatech.betweenus.ui.theme.StatusOnline
-import com.aatech.betweenus.ui.theme.Surface950
 import kotlinx.coroutines.launch
 
 /**
@@ -114,20 +108,27 @@ fun FriendsScreen(onOpenMenu: () -> Unit, onOpenChannel: (String) -> Unit) {
         }
     }
 
-    Column(Modifier.fillMaxSize().background(Ground).systemBarsPadding()) {
+    Column(
+        Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+            .systemBarsPadding(),
+    ) {
         Row(
-            modifier = Modifier.fillMaxWidth().background(Surface950).padding(4.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(MaterialTheme.colorScheme.surfaceContainer)
+                .padding(start = 4.dp, end = 12.dp, top = 6.dp, bottom = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             IconAction(BetweenUsIcons.LayoutSidebar, "Open the channel list", onOpenMenu)
             Text(
                 text = "Friends",
-                style = MaterialTheme.typography.titleMedium,
-                color = Slate50,
+                style = MaterialTheme.typography.titleLargeEmphasized,
+                color = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.weight(1f).padding(start = 8.dp),
             )
         }
-        HorizontalDivider(color = Edge)
 
         // Notification Permission Warning Banner (if user denied or turned off notifications)
         if (BetweenUsPermissions.NOTIFICATIONS != null && !notificationsGranted && !notificationBannerDismissed) {
@@ -139,7 +140,6 @@ fun FriendsScreen(onOpenMenu: () -> Unit, onOpenChannel: (String) -> Unit) {
                     notificationBannerDismissed = true
                 },
             )
-            HorizontalDivider(color = Edge)
         }
 
         LazyColumn(Modifier.fillMaxSize()) {
@@ -154,7 +154,7 @@ fun FriendsScreen(onOpenMenu: () -> Unit, onOpenChannel: (String) -> Unit) {
                         enabled = !busy,
                     )
                     note?.let {
-                        Notice(it, Danger, Modifier.padding(top = 8.dp))
+                        Notice(it, MaterialTheme.colorScheme.error, Modifier.padding(top = 8.dp))
                     }
                 }
             }
@@ -188,7 +188,7 @@ fun FriendsScreen(onOpenMenu: () -> Unit, onOpenChannel: (String) -> Unit) {
                             IconAction(BetweenUsIcons.Check, "Accept", tint = StatusOnline, onClick = {
                                 act { BetweenUsApi.acceptFriend(friend.user.id); Workspace.loadFriends() }
                             })
-                            IconAction(BetweenUsIcons.X, "Refuse", tint = Danger, onClick = {
+                            IconAction(BetweenUsIcons.X, "Refuse", tint = MaterialTheme.colorScheme.error, onClick = {
                                 act { BetweenUsApi.removeFriend(friend.user.id); Workspace.loadFriends() }
                             })
                         },
@@ -234,7 +234,7 @@ fun FriendsScreen(onOpenMenu: () -> Unit, onOpenChannel: (String) -> Unit) {
                                 onOpenChannel(direct.channelId)
                             }
                         })
-                        IconAction(BetweenUsIcons.X, "Remove", tint = Danger, onClick = {
+                        IconAction(BetweenUsIcons.X, "Remove", tint = MaterialTheme.colorScheme.error, onClick = {
                             act { BetweenUsApi.removeFriend(friend.user.id); Workspace.loadFriends() }
                         })
                     },
