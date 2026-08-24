@@ -200,7 +200,7 @@ fun MessageRow(
             ) {
                 BetweenUsIcon(
                     icon = BetweenUsIcons.Reply,
-                    tint = Accent.copy(alpha = progress),
+                    tint = MaterialTheme.colorScheme.primary.copy(alpha = progress),
                     size = (14 + 6 * progress).dp,
                 )
             }
@@ -241,7 +241,13 @@ fun MessageRow(
                     scope.launch { slide.snapTo(next) }
                 }
             }
-            .background(if (highlighted) Accent.copy(alpha = 0.14f) else Color.Transparent)
+            .background(
+                if (highlighted) {
+                    MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
+                } else {
+                    Color.Transparent
+                },
+            )
             .combinedClickable(
                 onClick = {},
                 onLongClick = { if (!message.deleted) onLongPress() },
@@ -275,71 +281,79 @@ fun MessageRow(
                     ) {
                         Text(
                             text = if (isSelf) "You" else message.author.label,
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            color = if (isSelf) Accent else Slate50,
+                            style = MaterialTheme.typography.labelLargeEmphasized,
+                            color = if (isSelf) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.onSurface
+                            },
                         )
 
                         Spacer(Modifier.width(8.dp))
                         Text(
                             text = shortTime(message.createdAt),
                             style = MaterialTheme.typography.bodySmall,
-                            fontSize = 11.sp,
-                            color = Slate500,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
 
                         if (message.pinned) {
                             Spacer(Modifier.width(6.dp))
-                            Box(
+                            // Pinned is news about a message, not a warning
+                            // about one, so it is the tertiary container - the
+                            // same tone reactions and unread counts use.
+                            Row(
                                 modifier = Modifier
-                                    .clip(RoundedCornerShape(4.dp))
-                                    .background(Color(0xFFF59E0B).copy(alpha = 0.15f))
-                                    .padding(horizontal = 4.dp, vertical = 1.dp),
+                                    .clip(MaterialTheme.shapes.small)
+                                    .background(MaterialTheme.colorScheme.tertiaryContainer)
+                                    .padding(horizontal = 6.dp, vertical = 2.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(3.dp),
                             ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(2.dp),
-                                ) {
-                                    BetweenUsIcon(
-                                        icon = BetweenUsIcons.Pin,
-                                        tint = Color(0xFFF59E0B),
-                                        size = 10.dp,
-                                    )
-                                    Text(
-                                        text = "PINNED",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        fontSize = 9.sp,
-                                        color = Color(0xFFF59E0B),
-                                        fontWeight = FontWeight.Bold,
-                                    )
-                                }
+                                BetweenUsIcon(
+                                    icon = BetweenUsIcons.Pin,
+                                    tint = MaterialTheme.colorScheme.onTertiaryContainer,
+                                    size = 11.dp,
+                                )
+                                Text(
+                                    text = "PINNED",
+                                    style = MaterialTheme.typography.labelSmallEmphasized,
+                                    color = MaterialTheme.colorScheme.onTertiaryContainer,
+                                )
                             }
                         }
                     }
                 }
 
-                // Message bubble container
+                // The bubble.
+                //
+                // Its shape says who is speaking and where in a run it sits.
+                // The corner nearest the speaker is tight - start for someone
+                // else, end for you - and a message that continues a run keeps
+                // that corner tight at the top as well, so a run reads as one
+                // block of speech rather than a stack of separate cards.
+                //
+                // Tone rather than an outline. Your own words are the primary
+                // container and everyone else's the surface, which is a
+                // stronger separation than a 1dp border ever was and one that
+                // survives a screen in sunlight.
+                val bubble = RoundedCornerShape(
+                    topStart = if (!isSelf && grouped) 6.dp else 18.dp,
+                    topEnd = if (isSelf && grouped) 6.dp else 18.dp,
+                    bottomStart = if (isSelf) 18.dp else 6.dp,
+                    bottomEnd = if (isSelf) 6.dp else 18.dp,
+                )
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(14.dp))
+                        .clip(bubble)
                         .background(
                             when {
-                                message.deleted -> Surface900.copy(alpha = 0.5f)
-                                isSelf -> Color(0xFF191726)
-                                else -> Surface900
+                                message.deleted -> MaterialTheme.colorScheme.surfaceContainer
+                                isSelf -> MaterialTheme.colorScheme.primaryContainer
+                                else -> MaterialTheme.colorScheme.surfaceContainerHigh
                             },
                         )
-                        .border(
-                            width = 1.dp,
-                            color = when {
-                                message.deleted -> Edge
-                                isSelf -> Accent.copy(alpha = 0.24f)
-                                else -> Edge
-                            },
-                            shape = RoundedCornerShape(14.dp),
-                        )
-                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                        .padding(horizontal = 14.dp, vertical = 10.dp),
                 ) {
                     Column {
                         // The quote belongs to the message, so it sits inside
@@ -349,24 +363,27 @@ fun MessageRow(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .padding(bottom = 6.dp)
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .background(Accent.copy(alpha = 0.08f))
+                                    .clip(MaterialTheme.shapes.small)
+                                    .background(MaterialTheme.colorScheme.surfaceContainerLowest.copy(alpha = 0.5f))
                                     .clickable { onOpenQuoted(reply.id) }
                                     .padding(horizontal = 8.dp, vertical = 5.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                             ) {
-                                BetweenUsIcon(BetweenUsIcons.Reply, tint = Slate500, size = 12.dp)
+                                BetweenUsIcon(
+                                    BetweenUsIcons.Reply,
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    size = 12.dp,
+                                )
                                 Text(
                                     text = reply.author,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = Accent,
+                                    style = MaterialTheme.typography.labelSmallEmphasized,
+                                    color = MaterialTheme.colorScheme.primary,
                                 )
                                 Text(
                                     text = reply.preview.ifBlank { "Sent an attachment" },
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = Slate400,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     maxLines = 1,
                                     overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                                 )
@@ -378,13 +395,17 @@ fun MessageRow(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                             ) {
-                                BetweenUsIcon(BetweenUsIcons.Trash, tint = Slate500, size = 16.dp)
+                                BetweenUsIcon(
+                                    BetweenUsIcons.Trash,
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    size = 16.dp,
+                                )
                                 Text(
                                     text = "Message deleted" +
                                         (message.deletedBy?.takeIf { it.id != message.author.id }
                                             ?.let { " by ${it.label}" } ?: ""),
                                     style = MaterialTheme.typography.bodyMedium,
-                                    color = Slate500,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
 
@@ -392,14 +413,18 @@ fun MessageRow(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                             ) {
-                                BetweenUsIcon(BetweenUsIcons.Lock, tint = Danger, size = 16.dp)
+                                BetweenUsIcon(
+                                    BetweenUsIcons.Lock,
+                                    tint = MaterialTheme.colorScheme.error,
+                                    size = 16.dp,
+                                )
                                 // One word, because it is drawn once per
                                 // message. Why, and what to do about it, is
                                 // said once for the channel - see ChatScreen.
                                 Text(
                                     text = "Encrypted",
                                     style = MaterialTheme.typography.bodyMedium,
-                                    color = Slate400,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
 
@@ -421,7 +446,7 @@ fun MessageRow(
                                     Text(
                                         text = "(edited)",
                                         style = MaterialTheme.typography.labelSmall,
-                                        color = Slate500,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         modifier = Modifier.padding(top = 4.dp),
                                     )
                                 }
@@ -441,12 +466,17 @@ fun MessageRow(
                             val reacted = self.id in reaction.userIds
                             Box(
                                 modifier = Modifier
+                                    // A reaction you are part of is filled;
+                                    // one you are not is a quiet container. No
+                                    // outline on either: at this size a border
+                                    // is most of what you see.
                                     .clip(RoundedCornerShape(14.dp))
-                                    .background(if (reacted) Accent.copy(alpha = 0.2f) else Surface800)
-                                    .border(
-                                        width = 1.dp,
-                                        color = if (reacted) Accent else Edge,
-                                        shape = RoundedCornerShape(14.dp),
+                                    .background(
+                                        if (reacted) {
+                                            MaterialTheme.colorScheme.tertiaryContainer
+                                        } else {
+                                            MaterialTheme.colorScheme.surfaceContainerHighest
+                                        },
                                     )
                                     .clickable { onReact(reaction.emoji) }
                                     .padding(horizontal = 8.dp, vertical = 4.dp),
@@ -462,9 +492,12 @@ fun MessageRow(
                                     )
                                     Text(
                                         text = "${reaction.userIds.size}",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        fontWeight = FontWeight.Bold,
-                                        color = if (reacted) Accent else Slate400,
+                                        style = MaterialTheme.typography.labelMediumEmphasized,
+                                        color = if (reacted) {
+                                            MaterialTheme.colorScheme.onTertiaryContainer
+                                        } else {
+                                            MaterialTheme.colorScheme.onSurfaceVariant
+                                        },
                                     )
                                 }
                             }
@@ -563,9 +596,8 @@ private fun AttachmentCard(
     Box(
         Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .background(Surface850)
-            .border(1.dp, Edge, RoundedCornerShape(12.dp)),
+            .clip(MaterialTheme.shapes.large)
+            .background(MaterialTheme.colorScheme.surfaceContainerLow),
     ) {
         when {
             // --- IMAGE ATTACHMENT ---
@@ -611,23 +643,34 @@ private fun AttachmentCard(
                             CircularProgressIndicator(
                                 modifier = Modifier.size(24.dp),
                                 strokeWidth = 2.dp,
-                                color = Accent,
+                                color = MaterialTheme.colorScheme.primary,
                             )
                         } else {
-                            BetweenUsIcon(BetweenUsIcons.Image, tint = if (failed) Danger else Accent, size = 24.dp)
+                            BetweenUsIcon(
+                                BetweenUsIcons.Image,
+                                tint = if (failed) {
+                                    MaterialTheme.colorScheme.error
+                                } else {
+                                    MaterialTheme.colorScheme.primary
+                                },
+                                size = 24.dp,
+                            )
                         }
 
                         Column(Modifier.weight(1f)) {
                             Text(
                                 text = attachment.name,
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.SemiBold,
-                                color = Slate100,
+                                style = MaterialTheme.typography.bodyMediumEmphasized,
+                                color = MaterialTheme.colorScheme.onSurface,
                             )
                             Text(
                                 text = if (failed) "Failed to decrypt photo" else "Decrypting photo · ${readableSize(attachment.size)}",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = if (failed) Danger else Slate500,
+                                color = if (failed) {
+                                    MaterialTheme.colorScheme.error
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                },
                             )
                         }
                     }

@@ -23,9 +23,10 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.LinearWavyProgressIndicator
+import androidx.compose.material3.MaterialShapes
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.toShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -65,18 +66,6 @@ import com.aatech.betweenus.ui.components.BetweenUsIcon
 import com.aatech.betweenus.ui.components.BetweenUsIcons
 import com.aatech.betweenus.ui.components.Notice
 import com.aatech.betweenus.ui.components.StatusDot
-import com.aatech.betweenus.ui.theme.Accent
-import com.aatech.betweenus.ui.theme.Danger
-import com.aatech.betweenus.ui.theme.Edge
-import com.aatech.betweenus.ui.theme.Ground
-import com.aatech.betweenus.ui.theme.Slate100
-import com.aatech.betweenus.ui.theme.Slate400
-import com.aatech.betweenus.ui.theme.Slate50
-import com.aatech.betweenus.ui.theme.Slate500
-import com.aatech.betweenus.ui.theme.Surface850
-import com.aatech.betweenus.ui.theme.Surface800
-import com.aatech.betweenus.ui.theme.Surface900
-import com.aatech.betweenus.ui.theme.Surface950
 import kotlinx.coroutines.launch
 
 /**
@@ -327,63 +316,72 @@ fun ChatScreen(
     Column(
         Modifier
             .fillMaxSize()
-            .background(Ground)
+            .background(MaterialTheme.colorScheme.background)
             .systemBarsPadding()
             .imePadding(),
     ) {
-        // --- Elevated Header App Bar ---
+        // --- The header ---
+        //
+        // A container rather than a bar with a line under it: the tone is what
+        // separates it from the conversation, and one fewer hairline on a
+        // screen that is mostly text is one fewer thing to read past. The
+        // channel's mark sits in a cookie, which is the shape this app uses
+        // wherever a symbol stands for a place.
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(Surface950)
-                .padding(horizontal = 6.dp, vertical = 6.dp),
+                .background(MaterialTheme.colorScheme.surfaceContainer)
+                .padding(start = 4.dp, end = 8.dp, top = 6.dp, bottom = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             IconAction(BetweenUsIcons.LayoutSidebar, "Open the channel list", onOpenMenu)
 
             Box(
                 modifier = Modifier
-                    .size(34.dp)
-                    .clip(CircleShape)
-                    .background(Surface850)
-                    .border(1.dp, Edge, CircleShape),
+                    .size(40.dp)
+                    .clip(MaterialShapes.Cookie9Sided.toShape())
+                    .background(
+                        if (direct != null) {
+                            MaterialTheme.colorScheme.primaryContainer
+                        } else {
+                            MaterialTheme.colorScheme.surfaceContainerHighest
+                        },
+                    ),
                 contentAlignment = Alignment.Center,
             ) {
                 BetweenUsIcon(
                     icon = if (direct != null) BetweenUsIcons.User else BetweenUsIcons.Hash,
-                    tint = if (direct != null) Accent else Slate400,
-                    size = 18.dp,
+                    tint = if (direct != null) {
+                        MaterialTheme.colorScheme.onPrimaryContainer
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+                    size = 20.dp,
                 )
             }
 
             Column(
                 Modifier
                     .weight(1f)
-                    .padding(start = 10.dp),
+                    .padding(start = 12.dp),
             ) {
                 Text(
                     text = title,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = Slate50,
+                    style = MaterialTheme.typography.titleMediumEmphasized,
+                    color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
-                if (direct != null) {
+                val caption = when {
+                    direct != null -> "Encrypted direct message"
+                    !channel?.topic.isNullOrBlank() -> channel!!.topic!!
+                    else -> null
+                }
+                if (caption != null) {
                     Text(
-                        text = "Encrypted direct message",
+                        text = caption,
                         style = MaterialTheme.typography.bodySmall,
-                        fontSize = 11.sp,
-                        color = Slate500,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                } else if (!channel?.topic.isNullOrBlank()) {
-                    Text(
-                        text = channel!!.topic!!,
-                        style = MaterialTheme.typography.bodySmall,
-                        fontSize = 11.sp,
-                        color = Slate500,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
@@ -391,11 +389,11 @@ fun ChatScreen(
             }
 
             IconAction(BetweenUsIcons.Pin, "Pinned messages", { showPins = true })
-            IconAction(BetweenUsIcons.Phone, "Start a call", onStartCall)
             IconAction(BetweenUsIcons.Users, "Members", onOpenMembers)
+            // The one action here that starts something rather than showing
+            // something, so it is the one that is filled.
+            IconAction(BetweenUsIcons.Phone, "Start a call", onStartCall, prominent = true)
         }
-
-        HorizontalDivider(color = Edge)
 
         // Notification Permission Warning Banner (if user denied or turned off notifications)
         if (BetweenUsPermissions.NOTIFICATIONS != null && !notificationsGranted && !notificationBannerDismissed) {
@@ -407,11 +405,13 @@ fun ChatScreen(
                     notificationBannerDismissed = true
                 },
             )
-            HorizontalDivider(color = Edge)
         }
 
+        // History on its way in. Wavy, because that is what "working" looks
+        // like everywhere else in this app and a flat bar here would be the
+        // one exception.
         if (busy && messages.isEmpty()) {
-            LinearProgressIndicator(Modifier.fillMaxWidth(), color = Accent)
+            LinearWavyProgressIndicator(Modifier.fillMaxWidth())
         }
 
         // --- Message History List ---
@@ -441,7 +441,7 @@ fun ChatScreen(
                                 "devices. Open BetweenUs on the device you first signed in " +
                                 "with and they will unlock here.",
                             style = MaterialTheme.typography.bodySmall,
-                            color = Slate500,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(horizontal = 12.dp, vertical = 8.dp),
@@ -500,9 +500,9 @@ fun ChatScreen(
             ) {
                 Box(
                     modifier = Modifier
-                        .size(6.dp)
+                        .size(7.dp)
                         .clip(CircleShape)
-                        .background(Accent),
+                        .background(MaterialTheme.colorScheme.primary),
                 )
                 Text(
                     text = when (typing.size) {
@@ -510,14 +510,17 @@ fun ChatScreen(
                         else -> "${typing.size} people are typing…"
                     },
                     style = MaterialTheme.typography.bodySmall,
-                    fontSize = 12.sp,
-                    color = Slate400,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         }
 
         failure?.let {
-            Notice(it, Danger, Modifier.padding(horizontal = 12.dp, vertical = 4.dp))
+            Notice(
+                it,
+                MaterialTheme.colorScheme.error,
+                Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+            )
         }
 
         // --- What is going out, if anything is ---
@@ -529,8 +532,8 @@ fun ChatScreen(
             Column(
                 Modifier
                     .fillMaxWidth()
-                    .background(Surface900)
-                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                    .background(MaterialTheme.colorScheme.surfaceContainer)
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -538,8 +541,8 @@ fun ChatScreen(
                 ) {
                     Text(
                         text = going.name,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = Slate100,
+                        style = MaterialTheme.typography.labelMediumEmphasized,
+                        color = MaterialTheme.colorScheme.onSurface,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f),
@@ -549,16 +552,16 @@ fun ChatScreen(
                             if (going.total > 1) append("${going.index}/${going.total} · ")
                             append("${(going.fraction * 100).toInt()}%")
                         },
-                        style = MaterialTheme.typography.labelSmall,
-                        color = Slate500,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                Spacer(Modifier.height(4.dp))
-                LinearProgressIndicator(
+                Spacer(Modifier.height(6.dp))
+                // The wave travels while the upload does. A flat bar creeping
+                // forward and a stalled one look the same; this pair does not.
+                LinearWavyProgressIndicator(
                     progress = { going.fraction },
-                    modifier = Modifier.fillMaxWidth().height(3.dp).clip(RoundedCornerShape(2.dp)),
-                    color = Accent,
-                    trackColor = Surface800,
+                    modifier = Modifier.fillMaxWidth(),
                 )
             }
         }

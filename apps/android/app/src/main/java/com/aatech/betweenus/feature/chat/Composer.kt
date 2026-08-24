@@ -36,6 +36,9 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.material3.FilledIconButton
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -68,19 +71,8 @@ import com.aatech.betweenus.core.store.Workspace
 import com.aatech.betweenus.core.store.ReadableMessage
 import com.aatech.betweenus.ui.components.IconAction
 import com.aatech.betweenus.ui.components.BetweenUsIcon
+import com.aatech.betweenus.ui.theme.BetweenUsMotion
 import com.aatech.betweenus.ui.components.BetweenUsIcons
-import com.aatech.betweenus.ui.theme.Accent
-import com.aatech.betweenus.ui.theme.Edge
-import com.aatech.betweenus.ui.theme.Slate100
-import com.aatech.betweenus.ui.theme.Slate300
-import com.aatech.betweenus.ui.theme.Slate400
-import com.aatech.betweenus.ui.theme.Slate50
-import com.aatech.betweenus.ui.theme.Slate500
-import com.aatech.betweenus.ui.theme.Surface700
-import com.aatech.betweenus.ui.theme.Surface800
-import com.aatech.betweenus.ui.theme.Surface850
-import com.aatech.betweenus.ui.theme.Surface900
-import com.aatech.betweenus.ui.theme.Surface950
 
 /**
  * WhatsApp-style Composer with:
@@ -89,7 +81,8 @@ import com.aatech.betweenus.ui.theme.Surface950
  * - Attachment paperclip button (what it picks goes to the preview, never to a
  *   chip on this bar: nothing is uploaded until the preview is sent from)
  * - Quick Camera button (automatically hidden when keyboard is open or when typing)
- * - Circular Accent Send button
+ * - A send button that lights up as the first character lands, and squares off
+ *   under a finger
  * - A pasted or keyboard-inserted picture, which goes to the send preview
  *   rather than into the text - see [onPasteMedia]
  */
@@ -200,48 +193,46 @@ fun Composer(
     val canSend = text.isNotBlank()
     val showCamera = !isImeVisible && text.isEmpty()
 
+    val scheme = MaterialTheme.colorScheme
     Column(
         Modifier
             .fillMaxWidth()
-            .background(Surface950),
+            .background(scheme.surfaceContainerLow),
     ) {
         EmojiSuggestBar(suggestions) { suggestion -> insert(suggestion.insert, query) }
-
-        HorizontalDivider(color = Edge)
 
         // A picture on the clipboard, and the one gesture that can send it.
         AnimatedVisibility(
             visible = clipboardImage,
-            enter = fadeIn() + expandVertically(),
-            exit = fadeOut() + shrinkVertically(),
+            enter = fadeIn(BetweenUsMotion.effect()) + expandVertically(BetweenUsMotion.spatial()),
+            exit = fadeOut(BetweenUsMotion.effect()) + shrinkVertically(BetweenUsMotion.spatial()),
         ) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(Surface900)
+                    .background(scheme.tertiaryContainer)
                     .clickable { pasteFromClipboard() }
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                    .padding(start = 16.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                BetweenUsIcon(BetweenUsIcons.Image, tint = Accent, size = 16.dp)
+                BetweenUsIcon(BetweenUsIcons.Image, tint = scheme.onTertiaryContainer, size = 18.dp)
                 Text(
                     text = "Image on the clipboard",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Slate300,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = scheme.onTertiaryContainer,
                     modifier = Modifier.weight(1f),
                 )
                 Text(
                     text = "PASTE",
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = Accent,
+                    style = MaterialTheme.typography.labelSmallEmphasized,
+                    color = scheme.onTertiaryContainer,
                 )
                 IconAction(
                     icon = BetweenUsIcons.X,
                     contentDescription = "Not this one",
                     onClick = { clipboardImage = false },
-                    modifier = Modifier.size(28.dp),
+                    tint = scheme.onTertiaryContainer,
                 )
             }
         }
@@ -249,40 +240,16 @@ fun Composer(
         // Editing banner
         AnimatedVisibility(
             visible = editing != null,
-            enter = fadeIn() + expandVertically(),
-            exit = fadeOut() + shrinkVertically(),
+            enter = fadeIn(BetweenUsMotion.effect()) + expandVertically(BetweenUsMotion.spatial()),
+            exit = fadeOut(BetweenUsMotion.effect()) + shrinkVertically(BetweenUsMotion.spatial()),
         ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(Surface900)
-                    .padding(horizontal = 16.dp, vertical = 6.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                BetweenUsIcon(BetweenUsIcons.Pencil, tint = Accent, size = 16.dp)
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        text = "Editing message",
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = Accent,
-                    )
-                    Text(
-                        text = editing?.text.orEmpty(),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Slate400,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-                IconAction(
-                    icon = BetweenUsIcons.X,
-                    contentDescription = "Cancel editing",
-                    onClick = onCancelEdit,
-                    tint = Slate400,
-                )
-            }
+            ComposerBanner(
+                icon = BetweenUsIcons.Pencil,
+                title = "Editing message",
+                detail = editing?.text.orEmpty(),
+                dismissDescription = "Cancel editing",
+                onDismiss = onCancelEdit,
+            )
         }
 
         // Replying banner. Same shape as the editing one above, and the two
@@ -290,40 +257,16 @@ fun Composer(
         // what it was answering.
         AnimatedVisibility(
             visible = editing == null && replyingTo != null,
-            enter = fadeIn() + expandVertically(),
-            exit = fadeOut() + shrinkVertically(),
+            enter = fadeIn(BetweenUsMotion.effect()) + expandVertically(BetweenUsMotion.spatial()),
+            exit = fadeOut(BetweenUsMotion.effect()) + shrinkVertically(BetweenUsMotion.spatial()),
         ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(Surface900)
-                    .padding(horizontal = 16.dp, vertical = 6.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                BetweenUsIcon(BetweenUsIcons.Reply, tint = Accent, size = 16.dp)
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        text = "Replying to ${replyingTo?.author.orEmpty()}",
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = Accent,
-                    )
-                    Text(
-                        text = replyingTo?.preview?.ifBlank { "Sent an attachment" }.orEmpty(),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Slate400,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-                IconAction(
-                    icon = BetweenUsIcons.X,
-                    contentDescription = "Cancel reply",
-                    onClick = onCancelReply,
-                    tint = Slate400,
-                )
-            }
+            ComposerBanner(
+                icon = BetweenUsIcons.Reply,
+                title = "Replying to ${replyingTo?.author.orEmpty()}",
+                detail = replyingTo?.preview?.ifBlank { "Sent an attachment" }.orEmpty(),
+                dismissDescription = "Cancel reply",
+                onDismiss = onCancelReply,
+            )
         }
 
         // Main input bar
@@ -334,37 +277,33 @@ fun Composer(
             verticalAlignment = Alignment.Bottom,
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            // Text Input Pill Container (holding Emoji, text, Paperclip, and Camera)
+            // The well the message is typed into.
+            //
+            // The outline is the focus, and it fades in and out on the theme's
+            // spring rather than switching: a border that appears the instant a
+            // character lands reads as a flicker.
+            val outline by animateColorAsState(
+                targetValue = if (text.isEmpty()) scheme.outlineVariant else scheme.primary,
+                animationSpec = BetweenUsMotion.effect(),
+                label = "composer-outline",
+            )
             Row(
                 modifier = Modifier
                     .weight(1f)
-                    .heightIn(min = 46.dp)
-                    .clip(RoundedCornerShape(24.dp))
-                    .background(Surface900)
-                    .border(
-                        1.dp,
-                        if (text.isNotEmpty()) Accent.copy(alpha = 0.45f) else Surface700,
-                        RoundedCornerShape(24.dp),
-                    )
-                    .padding(horizontal = 6.dp, vertical = 4.dp),
+                    .heightIn(min = 52.dp)
+                    .clip(ComposerWellShape)
+                    .background(scheme.surfaceContainerHigh)
+                    .border(1.dp, outline, ComposerWellShape)
+                    .padding(horizontal = 4.dp, vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                // Emoji Picker Button
-                Box(
-                    modifier = Modifier
-                        .size(36.dp)
-                        .clip(CircleShape)
-                        .clickable { showEmojiPicker = true },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    BetweenUsIcon(
-                        icon = BetweenUsIcons.Smile,
-                        tint = Slate400,
-                        size = 20.dp,
-                    )
-                }
+                IconAction(
+                    icon = BetweenUsIcons.Smile,
+                    contentDescription = "Emoji",
+                    onClick = { showEmojiPicker = true },
+                )
 
-                Spacer(Modifier.width(4.dp))
+                Spacer(Modifier.width(2.dp))
 
                 // Text Input Field
                 Box(
@@ -377,8 +316,7 @@ fun Composer(
                         Text(
                             text = "Message…",
                             style = MaterialTheme.typography.bodyLarge,
-                            color = Slate500,
-                            fontSize = 15.sp,
+                            color = scheme.onSurfaceVariant,
                         )
                     }
 
@@ -388,11 +326,8 @@ fun Composer(
                             field = it
                             if (it.text.isNotEmpty()) Presence.noteTyping(channelId)
                         },
-                        textStyle = TextStyle(
-                            color = Slate100,
-                            fontSize = 15.sp,
-                        ),
-                        cursorBrush = SolidColor(Accent),
+                        textStyle = MaterialTheme.typography.bodyLarge.copy(color = scheme.onSurface),
+                        cursorBrush = SolidColor(scheme.primary),
                         maxLines = 6,
                         keyboardOptions = KeyboardOptions(
                             capitalization = KeyboardCapitalization.Sentences,
@@ -420,64 +355,63 @@ fun Composer(
                     )
                 }
 
-                // Paperclip Attachment Button
-                Box(
-                    modifier = Modifier
-                        .size(36.dp)
-                        .clip(CircleShape)
-                        .clickable(onClick = onPickFile),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    BetweenUsIcon(
-                        icon = BetweenUsIcons.Paperclip,
-                        tint = Slate400,
-                        size = 19.dp,
-                    )
-                }
+                IconAction(
+                    icon = BetweenUsIcons.Paperclip,
+                    contentDescription = "Attach a file",
+                    onClick = onPickFile,
+                )
 
-                // Camera Button (hidden when keyboard is open or when typing)
+                // The camera stands down while there is a keyboard up or a
+                // message half-typed: at that point the screen is about words.
                 AnimatedVisibility(
                     visible = showCamera,
-                    enter = fadeIn() + expandHorizontally(),
-                    exit = fadeOut() + shrinkHorizontally(),
+                    enter = fadeIn(BetweenUsMotion.effect()) +
+                        expandHorizontally(BetweenUsMotion.spatial()),
+                    exit = fadeOut(BetweenUsMotion.effect()) +
+                        shrinkHorizontally(BetweenUsMotion.spatial()),
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(36.dp)
-                            .clip(CircleShape)
-                            .clickable(onClick = onCameraClick),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        BetweenUsIcon(
-                            icon = BetweenUsIcons.Video,
-                            tint = Slate400,
-                            size = 19.dp,
-                        )
-                    }
+                    IconAction(
+                        icon = BetweenUsIcons.Video,
+                        contentDescription = "Camera",
+                        onClick = onCameraClick,
+                    )
                 }
             }
 
-            // Circular Send Button
-            Box(
-                modifier = Modifier
-                    .size(46.dp)
-                    .clip(CircleShape)
-                    .background(if (canSend) Accent else Surface850)
-                    .border(1.dp, if (canSend) Accent else Edge, CircleShape)
-                    .let {
-                        if (canSend) it.clickable {
-                            val payload = text.trim()
-                            field = TextFieldValue("")
-                            onSend(payload)
-                        } else it
-                    },
-                contentAlignment = Alignment.Center,
+            // Send.
+            //
+            // Filled and primary the moment there is something to send, tonal
+            // and quiet before that - and the change is animated, so the button
+            // lights up as the first character lands rather than blinking. The
+            // shape set is the toolkit's: it squares off under a finger and
+            // springs back round.
+            val sendContainer by animateColorAsState(
+                targetValue = if (canSend) scheme.primary else scheme.surfaceContainerHigh,
+                animationSpec = BetweenUsMotion.effect(),
+                label = "send-container",
+            )
+            val sendContent by animateColorAsState(
+                targetValue = if (canSend) scheme.onPrimary else scheme.onSurfaceVariant,
+                animationSpec = BetweenUsMotion.effect(),
+                label = "send-content",
+            )
+            FilledIconButton(
+                onClick = {
+                    val payload = text.trim()
+                    field = TextFieldValue("")
+                    onSend(payload)
+                },
+                enabled = canSend,
+                shapes = IconButtonDefaults.shapes(),
+                colors = IconButtonDefaults.filledIconButtonColors(
+                    containerColor = sendContainer,
+                    contentColor = sendContent,
+                    disabledContainerColor = sendContainer,
+                    disabledContentColor = sendContent,
+                ),
+                modifier = Modifier.size(IconButtonDefaults.largeContainerSize()),
             ) {
-                BetweenUsIcon(
-                    icon = BetweenUsIcons.Send,
-                    tint = if (canSend) Color.White else Slate500,
-                    size = 19.dp,
-                )
+                BetweenUsIcon(BetweenUsIcons.Send, size = IconButtonDefaults.largeIconSize)
             }
         }
     }
@@ -487,6 +421,60 @@ fun Composer(
             onDismiss = { showEmojiPicker = false },
             onEmojiPicked = { emoji -> insert(emoji, replacing = null) },
             custom = customEmoji,
+        )
+    }
+}
+
+/**
+ * The corner the composer's well is drawn with.
+ *
+ * A constant rather than a call to the shape scale, because the border and the
+ * clip have to be the same shape to the pixel - two calls that happen to agree
+ * today are a hairline that stops matching the day one of them is changed.
+ */
+private val ComposerWellShape = RoundedCornerShape(26.dp)
+
+/**
+ * The strip above the composer that says what this message is going to be: a
+ * reply, or an edit. Both look the same because they are the same thing - a
+ * note about the message being typed - and they never appear together.
+ */
+@Composable
+private fun ComposerBanner(
+    icon: Int,
+    title: String,
+    detail: String,
+    dismissDescription: String,
+    onDismiss: () -> Unit,
+) {
+    val scheme = MaterialTheme.colorScheme
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(scheme.surfaceContainerHigh)
+            .padding(start = 16.dp, end = 8.dp, top = 6.dp, bottom = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        BetweenUsIcon(icon, tint = scheme.primary, size = 18.dp)
+        Column(Modifier.weight(1f)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.labelMediumEmphasized,
+                color = scheme.primary,
+            )
+            Text(
+                text = detail,
+                style = MaterialTheme.typography.bodySmall,
+                color = scheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        IconAction(
+            icon = BetweenUsIcons.X,
+            contentDescription = dismissDescription,
+            onClick = onDismiss,
         )
     }
 }
