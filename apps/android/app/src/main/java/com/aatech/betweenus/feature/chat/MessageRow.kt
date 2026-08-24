@@ -490,8 +490,19 @@ fun MessageRow(
                                     }
                                 }
 
-                                readable.attachments.forEach { attachment ->
+                                // Two or more photos are an album rather than
+                                // two attachments that happen to be pictures.
+                                val photos = readable.attachments.filter { it.isImage }
+                                val album = if (photos.size > 1) photos else emptyList()
+                                if (album.isNotEmpty()) {
                                     if (readable.text.isNotBlank()) Spacer(Modifier.height(8.dp))
+                                    PhotoGrid(channelId, album, onViewImage)
+                                }
+
+                                readable.attachments.filterNot { it in album }.forEach { attachment ->
+                                    if (readable.text.isNotBlank() || album.isNotEmpty()) {
+                                        Spacer(Modifier.height(8.dp))
+                                    }
                                     AttachmentCard(channelId, attachment, onViewImage, onPlayVideo)
                                 }
                             }
@@ -592,6 +603,127 @@ fun MessageRow(
             }
         }
     }
+    }
+}
+
+/**
+ * More than one photo in a message is one tiled block, not one card each.
+ *
+ * The shapes are the ones every phone messenger settled on: two side by side,
+ * three as a tall one beside two stacked, and past that a two-column grid with
+ * an odd last picture across the bottom. Laid out one under another instead,
+ * three photos from a phone camera were half a screen of scrolling for a single
+ * message.
+ *
+ * Every photo is drawn, rather than four and a "+n": the viewer opens one
+ * bitmap, so a picture that has no tile has no way to be opened at all.
+ */
+@Composable
+private fun PhotoGrid(
+    channelId: String,
+    photos: List<MessageAttachment>,
+    onViewImage: (Bitmap, String) -> Unit,
+) {
+    val gap = 2.dp
+
+    Column(
+        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)),
+        verticalArrangement = Arrangement.spacedBy(gap),
+    ) {
+        when {
+            photos.size == 2 -> Row(
+                modifier = Modifier.fillMaxWidth().height(150.dp),
+                horizontalArrangement = Arrangement.spacedBy(gap),
+            ) {
+                photos.forEach {
+                    PhotoTile(channelId, it, onViewImage, Modifier.weight(1f).fillMaxHeight())
+                }
+            }
+
+            photos.size == 3 -> Row(
+                modifier = Modifier.fillMaxWidth().height(220.dp),
+                horizontalArrangement = Arrangement.spacedBy(gap),
+            ) {
+                PhotoTile(channelId, photos[0], onViewImage, Modifier.weight(1f).fillMaxHeight())
+                Column(
+                    modifier = Modifier.weight(1f).fillMaxHeight(),
+                    verticalArrangement = Arrangement.spacedBy(gap),
+                ) {
+                    PhotoTile(channelId, photos[1], onViewImage, Modifier.weight(1f).fillMaxWidth())
+                    PhotoTile(channelId, photos[2], onViewImage, Modifier.weight(1f).fillMaxWidth())
+                }
+            }
+
+            else -> {
+                photos.chunked(2).forEach { pair ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth().height(150.dp),
+                        horizontalArrangement = Arrangement.spacedBy(gap),
+                    ) {
+                        // An odd last picture is alone in its row, so its
+                        // weight is the whole width rather than half of one.
+                        pair.forEach {
+                            PhotoTile(channelId, it, onViewImage, Modifier.weight(1f).fillMaxHeight())
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * One picture in an album: cropped to its cell, because a grid of photos laid
+ * out at their own aspect ratios is not a grid.
+ */
+@Composable
+private fun PhotoTile(
+    channelId: String,
+    attachment: MessageAttachment,
+    onViewImage: (Bitmap, String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    // Seeded from the cache for the same reason the single-photo card is: a row
+    // that has scrolled past and come back has already paid for the decode.
+    var bitmap by remember(attachment.key) { mutableStateOf(MediaCache.bitmap(attachment.key)) }
+    var failed by remember(attachment.key) { mutableStateOf(false) }
+
+    LaunchedEffect(attachment.key) {
+        if (bitmap != null) return@LaunchedEffect
+        val fetched = runCatching { Conversation.openAttachment(channelId, attachment) }
+            .onFailure { failed = true }
+            .getOrNull() ?: return@LaunchedEffect
+        bitmap = decodeDownsampled(fetched, MAX_DECODE_EDGE_PX)
+            ?.also { MediaCache.putBitmap(attachment.key, it) }
+    }
+
+    val shown = bitmap
+    Box(
+        modifier = modifier.background(MaterialTheme.colorScheme.surfaceContainerLow),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (shown != null) {
+            Image(
+                bitmap = shown.asImageBitmap(),
+                contentDescription = attachment.name,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clickable { onViewImage(shown, attachment.name) },
+            )
+        } else if (failed) {
+            BetweenUsIcon(
+                BetweenUsIcons.Image,
+                tint = MaterialTheme.colorScheme.error,
+                size = 20.dp,
+            )
+        } else {
+            CircularProgressIndicator(
+                modifier = Modifier.size(20.dp),
+                strokeWidth = 2.dp,
+                color = MaterialTheme.colorScheme.primary,
+            )
+        }
     }
 }
 
