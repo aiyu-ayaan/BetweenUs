@@ -4,6 +4,11 @@ import android.graphics.Bitmap
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -26,6 +31,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.LinearWavyProgressIndicator
 import androidx.compose.material3.MaterialShapes
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material3.toShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -66,6 +72,7 @@ import com.aatech.betweenus.ui.components.BetweenUsIcon
 import com.aatech.betweenus.ui.components.BetweenUsIcons
 import com.aatech.betweenus.ui.components.Notice
 import com.aatech.betweenus.ui.components.StatusDot
+import com.aatech.betweenus.ui.theme.BetweenUsMotion
 import kotlinx.coroutines.launch
 
 /**
@@ -486,6 +493,37 @@ fun ChatScreen(
                     )
                 }
             }
+
+            /**
+             * Back to the newest message.
+             *
+             * Only while the reader is somewhere else. `following` is already
+             * the latch that says so - it is what stops the list dragging
+             * somebody back down every time a message arrives - so the button
+             * is that same state, drawn.
+             *
+             * It springs in and out rather than appearing, because it arrives
+             * over a conversation somebody is reading and a control that blinks
+             * into existence there reads as a glitch.
+             */
+            JumpToNewest(
+                visible = !following && messages.isNotEmpty(),
+                onClick = {
+                    // Take the latch back first. The correction in the follow
+                    // effect is what actually pins the view to the bottom, and
+                    // it only runs while the latch is closed - scrolling
+                    // without it would land near the end and then drift off it
+                    // again as the next picture decoded.
+                    following = true
+                    scope.launch {
+                        val last = listState.layoutInfo.totalItemsCount - 1
+                        if (last >= 0) runCatching { listState.animateScrollToItem(last) }
+                    }
+                },
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(end = 16.dp, bottom = 12.dp),
+            )
         }
 
         // --- Typing Indicator ---
@@ -723,3 +761,39 @@ const val MAX_ATTACHMENT_BYTES = 100 * 1024 * 1024
  * needs no measuring.
  */
 private const val SCROLL_PAST_END = 100_000
+
+/**
+ * Back to the newest message.
+ *
+ * Only while the reader is somewhere else: the caller passes the same
+ * `following` latch that stops the list dragging somebody back down every time
+ * a message arrives, so this button is that state drawn rather than a second
+ * opinion about it.
+ *
+ * It springs in and out rather than appearing. It arrives over a conversation
+ * somebody is reading, and a control that blinks into existence there reads as
+ * a glitch.
+ */
+@Composable
+private fun JumpToNewest(visible: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    AnimatedVisibility(
+        visible = visible,
+        enter = fadeIn(BetweenUsMotion.effect()) +
+            scaleIn(BetweenUsMotion.spatial(), initialScale = 0.7f),
+        exit = fadeOut(BetweenUsMotion.effect()) +
+            scaleOut(BetweenUsMotion.spatial(), targetScale = 0.7f),
+        modifier = modifier,
+    ) {
+        SmallFloatingActionButton(
+            onClick = onClick,
+            containerColor = MaterialTheme.colorScheme.secondaryContainer,
+            contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+        ) {
+            BetweenUsIcon(
+                icon = BetweenUsIcons.ChevronDown,
+                size = 22.dp,
+                contentDescription = "Jump to the newest message",
+            )
+        }
+    }
+}
