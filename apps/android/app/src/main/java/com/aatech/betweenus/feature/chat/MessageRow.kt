@@ -171,6 +171,18 @@ fun MessageRow(
     val limit = with(density) { 88.dp.toPx() }
     /** True once this drag has passed the threshold, so the buzz happens once. */
     var armed by remember(message.id) { mutableStateOf(false) }
+    /**
+     * A drag that began at the left edge is not this row's.
+     *
+     * The edge belongs to the system - on a gesture-navigation phone a
+     * left-to-right swipe from it is Back - and to the navigation drawer, whose
+     * own swipe is the same drag. Trying to win that fight is how the row slid
+     * *and* the app went back. So the edge is left alone: nothing is consumed
+     * there and the gesture reaches whoever it was meant for. Reply is a swipe
+     * on the message, which is where a thumb already is.
+     */
+    val edge = with(density) { 40.dp.toPx() }
+    var fromEdge by remember(message.id) { mutableStateOf(false) }
     val settle = spring<Float>(
         dampingRatio = Spring.DampingRatioMediumBouncy,
         stiffness = Spring.StiffnessLow,
@@ -202,17 +214,23 @@ fun MessageRow(
             .pointerInput(message.id, message.deleted) {
                 if (message.deleted) return@pointerInput
                 detectHorizontalDragGestures(
+                    onDragStart = { start -> fromEdge = start.x <= edge },
                     onDragEnd = {
-                        val fired = slide.value >= threshold
+                        val fired = !fromEdge && slide.value >= threshold
                         armed = false
+                        fromEdge = false
                         scope.launch { slide.animateTo(0f, settle) }
                         if (fired) onReply()
                     },
                     onDragCancel = {
                         armed = false
+                        fromEdge = false
                         scope.launch { slide.animateTo(0f, settle) }
                     },
                 ) { change, dragAmount ->
+                    // Started at the edge: not ours. Nothing moves and nothing
+                    // is consumed, so Back and the drawer still work.
+                    if (fromEdge) return@detectHorizontalDragGestures
                     // Rightwards only, and never past the limit: a row dragged
                     // off the screen has nothing left to say.
                     val next = (slide.value + dragAmount).coerceIn(0f, limit)

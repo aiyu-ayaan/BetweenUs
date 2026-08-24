@@ -1204,12 +1204,18 @@ a new wire beyond one GET and one socket event.
 
 `detectHorizontalDragGestures` is what keeps this out of the *list's* way: it
 waits for horizontal touch slop, so a vertical drag still scrolls. What it did
-not keep out of the way was the navigation drawer, whose own swipe is the same
-left-to-right drag anywhere in the content - both fired, so the row slid and
-the menu came out over it. In a conversation the gesture belongs to the
-message (`gesturesEnabled = drawer.isOpen || !inConversation`); the menu button
-is still the way in, and the drawer keeps its swipe everywhere else and
-whenever it is already open, so it can always be swiped away again.
+not keep out of the way was the *left edge*, which two other things already
+own: on a gesture-navigation phone a left-to-right swipe from the edge is Back,
+and it is also the navigation drawer's. The first attempt at this turned the
+drawer's swipe off inside a conversation, which was the wrong end of the
+problem - it took the drawer away and the app still went back.
+
+The edge is left alone instead. A drag whose `onDragStart` lands within 40dp of
+the left edge is not this row's: nothing moves, nothing is consumed, and the
+gesture reaches whoever it was meant for. Reply is a swipe *on the message*,
+which is where a thumb already is - the same bargain WhatsApp makes. Away from
+the edge the row consumes the drag, which is what stops the drawer coming out
+underneath it.
 
 ## Coming back from the background
 

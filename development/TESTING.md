@@ -381,9 +381,13 @@ in front of a human.
   in the middle of a word while selecting text and it must *not* - the selection
   wins, or picking a word out of a message becomes impossible.
 - On a phone browser the same gesture is a double tap.
-- On Android, swipe a row left to right. Short of about 64dp it springs back
-  and nothing happens; past it there is a buzz and the composer quotes it.
-  Swiping a deleted message does nothing.
+- On Android, swipe a row left to right, starting on the message itself. Short
+  of about 64dp it springs back and nothing happens; past it there is a buzz
+  and the composer quotes it. Swiping a deleted message does nothing.
+- Start the same swipe from the very left edge instead. The row must not move
+  at all: that gesture is the system's Back on a gesture-navigation phone, and
+  the drawer's on a phone with buttons. Both must still work from a
+  conversation.
 - On the web client, right-click anywhere: on a message the app's own menu
   opens, and everywhere else nothing at all. Chrome's menu should never appear.
 
