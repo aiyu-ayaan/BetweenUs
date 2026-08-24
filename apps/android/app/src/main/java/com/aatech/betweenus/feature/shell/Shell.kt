@@ -7,9 +7,12 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.MaterialTheme
@@ -37,6 +40,7 @@ import androidx.navigation.compose.rememberNavController
 import com.aatech.betweenus.core.crypto.E2ee
 import com.aatech.betweenus.core.crypto.IdentityStatus
 import com.aatech.betweenus.core.data.ChannelType
+import com.aatech.betweenus.core.data.Connectivity
 import com.aatech.betweenus.core.data.PublicUser
 import com.aatech.betweenus.core.store.LastPlace
 import com.aatech.betweenus.core.store.Workspace
@@ -330,6 +334,9 @@ fun Shell(user: PublicUser) {
                     .systemGestureExclusion(),
             )
 
+            val connectivityState by Connectivity.state.collectAsState()
+            val bannerVisible = connectivityState != Connectivity.State.ONLINE
+
             // Above everything rather than over it: a banner drawn on top of
             // the screen covers the one control - the menu button - somebody
             // reaching for it would want.
@@ -358,7 +365,12 @@ fun Shell(user: PublicUser) {
                 NavHost(
                     navigation,
                     startDestination = start,
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier
+                        .weight(1f)
+                        .then(
+                            if (bannerVisible) Modifier.consumeWindowInsets(WindowInsets.statusBars)
+                            else Modifier
+                        ),
                     enterTransition = {
                         slideInHorizontally(travel) { it / 4 } + fadeIn(fade)
                     },
