@@ -16,7 +16,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.LineHeightStyle
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -67,6 +70,21 @@ fun Avatar(
                 color = Slate100,
                 fontWeight = FontWeight.SemiBold,
                 fontSize = (size.value * 0.4f).sp,
+                textAlign = TextAlign.Center,
+                // A single glyph in a `Box` is centred on its *line*, not on
+                // itself, and a line carries the font's own ascent and descent
+                // padding - which is asymmetric, so the letter sat high and
+                // left of the circle it is supposed to be in the middle of.
+                // Dropping the platform padding and trimming the line to the
+                // glyph is what makes "centre" mean the letter.
+                lineHeight = (size.value * 0.4f).sp,
+                style = MaterialTheme.typography.bodyMedium.copy(
+                    platformStyle = PlatformTextStyle(includeFontPadding = false),
+                    lineHeightStyle = LineHeightStyle(
+                        alignment = LineHeightStyle.Alignment.Center,
+                        trim = LineHeightStyle.Trim.Both,
+                    ),
+                ),
             )
         }
     }
