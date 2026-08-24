@@ -281,6 +281,19 @@ export class AuthService {
         ...(dto.avatarUrl !== undefined ? { avatarUrl: dto.avatarUrl } : {}),
       },
     });
+
+    // Everyone who can see this account has the old picture and the old name on
+    // screen right now. Published unconditionally rather than diffed: a write
+    // that changed nothing is a broadcast nobody notices, where a diff that
+    // gets one field wrong is a stale avatar until the next reload.
+    await this.events.publish(EVENTS.USER_UPDATED, {
+      user: {
+        id: updated.id,
+        username: updated.username,
+        displayName: updated.displayName,
+        avatarUrl: updated.avatarUrl,
+      },
+    });
     return toPublicUser(updated);
   }
 

@@ -476,6 +476,14 @@ export class ServersService {
       },
     });
 
+    // The name and the picture are in every member's sidebar, not only in the
+    // settings dialog the change was made from.
+    await this.events.publish(EVENTS.SERVER_UPDATED, {
+      serverId: server.id,
+      name: server.name,
+      iconUrl: server.iconUrl,
+    });
+
     return {
       ...toServer(server),
       role: membership.role as ServerRole,

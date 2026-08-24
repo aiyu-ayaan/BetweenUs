@@ -1485,6 +1485,24 @@ export type ServerChatEvent =
   /** Sent to everyone watching the server, and to whoever joined or left it. */
   | { type: 'server.members.changed'; serverId: string }
   /**
+   * Somebody changed their picture or their name.
+   *
+   * The exception to "announce, do not carry": a profile is drawn in every
+   * message that account ever sent, in the member list, in the friend list and
+   * in a DM header, so announcing it would be one refetch per list on every
+   * client that shares a room with them. Four fields are cheaper than any of
+   * that, and every one of those lists holds exactly those four.
+   *
+   * Reaches everyone who can see them: the members of every server they are in,
+   * everyone they are friends with, and their own other devices.
+   */
+  | { type: 'user.updated'; user: UserSummary }
+  /**
+   * A server was renamed or given a new picture. Carried for the same reason,
+   * and sent to everyone watching that server.
+   */
+  | { type: 'server.updated'; serverId: string; name: string; iconUrl: string | null }
+  /**
    * Somebody read a channel this socket is subscribed to. It carries the
    * marker rather than the receipts, because every client can already derive
    * "who has seen this message" from a marker and a timestamp - and a payload

@@ -20,7 +20,7 @@ import {
   userRoom,
 } from '@betweenus/websocket';
 import { Logger } from '@betweenus/logger';
-import type { ClientChatEvent, ServerChatEvent } from '@betweenus/shared-types';
+import type { ClientChatEvent, ServerChatEvent, UserSummary } from '@betweenus/shared-types';
 import { MessagesService } from '../modules/messages/messages.service';
 
 const HEARTBEAT_INTERVAL_MS = 30_000;
@@ -148,6 +148,20 @@ export class ChatGateway implements OnModuleDestroy {
       });
     }
 
+    // A renamed server, or one with a new picture. Everyone watching it is
+    // holding the old one in a sidebar.
+    await this.events.subscribe(EVENTS.SERVER_UPDATED, (envelope) => {
+      const { serverId, name, iconUrl } = envelope.payload;
+      this.broadcast(serverRoom(serverId), { type: 'server.updated', serverId, name, iconUrl });
+    });
+
+    // A changed profile has to reach everyone who draws it, which is a wider
+    // set than any one room: the members of every server this account is in,
+    // everyone it is friends with, and its own other devices.
+    await this.events.subscribe(EVENTS.USER_UPDATED, (envelope) => {
+      void this.broadcastProfile(envelope.payload.user);
+    });
+
     this.logger.info('Chat WebSocket gateway ready', { path: '/ws/chat' });
   }
 
@@ -217,6 +231,30 @@ export class ChatGateway implements OnModuleDestroy {
       default:
         this.send(socket, { type: 'error', code: 'UNKNOWN_EVENT', message: 'Unsupported event' });
     }
+  }
+
+  /**
+   * Who can see a profile: every server they share, plus every friendship.
+   *
+   * Friendships rather than DM channels because a direct message already
+   * requires an accepted friendship - so the friend list is the same set, and
+   * it is one query rather than two.
+   */
+  private async broadcastProfile(user: UserSummary): Promise<void> {
+    const [memberships, friendships] = await Promise.all([
+      prisma.serverMember.findMany({ where: { userId: user.id }, select: { serverId: true } }),
+      prisma.friendship.findMany({
+        where: { status: 'ACCEPTED', OR: [{ userAId: user.id }, { userBId: user.id }] },
+        select: { userAId: true, userBId: true },
+      }),
+    ]);
+
+    const rooms = [
+      userRoom(user.id),
+      ...memberships.map((row) => serverRoom(row.serverId)),
+      ...friendships.map((row) => userRoom(row.userAId === user.id ? row.userBId : row.userAId)),
+    ];
+    this.deliver(rooms, { type: 'user.updated', user });
   }
 
   private broadcast(room: string, event: ServerChatEvent): void {

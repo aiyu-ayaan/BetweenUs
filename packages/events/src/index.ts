@@ -6,7 +6,7 @@
  * later touches this file only.
  */
 import Redis from 'ioredis';
-import type { Message, PresenceState, VoiceState } from '@betweenus/shared-types';
+import type { Message, PresenceState, UserSummary, VoiceState } from '@betweenus/shared-types';
 
 export const EVENTS = {
   USER_CREATED: 'user.created',
@@ -14,6 +14,14 @@ export const EVENTS = {
   USER_ONLINE: 'user.online',
   USER_OFFLINE: 'user.offline',
   SERVER_CREATED: 'server.created',
+  /**
+   * A server's own details changed - its name, or its picture.
+   *
+   * Separate from `server.member.updated`, which is about one person's standing
+   * in it: this is the thing every member has on screen at once, in a sidebar
+   * they are not looking at, and it has to change under them without a reload.
+   */
+  SERVER_UPDATED: 'server.updated',
   SERVER_MEMBER_ADDED: 'server.member.added',
   SERVER_MEMBER_REMOVED: 'server.member.removed',
   /** A role or a permission override changed on an existing member. */
@@ -75,10 +83,18 @@ export const EVENTS = {
 
 export interface EventPayloads {
   [EVENTS.USER_CREATED]: { userId: string; username: string; email: string };
-  [EVENTS.USER_UPDATED]: { userId: string };
+  /**
+   * Carries the profile rather than the id, because the picture and the name
+   * are painted in a dozen places at once - every message that account ever
+   * sent, the member list, the friend list, a DM header - and an id would make
+   * each of those a refetch. The four public fields are all any of them draw.
+   */
+  [EVENTS.USER_UPDATED]: { user: UserSummary };
   [EVENTS.USER_ONLINE]: { userId: string };
   [EVENTS.USER_OFFLINE]: { userId: string };
   [EVENTS.SERVER_CREATED]: { serverId: string; ownerId: string };
+  /** Same reasoning as `user.updated`: what changed, not a hint to go and ask. */
+  [EVENTS.SERVER_UPDATED]: { serverId: string; name: string; iconUrl: string | null };
   [EVENTS.SERVER_MEMBER_ADDED]: { serverId: string; userId: string };
   [EVENTS.SERVER_MEMBER_REMOVED]: { serverId: string; userId: string };
   [EVENTS.SERVER_MEMBER_UPDATED]: { serverId: string; userId: string };
