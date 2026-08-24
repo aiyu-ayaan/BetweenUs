@@ -49,7 +49,6 @@ import com.aatech.betweenus.ui.theme.Slate50
 import com.aatech.betweenus.ui.theme.Slate500
 import com.aatech.betweenus.ui.theme.StatusOnline
 import com.aatech.betweenus.ui.theme.Surface800
-import com.aatech.betweenus.ui.theme.Surface900
 import kotlinx.coroutines.launch
 
 /**
@@ -103,7 +102,6 @@ fun InviteToCallSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        containerColor = Surface900,
     ) {
         Column(
             modifier = Modifier

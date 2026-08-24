@@ -24,7 +24,6 @@ import com.aatech.betweenus.ui.components.SectionLabel
 import com.aatech.betweenus.ui.theme.Accent
 import com.aatech.betweenus.ui.theme.Slate400
 import com.aatech.betweenus.ui.theme.Slate500
-import com.aatech.betweenus.ui.theme.Surface900
 
 /**
  * Which device the call is heard on and spoken into, from inside the call.
@@ -47,7 +46,7 @@ fun CallDeviceSheet(onDismiss: () -> Unit) {
     var route by remember { mutableStateOf(AudioPrefs.route) }
     var input by remember { mutableStateOf(AudioPrefs.input) }
 
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheet, containerColor = Surface900) {
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheet) {
         Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(bottom = 12.dp)) {
             SectionLabel("Play through")
             devices.routes.forEach { option ->

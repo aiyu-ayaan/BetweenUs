@@ -36,7 +36,6 @@ import com.aatech.betweenus.ui.components.SectionLabel
 import com.aatech.betweenus.ui.theme.Danger
 import com.aatech.betweenus.ui.theme.Slate100
 import com.aatech.betweenus.ui.theme.Slate500
-import com.aatech.betweenus.ui.theme.Surface900
 import kotlinx.coroutines.launch
 
 /**
@@ -70,7 +69,7 @@ fun MemberRoleSheet(
     var busy by remember { mutableStateOf(false) }
     var note by remember { mutableStateOf<String?>(null) }
 
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheet, containerColor = Surface900) {
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheet) {
         Column(
             Modifier
                 .fillMaxWidth()

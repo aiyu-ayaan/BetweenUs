@@ -49,7 +49,6 @@ import com.aatech.betweenus.ui.theme.Edge
 import com.aatech.betweenus.ui.theme.Slate100
 import com.aatech.betweenus.ui.theme.Slate400
 import com.aatech.betweenus.ui.theme.Surface700
-import com.aatech.betweenus.ui.theme.Surface900
 
 private data class EmojiCategory(val name: String, val icon: String, val emojis: List<String>)
 
@@ -125,7 +124,6 @@ fun EmojiPickerSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        containerColor = Surface900,
         dragHandle = {
             Box(
                 modifier = Modifier
@@ -145,7 +143,6 @@ fun EmojiPickerSheet(
             // Category Tabs
             ScrollableTabRow(
                 selectedTabIndex = selectedCategory,
-                containerColor = Surface900,
                 contentColor = Slate100,
                 edgePadding = 12.dp,
                 divider = {},

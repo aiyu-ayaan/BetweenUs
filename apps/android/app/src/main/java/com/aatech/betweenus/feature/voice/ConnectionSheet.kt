@@ -31,7 +31,6 @@ import com.aatech.betweenus.ui.theme.Slate400
 import com.aatech.betweenus.ui.theme.Slate50
 import com.aatech.betweenus.ui.theme.Slate500
 import com.aatech.betweenus.ui.theme.Surface800
-import com.aatech.betweenus.ui.theme.Surface900
 
 /**
  * What the call is doing, in numbers, for the person in it.
@@ -53,7 +52,6 @@ fun ConnectionSheet(stats: List<LinkStats>, onDismiss: () -> Unit) {
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        containerColor = Surface900,
     ) {
         Column(
             modifier = Modifier

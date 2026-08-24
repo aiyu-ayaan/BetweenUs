@@ -33,7 +33,6 @@ import com.aatech.betweenus.ui.components.Avatar
 import com.aatech.betweenus.ui.theme.Slate100
 import com.aatech.betweenus.ui.theme.Slate400
 import com.aatech.betweenus.ui.theme.Slate500
-import com.aatech.betweenus.ui.theme.Surface900
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -110,7 +109,7 @@ fun SeenBySheet(
 ) {
     val sheet = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheet, containerColor = Surface900) {
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheet) {
         Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(bottom = 12.dp)) {
             Column(Modifier.padding(horizontal = 20.dp, vertical = 4.dp)) {
                 Text(

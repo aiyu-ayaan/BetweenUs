@@ -36,7 +36,6 @@ import com.aatech.betweenus.ui.theme.Slate400
 import com.aatech.betweenus.ui.theme.Slate50
 import com.aatech.betweenus.ui.theme.Slate500
 import com.aatech.betweenus.ui.theme.Surface700
-import com.aatech.betweenus.ui.theme.Surface900
 import kotlinx.coroutines.launch
 
 /**
@@ -70,7 +69,6 @@ fun UpdateSheet(onDismiss: () -> Unit) {
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        containerColor = Surface900,
         dragHandle = null,
     ) {
         Column(

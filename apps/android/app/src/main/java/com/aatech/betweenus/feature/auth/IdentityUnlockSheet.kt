@@ -31,7 +31,6 @@ import com.aatech.betweenus.ui.theme.Danger
 import com.aatech.betweenus.ui.theme.Slate100
 import com.aatech.betweenus.ui.theme.Slate400
 import com.aatech.betweenus.ui.theme.Slate500
-import com.aatech.betweenus.ui.theme.Surface900
 import kotlinx.coroutines.launch
 
 /**
@@ -56,7 +55,7 @@ fun IdentityUnlockSheet(kind: String, onDismiss: () -> Unit) {
 
     val isPassword = kind == "password"
 
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheet, containerColor = Surface900) {
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheet) {
         Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(20.dp)) {
             BetweenUsLogoTile(size = 44)
             Spacer(Modifier.height(12.dp))

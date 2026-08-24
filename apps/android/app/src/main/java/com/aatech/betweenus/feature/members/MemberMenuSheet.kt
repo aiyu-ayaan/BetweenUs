@@ -30,7 +30,6 @@ import com.aatech.betweenus.ui.components.ListRow
 import com.aatech.betweenus.ui.theme.Slate100
 import com.aatech.betweenus.ui.theme.Slate400
 import com.aatech.betweenus.ui.theme.Slate500
-import com.aatech.betweenus.ui.theme.Surface900
 import kotlinx.coroutines.launch
 
 /**
@@ -67,7 +66,7 @@ fun MemberMenuSheet(
         friend = Workspace.friends.value.any { it.user.id == member.userId }
     }
 
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheet, containerColor = Surface900) {
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheet) {
         Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(bottom = 12.dp)) {
             Text(
                 text = "@${member.username}",

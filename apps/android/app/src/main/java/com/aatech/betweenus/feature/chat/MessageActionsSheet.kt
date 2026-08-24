@@ -41,7 +41,6 @@ import com.aatech.betweenus.ui.theme.Slate100
 import com.aatech.betweenus.ui.theme.Slate400
 import com.aatech.betweenus.ui.theme.Slate500
 import com.aatech.betweenus.ui.theme.Surface700
-import com.aatech.betweenus.ui.theme.Surface900
 
 /**
  * What a long press on a message offers.
@@ -67,7 +66,7 @@ fun MessageActionsSheet(
     val clipboard = LocalClipboardManager.current
     val mine = readable.message.author.id == self.id
 
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheet, containerColor = Surface900) {
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheet) {
         Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(bottom = 12.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
@@ -134,7 +133,7 @@ fun PinnedSheet(channelId: String, self: PublicUser, onDismiss: () -> Unit) {
         pins = runCatching { Conversation.pins(channelId) }.getOrDefault(emptyList())
     }
 
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheet, containerColor = Surface900) {
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheet) {
         Column(Modifier.fillMaxWidth().navigationBarsPadding()) {
             Text(
                 text = "Pinned messages",

@@ -58,7 +58,6 @@ import com.aatech.betweenus.ui.theme.Slate100
 import com.aatech.betweenus.ui.theme.Slate300
 import com.aatech.betweenus.ui.theme.Slate500
 import com.aatech.betweenus.ui.theme.Surface700
-import com.aatech.betweenus.ui.theme.Surface900
 
 /**
  * WhatsApp-style media and attachment picker bottom sheet.
@@ -125,7 +124,6 @@ fun AttachmentSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheet,
-        containerColor = Surface900,
         dragHandle = {
             Box(
                 modifier = Modifier

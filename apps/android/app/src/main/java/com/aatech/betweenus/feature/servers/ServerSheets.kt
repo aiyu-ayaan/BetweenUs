@@ -50,7 +50,6 @@ import com.aatech.betweenus.ui.theme.Slate500
 import com.aatech.betweenus.ui.theme.StatusOffline
 import com.aatech.betweenus.ui.theme.StatusOnline
 import com.aatech.betweenus.ui.theme.Surface700
-import com.aatech.betweenus.ui.theme.Surface900
 import kotlinx.coroutines.launch
 
 /**
@@ -75,7 +74,7 @@ fun JoinOrCreateServerSheet(onDismiss: () -> Unit, onDone: (ServerWithRole) -> U
     /** The invite being decided about. Null until a code has been looked up. */
     var preview by remember { mutableStateOf<InvitePreview?>(null) }
 
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheet, containerColor = Surface900) {
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheet) {
         Column(
             Modifier.fillMaxWidth().navigationBarsPadding().padding(20.dp),
         ) {
@@ -187,7 +186,7 @@ fun InviteSheet(code: String, onDismiss: () -> Unit, onDone: (ServerWithRole) ->
             .onFailure { note = it.message ?: "That invite is not valid" }
     }
 
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheet, containerColor = Surface900) {
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheet) {
         Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(20.dp)) {
             val found = invite
             if (found == null) {
@@ -326,7 +325,7 @@ fun CreateChannelSheet(server: ServerWithRole, onDismiss: () -> Unit) {
     var busy by remember { mutableStateOf(false) }
     var note by remember { mutableStateOf<String?>(null) }
 
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheet, containerColor = Surface900) {
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheet) {
         Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(20.dp)) {
             Text(
                 text = "Create a channel in ${server.name}",

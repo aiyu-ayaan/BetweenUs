@@ -41,7 +41,6 @@ import com.aatech.betweenus.ui.theme.Danger
 import com.aatech.betweenus.ui.theme.Slate400
 import com.aatech.betweenus.ui.theme.Slate50
 import com.aatech.betweenus.ui.theme.StatusIdle
-import com.aatech.betweenus.ui.theme.Surface900
 import kotlinx.coroutines.launch
 
 /**
@@ -110,7 +109,6 @@ fun ServerSheet(onDismiss: () -> Unit) {
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        containerColor = Surface900,
     ) {
         Column(
             modifier = Modifier
