@@ -1181,6 +1181,30 @@ reaches a locked phone.
   than its neighbours. Flip came out - it is on the self tile - and what is left
   is one size with room around it.
 
+## Read receipts and swipe-to-reply ✅ (compiles and is unit tested)
+
+Two things a phone chat is expected to have, and neither needed a new table or
+a new wire beyond one GET and one socket event.
+
+- **Who has seen it.** `Receipts` is the port of the desktop's `receipts.ts`,
+  and `ReceiptsTest` is the port of its check - deliberately the same cases,
+  because a phone that draws a face against a different message than the
+  desktop does is two answers to one question. Up to four faces sit at the
+  bottom right of your own messages, each reader shown once against the newest
+  message they have read; tapping opens a sheet with the send time and each
+  person's read time. `Conversation` loads the markers when a channel is opened
+  and patches them from `channel.read`, replacing a person's marker rather than
+  appending - it only ever moves forwards.
+- **Swipe a row to reply.** Left to right, past 64dp so it cannot fire by
+  accident, with the reply mark fading in underneath and a haptic at the point
+  of no return. The release is a Material 3 expressive spring
+  (`DampingRatioMediumBouncy`, `StiffnessLow`): the row overshoots and settles,
+  which is what makes the gesture feel answered rather than merely undone.
+  A tombstone does not swipe - there is nothing to answer.
+
+`detectHorizontalDragGestures` is what keeps this out of the list's way: it
+waits for horizontal touch slop, so a vertical drag still scrolls.
+
 ## Deliberately out of scope
 
 - **Live streaming.** Out of scope on every client while media is peer-to-peer.

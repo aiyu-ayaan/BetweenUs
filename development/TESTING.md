@@ -350,6 +350,43 @@ while everything under them changes size.
 - Set a recovery passphrase in Settings → My Account → Encryption key, then
   wipe the profile again: the same dialog asks for the passphrase instead.
 
+## Who has seen it
+
+Needs two accounts, which is what `pnpm dev:duo` is for. Nothing here has been
+in front of a human.
+
+- Send from Alice's window with Bob's closed, or on another channel. Nothing is
+  drawn under the message: a "seen by nobody" line under everything you send is
+  a nag, not a fact.
+- Open the channel as Bob. Bob's face appears at the bottom right of Alice's
+  message **while she is looking at it** - that is the `channel.read` broadcast,
+  not a refetch.
+- Send two more from Alice while Bob is reading. Bob's face moves to the newest
+  one rather than being drawn against all three: a reader is shown once, on the
+  newest message of yours they have got to.
+- Click the faces. The dialog says when the message was sent and when each
+  person read. Read the wording: it says "Read", of the channel marker, and
+  does not claim their eyes were on that line.
+- With more than four readers - a server channel is the easy way - four faces
+  and a `+N` is the whole row.
+- Your own marker is not a receipt. Reading the channel in a second window of
+  the *same* account must not put your own face under your own message.
+- A channel Alice cannot see must 404 rather than 403 on
+  `/api/v1/notifications/channels/:id/reads`, like every other channel route:
+  otherwise the endpoint is a way to probe for channel ids.
+
+## Replying without the menu
+
+- Double-click a message on desktop or web: the composer quotes it. Double-click
+  in the middle of a word while selecting text and it must *not* - the selection
+  wins, or picking a word out of a message becomes impossible.
+- On a phone browser the same gesture is a double tap.
+- On Android, swipe a row left to right. Short of about 64dp it springs back
+  and nothing happens; past it there is a buzz and the composer quotes it.
+  Swiping a deleted message does nothing.
+- On the web client, right-click anywhere: on a message the app's own menu
+  opens, and everywhere else nothing at all. Chrome's menu should never appear.
+
 ## Two clients, one channel, and a re-key
 
 The case that used to split a conversation in half, and the reason the Android

@@ -1140,6 +1140,44 @@ Calls — the second pass over the call screen:
       came to about 400dp - wider than the screen - so the bar ran off the right
       edge and took the hang-up button with it. It is sized to the screen, with
       the gaps taking what is left over.
+- [x] **Read receipts - who has seen your message.** No new table: the read
+      marker each account already keeps per channel only ever moves forwards,
+      so "who has seen this message" is "whose marker is at or past its
+      timestamp". It is the same row the unread count is derived from, which is
+      why the two can never disagree.
+
+      `notification-service` serves the other members' markers for a channel
+      (`GET /api/v1/notifications/channels/:id/reads`), with the caller left out
+      and anybody no longer in the audience left out with them; `chat-service`
+      broadcasts `channel.read` to the channel when a marker moves, so a receipt
+      appears while the sender is looking at it.
+
+      The row is up to four faces and a count, bottom right of your own
+      messages. Faces rather than a tick, because the question anybody asks of a
+      group is *who* has seen it. Each reader appears once, against the newest
+      message of yours they have got to - drawing everybody against every
+      message would repeat the same four faces down the conversation and say
+      nothing new each time. Opening it gives the send time and each person's
+      read time, described as the marker it is: "had the channel open at",
+      not "looked at this line at", because the marker is all the server has.
+
+      The arithmetic is written twice and tested twice against the same cases -
+      `apps/desktop/src/features/chat/receipts.ts` and
+      `core/store/Receipts.kt` - because a phone that anchors a face against a
+      different message than the desktop does is two answers to one question.
+- [x] **Reply without opening a menu.** A double click on desktop and web - a
+      double tap where there is no right button at all - and a left-to-right
+      swipe on Android. It is the action the message menu is opened for most.
+      A double click that is selecting a word is left alone; the swipe fires
+      only past a threshold, buzzes at the point of no return, and settles back
+      on a Material 3 expressive spring, so the row overshoots rather than
+      merely sliding back.
+- [x] **No browser context menu on web.** The app draws its own menu on a
+      message, and Chrome's - Back, Reload, View source, Inspect - appearing a
+      pixel outside it was the tell that this is a page rather than an
+      application. Suppressed on the bubble phase, so React's handlers still run
+      and the message menu opens as before. The Electron build has no such menu
+      to suppress.
 
 ---
 
