@@ -43,6 +43,11 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.FilledIconToggleButton
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.FloatingToolbarDefaults
+import androidx.compose.material3.HorizontalFloatingToolbar
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -917,135 +922,113 @@ fun VoiceChannelScreen(
             }
         }
 
-        // --- FLOATING BOTTOM ACTION BAR (WhatsApp style) ---
+        // --- the controls ---
+        //
+        // A floating toolbar, which is the expressive component for exactly
+        // this: a dock of actions over content, with the one destructive
+        // action held apart from the rest as a button attached to its end.
+        //
+        // That separation is the point. Leaving a call and muting yourself were
+        // six identical circles in a row, and the difference between them was a
+        // colour. Now the five that change a setting are toggles inside the bar
+        // - filled when on, quiet when off, each squaring off under a finger -
+        // and the one that ends the call is a red FAB outside it.
+        //
+        // It also solves the old arithmetic problem honestly. Six fixed buttons
+        // and fixed gaps came to about 400dp, wider than the phone, so the bar
+        // ran off the right-hand edge and took the hang-up button with it; the
+        // toolbar measures itself.
         AnimatedVisibility(
             visible = isInCall && !inPip && chrome,
-            enter = fadeIn() + slideInVertically { it },
-            exit = fadeOut() + slideOutVertically { it },
-            modifier = Modifier.align(Alignment.BottomCenter),
+            enter = FloatingToolbarDefaults.horizontalEnterTransition(Alignment.CenterHorizontally),
+            exit = FloatingToolbarDefaults.horizontalExitTransition(Alignment.CenterHorizontally),
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = FloatingToolbarDefaults.ScreenOffset),
         ) {
-            // Sized to the screen rather than to its contents. Six fixed
-            // buttons and fixed gaps came to about 400dp, which is wider than
-            // the phone: the bar ran off the right-hand edge and took the
-            // hang-up button with it. The width is now the screen's, the gaps
-            // are whatever is left over, and the buttons are small enough that
-            // there is some.
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 10.dp)
-                    .padding(bottom = 20.dp),
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .shadow(16.dp, RoundedCornerShape(36.dp))
-                        .clip(RoundedCornerShape(36.dp))
-                        .background(Color(0xFF131824).copy(alpha = 0.92f))
-                        .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(36.dp))
-                        .padding(horizontal = 8.dp, vertical = 12.dp),
-                    horizontalArrangement = Arrangement.SpaceEvenly,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    // Flipping the camera is not here: it is on the self tile,
-                    // which is the thing being flipped, and is the only place
-                    // it means anything at all while the camera is off. Seven
-                    // buttons in a row on a phone is how each of them ends up
-                    // too small and too close to the next.
-
-                    // 1. Camera Toggle
-                    CallCircleButton(
-                        icon = if (cameraOn) BetweenUsIcons.Video else BetweenUsIcons.VideoOff,
-                        contentDescription = if (cameraOn) "Turn camera off" else "Turn camera on",
-                        active = cameraOn,
-                        activeColor = Accent,
-                        tint = if (cameraOn) Color.White else Slate400,
-                        size = CONTROL_SIZE,
-                        onClick = { if (cameraOn) engine.stopVideo() else camera.request() },
-                    )
-
-                    // 2. Microphone Toggle
-                    CallCircleButton(
-                        icon = if (muted) BetweenUsIcons.MicOff else BetweenUsIcons.Mic,
-                        contentDescription = if (muted) "Unmute" else "Mute",
-                        active = muted,
-                        activeColor = Danger.copy(alpha = 0.25f),
-                        tint = if (muted) Danger else Color.White,
-                        size = CONTROL_SIZE,
-                        onClick = engine::toggleMute,
-                    )
-
-                    // 3. Screen Share Toggle
-                    CallCircleButton(
-                        icon = BetweenUsIcons.ScreenShare,
-                        contentDescription = when {
-                            sharing -> "Stop sharing"
-                            screenHolder != null -> "Take over screen"
-                            else -> "Share screen"
-                        },
-                        active = sharing,
-                        activeColor = Accent,
-                        tint = if (sharing) Color.White else Slate400,
-                        size = CONTROL_SIZE,
-                        onClick = {
-                            if (sharing) {
-                                engine.stopVideo()
-                            } else {
-                                val manager = context.getSystemService(Context.MEDIA_PROJECTION_SERVICE)
-                                    as MediaProjectionManager
-                                projection.launch(manager.createScreenCaptureIntent())
-                            }
-                        },
-                    )
-
-                    // 4. Add somebody to the call. The roster announcement
-                    // tells the channel a call is happening and rings nobody;
-                    // this is the aimed half, and the only way to reach it from
-                    // a phone that is showing a call rather than a member list.
-                    CallCircleButton(
-                        icon = BetweenUsIcons.UserPlus,
-                        contentDescription = "Add someone to the call",
-                        active = inviting,
-                        activeColor = Accent,
-                        tint = Slate400,
-                        size = CONTROL_SIZE,
-                        onClick = { inviting = true },
-                    )
-
-                    // 5. Connection - what the link is doing, in numbers. The
-                    // one thing a phone in a bad call has no other way to find
-                    // out, since there is no webrtc-internals to open.
-                    CallCircleButton(
-                        icon = BetweenUsIcons.Activity,
-                        contentDescription = "Connection",
-                        active = showingConnection,
-                        activeColor = Accent,
-                        tint = if (linkHealth != null) Danger else Slate400,
-                        size = CONTROL_SIZE,
-                        onClick = { showingConnection = true },
-                    )
-
-                    // 6. Leave Call (Prominent Red Button)
-                    Box(
-                        modifier = Modifier
-                            .size(LEAVE_SIZE)
-                            .clip(CircleShape)
-                            .background(Danger)
-                            .clickable(
-                                interactionSource = remember { MutableInteractionSource() },
-                                indication = null,
-                                onClick = { engine.leave(); onBack() },
-                            ),
-                        contentAlignment = Alignment.Center,
+            HorizontalFloatingToolbar(
+                expanded = true,
+                // Vibrant, because this one floats over video rather than over
+                // a surface, and the standard colours disappear into a picture.
+                colors = FloatingToolbarDefaults.vibrantFloatingToolbarColors(),
+                floatingActionButton = {
+                    FloatingActionButton(
+                        onClick = { engine.leave(); onBack() },
+                        containerColor = MaterialTheme.colorScheme.error,
+                        contentColor = MaterialTheme.colorScheme.onError,
                     ) {
                         BetweenUsIcon(
                             BetweenUsIcons.Phone,
-                            tint = Color.White,
-                            size = 22.dp,
+                            size = 24.dp,
                             contentDescription = "Leave call",
                         )
                     }
-                }
+                },
+            ) {
+                // Flipping the camera is not here: it is on the self tile,
+                // which is the thing being flipped, and is the only place it
+                // means anything at all while the camera is off. Seven buttons
+                // in a row on a phone is how each of them ends up too small and
+                // too close to the next.
+
+                CallToggle(
+                    icon = if (cameraOn) BetweenUsIcons.Video else BetweenUsIcons.VideoOff,
+                    contentDescription = if (cameraOn) "Turn camera off" else "Turn camera on",
+                    checked = cameraOn,
+                    onCheckedChange = { if (cameraOn) engine.stopVideo() else camera.request() },
+                )
+
+                // Muted is the one toggle whose "on" is a problem rather than a
+                // feature, so it is the one that turns red.
+                CallToggle(
+                    icon = if (muted) BetweenUsIcons.MicOff else BetweenUsIcons.Mic,
+                    contentDescription = if (muted) "Unmute" else "Mute",
+                    checked = muted,
+                    onCheckedChange = { engine.toggleMute() },
+                    alarming = true,
+                )
+
+                CallToggle(
+                    icon = BetweenUsIcons.ScreenShare,
+                    contentDescription = when {
+                        sharing -> "Stop sharing"
+                        screenHolder != null -> "Take over screen"
+                        else -> "Share screen"
+                    },
+                    checked = sharing,
+                    onCheckedChange = {
+                        if (sharing) {
+                            engine.stopVideo()
+                        } else {
+                            val manager = context.getSystemService(Context.MEDIA_PROJECTION_SERVICE)
+                                as MediaProjectionManager
+                            projection.launch(manager.createScreenCaptureIntent())
+                        }
+                    },
+                )
+
+                // Add somebody to the call. The roster announcement tells the
+                // channel a call is happening and rings nobody; this is the
+                // aimed half, and the only way to reach it from a phone that is
+                // showing a call rather than a member list.
+                CallToggle(
+                    icon = BetweenUsIcons.UserPlus,
+                    contentDescription = "Add someone to the call",
+                    checked = inviting,
+                    onCheckedChange = { inviting = true },
+                )
+
+                // What the link is doing, in numbers. The one thing a phone in
+                // a bad call has no other way to find out, since there is no
+                // webrtc-internals to open - so an unhappy link says so here,
+                // in the error colour, before anybody thinks to look.
+                CallToggle(
+                    icon = BetweenUsIcons.Activity,
+                    contentDescription = "Connection",
+                    checked = showingConnection,
+                    onCheckedChange = { showingConnection = true },
+                    alarming = linkHealth != null,
+                )
             }
         }
     }
@@ -1065,41 +1048,39 @@ fun VoiceChannelScreen(
 }
 
 /**
- * Circular action button for the modern bottom floating call bar.
+ * One control in the call toolbar.
+ *
+ * A toggle rather than a button, because every one of these is a setting that
+ * is either on or off, and a control that looks the same in both states is the
+ * reason people mute themselves twice. Checked fills it; unchecked leaves it
+ * quiet; the shape set squares it off under a finger and springs it back.
+ *
+ * [alarming] is for the two states that are bad news rather than good - muted,
+ * and a link that is struggling - and swaps the fill for the error colour.
  */
 @Composable
-private fun CallCircleButton(
+private fun CallToggle(
     icon: Int,
     contentDescription: String,
-    active: Boolean = false,
-    activeColor: Color = Surface800,
-    tint: Color = Slate100,
-    size: androidx.compose.ui.unit.Dp = 48.dp,
-    onClick: () -> Unit,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+    alarming: Boolean = false,
 ) {
-    Box(
-        modifier = Modifier
-            .size(size)
-            .clip(CircleShape)
-            .background(if (active) activeColor else Surface800.copy(alpha = 0.7f))
-            .border(1.dp, Color.White.copy(alpha = 0.1f), CircleShape)
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-                onClick = onClick,
-            ),
-        contentAlignment = Alignment.Center,
+    val scheme = MaterialTheme.colorScheme
+    FilledIconToggleButton(
+        checked = checked,
+        onCheckedChange = onCheckedChange,
+        shapes = IconButtonDefaults.toggleableShapes(),
+        colors = IconButtonDefaults.filledIconToggleButtonColors(
+            containerColor = Color.Transparent,
+            contentColor = if (alarming && checked) scheme.error else scheme.onSurfaceVariant,
+            checkedContainerColor = if (alarming) scheme.errorContainer else scheme.primary,
+            checkedContentColor = if (alarming) scheme.onErrorContainer else scheme.onPrimary,
+        ),
     ) {
-        BetweenUsIcon(icon, tint = tint, size = 20.dp, contentDescription = contentDescription)
+        BetweenUsIcon(icon, size = 22.dp, contentDescription = contentDescription)
     }
 }
-
-/**
- * The call controls, sized so six of them and their gaps fit the narrowest
- * phone worth supporting (320dp): 5 x 44 + 50 leaves 50dp of gap over.
- */
-private val CONTROL_SIZE = 44.dp
-private val LEAVE_SIZE = 50.dp
 
 private val PIP_WIDTH = 108.dp
 private val PIP_HEIGHT = 154.dp
