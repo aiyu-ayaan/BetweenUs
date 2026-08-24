@@ -29,6 +29,21 @@ android {
     }
 }
 
+
+/**
+ * Material 3 Expressive is still an opt-in API surface. The client is drawn in
+ * that language from the theme down, so the opt-in is a build setting rather
+ * than an annotation on every file that draws a button.
+ */
+kotlin {
+    compilerOptions {
+        freeCompilerArgs.addAll(
+            "-opt-in=androidx.compose.material3.ExperimentalMaterial3ExpressiveApi",
+            "-opt-in=androidx.compose.material3.ExperimentalMaterial3Api",
+        )
+    }
+}
+
 dependencies {
     coreLibraryDesugaring(libs.desugar.jdk.libs)
     // Compose is the whole surface of this module - a feature that depends on

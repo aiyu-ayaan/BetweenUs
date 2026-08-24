@@ -2,22 +2,22 @@ package com.aatech.betweenus.ui.components
 
 import androidx.annotation.DrawableRes
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LocalContentColor
+import androidx.compose.material3.MaterialShapes
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.toShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.aatech.betweenus.ui.R
-import com.aatech.betweenus.ui.theme.Accent
-import com.aatech.betweenus.ui.theme.Edge
-import com.aatech.betweenus.ui.theme.Slate400
 
 /**
  * The icon set, converted from `apps/desktop/src/components/icons.tsx` - the
@@ -85,12 +85,16 @@ object BetweenUsIcons {
  * One icon. The default size is 20dp because that is what reads correctly next
  * to 14sp body text; a tap target is made by the thing around it, never by
  * growing the glyph.
+ *
+ * The default tint is the content colour of whatever it is inside. That is what
+ * lets a Material button own its own disabled and pressed colours - an icon
+ * that names its own tint stays bright inside a greyed-out button.
  */
 @Composable
 fun BetweenUsIcon(
     @DrawableRes icon: Int,
     modifier: Modifier = Modifier,
-    tint: Color = Slate400,
+    tint: Color = LocalContentColor.current,
     size: Dp = 20.dp,
     contentDescription: String? = null,
 ) {
@@ -103,21 +107,35 @@ fun BetweenUsIcon(
 }
 
 @Composable
-fun BetweenUsLogo(modifier: Modifier = Modifier, tint: Color = Accent, size: Dp = 24.dp) {
+fun BetweenUsLogo(
+    modifier: Modifier = Modifier,
+    tint: Color = MaterialTheme.colorScheme.primary,
+    size: Dp = 24.dp,
+) {
     BetweenUsIcon(BetweenUsIcons.Logo, modifier, tint, size)
 }
 
-/** The logo in the rounded accent tile every entry screen opens with. */
+/**
+ * The logo in the tile every entry screen opens with.
+ *
+ * A cookie rather than a rounded square. It is the first thing anybody sees of
+ * this app, it is the one moment with nothing else on screen to compete with,
+ * and Material's own shape set is what says "expressive" before a single word
+ * has been read.
+ */
 @Composable
-fun BetweenUsLogoTile(modifier: Modifier = Modifier, size: Int = 48) {
+fun BetweenUsLogoTile(modifier: Modifier = Modifier, size: Int = 64) {
     Box(
         modifier = modifier
             .size(size.dp)
-            .border(1.dp, Edge, RoundedCornerShape(12.dp))
-            .background(Accent.copy(alpha = 0.15f), RoundedCornerShape(12.dp)),
+            .clip(MaterialShapes.Cookie12Sided.toShape())
+            .background(MaterialTheme.colorScheme.primaryContainer),
         contentAlignment = Alignment.Center,
     ) {
-        BetweenUsLogo(size = (size * 0.55f).dp)
+        BetweenUsLogo(
+            tint = MaterialTheme.colorScheme.onPrimaryContainer,
+            size = (size * 0.45f).dp,
+        )
     }
 }
 

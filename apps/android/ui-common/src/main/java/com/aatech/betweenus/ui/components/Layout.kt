@@ -1,8 +1,11 @@
 package com.aatech.betweenus.ui.components
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -15,9 +18,19 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.FilledTonalIconButton
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
+import androidx.compose.material3.MaterialShapes
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ripple
 import androidx.compose.material3.Text
+import androidx.compose.material3.toShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -25,20 +38,20 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.aatech.betweenus.ui.theme.Accent
-import com.aatech.betweenus.ui.theme.Edge
-import com.aatech.betweenus.ui.theme.Slate100
-import com.aatech.betweenus.ui.theme.Slate400
-import com.aatech.betweenus.ui.theme.Slate50
-import com.aatech.betweenus.ui.theme.Slate500
-import com.aatech.betweenus.ui.theme.Surface700
-import com.aatech.betweenus.ui.theme.Surface900
+import com.aatech.betweenus.ui.theme.BetweenUsMotion
 
 /**
- * The pieces every screen is assembled from.
+ * The pieces every screen is assembled from, in Material 3 Expressive.
  *
- * BetweenUs is drawn as panels on a dark ground - every region its own rounded
- * card with a hairline edge - and these are the phone-shaped version of that.
+ * The old version of this file drew panels: a rounded card with a hairline
+ * border, on a near-black ground. Expressive draws the same separation with
+ * *tone* - a container one step up the surface ramp - and keeps the hairline
+ * for the few places where two containers of the same tone meet. Fewer lines on
+ * screen, and the depth survives someone turning the contrast up.
+ *
+ * The second change is that things react. A row's corner opens up under a
+ * finger and springs back; a selected row is a different shape as well as a
+ * different colour. Shape is information here, not decoration.
  */
 
 /** The uppercase divider the sidebars group things under. */
@@ -47,13 +60,13 @@ fun SectionLabel(text: String, modifier: Modifier = Modifier, trailing: @Composa
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp),
+            .padding(start = 20.dp, end = 12.dp, top = 16.dp, bottom = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
             text = text.uppercase(),
-            style = MaterialTheme.typography.labelSmall,
-            color = Slate500,
+            style = MaterialTheme.typography.labelSmallEmphasized,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.weight(1f),
         )
         trailing?.invoke()
@@ -61,8 +74,15 @@ fun SectionLabel(text: String, modifier: Modifier = Modifier, trailing: @Composa
 }
 
 /**
- * One tappable row. 52dp is the floor, not the target: a list of names is the
- * thing people miss when a row is 40dp and a thumb is 9mm across.
+ * One tappable row.
+ *
+ * 56dp is the floor, not the target: a list of names is the thing people miss
+ * when a row is 40dp and a thumb is 9mm across.
+ *
+ * Selected is drawn three ways at once - a secondary container, a wider corner,
+ * and an emphasized label - because one of the three is always the one somebody
+ * cannot see. Pressing widens the corner further and it springs back, which is
+ * the expressive shape-morph applied to a list item rather than a button.
  */
 @Composable
 fun ListRow(
@@ -72,27 +92,61 @@ fun ListRow(
     selected: Boolean = false,
     leading: @Composable (() -> Unit)? = null,
     trailing: @Composable (RowScope.() -> Unit)? = null,
-    titleColor: Color = Slate100,
+    titleColor: Color = Color.Unspecified,
     onClick: (() -> Unit)? = null,
 ) {
+    val scheme = MaterialTheme.colorScheme
+    val interactions = remember { MutableInteractionSource() }
+    val pressed by interactions.collectIsPressedAsState()
+
+    val corner by animateDpAsState(
+        targetValue = when {
+            pressed -> 26.dp
+            selected -> 20.dp
+            else -> 14.dp
+        },
+        animationSpec = BetweenUsMotion.spatialFast(),
+        label = "row-corner",
+    )
+    val container by animateColorAsState(
+        targetValue = if (selected) scheme.secondaryContainer else Color.Transparent,
+        animationSpec = BetweenUsMotion.effect(),
+        label = "row-container",
+    )
+    val content = when {
+        titleColor != Color.Unspecified -> titleColor
+        selected -> scheme.onSecondaryContainer
+        else -> scheme.onSurface
+    }
+
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 8.dp, vertical = 2.dp)
-            .clip(RoundedCornerShape(8.dp))
-            .background(if (selected) Surface700 else Color.Transparent)
-            .let { if (onClick != null) it.clickable(onClick = onClick) else it }
-            .heightIn(min = 52.dp)
-            .padding(horizontal = 8.dp, vertical = 8.dp),
+            .padding(horizontal = 10.dp, vertical = 2.dp)
+            .clip(RoundedCornerShape(corner))
+            .background(container)
+            .let {
+                if (onClick != null) {
+                    it.clickable(interactionSource = interactions, indication = ripple(), onClick = onClick)
+                } else {
+                    it
+                }
+            }
+            .heightIn(min = 56.dp)
+            .padding(horizontal = 12.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         leading?.invoke()
         Column(Modifier.weight(1f)) {
             Text(
                 text = title,
-                style = MaterialTheme.typography.bodyLarge,
-                color = if (selected) Slate50 else titleColor,
+                style = if (selected) {
+                    MaterialTheme.typography.bodyLargeEmphasized
+                } else {
+                    MaterialTheme.typography.bodyLarge
+                },
+                color = content,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -100,7 +154,7 @@ fun ListRow(
                 Text(
                     text = subtitle,
                     style = MaterialTheme.typography.bodySmall,
-                    color = Slate500,
+                    color = if (selected) content.copy(alpha = 0.75f) else scheme.onSurfaceVariant,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -110,45 +164,77 @@ fun ListRow(
     }
 }
 
-/** A panel: the rounded card with a hairline edge everything sits inside. */
+/**
+ * A panel: the region every screen is divided into.
+ *
+ * Tone rather than a border. [tone] steps it up or down the container ramp for
+ * the rare case where two panels sit against each other and need telling apart.
+ */
 @Composable
-fun Panel(modifier: Modifier = Modifier, content: @Composable () -> Unit) {
+fun Panel(
+    modifier: Modifier = Modifier,
+    tone: Color = MaterialTheme.colorScheme.surfaceContainer,
+    content: @Composable () -> Unit,
+) {
     Box(
         modifier = modifier
-            .clip(RoundedCornerShape(16.dp))
-            .background(Surface900)
-            .border(1.dp, Edge, RoundedCornerShape(16.dp)),
+            .clip(MaterialTheme.shapes.extraLarge)
+            .background(tone),
     ) {
         content()
     }
 }
 
-/** An icon that is a button. The glyph stays 20dp; the target is 44dp. */
+/**
+ * An icon that is a button.
+ *
+ * The expressive icon button morphs between a round resting shape and a squarer
+ * pressed one, so this hands the toolkit a shape *set* rather than a corner.
+ * [prominent] fills it tonally, for the one action in a group that matters.
+ */
 @Composable
 fun IconAction(
     icon: Int,
     contentDescription: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    tint: Color = Slate400,
+    tint: Color = Color.Unspecified,
     enabled: Boolean = true,
+    prominent: Boolean = false,
 ) {
-    Box(
-        modifier = modifier
-            .size(44.dp)
-            .clip(RoundedCornerShape(10.dp))
-            .let { if (enabled) it.clickable(onClick = onClick) else it },
-        contentAlignment = Alignment.Center,
-    ) {
-        BetweenUsIcon(
-            icon = icon,
-            tint = if (enabled) tint else tint.copy(alpha = 0.4f),
-            contentDescription = contentDescription,
+    val resolved = if (tint == Color.Unspecified) MaterialTheme.colorScheme.onSurfaceVariant else tint
+    // No tint: the icon inherits the button's content colour, so pressed and
+    // disabled are the toolkit's business rather than this call site's.
+    val glyph = @Composable {
+        BetweenUsIcon(icon = icon, contentDescription = contentDescription)
+    }
+    if (prominent) {
+        FilledTonalIconButton(
+            onClick = onClick,
+            enabled = enabled,
+            shapes = IconButtonDefaults.shapes(),
+            modifier = modifier.size(IconButtonDefaults.mediumContainerSize()),
+            content = glyph,
+        )
+    } else {
+        IconButton(
+            onClick = onClick,
+            enabled = enabled,
+            shapes = IconButtonDefaults.shapes(),
+            colors = IconButtonDefaults.iconButtonColors(contentColor = resolved),
+            modifier = modifier.size(IconButtonDefaults.mediumContainerSize()),
+            content = glyph,
         )
     }
 }
 
-/** What a list says when it is empty, rather than saying nothing at all. */
+/**
+ * What a list says when it is empty, rather than saying nothing at all.
+ *
+ * The icon sits inside one of the Material shapes - a cookie, not a circle -
+ * because an empty state is the one screen with nothing else on it to look at,
+ * and a circle there reads as a missing image.
+ */
 @Composable
 fun EmptyState(
     icon: Int,
@@ -157,22 +243,35 @@ fun EmptyState(
     modifier: Modifier = Modifier,
     action: @Composable (() -> Unit)? = null,
 ) {
+    val scheme = MaterialTheme.colorScheme
     Column(
         modifier = modifier.fillMaxWidth().padding(32.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        BetweenUsIcon(icon, tint = Surface700, size = 40.dp)
-        Spacer(Modifier.height(12.dp))
-        Text(title, style = MaterialTheme.typography.titleMedium, color = Slate100)
-        Spacer(Modifier.height(4.dp))
+        Box(
+            modifier = Modifier
+                .size(96.dp)
+                .clip(MaterialShapes.Cookie9Sided.toShape())
+                .background(scheme.surfaceContainerHigh),
+            contentAlignment = Alignment.Center,
+        ) {
+            BetweenUsIcon(icon, tint = scheme.onSurfaceVariant, size = 36.dp)
+        }
+        Spacer(Modifier.height(20.dp))
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleMediumEmphasized,
+            color = scheme.onSurface,
+        )
+        Spacer(Modifier.height(6.dp))
         Text(
             text = detail,
             style = MaterialTheme.typography.bodyMedium,
-            color = Slate500,
+            color = scheme.onSurfaceVariant,
             textAlign = TextAlign.Center,
         )
         if (action != null) {
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(20.dp))
             action()
         }
     }
@@ -183,21 +282,35 @@ fun EmptyState(
 fun Chip(
     text: String,
     modifier: Modifier = Modifier,
-    tone: Color = Slate400,
+    tone: Color = Color.Unspecified,
     selected: Boolean = false,
     onClick: (() -> Unit)? = null,
 ) {
-    Box(
-        modifier = modifier
-            .clip(RoundedCornerShape(999.dp))
-            .background(if (selected) Accent.copy(alpha = 0.18f) else Surface700)
-            .let { if (onClick != null) it.clickable(onClick = onClick) else it }
-            .padding(horizontal = 10.dp, vertical = 6.dp),
-    ) {
-        Text(
-            text = text,
-            style = MaterialTheme.typography.bodySmall,
-            color = if (selected) Accent else tone,
-        )
-    }
+    val scheme = MaterialTheme.colorScheme
+    FilterChip(
+        selected = selected,
+        onClick = { onClick?.invoke() },
+        enabled = onClick != null || !selected,
+        label = {
+            Text(
+                text = text,
+                style = if (selected) {
+                    MaterialTheme.typography.labelMediumEmphasized
+                } else {
+                    MaterialTheme.typography.labelMedium
+                },
+            )
+        },
+        shape = MaterialTheme.shapes.small,
+        colors = FilterChipDefaults.filterChipColors(
+            containerColor = scheme.surfaceContainerHighest,
+            labelColor = if (tone == Color.Unspecified) scheme.onSurfaceVariant else tone,
+            selectedContainerColor = scheme.primaryContainer,
+            selectedLabelColor = scheme.onPrimaryContainer,
+            disabledContainerColor = scheme.surfaceContainerHighest,
+            disabledLabelColor = if (tone == Color.Unspecified) scheme.onSurfaceVariant else tone,
+        ),
+        border = null,
+        modifier = modifier,
+    )
 }

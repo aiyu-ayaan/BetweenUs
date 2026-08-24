@@ -1,5 +1,6 @@
 package com.aatech.betweenus.ui.components
 
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
@@ -11,6 +12,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -24,7 +26,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
-import com.aatech.betweenus.ui.theme.Slate100
+import com.aatech.betweenus.ui.theme.BetweenUsMotion
 import com.aatech.betweenus.ui.theme.StatusDnd
 import com.aatech.betweenus.ui.theme.StatusIdle
 import com.aatech.betweenus.ui.theme.StatusOffline
@@ -67,7 +69,7 @@ fun Avatar(
         } else {
             Text(
                 text = label.take(1).uppercase(),
-                color = Slate100,
+                color = MaterialTheme.colorScheme.onSurface,
                 fontWeight = FontWeight.SemiBold,
                 fontSize = (size.value * 0.4f).sp,
                 textAlign = TextAlign.Center,
@@ -130,9 +132,12 @@ fun statusColor(status: String): Color = when (status.lowercase()) {
 }
 
 /**
- * A server's tile in the rail. Square with a large radius when idle, rounder
- * and accented when it is the one being looked at - the same shape language the
- * desktop rail uses to say "you are here".
+ * A server's tile in the rail.
+ *
+ * The shape is the state. A tile at rest is a squircle; the one being looked at
+ * springs open to a circle and grows a ring, and the corner is animated rather
+ * than swapped so switching servers is one continuous movement instead of a
+ * cut. This is the expressive shape-morph doing the job an underline used to.
  */
 @Composable
 fun ServerTile(
@@ -144,15 +149,21 @@ fun ServerTile(
     modifier: Modifier = Modifier,
     content: @Composable BoxScope.() -> Unit = {},
 ) {
-    Box(modifier = modifier.size(52.dp), contentAlignment = Alignment.Center) {
+    val corner by animateDpAsState(
+        targetValue = if (selected) 23.dp else 16.dp,
+        animationSpec = BetweenUsMotion.spatial(),
+        label = "server-tile-corner",
+    )
+    val shape = RoundedCornerShape(corner)
+    Box(modifier = modifier.size(56.dp), contentAlignment = Alignment.Center) {
         Avatar(
             id = id,
             label = name,
             url = iconUrl,
             size = 46.dp,
-            shape = RoundedCornerShape(if (selected) 14.dp else 22.dp),
+            shape = shape,
             modifier = if (selected) {
-                Modifier.border(2.dp, com.aatech.betweenus.ui.theme.Accent, RoundedCornerShape(14.dp))
+                Modifier.border(2.dp, MaterialTheme.colorScheme.primary, shape)
             } else {
                 Modifier
             },
@@ -160,25 +171,26 @@ fun ServerTile(
         if (unread > 0) {
             Badge(
                 count = unread,
-                modifier = Modifier.align(Alignment.TopEnd).padding(top = 2.dp, end = 2.dp),
+                modifier = Modifier.align(Alignment.TopEnd),
             )
         }
         content()
     }
 }
 
+/** An unread count. Tertiary, not error: unread is news, it is not a failure. */
 @Composable
 fun Badge(count: Int, modifier: Modifier = Modifier) {
     Box(
         modifier = modifier
-            .background(com.aatech.betweenus.ui.theme.Danger, CircleShape)
-            .padding(horizontal = 5.dp, vertical = 1.dp),
+            .background(MaterialTheme.colorScheme.tertiary, CircleShape)
+            .padding(horizontal = 6.dp, vertical = 2.dp),
         contentAlignment = Alignment.Center,
     ) {
         Text(
             text = if (count > 99) "99+" else count.toString(),
-            style = MaterialTheme.typography.labelSmall,
-            color = Color.White,
+            style = MaterialTheme.typography.labelSmallEmphasized,
+            color = MaterialTheme.colorScheme.onTertiary,
         )
     }
 }
