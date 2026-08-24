@@ -10,6 +10,7 @@ import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.rememberDrawerState
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -239,8 +240,23 @@ fun Shell(user: PublicUser) {
         }
     }
 
+    /**
+     * Which screen is in front, so the drawer can stop competing for the same
+     * gesture as the one on it.
+     *
+     * A left-to-right drag on a chat row answers the message; the drawer's own
+     * swipe is the same drag anywhere in the content, so both fired at once -
+     * the row slid and the drawer came out over it. In a conversation the
+     * gesture belongs to the message, and the menu button is still the way in.
+     * Everywhere else - and whenever the drawer is already out, so it can
+     * always be swiped away again - the swipe is the drawer's.
+     */
+    val route by navigation.currentBackStackEntryAsState()
+    val inConversation = route?.destination?.route == Route.Chat && channelId != null
+
     ModalNavigationDrawer(
         drawerState = drawer,
+        gesturesEnabled = drawer.isOpen || !inConversation,
         drawerContent = {
             ModalDrawerSheet(
                 drawerContainerColor = Surface950,

@@ -286,6 +286,18 @@ object ChatSocket : JsonSocket("/ws/chat") {
     private val channels = LinkedHashSet<String>()
     private val servers = LinkedHashSet<String>()
 
+    /**
+     * Run once the subscriptions are back.
+     *
+     * Re-subscribing does not replay anything: the server sends what happens
+     * next, not what happened while nobody was listening. Whatever missed the
+     * gap has to be re-read over REST, and `Conversation` is what knows which
+     * channel that is - a callback rather than a direct call, because that
+     * lives in `core.store` and this is `core.data`.
+     */
+    @Volatile
+    var onReconnect: (() -> Unit)? = null
+
     override fun onConnected() {
         synchronized(channels) {
             channels.forEach { send(JSONObject().put("type", "channel.subscribe").put("channelId", it)) }
@@ -293,6 +305,7 @@ object ChatSocket : JsonSocket("/ws/chat") {
         synchronized(servers) {
             servers.forEach { send(JSONObject().put("type", "server.subscribe").put("serverId", it)) }
         }
+        onReconnect?.invoke()
     }
 
     /** Subscribes to exactly these channels, dropping anything else. */

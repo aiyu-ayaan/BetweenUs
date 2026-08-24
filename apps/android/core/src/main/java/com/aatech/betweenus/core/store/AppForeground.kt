@@ -32,6 +32,11 @@ object AppForeground {
                     // A phone that has come back to the app is a phone reading
                     // whatever is on screen, and the server has to hear so.
                     ChannelFocus.apply()
+                    // It is also a phone whose socket Android was free to drop
+                    // while nobody was looking, so what is on screen may be
+                    // several messages behind. Coming back is the other moment
+                    // - besides a reconnect - when it has to be re-read.
+                    Conversation.resumeVisible()
                 }
 
                 override fun onActivityPaused(activity: Activity) {

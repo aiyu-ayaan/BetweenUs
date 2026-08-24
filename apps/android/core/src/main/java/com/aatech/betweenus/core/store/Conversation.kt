@@ -17,6 +17,8 @@ import com.aatech.betweenus.core.data.UploadedObject
 import com.aatech.betweenus.core.data.UploadedPart
 import com.aatech.betweenus.core.data.Session
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -97,6 +99,12 @@ object Conversation {
         if (wired) return
         wired = true
         ChatSocket.on { event -> scope.launch { onEvent(event) } }
+        // A socket that was down missed every message that arrived while it
+        // was, and re-subscribing does not deliver them - the server sends what
+        // happens next, not what happened. A phone is down constantly (a lift,
+        // a lock screen, an OS that dropped the connection while the app was in
+        // the background), so coming back has to re-read rather than assume.
+        ChatSocket.onReconnect = { resumeVisible() }
     }
 
     fun stop() {
@@ -128,8 +136,19 @@ object Conversation {
                     insert(read(message))
                 }
                 val mine = message.author.id == (Session.state.value as? com.aatech.betweenus.core.data.AuthPhase.SignedIn)?.user?.id
-                if (!mine && message.channelId != visibleChannelId) {
-                    Workspace.noteUnread(message.channelId, 1)
+                if (!mine) {
+                    // On screen *and* in front of somebody. The chat screen is
+                    // still composed behind a lock screen, so `visibleChannelId`
+                    // alone would count a message nobody has seen as read.
+                    if (message.channelId == visibleChannelId && AppForeground.visible) {
+                        // Read as soon as it is drawn, so the marker moves on
+                        // the account too. Without this the marker only moved
+                        // when the channel was opened, and a conversation held
+                        // open never told anyone it had been read.
+                        markReadSoon(message.channelId)
+                    } else {
+                        Workspace.noteUnread(message.channelId, 1)
+                    }
                 }
             }
             // An edit, a deletion, a pin and a reaction are all "this message is
@@ -152,7 +171,13 @@ object Conversation {
         // for every channel at sign-in: it is only ever drawn for the one on
         // screen, and it goes stale the moment somebody reads anyway.
         loadReceipts(channelId)
-        if (_messages.value.containsKey(channelId)) return
+        // Already in memory, but not necessarily current: whatever arrived
+        // while the socket was down is missing from it, and re-opening the
+        // channel is exactly when somebody expects to see it.
+        if (_messages.value.containsKey(channelId)) {
+            refresh(channelId)
+            return
+        }
         scope.launch {
             _loading.update { it + channelId }
             // What was on screen last time, before anything is asked of the
@@ -177,6 +202,56 @@ object Conversation {
                 _messages.update { all -> all + (channelId to merge(all[channelId], readable)) }
             }
             _loading.update { it - channelId }
+        }
+    }
+
+    /**
+     * The newest page again, merged over what is held.
+     *
+     * Deliberately not [open]'s fetch: that one sets the cursor, and setting it
+     * from the newest page would throw away how far back somebody had already
+     * scrolled. This only fills in what is missing at the end.
+     */
+    fun refresh(channelId: String) {
+        scope.launch {
+            runCatching {
+                val page = BetweenUsApi.messages(channelId)
+                Cache.putMessages(page.items)
+                val readable = page.items.map { read(it) }
+                _messages.update { all -> all + (channelId to merge(all[channelId], readable)) }
+            }
+        }
+    }
+
+    /**
+     * The app came back to the front, or the socket did.
+     *
+     * Three things go stale together while a phone is asleep: the messages that
+     * arrived, who has read them, and the fact that this account is looking at
+     * the channel again. All three are re-asserted here, and nowhere else needs
+     * to know which of the two events it was.
+     */
+    fun resumeVisible() {
+        val channelId = visibleChannelId ?: return
+        if (!AppForeground.visible) return
+        refresh(channelId)
+        loadReceipts(channelId)
+        Workspace.markRead(channelId)
+    }
+
+    /** The pending "this channel has been read", if a burst is still arriving. */
+    private var readJob: Job? = null
+
+    /**
+     * Ten messages landing at once are one read, not ten POSTs. Coalesced
+     * rather than rate-limited: the last one wins, which is the marker that is
+     * actually true.
+     */
+    private fun markReadSoon(channelId: String) {
+        readJob?.cancel()
+        readJob = scope.launch {
+            delay(700)
+            Workspace.markRead(channelId)
         }
     }
 
