@@ -195,12 +195,16 @@ fun MessageRow(
      * back - the row overshoots and settles, which is what makes the gesture
      * feel answered rather than merely undone.
      *
-     * **The left third is the drawer's, the rest is the reply's.** A 24dp edge
-     * is a gesture people miss, so the drawer needs more than the edge; but it
-     * was tried at half the row and that is too much, because reply is the one
-     * of the two you use in the middle of reading and it wants the part of the
-     * bubble a thumb is already on. A third is wide enough to find without
-     * aiming and narrow enough to leave the message alone.
+     * **A 48dp gutter down the left is the drawer's, the rest is the reply's.**
+     * A 24dp edge is a gesture people miss, so the drawer needs more than the
+     * edge - but it was tried at half the row and then a third, and both were
+     * measured against the width of the screen. That was tolerable while a
+     * message filled the row and wrong the moment messages became bubbles: a
+     * third of a phone is most of an incoming bubble, so the gesture people
+     * actually make - a swipe on the bubble they are reading - opened the
+     * drawer instead of replying. A fixed gutter does not move when the message
+     * does, and 48dp is the standard minimum touch target: findable without
+     * aiming, and sitting in the avatar gutter rather than on the message.
      *
      * **Nothing is consumed until the gesture has been claimed**, and that is
      * the whole reason this is written by hand rather than with
@@ -270,9 +274,20 @@ fun MessageRow(
                 val slop = viewConfiguration.touchSlop
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false)
-                    // The left third is the drawer's. Leave without touching
-                    // anything, so the drag reaches the draggable above.
-                    if (down.position.x < size.width / 3f) return@awaitEachGesture
+                    // A fixed gutter down the left is the drawer's, not a
+                    // fraction of the row. A third was measured against the
+                    // whole width of the screen, which was fine while a message
+                    // filled it and wrong once messages became bubbles: a third
+                    // of a phone is most of an incoming bubble, so the gesture
+                    // people actually make - a swipe on the bubble they are
+                    // reading - opened the drawer instead of replying.
+                    //
+                    // 48dp is the standard minimum touch target: bigger than the
+                    // 24dp edge that was too mean to hit, and narrow enough that
+                    // it lands in the avatar gutter rather than on the message.
+                    // Leave without touching anything, so the drag reaches the
+                    // draggable above.
+                    if (down.position.x < DRAWER_GUTTER.toPx()) return@awaitEachGesture
 
                     var travelX = 0f
                     var travelY = 0f
@@ -1392,6 +1407,18 @@ private fun MarkupBody(
  * when it is asked for rather than once per row on the way past.
  */
 private const val MAX_DECODE_EDGE_PX = 1080
+
+/**
+ * The strip down the left of a message row that belongs to the navigation
+ * drawer rather than to the reply swipe.
+ *
+ * Fixed rather than a fraction of the row: a fraction was measured against the
+ * width of the screen, so once messages became bubbles a third of a phone was
+ * most of an incoming bubble and swiping the message you are reading opened the
+ * drawer. 48dp is the standard minimum touch target - wide enough to find
+ * without aiming, narrow enough to stay in the avatar gutter.
+ */
+private val DRAWER_GUTTER = 48.dp
 
 /**
  * How much to shrink a picture by while decoding it.
