@@ -22,6 +22,14 @@ gateway class handling frames itself.
 | `message.created` / `message.updated` | server → client | New message, or an edit/delete/pin/reaction on an existing one |
 | `friends.changed` | server → client | Re-fetch the friends list |
 | `server.members.changed` | server → client | Re-fetch a server's member list |
+| `user.updated` | server → client | A changed profile, carried: `{ id, username, displayName, avatarUrl }` |
+| `server.updated` | server → client | A renamed server or a new icon, carried |
+| `channel.read` | server → client | Somebody's read marker moved |
+
+`user.updated` is fanned out to everyone entitled to see the account — the
+members of every server it is in, everyone it is friends with, and its own other
+devices. Friendships stand in for direct messages, because a DM already requires
+one. `server.updated` goes to the `server:<id>` room.
 
 See [Events](/system-design/events) for why edits, deletes, pins and
 reactions all arrive as one `message.updated` shape.

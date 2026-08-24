@@ -219,6 +219,40 @@ Calls:
       resolution through `RendererEvents` and sizes the renderer to it, and the
       letterbox is the tile's background showing through.
 
+- [x] **A changed picture, name or server, live on every client.** A profile and
+      a server's details were read once at load and never again: change either
+      and every other screen in the deployment kept the old one until it was
+      reloaded, which for a sidebar nobody clicks is until the app restarts.
+
+      `user.updated` grew a payload and `server.updated` is new, and both carry
+      the changed fields rather than announcing that something changed. That is
+      the opposite of the rule `friends.changed` follows, and deliberately: an
+      avatar has a copy in every message that account ever sent in an open
+      channel, in every cached page of history behind it, in the pins, the read
+      receipts, the member list, the friend list and the conversation list.
+      Announcing it would be one refetch per list on every client that shares a
+      room with them. A reply's quoted author is left alone - it is a snapshot
+      of a signature, not a reference.
+
+      `chat-service` fans the profile out to everyone entitled to see it: the
+      members of every server it is in, everyone it is friends with, and its own
+      other devices. Friendships stand in for direct messages, because a DM
+      already requires one.
+
+- [x] **The status dot, which was never realtime on any client.** Desktop and
+      web read it through `usePresenceStore((state) => state.statusOf)` - which
+      selects a *function*, and a function reference is the same one for the
+      life of the store. Four screens picked it out, subscribed to nothing, and
+      drew whatever colour the dot had when they were first rendered. The
+      friends list only worked by accident: it also selects the `online` set, so
+      it re-rendered for another reason and the lookup happened to be re-run.
+      Android's drawer had the same bug in its own dialect - `Presence.statusOf`
+      is a plain read of the current value.
+
+      Nothing was wrong with the backend: presence-service was publishing and
+      scoping correctly the whole time. The fix is to select the map, which is
+      replaced on every presence event, and do the same lookup on top of it.
+
 Android:
 
 - [x] **Input sensitivity on the phone**, which was the one item here written
@@ -1552,3 +1586,28 @@ The cases most worth putting a person in front of, in order:
     being watched for is a link that comes back late, which now happens and did
     not before, and a call that renegotiates when it did not need to, which is
     what the "only from `new`" rule exists to prevent.
+
+36. **A picture changed on one device, on every screen of another.** Two
+    accounts signed in on three clients between them - desktop or web, and the
+    phone - sharing a server and a friendship. Change the avatar on one and
+    watch the other, without touching anything: the member list, the message
+    list of an open channel, the conversation list and the friend list must all
+    take the new picture. Change the display name too, because it travels in the
+    same event and is drawn in more places. Then the quoted line of a reply,
+    which must *not* change - it is how the message was signed at the time.
+
+    Then a server: rename it and give it a new icon from one client, and watch
+    the rail on the other. Do this from Android as well as from the desktop, and
+    do it while the other client is looking at a different server, because the
+    sidebar is the case that used to need a restart.
+
+    Last, a relaunch on the phone: the patched lists are written back to the
+    cache, so a restart must not bring the old picture back.
+
+37. **The status dot, which has never been watched go green.** Two accounts,
+    friends, on two clients. Sign one in and watch the other's friends list, DM
+    list and member list without touching them: each dot must go green within a
+    second or two, and grey again when the first signs out. Do it on the phone's
+    drawer as well - that had its own copy of the same bug. The thing to be
+    suspicious of is a screen that only updates when something else on it moves,
+    which is exactly what the four broken selectors looked like.

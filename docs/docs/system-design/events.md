@@ -40,6 +40,17 @@ negotiates its own WebRTC path directly between peers (see
   one payload can't serve both parties of the same friendship without being
   composed twice — a refetch is cheaper and harder to get subtly wrong.
 
+`user.updated` and `server.updated` are carried rather than announced, and the
+reason is the opposite of the friendship one: the same four fields are drawn in
+a dozen places at once. A changed avatar has a copy in every message that
+account ever sent in an open channel, in every cached page of history behind it,
+in the pins, the read receipts, the member list, the friend list and the
+conversation list. Announcing it would be one refetch per list on every client
+that shares a room with them; carrying `{ id, username, displayName, avatarUrl }`
+lets each client patch its copies in place. A reply's quoted author is
+deliberately *not* patched — it is a snapshot of how a message was signed at the
+time, not a live reference.
+
 ## Rooms
 
 Three kinds of Socket.IO room:
@@ -77,7 +88,7 @@ at-most-once delivery becomes the limiting factor.
 
 ```text
 user.created            user.updated            user.online / user.offline
-server.created           server.member.added       server.member.removed
+server.created           server.updated            server.member.added / removed / updated
 channel.created           channel.deleted
 message.created             message.updated             message.deleted
 call.started                  call.ended                    call.participant.joined / left

@@ -1231,12 +1231,19 @@ keeps whatever is nearest the bottom of the screen, so the drawer opens by
 swipe from the lower part of the edge - where a thumb rests - and Back still
 works from the rest.
 
-**The left third of a row is the drawer's; the rest is the reply's.** A 24dp
-edge is a gesture people miss, so the drawer needs more than the edge - but
-half the row, which was the first attempt, is too much. Reply is the one of the
-two used in the middle of reading, and it wants the part of the bubble a thumb
-is already on. A third is wide enough to find without aiming and narrow enough
-to leave the message alone.
+**A 48dp gutter down the left is the drawer's; the rest is the reply's.** A
+24dp edge is a gesture people miss, so the drawer needs more than the edge - but
+half the row, which was the first attempt, is too much, and the third that
+replaced it turned out to be measured against the wrong thing. Both were a
+fraction of the row, and a row is the full width of the screen. That was
+tolerable while a message filled it and wrong the moment messages became
+bubbles: a third of a phone is most of an incoming bubble, so the gesture people
+actually make - a swipe on the bubble they are reading - opened the drawer
+instead of replying.
+
+A fixed gutter does not move when the message does. 48dp is the standard minimum
+touch target: findable without aiming, and sitting in the avatar gutter rather
+than on anything anybody wants to answer.
 
 **Nothing is consumed until the gesture has been claimed**, which is why this
 is written by hand with `awaitEachGesture` rather than with
