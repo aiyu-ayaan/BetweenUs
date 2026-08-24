@@ -195,8 +195,14 @@ fun Badge(count: Int, modifier: Modifier = Modifier) {
     }
 }
 
-/** Stable across sessions and clients, because it is a hash and not a choice. */
-private fun tintFor(id: String): Color {
+/**
+ * The colour this person is drawn in.
+ *
+ * Stable across sessions and clients, because it is a hash and not a choice -
+ * which is what lets a name in a conversation be tinted to match the avatar
+ * beside it without the two being told about each other.
+ */
+fun tintFor(id: String): Color {
     val palette = listOf(
         Color(0xFF7C5CFF), Color(0xFF3FD68C), Color(0xFFF5B83D),
         Color(0xFF4CA5FF), Color(0xFFFF7A9C), Color(0xFF3FD1D6),

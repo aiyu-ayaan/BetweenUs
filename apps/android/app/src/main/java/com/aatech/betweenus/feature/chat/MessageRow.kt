@@ -24,10 +24,12 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
@@ -89,7 +91,9 @@ import com.aatech.betweenus.core.data.MessageCustomEmoji
 import com.aatech.betweenus.core.data.PublicUser
 import com.aatech.betweenus.core.store.Conversation
 import com.aatech.betweenus.core.store.ReadableMessage
+import com.aatech.betweenus.core.store.Workspace
 import com.aatech.betweenus.ui.components.Avatar
+import com.aatech.betweenus.ui.components.tintFor
 import com.aatech.betweenus.ui.components.BetweenUsIcon
 import com.aatech.betweenus.ui.components.BetweenUsIcons
 import com.aatech.betweenus.ui.theme.Accent
@@ -121,12 +125,26 @@ import java.time.format.DateTimeFormatter
 private val timeFormat = DateTimeFormatter.ofPattern("HH:mm")
 
 /**
- * Enhanced chat message row supporting:
- * - Distinct bubbles with sender accents and "YOU" badge
- * - Encrypted inline photo cards with zoomable fullscreen viewer
- * - Encrypted video cards with thumbnail extraction and integrated video player
- * - Document/Audio tiles with download/decrypt actions
- * - Interactive emoji reactions
+ * One message, drawn the way every phone messenger draws one.
+ *
+ * A bubble is as wide as what is in it and no wider than 78% of the screen;
+ * yours sit against the right edge and everybody else's against the left, so
+ * *who said this* is answered by the shape of the screen before a word is read.
+ * The rest follows from that:
+ *
+ * - The name and the time move **inside** the bubble - the name at the top in
+ *   the sender's own colour, the time in the bottom corner - because a bubble
+ *   that hugs its text has no margin left to hang them in.
+ * - The name is only drawn for other people, and only on the first message of
+ *   a run. Yours is never drawn: the side of the screen already said it.
+ * - The tail is the one square corner, top-outer, on the first bubble of a
+ *   run. A continuation has four round corners, which is what makes a run read
+ *   as one person talking rather than a stack of cards.
+ * - Reactions and read receipts hang off the bubble's own edge rather than the
+ *   screen's.
+ *
+ * It also carries the encrypted photo, video and document cards, and the
+ * swipe-to-reply gesture - see the note on that below.
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -149,6 +167,17 @@ fun MessageRow(
 ) {
     val message = readable.message
     val isSelf = message.author.id == self.id
+
+    /**
+     * Whether this message needs a face beside it.
+     *
+     * Not for your own - the side of the screen it is on already says who said
+     * it - and not in a direct message, where there are two people and one of
+     * them is you. A channel is the only place a face answers a question.
+     */
+    val showAvatar = !isSelf && remember(channelId) {
+        Workspace.directChannel(channelId) == null
+    }
     val grouped = previous != null &&
         previous.message.author.id == message.author.id &&
         !previous.message.deleted &&
@@ -189,6 +218,13 @@ fun MessageRow(
      * down, and once it is clearly vertical the row lets go for good and the
      * list keeps it.
      */
+    /** The time, the pin and "edited": present, and never the loudest thing. */
+    val footnote = when {
+        message.deleted -> MaterialTheme.colorScheme.onSurfaceVariant
+        isSelf -> MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+        else -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
+
     val scope = rememberCoroutineScope()
     val density = LocalDensity.current
     val haptics = LocalHapticFeedback.current
@@ -203,7 +239,10 @@ fun MessageRow(
         stiffness = Spring.StiffnessLow,
     )
 
-    Box(Modifier.fillMaxWidth()) {
+    // The 78% cap needs a number to be 78% of, and this is the only place
+    // that knows how wide the conversation is.
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        val widest = maxWidth * 0.78f
         // The reply mark underneath, fading in with the drag. Nothing is drawn
         // at rest, which is the point: the gesture costs the row no furniture.
         val progress = (slide.value / threshold).coerceIn(0f, 1f)
@@ -291,98 +330,59 @@ fun MessageRow(
                 onLongClick = { if (!message.deleted) onLongPress() },
             )
             .padding(
-                horizontal = 12.dp,
-                vertical = if (grouped) 2.dp else 6.dp,
+                horizontal = 10.dp,
+                vertical = if (grouped) 1.dp else 5.dp,
             ),
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
+            // Yours to the right, everybody else's to the left. This one line
+            // is most of what makes a conversation readable at a glance.
+            horizontalArrangement = if (isSelf) Arrangement.End else Arrangement.Start,
             verticalAlignment = Alignment.Top,
         ) {
-            if (grouped) {
-                Spacer(Modifier.width(44.dp))
-            } else {
-                Avatar(
-                    id = message.author.id,
-                    label = message.author.label,
-                    url = message.author.avatarUrl?.let { Endpoint.absolute(it) },
-                    size = 36.dp,
-                )
-                Spacer(Modifier.width(8.dp))
+            // Your own face is not news, and a direct message has only two
+            // people in it - so the avatar is for other people in a channel,
+            // once per run, and nowhere else.
+            if (showAvatar) {
+                if (grouped) {
+                    Spacer(Modifier.width(44.dp))
+                } else {
+                    Avatar(
+                        id = message.author.id,
+                        label = message.author.label,
+                        url = message.author.avatarUrl?.let { Endpoint.absolute(it) },
+                        size = 36.dp,
+                    )
+                    Spacer(Modifier.width(8.dp))
+                }
             }
 
-            Column(Modifier.weight(1f)) {
-                if (!grouped) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(bottom = 3.dp),
-                    ) {
-                        Text(
-                            text = if (isSelf) "You" else message.author.label,
-                            style = MaterialTheme.typography.labelLargeEmphasized,
-                            color = if (isSelf) {
-                                MaterialTheme.colorScheme.primary
-                            } else {
-                                MaterialTheme.colorScheme.onSurface
-                            },
-                        )
-
-                        Spacer(Modifier.width(8.dp))
-                        Text(
-                            text = shortTime(message.createdAt),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-
-                        if (message.pinned) {
-                            Spacer(Modifier.width(6.dp))
-                            // Pinned is news about a message, not a warning
-                            // about one, so it is the tertiary container - the
-                            // same tone reactions and unread counts use.
-                            Row(
-                                modifier = Modifier
-                                    .clip(MaterialTheme.shapes.small)
-                                    .background(MaterialTheme.colorScheme.tertiaryContainer)
-                                    .padding(horizontal = 6.dp, vertical = 2.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(3.dp),
-                            ) {
-                                BetweenUsIcon(
-                                    icon = BetweenUsIcons.Pin,
-                                    tint = MaterialTheme.colorScheme.onTertiaryContainer,
-                                    size = 11.dp,
-                                )
-                                Text(
-                                    text = "PINNED",
-                                    style = MaterialTheme.typography.labelSmallEmphasized,
-                                    color = MaterialTheme.colorScheme.onTertiaryContainer,
-                                )
-                            }
-                        }
-                    }
-                }
-
+            Column(horizontalAlignment = if (isSelf) Alignment.End else Alignment.Start) {
                 // The bubble.
                 //
-                // Its shape says who is speaking and where in a run it sits.
-                // The corner nearest the speaker is tight - start for someone
-                // else, end for you - and a message that continues a run keeps
-                // that corner tight at the top as well, so a run reads as one
-                // block of speech rather than a stack of separate cards.
+                // The tail is the one square corner, on the outer top edge of
+                // the first message of a run - left for somebody else, right
+                // for you. A continuation has four round corners, and that is
+                // what makes a run read as one person talking rather than as a
+                // stack of separate cards.
                 //
-                // Tone rather than an outline. Your own words are the primary
-                // container and everyone else's the surface, which is a
-                // stronger separation than a 1dp border ever was and one that
-                // survives a screen in sunlight.
+                // Tone rather than an outline: your words are the primary
+                // container and everyone else's the surface. That is a stronger
+                // separation than a 1dp border ever was, and one that survives
+                // a screen in sunlight.
                 val bubble = RoundedCornerShape(
-                    topStart = if (!isSelf && grouped) 6.dp else 18.dp,
-                    topEnd = if (isSelf && grouped) 6.dp else 18.dp,
-                    bottomStart = if (isSelf) 18.dp else 6.dp,
-                    bottomEnd = if (isSelf) 6.dp else 18.dp,
+                    topStart = if (!isSelf && !grouped) 4.dp else 18.dp,
+                    topEnd = if (isSelf && !grouped) 4.dp else 18.dp,
+                    bottomStart = 18.dp,
+                    bottomEnd = 18.dp,
                 )
                 Box(
                     modifier = Modifier
-                        .fillMaxWidth()
+                        // Wide enough for what is in it, and never wider than
+                        // this: a bubble that reaches both edges of the screen
+                        // stops looking like something somebody said.
+                        .widthIn(max = widest)
                         .clip(bubble)
                         .background(
                             when {
@@ -391,9 +391,24 @@ fun MessageRow(
                                 else -> MaterialTheme.colorScheme.surfaceContainerHigh
                             },
                         )
-                        .padding(horizontal = 14.dp, vertical = 10.dp),
+                        .padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 6.dp),
                 ) {
                     Column {
+                        // Who is speaking, in their own colour - the same hash
+                        // the avatar is tinted with, so the name and the face
+                        // agree without either being told about the other.
+                        // Once per run, and never for you: the side of the
+                        // screen your bubble is on already said that.
+                        if (!isSelf && !grouped) {
+                            Text(
+                                text = message.author.label,
+                                style = MaterialTheme.typography.labelLargeEmphasized,
+                                color = tintFor(message.author.id),
+                                maxLines = 1,
+                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                                modifier = Modifier.padding(bottom = 2.dp),
+                            )
+                        }
                         // The quote belongs to the message, so it sits inside
                         // the bubble and above everything the message says.
                         readable.replyTo?.takeIf { !message.deleted }?.let { reply ->
@@ -479,26 +494,54 @@ fun MessageRow(
                                     if (readable.text.isNotBlank()) Spacer(Modifier.height(8.dp))
                                     AttachmentCard(channelId, attachment, onViewImage, onPlayVideo)
                                 }
-
-                                if (message.editedAt != null) {
-                                    Text(
-                                        text = "(edited)",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        modifier = Modifier.padding(top = 4.dp),
-                                    )
-                                }
                             }
+                        }
+
+                        // The footer, in the corner of the bubble: when it was
+                        // said, whether it has been changed since, and whether
+                        // it is pinned. Inside, because a bubble that hugs its
+                        // own text has no margin left to hang them in.
+                        Row(
+                            modifier = Modifier
+                                .align(Alignment.End)
+                                .padding(top = 2.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        ) {
+                            if (message.pinned) {
+                                BetweenUsIcon(
+                                    icon = BetweenUsIcons.Pin,
+                                    tint = footnote,
+                                    size = 11.dp,
+                                    contentDescription = "Pinned",
+                                )
+                            }
+                            if (message.editedAt != null) {
+                                Text(
+                                    text = "edited",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = footnote,
+                                )
+                            }
+                            Text(
+                                text = shortTime(message.createdAt),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = footnote,
+                            )
                         }
                     }
                 }
 
                 // Reactions section
                 if (message.reactions.isNotEmpty()) {
-                    Spacer(Modifier.height(4.dp))
                     Row(
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        modifier = Modifier.padding(top = 2.dp),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        modifier = Modifier
+                            .widthIn(max = widest)
+                            // Pulled up under the bubble's edge rather than
+                            // spaced away from it: a reaction belongs to the
+                            // message, and a gap makes it look like a reply.
+                            .offset(y = (-4).dp),
                     ) {
                         message.reactions.forEach { reaction ->
                             val reacted = self.id in reaction.userIds

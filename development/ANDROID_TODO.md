@@ -1360,10 +1360,13 @@ one artifact in this project not taking its version from the BoM.
 None of this has been on a screen. In rough order of how likely it is to be
 wrong:
 
-1. **The conversation.** The bubble's shape now says who is speaking and where
-   in a run it sits - tight corner nearest the speaker, tight at the top too
-   when a message continues a run. Worth checking a long run from one person,
-   a run alternating between two, and a deleted message inside one.
+1. **The conversation.** Bubbles hug their text now, cap at 78% of the width,
+   and sit on the side of the screen that says who is speaking - yours right,
+   everybody else's left. The name moved inside the bubble in the sender's own
+   colour, the time into its bottom corner, and the tail is the one square
+   corner on the first message of a run. Worth checking a long run from one
+   person, a run alternating between two, a message that is only a photo, one
+   with a quote in it, and a deleted message inside a run.
 2. **The call toolbar.** `HorizontalFloatingToolbar` measures itself, which is
    the fix for the bar that used to run off the right-hand edge. Check it on
    the narrowest device to hand, and check the red leave button is where a
