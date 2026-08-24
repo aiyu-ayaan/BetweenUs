@@ -30,10 +30,22 @@ export function AttachmentList({
   const [preview, setPreview] = useState<MessageAttachment | null>(null);
   if (attachments.length === 0) return null;
 
+  // Two or more photos are an album, not two attachments that happen to be
+  // pictures: they get one tiled block, the way every phone messenger draws
+  // them. A single photo is still a photo, at its own shape.
+  const photos = attachments.filter((a) => a.contentType.startsWith('image/'));
+  const album = photos.length > 1 ? photos : [];
+  const rest = album.length > 0 ? attachments.filter((a) => !album.includes(a)) : attachments;
+
   return (
     <>
+      {album.length > 0 && (
+        <PhotoAlbum channelId={channelId} photos={album} onOpen={setPreview} />
+      )}
+
+      {rest.length > 0 && (
       <ul className="mt-1 flex flex-col gap-2">
-        {attachments.map((attachment) => (
+        {rest.map((attachment) => (
           <li key={attachment.key} className="max-w-lg">
             {attachment.contentType.startsWith('image/') ? (
               <ImageAttachment
@@ -55,11 +67,16 @@ export function AttachmentList({
           </li>
         ))}
       </ul>
+      )}
 
       {preview && (
         <PreviewOverlay
           channelId={channelId}
           attachment={preview}
+          // An album of five shows four tiles, so the fifth is only reachable
+          // from in here. Everything in the album is, once one of them is open.
+          siblings={album.includes(preview) ? album : []}
+          onShow={setPreview}
           onClose={() => setPreview(null)}
         />
       )}
@@ -151,6 +168,105 @@ function ImageAttachment({
         />
       ) : (
         <div className="h-full w-full animate-pulse bg-surface-800" />
+      )}
+    </button>
+  );
+}
+
+// --- Albums -----------------------------------------------------------------
+
+/**
+ * More than one photo in a message is drawn as one tiled block.
+ *
+ * The shapes are the ones every phone messenger settled on: two side by side,
+ * three as one tall picture beside two stacked, four as a square. Past four the
+ * fourth tile carries a "+n" and the rest are only in the preview - a message
+ * with twenty photos should still be the height of a message.
+ *
+ * Tiles crop rather than fit. An album of mixed portrait and landscape shots
+ * laid out at their own aspect ratios is a ragged mess; the whole point of the
+ * grid is that it is a grid.
+ */
+const ALBUM_WIDTH = 320;
+const ALBUM_GAP = 2;
+const ALBUM_TILES = 4;
+
+function PhotoAlbum({
+  channelId,
+  photos,
+  onOpen,
+}: {
+  channelId: string;
+  photos: MessageAttachment[];
+  onOpen: (attachment: MessageAttachment) => void;
+}): JSX.Element {
+  const shown = photos.slice(0, ALBUM_TILES);
+  const hidden = photos.length - shown.length;
+  const pair = shown.length === 2;
+  const trio = shown.length === 3;
+
+  return (
+    <div
+      className="mt-1 grid overflow-hidden rounded-lg border border-edge bg-surface-850"
+      style={{
+        width: ALBUM_WIDTH,
+        height: pair ? ALBUM_WIDTH / 2 : ALBUM_WIDTH * 0.75,
+        gap: ALBUM_GAP,
+        gridTemplateColumns: '1fr 1fr',
+        gridTemplateRows: pair ? '1fr' : '1fr 1fr',
+      }}
+    >
+      {shown.map((photo, index) => (
+        <PhotoTile
+          key={photo.key}
+          channelId={channelId}
+          attachment={photo}
+          onOpen={() => onOpen(photo)}
+          // The tall one in a set of three is the first.
+          span={trio && index === 0}
+          more={index === shown.length - 1 ? hidden : 0}
+        />
+      ))}
+    </div>
+  );
+}
+
+function PhotoTile({
+  channelId,
+  attachment,
+  onOpen,
+  span,
+  more,
+}: {
+  channelId: string;
+  attachment: MessageAttachment;
+  onOpen: () => void;
+  span: boolean;
+  /** How many further photos this tile stands in for, if it is the last one. */
+  more: number;
+}): JSX.Element {
+  const { url, error } = useDecrypted(channelId, attachment);
+
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      title={attachment.name}
+      className={`relative block h-full w-full cursor-pointer overflow-hidden bg-surface-800 ${
+        span ? 'row-span-2' : ''
+      }`}
+    >
+      {url && !error ? (
+        <img src={url} alt={attachment.name} className="h-full w-full object-cover" />
+      ) : error ? (
+        <FileIcon className="mx-auto h-6 w-6 text-slate-500" />
+      ) : (
+        <div className="h-full w-full animate-pulse bg-surface-800" />
+      )}
+      {more > 0 && (
+        <span className="absolute inset-0 flex items-center justify-center bg-black/55 text-2xl font-medium text-white">
+          +{more}
+        </span>
       )}
     </button>
   );
@@ -348,10 +464,15 @@ function FileCard({
 function PreviewOverlay({
   channelId,
   attachment,
+  siblings = [],
+  onShow,
   onClose,
 }: {
   channelId: string;
   attachment: MessageAttachment;
+  /** The album this picture belongs to, if it belongs to one. */
+  siblings?: MessageAttachment[];
+  onShow?: (attachment: MessageAttachment) => void;
   onClose: () => void;
 }): JSX.Element {
   const isImage = attachment.contentType.startsWith('image/');
@@ -367,14 +488,24 @@ function PreviewOverlay({
     };
   }, [channelId, attachment, isImage]);
 
-  // Escape closes, the way every other overlay in this app behaves.
+  const at = siblings.indexOf(attachment);
+  const step = (by: number): void => {
+    if (at < 0 || !onShow) return;
+    const next = siblings[(at + by + siblings.length) % siblings.length];
+    if (next) onShow(next);
+  };
+
+  // Escape closes, the way every other overlay in this app behaves; the arrow
+  // keys walk the album, the way every other gallery does.
   useEffect(() => {
     const onKey = (event: KeyboardEvent): void => {
       if (event.key === 'Escape') onClose();
+      if (event.key === 'ArrowLeft') step(-1);
+      if (event.key === 'ArrowRight') step(1);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  });
 
   return (
     <div
@@ -390,10 +521,21 @@ function PreviewOverlay({
       >
         <header className="flex h-12 shrink-0 items-center gap-3 border-b border-edge px-4">
           <p className="truncate text-sm font-medium text-slate-100">{attachment.name}</p>
+          {at >= 0 && siblings.length > 1 && (
+            <span className="shrink-0 text-xs text-slate-400">
+              {at + 1} / {siblings.length}
+            </span>
+          )}
           {!isImage && (
             <span className="text-xs text-slate-400">{formatBytes(attachment.size)}</span>
           )}
           <div className="ml-auto flex gap-1">
+            {at >= 0 && siblings.length > 1 && (
+              <>
+                <IconButton label="Previous" onClick={() => step(-1)} icon={<span aria-hidden>‹</span>} />
+                <IconButton label="Next" onClick={() => step(1)} icon={<span aria-hidden>›</span>} />
+              </>
+            )}
             <IconButton
               label="Download"
               onClick={() => void saveAttachment(channelId, attachment)}
