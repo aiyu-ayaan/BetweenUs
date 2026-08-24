@@ -1,6 +1,10 @@
-import { Body, Controller, Get, Patch, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
 import { CurrentUser, JwtAuthGuard, type AuthenticatedUser } from '@betweenus/auth';
-import type { ChannelUnread, NotificationPreferences } from '@betweenus/shared-types';
+import type {
+  ChannelReadReceipt,
+  ChannelUnread,
+  NotificationPreferences,
+} from '@betweenus/shared-types';
 import { NotificationsService } from './notifications.service';
 import { MarkReadDto, UpdatePreferencesDto } from './dto';
 
@@ -25,6 +29,15 @@ export class NotificationsController {
   @Get('unread')
   unread(@CurrentUser() user: AuthenticatedUser): Promise<ChannelUnread[]> {
     return this.notifications.unread(user.id);
+  }
+
+  /** Who else has read this channel - the receipts a "seen by" row is drawn from. */
+  @Get('channels/:channelId/reads')
+  receipts(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('channelId') channelId: string,
+  ): Promise<ChannelReadReceipt[]> {
+    return this.notifications.receipts(user.id, channelId);
   }
 
   @Post('read')

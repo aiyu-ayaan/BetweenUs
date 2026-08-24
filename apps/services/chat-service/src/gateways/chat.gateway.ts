@@ -116,6 +116,14 @@ export class ChatGateway implements OnModuleDestroy {
       });
     }
 
+    // A read marker moved. Everyone subscribed to the channel is told, because
+    // a read receipt is only useful to the person whose message was read - and
+    // the marker is what every client derives "who has seen this" from.
+    await this.events.subscribe(EVENTS.CHANNEL_READ, (envelope) => {
+      const { channelId, userId, at } = envelope.payload;
+      this.broadcast(channelRoom(channelId), { type: 'channel.read', channelId, userId, at });
+    });
+
     await this.events.subscribe(EVENTS.FRIEND_CHANGED, (envelope) => {
       for (const userId of envelope.payload.userIds) {
         this.broadcast(userRoom(userId), { type: 'friends.changed' });

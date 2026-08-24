@@ -1198,6 +1198,20 @@ export interface MarkChannelReadRequest {
   channelId: string;
 }
 
+/**
+ * Somebody else's read marker in a channel: who has read it, and up to when.
+ *
+ * Read receipts are derived from these rather than stored per message. A
+ * marker is one row per person per channel and it only moves forwards, so
+ * "who has seen this message" is "whose marker is at or past its timestamp" -
+ * which needs no new table and cannot fall out of step with the unread count,
+ * because it is the same row the unread count is derived from.
+ */
+export interface ChannelReadReceipt {
+  user: MessageAuthor;
+  readAt: string;
+}
+
 // --- Push devices (phase 27) ---
 
 /** The transports a push token can belong to. One per client family. */
@@ -1470,6 +1484,13 @@ export type ServerChatEvent =
   | { type: 'friends.changed' }
   /** Sent to everyone watching the server, and to whoever joined or left it. */
   | { type: 'server.members.changed'; serverId: string }
+  /**
+   * Somebody read a channel this socket is subscribed to. It carries the
+   * marker rather than the receipts, because every client can already derive
+   * "who has seen this message" from a marker and a timestamp - and a payload
+   * per reader would be the same fact said once per person.
+   */
+  | { type: 'channel.read'; channelId: string; userId: string; at: string }
   | { type: 'pong' }
   | { type: 'error'; code: string; message: string };
 

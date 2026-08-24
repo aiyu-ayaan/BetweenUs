@@ -12,9 +12,10 @@
  * service is tracked in development/TODO.md.
  */
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { prisma, resolveChannelAccess } from '@betweenus/database';
+import { channelAudience, prisma, resolveChannelAccess } from '@betweenus/database';
 import { EVENTS, EventBus } from '@betweenus/events';
 import type {
+  ChannelReadReceipt,
   ChannelUnread,
   NotificationPreferences,
   UpdateNotificationPreferencesRequest,
@@ -176,5 +177,44 @@ export class NotificationsService {
     });
 
     return { channelId, count: 0, lastReadAt: at.toISOString() };
+  }
+
+  /**
+   * Who else has read this channel, and up to when.
+   *
+   * The caller is left out: a receipt is about somebody else having seen your
+   * message, and your own marker is already the thing that moves when you read.
+   * Anyone who can read the channel but has never opened it simply has no row,
+   * which reads as "has not seen it" without a null to carry around.
+   */
+  async receipts(userId: string, channelId: string): Promise<ChannelReadReceipt[]> {
+    // Same 404 as everywhere else: a channel this account cannot see does not
+    // exist, so receipts cannot be used to probe for channel ids either.
+    const access = await resolveChannelAccess(userId, channelId);
+    if (!access) {
+      throw new NotFoundException({ code: 'CHANNEL_NOT_FOUND', message: 'Channel not found' });
+    }
+
+    // The audience, not every row: somebody who has since been removed from a
+    // private channel keeps their old marker, and it is not the caller's
+    // business any more.
+    const audience = (await channelAudience(channelId)).filter((id) => id !== userId);
+    if (audience.length === 0) return [];
+
+    const reads = await prisma.channelRead.findMany({
+      where: { channelId, userId: { in: audience } },
+      orderBy: { lastReadAt: 'desc' },
+      select: {
+        lastReadAt: true,
+        user: {
+          select: { id: true, username: true, displayName: true, avatarUrl: true },
+        },
+      },
+    });
+
+    return reads.map((read) => ({
+      user: read.user,
+      readAt: read.lastReadAt.toISOString(),
+    }));
   }
 }
