@@ -269,3 +269,22 @@ configureApi(() => useAuthStore.getState().accessToken, refreshSession);
 // And so does a socket whose token was rejected: it carries the access token in
 // its URL, so it outlives it, and nothing else would have asked.
 onSocketTokenRejected(refreshSession);
+
+/**
+ * This account's own profile, changed on another of its devices. The picture in
+ * the corner is the one thing every screen of the app has on it, so it moves
+ * without waiting for a reload here too.
+ */
+chatSocket.on((event) => {
+  if (event.type !== 'user.updated') return;
+  const { user } = useAuthStore.getState();
+  if (!user || user.id !== event.user.id) return;
+  useAuthStore.setState({
+    user: {
+      ...user,
+      username: event.user.username,
+      displayName: event.user.displayName,
+      avatarUrl: event.user.avatarUrl,
+    },
+  });
+});

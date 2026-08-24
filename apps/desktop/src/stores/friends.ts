@@ -99,9 +99,27 @@ export const useFriendsStore = create<FriendsState>((set, get) => ({
  * nothing - see the note on `ServerChatEvent`.
  */
 chatSocket.on((event) => {
-  if (event.type !== 'friends.changed') return;
-  void useFriendsStore.getState().load();
-  void useChatStore.getState().loadDirects();
+  if (event.type === 'friends.changed') {
+    void useFriendsStore.getState().load();
+    void useChatStore.getState().loadDirects();
+    return;
+  }
+
+  // A friend changed their picture or their name. Both lists name them, and
+  // the conversation list is the one on screen while it happens.
+  if (event.type === 'user.updated') {
+    const { friends, directChannels, searchResults } = useFriendsStore.getState();
+    const same = (person: UserSummary): UserSummary =>
+      person.id === event.user.id ? event.user : person;
+    useFriendsStore.setState({
+      friends: friends.map((friend) => ({ ...friend, user: same(friend.user) })),
+      directChannels: directChannels.map((direct) => ({
+        ...direct,
+        participant: same(direct.participant),
+      })),
+      searchResults: searchResults.map(same),
+    });
+  }
 });
 
 function upsert(friends: Friend[], incoming: Friend): Friend[] {

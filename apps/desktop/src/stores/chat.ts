@@ -10,6 +10,7 @@ import type {
   MessageReply,
   ServerMember,
   ServerWithRole,
+  UserSummary,
   UpdateServerMemberRequest,
   UpdateServerRequest,
 } from '@betweenus/shared-types';
@@ -899,9 +900,65 @@ function replaceMessage(message: DecryptedMessage): void {
   if (newlyPinned && state.rightPanel === 'pins') void useChatStore.getState().loadPins();
 }
 
+/**
+ * Repaint one account's face wherever this store is holding a copy of it.
+ *
+ * Patched rather than refetched because the copies are everywhere: every
+ * message that account ever sent in an open channel, every page of history
+ * cached behind it, the pins, the read receipts and the member list. Refetching
+ * would be five calls to change three fields that arrived in the event.
+ *
+ * `replyTo.author` is deliberately left alone - it is a snapshot of how the
+ * quoted message was signed when the reply was written, not a live reference.
+ */
+function patchProfile(user: UserSummary): void {
+  const state = useChatStore.getState();
+  const face = {
+    username: user.username,
+    displayName: user.displayName,
+    avatarUrl: user.avatarUrl,
+  };
+  const inMessage = (message: DecryptedMessage): DecryptedMessage =>
+    message.author.id === user.id ? { ...message, author: { ...message.author, ...face } } : message;
+  const mapValues = <T>(record: Record<string, T[]>, map: (item: T) => T): Record<string, T[]> =>
+    Object.fromEntries(Object.entries(record).map(([key, list]) => [key, list.map(map)]));
+
+  useChatStore.setState({
+    members: state.members.map((member) =>
+      member.userId === user.id ? { ...member, ...face } : member,
+    ),
+    messages: state.messages.map(inMessage),
+    pins: state.pins.map(inMessage),
+    history: mapValues(state.history, inMessage),
+    receipts: mapValues(state.receipts, (receipt) =>
+      receipt.user.id === user.id ? { ...receipt, user: { ...receipt.user, ...face } } : receipt,
+    ),
+  });
+}
+
 // Realtime events land here regardless of which component is mounted, for
 // every subscribed channel - not only the one on screen.
 chatSocket.on((event) => {
+  if (event.type === 'user.updated') {
+    patchProfile(event.user);
+    return;
+  }
+
+  // A server was renamed or given a new picture. Only the sidebar entry holds
+  // either, so this is a patch of one row rather than a reload of the list.
+  if (event.type === 'server.updated') {
+    const { servers } = useChatStore.getState();
+    if (!servers.some((server) => server.id === event.serverId)) return;
+    useChatStore.setState({
+      servers: servers.map((server) =>
+        server.id === event.serverId
+          ? { ...server, name: event.name, iconUrl: event.iconUrl }
+          : server,
+      ),
+    });
+    return;
+  }
+
   if (event.type === 'message.updated') {
     // An edit, a deletion, a pin and a reaction all replace the stored row, so
     // the cache does not hand back a message that was taken down an hour ago.
