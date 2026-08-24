@@ -106,6 +106,9 @@ import com.aatech.betweenus.ui.theme.Slate300
 import com.aatech.betweenus.ui.theme.Slate400
 import com.aatech.betweenus.ui.theme.Slate50
 import com.aatech.betweenus.ui.theme.Slate500
+import com.aatech.betweenus.ui.theme.BetweenUsMotion
+import com.aatech.betweenus.ui.theme.Neutral99
+import com.aatech.betweenus.ui.theme.Red60
 import com.aatech.betweenus.ui.theme.StatusOnline
 import com.aatech.betweenus.ui.theme.Surface800
 import com.aatech.betweenus.ui.theme.Surface900
@@ -485,18 +488,28 @@ fun VoiceChannelScreen(
                                     muted = muted,
                                     isLocal = true,
                                     fit = RendererCommon.ScalingType.SCALE_ASPECT_FILL,
+                                    // Clear of the dock, which is drawn over
+                                    // the bottom of this tile.
+                                    labelBottomPadding = if (chrome) 92.dp else 12.dp,
                                     modifier = Modifier.fillMaxSize(),
                                 )
+                                // Below the tile's centre, not on it. Both were
+                                // centred, so this pill was drawn across the
+                                // face it was talking about.
                                 Box(
                                     modifier = Modifier
                                         .align(Alignment.Center)
-                                        .background(Color.Black.copy(alpha = 0.65f), RoundedCornerShape(16.dp))
-                                        .padding(horizontal = 16.dp, vertical = 10.dp),
+                                        .padding(top = 116.dp)
+                                        .background(
+                                            MaterialTheme.colorScheme.surfaceContainerHighest,
+                                            MaterialTheme.shapes.extraLarge,
+                                        )
+                                        .padding(horizontal = 20.dp, vertical = 12.dp),
                                 ) {
                                     Text(
                                         text = "Waiting for others to join…",
                                         style = MaterialTheme.typography.bodyMedium,
-                                        color = Slate300,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
                                 }
                             }
@@ -792,8 +805,13 @@ fun VoiceChannelScreen(
         // once the chrome has gone quiet.
         AnimatedVisibility(
             visible = !inPip && chrome,
-            enter = fadeIn() + slideInVertically { -it },
-            exit = fadeOut() + slideOutVertically { -it },
+            // The same spring as the dock, in the opposite direction, so the
+            // two halves of the chrome leave together rather than at their own
+            // speeds.
+            enter = fadeIn(BetweenUsMotion.effect()) +
+                slideInVertically(BetweenUsMotion.spatial()) { -it },
+            exit = fadeOut(BetweenUsMotion.effect()) +
+                slideOutVertically(BetweenUsMotion.spatial()) { -it },
             modifier = Modifier.align(Alignment.TopCenter),
         ) {
             Row(
@@ -940,22 +958,43 @@ fun VoiceChannelScreen(
         // toolbar measures itself.
         AnimatedVisibility(
             visible = isInCall && !inPip && chrome,
-            enter = FloatingToolbarDefaults.horizontalEnterTransition(Alignment.CenterHorizontally),
-            exit = FloatingToolbarDefaults.horizontalExitTransition(Alignment.CenterHorizontally),
+            // Down and away, not squeezed in from the sides. The toolbar's
+            // own transitions expand it horizontally, which is right for a bar
+            // that appears beside something and wrong for a dock that lives at
+            // the bottom of the screen: hiding the chrome made the controls
+            // concertina into their own middle.
+            enter = fadeIn(BetweenUsMotion.effect()) +
+                slideInVertically(BetweenUsMotion.spatial()) { it / 2 },
+            exit = fadeOut(BetweenUsMotion.effect()) +
+                slideOutVertically(BetweenUsMotion.spatial()) { it / 2 },
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .padding(bottom = FloatingToolbarDefaults.ScreenOffset),
         ) {
             HorizontalFloatingToolbar(
                 expanded = true,
-                // Vibrant, because this one floats over video rather than over
-                // a surface, and the standard colours disappear into a picture.
-                colors = FloatingToolbarDefaults.vibrantFloatingToolbarColors(),
+                // Standard, not vibrant. Vibrant paints the whole dock in the
+                // primary container, which over a dark call stage is a large
+                // purple slab with grey icons on it - the controls were the
+                // least legible thing on a screen they are the only thing to
+                // touch. A dark container with light icons is what a dock over
+                // a picture wants, and it leaves "on" somewhere to go.
+                colors = FloatingToolbarDefaults.standardFloatingToolbarColors(),
                 floatingActionButton = {
                     FloatingActionButton(
                         onClick = { engine.leave(); onBack() },
-                        containerColor = MaterialTheme.colorScheme.error,
-                        contentColor = MaterialTheme.colorScheme.onError,
+                        // A circle, and the one fixed colour in this app.
+                        //
+                        // The scheme's `error` role is a *light* red in a dark
+                        // theme, which is correct for text on a dark surface and
+                        // wrong for the only button on the screen that ends the
+                        // call: it came out pale pink. Hanging up is a colour
+                        // people already know, so it is spelled out - a strong
+                        // red with a white handset - and it is round, because
+                        // every phone anyone has held has a round one.
+                        shape = CircleShape,
+                        containerColor = Red60,
+                        contentColor = Neutral99,
                     ) {
                         BetweenUsIcon(
                             BetweenUsIcons.Phone,
