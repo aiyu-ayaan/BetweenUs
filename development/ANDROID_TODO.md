@@ -39,6 +39,28 @@ first.
 nobody has put two devices in a call or driven a real agent's screen. Those are
 the cases the design is built around and the ones most likely to be wrong.
 
+Three call changes landed since and are in the same unverified state - they all
+need a real phone, and two of them need a real cellular call:
+
+- **A call on hold.** Another app taking the audio - a phone call, on a phone -
+  already closed the microphone. It now says so: the hold travels with the media
+  state over the data channel, so the far end draws "On hold" instead of a
+  muted tile, and this end gets a banner. What to try: be in a BetweenUs call,
+  take an ordinary call, and watch both screens; then end the ordinary call and
+  watch the BetweenUs one come back by itself.
+- **Resuming after a permanent focus loss.** A transient loss ends in
+  `AUDIOFOCUS_GAIN` and the call resumes itself; a permanent one has nothing
+  coming, so the focus is asked for again when the call screen returns to the
+  front, and from a Resume button on the banner. The case to force is a second
+  VoIP app taking the audio for good.
+- **The call bar fits.** Six fixed buttons and fixed gaps came to about 400dp,
+  which is wider than the phone: the bar ran off the right edge and took the
+  hang-up button with it. Worth looking at on the narrowest device to hand.
+
+The reconnecting banner is new too: a socket that has been down for thirty
+seconds is given up on rather than retried more slowly, and the bar offers a
+button that starts again. Flight mode on and off is the whole test.
+
 Phase 5 (FCM) has landed for messages, along with the backend half it shares
 with the web client - the device registry and the `message.created` fan-out,
 phase 27 in `TODO.md`. A push is data-only and carries no words, because the

@@ -45,8 +45,14 @@ short test secrets, because a rule that stops people working is a rule that
 acquires an override flag which then gets used in production.
 
 **Refresh tokens rotate.** Presenting one revokes it and mints its successor,
-and presenting a revoked one is read as theft: every live token for the account
-dies and both parties have to sign in again. The exception is a short grace
+and presenting a revoked one is read as theft: the token's whole family dies and
+both parties have to sign in again. A family is one sign-in — the token that
+sign-in minted, and everything rotated out of it — so the phone and the laptop
+are separate chains and a theft on one does not sign the other out. Revoking by
+account was what made being signed in on two devices impossible: any interrupted
+rotation anywhere ended every session everywhere. Changing the password still
+ends all of them, because that is a fact about the account rather than about a
+device. The exception is a short grace
 window — `REFRESH_REPLAY_GRACE_MS`, thirty seconds by default — in which the
 *same* pair is handed back again, because rotation is not atomic across a
 network and a reload mid-refresh is otherwise indistinguishable from a theft. A

@@ -1099,6 +1099,47 @@ Calls — the second pass over the call screen:
       happened to be up at that moment. It is registered for the length of the
       call now, and a route or input pinned to a device that has just been
       unplugged goes back to `Automatic` rather than to silence.
+- [x] **Two devices at once.** Refresh-token reuse revoked every live token for
+      the account, so a token replayed on a phone - an interrupted rotation, an
+      app resumed after the grace window - signed the laptop out as well, and
+      being signed in on two devices was not possible for long. A token now
+      carries the family it descends from: one sign-in is one family, every
+      rotation of it stays in that family, and reuse revokes that chain only.
+      Changing the password still ends every session. `familyId` is a column,
+      migrated by making each existing row its own family.
+- [x] **A browser tab that shows its notifications.** The first notification
+      worth raising asked for permission and then returned, so the message that
+      prompted was dropped - and where a deployment has no VAPID keys nothing
+      else ever prompts, which is why a tab appeared to have notifications and
+      never showed one. It is shown once permission is granted, and Settings has
+      a button that asks from a gesture, which is the only kind of request
+      Firefox and Safari honour.
+- [x] **The unread line goes away when it has been read.** It is placed when
+      messages arrive at an unfocused window; coming back to that window marks
+      them read but left the line, so being rid of it meant reloading the page.
+      It fades five seconds after the channel it is in has been read, and only
+      for a channel that is on screen - everywhere else it is still a place to
+      come back to.
+- [x] **A visible reconnect, with an end to it.** Both clients reconnected
+      silently, so a window or a phone that could not reach the backend looked
+      exactly like one nobody had written to. Every socket reports into one
+      connection state; a bar shows a spinner and "Reconnecting…" while it
+      retries. The backoff also had no end, which is a spinner with no end: a
+      socket down for thirty seconds is given up on, the bar says "Disconnected"
+      and offers a button that starts the ladder again. On Android a returning
+      network still restarts it by itself.
+- [x] **A call goes on hold, visibly, when a phone call takes the audio.** The
+      microphone already closed - the audio focus is how the platform announces
+      a cellular call - but the far end saw a muted tile, which reads as a
+      choice, and this end saw nothing. The hold travels with the media state,
+      so every client draws "On hold" for whoever has been pulled away, and the
+      phone shows a banner. A *permanent* focus loss has no "gain" coming, so a
+      call held by one stayed held: the focus is asked for again when the call
+      screen returns to the front, and from a Resume button.
+- [x] **The Android call bar fits the phone.** Six fixed buttons and fixed gaps
+      came to about 400dp - wider than the screen - so the bar ran off the right
+      edge and took the hang-up button with it. It is sized to the screen, with
+      the gaps taking what is left over.
 
 ---
 
