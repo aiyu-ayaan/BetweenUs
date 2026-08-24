@@ -111,6 +111,20 @@ export const usePresenceStore = create<PresenceState>((set, get) => ({
 }));
 
 /**
+ * Status lookup that actually re-renders when a status changes.
+ *
+ * `usePresenceStore((state) => state.statusOf)` selects a function, and that
+ * reference never changes - so a component picking it out subscribed to
+ * nothing, and the dot next to a name kept whatever colour it had when the
+ * screen was first drawn. Selecting the map instead is what makes the
+ * subscription real; the lookup on top of it is the same one.
+ */
+export function useStatusOf(): (userId: string) => PresenceStatus {
+  const statuses = usePresenceStore((state) => state.statuses);
+  return (userId) => statuses.get(userId) ?? 'offline';
+}
+
+/**
  * Someone joining a voice channel is this app's closest thing to a ringing
  * phone, so it is worth a notification - unless it is this user, or a channel
  * they are already sitting in, where the tile appearing says it better.

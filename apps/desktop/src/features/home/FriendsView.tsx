@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { Friend } from '@betweenus/shared-types';
 import { useFriendsStore } from '../../stores/friends';
-import { usePresenceStore } from '../../stores/presence';
+import { usePresenceStore, useStatusOf } from '../../stores/presence';
 import { Avatar } from '../../components/Avatar';
 import {
   CheckIcon,
@@ -150,7 +150,7 @@ export function FriendsView({ onOpenMenu }: { onOpenMenu?: () => void } = {}): J
 }
 
 function FriendList({ friends, tab }: { friends: Friend[]; tab: Tab }): JSX.Element {
-  const statusOf = usePresenceStore((state) => state.statusOf);
+  const statusOf = useStatusOf();
   const accept = useFriendsStore((state) => state.accept);
   const remove = useFriendsStore((state) => state.remove);
   const openDirect = useFriendsStore((state) => state.openDirect);

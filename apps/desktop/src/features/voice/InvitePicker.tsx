@@ -16,7 +16,7 @@ import { useEffect, useRef, useState } from 'react';
 import { api } from '../../services/api';
 import { useAuthStore } from '../../stores/auth';
 import { useChatStore } from '../../stores/chat';
-import { usePresenceStore } from '../../stores/presence';
+import { useStatusOf } from '../../stores/presence';
 import { useVoiceStore } from '../../stores/voice';
 import { Avatar } from '../../components/Avatar';
 
@@ -25,7 +25,7 @@ export function InvitePicker({ onClose }: { onClose: () => void }): JSX.Element 
   const channelId = useVoiceStore((state) => state.channelId);
   const tiles = useVoiceStore((state) => state.tiles);
   const members = useChatStore((state) => state.members);
-  const statusOf = usePresenceStore((state) => state.statusOf);
+  const statusOf = useStatusOf();
   const selfId = useAuthStore((state) => state.user?.id);
 
   /** Per person: 'ringing', 'rang', or why it failed. Untouched people absent. */

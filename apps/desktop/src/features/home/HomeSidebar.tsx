@@ -1,6 +1,6 @@
 import { useChatStore } from '../../stores/chat';
 import { useFriendsStore } from '../../stores/friends';
-import { usePresenceStore } from '../../stores/presence';
+import { useStatusOf } from '../../stores/presence';
 import { isDesktopRuntime } from '../../services/platform';
 import { UserPanel } from '../settings/UserPanel';
 import { VoicePanel } from '../voice/VoicePanel';
@@ -31,7 +31,7 @@ export function HomeSidebar({
   const openDirect = useFriendsStore((state) => state.openDirect);
   const activeChannelId = useChatStore((state) => state.activeChannelId);
   const unread = useChatStore((state) => state.unread);
-  const statusOf = usePresenceStore((state) => state.statusOf);
+  const statusOf = useStatusOf();
   const pending = useFriendsStore((state) =>
     state.friends.filter((friend) => friend.direction === 'incoming').length,
   );

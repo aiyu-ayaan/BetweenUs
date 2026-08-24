@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import type { PresenceStatus, ServerMember, ServerRole } from '@betweenus/shared-types';
 import { useChatStore } from '../../stores/chat';
 import { useFriendsStore } from '../../stores/friends';
-import { usePresenceStore } from '../../stores/presence';
+import { usePresenceStore, useStatusOf } from '../../stores/presence';
 import { useAuthStore } from '../../stores/auth';
 import { Avatar } from '../../components/Avatar';
 import {
@@ -34,7 +34,7 @@ export function MemberList({
 }: MemberListProps = {}): JSX.Element {
   const members = useChatStore((state) => state.members);
   const online = usePresenceStore((state) => state.online);
-  const statusOf = usePresenceStore((state) => state.statusOf);
+  const statusOf = useStatusOf();
   const [menu, setMenu] = useState<{ member: ServerMember; at: { x: number; y: number } } | null>(
     null,
   );
