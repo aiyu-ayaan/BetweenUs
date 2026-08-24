@@ -38,6 +38,7 @@ import com.aatech.betweenus.core.data.Channel
 import com.aatech.betweenus.core.data.ChannelType
 import com.aatech.betweenus.core.data.PublicUser
 import com.aatech.betweenus.core.data.ServerWithRole
+import com.aatech.betweenus.core.data.PresenceStatus
 import com.aatech.betweenus.core.store.Presence
 import com.aatech.betweenus.core.store.Workspace
 import com.aatech.betweenus.feature.servers.CreateChannelSheet
@@ -320,6 +321,10 @@ private fun ChannelRow(
 private fun DirectMessageList(onSelectChannel: (Channel) -> Unit) {
     val directs by Workspace.directChannels.collectAsState()
     val unread by Workspace.unread.collectAsState()
+    // Collected, not read through `Presence.statusOf`: that returns the value
+    // at the moment it is called, so the dot next to a conversation kept the
+    // colour it had when the drawer was first drawn and never went green.
+    val statuses by Presence.statuses.collectAsState()
 
     Column {
         SectionLabel("Direct messages")
@@ -332,7 +337,7 @@ private fun DirectMessageList(onSelectChannel: (Channel) -> Unit) {
             )
         }
         directs.forEach { direct ->
-            val status = Presence.statusOf(direct.participant.id).wire
+            val status = (statuses[direct.participant.id] ?: PresenceStatus.OFFLINE).wire
             ListRow(
                 title = direct.participant.label,
                 leading = {

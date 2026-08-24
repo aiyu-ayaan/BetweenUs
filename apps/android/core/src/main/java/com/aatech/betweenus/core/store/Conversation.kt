@@ -16,6 +16,7 @@ import com.aatech.betweenus.core.data.BetweenUsApi
 import com.aatech.betweenus.core.data.UploadedObject
 import com.aatech.betweenus.core.data.UploadedPart
 import com.aatech.betweenus.core.data.Session
+import com.aatech.betweenus.core.data.UserSummary
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -122,6 +123,13 @@ object Conversation {
             onChannelRead(event.optString("channelId"), event.optString("userId"), event.optString("at"))
             return
         }
+        // Somebody changed their picture or their name. Every message they ever
+        // sent in an open channel is signed with a copy of it, as is every read
+        // receipt, so the copies are rewritten rather than the history refetched.
+        if (event.optString("type") == "user.updated") {
+            event.optJSONObject("user")?.let { patchProfile(UserSummary.from(it)) }
+            return
+        }
         val message = event.optJSONObject("message")?.let { Message.from(it) } ?: return
         // Cached whether or not the channel is open. A conversation nobody has
         // looked at this session is exactly the one that should not be a spinner
@@ -156,6 +164,38 @@ object Conversation {
             // message.
             "message.updated" -> if (_messages.value.containsKey(message.channelId)) {
                 replace(read(message))
+            }
+        }
+    }
+
+    /**
+     * Rewrite one account's face in every message and receipt held here.
+     *
+     * `replyTo.author` is deliberately left alone: it is how the quoted message
+     * was signed when the reply was written, not a live reference to anybody.
+     */
+    private fun patchProfile(user: UserSummary) {
+        _messages.update { byChannel ->
+            byChannel.mapValues { (_, list) ->
+                list.map { readable ->
+                    val message = readable.message
+                    val author =
+                        if (message.author.id == user.id) user else message.author
+                    val deletedBy =
+                        if (message.deletedBy?.id == user.id) user else message.deletedBy
+                    if (author === message.author && deletedBy === message.deletedBy) {
+                        readable
+                    } else {
+                        readable.copy(
+                            message = message.copy(author = author, deletedBy = deletedBy),
+                        )
+                    }
+                }
+            }
+        }
+        _receipts.update { byChannel ->
+            byChannel.mapValues { (_, list) ->
+                list.map { if (it.user.id == user.id) it.copy(user = user) else it }
             }
         }
     }

@@ -11,6 +11,7 @@ import com.aatech.betweenus.core.data.ServerEmoji
 import com.aatech.betweenus.core.data.ServerMember
 import com.aatech.betweenus.core.data.ServerWithRole
 import com.aatech.betweenus.core.data.Session
+import com.aatech.betweenus.core.data.UserSummary
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -70,6 +71,35 @@ object Workspace {
             ChatSocket.on { event ->
                 when (event.optString("type")) {
                     "friends.changed" -> scope.launch { loadFriends() }
+
+                    // A picture or a name changed. Patched in place rather
+                    // than refetched: the event carries the four fields every
+                    // list here holds, and going back to the API for them would
+                    // be three calls to learn what already arrived.
+                    "user.updated" -> event.optJSONObject("user")
+                        ?.let { UserSummary.from(it) }
+                        ?.let {
+                            patchProfile(it)
+                            // Their own account, changed on another device: the
+                            // avatar in the drawer is drawn from the session.
+                            Session.applyProfile(it)
+                        }
+
+                    "server.updated" -> {
+                        val serverId = event.optString("serverId")
+                        val iconUrl =
+                            if (event.isNull("iconUrl")) null else event.optString("iconUrl")
+                        _servers.update { list ->
+                            list.map {
+                                if (it.id == serverId) {
+                                    it.copy(name = event.optString("name"), iconUrl = iconUrl)
+                                } else {
+                                    it
+                                }
+                            }
+                        }
+                        scope.launch { Cache.putServers(_servers.value) }
+                    }
 
                     "server.members.changed" -> scope.launch {
                         val serverId = event.optString("serverId")
@@ -205,6 +235,41 @@ object Workspace {
         runCatching { BetweenUsApi.members(serverId) }.onSuccess { members ->
             _members.update { it + (serverId to members) }
             Cache.putMembers(_members.value)
+        }
+    }
+
+    /**
+     * Repaint one account's face wherever this store holds a copy of it: the
+     * member list of every server, the conversation list and the friend list.
+     *
+     * [Conversation] keeps the copies inside message history and does its own.
+     */
+    fun patchProfile(user: UserSummary) {
+        _members.update { byServer ->
+            byServer.mapValues { (_, list) ->
+                list.map {
+                    if (it.userId == user.id) {
+                        it.copy(
+                            username = user.username,
+                            displayName = user.displayName,
+                            avatarUrl = user.avatarUrl,
+                        )
+                    } else {
+                        it
+                    }
+                }
+            }
+        }
+        _directChannels.update { list ->
+            list.map { if (it.participant.id == user.id) it.copy(participant = user) else it }
+        }
+        _friends.update { list ->
+            list.map { if (it.user.id == user.id) it.copy(user = user) else it }
+        }
+        scope.launch {
+            Cache.putMembers(_members.value)
+            Cache.putDirectChannels(_directChannels.value)
+            Cache.putFriends(_friends.value)
         }
     }
 

@@ -246,6 +246,23 @@ object Session {
     }
 
     /**
+     * The same profile, changed on another of this account's devices, arriving
+     * over the socket. Only the three public fields move - the address and the
+     * platform role are not in the event and are not what changed.
+     */
+    fun applyProfile(summary: UserSummary) {
+        val signedIn = _state.value as? AuthPhase.SignedIn ?: return
+        if (signedIn.user.id != summary.id) return
+        _state.value = AuthPhase.SignedIn(
+            signedIn.user.copy(
+                username = summary.username,
+                displayName = summary.displayName,
+                avatarUrl = summary.avatarUrl,
+            ),
+        )
+    }
+
+    /**
      * A sign-in that failed with no form on screen to put the error on.
      *
      * The provider hand-off comes back through an intent rather than through a
