@@ -1231,11 +1231,12 @@ keeps whatever is nearest the bottom of the screen, so the drawer opens by
 swipe from the lower part of the edge - where a thumb rests - and Back still
 works from the rest.
 
-**The row is split down the middle.** A drag beginning on the left half is the
-drawer's; one beginning on the right half is the reply's. Half is generous on
-both sides on purpose - a drawer pulled from a 24dp edge is a gesture people
-miss, and a reply is a flick from wherever the thumb is already resting on the
-message.
+**The left third of a row is the drawer's; the rest is the reply's.** A 24dp
+edge is a gesture people miss, so the drawer needs more than the edge - but
+half the row, which was the first attempt, is too much. Reply is the one of the
+two used in the middle of reading, and it wants the part of the bubble a thumb
+is already on. A third is wide enough to find without aiming and narrow enough
+to leave the message alone.
 
 **Nothing is consumed until the gesture has been claimed**, which is why this
 is written by hand with `awaitEachGesture` rather than with

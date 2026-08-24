@@ -166,11 +166,12 @@ fun MessageRow(
      * back - the row overshoots and settles, which is what makes the gesture
      * feel answered rather than merely undone.
      *
-     * **The row is split down the middle.** A drag that starts on the left
-     * half is the drawer's and a drag that starts on the right half is the
-     * reply's. Half is generous on both sides on purpose: a drawer pulled from
-     * a 24dp edge is a gesture people miss, and a reply is a flick from
-     * wherever the thumb already rests on the message.
+     * **The left third is the drawer's, the rest is the reply's.** A 24dp edge
+     * is a gesture people miss, so the drawer needs more than the edge; but it
+     * was tried at half the row and that is too much, because reply is the one
+     * of the two you use in the middle of reading and it wants the part of the
+     * bubble a thumb is already on. A third is wide enough to find without
+     * aiming and narrow enough to leave the message alone.
      *
      * **Nothing is consumed until the gesture has been claimed**, and that is
      * the whole reason this is written by hand rather than with
@@ -230,9 +231,9 @@ fun MessageRow(
                 val slop = viewConfiguration.touchSlop
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false)
-                    // The left half is the drawer's. Leave without touching
+                    // The left third is the drawer's. Leave without touching
                     // anything, so the drag reaches the draggable above.
-                    if (down.position.x < size.width / 2f) return@awaitEachGesture
+                    if (down.position.x < size.width / 3f) return@awaitEachGesture
 
                     var travelX = 0f
                     var travelY = 0f
