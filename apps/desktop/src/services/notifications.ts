@@ -258,12 +258,25 @@ function raise(title: string, body: string, channelId?: string, active = false):
 
   // Asked for at the first notification worth raising rather than at sign-in:
   // a permission prompt on the way into the app is the one people refuse.
+  //
+  // The notification it was asked for is then shown, rather than dropped. It
+  // used to return here, so the first message after granting produced nothing
+  // and every message before the prompt was answered produced nothing either -
+  // which, on a deployment with no VAPID keys (the only other thing that ever
+  // prompts), is every message until somebody granted it from the URL bar.
   if (Notification.permission === 'default') {
-    void Notification.requestPermission();
+    void Notification.requestPermission().then((permission) => {
+      if (permission === 'granted') show(title, body, channelId);
+    });
     return;
   }
   if (Notification.permission !== 'granted') return;
 
+  show(title, body, channelId);
+}
+
+/** The toast itself, once permission is known to be granted. */
+function show(title: string, body: string, channelId?: string): void {
   // `tag` collapses a run of messages in one channel into a single toast,
   // which is what the main process does with its own notifications.
   const note = new Notification(title, { body, tag: channelId });

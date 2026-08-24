@@ -26,6 +26,7 @@ import { backupIdentity, deviceId, rewrapBackupForPassword } from '../../service
 import { useIdentityStore } from '../../stores/identity';
 import { useAgentStore } from '../../services/remote-agent';
 import { isDesktopRuntime } from '../../services/platform';
+import { startWebPush } from '../../services/web-push';
 import { ServerPicker } from '../auth/ServerPicker';
 import { Avatar } from '../../components/Avatar';
 import { PicturePicker } from '../../components/PicturePicker';
@@ -931,6 +932,65 @@ function LevelMeter({
   );
 }
 
+/**
+ * The browser's own permission, which is not the account's setting.
+ *
+ * A tab cannot raise anything the browser has not been asked about, and asking
+ * has to come from something the person clicked: Firefox and Safari drop a
+ * `requestPermission()` that no gesture led to, which is exactly what sign-in
+ * is. So the prompt lives on a button, and the state is shown either way -
+ * "notifications are on" with nothing arriving was the confusing half of this.
+ */
+function BrowserPermission(): JSX.Element | null {
+  const [permission, setPermission] = useState<NotificationPermission | null>(() =>
+    typeof Notification === 'undefined' ? null : Notification.permission,
+  );
+
+  if (permission === null) return null;
+
+  const ask = (): void => {
+    void Notification.requestPermission().then((next) => {
+      setPermission(next);
+      // The push subscription needs the same permission, and this is the first
+      // moment it can have it. A no-op where the deployment has no VAPID keys.
+      if (next === 'granted') void startWebPush();
+    });
+  };
+
+  return (
+    <>
+      <h2 className="mt-8 text-base font-semibold text-slate-100">This browser</h2>
+      <div className="mt-3 rounded-lg bg-surface-800 p-4">
+        {permission === 'granted' && (
+          <p className="text-sm text-slate-400">
+            This browser is allowed to show notifications.
+          </p>
+        )}
+        {permission === 'default' && (
+          <>
+            <p className="text-sm text-slate-400">
+              This browser has not been asked yet, so nothing can be shown until it is.
+            </p>
+            <button
+              type="button"
+              onClick={ask}
+              className="mt-3 rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-white hover:bg-accent/90"
+            >
+              Allow notifications
+            </button>
+          </>
+        )}
+        {permission === 'denied' && (
+          <p className="text-sm text-slate-400">
+            This browser is blocking notifications. Nothing here can undo that - it has to be
+            turned back on from the padlock in the address bar.
+          </p>
+        )}
+      </div>
+    </>
+  );
+}
+
 function NotificationsSection(): JSX.Element {
   const selfStatus = usePresenceStore((state) => state.selfStatus);
   const channels = useChatStore((state) => state.channels);
@@ -1007,6 +1067,8 @@ function NotificationsSection(): JSX.Element {
           </div>
         )}
       </div>
+
+      {!isDesktopRuntime() && <BrowserPermission />}
 
       <h2 className="mt-8 text-base font-semibold text-slate-100">This computer</h2>
       <div className="mt-3 space-y-1 rounded-lg bg-surface-800 p-4">
