@@ -833,6 +833,23 @@ data class ChannelUnread(val channelId: String, val count: Int) {
     }
 }
 
+/**
+ * Somebody else's read marker in a channel: who has read it, and up to when.
+ *
+ * Read receipts are derived from these rather than stored per message. A
+ * marker is one row per person per channel and only ever moves forwards, so
+ * "who has seen this message" is "whose marker is at or past its timestamp".
+ * See [com.aatech.betweenus.core.store.Receipts].
+ */
+data class ChannelReadReceipt(val user: UserSummary, val readAt: String) {
+    companion object {
+        fun from(json: JSONObject) = ChannelReadReceipt(
+            user = UserSummary.from(json.getJSONObject("user")),
+            readAt = json.optString("readAt"),
+        )
+    }
+}
+
 // --- calls ---
 
 data class IceServer(val urls: List<String>, val username: String?, val credential: String?) {

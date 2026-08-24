@@ -54,6 +54,7 @@ import com.aatech.betweenus.core.crypto.E2ee
 import com.aatech.betweenus.core.data.MessageReply
 import com.aatech.betweenus.core.data.PublicUser
 import com.aatech.betweenus.core.store.Conversation
+import com.aatech.betweenus.core.store.Receipts
 import com.aatech.betweenus.core.store.PendingShare
 import com.aatech.betweenus.core.store.Presence
 import com.aatech.betweenus.core.store.ReadableMessage
@@ -97,8 +98,17 @@ fun ChatScreen(
     val everything by Conversation.messages.collectAsState()
     val loading by Conversation.loading.collectAsState()
     val typingByChannel by Presence.typing.collectAsState()
+    val receiptsByChannel by Conversation.receipts.collectAsState()
 
     val messages = everything[channelId].orEmpty()
+    val receipts = receiptsByChannel[channelId].orEmpty()
+    /**
+     * Where each reader's face is drawn: once, against the newest message of
+     * yours they have read, rather than repeated down the conversation.
+     */
+    val anchors = remember(messages, receipts, self.id) {
+        Receipts.anchorReceipts(messages, receipts, self.id)
+    }
     val channel = Workspace.channel(channelId)
     val direct = Workspace.directChannel(channelId)
     val title = channel?.name ?: direct?.participant?.label ?: "Conversation"
@@ -110,6 +120,8 @@ fun ChatScreen(
     /** A quoted message that has just been jumped to, flashed so it is findable. */
     var highlighted by remember { mutableStateOf<String?>(null) }
     var showPins by remember { mutableStateOf(false) }
+    /** The message whose "seen by" sheet is open, if any. */
+    var seenFor by remember(channelId) { mutableStateOf<ReadableMessage?>(null) }
     var failure by remember { mutableStateOf<String?>(null) }
 
     var showAttachmentSheet by remember { mutableStateOf(false) }
@@ -446,7 +458,10 @@ fun ChatScreen(
                         self = self,
                         channelId = channelId,
                         highlighted = highlighted == readable.id,
+                        receipts = anchors[readable.id].orEmpty(),
                         onLongPress = { acting = readable },
+                        onReply = { replyingTo = readable.quote() },
+                        onOpenSeenBy = { seenFor = readable },
                         onOpenQuoted = { quotedId ->
                             val at = messages.indexOfFirst { it.id == quotedId }
                             // Not on this device yet: the quote carries enough
@@ -635,6 +650,15 @@ fun ChatScreen(
             videoUri = videoUri,
             title = title,
             onDismiss = { playingVideo = null },
+        )
+    }
+
+    // --- Who has read it, and when ---
+    seenFor?.let { readable ->
+        SeenBySheet(
+            sentAt = readable.message.createdAt,
+            receipts = Receipts.seenBy(readable.message.createdAt, receipts),
+            onDismiss = { seenFor = null },
         )
     }
 

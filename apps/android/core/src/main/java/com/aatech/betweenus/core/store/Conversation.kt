@@ -5,6 +5,7 @@ import android.graphics.BitmapFactory
 import android.graphics.Matrix
 import android.media.ExifInterface
 import com.aatech.betweenus.core.crypto.E2ee
+import com.aatech.betweenus.core.data.ChannelReadReceipt
 import com.aatech.betweenus.core.data.ChatSocket
 import com.aatech.betweenus.core.data.Message
 import com.aatech.betweenus.core.data.MessageAttachment
@@ -73,6 +74,14 @@ object Conversation {
     private val _loading = MutableStateFlow<Set<String>>(emptySet())
     val loading: StateFlow<Set<String>> = _loading.asStateFlow()
 
+    /**
+     * channelId -> everyone else's read marker in it. The "seen by" row under
+     * your own messages is derived from these; see [Receipts]. Loaded when a
+     * channel is opened and kept current by the `channel.read` event.
+     */
+    private val _receipts = MutableStateFlow<Map<String, List<ChannelReadReceipt>>>(emptyMap())
+    val receipts: StateFlow<Map<String, List<ChannelReadReceipt>>> = _receipts.asStateFlow()
+
     /** The oldest id fetched per channel, which is what "load more" asks before. */
     private val cursors = ConcurrentHashMap<String, String>()
     private val exhausted = ConcurrentHashMap.newKeySet<String>()
@@ -92,12 +101,19 @@ object Conversation {
 
     fun stop() {
         _messages.value = emptyMap()
+        _receipts.value = emptyMap()
         cursors.clear()
         exhausted.clear()
         visibleChannelId = null
     }
 
     private suspend fun onEvent(event: JSONObject) {
+        // Somebody read a channel this client is subscribed to. It carries no
+        // message, so it is answered before the message is even looked for.
+        if (event.optString("type") == "channel.read") {
+            onChannelRead(event.optString("channelId"), event.optString("userId"), event.optString("at"))
+            return
+        }
         val message = event.optJSONObject("message")?.let { Message.from(it) } ?: return
         // Cached whether or not the channel is open. A conversation nobody has
         // looked at this session is exactly the one that should not be a spinner
@@ -132,6 +148,10 @@ object Conversation {
         // from being woken for a conversation being read here.
         ChannelFocus.apply()
         Workspace.markRead(channelId)
+        // Who has read it, for the "seen by" row. Per open channel rather than
+        // for every channel at sign-in: it is only ever drawn for the one on
+        // screen, and it goes stale the moment somebody reads anyway.
+        loadReceipts(channelId)
         if (_messages.value.containsKey(channelId)) return
         scope.launch {
             _loading.update { it + channelId }
@@ -157,6 +177,41 @@ object Conversation {
                 _messages.update { all -> all + (channelId to merge(all[channelId], readable)) }
             }
             _loading.update { it - channelId }
+        }
+    }
+
+    /** Who else has read this channel. Quiet on failure: it is a decoration. */
+    fun loadReceipts(channelId: String) {
+        scope.launch {
+            runCatching { BetweenUsApi.channelReads(channelId) }.onSuccess { rows ->
+                _receipts.update { it + (channelId to rows) }
+            }
+        }
+    }
+
+    /**
+     * A marker moved. One marker per person, replaced rather than appended: it
+     * only ever moves forwards, and keeping the old one would draw a face
+     * against a message they have since read past.
+     */
+    private fun onChannelRead(channelId: String, userId: String, at: String) {
+        if (channelId.isBlank() || userId.isBlank()) return
+        // Your own marker, from another of your devices. Not a receipt: the row
+        // is about who else has seen your message.
+        val self = (Session.state.value as? com.aatech.betweenus.core.data.AuthPhase.SignedIn)?.user
+        if (userId == self?.id) return
+
+        // A channel this client has never opened has no list to patch, and one
+        // is fetched whole when it is opened.
+        val known = _receipts.value[channelId] ?: return
+        if (known.none { it.user.id == userId }) {
+            // Somebody who had never read this channel before: their name is on
+            // no list here, so the whole thing is re-read rather than invented.
+            loadReceipts(channelId)
+            return
+        }
+        _receipts.update { all ->
+            all + (channelId to known.map { if (it.user.id == userId) it.copy(readAt = at) else it })
         }
     }
 

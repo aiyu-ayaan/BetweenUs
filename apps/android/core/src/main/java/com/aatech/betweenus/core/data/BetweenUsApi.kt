@@ -618,6 +618,12 @@ object BetweenUsApi {
         authedArray("GET", "/api/v1/notifications/unread").map { ChannelUnread.from(it) }
     }
 
+    /** Who else has read this channel, and up to when. */
+    suspend fun channelReads(channelId: String): List<ChannelReadReceipt> = io {
+        authedArray("GET", "/api/v1/notifications/channels/${enc(channelId)}/reads")
+            .map { ChannelReadReceipt.from(it) }
+    }
+
     suspend fun markChannelRead(channelId: String): Unit = io {
         authed("POST", "/api/v1/notifications/read", obj("channelId" to channelId))
     }

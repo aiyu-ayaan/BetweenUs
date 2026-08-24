@@ -3,6 +3,9 @@ package com.aatech.betweenus.feature.chat
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -21,6 +24,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -42,8 +46,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.AnnotatedString
@@ -51,6 +59,7 @@ import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.aatech.betweenus.core.crypto.E2ee
@@ -67,6 +76,7 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import coil.compose.AsyncImage
 import com.aatech.betweenus.core.data.BetweenUsApi
+import com.aatech.betweenus.core.data.ChannelReadReceipt
 import com.aatech.betweenus.core.data.CustomEmoji
 import com.aatech.betweenus.core.data.Endpoint
 import com.aatech.betweenus.core.data.LinkPreview
@@ -99,6 +109,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.math.max
+import kotlin.math.roundToInt
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -121,7 +132,12 @@ fun MessageRow(
     self: PublicUser,
     channelId: String,
     highlighted: Boolean = false,
+    /** Who has read this far. Empty for anything but your own newest messages. */
+    receipts: List<ChannelReadReceipt> = emptyList(),
     onLongPress: () -> Unit,
+    /** Swiping the row rightwards answers it, the way every phone chat does. */
+    onReply: () -> Unit = {},
+    onOpenSeenBy: () -> Unit = {},
     onOpenQuoted: (String) -> Unit = {},
     onReact: (String) -> Unit,
     onViewImage: (Bitmap, String) -> Unit = { _, _ -> },
@@ -135,9 +151,79 @@ fun MessageRow(
         !message.deleted &&
         withinFiveMinutes(previous.message.createdAt, message.createdAt)
 
+    /**
+     * Swipe-to-reply.
+     *
+     * Left to right only, and only far enough to be deliberate: a phone list
+     * scrolls vertically, so a horizontal drag is unambiguous, while a swipe
+     * that fired on any movement at all would answer messages by accident.
+     *
+     * The release is a Material 3 expressive spring rather than a linear slide
+     * back - the row overshoots and settles, which is what makes the gesture
+     * feel answered rather than merely undone.
+     */
+    val scope = rememberCoroutineScope()
+    val density = LocalDensity.current
+    val haptics = LocalHapticFeedback.current
+    val slide = remember(message.id) { Animatable(0f) }
+    /** How far it has to go to count, and how far it will go at all. */
+    val threshold = with(density) { 64.dp.toPx() }
+    val limit = with(density) { 88.dp.toPx() }
+    /** True once this drag has passed the threshold, so the buzz happens once. */
+    var armed by remember(message.id) { mutableStateOf(false) }
+    val settle = spring<Float>(
+        dampingRatio = Spring.DampingRatioMediumBouncy,
+        stiffness = Spring.StiffnessLow,
+    )
+
+    Box(Modifier.fillMaxWidth()) {
+        // The reply mark underneath, fading in with the drag. Nothing is drawn
+        // at rest, which is the point: the gesture costs the row no furniture.
+        val progress = (slide.value / threshold).coerceIn(0f, 1f)
+        if (progress > 0f) {
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .padding(start = 14.dp),
+                contentAlignment = Alignment.CenterStart,
+            ) {
+                BetweenUsIcon(
+                    icon = BetweenUsIcons.Reply,
+                    tint = Accent.copy(alpha = progress),
+                    size = (14 + 6 * progress).dp,
+                )
+            }
+        }
+
     Column(
         Modifier
             .fillMaxWidth()
+            .offset { IntOffset(slide.value.roundToInt(), 0) }
+            .pointerInput(message.id, message.deleted) {
+                if (message.deleted) return@pointerInput
+                detectHorizontalDragGestures(
+                    onDragEnd = {
+                        val fired = slide.value >= threshold
+                        armed = false
+                        scope.launch { slide.animateTo(0f, settle) }
+                        if (fired) onReply()
+                    },
+                    onDragCancel = {
+                        armed = false
+                        scope.launch { slide.animateTo(0f, settle) }
+                    },
+                ) { change, dragAmount ->
+                    // Rightwards only, and never past the limit: a row dragged
+                    // off the screen has nothing left to say.
+                    val next = (slide.value + dragAmount).coerceIn(0f, limit)
+                    if (next != slide.value) change.consume()
+                    if (!armed && next >= threshold) {
+                        armed = true
+                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                    }
+                    scope.launch { slide.snapTo(next) }
+                }
+            }
             .background(if (highlighted) Accent.copy(alpha = 0.14f) else Color.Transparent)
             .combinedClickable(
                 onClick = {},
@@ -368,8 +454,13 @@ fun MessageRow(
                         }
                     }
                 }
+
+                // Only ever under your own message, and only once each reader
+                // has got this far - see `Receipts.anchorReceipts`.
+                SeenByRow(receipts, onOpenSeenBy)
             }
         }
+    }
     }
 }
 
