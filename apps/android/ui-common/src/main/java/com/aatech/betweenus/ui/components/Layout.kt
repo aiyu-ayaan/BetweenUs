@@ -191,6 +191,11 @@ fun Panel(
  * The expressive icon button morphs between a round resting shape and a squarer
  * pressed one, so this hands the toolkit a shape *set* rather than a corner.
  * [prominent] fills it tonally, for the one action in a group that matters.
+ *
+ * [compact] is the 40dp size, for a button that lives *inside* something - the
+ * composer's well - where the 56dp default sets the height of whatever it is
+ * in. Still over the 48dp touch target, because the button's own hit area is
+ * expanded past its container.
  */
 @Composable
 fun IconAction(
@@ -201,20 +206,24 @@ fun IconAction(
     tint: Color = Color.Unspecified,
     enabled: Boolean = true,
     prominent: Boolean = false,
+    compact: Boolean = false,
 ) {
     val resolved = if (tint == Color.Unspecified) MaterialTheme.colorScheme.onSurfaceVariant else tint
-    // No tint: the icon inherits the button's content colour, so pressed and
-    // disabled are the toolkit's business rather than this call site's.
-    val glyph = @Composable {
-        BetweenUsIcon(icon = icon, contentDescription = contentDescription)
+    val container =
+        if (compact) IconButtonDefaults.smallContainerSize() else IconButtonDefaults.mediumContainerSize()
+    val glyph = IconButtonDefaults.run { if (compact) smallIconSize else mediumIconSize }
+    // No tint on the icon: it inherits the button's content colour, so pressed
+    // and disabled are the toolkit's business rather than this call site's.
+    val content = @Composable {
+        BetweenUsIcon(icon = icon, size = glyph, contentDescription = contentDescription)
     }
     if (prominent) {
         FilledTonalIconButton(
             onClick = onClick,
             enabled = enabled,
             shapes = IconButtonDefaults.shapes(),
-            modifier = modifier.size(IconButtonDefaults.mediumContainerSize()),
-            content = glyph,
+            modifier = modifier.size(container),
+            content = content,
         )
     } else {
         IconButton(
@@ -222,8 +231,8 @@ fun IconAction(
             enabled = enabled,
             shapes = IconButtonDefaults.shapes(),
             colors = IconButtonDefaults.iconButtonColors(contentColor = resolved),
-            modifier = modifier.size(IconButtonDefaults.mediumContainerSize()),
-            content = glyph,
+            modifier = modifier.size(container),
+            content = content,
         )
     }
 }

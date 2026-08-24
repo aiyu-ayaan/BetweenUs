@@ -275,7 +275,7 @@ fun Composer(
                 .fillMaxWidth()
                 .padding(horizontal = 8.dp, vertical = 8.dp),
             verticalAlignment = Alignment.Bottom,
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             // The well the message is typed into.
             //
@@ -290,7 +290,7 @@ fun Composer(
             Row(
                 modifier = Modifier
                     .weight(1f)
-                    .heightIn(min = 52.dp)
+                    .heightIn(min = 56.dp)
                     .clip(ComposerWellShape)
                     .background(scheme.surfaceContainerHigh)
                     .border(1.dp, outline, ComposerWellShape)
@@ -301,6 +301,7 @@ fun Composer(
                     icon = BetweenUsIcons.Smile,
                     contentDescription = "Emoji",
                     onClick = { showEmojiPicker = true },
+                    compact = true,
                 )
 
                 Spacer(Modifier.width(2.dp))
@@ -359,6 +360,7 @@ fun Composer(
                     icon = BetweenUsIcons.Paperclip,
                     contentDescription = "Attach a file",
                     onClick = onPickFile,
+                    compact = true,
                 )
 
                 // The camera stands down while there is a keyboard up or a
@@ -374,6 +376,7 @@ fun Composer(
                         icon = BetweenUsIcons.Video,
                         contentDescription = "Camera",
                         onClick = onCameraClick,
+                        compact = true,
                     )
                 }
             }
@@ -386,7 +389,7 @@ fun Composer(
             // shape set is the toolkit's: it squares off under a finger and
             // springs back round.
             val sendContainer by animateColorAsState(
-                targetValue = if (canSend) scheme.primary else scheme.surfaceContainerHigh,
+                targetValue = if (canSend) scheme.primary else scheme.surfaceContainerHighest,
                 animationSpec = BetweenUsMotion.effect(),
                 label = "send-container",
             )
@@ -409,9 +412,13 @@ fun Composer(
                     disabledContainerColor = sendContainer,
                     disabledContentColor = sendContent,
                 ),
-                modifier = Modifier.size(IconButtonDefaults.largeContainerSize()),
+                // Medium, which is 56dp. Large is 96dp on this scale - a
+                // circle wider than the well is tall, which is what it looked
+                // like: a button that had swallowed the bar rather than sat
+                // beside it.
+                modifier = Modifier.size(IconButtonDefaults.mediumContainerSize()),
             ) {
-                BetweenUsIcon(BetweenUsIcons.Send, size = IconButtonDefaults.largeIconSize)
+                BetweenUsIcon(BetweenUsIcons.Send, size = IconButtonDefaults.mediumIconSize)
             }
         }
     }
