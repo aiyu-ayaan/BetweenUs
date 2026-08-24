@@ -14,11 +14,10 @@ const message = (id: string, createdAt: string, authorId: string): ReceiptMessag
   authorId,
 });
 
-const mine = [
-  message('m1', '2026-01-01T10:00:00.000Z', 'me'),
-  message('m2', '2026-01-01T10:05:00.000Z', 'me'),
-  message('m3', '2026-01-01T10:10:00.000Z', 'me'),
-];
+const first = message('m1', '2026-01-01T10:00:00.000Z', 'me');
+const second = message('m2', '2026-01-01T10:05:00.000Z', 'me');
+const third = message('m3', '2026-01-01T10:10:00.000Z', 'me');
+const mine = [first, second, third];
 
 // --- seenBy ------------------------------------------------------------------
 
@@ -28,24 +27,24 @@ const readers = [
 ];
 
 assert.deepEqual(
-  seenBy(mine[0], readers).map((r) => r.user.id),
+  seenBy(first, readers).map((r) => r.user.id),
   ['ana', 'bo'],
   'both markers are past the first message',
 );
 assert.deepEqual(
-  seenBy(mine[2], readers).map((r) => r.user.id),
+  seenBy(third, readers).map((r) => r.user.id),
   ['bo'],
   'only the marker past the newest message counts',
 );
 // The marker landing on the same millisecond counts: it was read, not missed.
-assert.equal(seenBy(mine[1], [reader('cy', mine[1].createdAt)]).length, 1);
+assert.equal(seenBy(second, [reader('cy', second.createdAt)]).length, 1);
 
 // --- anchorReceipts ----------------------------------------------------------
 
 const anchors = anchorReceipts(mine, readers, 'me');
 assert.deepEqual(Object.keys(anchors).sort(), ['m2', 'm3']);
-assert.deepEqual(anchors.m2.map((r) => r.user.id), ['ana'], 'ana stops at the second');
-assert.deepEqual(anchors.m3.map((r) => r.user.id), ['bo'], 'bo reached the newest');
+assert.deepEqual(anchors.m2?.map((r) => r.user.id), ['ana'], 'ana stops at the second');
+assert.deepEqual(anchors.m3?.map((r) => r.user.id), ['bo'], 'bo reached the newest');
 assert.equal(anchors.m1, undefined, 'nobody is drawn twice');
 
 // A marker older than anything on screen anchors nowhere.
@@ -58,7 +57,7 @@ assert.deepEqual(anchorReceipts(theirs, readers, 'me'), {});
 assert.deepEqual(anchorReceipts(mine, readers, undefined), {});
 
 // Out-of-order input must not change the answer: the list is sorted first.
-const shuffled = [mine[2], mine[0], mine[1]];
+const shuffled = [third, first, second];
 assert.deepEqual(Object.keys(anchorReceipts(shuffled, readers, 'me')).sort(), ['m2', 'm3']);
 
 // --- seenByLabel -------------------------------------------------------------

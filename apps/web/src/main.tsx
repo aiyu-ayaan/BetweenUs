@@ -12,6 +12,20 @@ import ReactDOM from 'react-dom/client';
 import App from '../../desktop/src/App';
 import '../../desktop/src/index.css';
 
+/**
+ * No browser context menu, anywhere.
+ *
+ * The app puts its own menu on a message, and having Chrome's - Back, Reload,
+ * View source, Inspect - appear a pixel outside it is the tell that this is a
+ * web page rather than the application it is trying to be. This is the whole
+ * of the difference: the Electron build has no such menu to suppress.
+ *
+ * On the bubble phase deliberately. React's own handlers run first, on the
+ * root container, so the message menu still opens - this only takes away what
+ * the browser would have drawn afterwards.
+ */
+document.addEventListener('contextmenu', (event) => event.preventDefault());
+
 const container = document.getElementById('root');
 if (!container) throw new Error('Missing #root element');
 

@@ -10,6 +10,7 @@ import type {
   InvitePreview,
   ChannelKeysResponse,
   ChannelMember,
+  ChannelReadReceipt,
   ChannelUnread,
   CreateChannelRequest,
   EnrolMachineResponse,
@@ -575,6 +576,10 @@ export const api = {
     }),
 
   unread: (): Promise<ChannelUnread[]> => request('/api/v1/notifications/unread'),
+
+  /** Who else has read this channel, and up to when. */
+  channelReads: (channelId: string): Promise<ChannelReadReceipt[]> =>
+    request(`/api/v1/notifications/channels/${encodeURIComponent(channelId)}/reads`),
 
   markChannelRead: (channelId: string): Promise<ChannelUnread> =>
     request('/api/v1/notifications/read', {

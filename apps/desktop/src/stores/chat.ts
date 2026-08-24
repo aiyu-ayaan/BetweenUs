@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type {
   Channel,
+  ChannelReadReceipt,
   ChannelType,
   DirectChannel,
   Message,
@@ -95,6 +96,12 @@ interface ChatState {
    * message list watches it, scrolls there and highlights it, then clears it.
    */
   jumpTo: string | null;
+  /**
+   * channelId -> everyone else's read marker in it. The "seen by" row under
+   * your own messages is derived from these; see `features/chat/receipts.ts`.
+   * Loaded when a channel is opened and kept current by `channel.read`.
+   */
+  receipts: Record<string, ChannelReadReceipt[]>;
 
   loadServers: () => Promise<void>;
   /** Read markers live on the account, so a badge survives a restart. */
@@ -149,6 +156,8 @@ interface ChatState {
   /** Adds the emoji, or takes it back when it is already yours. */
   react: (messageId: string, emoji: string) => Promise<void>;
   loadPins: () => Promise<void>;
+  /** Who else has read the open channel. Cheap, and only for the open one. */
+  loadReceipts: (channelId: string) => Promise<void>;
   showPanel: (panel: ChatState['rightPanel']) => void;
   /** Opens the message in the list, wherever the request came from. */
   jumpToMessage: (messageId: string) => void;
@@ -193,6 +202,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   rightPanel: 'members',
   pins: [],
   jumpTo: null,
+  receipts: {},
 
   loadServers: async () => {
     // What was on screen last time, before anything is asked of the network.
@@ -371,6 +381,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
     });
     chatSocket.subscribe(channelId);
     if (get().rightPanel === 'pins') void get().loadPins();
+    // Who has read it, for the "seen by" row. Fetched per open channel rather
+    // than for every channel at sign-in: it is only ever drawn for the one on
+    // screen, and it goes stale the moment somebody reads anyway.
+    void get().loadReceipts(channelId);
 
     // Nothing in memory: what this device has on disk, decrypted here rather
     // than waiting for the round trip. It is the same fifty messages the fetch
@@ -577,6 +591,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
     await api.reactToMessage(messageId, emoji);
   },
 
+  loadReceipts: async (channelId) => {
+    const receipts = await api.channelReads(channelId).catch(() => null);
+    if (receipts === null) return;
+    set({ receipts: { ...get().receipts, [channelId]: receipts } });
+  },
+
   loadPins: async () => {
     const channelId = get().activeChannelId;
     if (!channelId) {
@@ -716,6 +736,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       readMarkers: {},
       divider: {},
       replyingTo: {},
+      receipts: {},
     });
   },
 }));
@@ -886,6 +907,38 @@ chatSocket.on((event) => {
     // the cache does not hand back a message that was taken down an hour ago.
     void cache.putMessages([event.message]).catch(() => undefined);
     void decrypt(event.message).then(replaceMessage);
+    return;
+  }
+
+  // Somebody read a channel this client is subscribed to. One marker per
+  // person, replaced rather than appended: it only ever moves forwards, and
+  // keeping the old one would draw a face against a message they have since
+  // read past.
+  if (event.type === 'channel.read') {
+    const self = useAuthStore.getState().user;
+    // Your own marker, from another of your devices. It is not a receipt: the
+    // row is about who else has seen your message.
+    if (event.userId === self?.id) return;
+    const state = useChatStore.getState();
+    const known = state.receipts[event.channelId];
+    // A channel this client has never opened has no list to patch, and one
+    // will be fetched whole when it is opened.
+    if (!known) return;
+    const existing = known.find((receipt) => receipt.user.id === event.userId);
+    if (!existing) {
+      // Somebody who had never read this channel before: their name is not on
+      // any list here, so the whole thing is re-read rather than invented.
+      void useChatStore.getState().loadReceipts(event.channelId);
+      return;
+    }
+    useChatStore.setState({
+      receipts: {
+        ...state.receipts,
+        [event.channelId]: known.map((receipt) =>
+          receipt.user.id === event.userId ? { ...receipt, readAt: event.at } : receipt,
+        ),
+      },
+    });
     return;
   }
 

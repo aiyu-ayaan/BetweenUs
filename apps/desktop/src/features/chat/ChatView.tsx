@@ -29,6 +29,8 @@ import {
 import { absoluteUrl } from '../../services/endpoint';
 import { emojiQueryAt } from './emoji-names';
 import { nextFollow } from './follow';
+import { anchorReceipts, seenBy } from './receipts';
+import { SeenByDialog, SeenByRow } from './SeenBy';
 import { formatBytes, uploadAttachment } from '../../services/attachments';
 import { OVERFLOW_CHARS, overflowFile, replyPreview } from '../../services/message-body';
 import { reactorNames } from '../../services/reactions';
@@ -327,6 +329,7 @@ function MessageList({
   const jumpTo = useChatStore((state) => state.jumpTo);
   const clearJump = useChatStore((state) => state.clearJump);
   const dividerId = useChatStore((state) => state.divider[channel.id] ?? null);
+  const receipts = useChatStore((state) => state.receipts[channel.id]);
   const unreadCount = useChatStore((state) => state.unread[channel.id] ?? 0);
 
   const [menu, setMenu] = useState<{ id: string; at: { x: number; y: number } } | null>(null);
@@ -335,6 +338,24 @@ function MessageList({
   const [editing, setEditing] = useState<string | null>(null);
   const [highlighted, setHighlighted] = useState<string | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
+  /** The message whose "seen by" dialog is open, if any. */
+  const [seenFor, setSeenFor] = useState<string | null>(null);
+
+  /**
+   * Where each reader's face is drawn: once, against the newest message of
+   * yours they have read. Recomputed on every render rather than memoised -
+   * it is a pass over your own messages and a handful of markers, and it has
+   * to move the moment either changes.
+   */
+  const anchors = anchorReceipts(
+    messages.map((message) => ({
+      id: message.id,
+      createdAt: message.createdAt,
+      authorId: message.author.id,
+    })),
+    receipts ?? [],
+    me?.id,
+  );
 
   /**
    * Menu actions used to be fired and forgotten, so a refused pin or delete
@@ -568,6 +589,18 @@ function MessageList({
                 setArmedDelete(null);
                 setMenu({ id: message.id, at: { x: event.clientX, y: event.clientY } });
               }}
+              onDoubleClick={(event) => {
+                // The shortcut for the one action the menu is opened for most:
+                // reply. A double tap does the same on a touch screen, where
+                // there is no right button to press at all.
+                if (deleted) return;
+                // Not while something is being selected: a double-click is
+                // also "select this word", and stealing that would make text
+                // in a message impossible to pick out.
+                if (!window.getSelection()?.isCollapsed) return;
+                event.preventDefault();
+                setReplyTo(quoteOf(message));
+              }}
               className={`relative rounded-lg px-2 transition-colors duration-500 ${
                 highlighted === message.id
                   ? 'bg-accent/20'
@@ -636,6 +669,12 @@ function MessageList({
                       onToggle={(emoji) => report(react(message.id, emoji))}
                       onMore={(at) => setPicker({ id: message.id, at })}
                     />
+                    {/* Only ever under your own message, and only once each
+                        reader has got this far - see `anchorReceipts`. */}
+                    <SeenByRow
+                      receipts={anchors[message.id] ?? []}
+                      onOpen={() => setSeenFor(message.id)}
+                    />
                   </>
                 )}
               </div>
@@ -679,6 +718,19 @@ function MessageList({
           }}
         />
       )}
+
+      {seenFor &&
+        (() => {
+          const target = messages.find((item) => item.id === seenFor);
+          if (!target) return null;
+          return (
+            <SeenByDialog
+              sentAt={target.createdAt}
+              receipts={seenBy(target, receipts ?? [])}
+              onClose={() => setSeenFor(null)}
+            />
+          );
+        })()}
 
       {picker && (
         <EmojiPicker
