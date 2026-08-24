@@ -1210,12 +1210,18 @@ and it is also the navigation drawer's. The first attempt at this turned the
 drawer's swipe off inside a conversation, which was the wrong end of the
 problem - it took the drawer away and the app still went back.
 
-The edge is left alone instead. A drag whose `onDragStart` lands within 40dp of
-the left edge is not this row's: nothing moves, nothing is consumed, and the
-gesture reaches whoever it was meant for. Reply is a swipe *on the message*,
-which is where a thumb already is - the same bargain WhatsApp makes. Away from
-the edge the row consumes the drag, which is what stops the drawer coming out
-underneath it.
+Leaving the edge alone was not enough either: 40dp of dead zone took the reply
+swipe away without giving the back gesture anything it did not already have.
+The only way to ask the system to keep its hands off an area is
+`Modifier.systemGestureExclusion()`, and that is now on the message list.
+
+Android caps the exclusion at 200dp of height per edge and keeps what is
+nearest the bottom of the screen - so the newest messages, the ones anybody
+actually replies to, are the part that gets it. Rows above that still lose an
+edge swipe to Back, which is the platform's call and not something an app can
+overrule. The row's own dead zone is down to 16dp for the same reason: past
+that sliver the drag is the row's, and it consumes it, which is what stops the
+drawer coming out underneath it.
 
 ## Coming back from the background
 
