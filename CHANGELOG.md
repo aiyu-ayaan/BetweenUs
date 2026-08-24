@@ -1,5 +1,66 @@
 # Changelog
 
+## [0.0.1-alpha.12](https://github.com/aiyu-ayaan/BetweenUs/compare/v0.0.1-alpha.11...v0.0.1-alpha.12) (2026-08-24)
+
+### Features
+
+* Repaint a changed picture, name or server without a restart
+* Repaint a changed picture or name where it already is
+* Announce a changed profile or server, rather than let it go stale
+* Draw several photos as one album, not several cards
+* Draw several photos as one album, not several attachments
+* Draw messages the way a phone messenger draws them
+* Offer a way back down when the conversation is scrolled up
+* Let the sheets take their colour from the scheme
+* Put the call controls in a floating toolbar
+* Repaint the entry, friends and settings screens
+* Redraw the conversation
+* Move the shell onto the scheme, and give it motion
+* Rebuild the shared controls in the expressive language
+* Give the client a Material 3 Expressive theme
+* Seen-by faces on a message, and swipe a row to reply
+* Draw who has seen a message, and reply on a double click
+* Say who has read a message, derived from the read markers
+* Hold a call when another one takes the audio, and say so
+* Say when the connection is down, and stop retrying after 30s
+
+### Bug fixes
+
+* Pad connection banner for status bar insets and consume them in shell
+* Give the drawer a fixed gutter, not a fraction of the screen
+* Make the status dot subscribe to statuses rather than to a function
+* Give the drawer a third of the row rather than half
+* Split the row down the middle, and make a swipe prove it is one
+* Make the call screen readable, and let the chrome leave downwards
+* Give the gutter to the drawer by moving the gesture, not guarding it
+* Size the composer's buttons to the bar they are in
+* Give the left edge to the drawer, the message to the reply
+* Ask the system for the swipe area instead of ceding it
+* Leave the left edge to Back and the drawer
+* Catch up after the background, and stop the drawer stealing the swipe
+* Centre the initial in a pictureless avatar
+* Show the notification the prompt was asked for, and fade the read line
+* Scope refresh-token reuse revocation to one sign-in
+
+### Other changes
+
+* Changes done for new release
+* Record the live profile and server updates, and the status dot that was not live
+* Correct the swipe-to-reply rule, and note the jump button
+* Record the Material 3 Expressive redesign
+* Record the Android catch-up and the drawer gesture
+* Record read receipts and the reply shortcuts
+* Record the session, hold and reconnect work
+* !docs : Docs is done
+
+### Artifacts
+
+| Platform | This release |
+| --- | --- |
+| Server images | Built here |
+| Desktop (Windows) | Built here |
+| Android | Built here |
+
 ## [0.0.1-alpha.11](https://github.com/aiyu-ayaan/BetweenUs/compare/v0.0.1-alpha.10...v0.0.1-alpha.11) (2026-08-23)
 
 ### Features
