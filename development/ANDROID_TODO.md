@@ -1202,8 +1202,36 @@ a new wire beyond one GET and one socket event.
   which is what makes the gesture feel answered rather than merely undone.
   A tombstone does not swipe - there is nothing to answer.
 
-`detectHorizontalDragGestures` is what keeps this out of the list's way: it
-waits for horizontal touch slop, so a vertical drag still scrolls.
+`detectHorizontalDragGestures` is what keeps this out of the *list's* way: it
+waits for horizontal touch slop, so a vertical drag still scrolls. What it did
+not keep out of the way was the navigation drawer, whose own swipe is the same
+left-to-right drag anywhere in the content - both fired, so the row slid and
+the menu came out over it. In a conversation the gesture belongs to the
+message (`gesturesEnabled = drawer.isOpen || !inConversation`); the menu button
+is still the way in, and the drawer keeps its swipe everywhere else and
+whenever it is already open, so it can always be swiped away again.
+
+## Coming back from the background
+
+A phone spends most of its life with the app away, and Android is free to drop
+the socket while it is. Re-subscribing does not replay the gap - the server
+sends what happens next, not what happened - so a conversation held open came
+back several messages short, with a notification for each of them and nothing
+in the list.
+
+`Conversation.resumeVisible()` is the one answer to both moments: the activity
+resuming (`AppForeground`) and the socket reconnecting (`ChatSocket.onReconnect`).
+It re-reads three things that go stale together - the newest page merged over
+what is held, the receipts, and the read marker. The refresh deliberately does
+not touch the cursor, unlike `open`'s fetch: setting it from the newest page
+would throw away how far back somebody had already scrolled.
+
+The read marker used to move only when a channel was *opened*, which is why
+"seen" needed the chat closed and opened again. A message arriving in the
+channel on screen moves it as soon as it is drawn - gated on
+`AppForeground.visible`, because the chat screen is still composed behind a
+lock screen and nobody has read anything there. Ten messages landing at once
+coalesce into one marker rather than ten POSTs.
 
 ## Deliberately out of scope
 

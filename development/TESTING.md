@@ -387,6 +387,22 @@ in front of a human.
 - On the web client, right-click anywhere: on a message the app's own menu
   opens, and everywhere else nothing at all. Chrome's menu should never appear.
 
+## The phone, after the background
+
+The case that was wrong in three ways at once, so it is worth doing in order.
+
+- Open a channel on the phone, then go to the home screen. Send two messages
+  from the desktop as the other account.
+- The pushes arrive. Come back to the app: **both messages must be in the list
+  already**, without closing and reopening the channel.
+- Look at the desktop while the phone is in front: the seen-by faces must move
+  to the newest message within a second or so, without touching the phone.
+- Lock the phone with the channel still open and send another. It must count as
+  unread and raise a notification - the chat screen is still composed behind
+  the lock screen, and treating that as "read" is the bug this guards.
+- Turn aeroplane mode on for a minute, send three from the desktop, turn it
+  off. The reconnect must bring all three in.
+
 ## Two clients, one channel, and a re-key
 
 The case that used to split a conversation in half, and the reason the Android
