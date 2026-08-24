@@ -84,14 +84,24 @@ the phone's owner installed, signing reads a keystore from the environment or a
 git-ignored file beside the project, crash reporting is opt-in and local, and
 CI builds the debug APK on every pull request.
 
+**The client is now drawn in Material 3 Expressive** - see "The expressive
+redesign" below. The theme, the shared controls, the shell, the conversation,
+the entry screen and the call controls have all moved onto the scheme, and
+`material3` is pinned past the Compose BoM to reach the APIs. **None of it has
+been on a screen**: it compiles, the unit tests pass and the debug APK builds,
+and that is all. Six things to look at first are listed at the end of that
+section.
+
 **Three items are open and two of them are blocked on something that is not
 this client.** Input sensitivity needs an insertion point on Android's WebRTC
 capture path that does not exist short of a custom audio device module. Remote
 file transfer needs a wire: there is no file message in the gateway's
 vocabulary, nothing on the desktop agent that would receive one, and a remote
-session opens no data channel to carry it. The light theme is open on its own
-terms - the palette is forty top-level constants used directly by thirty-five
-files, and nothing about a light BetweenUs has been designed.
+session opens no data channel to carry it. The light theme is cheaper than it
+was - there is a real `ColorScheme` now, so a light one is a second
+`lightColorScheme` rather than a repaint - but it is still open: about a
+thousand call sites name a palette constant directly rather than reading a
+role, and nothing about a light BetweenUs has been designed.
 
 ### What a real deployment found
 
@@ -1249,6 +1259,92 @@ channel on screen moves it as soon as it is drawn - gated on
 `AppForeground.visible`, because the chat screen is still composed behind a
 lock screen and nobody has read anything there. Ten messages landing at once
 coalesce into one marker rather than ten POSTs.
+
+## The expressive redesign
+
+The client was drawn in a house style: one accent, one grey ramp, six type
+styles, a hairline border round everything, and each screen naming its own
+colours. It is now drawn in Material 3 Expressive, from the theme down.
+
+Expressive is three things at once, and the redesign is those three things:
+
+- **A wider scheme.** Not one accent and a grey but three tonal families - iris
+  for the primary, teal for the secondary, rose for the tertiary - and a
+  five-step surface-container ramp. Depth comes off that ramp rather than off
+  shadows, and regions are separated by tone rather than by a 1dp line.
+- **A shape scale that carries information.** Corners run to 48dp, and the
+  scale holds the half-steps expressive controls morph *between*. A button
+  squares off while pressed and springs back; a list row's corner opens under a
+  finger; a server tile in the rail springs from a squircle to a circle when it
+  is the one you are in.
+- **A motion scheme.** Springs rather than durations, with a little overshoot
+  on anything that moves. This only exists if the theme is built with
+  `MaterialExpressiveTheme`, which is why the theme moved first and everything
+  else followed.
+
+### Where it lives
+
+`ui-common/src/main/java/com/aatech/betweenus/ui/theme/` is the whole of it:
+
+- `Color.kt` - tonal ramps, and the legacy names.
+- `Theme.kt` - the scheme, the shape scale, the motion scheme.
+- `Type.kt` - the full expressive type scale, both cuts.
+- `Motion.kt` - four springs off `MaterialTheme.motionScheme`, generic in what
+  they animate. Nothing in this app should hand-write a `tween`.
+
+`ui-common/.../components/` is the second layer: fields, buttons, list rows,
+chips, panels, empty states and icon actions, each handed a Material *shape
+set* rather than a corner so the toolkit can run the press morph itself.
+
+### The legacy names
+
+About a thousand call sites across the feature modules name a colour directly -
+`Slate400`, `Surface900`, `Accent`. Every one of those names still exists and
+now points at a tone off the new ramps, so the whole app repainted itself in
+one commit and the migration to `MaterialTheme.colorScheme` is a screen at a
+time rather than one enormous diff.
+
+That is deliberate and it is also the debt. A call site holding `Slate400` gets
+the new colour but cannot get a *light* one, which is why the light theme is
+still open. Screens migrated properly so far: the shell and drawer, the
+conversation, the composer, the message row, sign-in, friends, settings, the
+call controls, and every bottom sheet.
+
+### material3 is pinned past the BoM
+
+`libs.versions.toml` pins `androidx.compose.material3` to a 1.5 alpha rather
+than taking the version the Compose BoM resolves. Every expressive API -
+`MaterialExpressiveTheme`, `MotionScheme`, `ButtonGroup`, `HorizontalFloatingToolbar`,
+`LoadingIndicator`, the wavy progress indicators, every `*Shapes` overload - is
+`internal` in the 1.4.0 the BoM carries and public only in the alphas.
+
+Move it deliberately. An alpha may rename things between builds, and it is the
+one artifact in this project not taking its version from the BoM.
+
+### What to look at first
+
+None of this has been on a screen. In rough order of how likely it is to be
+wrong:
+
+1. **The conversation.** The bubble's shape now says who is speaking and where
+   in a run it sits - tight corner nearest the speaker, tight at the top too
+   when a message continues a run. Worth checking a long run from one person,
+   a run alternating between two, and a deleted message inside one.
+2. **The call toolbar.** `HorizontalFloatingToolbar` measures itself, which is
+   the fix for the bar that used to run off the right-hand edge. Check it on
+   the narrowest device to hand, and check the red leave button is where a
+   thumb expects it.
+3. **The composer.** The send button lights up as the first character lands and
+   the well outlines itself on focus, both sprung. Watch for a flicker when
+   typing fast, and check the camera button leaving and returning.
+4. **Contrast.** The scheme is hand-written tonal ramps, not a generated
+   palette. Every container/on-container pair should be legible; the rose and
+   teal families are the least exercised and the most likely to be wrong.
+5. **The bottom sheets.** All eighteen took their container colour from the
+   scheme in one commit and none of them have been opened since.
+6. **Motion under interruption.** The screen transitions are springs, so a
+   second tap before the first has settled should carry velocity forward rather
+   than snap. Tapping quickly through the drawer is the test.
 
 ## Deliberately out of scope
 

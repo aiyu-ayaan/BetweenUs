@@ -717,6 +717,45 @@ Attachments and pictures:
       rather than on uplink, and out-of-order parts were already supported and
       checked in `packages/storage`.
 
+Android, Material 3 Expressive:
+
+- [x] **The theme.** Tonal ramps - iris, teal, rose, neutral, red - and a
+      scheme that names a role off a ramp rather than picking a hex. Depth
+      comes off a five-step container ramp instead of shadows. The full
+      expressive type scale, both cuts, so weight says how loud a thing is
+      where size says how important. A shape scale to 48dp carrying the
+      half-steps controls morph between, and `MotionScheme.expressive()` - the
+      spring every animation in the app now reads.
+- [x] **The legacy palette names still work.** ~1100 call sites name a colour
+      directly; every one of those names now points at a tone off the new
+      ramps, so the app repainted itself in one commit and the migration to
+      `colorScheme` can be a screen at a time.
+- [x] **The shared controls.** Buttons and icon buttons take a shape *set* and
+      morph under a press; the busy button spins the expressive loading
+      indicator and animates its own width so the label does not jump; a list
+      row says "selected" three ways at once; chips are real filter chips;
+      panels are a tone rather than a border. `BetweenUsMotion` is the whole
+      animation vocabulary - four springs, generic in what they animate.
+- [x] **The shell.** Screens slide a quarter-width and fade on the theme's
+      spring, forward and back, so the stack has a direction; an interrupted
+      transition carries its velocity. The rail's home tile fills when it is
+      where you are. The connection banner separates trying from failing.
+- [x] **The conversation.** The bubble's shape says who is speaking and where
+      in a run it sits; your words are the primary container and everyone
+      else's the surface. The composer's send button lights up as the first
+      character lands and squares off under a finger; reply and edit are one
+      banner instead of two copies. Uploads and history report on the wavy
+      indicator.
+- [x] **The call controls.** A `HorizontalFloatingToolbar` with the five
+      settings as toggles inside it and the red leave button as a FAB outside
+      it - which also fixes the hand-sized bar that ran off the edge of a
+      narrow phone.
+- [x] **Sign-in, friends, settings and every bottom sheet** moved onto the
+      scheme; the hand-written switch and slider colours went, because the
+      expressive defaults now say the same thing off the same scheme.
+- [x] **`material3` pinned past the Compose BoM** to a 1.5 alpha, because every
+      expressive API is `internal` in the 1.4.0 the BoM resolves.
+
 Android faults found against a real deployment:
 
 - [x] **The phone could never mint a channel's first key.** Publishing wrapped
@@ -1223,6 +1262,18 @@ blocked by anything outside this document.
 ### Android
 
 
+- [ ] **Put the expressive redesign on a screen.** It compiles, the unit tests
+      pass and the debug APK builds, and no part of it has been looked at. The
+      six things to check first are listed at the end of "The expressive
+      redesign" in `ANDROID_TODO.md`; contrast on the hand-written tonal ramps
+      and the call toolbar on a narrow device are the two most likely to be
+      wrong.
+- [ ] **Decide what to do about the material3 alpha.** The client is pinned to
+      a 1.5 alpha past the Compose BoM, because every expressive API is
+      `internal` in the 1.4.0 the BoM resolves. It is the one artifact here not
+      taking its version from the BoM, and an alpha may rename things between
+      builds.
+
 - [ ] **Remote file transfer on the phone**, gated on `REMOTE_FILE_TRANSFER`.
       No longer blocked on a wire that does not exist: the gateway has the
       offer, the desktop agent receives, and a session negotiates a data
@@ -1231,9 +1282,12 @@ blocked by anything outside this document.
       offer-then-bytes order the desktop uses. The clipboard, which shares the
       item it used to be half of, landed - see below.
 - [ ] **A light theme on the phone**, which is the same item the desktop has and
-      is open for the same reason: the ramp is forty top-level constants used
-      directly by thirty-five files, and nothing about a light BetweenUs has
-      been designed.
+      is open for most of the same reason. Cheaper than it was: the Material 3
+      Expressive redesign gave the client a real `ColorScheme`, so a light
+      theme is a second `lightColorScheme` rather than a repaint. What is left
+      is that about a thousand call sites still name a palette constant
+      directly instead of reading a role - and nothing about a light BetweenUs
+      has been designed.
 
 ---
 
