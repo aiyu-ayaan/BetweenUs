@@ -1,5 +1,64 @@
 # Changelog
 
+## [0.0.1-alpha.13](https://github.com/aiyu-ayaan/BetweenUs/compare/v0.0.1-alpha.12...v0.0.1-alpha.13) (2026-08-25)
+
+### Features
+
+* Pressing play on the page plays it for the call
+* Press a video, the call watches it - no link, no button
+* Press a video on YouTube and it plays, without the queue detour
+* The Listen Together panel
+* The Listen Together player, and the clock it runs on
+* Listen Together, the shared transport on /ws/call
+* Show the marks in the composer as they are typed
+* Return makes a newline inside a list, quote or fence
+* Carry a list on to its next item
+* Render markdown in messages
+* A markup parser, ported from android
+* Draw bulleted and numbered lists in messages
+* Bulleted and numbered lists
+* Bubble-style message rows, matching the android layout
+
+### Bug fixes
+
+* The pause button that did nothing, in a window that was silent
+* Nothing plays in the browser, on the one event that catches it
+* The browser is not a second player
+* A seek that snapped back, and a browser that could be heard
+* The second copy of the song, playing in the browser tab
+* One Listen Together panel, on the stage, bounded
+* The sandbox that made it silent, and YouTube itself in the call
+* Hide the members panel by default
+* Grow the composer with what is typed, up to a cap
+* Wrap long composer text instead of scrolling it
+* Shrink the chat header call button to match its neighbours
+* Double-click reply, not native word-select
+* Swipe right-to-left replies, left-to-right stays the drawer's
+* A peer id that survives a reconnect, and a seat held for one
+* Reopen a socket the background killed, on the way back
+* Only a refused credential ends a session
+
+### Other changes
+
+* Changes done for new release
+* Add interactive installation & setup section and feature highlights
+* Update architecture and service docs with listen together and rich formatting
+* A blocked window looks like a blocked window
+* The browser that had to stop playing, and the seek that had to stay put
+* Clicking a video is the control
+* Playing what you found, and the browser that was making its own noise
+* The panel's shape, and the two bugs it came from
+* Browsing YouTube in the call, and the sandbox that made it silent
+* Listen Together
+
+### Artifacts
+
+| Platform | This release |
+| --- | --- |
+| Server images | Built here |
+| Desktop (Windows) | Built here |
+| Android | Built here |
+
 ## [0.0.1-alpha.12](https://github.com/aiyu-ayaan/BetweenUs/compare/v0.0.1-alpha.11...v0.0.1-alpha.12) (2026-08-24)
 
 ### Features
