@@ -34,6 +34,7 @@ import {
 } from '../../services/server-emoji';
 import { absoluteUrl } from '../../services/endpoint';
 import {
+  continueList,
   parse as parseMarkup,
   type Block as MarkupBlockType,
   type Span as MarkupSpan,
@@ -1507,6 +1508,23 @@ function MessageComposer({
     if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault();
       void submit();
+    }
+
+    // Shift+Enter is the newline here, so it is where a list carries on to its
+    // next item - and where an empty item ends the list rather than offering
+    // one more. The rule itself lives in `markup`, because the android
+    // composer needs exactly the same one.
+    if (event.key === 'Enter' && event.shiftKey) {
+      const area = event.currentTarget;
+      const next = continueList(area.value, area.selectionStart ?? area.value.length);
+      if (!next) return;
+      event.preventDefault();
+      setContent(next.text);
+      // After React has written the new value; setting it now would be undone
+      // by the re-render that the state change is about to cause.
+      requestAnimationFrame(() => {
+        area.setSelectionRange(next.caret, next.caret);
+      });
     }
     // Escape drops the reply rather than the draft: the text is the expensive
     // thing in the box and nothing else here throws it away.

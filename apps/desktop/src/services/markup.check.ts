@@ -13,7 +13,7 @@
  * words and looks almost right.
  */
 import assert from 'node:assert/strict';
-import { isPlain, parse, type Block, type Span } from './markup';
+import { continueList, isPlain, parse, type Block, type Span } from './markup';
 
 const one = (text: string): Block => {
   const blocks = parse(text);
@@ -230,5 +230,37 @@ for (const text of [
 
 // A shortcode survives the parse, so the emoji splitter still sees it.
 assert.equal(one('hi :wave: there').text, 'hi :wave: there');
+
+// --- continueList ---
+
+// Nothing to continue outside a list: the box behaves as it always did.
+assert.equal(continueList('just words', 10), null);
+// A marker with nothing after it is not a list yet.
+assert.equal(continueList('-', 1), null);
+
+// A bullet offers the next bullet.
+assert.deepEqual(continueList('- eggs', 6), { text: '- eggs\n- ', caret: 9 });
+
+// The exact marker is kept, character and spacing and indent alike.
+assert.deepEqual(continueList('* eggs', 6), { text: '* eggs\n* ', caret: 9 });
+assert.deepEqual(continueList('  + eggs', 8), { text: '  + eggs\n  + ', caret: 13 });
+
+// A numbered item offers the one after it, keeping the separator it was
+// written with.
+assert.deepEqual(continueList('1. one', 6), { text: '1. one\n2. ', caret: 10 });
+assert.deepEqual(continueList('3) three', 8), { text: '3) three\n4) ', caret: 12 });
+
+// An empty item ends the list rather than offering another one - otherwise the
+// only way out is to delete a marker nobody typed.
+assert.deepEqual(continueList('- eggs\n- ', 9), { text: '- eggs\n', caret: 7 });
+assert.deepEqual(continueList('1. one\n2. ', 10), { text: '1. one\n', caret: 7 });
+
+// Only the line the caret is on counts, not the whole box.
+assert.deepEqual(continueList('prose\n- eggs', 12), { text: 'prose\n- eggs\n- ', caret: 15 });
+// The caret in prose under a list is an ordinary newline.
+assert.equal(continueList('- eggs\nprose', 12), null);
+
+// A caret in the middle of an item splits it and carries the list on.
+assert.deepEqual(continueList('- eggsmilk', 6), { text: '- eggs\n- milk', caret: 9 });
 
 console.log('markup.check.ts ok');

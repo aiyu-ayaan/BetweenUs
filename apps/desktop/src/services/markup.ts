@@ -213,6 +213,59 @@ function openerAt(source: string, at: number): Delimiter | null {
   return null;
 }
 
+/** The box's text and where the caret sits in it, after a newline was typed. */
+export interface Continuation {
+  text: string;
+  caret: number;
+}
+
+/**
+ * What a newline typed inside a list should do.
+ *
+ * Null for an ordinary newline anywhere else - the caller then does nothing
+ * and the box behaves as it always did. This is what makes a list feel like a
+ * list while it is being written rather than only once it has been sent:
+ * typing `- eggs` and pressing return offers the next bullet, the way every
+ * editor anybody has used does.
+ *
+ * An empty item ends the list instead of offering another one. Without that,
+ * the only way out of a list is to delete a marker somebody never typed, which
+ * is the single thing that makes auto-continuation infuriating rather than
+ * helpful.
+ *
+ * Pure, and separate from the two composers that call it, because the rule is
+ * fiddly and identical on both.
+ */
+export function continueList(text: string, caret: number): Continuation | null {
+  const from = text.lastIndexOf('\n', caret - 1) + 1;
+  const line = text.slice(from, caret);
+
+  const bullet = BULLET.exec(line);
+  const numbered = bullet ? null : NUMBER.exec(line);
+  if (!bullet && !numbered) return null;
+
+  // An empty item is somebody asking to stop. The marker goes, and with it
+  // the item they were about to write.
+  const content = bullet ? bullet[1] : numbered![2];
+  if ((content ?? '').trim().length === 0) {
+    const without = text.slice(0, from) + text.slice(caret);
+    return { text: without, caret: from };
+  }
+
+  // The content is the tail of the line by construction, so whatever is in
+  // front of it is exactly the marker - indent, bullet character and spacing
+  // included. Rebuilding it from the parts would quietly normalise all three.
+  const prefix = line.slice(0, line.length - (content ?? '').length);
+  const marker = bullet
+    ? prefix
+    : prefix.replace(/\d{1,9}/, String((Number.parseInt(numbered![1] ?? '1', 10) || 1) + 1));
+  const inserted = `\n${marker}`;
+  return {
+    text: text.slice(0, caret) + inserted + text.slice(caret),
+    caret: caret + inserted.length,
+  };
+}
+
 /** Whether anything at all would be drawn differently. Saves a rebuild. */
 export function isPlain(text: string): boolean {
   if (/[*_~`\\]/.test(text)) return false;
