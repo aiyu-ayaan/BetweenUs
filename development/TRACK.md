@@ -70,18 +70,24 @@ Listen Together:
       Google's hosts. Not `webviewTag`, which would give the renderer the power
       to mount web content anywhere; not an iframe, which youtube.com refuses
       outright - so the web client keeps the paste box and is told why.
-- [x] **Press a video and it plays.** The browser's only button used to add to
-      the end of the queue, so hearing the song you had just found took three
-      actions: add it, switch tabs, click it again in the list. **Play now**
-      carries `playNow` on `listen.add` and the gateway jumps to the new track
-      inside the same action - not an add followed by a play, because two
-      messages are two revisions and anything arriving between them moves the
-      index the play was aiming at. **Add to queue** is unchanged and still
-      leaves you on the site, which is what queueing a second track means.
-- [x] **The browser is muted.** Clicking a video on youtube.com started it
-      playing there, with sound, over the shared player everybody is already in
-      step with - two copies of the same track, seconds apart, in one person's
-      headphones. That half of the panel picks; the shared player sounds.
+- [x] **Press a video, the call watches it.** No link, no button: landing on a
+      video page inside the browser plays it for everybody and flips the panel
+      to the player. A button that queued whatever page you were on was still a
+      paste box with the copying moved indoors; clicking a thumbnail is the
+      gesture people already have for "play this". Only on a change and only
+      after the first navigation report, or reopening the panel on the page
+      somebody left it on would restart the room's track. Underneath it is
+      `playNow` on `listen.add`, and the gateway jumps to the new track inside
+      the same action - not an add followed by a play, because two messages are
+      two revisions and anything arriving between them moves the index the play
+      was aiming at. **Add to queue** stays for the other thing, which is
+      choosing what comes after what is on, and still leaves you on the site.
+- [x] **The browser is muted, and paused when hidden.** Clicking a video on
+      youtube.com started it playing there, with sound, over the shared player
+      everybody is already in step with - two copies of the same track, seconds
+      apart, in one person's headphones. Muting fixed the sound; a hidden
+      `WebContentsView` still decodes, so hiding also pauses it. That half of
+      the panel picks; the shared player plays.
 - [x] **The video on screen.** Both the player's frame and the browser's view
       follow the same rule: the thing that plays outlives the component that
       shows it. A React component offers an empty rectangle and the frame is

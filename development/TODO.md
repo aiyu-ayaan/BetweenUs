@@ -86,10 +86,12 @@ part of it deliberately left open:
       `listen.meta` should be sent, since both are idempotent and a phone is as
       good a reporter as anything else. See `ANDROID_TODO.md`.
 - [x] **Browsing, rather than pasting.** Desktop shows youtube.com itself inside
-      the call - signed in, with search, playlists and subscriptions - and a
-      video page offers both **Play now** and **Add to queue**. A
-      `WebContentsView` the main process owns, not `webviewTag` and not an
-      iframe, and muted, because the sound of the call is the shared player.
+      the call - signed in, with search, playlists and subscriptions - and
+      pressing a video plays it for everybody, the way every other "watch
+      together" works. **Add to queue** remains for stacking something behind
+      what is on. A `WebContentsView` the main process owns, not `webviewTag`
+      and not an iframe; muted and paused while hidden, because the sound of the
+      call is the shared player.
 - [ ] **The web client is still paste-only, and has to be.** youtube.com sends
       `X-Frame-Options` and `frame-ancestors`, so no browser tab can show the
       site inside another page. The only alternative there is a YouTube Data API
