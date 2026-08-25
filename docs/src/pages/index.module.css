@@ -115,6 +115,12 @@
   padding: 4rem 0;
 }
 
+.sectionAlt {
+  background: var(--betweenus-surface-950);
+  border-top: 1px solid var(--betweenus-edge);
+  border-bottom: 1px solid var(--betweenus-edge);
+}
+
 .sectionHeading {
   text-align: center;
   font-size: 0.85rem;

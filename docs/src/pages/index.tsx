@@ -5,6 +5,7 @@ import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
 import useBaseUrl from '@docusaurus/useBaseUrl';
 import Layout from '@theme/Layout';
 import HomepageFeatures from '@site/src/components/HomepageFeatures';
+import HomepageSetup from '@site/src/components/HomepageSetup';
 
 import styles from './index.module.css';
 
@@ -24,7 +25,7 @@ function HomepageHeader() {
   return (
     <header className={styles.heroBanner}>
       <div className={clsx('container', styles.heroInner)}>
-        <span className={styles.heroBadge}>Discord-like · self-hosted</span>
+        <span className={styles.heroBadge}>Discord-like · E2EE · self-hosted</span>
         <h1 className={styles.heroTitle}>{siteConfig.title}</h1>
         <p className={styles.heroSubtitle}>{siteConfig.tagline}</p>
         <div className={styles.buttons}>
@@ -92,7 +93,7 @@ export default function Home(): ReactNode {
   return (
     <Layout
       title={siteConfig.title}
-      description="Architecture, system design and deployment docs for BetweenUs">
+      description="Architecture, system design, setups, and deployment docs for BetweenUs">
       <HomepageHeader />
       <main>
         <section className={styles.section}>
@@ -104,6 +105,17 @@ export default function Home(): ReactNode {
             <HomepageFeatures />
           </div>
         </section>
+
+        <section className={clsx(styles.section, styles.sectionAlt)}>
+          <div className="container">
+            <p className={styles.sectionHeading}>Installation & Setup</p>
+            <h2 className={styles.sectionTitle}>
+              Get started with BetweenUs
+            </h2>
+            <HomepageSetup />
+          </div>
+        </section>
+
         <Screenshot />
         <ClosingCta />
       </main>

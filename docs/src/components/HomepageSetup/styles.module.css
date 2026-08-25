@@ -1,0 +1,177 @@
+.setupSection {
+  padding: 4rem 0 2rem;
+  width: 100%;
+}
+
+.setupContainer {
+  max-width: 960px;
+  margin: 0 auto;
+}
+
+.tabList {
+  display: flex;
+  justify-content: center;
+  gap: 0.5rem;
+  margin-bottom: 2rem;
+  flex-wrap: wrap;
+}
+
+.tabButton {
+  background: var(--betweenus-surface-900);
+  color: var(--ifm-color-emphasis-700);
+  border: 1px solid var(--betweenus-edge);
+  border-radius: 999px;
+  padding: 0.6rem 1.4rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  transition: all 0.14s cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.tabButton:hover {
+  background: var(--betweenus-surface-800);
+  color: var(--ifm-font-color-base);
+  border-color: color-mix(in srgb, var(--betweenus-iris) 30%, transparent);
+}
+
+.tabButtonActive {
+  background: var(--betweenus-iris-soft);
+  color: var(--betweenus-iris);
+  border-color: var(--betweenus-iris);
+  box-shadow: 0 0 16px -4px var(--betweenus-glow);
+}
+
+.setupCard {
+  background: var(--betweenus-surface-900);
+  border: 1px solid var(--betweenus-edge);
+  border-radius: var(--betweenus-radius);
+  box-shadow: var(--betweenus-shadow-pop);
+  padding: 2.25rem 2rem;
+  transition: border-color 0.14s ease;
+}
+
+.setupHeader {
+  margin-bottom: 1.5rem;
+}
+
+.setupTitle {
+  font-size: 1.35rem;
+  font-weight: 700;
+  margin-bottom: 0.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.setupDesc {
+  color: var(--ifm-color-emphasis-700);
+  font-size: 0.95rem;
+  line-height: 1.6;
+  margin: 0;
+}
+
+.stepsList {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  margin-top: 1.5rem;
+}
+
+.stepItem {
+  display: flex;
+  gap: 1rem;
+  align-items: flex-start;
+}
+
+.stepNumber {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--betweenus-iris-soft);
+  color: var(--betweenus-iris);
+  border: 1px solid color-mix(in srgb, var(--betweenus-iris) 40%, transparent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.82rem;
+  font-weight: 700;
+  margin-top: 0.15rem;
+}
+
+.stepContent {
+  flex: 1;
+  min-width: 0;
+}
+
+.stepTitle {
+  font-size: 0.95rem;
+  font-weight: 600;
+  margin-bottom: 0.35rem;
+  color: var(--ifm-font-color-base);
+}
+
+.stepDetail {
+  font-size: 0.88rem;
+  color: var(--ifm-color-emphasis-700);
+  margin-bottom: 0.5rem;
+  line-height: 1.5;
+}
+
+.codeSnippet {
+  background: var(--betweenus-surface-950);
+  border: 1px solid var(--betweenus-edge);
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  font-family: var(--ifm-font-family-monospace);
+  font-size: 0.86rem;
+  color: #c9d1d9;
+  overflow-x: auto;
+  margin: 0.4rem 0 0;
+  display: block;
+}
+
+.footerLinks {
+  margin-top: 2rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--betweenus-edge);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.footerNote {
+  font-size: 0.85rem;
+  color: var(--ifm-color-emphasis-600);
+  margin: 0;
+}
+
+.actionLink {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--betweenus-iris);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  transition: color 0.12s ease;
+}
+
+.actionLink:hover {
+  color: var(--betweenus-iris-hover);
+  text-decoration: underline;
+}
+
+@media screen and (max-width: 768px) {
+  .setupCard {
+    padding: 1.5rem 1.25rem;
+  }
+  
+  .stepItem {
+    gap: 0.75rem;
+  }
+}
