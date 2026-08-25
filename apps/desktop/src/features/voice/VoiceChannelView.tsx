@@ -33,8 +33,7 @@ import { VoiceControls } from './VoiceControls';
 import { NotHeardNotice } from './NotHeardNotice';
 import { VideoSink } from './MediaSink';
 import { ShareStage } from './ShareStage';
-import { ListenStage } from './ListenStage';
-import { ListenBrowser } from './ListenBrowser';
+import { ListenBar, ListenPanel } from './ListenPanel';
 import { useListenStore } from '../../stores/listen';
 import {
   ChevronLeftIcon,
@@ -110,7 +109,7 @@ export function VoiceChannelView({
       }));
 
   const ordered = useOrderedStage(stage);
-  const browsingYouTube = useListenStore((state) => state.browsing);
+  const listenOpen = useListenStore((state) => state.open);
   const watched = connected ? (shares.find((share) => share.identity === watching) ?? null) : null;
 
   return (
@@ -186,14 +185,19 @@ export function VoiceChannelView({
             faces watching it are the same activity, and hiding one to show the
             other is what makes a group watch feel like a broadcast. It draws
             nothing when nobody has started a queue. */}
-        <ListenStage />
+        {/* One line saying what is playing, while the panel is closed - so the
+            call goes back to being a call and the music is still visibly a
+            thing that is happening. Draws nothing when nothing is. */}
+        <ListenBar />
 
-        {/* Browsing takes the stage while it is open: picking the next track is
-            a thing somebody does with their whole attention for twenty seconds,
-            and shrinking YouTube into a corner to keep nine faces on screen
-            serves neither. The tiles come straight back on closing it. */}
-        {browsingYouTube ? (
-          <ListenBrowser />
+        {/* Listening takes the stage while it is open. Picking the next track
+            is a thing somebody does with their whole attention for twenty
+            seconds, and shrinking YouTube into a corner to keep nine faces on
+            screen serves neither; the tiles come straight back on closing it.
+            It is also the *only* place this panel is drawn - see the note on
+            the button in VoiceControls. */}
+        {listenOpen && connected ? (
+          <ListenPanel />
         ) : stage.length === 0 ? (
           <EmptyStage />
         ) : watched ? (

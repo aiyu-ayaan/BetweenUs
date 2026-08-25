@@ -61,18 +61,30 @@ const DUCK_FADE_MS = 80;
 interface ListenState {
   /** What the call is listening to, as the gateway last said. Null for nothing. */
   session: ListenSession | null;
-  /** Whether the panel is on screen. Local: it is a view, not a shared decision. */
+  /**
+   * Whether the Listen Together panel has the stage.
+   *
+   * Local: it is a view, not a shared decision. Somebody who folds the video
+   * away to read something is not asking the rest of the call to stop watching.
+   *
+   * It is a single flag with a *single* render site, and that is the fix for a
+   * real bug rather than a preference. The panel used to be a popover hung off
+   * `VoiceControls` - which is rendered twice, once in the sidebar and once in
+   * the channel view - so one flag drew two panels, side by side, both live.
+   * A piece of shared state may only be drawn once.
+   */
   open: boolean;
   /**
-   * The picture is folded away to a one-line bar, and the music carries on.
+   * Which half of the panel is showing.
    *
-   * Local, like every other view decision here. Somebody who wants the video
-   * out of the way while they read something is not asking the rest of the call
-   * to stop watching it.
+   * `browse` is the real youtube.com and is the default, because looking for
+   * something to play is what somebody opening this is doing. `playing` is the
+   * video everybody is watching. They are tabs rather than two panels because
+   * only one of them can have the space, and because a native browser view and
+   * an embedded player must never be on screen at the same time - see
+   * `ListenBrowser` on why a `WebContentsView` paints over everything.
    */
-  collapsed: boolean;
-  /** Whether the in-app YouTube browser is open. Desktop only - see `ListenBrowser`. */
-  browsing: boolean;
+  tab: 'browse' | 'playing';
   /**
    * This window's own volume, 0-100, and nobody else's business.
    *
@@ -108,8 +120,7 @@ interface ListenState {
   sampleClock: (sample: ClockSample) => void;
 
   setOpen: (open: boolean) => void;
-  setCollapsed: (collapsed: boolean) => void;
-  setBrowsing: (browsing: boolean) => void;
+  setTab: (tab: 'browse' | 'playing') => void;
   setVolume: (volume: number) => void;
   /** A pasted link or a bare id. Returns what went wrong, or null. */
   add: (input: string) => string | null;
@@ -236,8 +247,7 @@ export const useListenStore = create<ListenState>((set, get) => ({
   session: null,
   open: false,
   volume: 60,
-  collapsed: false,
-  browsing: false,
+  tab: 'browse',
   ducking: false,
   clockOffset: 0,
   needsGesture: false,
@@ -282,8 +292,7 @@ export const useListenStore = create<ListenState>((set, get) => ({
     set({
       session: null,
       open: false,
-      collapsed: false,
-      browsing: false,
+      tab: 'browse',
       ducking: false,
       clockOffset: 0,
       needsGesture: false,
@@ -316,8 +325,7 @@ export const useListenStore = create<ListenState>((set, get) => ({
   },
 
   setOpen: (open) => set({ open }),
-  setCollapsed: (collapsed) => set({ collapsed }),
-  setBrowsing: (browsing) => set({ browsing }),
+  setTab: (tab) => set({ tab }),
 
   setVolume: (volume) => {
     set({ volume: Math.min(100, Math.max(0, Math.round(volume))) });
@@ -329,6 +337,9 @@ export const useListenStore = create<ListenState>((set, get) => ({
     if (!ref) return 'That does not look like a YouTube link.';
     mesh?.sendListen({ type: 'listen.add', provider: 'youtube', ref });
     set({ error: null });
+    // Stay on the browser. Adding a second track while looking for a third is
+    // the normal case, and throwing somebody back to the player every time they
+    // press add is the thing that makes queueing four songs annoying.
     // The click that added a track is a gesture in *this* window, which is what
     // lets its player start. Everybody else's window may still need one.
     set({ needsGesture: false });

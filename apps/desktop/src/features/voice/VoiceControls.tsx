@@ -14,7 +14,6 @@ import { ConnectionPanel } from './ConnectionPanel';
 import { ScreenSharePicker } from './ScreenSharePicker';
 import { DevicePicker } from './DevicePicker';
 import { InvitePicker } from './InvitePicker';
-import { ListenTogether } from './ListenTogether';
 import {
   MicIcon,
   MicOffIcon,
@@ -45,7 +44,7 @@ export function VoiceControls({ size = 'sm' }: { size?: 'sm' | 'lg' }): JSX.Elem
   const stats = useVoiceStore((state) => state.stats);
   const listening = useListenStore((state) => state.session !== null);
   const listenOpen = useListenStore((state) => state.open);
-  const setListenOpen = useListenStore((state) => state.setOpen);
+  const openCallChannel = useVoiceStore((state) => state.openCallChannel);
 
   // Starting a share asks what to share first; stopping is immediate.
   const [picking, setPicking] = useState(false);
@@ -138,19 +137,27 @@ export function VoiceControls({ size = 'sm' }: { size?: 'sm' | 'lg' }): JSX.Elem
       {/* Music, and not a screen share with the sound on: every window plays
           the track itself, so it costs no uplink and stays at full quality.
           Amber while something is playing, because the queue is shared and
-          somebody else may have started it. */}
-      <div className="relative">
-        <ControlButton
-          active={listenOpen}
-          disabled={disabled}
-          pad={pad}
-          label={listening ? 'Listening together' : 'Listen together'}
-          onClick={() => setListenOpen(!listenOpen)}
-        >
-          <MusicIcon className={`${icon} ${listening && !listenOpen ? 'text-amber-300' : ''}`} />
-        </ControlButton>
-        {listenOpen && <ListenTogether onClose={() => setListenOpen(false)} />}
-      </div>
+          somebody else may have started it.
+
+          The button only sets a flag - it draws no panel. This component is
+          rendered twice, in the sidebar and in the channel view, so anything it
+          drew from shared state was drawn twice: two panels, side by side, both
+          live, which is exactly what happened. The panel has one render site,
+          in `VoiceChannelView`, and pressing this from the sidebar goes there
+          first rather than trying to open one where there is no room for it. */}
+      <ControlButton
+        active={listenOpen}
+        disabled={disabled}
+        pad={pad}
+        label={listening ? 'Listening together' : 'Listen together'}
+        onClick={() => {
+          const next = !listenOpen;
+          useListenStore.getState().setOpen(next);
+          if (next) void openCallChannel();
+        }}
+      >
+        <MusicIcon className={`${icon} ${listening && !listenOpen ? 'text-amber-300' : ''}`} />
+      </ControlButton>
 
       {/* Amber when something is measurably wrong, so the numbers are worth
           opening before anybody has thought to ask for them. */}
