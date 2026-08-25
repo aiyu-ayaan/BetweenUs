@@ -1,11 +1,19 @@
 /**
- * YouTube itself, inside the call, with a button that queues whatever is on it.
+ * YouTube itself, inside the call. Press a video; the whole call watches it.
  *
  * The paste box was the first version and it was the wrong shape. Nobody keeps
  * a list of video ids; they search for a half-remembered chorus, or open the
  * playlist they made, or look at what their subscriptions posted this morning -
  * and every one of those needs the actual site and, for two of them, a signed-in
  * account.
+ *
+ * The second version was the right site with the wrong control: a button that
+ * queued whatever page you were on. That is still a paste box - it just moved
+ * the copying inside the app. Clicking a thumbnail is the gesture people
+ * already have for "play this", so that is the gesture that plays it: landing
+ * on a video page starts it for everybody and hands the panel back to the
+ * player. The queue button stays for the other thing, which is choosing what
+ * comes *after* what is on.
  *
  * Like the player slot in `ListenPanel`, this component draws nothing. The page is a
  * `WebContentsView` the main process owns, and this hands it a rectangle to sit
@@ -26,7 +34,6 @@ import {
   ChevronLeftIcon,
   ChevronRightIcon,
   CompassIcon,
-  PlayIcon,
   PlusIcon,
   SearchIcon,
 } from '../../components/icons';
@@ -91,6 +98,34 @@ export function ListenBrowser(): JSX.Element {
     };
   }, [bridge]);
 
+  // Pressing a video *is* the control. Landing on a video page plays it for
+  // the whole call and hands the panel back to the player - which is what
+  // "watch together" means everywhere else it exists, and is the difference
+  // between this and a paste box with a browser bolted on.
+  //
+  // Only on a *change*, and only after the first report, or reopening the panel
+  // on the page somebody left it on would restart the room's track. The tab
+  // flipping to the player is also what stops a stray second trigger: picking
+  // again is a deliberate trip back to Browse.
+  const seen = useRef<string | null | undefined>(undefined);
+  useEffect(() => {
+    const id = nav?.videoId ?? null;
+    if (seen.current === undefined) {
+      seen.current = id;
+      return;
+    }
+    if (id === seen.current) return;
+    seen.current = id;
+    if (!id) return;
+
+    const store = useListenStore.getState();
+    const playing = store.session?.queue[store.session.index];
+    // Already what the call is watching: show it rather than queueing a second
+    // copy of the same video behind itself.
+    if (playing?.ref !== id) store.add(id, true);
+    store.setTab('playing');
+  }, [nav?.videoId]);
+
   if (!isDesktopRuntime() || !bridge?.youtubeOpen) {
     return (
       <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-white/10 p-6 text-center">
@@ -105,14 +140,14 @@ export function ListenBrowser(): JSX.Element {
     );
   }
 
-  const queue = (playNow: boolean): void => {
+  const queue = (): void => {
     if (!nav?.videoId) return;
-    useListenStore.getState().add(nav.videoId, playNow);
+    useListenStore.getState().add(nav.videoId);
     setAdded(nav.videoId);
     window.setTimeout(() => setAdded(null), 1500);
-    // Play now means "show me the thing I just pressed". Queueing does not:
-    // adding a second track while looking for a third is the normal case.
-    if (playNow) useListenStore.getState().setTab('playing');
+    // Deliberately stays on the site: adding a second track while looking for a
+    // third is the normal case, and being thrown back to the player every time
+    // is what made queueing four songs annoying.
   };
 
   return (
@@ -155,21 +190,13 @@ export function ListenBrowser(): JSX.Element {
           <SearchIcon className="h-4 w-4" />
         </ToolbarButton>
 
-        {/* The whole point of the browser. Both live only on a video page,
-            because queueing "the YouTube home page" is not a thing. */}
+        {/* Not "play this" - pressing it on the site already did that. This is
+            for building a queue *behind* what is on, which is the one thing
+            clicking a thumbnail cannot say. Live only on a video page, because
+            queueing "the YouTube home page" is not a thing. */}
         <button
           type="button"
-          onClick={() => queue(true)}
-          disabled={!nav?.videoId}
-          title={nav?.videoId ? 'Play this for everyone now' : 'Open a video first'}
-          className="flex shrink-0 cursor-pointer items-center gap-1.5 rounded-md bg-amber-500/25 px-2.5 py-1.5 text-xs font-medium text-amber-100 transition-colors hover:bg-amber-500/35 disabled:cursor-not-allowed disabled:bg-surface-800 disabled:text-slate-600"
-        >
-          <PlayIcon className="h-3.5 w-3.5" />
-          Play now
-        </button>
-        <button
-          type="button"
-          onClick={() => queue(false)}
+          onClick={queue}
           disabled={!nav?.videoId}
           title={nav?.videoId ? 'Add this to the shared queue' : 'Open a video first'}
           className="flex shrink-0 cursor-pointer items-center gap-1.5 rounded-md bg-amber-500/15 px-2.5 py-1.5 text-xs font-medium text-amber-200 transition-colors hover:bg-amber-500/25 disabled:cursor-not-allowed disabled:bg-surface-800 disabled:text-slate-600"
@@ -186,8 +213,8 @@ export function ListenBrowser(): JSX.Element {
 
       <p className="shrink-0 truncate text-[11px] text-slate-600" title={nav?.url}>
         {nav?.loading ? 'Loading…' : (nav?.title ?? 'youtube.com')}
-        {' · muted here; the sound is the shared player. Signs in with your own '}
-        {'Google account, kept apart from BetweenUs'}
+        {' · press a video and the whole call watches it. Signed in with your '}
+        {'own Google account, kept apart from BetweenUs'}
       </p>
     </div>
   );

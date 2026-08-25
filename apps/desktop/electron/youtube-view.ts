@@ -209,6 +209,13 @@ export function setYouTubeBounds(bounds: ViewBounds): void {
  */
 export function hideYouTubeView(): void {
   view?.setVisible(false);
+  // And stop whatever it had started. The site plays a video the moment it is
+  // clicked, and a hidden view goes on decoding it - a second copy of the same
+  // stream, pulled down for nobody, while the shared player plays the real one.
+  // Muted was enough for the sound; this is the bandwidth.
+  void view?.webContents
+    .executeJavaScript('document.querySelectorAll("video").forEach((v) => v.pause());', true)
+    .catch(() => undefined);
 }
 
 export function closeYouTubeView(): void {
