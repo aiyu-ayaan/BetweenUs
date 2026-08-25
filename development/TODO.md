@@ -86,9 +86,10 @@ part of it deliberately left open:
       `listen.meta` should be sent, since both are idempotent and a phone is as
       good a reporter as anything else. See `ANDROID_TODO.md`.
 - [x] **Browsing, rather than pasting.** Desktop shows youtube.com itself inside
-      the call - signed in, with search, playlists and subscriptions - and
-      queues whatever is on screen. A `WebContentsView` the main process owns,
-      not `webviewTag` and not an iframe.
+      the call - signed in, with search, playlists and subscriptions - and a
+      video page offers both **Play now** and **Add to queue**. A
+      `WebContentsView` the main process owns, not `webviewTag` and not an
+      iframe, and muted, because the sound of the call is the shared player.
 - [ ] **The web client is still paste-only, and has to be.** youtube.com sends
       `X-Frame-Options` and `frame-ancestors`, so no browser tab can show the
       site inside another page. The only alternative there is a YouTube Data API
@@ -128,8 +129,8 @@ part of it deliberately left open:
       What is most likely to be wrong next: the postMessage handshake against a
       future embed change, the autoplay block on the window that did not start
       the track, the ducking chasing itself when both windows share one
-      machine's speakers, and the browser's `Add to queue` button on a YouTube
-      navigation that fires none of the five events it listens for.
+      machine's speakers, and the browser's buttons on a YouTube navigation that
+      fires none of the five events it listens for.
 
 ---
 

@@ -718,11 +718,12 @@ the ducking will chase itself.
 1. **Start it.** The music note in the call controls, then **Browse YouTube**.
    The real site should open inside the call - sign in if you want your own
    playlists and subscriptions, and it should still be signed in next time.
-   Open a video and press **Add to queue**. Both windows should start playing
-   the same track with the picture on screen, and the note in the *other* window
-   should go amber without anybody opening its panel. Pasting a link into the
-   box below the browse button does the same thing and is the only way in the
-   web client, which says so.
+   Open a video and press **Play now**. The panel should switch to Playing and
+   both windows should start that track with the picture on screen, and the note
+   in the *other* window should go amber without anybody opening its panel.
+   **Add to queue** appends instead and leaves you on the site. Pasting a link
+   into the box beside the queue does the same as adding, and is the only way in
+   the web client, which says so.
 2. **The thing to actually check: are they in step.** Play something with a
    clear beat and take one headphone from each machine. They should sound like
    one source, not like a round. If they are audibly apart, the clock offset is
@@ -762,10 +763,16 @@ The browser itself is worth five minutes on its own:
 - **It must not become a browser.** Click a link that leaves YouTube - a
   sponsor's URL in a description. It should open in your real browser, not
   inside the app.
-- **The Add button follows the page.** YouTube is a single-page application, so
+- **Both buttons follow the page.** YouTube is a single-page application, so
   clicking from the home page to a video changes the URL without a page load.
-  The button must go live anyway; if it stays grey, only `did-navigate` is being
+  They must go live anyway; if they stay grey, only `did-navigate` is being
   listened for.
+- **The site makes no sound.** Play a video inside the browse tab with a track
+  already playing. You should hear the shared player only. Two songs at once
+  means the view is not muted.
+- **Play now jumps, add does not.** With three tracks queued and the first one
+  playing, **Play now** on a fourth should start it immediately in both windows;
+  **Add to queue** on a fifth should leave the first one playing.
 - **Collapse costs nothing.** Close the browser, reopen it: same page, same
   scroll, still signed in. Ending the call is the only thing that should reset
   it.
