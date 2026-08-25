@@ -1017,6 +1017,81 @@ export type CallSignal =
   | { kind: 'answer'; sdp: string; fingerprintProof: string }
   | { kind: 'ice'; candidate: IceCandidatePayload };
 
+/**
+ * --- Listen Together ---
+ *
+ * A shared listening session inside a voice call: everybody hears the same
+ * track at the same moment, and anybody in the call can change what it is.
+ *
+ * The thing to understand before reading the rest: **no audio crosses the
+ * wire.** Each client plays the track itself, from the provider, over its own
+ * connection. What the gateway relays is a few dozen bytes of transport state -
+ * which track, playing or paused, where in it, and when that was true. That is
+ * why this belongs on `/ws/call` beside the SDP and not anywhere near the mesh:
+ * it is signalling, it is small, it is text, and it is exactly what a
+ * Cloudflare Tunnel carries.
+ *
+ * It is also why this is not a screen share with the sound on. A share costs
+ * the sharer one upload per other participant, re-encodes the music through a
+ * codec tuned for speech, and gives everyone else whatever survived the trip.
+ * Here every client streams the original at full quality, the uplink cost is
+ * zero, and the only thing that has to stay in step is a number.
+ */
+export type ListenProvider = 'youtube';
+
+/** One entry in the shared queue. */
+export interface ListenTrack {
+  /** Queue-entry id, minted by whoever added it. The same video can be queued twice. */
+  id: string;
+  provider: ListenProvider;
+  /** The provider's own id - for YouTube, the eleven-character video id. */
+  ref: string;
+  /**
+   * What to call it on screen.
+   *
+   * Filled in by the first client whose player learns it, because nothing on
+   * the server may talk to YouTube: an outbound call from a backend service to
+   * fetch a title would be a service that needs an API key, an egress rule and
+   * an opinion about who is listening to what. The clients already have the
+   * player open, and it tells them.
+   */
+  title: string;
+  /** Milliseconds; 0 until a player reports it. */
+  durationMs: number;
+  addedByUserId: string;
+  addedByUsername: string;
+}
+
+/**
+ * The whole of a listening session, as the gateway holds it.
+ *
+ * `positionMs` is where the track was at `atServerMs`, not where it is now.
+ * Sending "now" would be a lie by the time it arrived: a client reads its
+ * position as `positionMs + (serverNow - atServerMs)` while playing, which
+ * makes one message good for as long as nothing changes. See
+ * `services/listen-sync.ts` for the arithmetic and the drift correction.
+ */
+export interface ListenSession {
+  /**
+   * Bumped by the gateway on every change.
+   *
+   * The gateway is the only thing that can order two people pressing pause at
+   * the same moment, for the same reason it arbitrates the screen share: a mesh
+   * has no ordering of its own. A client drops any state with a `rev` it has
+   * already seen, so its own echo cannot undo somebody else's later change.
+   */
+  rev: number;
+  queue: ListenTrack[];
+  /** Index into `queue`. A session always has at least one track. */
+  index: number;
+  paused: boolean;
+  positionMs: number;
+  /** The gateway's clock when this state was made. */
+  atServerMs: number;
+  /** Who last touched it, for the line that says who skipped. */
+  byUserId: string | null;
+}
+
 export type ClientCallEvent =
   | { type: 'join'; channelId: string }
   /**
@@ -1038,6 +1113,32 @@ export type ClientCallEvent =
    */
   | { type: 'screen.claim' }
   | { type: 'screen.release' }
+  /**
+   * Listen Together. Anybody in the call may send any of these - there is no
+   * host, because a host is a person who has to leave eventually and take the
+   * music with them. The gateway sequences them and tells everybody the result.
+   */
+  | { type: 'listen.add'; provider: ListenProvider; ref: string; title?: string }
+  | { type: 'listen.remove'; trackId: string }
+  /** Resume, or jump to `index` in the queue. */
+  | { type: 'listen.play'; index?: number }
+  | { type: 'listen.pause'; positionMs: number }
+  | { type: 'listen.seek'; positionMs: number }
+  | { type: 'listen.skip'; delta: number }
+  /** Close the session for everybody. */
+  | { type: 'listen.stop' }
+  /**
+   * "My player reached the end of this track."
+   *
+   * Every client sends it, and the gateway advances once: the track id is
+   * checked against the one playing, so the second and third arrivals are about
+   * a track that is no longer current and do nothing. Idempotent by
+   * construction rather than by election - electing a reporter means the queue
+   * stops when that person's window closes.
+   */
+  | { type: 'listen.ended'; trackId: string }
+  /** "My player says this track is this long." First one to know, wins. */
+  | { type: 'listen.duration'; trackId: string; durationMs: number }
   | { type: 'ping' };
 
 export type ServerCallEvent =
@@ -1062,7 +1163,23 @@ export type ServerCallEvent =
    * screens on one stage and no way to tell which is which.
    */
   | { type: 'screen.holder'; peerId: string | null; userId: string | null }
-  | { type: 'pong' }
+  /**
+   * The listening session in this call, or null when there is not one.
+   *
+   * Always the whole session rather than a delta: it is a few hundred bytes,
+   * it changes when a person presses a button rather than continuously, and a
+   * client that missed one message would otherwise hold a queue nobody else
+   * has. Sent to everybody on every change, the joiner included.
+   */
+  | { type: 'listen.state'; session: ListenSession | null }
+  /**
+   * `serverMs` is the gateway's clock, which is what makes the shared position
+   * mean anything: two machines disagree about what time it is by whatever
+   * their NTP daemons last decided, and a listening session that trusted local
+   * clocks would be as far out of step as they are. The client subtracts half
+   * the round trip and keeps the offset. See `services/listen-sync.ts`.
+   */
+  | { type: 'pong'; serverMs?: number }
   | { type: 'error'; code: string; message: string };
 
 // --- Presence ---

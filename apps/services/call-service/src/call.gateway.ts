@@ -22,6 +22,7 @@
  *   traffic as somebody else.
  */
 import { Injectable, OnModuleDestroy } from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
 import type { Server as HttpServer } from 'node:http';
 import { WebSocket, WebSocketServer } from 'ws';
 import { resolveChannelAccess } from '@betweenus/database';
@@ -32,8 +33,10 @@ import { SIGNAL_MAX_PAYLOAD, authenticateHandshake } from '@betweenus/websocket'
 import type {
   CallPeer,
   ClientCallEvent,
+  ListenSession,
   ServerCallEvent,
 } from '@betweenus/shared-types';
+import { apply as applyListen, type ListenAction } from './listen-session';
 import { otherDevicesInCall } from './devices';
 import { deviceOf, peerIdFor } from './peer-identity';
 import { CallsService, type ReportedUsage } from './modules/calls/calls.service';
@@ -111,6 +114,23 @@ export class CallGateway implements OnModuleDestroy {
    * gateway can decide.
    */
   private readonly sharing = new Map<string, WebSocket>();
+
+  /**
+   * channelId -> the Listen Together session in that call, if there is one.
+   *
+   * Beside the roster for the same reason `sharing` is: two people pressing
+   * pause at the same moment need one answer, and a mesh has no ordering to
+   * produce one. This gateway holds the sockets, so it is the only thing that
+   * can say which press happened second.
+   *
+   * The music itself is nowhere near here. Each client plays the track from the
+   * provider over its own connection; what crosses this gateway is a queue and
+   * a position - signalling, exactly like an SDP, and for exactly the same
+   * reason it works through a tunnel. Sharing a browser tab with the sound on
+   * would have made it media, one upload per listener, re-encoded through a
+   * codec meant for speech.
+   */
+  private readonly listening = new Map<string, ListenSession>();
 
   /**
    * `channelId\u0000peerId` -> the "they have gone" nobody has been told yet.
@@ -289,7 +309,62 @@ export class CallGateway implements OnModuleDestroy {
         return;
 
       case 'ping':
-        this.send(socket, { type: 'pong' });
+        // The gateway's clock rides along, because a shared position is
+        // meaningless without one: two machines disagree about what time it is
+        // by whatever their clocks last drifted to, and this is the reference
+        // every client measures its own offset against.
+        this.send(socket, { type: 'pong', serverMs: Date.now() });
+        return;
+
+      case 'listen.add':
+        this.listen(state, {
+          kind: 'add',
+          track: {
+            // Minted here, not by the client: it is the identity two clients
+            // agree a queue entry has, and a client that chose its own could
+            // collide with one already in the queue - which is a `remove` that
+            // takes away somebody else's track.
+            id: randomUUID(),
+            provider: event.provider,
+            ref: event.ref,
+            title: typeof event.title === 'string' ? event.title : '',
+            durationMs: 0,
+            addedByUserId: state.userId,
+            addedByUsername: state.username,
+          },
+        });
+        return;
+
+      case 'listen.remove':
+        this.listen(state, { kind: 'remove', trackId: event.trackId });
+        return;
+
+      case 'listen.play':
+        this.listen(state, { kind: 'play', index: event.index });
+        return;
+
+      case 'listen.pause':
+        this.listen(state, { kind: 'pause', positionMs: event.positionMs });
+        return;
+
+      case 'listen.seek':
+        this.listen(state, { kind: 'seek', positionMs: event.positionMs });
+        return;
+
+      case 'listen.skip':
+        this.listen(state, { kind: 'skip', delta: event.delta });
+        return;
+
+      case 'listen.stop':
+        this.listen(state, { kind: 'stop' });
+        return;
+
+      case 'listen.ended':
+        this.listen(state, { kind: 'ended', trackId: event.trackId });
+        return;
+
+      case 'listen.duration':
+        this.listen(state, { kind: 'duration', trackId: event.trackId, durationMs: event.durationMs });
         return;
 
       default:
@@ -428,6 +503,12 @@ export class CallGateway implements OnModuleDestroy {
 
     this.announceRoster(channelId);
 
+    // Whatever is already playing, to the newcomer only. They get the position
+    // and the instant it was true, so their player opens partway through the
+    // track everybody else is partway through rather than at the beginning.
+    const listening = this.listening.get(channelId);
+    if (listening) this.send(socket, { type: 'listen.state', session: listening });
+
     // The log row is opened here because here is where the join is known to
     // have been allowed. If they left while this was being written - a socket
     // that closes mid-await - it is closed straight away rather than left open
@@ -473,6 +554,36 @@ export class CallGateway implements OnModuleDestroy {
 
     this.sharing.delete(channelId);
     this.announceScreen(channelId);
+  }
+
+  /**
+   * Runs one Listen Together action and tells the call what came of it.
+   *
+   * Membership is the only permission asked for, and deliberately: everybody in
+   * the call can change what is playing. A host is a person who eventually
+   * leaves and takes the music with them, and the point of listening together
+   * is that two people are doing it, not that one is performing it.
+   *
+   * The whole session is broadcast rather than a delta. It is a few hundred
+   * bytes, it changes when somebody presses a button rather than continuously,
+   * and a client that missed one message would otherwise hold a queue nobody
+   * else has - which is the failure that cannot be noticed from inside.
+   */
+  private listen(state: SocketState, action: ListenAction): void {
+    const channelId = state.channelId;
+    if (!channelId) return;
+
+    const before = this.listening.get(channelId) ?? null;
+    const after = applyListen(before, action, state.userId, Date.now());
+    // Nothing happened: a `duration` for a track that already had one, or an
+    // `ended` for a track that stopped being current before it arrived. Saying
+    // so anyway would make every client re-seek for no reason.
+    if (after === before) return;
+
+    if (after) this.listening.set(channelId, after);
+    else this.listening.delete(channelId);
+
+    this.broadcast(channelId, { type: 'listen.state', session: after });
   }
 
   private announceScreen(channelId: string): void {
@@ -538,7 +649,14 @@ export class CallGateway implements OnModuleDestroy {
     const members = this.calls.get(channelId);
     if (!members) return;
     members.delete(socket);
-    if (members.size === 0) this.calls.delete(channelId);
+    if (members.size === 0) {
+      this.calls.delete(channelId);
+      // Nobody is listening, so there is nothing to listen to. The queue was a
+      // thing this call built and it goes when the call does - keeping it would
+      // mean the next person to join a quiet channel is played whatever the
+      // last people left half-finished.
+      this.listening.delete(channelId);
+    }
 
     // Somebody who left is not still sharing. Without this the screen stays
     // claimed by a socket that has gone, and the next person to press the
