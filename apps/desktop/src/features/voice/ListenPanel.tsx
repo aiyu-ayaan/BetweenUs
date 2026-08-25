@@ -283,6 +283,23 @@ export function Transport({ compact = false }: { compact?: boolean }): JSX.Eleme
   const ducking = useListenStore((state) => state.ducking);
   const [position, setPosition] = useState(0);
   const [scrubbing, setScrubbing] = useState<number | null>(null);
+  /**
+   * Where a released seek asked to be, held until the gateway agrees.
+   *
+   * Without this the bar visibly snaps back. Letting go clears `scrubbing`, and
+   * the position underneath is still computed from the session as it was - the
+   * old one - until this client's own request has gone to the gateway, been
+   * ordered and come back. That is a round trip, plus up to 250ms of tick, on
+   * every seek: the thumb jumps home and then forward again, which reads as
+   * "seek does not work" rather than as latency, and reads worst on the person
+   * furthest from the gateway.
+   *
+   * The rev it was sent against is what clears it, because that is the thing
+   * that says the answer has arrived. The timeout is for the answer that never
+   * does - a clamp to the same number, or a socket that dropped the message -
+   * where holding a stale thumb for ever would be the worse failure.
+   */
+  const [pending, setPending] = useState<{ rev: number; positionMs: number } | null>(null);
 
   useEffect(() => {
     if (!session) return undefined;
@@ -293,12 +310,29 @@ export function Transport({ compact = false }: { compact?: boolean }): JSX.Eleme
     return () => window.clearInterval(timer);
   }, [session]);
 
+  useEffect(() => {
+    if (!pending) return undefined;
+    if (session && session.rev > pending.rev) {
+      setPending(null);
+      return undefined;
+    }
+    const timer = window.setTimeout(() => setPending(null), 2_000);
+    return () => window.clearTimeout(timer);
+  }, [pending, session]);
+
   if (!session) return null;
   const track = session.queue[session.index];
   if (!track) return null;
 
   const duration = track.durationMs;
-  const shown = scrubbing ?? position;
+  const shown = scrubbing ?? pending?.positionMs ?? position;
+
+  const release = (): void => {
+    if (scrubbing === null) return;
+    useListenStore.getState().seek(scrubbing);
+    setPending({ rev: session.rev, positionMs: scrubbing });
+    setScrubbing(null);
+  };
 
   return (
     <div className="flex shrink-0 items-center gap-2 rounded-lg bg-surface-900 px-3 py-2">
@@ -357,14 +391,15 @@ export function Transport({ compact = false }: { compact?: boolean }): JSX.Eleme
             disabled={duration === 0}
             aria-label="Seek for everyone"
             onChange={(event) => setScrubbing(Number(event.target.value))}
-            onPointerUp={() => {
-              if (scrubbing !== null) useListenStore.getState().seek(scrubbing);
-              setScrubbing(null);
-            }}
-            onKeyUp={() => {
-              if (scrubbing !== null) useListenStore.getState().seek(scrubbing);
-              setScrubbing(null);
-            }}
+            onPointerUp={release}
+            // A pointer released off the input still ends the drag: a range
+            // input captures the pointer, so the browser sends the up event
+            // here - but a drag cancelled by the window losing focus does not,
+            // and without this the thumb would stay stuck under the hand that
+            // left.
+            onLostPointerCapture={release}
+            onKeyUp={release}
+            onBlur={release}
             className="h-1 flex-1 cursor-pointer accent-amber-400 disabled:cursor-not-allowed disabled:opacity-40"
           />
           <span className="w-9 shrink-0 text-[10px] tabular-nums text-slate-500">

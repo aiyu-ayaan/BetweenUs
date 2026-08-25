@@ -127,6 +127,11 @@ function report(): void {
 export function openYouTubeView(window: BrowserWindow, bounds: ViewBounds): void {
   if (view && owner === window) {
     view.setVisible(true);
+    // Muted again on every show, not only when the view is built. The mute is
+    // a property of the *page*, and a page that navigated, crashed and was
+    // reloaded, or came back through the sign-in flow is not guaranteed to
+    // still carry the one set on the WebContents that first loaded it.
+    view.webContents.setAudioMuted(true);
     setYouTubeBounds(bounds);
     return;
   }
