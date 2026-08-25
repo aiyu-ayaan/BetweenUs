@@ -13,7 +13,15 @@
  * words and looks almost right.
  */
 import assert from 'node:assert/strict';
-import { continueList, isPlain, parse, wantsNewline, type Block, type Span } from './markup';
+import {
+  continueList,
+  highlight,
+  isPlain,
+  parse,
+  wantsNewline,
+  type Block,
+  type Span,
+} from './markup';
 
 const one = (text: string): Block => {
   const blocks = parse(text);
@@ -262,6 +270,70 @@ assert.equal(continueList('- eggs\nprose', 12), null);
 
 // A caret in the middle of an item splits it and carries the list on.
 assert.deepEqual(continueList('- eggsmilk', 6), { text: '- eggs\n- milk', caret: 9 });
+
+// --- highlight ---
+
+/**
+ * The one invariant that matters: these offsets are into the text as typed, so
+ * every span has to land inside it and none may be empty. A composer that
+ * draws a span past the end of the string drops characters on the floor.
+ */
+const wellFormed = (text: string): void => {
+  for (const span of highlight(text)) {
+    assert.ok(span.start >= 0 && span.end <= text.length, `out of range in ${text}`);
+    assert.ok(span.end > span.start, `empty span in ${text}`);
+  }
+};
+
+for (const text of [
+  '',
+  'plain',
+  '**bold** and *italic*',
+  '- eggs\n- milk',
+  '1. one\n2. two',
+  '> quoted',
+  '```\ncode\n```',
+  '```\nunclosed',
+  'a \\*escaped\\* b',
+  '**unclosed',
+  'nested **bold _and_ italic** here',
+]) {
+  wellFormed(text);
+}
+
+// The marks are reported, not removed - which is the whole difference from
+// `parse`. The content is styled and the asterisks are spans of their own.
+assert.deepEqual(highlight('**b**'), [
+  { start: 0, end: 2, style: 'mark' },
+  { start: 2, end: 3, style: 'bold' },
+  { start: 3, end: 5, style: 'mark' },
+]);
+
+// A list marker is a mark, and its words are left plain.
+assert.deepEqual(highlight('- eggs'), [{ start: 0, end: 2, style: 'mark' }]);
+assert.deepEqual(highlight('1. one'), [{ start: 0, end: 3, style: 'mark' }]);
+assert.deepEqual(highlight('> hi'), [{ start: 0, end: 2, style: 'mark' }]);
+
+// Every line of a fence is code, and the fences themselves are marks.
+assert.deepEqual(highlight('```\nx\n```'), [
+  { start: 0, end: 3, style: 'mark' },
+  { start: 4, end: 5, style: 'code' },
+  { start: 6, end: 9, style: 'mark' },
+]);
+
+// An unclosed mark styles nothing: it is text until its pair arrives, and
+// styling the rest of the message on every stray asterisk is unusable.
+assert.deepEqual(highlight('**unclosed'), []);
+
+// A mark does not reach across a newline.
+assert.deepEqual(highlight('*a\nb*'), []);
+
+// A marker inside a fence is left alone, as it is when the message is drawn.
+assert.deepEqual(highlight('```\n- not a bullet\n```'), [
+  { start: 0, end: 3, style: 'mark' },
+  { start: 4, end: 18, style: 'code' },
+  { start: 19, end: 22, style: 'mark' },
+]);
 
 // --- wantsNewline ---
 

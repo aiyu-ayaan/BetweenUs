@@ -214,6 +214,98 @@ function openerAt(source: string, at: number): Delimiter | null {
 }
 
 /**
+ * A style over `[start, end)` of the text exactly as it was typed, marks and
+ * all. `mark` is the delimiter itself - the asterisks, the bullet, the fence.
+ */
+export type HighlightStyle = Style | 'mark';
+
+export interface Highlight {
+  start: number;
+  end: number;
+  style: HighlightStyle;
+}
+
+/**
+ * The same marks, found in the text somebody is still typing.
+ *
+ * Separate from `parse`, and deliberately so. `parse` takes the marks *out*,
+ * which is right for drawing a message that has been sent and wrong for a box
+ * somebody is typing in: text that reflows out from under the caret as a
+ * second asterisk lands is unusable. So these offsets are into the original
+ * string, nothing is removed, and the marks are reported as spans of their own
+ * for the composer to draw quietly rather than hide.
+ *
+ * That also means the caret never has to be mapped between two strings, which
+ * is the bug this shape exists to avoid.
+ */
+export function highlight(text: string): Highlight[] {
+  const out: Highlight[] = [];
+  let at = 0;
+  let fenced = false;
+
+  for (const line of text.split('\n')) {
+    const end = at + line.length;
+
+    if (line.trimStart().startsWith('```')) {
+      out.push({ start: at, end, style: 'mark' });
+      fenced = !fenced;
+    } else if (fenced) {
+      out.push({ start: at, end, style: 'code' });
+    } else {
+      // Everything in front of the content is the marker, whichever kind it
+      // is - the same rule `continueList` rebuilds a marker with.
+      let prefix = 0;
+      if (line === '>') {
+        prefix = 1;
+      } else if (line.startsWith('> ')) {
+        prefix = 2;
+      } else {
+        const bullet = BULLET.exec(line);
+        const numbered = bullet ? null : NUMBER.exec(line);
+        const content = bullet ? bullet[1] : numbered ? numbered[2] : undefined;
+        if (content !== undefined) prefix = line.length - content.length;
+      }
+      if (prefix > 0) out.push({ start: at, end: at + prefix, style: 'mark' });
+      scanSource(text, at + prefix, end, out);
+    }
+
+    at = end + 1;
+  }
+
+  return out;
+}
+
+/** `scan`, but reporting where it looked rather than what it produced. */
+function scanSource(text: string, from: number, to: number, out: Highlight[]): void {
+  let i = from;
+  while (i < to) {
+    if (text[i] === '\\' && i + 1 < to && ESCAPABLE.includes(text[i + 1] ?? '')) {
+      out.push({ start: i, end: i + 2, style: 'mark' });
+      i += 2;
+      continue;
+    }
+
+    const opener = openerAt(text, i);
+    if (opener) {
+      const contentFrom = i + opener.token.length;
+      const close = text.indexOf(opener.token, contentFrom);
+      // Bounded by the line: a mark does not reach across a newline, and
+      // without this an unclosed `*` would style the rest of the message.
+      if (close > contentFrom && close + opener.token.length <= to) {
+        out.push({ start: i, end: contentFrom, style: 'mark' });
+        out.push({ start: contentFrom, end: close, style: opener.style });
+        if (opener.style !== 'code') scanSource(text, contentFrom, close, out);
+        out.push({ start: close, end: close + opener.token.length, style: 'mark' });
+        i = close + opener.token.length;
+        continue;
+      }
+    }
+
+    i++;
+  }
+}
+
+/**
  * Whether return should make a newline here rather than send the message.
  *
  * True inside the three things that are written across more than one line: an

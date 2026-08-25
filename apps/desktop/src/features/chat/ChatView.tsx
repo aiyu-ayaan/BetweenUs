@@ -35,9 +35,12 @@ import {
 import { absoluteUrl } from '../../services/endpoint';
 import {
   continueList,
+  highlight,
   wantsNewline,
   parse as parseMarkup,
   type Block as MarkupBlockType,
+  type Highlight,
+  type HighlightStyle,
   type Span as MarkupSpan,
   type Style as MarkupStyle,
 } from '../../services/markup';
@@ -1374,6 +1377,104 @@ function TypingIndicator({ channelId }: { channelId: string }): JSX.Element {
 /** More than this in one message and the point is a folder, not a chat. */
 const MAX_FILES = 10;
 
+/**
+ * Every property that decides where a character lands.
+ *
+ * One constant because the composer is two boxes stacked exactly on top of one
+ * another, and a single millimetre of disagreement between them shows up as
+ * text that does not line up with its own colours. Two class lists that happen
+ * to match today would stop matching the first time one of them was edited.
+ */
+const COMPOSER_METRICS =
+  'max-h-40 min-h-[32px] sm:min-h-[24px] py-1 sm:py-0.5 whitespace-pre-wrap break-words';
+
+/**
+ * The marks, coloured, behind the box they were typed into.
+ *
+ * A textarea cannot hold styled text, so the standard trick: a div rendering
+ * the same string with the same metrics, sitting exactly behind a textarea
+ * whose own text is transparent. What is read is this; what is edited is the
+ * real box, with its real caret, its real selection and its real undo.
+ *
+ * **Nothing here may change how wide a character is.** That is the whole rule.
+ * Bold weight, italic slant and a different family all reflow this copy out of
+ * step with the box in front of it, and text that sits beside its own colours
+ * is worse than no colour at all. So emphasis is carried by colour, by a
+ * background and by `line-through` - three things that paint differently
+ * without moving anything. Bold gets a stroke rather than a weight for the
+ * same reason: a stroke thickens a glyph without advancing it.
+ */
+function ComposerMirror({
+  content,
+  marks,
+  scroll,
+}: {
+  content: string;
+  marks: Highlight[];
+  scroll: { current: HTMLDivElement | null };
+}): JSX.Element | null {
+  if (marks.length === 0) return null;
+
+  return (
+    <div
+      ref={scroll}
+      aria-hidden="true"
+      className={`${COMPOSER_METRICS} pointer-events-none absolute inset-0 overflow-hidden text-slate-100`}
+    >
+      {highlightRuns(content, marks).map((run, index) => (
+        <span key={index} className={classesFor(run.styles)} style={styleFor(run.styles)}>
+          {run.text}
+        </span>
+      ))}
+      {/* A trailing newline is not a line to a div, and without this the box
+          scrolls one line further than its colours do. */}
+      {'\n'}
+    </div>
+  );
+}
+
+function classesFor(styles: HighlightStyle[]): string {
+  if (styles.includes('mark')) return 'text-slate-500';
+  const out: string[] = [];
+  if (styles.includes('code')) out.push('rounded bg-surface-950 text-accent');
+  if (styles.includes('strike')) out.push('line-through');
+  if (styles.includes('bold')) out.push('text-slate-50');
+  else if (styles.includes('italic')) out.push('text-slate-300');
+  return out.join(' ');
+}
+
+/**
+ * Bold, without the width that comes with a bold face. A stroke is painted
+ * over the glyph that was going to be drawn anyway, so the text stays exactly
+ * as wide as the box in front of it believes it is.
+ */
+function styleFor(styles: HighlightStyle[]): { WebkitTextStroke: string } | undefined {
+  if (styles.includes('mark') || !styles.includes('bold')) return undefined;
+  return { WebkitTextStroke: '0.4px currentColor' };
+}
+
+/** A stretch of the typed text over which the same marks are active. */
+function highlightRuns(
+  text: string,
+  marks: Highlight[],
+): Array<{ text: string; styles: HighlightStyle[] }> {
+  const runs: Array<{ text: string; styles: HighlightStyle[] }> = [];
+  let current: { text: string; styles: HighlightStyle[] } | null = null;
+
+  for (let at = 0; at < text.length; at++) {
+    const styles = marks
+      .filter((mark) => at >= mark.start && at < mark.end)
+      .map((mark) => mark.style);
+    if (current && current.styles.join(',') === styles.join(',')) {
+      current.text += text[at];
+    } else {
+      current = { text: text[at] ?? '', styles };
+      runs.push(current);
+    }
+  }
+  return runs;
+}
+
 function MessageComposer({
   channel,
   takeFiles,
@@ -1412,7 +1513,19 @@ function MessageComposer({
   const [emoji, setEmoji] = useState<{ x: number; y: number } | null>(null);
   const picker = useRef<HTMLInputElement>(null);
   const box = useRef<HTMLTextAreaElement>(null);
+  const mirror = useRef<HTMLDivElement>(null);
   const isMobile = useIsMobile();
+
+  /**
+   * What the mirror would draw, asked once.
+   *
+   * The box goes transparent only when this has something in it, and both
+   * facts come from this one array - because they are the same fact. Deciding
+   * "is there markup" separately from "is there anything to draw" is how the
+   * box ends up transparent with nothing behind it: `2 * 3` has a mark
+   * character in it and no marks to draw, and the message would vanish.
+   */
+  const marks = highlight(content);
 
   const placeholder =
     channel.type === 'DM'
@@ -1657,35 +1770,55 @@ function MessageComposer({
           <label htmlFor="composer" className="sr-only">
             {placeholder}
           </label>
-          <textarea
-            id="composer"
-            ref={box}
-            rows={1}
-            value={content}
-            onChange={(event) => {
-              setContent(event.target.value);
-              setEmojiQuery(emojiQueryAt(event.target.value, event.target.selectionStart ?? 0));
-              if (event.target.value.length > 0) notifyTyping(channel.id);
-            }}
-            onSelect={(event) => {
-              // Moving the caret in or out of a shortcode changes the answer as
-              // much as typing does - clicking behind a `:word` should offer it.
-              const box = event.currentTarget;
-              setEmojiQuery(emojiQueryAt(box.value, box.selectionStart ?? 0));
-            }}
-            onBlur={() => setEmojiQuery(null)}
-            onKeyDown={onKeyDown}
-            onPaste={(event) => {
-              // A screenshot on the clipboard is a file, and pasting it is how
-              // everyone expects to send one.
-              const pasted = [...event.clipboardData.files];
-              if (pasted.length === 0) return;
-              event.preventDefault();
-              addFiles(pasted);
-            }}
-            placeholder={placeholder}
-            className="max-h-40 min-h-[32px] sm:min-h-[24px] min-w-0 flex-1 resize-none overflow-y-auto bg-transparent py-1 sm:py-0.5 text-slate-100 placeholder-slate-500 focus:outline-none"
-          />
+          {/* The box, and the mirror behind it. See `ComposerMirror`. */}
+          <div className="relative min-w-0 flex-1">
+            <ComposerMirror content={content} marks={marks} scroll={mirror} />
+            <textarea
+              id="composer"
+              ref={box}
+              rows={1}
+              value={content}
+              onScroll={(event) => {
+                // The mirror has no pointer events, so it never scrolls itself
+                // - it has to be dragged along by the box that does, or a long
+                // draft slides out from under its own colours.
+                if (mirror.current) mirror.current.scrollTop = event.currentTarget.scrollTop;
+              }}
+              onChange={(event) => {
+                setContent(event.target.value);
+                setEmojiQuery(emojiQueryAt(event.target.value, event.target.selectionStart ?? 0));
+                if (event.target.value.length > 0) notifyTyping(channel.id);
+              }}
+              onSelect={(event) => {
+                // Moving the caret in or out of a shortcode changes the answer
+                // as much as typing does - clicking behind a `:word` should
+                // offer it.
+                const box = event.currentTarget;
+                setEmojiQuery(emojiQueryAt(box.value, box.selectionStart ?? 0));
+              }}
+              onBlur={() => setEmojiQuery(null)}
+              onKeyDown={onKeyDown}
+              onPaste={(event) => {
+                // A screenshot on the clipboard is a file, and pasting it is
+                // how everyone expects to send one.
+                const pasted = [...event.clipboardData.files];
+                if (pasted.length === 0) return;
+                event.preventDefault();
+                addFiles(pasted);
+              }}
+              placeholder={placeholder}
+              // `block`, not the inline-block a textarea is by default: inline
+              // leaves a baseline descender under it inside the wrapper, which
+              // makes the well taller than its own text and rides everything
+              // off centre against the icons beside it.
+              className={`${COMPOSER_METRICS} relative block w-full resize-none overflow-y-auto bg-transparent placeholder-slate-500 focus:outline-none ${
+                // Transparent over the mirror's copy, so what is read is the
+                // coloured one and what is edited is the real box. The caret
+                // has to be painted back on, or it goes transparent too.
+                marks.length > 0 ? 'text-transparent caret-slate-100' : 'text-slate-100'
+              }`}
+            />
+          </div>
           <button
             type="submit"
             disabled={sending || (content.trim().length === 0 && files.length === 0)}
