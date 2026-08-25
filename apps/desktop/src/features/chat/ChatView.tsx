@@ -1235,6 +1235,23 @@ function MessageComposer({
     if (replyTo) box.current?.focus();
   }, [replyTo]);
 
+  /**
+   * The box grows with what is typed into it, up to the cap the stylesheet
+   * sets, and scrolls after that - which is what every chat app does and what
+   * a fixed `rows={1}` textarea cannot: a wrapped message past the first line
+   * was written into a box too short to read it back in.
+   *
+   * `auto` first, because a textarea's `scrollHeight` never shrinks below the
+   * height it is currently set to - measuring without resetting only ever
+   * grows the box, never lets it back down when the text is deleted.
+   */
+  useLayoutEffect(() => {
+    const area = box.current;
+    if (!area) return;
+    area.style.height = 'auto';
+    area.style.height = `${area.scrollHeight}px`;
+  }, [content]);
+
   const addFiles = (incoming: File[]): void => {
     if (incoming.length === 0) return;
     setFailure(null);
@@ -1449,7 +1466,7 @@ function MessageComposer({
               addFiles(pasted);
             }}
             placeholder={placeholder}
-            className="max-h-40 min-h-[32px] sm:min-h-[24px] min-w-0 flex-1 resize-none bg-transparent py-1 sm:py-0.5 text-slate-100 placeholder-slate-500 focus:outline-none"
+            className="max-h-40 min-h-[32px] sm:min-h-[24px] min-w-0 flex-1 resize-none overflow-y-auto bg-transparent py-1 sm:py-0.5 text-slate-100 placeholder-slate-500 focus:outline-none"
           />
           <button
             type="submit"
