@@ -66,6 +66,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import com.aatech.betweenus.core.data.MessageReply
 import com.aatech.betweenus.core.data.EmojiNames
+import com.aatech.betweenus.core.data.Markup
 import com.aatech.betweenus.core.store.Presence
 import com.aatech.betweenus.core.store.Workspace
 import com.aatech.betweenus.core.store.ReadableMessage
@@ -323,9 +324,22 @@ fun Composer(
 
                     BasicTextField(
                         value = field,
-                        onValueChange = {
-                            field = it
-                            if (it.text.isNotEmpty()) Presence.noteTyping(channelId)
+                        onValueChange = { next ->
+                            // A list carries on to its next item, and an empty
+                            // item ends it. There is no key event to hang this
+                            // off - the IME hands over a whole new value - so
+                            // the newline is recognised by what it did: one
+                            // character longer, that character a newline, and
+                            // the rest of the text unchanged.
+                            val carried = newlineAt(field.text, next)
+                                ?.let { at -> Markup.continueList(field.text, at) }
+
+                            field = if (carried != null) {
+                                TextFieldValue(carried.text, TextRange(carried.caret))
+                            } else {
+                                next
+                            }
+                            if (field.text.isNotEmpty()) Presence.noteTyping(channelId)
                         },
                         textStyle = MaterialTheme.typography.bodyLarge.copy(color = scheme.onSurface),
                         cursorBrush = SolidColor(scheme.primary),
@@ -430,6 +444,28 @@ fun Composer(
             custom = customEmoji,
         )
     }
+}
+
+/**
+ * Where a newline was just typed, or null if that is not what happened.
+ *
+ * A software keyboard reports an edit as a whole new value rather than as a
+ * key, so "the user pressed return" has to be recognised from what changed:
+ * one character longer, that character a newline sitting just behind the
+ * caret, and the rest of the text exactly as it was. Anything else - a paste
+ * carrying newlines, a word swapped by autocorrect, a character deleted - fails
+ * one of the three and is left alone.
+ *
+ * The answer is the caret's position *before* the newline, which is where the
+ * line being continued ends.
+ */
+private fun newlineAt(previous: String, next: TextFieldValue): Int? {
+    if (next.text.length != previous.length + 1) return null
+    if (!next.selection.collapsed) return null
+    val caret = next.selection.start
+    if (caret <= 0 || next.text[caret - 1] != '\n') return null
+    if (next.text.removeRange(caret - 1, caret) != previous) return null
+    return caret - 1
 }
 
 /**

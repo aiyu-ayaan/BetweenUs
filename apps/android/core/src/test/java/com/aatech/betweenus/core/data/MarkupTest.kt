@@ -4,6 +4,7 @@ import com.aatech.betweenus.core.data.Markup.Kind
 import com.aatech.betweenus.core.data.Markup.Span
 import com.aatech.betweenus.core.data.Markup.Style
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -186,6 +187,51 @@ class MarkupTest {
         val blocks = Markup.parse("```\n- not a bullet\n```")
         assertEquals(listOf(Kind.Code), blocks.map { it.kind })
         assertEquals("- not a bullet", blocks[0].text)
+    }
+
+    @Test
+    fun `there is nothing to continue outside a list`() {
+        assertNull(Markup.continueList("just words", 10))
+        // A marker with nothing after it is not a list yet.
+        assertNull(Markup.continueList("-", 1))
+        // The caret in prose under a list is an ordinary newline.
+        assertNull(Markup.continueList("- eggs\nprose", 12))
+    }
+
+    @Test
+    fun `a bullet offers the next bullet`() {
+        assertEquals(Markup.Continuation("- eggs\n- ", 9), Markup.continueList("- eggs", 6))
+    }
+
+    @Test
+    fun `the exact marker is kept`() {
+        assertEquals(Markup.Continuation("* eggs\n* ", 9), Markup.continueList("* eggs", 6))
+        assertEquals(Markup.Continuation("  + eggs\n  + ", 13), Markup.continueList("  + eggs", 8))
+    }
+
+    @Test
+    fun `a numbered item offers the one after it`() {
+        assertEquals(Markup.Continuation("1. one\n2. ", 10), Markup.continueList("1. one", 6))
+        assertEquals(Markup.Continuation("3) three\n4) ", 12), Markup.continueList("3) three", 8))
+    }
+
+    @Test
+    fun `an empty item ends the list`() {
+        assertEquals(Markup.Continuation("- eggs\n", 7), Markup.continueList("- eggs\n- ", 9))
+        assertEquals(Markup.Continuation("1. one\n", 7), Markup.continueList("1. one\n2. ", 10))
+    }
+
+    @Test
+    fun `only the line the caret is on counts`() {
+        assertEquals(
+            Markup.Continuation("prose\n- eggs\n- ", 15),
+            Markup.continueList("prose\n- eggs", 12),
+        )
+    }
+
+    @Test
+    fun `a caret mid-item splits it and carries the list on`() {
+        assertEquals(Markup.Continuation("- eggs\n- milk", 9), Markup.continueList("- eggsmilk", 6))
     }
 
     @Test

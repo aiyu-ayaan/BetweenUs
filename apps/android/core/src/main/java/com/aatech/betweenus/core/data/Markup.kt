@@ -198,6 +198,58 @@ object Markup {
         return null
     }
 
+    /** The box's text and where the caret sits in it, after a newline was typed. */
+    data class Continuation(val text: String, val caret: Int)
+
+    /**
+     * What a newline typed inside a list should do.
+     *
+     * Null for an ordinary newline anywhere else - the caller then does
+     * nothing and the box behaves as it always did. This is what makes a list
+     * feel like a list while it is being written rather than only once it has
+     * been sent: typing `- eggs` and pressing return offers the next bullet,
+     * the way every editor anybody has used does.
+     *
+     * An empty item ends the list instead of offering another one. Without
+     * that, the only way out of a list is to delete a marker somebody never
+     * typed, which is the single thing that makes auto-continuation
+     * infuriating rather than helpful.
+     *
+     * Line for line the desktop's `continueList`. Changing one changes both.
+     */
+    fun continueList(text: String, caret: Int): Continuation? {
+        val from = text.lastIndexOf('\n', caret - 1) + 1
+        val line = text.substring(from, caret)
+
+        val bullet = BULLET.find(line)
+        val numbered = if (bullet == null) NUMBER.find(line) else null
+        if (bullet == null && numbered == null) return null
+
+        // An empty item is somebody asking to stop. The marker goes, and with
+        // it the item they were about to write.
+        val content = bullet?.groupValues?.get(1) ?: numbered!!.groupValues[2]
+        if (content.isBlank()) {
+            return Continuation(text.substring(0, from) + text.substring(caret), from)
+        }
+
+        // The content is the tail of the line by construction, so whatever is
+        // in front of it is exactly the marker - indent, bullet character and
+        // spacing included. Rebuilding it from the parts would quietly
+        // normalise all three.
+        val prefix = line.substring(0, line.length - content.length)
+        val marker = if (bullet != null) {
+            prefix
+        } else {
+            val next = (numbered!!.groupValues[1].toIntOrNull() ?: 1) + 1
+            prefix.replaceFirst(Regex("\\d{1,9}"), next.toString())
+        }
+        val inserted = "\n$marker"
+        return Continuation(
+            text.substring(0, caret) + inserted + text.substring(caret),
+            caret + inserted.length,
+        )
+    }
+
     /** Whether anything at all would be drawn differently. Saves a rebuild. */
     fun isPlain(text: String): Boolean =
         text.none { it == '*' || it == '_' || it == '~' || it == '`' || it == '\\' } &&
