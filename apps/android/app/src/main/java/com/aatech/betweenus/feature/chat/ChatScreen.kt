@@ -399,7 +399,7 @@ fun ChatScreen(
             IconAction(BetweenUsIcons.Users, "Members", onOpenMembers)
             // The one action here that starts something rather than showing
             // something, so it is the one that is filled.
-            IconAction(BetweenUsIcons.Phone, "Start a call", onStartCall, prominent = true)
+            IconAction(BetweenUsIcons.Phone, "Start a call", onStartCall, prominent = true, compact = true)
         }
 
         // Notification Permission Warning Banner (if user denied or turned off notifications)
