@@ -1449,7 +1449,7 @@ function MessageComposer({
               addFiles(pasted);
             }}
             placeholder={placeholder}
-            className="max-h-40 min-h-[32px] sm:min-h-[24px] flex-1 resize-none bg-transparent py-1 sm:py-0.5 text-slate-100 placeholder-slate-500 focus:outline-none"
+            className="max-h-40 min-h-[32px] sm:min-h-[24px] min-w-0 flex-1 resize-none bg-transparent py-1 sm:py-0.5 text-slate-100 placeholder-slate-500 focus:outline-none"
           />
           <button
             type="submit"
