@@ -9,20 +9,48 @@ import com.aatech.betweenus.core.store.Cache
 import com.aatech.betweenus.core.store.Conversation
 import com.aatech.betweenus.core.store.Presence
 import com.aatech.betweenus.core.store.Workspace
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlin.math.min
+
+/**
+ * Whether a failed token exchange means this session is over.
+ *
+ * Exactly one thing does: the server refusing the credential. Everything else -
+ * a host that will not resolve, a gateway that has not finished starting, a
+ * phone in a tunnel, a coroutine cancelled because an activity was recreated -
+ * says nothing about whether the refresh token is still good, and treating it
+ * as an ending is what signed people out at random while holding a token valid
+ * for another month.
+ *
+ * Pure, and separate from [Session], so the rule can be checked without an
+ * Android device to run it on.
+ */
+fun endsSession(error: Throwable): Boolean = error is ApiError && error.status == 401
 
 /** What the app shows: the splash, the sign-in form, or the app itself. */
 sealed interface AuthPhase {
-    /** Cold start, with a refresh token to try. Nothing is drawn but the mark. */
-    data object Restoring : AuthPhase
+    /**
+     * Cold start, with a refresh token to try. Nothing is drawn but the mark.
+     *
+     * [problem] is set once a restore has failed for a reason that is not the
+     * token being refused - an unreachable server, a gateway still starting.
+     * The session is not over in that case and the token is kept, so the splash
+     * says what is wrong and keeps trying rather than dropping somebody onto a
+     * sign-in form for a credential nobody rejected.
+     */
+    data class Restoring(val problem: String? = null) : AuthPhase
 
     /** No session. [reason] is set when the last attempt failed for a reason
      *  worth repeating - a server that was unreachable, not a wrong password. */
@@ -79,7 +107,7 @@ object Session {
 
         // A stored refresh token means there is something to restore, and the
         // splash should stay up until it is known whether it still works.
-        if (refreshToken != null) _state.value = AuthPhase.Restoring
+        if (refreshToken != null) _state.value = AuthPhase.Restoring()
     }
 
     /**
@@ -143,25 +171,139 @@ object Session {
     }
 
     /**
-     * Cold start. A missing token is simply a signed-out app; a token the
-     * server rejects is a session that ended while the app was closed.
+     * Cold start.
+     *
+     * A missing token is simply a signed-out app, and a token the server
+     * *rejects* is a session that ended while the app was closed. Nothing else
+     * is: an unreachable server, a gateway that has not finished starting, a
+     * phone that woke up in a tunnel - none of them say anything about whether
+     * this session is still good, and signing out over one is what put somebody
+     * back on a login form holding a refresh token that was valid the whole
+     * time.
+     *
+     * So a failure that is not a refusal keeps the token, stays on the splash
+     * with the reason on it, and tries again - on a backoff, and immediately
+     * whenever the phone gets a network back.
+     *
+     * Single-flight, and owned by [scope] rather than by whoever asked. A
+     * restore driven from an activity's scope died with the activity - a
+     * rotation, a themed recreate, a process the system paused - and the
+     * `CancellationException` that came out of it was being read as a failed
+     * sign-in. That is the whole of "Job was cancelled" on a login form.
      */
     suspend fun restore() {
-        if (refreshToken == null) {
-            _state.value = AuthPhase.SignedOut()
-            return
+        current().join()
+    }
+
+    /** The same restore, for a caller with no coroutine to wait in. */
+    fun restoreAsync() {
+        current()
+    }
+
+    @Synchronized
+    private fun current(): Job =
+        restoring?.takeIf { it.isActive } ?: scope.launch { runRestore() }.also { restoring = it }
+
+    /** The restore in flight, so two callers do not spend the token twice. */
+    @Volatile
+    private var restoring: Job? = null
+
+    private suspend fun runRestore() {
+        var attempt = 0
+        while (true) {
+            if (refreshToken == null) {
+                _state.value = AuthPhase.SignedOut()
+                return
+            }
+            if (_state.value !is AuthPhase.SignedIn) _state.value = AuthPhase.Restoring()
+
+            val problem = attemptRestore() ?: return
+
+            // Still restoring, still holding the token, now saying why.
+            _state.value = AuthPhase.Restoring(problem)
+            attempt += 1
+            waitBeforeRetry(attempt)
         }
-        _state.value = AuthPhase.Restoring
+    }
+
+    /**
+     * One go. Returns null when the session is settled either way - restored,
+     * or genuinely signed out - and the reason to show when it is worth trying
+     * again.
+     */
+    private suspend fun attemptRestore(): String? {
         val token = refreshAccessToken()
-        if (token == null) return
-        try {
+        if (token == null) {
+            // A refusal has already cleared the token and moved the state on;
+            // anything else left both alone and is worth retrying.
+            if (refreshToken == null) return null
+            return lastRefreshProblem ?: "Could not reach ${Http.hostOf(Endpoint.current())}"
+        }
+        return try {
             val user = BetweenUsApi.me()
             _state.value = AuthPhase.SignedIn(user)
             begin(user, secret = null)
+            null
+        } catch (cancelled: CancellationException) {
+            throw cancelled
         } catch (error: Exception) {
-            _state.value = AuthPhase.SignedOut(messageOf(error))
+            // The same rule as the refresh: only a refusal ends the session.
+            if (endsSession(error)) {
+                refreshToken = null
+                accessToken = null
+                _state.value = AuthPhase.SignedOut()
+                null
+            } else {
+                messageOf(error)
+            }
         }
     }
+
+    /**
+     * Backoff, cut short by a network coming back.
+     *
+     * The wait is for a server that is down, where hammering it is exactly
+     * wrong. A phone that has just found wifi is the other case entirely, and
+     * making it wait out a timer measuring a problem it no longer has is how a
+     * splash screen sits there for half a minute after the lift doors open.
+     */
+    private suspend fun waitBeforeRetry(attempt: Int) {
+        val delayMs = min(2_000L shl min(attempt - 1, 4), 30_000L)
+        val woken = CompletableDeferred<Unit>()
+        val stop = NetworkWatch.onAvailable { woken.complete(Unit) }
+        try {
+            withTimeoutOrNull(delayMs) { woken.await() }
+        } finally {
+            stop()
+        }
+    }
+
+    /**
+     * The button on the splash: try the whole thing again now.
+     *
+     * The retry loop is already waiting on a backoff, so this is only ever
+     * shortening a wait - the job is replaced rather than raced, because two
+     * restores would each spend the stored refresh token and one would lose.
+     */
+    @Synchronized
+    fun retryRestore() {
+        if (_state.value !is AuthPhase.Restoring) return
+        restoring?.cancel()
+        restoring = scope.launch { runRestore() }
+    }
+
+    /** Somebody would rather sign in again than watch a splash keep trying. */
+    @Synchronized
+    fun abandonRestore() {
+        if (_state.value !is AuthPhase.Restoring) return
+        restoring?.cancel()
+        restoring = null
+        _state.value = AuthPhase.SignedOut()
+    }
+
+    /** Why the last refresh failed, when it failed for something retryable. */
+    @Volatile
+    private var lastRefreshProblem: String? = null
 
     /**
      * Rotating refresh, single-flight: two calls racing would each spend the
@@ -186,20 +328,28 @@ object Session {
             // is a reconnect. They are idempotent when already open.
             ChatSocket.connect(tokens.accessToken)
             PresenceSocket.connect(tokens.accessToken)
+            lastRefreshProblem = null
             tokens.accessToken
+        } catch (cancelled: CancellationException) {
+            // A cancelled coroutine is not a refused credential. It used to be
+            // caught below and turned into "Job was cancelled" on a sign-in
+            // form - a session thrown away because an activity was recreated.
+            throw cancelled
         } catch (error: Exception) {
-            val rejected = error is ApiError && error.status == 401
-            if (!rejected && _state.value is AuthPhase.SignedIn) {
-                // A session that is already running stays running. The
-                // credential was never refused - the network was - so ending it
-                // here threw people back to the sign-in form over a lift, a
-                // handover or a gateway restart. The stored token is untouched
-                // and the next request refreshes again.
+            if (!endsSession(error)) {
+                // The credential was never refused - the network was - so the
+                // stored token stays and the next request refreshes again.
+                // Nothing about the session ends here, whatever phase it is in:
+                // ending it over a lift, a handover or a gateway restart is
+                // what signed people out at random, and it did so on the one
+                // path that had no guard: a cold start.
+                lastRefreshProblem = messageOf(error)
                 return@withLock null
             }
-            if (rejected) refreshToken = null
+            refreshToken = null
             accessToken = null
-            _state.value = AuthPhase.SignedOut(if (rejected) null else messageOf(error))
+            lastRefreshProblem = null
+            _state.value = AuthPhase.SignedOut()
             null
         }
     }

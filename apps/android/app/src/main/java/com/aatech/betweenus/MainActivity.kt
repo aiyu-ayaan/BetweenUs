@@ -7,13 +7,22 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
 import androidx.core.content.IntentCompat
 import androidx.lifecycle.lifecycleScope
 import com.aatech.betweenus.core.data.AuthPhase
@@ -39,7 +48,14 @@ class MainActivity : ComponentActivity() {
 
         // A stored refresh token is spent once per process, here, rather than
         // by whichever screen happens to make the first request.
-        lifecycleScope.launch { Session.restore() }
+        //
+        // Not on `lifecycleScope`: this activity is recreated by a rotation, a
+        // theme change and anything else the system feels like, and a restore
+        // cancelled halfway came back as "Job was cancelled" on a sign-in form
+        // - a session thrown away because a window was rebuilt. The session
+        // owns it, and it is single-flight, so a second `onCreate` joins the
+        // one already running rather than starting another.
+        Session.restoreAsync()
 
         // A link - or a share from another app - may be what started this
         // process at all.
@@ -188,14 +204,56 @@ private fun BetweenUsRoot() {
     when (val current = phase) {
         // Nothing but the mark: this lasts one refresh round-trip and a splash
         // that says "Loading…" for 200ms is worse than one that says nothing.
-        AuthPhase.Restoring -> Box(
-            modifier = Modifier.fillMaxSize().background(Ground),
-            contentAlignment = Alignment.Center,
-        ) {
-            BetweenUsLogoTile(size = 56)
-        }
+        //
+        // Unless it does not last one round trip. A server that cannot be
+        // reached is not a session that ended, so the token is kept and the
+        // restore keeps trying - and this is where it says so, with the two
+        // things somebody might want: try now, or sign in instead.
+        is AuthPhase.Restoring -> RestoringScreen(current.problem)
 
         is AuthPhase.SignedOut -> LoginScreen(signedOutReason = current.reason)
         is AuthPhase.SignedIn -> Shell(current.user)
+    }
+}
+
+/**
+ * The splash, and what it turns into when a restore cannot finish.
+ *
+ * A refresh token is worth keeping through a server being down: it is valid for
+ * a month and the outage is usually a minute. So the mark stays up and the
+ * restore keeps trying behind it, and after the first failure this says which
+ * address it cannot reach - the one fact that separates a stopped service from
+ * a wrong address from a phone with no signal.
+ */
+@Composable
+private fun RestoringScreen(problem: String?) {
+    Box(
+        modifier = Modifier.fillMaxSize().background(Ground),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            BetweenUsLogoTile(size = 56)
+            if (problem != null) {
+                Text(
+                    text = problem,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(horizontal = 32.dp),
+                )
+                Text(
+                    text = "Still trying…",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(onClick = { Session.retryRestore() }) { Text("Try now") }
+                    TextButton(onClick = { Session.abandonRestore() }) { Text("Sign in instead") }
+                }
+            }
+        }
     }
 }

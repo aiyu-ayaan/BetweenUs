@@ -93,7 +93,7 @@ export function accessTtl(): string {
 }
 
 export function refreshTtl(): string {
-  return envOr('JWT_REFRESH_TTL', '30d');
+  return envOr('JWT_REFRESH_TTL', '90d');
 }
 
 export function signAccessToken(user: Pick<PublicUser, 'id' | 'email' | 'username'>): string {

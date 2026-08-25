@@ -1390,6 +1390,49 @@ wrong:
    second tap before the first has settled should carry velocity forward rather
    than snap. Tapping quickly through the drawer is the test.
 
+## The session that kept ending ✅ (compiles and is unit tested)
+
+Three reports, one cause. A sign-in form appeared holding `Could not reach
+betweenus.aiyuayaan.uk`, and another holding `Job was cancelled`, on a phone
+whose refresh token was valid for another four weeks.
+
+`Session.refreshAccessToken` already knew that only a 401 ends a session — but
+it only applied that rule when the state was already `SignedIn`. A cold start
+is `Restoring`, so the one path with no guard was the only path a launch takes:
+the server being unreachable for a second signed the device out for good.
+
+`restore()` also ran on `lifecycleScope`. That scope dies with the activity — a
+rotation, a theme change, a system-initiated recreate — and the
+`CancellationException` it throws was caught by `catch (error: Exception)` and
+shown as a failed sign-in. `Job was cancelled` is that, verbatim.
+
+What changed:
+
+- **One rule, in one place.** `endsSession(error)` is a pure function: a 401 and
+  nothing else. Both catch blocks call it, and `CancellationException` is
+  rethrown before either can see it. `core/src/test/.../SessionRuleTest.kt`
+  holds the four cases that were real sign-outs.
+- **A restore that keeps trying.** A failure that is not a refusal keeps the
+  token, stays on the splash, and retries — backing off to thirty seconds, and
+  cut short the instant `NetworkWatch` reports a network. `AuthPhase.Restoring`
+  carries the reason, so the splash says which address it cannot reach and
+  offers "Try now" and "Sign in instead" rather than pretending the session is
+  over.
+- **The session owns the restore.** `Session.restoreAsync()` from `onCreate`,
+  single-flight on the session's own scope. A second `onCreate` joins the one
+  already running instead of spending the refresh token twice.
+- **A push does not sit in the loop.** `PushGate.ensureSession` gives it ten
+  seconds and goes on without it; the retry carries on in the background.
+
+Server side, `JWT_REFRESH_TTL` went from 30d to 90d. It slides — every refresh
+rotates the token and the successor gets the full window — so it is the answer
+to "how long may this app go unopened", not to "how long is a session". Nothing
+is weakened: the spent token is still revoked on rotation, a sign-out still ends
+it, and family revocation on replay is untouched.
+
+Not fixed here: nothing offers to re-enter a password without losing the cached
+workspace, because nothing needs to yet.
+
 ## Deliberately out of scope
 
 - **Live streaming.** Out of scope on every client while media is peer-to-peer.

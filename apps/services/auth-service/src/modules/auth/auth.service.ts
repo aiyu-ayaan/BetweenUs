@@ -25,8 +25,18 @@ import type { ChangePasswordDto, LoginDto, RegisterDto, UpdateAccountDto } from 
 
 const logger = createLogger('auth-service', envOr('LOG_LEVEL', 'info') as LogLevel);
 
-/** Days a refresh token stays valid; mirrors JWT_REFRESH_TTL for the DB row. */
-const REFRESH_DAYS = Number(envOr('JWT_REFRESH_TTL', '30d').replace(/\D/g, '')) || 30;
+/**
+ * Days a refresh token stays valid; mirrors JWT_REFRESH_TTL for the DB row.
+ *
+ * It slides: every refresh rotates the token and the successor gets the full
+ * window again, so this is how long an app may go *unopened* before its owner
+ * has to type a password. Ninety days rather than thirty because that is the
+ * question it actually answers - a phone left in a drawer over a summer - and
+ * nothing is weakened by it. The token is still revoked the moment it is spent,
+ * a sign-out still ends it server-side, and theft detection still revokes the
+ * whole family.
+ */
+const REFRESH_DAYS = Number(envOr('JWT_REFRESH_TTL', '90d').replace(/\D/g, '')) || 90;
 
 /**
  * How long a token that has just been rotated still answers with the pair that

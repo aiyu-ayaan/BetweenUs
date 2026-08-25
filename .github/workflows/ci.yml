@@ -14,7 +14,7 @@ env:
   JWT_SECRET: ci-access-secret-not-used-anywhere-else
   JWT_REFRESH_SECRET: ci-refresh-secret-not-used-anywhere-else
   JWT_ACCESS_TTL: 15m
-  JWT_REFRESH_TTL: 30d
+  JWT_REFRESH_TTL: 90d
   NODE_ENV: test
   LOG_LEVEL: warn
 

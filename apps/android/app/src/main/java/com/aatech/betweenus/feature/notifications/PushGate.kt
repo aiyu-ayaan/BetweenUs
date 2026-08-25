@@ -8,6 +8,7 @@ import com.aatech.betweenus.core.data.Session
 import com.aatech.betweenus.core.store.AppForeground
 import com.aatech.betweenus.core.store.Conversation
 import com.aatech.betweenus.core.store.Workspace
+import kotlinx.coroutines.withTimeoutOrNull
 import java.time.LocalTime
 
 /**
@@ -29,12 +30,22 @@ object PushGate {
      * token there is no channel key to fetch and no way to answer a reply. It
      * is one refresh round trip and only happens when the app was not already
      * running.
+     *
+     * Bounded, because a restore is no longer a single attempt: a server that
+     * cannot be reached is retried rather than treated as a session that ended,
+     * and a push handler must not sit inside that loop. The system gives this
+     * callback seconds, not minutes. Giving up here costs one notification's
+     * decryption and nothing else - the retry carries on in the background and
+     * the session is there by the time anybody opens the app.
      */
     suspend fun ensureSession(): PublicUser? {
         (Session.state.value as? AuthPhase.SignedIn)?.let { return it.user }
-        Session.restore()
+        withTimeoutOrNull(RESTORE_BUDGET_MS) { Session.restore() }
         return (Session.state.value as? AuthPhase.SignedIn)?.user
     }
+
+    /** How long a push may wait for a cold session before it goes on without one. */
+    private const val RESTORE_BUDGET_MS = 10_000L
 
     /** The name at the top of the notification: `#general`, or a person. */
     fun conversationTitle(channelId: String): String =
