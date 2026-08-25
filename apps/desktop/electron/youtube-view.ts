@@ -149,6 +149,11 @@ export function openYouTubeView(window: BrowserWindow, bounds: ViewBounds): void
   });
 
   const contents = view.webContents;
+  // Silent, always. This half of the panel is for *choosing* a track: the sound
+  // of the call is the shared player, which every window runs in step. An
+  // unmuted browser here plays a second, unsynchronised copy of the same song
+  // in one person's headphones over the one everybody agreed on.
+  contents.setAudioMuted(true);
   // A real browser's, because YouTube serves a degraded page to anything it
   // does not recognise - and an Electron user agent is one of those.
   contents.setUserAgent(

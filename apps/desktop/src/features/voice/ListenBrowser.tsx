@@ -172,7 +172,8 @@ export function ListenBrowser(): JSX.Element {
 
       <p className="shrink-0 truncate text-[11px] text-slate-600" title={nav?.url}>
         {nav?.loading ? 'Loading…' : (nav?.title ?? 'youtube.com')}
-        {' · signs in with your own Google account, kept apart from BetweenUs'}
+        {' · muted here; the sound is the shared player. Signs in with your own '}
+        {'Google account, kept apart from BetweenUs'}
       </p>
     </div>
   );
