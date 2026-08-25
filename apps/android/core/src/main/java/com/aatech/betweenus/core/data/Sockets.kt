@@ -51,18 +51,38 @@ open class JsonSocket(private val path: String) {
     }
 
     /**
-     * Asked for by the reconnecting banner, and by a network that came back.
+     * Try now: the banner's button, and the app coming back to the screen.
      *
      * Whatever the backoff had climbed to belonged to a network that has been
      * replaced, so the ladder starts again at the bottom.
+     *
+     * A socket that is not *connected* is dropped and opened again, and that
+     * part is the fix rather than an optimisation. A phone in the background is
+     * one Android may stop from running anything at all: the reconnect thread
+     * is held in doze, the keepalive ping never fires, and the connection dies
+     * with neither end told. What comes back to the foreground is then either a
+     * backoff frozen since last night or a `WebSocket` object that is a corpse
+     * nothing has noticed - and the old test, `if (socket == null)`, did
+     * nothing in both cases while having just announced "Reconnecting…". That
+     * is a banner that stays up until the app is killed, and a button that
+     * makes it worse.
+     *
+     * A socket that really is connected is left alone. If it turns out not to
+     * be, the ping resumes with the app and finds out inside thirty seconds.
      */
     @Synchronized
     fun retry() {
         if (closedByUs || token == null) return
         attempt = 0
+        if (connected) return
+        // Cancelled rather than closed: a close is a handshake, and there may
+        // be nothing at the other end left to complete it.
+        socket?.cancel()
+        socket = null
         downSince = System.currentTimeMillis()
+        log("retry")
         Connectivity.report(path, Connectivity.State.RECONNECTING)
-        if (socket == null) open()
+        open()
     }
 
     /**
@@ -265,7 +285,11 @@ object Connectivity {
         }
     }
 
-    /** The button on the banner: every socket starts its ladder again. */
+    /**
+     * Every socket starts its ladder again, and any that is not really up is
+     * opened again rather than waited on. The banner's button, and what the app
+     * does the moment it is back on screen. See [JsonSocket.retry].
+     */
     fun retry() {
         ChatSocket.retry()
         PresenceSocket.retry()

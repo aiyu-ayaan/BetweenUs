@@ -3,6 +3,7 @@ package com.aatech.betweenus.core.store
 import android.app.Activity
 import android.app.Application
 import android.os.Bundle
+import com.aatech.betweenus.core.data.Connectivity
 
 /**
  * Whether somebody is actually looking at the app.
@@ -28,7 +29,15 @@ object AppForeground {
         application.registerActivityLifecycleCallbacks(
             object : Application.ActivityLifecycleCallbacks {
                 override fun onActivityResumed(activity: Activity) {
+                    val returning = resumed == 0
                     resumed += 1
+                    // Coming back to the app, rather than moving between two of
+                    // its screens. The sockets are asked whether they are really
+                    // up before anything else is: a background Android froze
+                    // leaves a connection that is dead and a backoff that never
+                    // ran, and both look like a banner that says "Reconnecting…"
+                    // for as long as the app is left open.
+                    if (returning) Connectivity.retry()
                     // A phone that has come back to the app is a phone reading
                     // whatever is on screen, and the server has to hear so.
                     ChannelFocus.apply()

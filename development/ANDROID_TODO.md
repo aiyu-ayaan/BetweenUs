@@ -1433,6 +1433,29 @@ it, and family revocation on replay is untouched.
 Not fixed here: nothing offers to re-enter a password without losing the cached
 workspace, because nothing needs to yet.
 
+## The banner that would not go away ✅ (compiles; not yet on a device)
+
+Leave the app, come back, and the top of the screen says "Reconnecting…" for
+as long as it is left open. Nothing was reconnecting: nothing was running.
+
+A phone in the background is one Android may stop from running anything. The
+reconnect thread is held in doze, OkHttp's keepalive ping never fires, and the
+TCP connection dies without either end being told. Coming back therefore finds
+one of two things, and they look identical: a backoff frozen since last night,
+or a `WebSocket` object that is a corpse. `JsonSocket.retry` tested
+`if (socket == null)` before reopening, which is false in both cases - so it
+announced `RECONNECTING`, did nothing, and left the banner up. The "Try again"
+button ran the same code, so pressing it only reset the deadline.
+
+`retry` now drops any socket that is not *connected* - cancelled rather than
+closed, because a close is a handshake and there may be nothing left at the far
+end to finish it - and opens a new one from the bottom of the ladder. A socket
+that really is connected is left alone; the ping resumes with the app and finds
+out inside thirty seconds if it was wrong.
+
+`AppForeground` calls `Connectivity.retry()` on the resume that brings the app
+back, counted so moving between two of its own screens does not.
+
 ## Deliberately out of scope
 
 - **Live streaming.** Out of scope on every client while media is peer-to-peer.
