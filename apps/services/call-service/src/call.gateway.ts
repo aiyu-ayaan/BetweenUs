@@ -319,6 +319,7 @@ export class CallGateway implements OnModuleDestroy {
       case 'listen.add':
         this.listen(state, {
           kind: 'add',
+          playNow: event.playNow === true,
           track: {
             // Minted here, not by the client: it is the identity two clients
             // agree a queue entry has, and a client that chose its own could

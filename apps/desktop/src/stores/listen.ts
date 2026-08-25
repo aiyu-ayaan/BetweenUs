@@ -122,8 +122,13 @@ interface ListenState {
   setOpen: (open: boolean) => void;
   setTab: (tab: 'browse' | 'playing') => void;
   setVolume: (volume: number) => void;
-  /** A pasted link or a bare id. Returns what went wrong, or null. */
-  add: (input: string) => string | null;
+  /**
+    * A pasted link or a bare id. Returns what went wrong, or null.
+    *
+    * `playNow` jumps to it as well, which is what pressing a video in the
+    * browser means - the queue is where a second choice goes, not the first.
+    */
+  add: (input: string, playNow?: boolean) => string | null;
   remove: (trackId: string) => void;
   playPause: () => void;
   playIndex: (index: number) => void;
@@ -332,10 +337,10 @@ export const useListenStore = create<ListenState>((set, get) => ({
     applyDuck(true);
   },
 
-  add: (input) => {
+  add: (input, playNow = false) => {
     const ref = parseYouTube(input);
     if (!ref) return 'That does not look like a YouTube link.';
-    mesh?.sendListen({ type: 'listen.add', provider: 'youtube', ref });
+    mesh?.sendListen({ type: 'listen.add', provider: 'youtube', ref, playNow });
     set({ error: null });
     // Stay on the browser. Adding a second track while looking for a third is
     // the normal case, and throwing somebody back to the player every time they

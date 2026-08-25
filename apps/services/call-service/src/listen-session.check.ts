@@ -50,6 +50,27 @@ assert.equal(first.rev, 1);
 assert.equal(apply(null, { kind: 'pause', positionMs: 0 }, 'ana', T0), null);
 assert.equal(apply(null, { kind: 'skip', delta: 1 }, 'ana', T0), null);
 
+// `playNow` adds and jumps in one action. Two messages could not do it: an add
+// that arrived in between would move the index the play was aiming at, and the
+// call would hear somebody else's track instead of the one that was pressed.
+const playedNow = apply(
+  apply(first, { kind: 'add', track: track('b') }, 'ana', T0),
+  { kind: 'add', track: track('c'), playNow: true },
+  'bo',
+  T0 + 1_000,
+);
+assert.ok(playedNow);
+assert.equal(playedNow.queue.length, 3);
+assert.equal(playedNow.index, 2);
+assert.equal(playedNow.positionMs, 0);
+assert.equal(playedNow.paused, false);
+
+// Without it the cursor stays where it was: a track queued while another plays
+// does not interrupt it.
+const appended = apply(first, { kind: 'add', track: track('d') }, 'bo', T0 + 1_000);
+assert.ok(appended);
+assert.equal(appended.index, 0);
+
 // --- The clock, which is the whole feature ----------------------------------
 
 // Playing: the position is where it was plus how long ago that was. This is the

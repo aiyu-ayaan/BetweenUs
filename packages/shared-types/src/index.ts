@@ -1136,7 +1136,18 @@ export type ClientCallEvent =
    * host, because a host is a person who has to leave eventually and take the
    * music with them. The gateway sequences them and tells everybody the result.
    */
-  | { type: 'listen.add'; provider: ListenProvider; ref: string; title?: string }
+  /**
+   * Queue a track. `playNow` also jumps to it, which is what pressing a video
+   * means: somebody who clicked a song wants to hear that song, not to hear it
+   * after the four already in the queue.
+   */
+  | {
+      type: 'listen.add';
+      provider: ListenProvider;
+      ref: string;
+      title?: string;
+      playNow?: boolean;
+    }
   | { type: 'listen.remove'; trackId: string }
   /** Resume, or jump to `index` in the queue. */
   | { type: 'listen.play'; index?: number }

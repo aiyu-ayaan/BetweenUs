@@ -26,6 +26,7 @@ import {
   ChevronLeftIcon,
   ChevronRightIcon,
   CompassIcon,
+  PlayIcon,
   PlusIcon,
   SearchIcon,
 } from '../../components/icons';
@@ -104,11 +105,14 @@ export function ListenBrowser(): JSX.Element {
     );
   }
 
-  const queue = (): void => {
+  const queue = (playNow: boolean): void => {
     if (!nav?.videoId) return;
-    useListenStore.getState().add(nav.videoId);
+    useListenStore.getState().add(nav.videoId, playNow);
     setAdded(nav.videoId);
     window.setTimeout(() => setAdded(null), 1500);
+    // Play now means "show me the thing I just pressed". Queueing does not:
+    // adding a second track while looking for a third is the normal case.
+    if (playNow) useListenStore.getState().setTab('playing');
   };
 
   return (
@@ -151,11 +155,21 @@ export function ListenBrowser(): JSX.Element {
           <SearchIcon className="h-4 w-4" />
         </ToolbarButton>
 
-        {/* The whole point of the browser. Live only on a video page, because
-            queueing "the YouTube home page" is not a thing. */}
+        {/* The whole point of the browser. Both live only on a video page,
+            because queueing "the YouTube home page" is not a thing. */}
         <button
           type="button"
-          onClick={queue}
+          onClick={() => queue(true)}
+          disabled={!nav?.videoId}
+          title={nav?.videoId ? 'Play this for everyone now' : 'Open a video first'}
+          className="flex shrink-0 cursor-pointer items-center gap-1.5 rounded-md bg-amber-500/25 px-2.5 py-1.5 text-xs font-medium text-amber-100 transition-colors hover:bg-amber-500/35 disabled:cursor-not-allowed disabled:bg-surface-800 disabled:text-slate-600"
+        >
+          <PlayIcon className="h-3.5 w-3.5" />
+          Play now
+        </button>
+        <button
+          type="button"
+          onClick={() => queue(false)}
           disabled={!nav?.videoId}
           title={nav?.videoId ? 'Add this to the shared queue' : 'Open a video first'}
           className="flex shrink-0 cursor-pointer items-center gap-1.5 rounded-md bg-amber-500/15 px-2.5 py-1.5 text-xs font-medium text-amber-200 transition-colors hover:bg-amber-500/25 disabled:cursor-not-allowed disabled:bg-surface-800 disabled:text-slate-600"

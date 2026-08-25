@@ -40,7 +40,7 @@ export const MAX_TITLE = 200;
 
 /** What a client asked for, once the gateway has decided who asked. */
 export type ListenAction =
-  | { kind: 'add'; track: ListenTrack }
+  | { kind: 'add'; track: ListenTrack; playNow?: boolean }
   | { kind: 'remove'; trackId: string }
   | { kind: 'play'; index?: number }
   | { kind: 'pause'; positionMs: number }
@@ -177,7 +177,12 @@ function mutate(
       const track = sanitiseTrack(action.track);
       if (!track) return session;
       if (session.queue.length >= MAX_QUEUE) return session;
-      return { ...session, queue: [...session.queue, track] };
+      const queued = { ...session, queue: [...session.queue, track] };
+      // `playNow` is a play at the end of an add rather than a second message,
+      // because the two have to be one decision: an add followed by a play is
+      // two revs, and anything that arrives between them - somebody else's add,
+      // a remove - moves the index the play was aiming at.
+      return action.playNow ? move(queued, queued.queue.length - 1, nowMs) : queued;
     }
 
     case 'remove': {
