@@ -589,14 +589,23 @@ function MessageList({
                 setArmedDelete(null);
                 setMenu({ id: message.id, at: { x: event.clientX, y: event.clientY } });
               }}
+              onMouseDown={(event) => {
+                // The browser selects the word under the cursor on the second
+                // mousedown of a double-click, before onDoubleClick ever
+                // fires - so by the time that handler runs, the selection
+                // guard below always sees a non-collapsed selection and never
+                // fires. Suppressing native selection here, on the second
+                // click only, leaves ordinary click-drag selection untouched.
+                if (event.detail === 2) event.preventDefault();
+              }}
               onDoubleClick={(event) => {
                 // The shortcut for the one action the menu is opened for most:
                 // reply. A double tap does the same on a touch screen, where
                 // there is no right button to press at all.
                 if (deleted) return;
-                // Not while something is being selected: a double-click is
-                // also "select this word", and stealing that would make text
-                // in a message impossible to pick out.
+                // Not while something is being selected: a drag that was
+                // already selecting text when the double-click landed should
+                // keep selecting, not be hijacked into a reply.
                 if (!window.getSelection()?.isCollapsed) return;
                 event.preventDefault();
                 setReplyTo(quoteOf(message));
