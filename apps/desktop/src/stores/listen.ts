@@ -73,6 +73,13 @@ interface ListenState {
   /** True while the music is turned down under somebody talking. */
   ducking: boolean;
   /**
+   * How far this machine's clock is behind the gateway's, in milliseconds.
+   *
+   * In the store only so the seek bar can draw a position between messages.
+   * The reconciler reads the clock itself.
+   */
+  clockOffset: number;
+  /**
    * The browser refused to start the audio without a gesture, so a button has
    * to be pressed in this window before anything is heard.
    *
@@ -84,9 +91,6 @@ interface ListenState {
    */
   needsGesture: boolean;
   error: string | null;
-
-  /** The element the player's frame lives in, for the panel to adopt. */
-  host: () => HTMLDivElement;
 
   attach: (mesh: Mesh) => void;
   detach: () => void;
@@ -112,7 +116,30 @@ let mesh: Mesh | null = null;
 let player: YouTubePlayer | null = null;
 /** Which track the current player was built for, so it is rebuilt only on a change. */
 let loadedTrackId: string | null = null;
+/**
+ * Where the player's frame lives: a one-pixel corner of the document, always.
+ *
+ * Not inside the panel, which was the first attempt and is wrong in a way that
+ * only shows up later - an iframe removed from the document stops playing, so
+ * closing the panel silenced the music. The frame therefore never moves, and
+ * the panel draws the title and the queue rather than the picture.
+ *
+ * ponytail: audio only. Showing the video means a component that stays mounted
+ * for the life of the call and hands the frame a place to be, which is a real
+ * amount of plumbing for a feature about listening while you work. The seam is
+ * this element: give it somewhere visible to live and the picture appears.
+ */
 let host: HTMLDivElement | null = null;
+
+function playerHost(): HTMLDivElement {
+  if (host) return host;
+  host = document.createElement('div');
+  host.setAttribute('aria-hidden', 'true');
+  host.style.cssText =
+    'position:fixed;bottom:0;left:0;width:1px;height:1px;opacity:0;pointer-events:none;overflow:hidden;';
+  document.body.append(host);
+  return host;
+}
 const clock = new ServerClock();
 let driftTimer: number | null = null;
 let clockTimer: number | null = null;
@@ -142,17 +169,9 @@ export const useListenStore = create<ListenState>((set, get) => ({
   open: false,
   volume: 60,
   ducking: false,
+  clockOffset: 0,
   needsGesture: false,
   error: null,
-
-  host: () => {
-    if (!host) {
-      host = document.createElement('div');
-      host.style.width = '100%';
-      host.style.height = '100%';
-    }
-    return host;
-  },
 
   attach: (next) => {
     mesh = next;
@@ -181,9 +200,18 @@ export const useListenStore = create<ListenState>((set, get) => ({
     unsubscribeVoice?.();
     unsubscribeVoice = null;
     teardownPlayer();
+    host?.remove();
+    host = null;
     reportedEnd.clear();
     reportedMeta.clear();
-    set({ session: null, open: false, ducking: false, needsGesture: false, error: null });
+    set({
+      session: null,
+      open: false,
+      ducking: false,
+      clockOffset: 0,
+      needsGesture: false,
+      error: null,
+    });
   },
 
   receive: (session) => {
@@ -202,7 +230,13 @@ export const useListenStore = create<ListenState>((set, get) => ({
     reconcile();
   },
 
-  sampleClock: (sample) => clock.sample(sample),
+  sampleClock: (sample) => {
+    clock.sample(sample);
+    const offset = clock.offset();
+    // Only when it has actually moved: this fires every fifteen seconds and a
+    // set() that changes nothing still wakes every subscriber.
+    if (offset !== get().clockOffset) set({ clockOffset: offset });
+  },
 
   setOpen: (open) => set({ open }),
 
@@ -276,7 +310,7 @@ function reconcile(): void {
     teardownPlayer();
     loadedTrackId = track.id;
     player = new YouTubePlayer(track.ref, (state) => onPlayerState(state));
-    (host ?? useListenStore.getState().host()).append(player.frame);
+    playerHost().append(player.frame);
     applyDuck(true);
     // Nothing else here: the player has not loaded, so telling it to seek is
     // telling nobody. The next tick, or its first state message, does it.

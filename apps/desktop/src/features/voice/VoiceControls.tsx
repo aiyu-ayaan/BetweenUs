@@ -6,6 +6,7 @@
  */
 import { useState, type ReactNode } from 'react';
 import { useVoiceStore } from '../../stores/voice';
+import { useListenStore } from '../../stores/listen';
 import { useAudioSettings } from '../../stores/audioSettings';
 import { describeKey } from '../../services/talk-key';
 import { healthWarning } from '../../services/call-stats';
@@ -13,12 +14,14 @@ import { ConnectionPanel } from './ConnectionPanel';
 import { ScreenSharePicker } from './ScreenSharePicker';
 import { DevicePicker } from './DevicePicker';
 import { InvitePicker } from './InvitePicker';
+import { ListenTogether } from './ListenTogether';
 import {
   MicIcon,
   MicOffIcon,
   PhoneOffIcon,
   ScreenShareIcon,
   ActivityIcon,
+  MusicIcon,
   SettingsIcon,
   UserPlusIcon,
   VideoIcon,
@@ -40,6 +43,9 @@ export function VoiceControls({ size = 'sm' }: { size?: 'sm' | 'lg' }): JSX.Elem
   const tiles = useVoiceStore((state) => state.tiles);
   const leave = useVoiceStore((state) => state.leave);
   const stats = useVoiceStore((state) => state.stats);
+  const listening = useListenStore((state) => state.session !== null);
+  const listenOpen = useListenStore((state) => state.open);
+  const setListenOpen = useListenStore((state) => state.setOpen);
 
   // Starting a share asks what to share first; stopping is immediate.
   const [picking, setPicking] = useState(false);
@@ -127,6 +133,23 @@ export function VoiceControls({ size = 'sm' }: { size?: 'sm' | 'lg' }): JSX.Elem
           <UserPlusIcon className={icon} />
         </ControlButton>
         {inviting && <InvitePicker onClose={() => setInviting(false)} />}
+      </div>
+
+      {/* Music, and not a screen share with the sound on: every window plays
+          the track itself, so it costs no uplink and stays at full quality.
+          Amber while something is playing, because the queue is shared and
+          somebody else may have started it. */}
+      <div className="relative">
+        <ControlButton
+          active={listenOpen}
+          disabled={disabled}
+          pad={pad}
+          label={listening ? 'Listening together' : 'Listen together'}
+          onClick={() => setListenOpen(!listenOpen)}
+        >
+          <MusicIcon className={`${icon} ${listening && !listenOpen ? 'text-amber-300' : ''}`} />
+        </ControlButton>
+        {listenOpen && <ListenTogether onClose={() => setListenOpen(false)} />}
       </div>
 
       {/* Amber when something is measurably wrong, so the numbers are worth

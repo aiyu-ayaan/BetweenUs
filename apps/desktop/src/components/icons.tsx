@@ -432,3 +432,32 @@ export const MenuIcon = (props: IconProps): JSX.Element => (
 );
 
 
+
+export const MusicIcon = (props: IconProps): JSX.Element => (
+  <Base {...props}>
+    <path d="M9 18V5l12-2v13" />
+    <circle cx="6" cy="18" r="3" />
+    <circle cx="18" cy="16" r="3" />
+  </Base>
+);
+
+export const PauseIcon = (props: IconProps): JSX.Element => (
+  <Base {...props}>
+    <rect x="6" y="4" width="4" height="16" rx="1" />
+    <rect x="14" y="4" width="4" height="16" rx="1" />
+  </Base>
+);
+
+export const SkipBackIcon = (props: IconProps): JSX.Element => (
+  <Base {...props}>
+    <polygon points="19 20 9 12 19 4 19 20" />
+    <line x1="5" y1="19" x2="5" y2="5" />
+  </Base>
+);
+
+export const SkipForwardIcon = (props: IconProps): JSX.Element => (
+  <Base {...props}>
+    <polygon points="5 4 15 12 5 20 5 4" />
+    <line x1="19" y1="5" x2="19" y2="19" />
+  </Base>
+);
