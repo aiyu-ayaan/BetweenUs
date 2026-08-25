@@ -7,7 +7,13 @@ import {
   type FormEvent,
   type KeyboardEvent,
 } from 'react';
-import type { Channel, LinkPreview, MessageAttachment, MessageReply } from '@betweenus/shared-types';
+import type {
+  Channel,
+  LinkPreview,
+  MessageAttachment,
+  MessageCustomEmoji,
+  MessageReply,
+} from '@betweenus/shared-types';
 import { useChatStore, type DecryptedMessage } from '../../stores/chat';
 import { UNDECRYPTABLE } from '../../services/e2ee';
 import { api } from '../../services/api';
@@ -27,6 +33,12 @@ import {
   splitMessage,
 } from '../../services/server-emoji';
 import { absoluteUrl } from '../../services/endpoint';
+import {
+  parse as parseMarkup,
+  type Block as MarkupBlockType,
+  type Span as MarkupSpan,
+  type Style as MarkupStyle,
+} from '../../services/markup';
 import { emojiQueryAt } from './emoji-names';
 import { nextFollow } from './follow';
 import { anchorReceipts, seenBy } from './receipts';
@@ -672,9 +684,12 @@ function MessageList({
                         {/* A message that is only files has no text line at all. */}
                         {message.content.length > 0 && (
                           <>
-                            <p className="whitespace-pre-wrap break-words leading-relaxed text-slate-200">
+                            {/* A div, not a p: a message can now contain a
+                                list, a quote or a fenced block, and none of
+                                those are legal inside a paragraph. */}
+                            <div className="leading-relaxed text-slate-200">
                               <MessageText message={message} />
-                            </p>
+                            </div>
                             <MessageLinkPreviews content={message.content} />
                           </>
                         )}
@@ -1000,12 +1015,189 @@ function renderTextWithLinks(text: string): JSX.Element {
 }
 
 /**
- * A message's words, with its custom emoji drawn and URLs highlighted as hyperlinks.
+ * A message's words: the marks, then the custom emoji, then the links, in that
+ * order and for a reason.
+ *
+ * `parse` takes the marks *out* of the text, so every span it reports is an
+ * index into what comes back - which is the string the emoji splitter and the
+ * link matcher then run over. Doing it the other way round would have them
+ * matching against asterisks that are never drawn.
  */
 function MessageText({ message }: { message: DecryptedMessage }): JSX.Element {
-  const pieces = splitMessage(message.content, message.emoji ?? []);
-  const large = isOnlyEmoji(pieces);
+  const emoji = message.emoji ?? [];
+  const blocks = parseMarkup(message.content);
 
+  // The one case worth short-circuiting, because it is almost every message:
+  // plain words, no marks, no blocks. It is also the only case that may be
+  // drawn large, since a wall of emoji is never a list or a quote.
+  if (blocks.length === 1 && blocks[0]!.kind === 'body' && blocks[0]!.spans.length === 0) {
+    const pieces = splitMessage(blocks[0]!.text, emoji);
+    return <>{renderPieces(pieces, isOnlyEmoji(pieces))}</>;
+  }
+
+  return (
+    <>
+      {groupBlocks(blocks).map((group, index) =>
+        group.kind === 'list' ? (
+          <MarkupList key={index} items={group.blocks} emoji={emoji} />
+        ) : (
+          <MarkupBlock key={index} block={group.blocks[0]!} emoji={emoji} />
+        ),
+      )}
+    </>
+  );
+}
+
+/**
+ * Consecutive list items are one list.
+ *
+ * The parser keeps its blocks flat - each item its own - because that is all a
+ * chat line needs. Turning a run of them back into a `<ul>` is the renderer's
+ * job, and it is the difference between a list and a stack of lines that
+ * happen to start with a dot.
+ */
+function groupBlocks(blocks: MarkupBlockType[]): Array<{ kind: 'list' | 'one'; blocks: MarkupBlockType[] }> {
+  const groups: Array<{ kind: 'list' | 'one'; blocks: MarkupBlockType[] }> = [];
+  for (const block of blocks) {
+    const isItem = block.kind === 'bullet' || block.kind === 'number';
+    const open = groups[groups.length - 1];
+    // A run breaks when the marker changes, so a bulleted list under a
+    // numbered one is two lists rather than one confused one.
+    if (isItem && open?.kind === 'list' && open.blocks[0]!.kind === block.kind) {
+      open.blocks.push(block);
+    } else {
+      groups.push({ kind: isItem ? 'list' : 'one', blocks: [block] });
+    }
+  }
+  return groups;
+}
+
+function MarkupList({
+  items,
+  emoji,
+}: {
+  items: MarkupBlockType[];
+  emoji: MessageCustomEmoji[];
+}): JSX.Element {
+  const numbered = items[0]!.kind === 'number';
+  const Tag = numbered ? 'ol' : 'ul';
+
+  // The marker sits in a gutter of its own rather than inline, so a wrapped
+  // item lines up under its own first word instead of under the bullet.
+  return (
+    <Tag className="my-0.5 space-y-0.5">
+      {items.map((item, index) => (
+        <li key={index} className="flex gap-2">
+          <span aria-hidden="true" className="w-5 shrink-0 text-right text-slate-400">
+            {numbered ? `${item.ordinal}.` : '•'}
+          </span>
+          <span className="min-w-0 flex-1">
+            <MarkupInline block={item} emoji={emoji} />
+          </span>
+        </li>
+      ))}
+    </Tag>
+  );
+}
+
+function MarkupBlock({
+  block,
+  emoji,
+}: {
+  block: MarkupBlockType;
+  emoji: MessageCustomEmoji[];
+}): JSX.Element {
+  if (block.kind === 'code') {
+    return (
+      <pre className="my-1 overflow-x-auto rounded-md border border-edge bg-surface-950 px-3 py-2 font-mono text-sm text-slate-100">
+        <code>{block.text}</code>
+      </pre>
+    );
+  }
+
+  if (block.kind === 'quote') {
+    return (
+      <blockquote className="my-1 whitespace-pre-wrap break-words border-l-[3px] border-edge pl-2.5 text-slate-400">
+        <MarkupInline block={block} emoji={emoji} />
+      </blockquote>
+    );
+  }
+
+  return (
+    <p className="whitespace-pre-wrap break-words">
+      <MarkupInline block={block} emoji={emoji} />
+    </p>
+  );
+}
+
+/** A block's words, with its styles laid over them. */
+function MarkupInline({
+  block,
+  emoji,
+}: {
+  block: MarkupBlockType;
+  emoji: MessageCustomEmoji[];
+}): JSX.Element {
+  return (
+    <>
+      {styleRuns(block.text, block.spans).map((run, index) => (
+        <StyledRun key={index} run={run} emoji={emoji} />
+      ))}
+    </>
+  );
+}
+
+/** A stretch of text over which exactly the same set of styles is active. */
+interface Run {
+  text: string;
+  styles: MarkupStyle[];
+}
+
+/**
+ * Cuts a block's text into runs of uniform styling.
+ *
+ * Spans nest - bold around italic is two spans over overlapping ranges - so
+ * this cannot walk them one at a time. It asks each character which styles
+ * cover it and groups the neighbours that agree, which is the one approach
+ * that handles nesting without building a tree.
+ */
+function styleRuns(text: string, spans: MarkupSpan[]): Run[] {
+  if (spans.length === 0) return text ? [{ text, styles: [] }] : [];
+
+  const runs: Run[] = [];
+  let current: Run | null = null;
+
+  for (let at = 0; at < text.length; at++) {
+    const styles = spans.filter((span) => at >= span.start && at < span.end).map((span) => span.style);
+    const key = styles.join(',');
+    if (current && current.styles.join(',') === key) {
+      current.text += text[at];
+    } else {
+      current = { text: text[at] ?? '', styles };
+      runs.push(current);
+    }
+  }
+  return runs;
+}
+
+function StyledRun({ run, emoji }: { run: Run; emoji: MessageCustomEmoji[] }): JSX.Element {
+  // Code is literal - it is where somebody puts the text they did not want
+  // touched - so neither the emoji splitter nor the link matcher runs inside
+  // it. Everything else gets both.
+  let node: JSX.Element = run.styles.includes('code') ? (
+    <code className="rounded bg-surface-950 px-1 py-0.5 font-mono text-[0.9em]">{run.text}</code>
+  ) : (
+    <>{renderPieces(splitMessage(run.text, emoji), false)}</>
+  );
+
+  if (run.styles.includes('strike')) node = <del>{node}</del>;
+  if (run.styles.includes('italic')) node = <em>{node}</em>;
+  if (run.styles.includes('bold')) node = <strong className="font-semibold">{node}</strong>;
+  return node;
+}
+
+/** Emoji drawn, everything else handed to the link matcher. */
+function renderPieces(pieces: ReturnType<typeof splitMessage>, large: boolean): JSX.Element {
   return (
     <>
       {pieces.map((piece, index) =>
