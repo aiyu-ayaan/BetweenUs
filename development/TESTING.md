@@ -776,9 +776,10 @@ The browser itself is worth five minutes on its own:
   video page and should play A for everybody again.
 - **The site is never a second player.** With a track playing, press a video in
   the browse tab. You should hear the shared player only, and the watch page
-  behind it should be sitting paused rather than running a muted copy of the
-  same song. Press play on it deliberately and it should stay playing - the
-  pause is aimed at the page's own autoplay, not at you.
+  behind it should sit paused rather than run a muted copy of the same song.
+  Press the page's own play button too: it should stop again immediately. That
+  is the point - the picture the call watches is the shared player's, and this
+  half of the panel is for choosing.
 - **The seek bar does not snap back.** Drag the position bar and let go. It
   should stay where it was put and carry on from there, in both windows. A jump
   back to the old position followed by a jump forward means the held value is

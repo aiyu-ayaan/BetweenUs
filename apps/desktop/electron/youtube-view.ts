@@ -72,8 +72,6 @@ export interface YouTubeNavigation {
 
 let view: WebContentsView | null = null;
 let owner: BrowserWindow | null = null;
-/** The video whose autoplay has already been stopped, so it is stopped once. */
-let quietened: string | null = null;
 
 function hostOf(url: string): string | null {
   try {
@@ -115,46 +113,29 @@ export function videoIdOf(url: string): string | null {
 /**
  * Stops whatever the page has started playing.
  *
- * The browser is for picking, and a video page picked is a video page that
- * autoplays - so without this the site is a second player: the same song, a few
- * seconds off the shared one, with its own controls and nobody's agreement.
- * Muting fixed the noise; this is the rest of it, because a muted video is
- * still a video being decoded and downloaded for nobody.
+ * The browser is for picking. A watch page autoplays, an SPA click starts one
+ * without a load event, YouTube runs the next video when one ends, and a person
+ * poking the page can start one by hand - so "pause it after navigating" was
+ * four races, and it lost some of them. `media-started-playing` is the one
+ * place all four arrive: whatever begins, whenever it begins, this is the
+ * event, and pausing from it needs no timing guess at all.
  *
- * Repeated, briefly, because a single pause loses a race the page is going to
- * run anyway: YouTube starts playback some way after the navigation that
- * triggered it, and on an SPA click there is no load event to hang this on.
- * Four attempts over a second and a half is enough for that and stops well
- * before it could fight a person who pressed play on purpose.
+ * The video element rather than the whole WebContents, because muting a page is
+ * not stopping it: a muted video is still decoded and still downloaded, for a
+ * picture nobody chose to watch.
  */
-const PAUSE_RETRIES_MS = [0, 250, 600, 1_500];
-
 function quieten(): void {
   const contents = view?.webContents;
-  if (!contents) return;
-  for (const delay of PAUSE_RETRIES_MS) {
-    setTimeout(() => {
-      if (view?.webContents !== contents || contents.isDestroyed()) return;
-      void contents
-        .executeJavaScript('document.querySelectorAll("video").forEach((v) => v.pause());', true)
-        .catch(() => undefined);
-    }, delay);
-  }
+  if (!contents || contents.isDestroyed()) return;
+  void contents
+    .executeJavaScript('document.querySelectorAll("video").forEach((v) => v.pause());', true)
+    .catch(() => undefined);
 }
 
 function report(): void {
   if (!view || !owner || owner.isDestroyed()) return;
   const contents = view.webContents;
   const url = contents.getURL();
-  // A video page is a page the shared player is about to be given. Whatever
-  // this one started playing to accompany it is not wanted. Once per video:
-  // five of these events fire per navigation, and a title update on a page
-  // somebody deliberately un-paused is not a reason to fight them.
-  const onPage = videoIdOf(url);
-  if (onPage !== null && onPage !== quietened) {
-    quietened = onPage;
-    quieten();
-  }
   owner.webContents.send('youtube:navigated', {
     url,
     title: contents.getTitle(),
@@ -224,6 +205,12 @@ export function openYouTubeView(window: BrowserWindow, bounds: ViewBounds): void
   // from the home page to a video is `did-navigate-in-page` and nothing else,
   // and listening only for `did-navigate` means the "add this" button stays
   // grey on the video somebody just opened.
+  // Nothing plays in here. Not the watch page's autoplay, not the next video
+  // after one ends, not a play button somebody pressed: the picture the call is
+  // watching is the shared player's, and a second one a few seconds out from it
+  // is the thing this whole feature exists instead of.
+  contents.on('media-started-playing', () => quieten());
+
   contents.on('did-navigate', () => report());
   contents.on('did-navigate-in-page', () => report());
   contents.on('did-finish-load', () => report());
@@ -263,7 +250,6 @@ export function hideYouTubeView(): void {
 }
 
 export function closeYouTubeView(): void {
-  quietened = null;
   if (view && owner && !owner.isDestroyed()) owner.contentView.removeChildView(view);
   view?.webContents.close();
   view = null;

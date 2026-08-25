@@ -213,8 +213,9 @@ export function ListenBrowser(): JSX.Element {
 
       <p className="shrink-0 truncate text-[11px] text-slate-600" title={nav?.url}>
         {nav?.loading ? 'Loading…' : (nav?.title ?? 'youtube.com')}
-        {' · press a video and the whole call watches it. Signed in with your '}
-        {'own Google account, kept apart from BetweenUs'}
+        {' · press a video and the whole call watches it. Nothing plays here - '}
+        {'the picture is the shared player’s. Signed in with your own Google '}
+        {'account, kept apart from BetweenUs'}
       </p>
     </div>
   );

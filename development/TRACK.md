@@ -86,11 +86,14 @@ Listen Together:
       clicking a thumbnail left the site playing the same song a few seconds out
       from the shared one, with its own controls and nobody's agreement. Muted
       on build and on every show - the mute belongs to a page that may since
-      have navigated through a sign-in - and any video page it lands on is
-      paused, four times over a second and a half, because one pause loses the
-      race YouTube runs after an SPA click. Once per video id, so a page
-      somebody deliberately pressed play on is left alone. That half of the
-      panel picks; the shared player plays.
+      have navigated through a sign-in - and nothing plays in it at all:
+      `media-started-playing` pauses whatever started. Pausing after a
+      navigation was four races - the watch page's autoplay, an SPA click with
+      no load event, the next video after one ends, a play button pressed by
+      hand - and it lost some of them; that event is the one place all four
+      arrive. Muting alone was never enough either: a muted video is still
+      decoded and downloaded, for a picture nobody chose. That half of the panel
+      picks; the shared player plays.
 - [x] **A seek that stopped snapping back.** Letting go of the bar cleared the
       scrub value and showed the position from the session as it was, until this
       client's own request had been to the gateway and back - so every seek
