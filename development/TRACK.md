@@ -94,6 +94,14 @@ Listen Together:
       arrive. Muting alone was never enough either: a muted video is still
       decoded and downloaded, for a picture nobody chose. That half of the panel
       picks; the shared player plays.
+- [x] **A transport that says what *this* window is doing.** The play/pause
+      button was drawn from the session, so a window refused permission to start
+      its audio showed `pause` while playing nothing: pressing it paused the
+      track for everybody, pressing it again played it for everybody, and the
+      silent window stayed silent. Blocked now draws play, in amber, with "press
+      play here" beside the title, and the click starts this window rather than
+      driving the room. The prompt used to live in the panel body, which meant
+      it did not exist at all once the panel was closed.
 - [x] **A seek that stopped snapping back.** Letting go of the bar cleared the
       scrub value and showed the position from the session as it was, until this
       client's own request had been to the gateway and back - so every seek

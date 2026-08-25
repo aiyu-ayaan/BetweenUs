@@ -740,10 +740,12 @@ the ducking will chase itself.
    quarter in both, fade rather than step, and come back a beat after you stop -
    not instantly, or it will pump through every pause in a sentence. Mute the
    microphone and it should not duck at all.
-6. **Autoplay.** The window that did *not* add the track may say "your browser
-   blocked the audio". That is the honest case, not a bug: click it and the
-   track should join at the position everybody else is already at, not at the
-   beginning.
+6. **Autoplay.** The window that did *not* add the track may be refused
+   permission to start its audio. That is the honest case, not a bug, and the
+   transport says so: the play button goes amber and "press play here" appears
+   beside the title, with the panel open or closed. Press it and the track
+   should join at the position everybody else is already at, not at the
+   beginning - and it must not pause anybody else while it does.
 7. **Drift.** Leave it playing for ten minutes and compare again. A correction
    is a single seek, not a stutter; nothing should be seeking every few
    seconds. If it is, the tolerance is being read wrong.
