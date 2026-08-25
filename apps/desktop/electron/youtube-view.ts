@@ -205,11 +205,22 @@ export function openYouTubeView(window: BrowserWindow, bounds: ViewBounds): void
   // from the home page to a video is `did-navigate-in-page` and nothing else,
   // and listening only for `did-navigate` means the "add this" button stays
   // grey on the video somebody just opened.
-  // Nothing plays in here. Not the watch page's autoplay, not the next video
-  // after one ends, not a play button somebody pressed: the picture the call is
-  // watching is the shared player's, and a second one a few seconds out from it
-  // is the thing this whole feature exists instead of.
-  contents.on('media-started-playing', () => quieten());
+  // Trying to play something in here is how somebody says "play this" - the
+  // thumbnail they clicked, the play button they pressed, the next video the
+  // page queued up. So it is not refused, it is *redirected*: the page is
+  // paused and the call is told to play that video, which is the same picture
+  // in the place everybody can see it.
+  //
+  // This is the whole trigger, and it replaced watching for navigations. A
+  // navigation is a proxy for the intent and a bad one - it fires for a page
+  // opened to read the description, and misses the play pressed on a page
+  // already open.
+  contents.on('media-started-playing', () => {
+    quieten();
+    const videoId = videoIdOf(contents.getURL());
+    if (!videoId || !owner || owner.isDestroyed()) return;
+    owner.webContents.send('youtube:play', videoId);
+  });
 
   contents.on('did-navigate', () => report());
   contents.on('did-navigate-in-page', () => report());

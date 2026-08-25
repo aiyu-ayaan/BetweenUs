@@ -241,6 +241,16 @@ const api = {
   youtubeForward: (): Promise<void> => ipcRenderer.invoke('youtube:forward'),
   youtubeHome: (): Promise<void> => ipcRenderer.invoke('youtube:home'),
   youtubeSearch: (query: string): Promise<void> => ipcRenderer.invoke('youtube:search', query),
+  /**
+   * "Somebody asked this page to play something." The main process has already
+   * stopped it; this is the call's cue to play the same video where everyone
+   * can see it.
+   */
+  onYouTubePlay: (handler: (videoId: string) => void): (() => void) => {
+    const listener = (_event: unknown, videoId: string): void => handler(videoId);
+    ipcRenderer.on('youtube:play', listener);
+    return () => ipcRenderer.removeListener('youtube:play', listener);
+  },
   onYouTubeNavigated: (
     handler: (state: {
       url: string;

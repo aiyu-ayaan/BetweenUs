@@ -159,6 +159,8 @@ interface Window {
     youtubeForward?: () => Promise<void>;
     youtubeHome?: () => Promise<void>;
     youtubeSearch?: (query: string) => Promise<void>;
+    /** The page tried to play something; it has been stopped, play it for the call. */
+    onYouTubePlay?: (handler: (videoId: string) => void) => () => void;
     onYouTubeNavigated?: (
       handler: (state: {
         url: string;

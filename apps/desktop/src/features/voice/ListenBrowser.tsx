@@ -9,11 +9,12 @@
  *
  * The second version was the right site with the wrong control: a button that
  * queued whatever page you were on. That is still a paste box - it just moved
- * the copying inside the app. Clicking a thumbnail is the gesture people
- * already have for "play this", so that is the gesture that plays it: landing
- * on a video page starts it for everybody and hands the panel back to the
- * player. The queue button stays for the other thing, which is choosing what
- * comes *after* what is on.
+ * the copying inside the app. Pressing play is the gesture people already have
+ * for "play this", so that is the gesture that plays it: a thumbnail, the
+ * player's own play button, whatever the page runs next. The page is stopped
+ * and the call plays the same video where everybody can see it. The queue
+ * button stays for the other thing, which is choosing what comes *after* what
+ * is on.
  *
  * Like the player slot in `ListenPanel`, this component draws nothing. The page is a
  * `WebContentsView` the main process owns, and this hands it a rectangle to sit
@@ -98,33 +99,26 @@ export function ListenBrowser(): JSX.Element {
     };
   }, [bridge]);
 
-  // Pressing a video *is* the control. Landing on a video page plays it for
-  // the whole call and hands the panel back to the player - which is what
-  // "watch together" means everywhere else it exists, and is the difference
-  // between this and a paste box with a browser bolted on.
+  // Pressing play *is* the control - on a thumbnail, on the player's own play
+  // button, on whatever the page decided to run next. The main process stops
+  // the page and says which video was asked for; this plays it where the whole
+  // call can see it and hands the panel back to the player.
   //
-  // Only on a *change*, and only after the first report, or reopening the panel
-  // on the page somebody left it on would restart the room's track. The tab
-  // flipping to the player is also what stops a stray second trigger: picking
-  // again is a deliberate trip back to Browse.
-  const seen = useRef<string | null | undefined>(undefined);
+  // This used to watch for navigations instead, which is a proxy for the intent
+  // and a poor one: it fired for a page opened to read the description, and
+  // missed a play pressed on a page that was already open - which is exactly
+  // the case that looked broken.
   useEffect(() => {
-    const id = nav?.videoId ?? null;
-    if (seen.current === undefined) {
-      seen.current = id;
-      return;
-    }
-    if (id === seen.current) return;
-    seen.current = id;
-    if (!id) return;
-
-    const store = useListenStore.getState();
-    const playing = store.session?.queue[store.session.index];
-    // Already what the call is watching: show it rather than queueing a second
-    // copy of the same video behind itself.
-    if (playing?.ref !== id) store.add(id, true);
-    store.setTab('playing');
-  }, [nav?.videoId]);
+    if (!bridge?.onYouTubePlay) return undefined;
+    return bridge.onYouTubePlay((videoId) => {
+      const store = useListenStore.getState();
+      const playing = store.session?.queue[store.session.index];
+      // Already what the call is watching: show it rather than queueing a
+      // second copy of the same video behind itself.
+      if (playing?.ref !== videoId) store.add(videoId, true);
+      store.setTab('playing');
+    });
+  }, [bridge]);
 
   if (!isDesktopRuntime() || !bridge?.youtubeOpen) {
     return (
@@ -213,9 +207,9 @@ export function ListenBrowser(): JSX.Element {
 
       <p className="shrink-0 truncate text-[11px] text-slate-600" title={nav?.url}>
         {nav?.loading ? 'Loading…' : (nav?.title ?? 'youtube.com')}
-        {' · press a video and the whole call watches it. Nothing plays here - '}
-        {'the picture is the shared player’s. Signed in with your own Google '}
-        {'account, kept apart from BetweenUs'}
+        {' · press play on anything and the whole call watches it. Nothing '}
+        {'plays in here; the picture is the shared player’s. Signed in with '}
+        {'your own Google account, kept apart from BetweenUs'}
       </p>
     </div>
   );
