@@ -29,6 +29,17 @@ import {
 } from './remote-input';
 import { spawn } from 'node:child_process';
 import {
+  closeYouTubeView,
+  hideYouTubeView,
+  openYouTubeView,
+  setYouTubeBounds,
+  youTubeGoBack,
+  youTubeGoForward,
+  youTubeHome,
+  youTubeSearch,
+  type ViewBounds,
+} from './youtube-view';
+import {
   channelOf,
   downloadAsset,
   findUpdate,
@@ -885,6 +896,43 @@ function watchDisplays(): void {
   screen.on('display-removed', broadcastDisplays);
   screen.on('display-metrics-changed', broadcastDisplays);
 }
+
+// --- The real youtube.com, inside the window ---------------------------------
+//
+// The renderer may ask for it to be shown over a rectangle and may drive its
+// history. It cannot mount web content itself - `webviewTag` stays off - and it
+// never gets a handle on the view. See electron/youtube-view.ts for why the
+// site cannot simply be an iframe, and what keeps this one fenced in.
+
+function boundsOf(value: unknown): ViewBounds | null {
+  if (!value || typeof value !== 'object') return null;
+  const box = value as Record<string, unknown>;
+  const numbers = ['x', 'y', 'width', 'height'].map((key) => box[key]);
+  if (!numbers.every((entry) => typeof entry === 'number' && Number.isFinite(entry))) return null;
+  const [x, y, width, height] = numbers as number[];
+  return { x: x!, y: y!, width: width!, height: height! };
+}
+
+ipcMain.handle('youtube:open', (event, rect: unknown): void => {
+  const window = BrowserWindow.fromWebContents(event.sender);
+  const bounds = boundsOf(rect);
+  if (!window || !bounds) return;
+  openYouTubeView(window, bounds);
+});
+
+ipcMain.handle('youtube:bounds', (_event, rect: unknown): void => {
+  const bounds = boundsOf(rect);
+  if (bounds) setYouTubeBounds(bounds);
+});
+
+ipcMain.handle('youtube:hide', (): void => hideYouTubeView());
+ipcMain.handle('youtube:close', (): void => closeYouTubeView());
+ipcMain.handle('youtube:back', (): void => youTubeGoBack());
+ipcMain.handle('youtube:forward', (): void => youTubeGoForward());
+ipcMain.handle('youtube:home', (): void => youTubeHome());
+ipcMain.handle('youtube:search', (_event, query: unknown): void => {
+  if (typeof query === 'string' && query.trim()) youTubeSearch(query.trim());
+});
 
 ipcMain.handle('screen:select', (_event, id: unknown, audio: unknown): void => {
   pendingShare = typeof id === 'string' ? { id, audio: audio === true } : null;

@@ -222,6 +222,40 @@ const api = {
   updateInstall: (): Promise<{ started: boolean; reason?: string }> =>
     ipcRenderer.invoke('update:install'),
 
+  /**
+   * The real youtube.com, shown over a rectangle of this window.
+   *
+   * Desktop only, and unavoidably so: youtube.com refuses to be framed, so a
+   * browser tab cannot show the site inside another page however it is asked.
+   * The renderer never holds the view - it says where to put it and which way
+   * to go, and the main process owns everything else.
+   */
+  youtubeOpen: (bounds: { x: number; y: number; width: number; height: number }): Promise<void> =>
+    ipcRenderer.invoke('youtube:open', bounds),
+  youtubeBounds: (bounds: { x: number; y: number; width: number; height: number }): Promise<void> =>
+    ipcRenderer.invoke('youtube:bounds', bounds),
+  /** Out of sight, still loaded: a collapsed panel must not lose the search. */
+  youtubeHide: (): Promise<void> => ipcRenderer.invoke('youtube:hide'),
+  youtubeClose: (): Promise<void> => ipcRenderer.invoke('youtube:close'),
+  youtubeBack: (): Promise<void> => ipcRenderer.invoke('youtube:back'),
+  youtubeForward: (): Promise<void> => ipcRenderer.invoke('youtube:forward'),
+  youtubeHome: (): Promise<void> => ipcRenderer.invoke('youtube:home'),
+  youtubeSearch: (query: string): Promise<void> => ipcRenderer.invoke('youtube:search', query),
+  onYouTubeNavigated: (
+    handler: (state: {
+      url: string;
+      title: string;
+      videoId: string | null;
+      canGoBack: boolean;
+      canGoForward: boolean;
+      loading: boolean;
+    }) => void,
+  ): (() => void) => {
+    const listener = (_event: unknown, state: Parameters<typeof handler>[0]): void => handler(state);
+    ipcRenderer.on('youtube:navigated', listener);
+    return () => ipcRenderer.removeListener('youtube:navigated', listener);
+  },
+
   /** Window state change listeners for auto Picture-in-Picture */
   onWindowMinimize: (handler: () => void): (() => void) => {
     const listener = (): void => handler();

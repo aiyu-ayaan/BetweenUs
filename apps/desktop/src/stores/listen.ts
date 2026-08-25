@@ -64,6 +64,16 @@ interface ListenState {
   /** Whether the panel is on screen. Local: it is a view, not a shared decision. */
   open: boolean;
   /**
+   * The picture is folded away to a one-line bar, and the music carries on.
+   *
+   * Local, like every other view decision here. Somebody who wants the video
+   * out of the way while they read something is not asking the rest of the call
+   * to stop watching it.
+   */
+  collapsed: boolean;
+  /** Whether the in-app YouTube browser is open. Desktop only - see `ListenBrowser`. */
+  browsing: boolean;
+  /**
    * This window's own volume, 0-100, and nobody else's business.
    *
    * Shared transport, local volume: what is playing is a thing two people agree
@@ -98,6 +108,8 @@ interface ListenState {
   sampleClock: (sample: ClockSample) => void;
 
   setOpen: (open: boolean) => void;
+  setCollapsed: (collapsed: boolean) => void;
+  setBrowsing: (browsing: boolean) => void;
   setVolume: (volume: number) => void;
   /** A pasted link or a bare id. Returns what went wrong, or null. */
   add: (input: string) => string | null;
@@ -117,28 +129,84 @@ let player: YouTubePlayer | null = null;
 /** Which track the current player was built for, so it is rebuilt only on a change. */
 let loadedTrackId: string | null = null;
 /**
- * Where the player's frame lives: a one-pixel corner of the document, always.
+ * Where the player's frame lives: one element on `document.body`, always, that
+ * is *moved over* whatever slot the UI is currently offering it.
  *
- * Not inside the panel, which was the first attempt and is wrong in a way that
- * only shows up later - an iframe removed from the document stops playing, so
- * closing the panel silenced the music. The frame therefore never moves, and
- * the panel draws the title and the queue rather than the picture.
+ * This is the shape the feature needs and the first version got wrong. An
+ * iframe removed from the document stops playing and loses its position, so a
+ * frame rendered inside a React component dies every time that component
+ * unmounts - closing the panel, switching to a text channel, paging the grid.
+ * Re-mounting it is not a fix either: a fresh frame is a fresh player, back at
+ * zero, refused autoplay, and out of step with everybody.
  *
- * ponytail: audio only. Showing the video means a component that stays mounted
- * for the life of the call and hands the frame a place to be, which is a real
- * amount of plumbing for a feature about listening while you work. The seam is
- * this element: give it somewhere visible to live and the picture appears.
+ * So the frame never moves in the DOM. A component claims the slot by handing
+ * over its own element, and this positions the frame on top of it - `fixed`,
+ * tracking that element's rectangle. When nothing claims it, the frame shrinks
+ * into a corner and keeps playing, which is what "the music carries on while
+ * you go and read something" has to mean.
  */
 let host: HTMLDivElement | null = null;
+/** The element the picture is currently drawn over, if any. */
+let slot: HTMLElement | null = null;
+let slotObserver: ResizeObserver | null = null;
+let followFrame: number | null = null;
 
 function playerHost(): HTMLDivElement {
   if (host) return host;
   host = document.createElement('div');
-  host.setAttribute('aria-hidden', 'true');
   host.style.cssText =
-    'position:fixed;bottom:0;left:0;width:1px;height:1px;opacity:0;pointer-events:none;overflow:hidden;';
+    'position:fixed;z-index:20;overflow:hidden;background:#000;border-radius:0.5rem;';
   document.body.append(host);
+  follow();
   return host;
+}
+
+/**
+ * Puts the frame where the claimed slot is, or parks it when there is none.
+ *
+ * Parked is one pixel in a corner rather than `display:none`: a hidden iframe is
+ * one Chromium is entitled to stop, and stopping it is the difference between
+ * music that carries on while you read a channel and music that does not.
+ */
+function follow(): void {
+  if (!host) return;
+  if (!slot || !slot.isConnected) {
+    host.style.cssText =
+      'position:fixed;bottom:0;left:0;width:1px;height:1px;opacity:0;pointer-events:none;overflow:hidden;';
+    return;
+  }
+  const box = slot.getBoundingClientRect();
+  host.style.cssText =
+    'position:fixed;z-index:20;overflow:hidden;background:#000;border-radius:0.5rem;' +
+    `left:${box.left}px;top:${box.top}px;width:${box.width}px;height:${box.height}px;`;
+}
+
+/**
+ * A component offering the picture somewhere to be, or `null` on its way out.
+ *
+ * Followed on a frame loop rather than only on resize, because the rectangle
+ * moves for reasons no observer reports: a sidebar opening, a banner appearing
+ * above it, the window being dragged between monitors. One `getBoundingClientRect`
+ * a frame is nothing next to the video it is positioning.
+ */
+export function claimListenSlot(element: HTMLElement | null): void {
+  slot = element;
+  slotObserver?.disconnect();
+  slotObserver = null;
+  if (followFrame !== null) cancelAnimationFrame(followFrame);
+  followFrame = null;
+
+  playerHost();
+  follow();
+  if (!element) return;
+
+  slotObserver = new ResizeObserver(() => follow());
+  slotObserver.observe(element);
+  const tick = (): void => {
+    follow();
+    followFrame = requestAnimationFrame(tick);
+  };
+  followFrame = requestAnimationFrame(tick);
 }
 const clock = new ServerClock();
 let driftTimer: number | null = null;
@@ -168,6 +236,8 @@ export const useListenStore = create<ListenState>((set, get) => ({
   session: null,
   open: false,
   volume: 60,
+  collapsed: false,
+  browsing: false,
   ducking: false,
   clockOffset: 0,
   needsGesture: false,
@@ -200,6 +270,11 @@ export const useListenStore = create<ListenState>((set, get) => ({
     unsubscribeVoice?.();
     unsubscribeVoice = null;
     teardownPlayer();
+    claimListenSlot(null);
+    // Destroyed rather than hidden, here and only here: the sign-in is worth
+    // keeping across a collapsed panel and is not worth keeping across a call
+    // nobody is in.
+    void window.betweenus?.youtubeClose?.();
     host?.remove();
     host = null;
     reportedEnd.clear();
@@ -207,6 +282,8 @@ export const useListenStore = create<ListenState>((set, get) => ({
     set({
       session: null,
       open: false,
+      collapsed: false,
+      browsing: false,
       ducking: false,
       clockOffset: 0,
       needsGesture: false,
@@ -239,6 +316,8 @@ export const useListenStore = create<ListenState>((set, get) => ({
   },
 
   setOpen: (open) => set({ open }),
+  setCollapsed: (collapsed) => set({ collapsed }),
+  setBrowsing: (browsing) => set({ browsing }),
 
   setVolume: (volume) => {
     set({ volume: Math.min(100, Math.max(0, Math.round(volume))) });
@@ -249,7 +328,7 @@ export const useListenStore = create<ListenState>((set, get) => ({
     const ref = parseYouTube(input);
     if (!ref) return 'That does not look like a YouTube link.';
     mesh?.sendListen({ type: 'listen.add', provider: 'youtube', ref });
-    set({ open: true, error: null });
+    set({ error: null });
     // The click that added a track is a gesture in *this* window, which is what
     // lets its player start. Everybody else's window may still need one.
     set({ needsGesture: false });

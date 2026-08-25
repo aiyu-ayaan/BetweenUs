@@ -23,6 +23,13 @@
  * which is checked for origin on the way in, because a `message` handler that
  * does not check origin is a hole any page in any frame can post through.
  *
+ * The frame carries no `sandbox` attribute, and that is the deliberate part.
+ * `sandbox` without `allow-same-origin` gives a frame an *opaque* origin, so
+ * everything it posts arrives as `event.origin === 'null'` and the origin check
+ * refuses all of it - a player that loads, shows a picture and never answers a
+ * command. It also buys nothing here: a cross-origin frame is already isolated
+ * from this document by the same-origin policy, exactly as hard.
+ *
  * ponytail: one provider. Spotify is a second `ListenProvider` and a second
  * class with the same four methods, and it needs things this does not - an
  * OAuth flow, a Premium account per listener, and the Web Playback SDK, which
@@ -30,8 +37,21 @@
  * not modelled ahead of time; the seam is the discriminant on `ListenTrack`.
  */
 
-/** The origin the frame is loaded from, and the only one it is listened to on. */
+/** The origin the frame is loaded from. */
 export const YOUTUBE_ORIGIN = 'https://www.youtube-nocookie.com';
+
+/**
+ * Origins a message from the player may arrive on.
+ *
+ * Both, because the embed is served from the no-cookie host and its player code
+ * sometimes posts as `www.youtube.com`. Anything else is another frame on the
+ * page pretending, and is dropped - a `message` handler that does not check
+ * this is a hole any frame can post through.
+ */
+export const YOUTUBE_ORIGINS = [
+  'https://www.youtube-nocookie.com',
+  'https://www.youtube.com',
+];
 
 /** What the embed reports about itself. */
 export interface YouTubeState {
@@ -91,10 +111,22 @@ function valid(id: string | null | undefined): string | null {
   return id && /^[A-Za-z0-9_-]{11}$/.test(id) ? id : null;
 }
 
-/** The URL the frame is pointed at. Separated so the check can read it. */
+/**
+ * The URL the frame is pointed at. Separated so the check can read it.
+ *
+ * `origin` is passed only when it is a real web origin. A packaged Electron
+ * build serves the renderer from `file://`, and `origin=file://` is not a thing
+ * YouTube accepts - it refuses the API handshake outright, which is a player
+ * that loads, shows a frame and never answers a command. Omitting the parameter
+ * is allowed and is what that case needs.
+ */
 export function embedUrl(videoId: string, origin: string): string {
   const params = new URLSearchParams({
     enablejsapi: '1',
+    // Asked for up front as well as commanded later. The command path needs the
+    // handshake to have completed; this does not, so a player that is slow to
+    // answer still starts on time for whoever added the track.
+    autoplay: '1',
     // Nothing but this app drives the player: the call decides what plays, so
     // the embed's own controls would be a second set of buttons that change
     // what one person hears and nobody else.
@@ -105,10 +137,9 @@ export function embedUrl(videoId: string, origin: string): string {
     rel: '0',
     modestbranding: '1',
     playsinline: '1',
-    // The frame is hidden, so it must not try to draw anything of its own.
-    fs: '0',
-    origin,
+    fs: '1',
   });
+  if (/^https?:\/\//.test(origin)) params.set('origin', origin);
   return `${YOUTUBE_ORIGIN}/embed/${videoId}?${params.toString()}`;
 }
 
@@ -140,12 +171,22 @@ export class YouTubePlayer {
   ) {
     this.frame = document.createElement('iframe');
     this.frame.src = embedUrl(videoId, window.location.origin);
-    this.frame.allow = 'autoplay; encrypted-media';
-    // No `allow-same-origin`, so the frame gets an opaque origin of its own and
-    // cannot reach this document's storage even by name. It still needs
-    // scripts (it is a player) and popups-to-escape-sandbox is *not* granted,
-    // so nothing in it can navigate this window.
-    this.frame.setAttribute('sandbox', 'allow-scripts allow-presentation');
+    this.frame.allow = 'autoplay; encrypted-media; fullscreen; picture-in-picture';
+    this.frame.setAttribute('allowfullscreen', 'true');
+    // No `sandbox` attribute, and that is deliberate rather than an omission.
+    //
+    // It was `sandbox="allow-scripts allow-presentation"` and that is why
+    // nothing ever played. Without `allow-same-origin` a frame is given an
+    // *opaque* origin, so every message it posts arrives with
+    // `event.origin === 'null'` - which the origin check below correctly
+    // refused, every time. The handshake therefore never completed, the queued
+    // `playVideo` was never flushed, and the result was a player that looked
+    // present and was silent, with nothing in the console to say why.
+    //
+    // Adding `allow-same-origin` back would fix that and buy nothing: this
+    // frame is already cross-origin, so the same-origin policy isolates it from
+    // this document exactly as hard as the sandbox was pretending to. The
+    // sandbox was security theatre that broke the feature.
     this.frame.setAttribute('title', 'Listen Together');
     this.frame.style.border = '0';
     this.frame.style.width = '100%';
@@ -178,7 +219,7 @@ export class YouTubePlayer {
     // The check that makes this safe. Without it any frame or opener on the
     // page can post a message shaped like YouTube's and drive the player - or
     // worse, be believed about a title that is then drawn.
-    if (event.origin !== YOUTUBE_ORIGIN) return;
+    if (!YOUTUBE_ORIGINS.includes(event.origin)) return;
     if (event.source !== this.frame.contentWindow) return;
 
     let message: { event?: string; info?: Record<string, unknown> };
@@ -225,7 +266,13 @@ export class YouTubePlayer {
     const window_ = this.frame.contentWindow;
     if (!window_) return;
     const body = func ? { event, func, args } : { event };
-    window_.postMessage(JSON.stringify({ ...body, id: 'betweenus', channel: 'widget' }), YOUTUBE_ORIGIN);
+    // `'*'` as the target: the frame's own origin is YouTube's and is the only
+    // thing that can receive this, and naming it exactly has to be right for
+    // whichever of the two hosts the player settled on. The message carries no
+    // secret - it is "play", "pause", "seek to 1:04" - so the cost of being
+    // wrong about the target is nothing, and the cost of being wrong about the
+    // name is silence.
+    window_.postMessage(JSON.stringify({ ...body, id: 'betweenus', channel: 'widget' }), '*');
   }
 
   private command(func: string, args: unknown[] = []): void {

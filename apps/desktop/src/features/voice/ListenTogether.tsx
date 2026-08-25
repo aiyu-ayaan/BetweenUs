@@ -23,7 +23,9 @@ import { listenPositionAt } from '@betweenus/shared-types';
 import { useListenStore } from '../../stores/listen';
 import { useVoiceStore } from '../../stores/voice';
 import { formatPosition } from '../../services/listen-sync';
+import { isDesktopRuntime } from '../../services/platform';
 import {
+  CompassIcon,
   MusicIcon,
   PauseIcon,
   PlayIcon,
@@ -108,10 +110,27 @@ export function ListenTogether({ onClose }: { onClose: () => void }): JSX.Elemen
           why it is not a screen share. */}
       {!session && (
         <p className="text-xs leading-relaxed text-slate-400">
-          Paste a YouTube link and everyone in the call hears it, in step, from
-          their own connection. Nothing is streamed between you, so it stays at
-          full quality - and anybody here can change what is playing.
+          Everyone in the call hears the same track, in step, from their own
+          connection. Nothing is streamed between you, so it stays at full
+          quality - and anybody here can change what is playing.
         </p>
+      )}
+
+      {/* The way in, on desktop: the real site, signed in as you, with a button
+          that queues whatever is on screen. Pasting still works and is the only
+          way in a browser tab, because youtube.com refuses to be framed. */}
+      {isDesktopRuntime() && window.betweenus?.youtubeOpen && (
+        <button
+          type="button"
+          onClick={() => {
+            useListenStore.getState().setBrowsing(true);
+            onClose();
+          }}
+          className="flex items-center justify-center gap-2 rounded-md bg-amber-500/15 px-3 py-2 text-xs font-medium text-amber-200 transition-colors hover:bg-amber-500/25"
+        >
+          <CompassIcon className="h-4 w-4" />
+          Browse YouTube - search, playlists, your subscriptions
+        </button>
       )}
 
       <div className="flex gap-2">
@@ -125,7 +144,7 @@ export function ListenTogether({ onClose }: { onClose: () => void }): JSX.Elemen
           onKeyDown={(event) => {
             if (event.key === 'Enter') submit();
           }}
-          placeholder="Paste a YouTube link"
+          placeholder="…or paste a YouTube link"
           aria-label="YouTube link"
           className="min-w-0 flex-1 rounded-md border border-white/10 bg-surface-800 px-2 py-1.5 text-sm text-slate-200 placeholder:text-slate-500 focus:border-white/20 focus:outline-none"
         />

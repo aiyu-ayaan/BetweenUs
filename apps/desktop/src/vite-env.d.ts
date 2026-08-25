@@ -142,6 +142,33 @@ interface Window {
     /** Fraction downloaded, or -1 while the total size is unknown. */
     onUpdateProgress?: (handler: (fraction: number) => void) => () => void;
     updateInstall?: () => Promise<{ started: boolean; reason?: string }>;
+
+    /**
+     * The real youtube.com, shown over a rectangle of this window.
+     *
+     * All optional: this is the Electron bridge, and a browser tab has none of
+     * it. youtube.com refuses to be framed, so browsing the site inside the app
+     * is desktop-only and cannot be otherwise - `ListenBrowser` checks for these
+     * and says so plainly rather than rendering a frame that will never load.
+     */
+    youtubeOpen?: (bounds: { x: number; y: number; width: number; height: number }) => Promise<void>;
+    youtubeBounds?: (bounds: { x: number; y: number; width: number; height: number }) => Promise<void>;
+    youtubeHide?: () => Promise<void>;
+    youtubeClose?: () => Promise<void>;
+    youtubeBack?: () => Promise<void>;
+    youtubeForward?: () => Promise<void>;
+    youtubeHome?: () => Promise<void>;
+    youtubeSearch?: (query: string) => Promise<void>;
+    onYouTubeNavigated?: (
+      handler: (state: {
+        url: string;
+        title: string;
+        videoId: string | null;
+        canGoBack: boolean;
+        canGoForward: boolean;
+        loading: boolean;
+      }) => void,
+    ) => () => void;
   };
 }
 
