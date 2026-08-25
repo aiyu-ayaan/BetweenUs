@@ -21,6 +21,8 @@ today, with web and Android planned in the same backend.
 - **[Architecture](/architecture/overview)** — the microservices, the
   peer-to-peer media design, why there is no media server, and the
   [Android client](/architecture/android-client).
+- **[Listen Together](/architecture/listen-together)** — synchronized YouTube
+  playback inside calls with zero uplink, in-app YouTube browsing, and automatic speech ducking.
 - **[System Design](/system-design/auth-and-permissions)** — auth, RBAC,
   events, ingress through Cloudflare Tunnel.
 - **[Database](/database/schema)** — the Prisma schema, model by model, with
@@ -36,15 +38,13 @@ today, with web and Android planned in the same backend.
 
 ## Core capabilities
 
-- User authentication (JWT + refresh rotation + OAuth)
-- Servers, text channels, direct messages
-- Voice calls, video calls, screen sharing
-- Presence / online status, typing indicators
-- Notifications (desktop tray, push via FCM)
-- Roles and per-member permission overrides
-- Remote desktop access: view, control, clipboard, file transfer
-- Remote machine enrollment and per-machine permission grants, with an audit
-  log
+- **Authentication & Accounts**: JWT + refresh-token rotation with reuse detection, Google & GitHub OAuth sign-in.
+- **Servers & Channels**: Public and private channels, custom roles with colors, per-member overrides, invite links with limits.
+- **End-to-End Encrypted Chat**: Messages, edits, reactions, replies, pins, rich markdown parsing (bulleted/numbered lists, inline marks, code blocks), and encrypted attachments up to 100 MB.
+- **Voice, Video & Screen Share**: Peer-to-peer WebRTC mesh, camera, screen sharing with interactive remote control handover and multi-cursor overlays.
+- **Listen Together**: Synchronized YouTube playback in voice calls, browse youtube.com in-app, click-to-play with zero uplink, and automatic speech ducking.
+- **Remote Desktop**: Screen viewing, remote control, clipboard sync, multi-monitor selection, granular permission grants with expiry, and audit trail.
+- **Presence & Notifications**: Status selection, typing indicators, desktop tray, quiet hours, push suppression across devices, and FCM push notifications.
 
 ## Technology at a glance
 

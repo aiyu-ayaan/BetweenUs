@@ -145,7 +145,7 @@ Client → server, on `/ws/call`:
 
 | Event | Meaning |
 | --- | --- |
-| `listen.add` | `{provider, ref}` — a YouTube id. The gateway mints the queue-entry id |
+| `listen.add` | `{provider, ref, playNow?}` — a YouTube id. Gateway mints the entry id; `playNow: true` queues and jumps in a single atomic revision |
 | `listen.remove` | `{trackId}`. Emptying the queue ends the session |
 | `listen.play` | Resume, or `{index}` to jump |
 | `listen.pause` | `{positionMs}` — where this window's player actually stopped |
@@ -222,8 +222,27 @@ list of video ids. People search for a half-remembered chorus, open a playlist
 they made, or look at what their subscriptions posted this morning — and two of
 those need a signed-in account.
 
-So on **desktop**, the panel opens youtube.com itself, inside the call, with an
-**Add to queue** button that is live whenever the page is a video.
+So on **desktop**, the panel opens youtube.com itself inside the call:
+
+- **Clicking a thumbnail is the control:** Pressing any video on YouTube directly plays it for the entire call (`listen.add` with `playNow: true`) and flips the view to the Playing tab. No extra copy/paste or button clicking is needed.
+- **Add to queue stays on Browse:** An "Add to queue" button remains available on the browser bar so listeners can line up subsequent tracks while continuing to search.
+- **Atomic jump (`playNow`):** Queuing and playing happen in one server revision. Sending `listen.add` followed by `listen.play` would be two revisions, where a concurrent queue modification could shift track indices and cause the wrong song to play.
+
+### The browser is not a second player
+
+Opening a YouTube watch page naturally starts autoplaying. Left alone, the in-app browser would decode and play its own copy out of sync with the call's shared player.
+
+To prevent this:
+1. The `WebContentsView` is permanently muted.
+2. The main process intercepts `media-started-playing` events and immediately pauses the internal view. This prevents wasted background CPU/decoding and ensures only the shared stage player plays audio.
+
+### Seek scrubbing without snapback
+
+Dragging and releasing the seek slider commits the new timestamp to the server. To avoid an ugly "snapback" where the UI slider jumps back to the old timestamp while waiting for the network round-trip, the client optimistically holds the scrubbed position until a newer gateway revision arrives (with a 2-second timeout fallback).
+
+### Autoplay-blocked window UX
+
+If an operating system or browser policy refuses background autoplay for a particular client window, the transport marks the local state as blocked with an amber prompt ("press play here"). Clicking it starts audio playback locally with a user gesture, without sending an erroneous global pause command to everyone else in the call.
 
 ### Why it is desktop-only, and why that cannot be fixed
 

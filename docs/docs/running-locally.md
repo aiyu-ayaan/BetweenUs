@@ -36,7 +36,8 @@ alongside it.
 ## Desktop client
 
 ```bash
-pnpm --filter @betweenus/desktop dev
+pnpm --filter @betweenus/desktop dev    # run in development
+pnpm desktop:package                    # package production executable (.exe / installer)
 ```
 
 ## Web client

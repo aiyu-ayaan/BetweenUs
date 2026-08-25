@@ -87,3 +87,11 @@ reactions all arrive as one `message.updated` shape.
 
 Attachments are encrypted client-side before upload and served only as
 opaque downloads — see [`E2EE.md`](/security/e2ee).
+
+## Message Markup & Formatting
+
+Messages support full client-side markdown parsing:
+- **Lists**: Bulleted (`*`, `-`) and numbered (`1.`) lists. The composer automatically continues lists on `Enter` and terminates on a double `Enter`.
+- **Inline marks**: Bold (`**`), italic (`*`), strikethrough (`~~`), inline code (`` ` ``).
+- **Blocks**: Fenced code blocks with language highlighting and block quotes (`> `).
+- **Composer behavior**: Auto-growing height up to a max cap, text wrapping without horizontal scrolls, and live markup previews.
