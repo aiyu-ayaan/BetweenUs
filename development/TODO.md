@@ -70,6 +70,49 @@ it is, and the backlog of everything anybody has thought of. Where an item
 appears in both, the phase sections below carry the reasoning and `TRACK.md`
 carries the state.
 
+## Listen Together — landed on desktop and web, open elsewhere
+
+The shared queue, the clock, the drift correction, the ducking and the panel are
+in code; the design is `docs/docs/architecture/listen-together.md`. What each
+part of it deliberately left open:
+
+- [ ] **Android listens but does not drive.** Agreed scope: a phone in the call
+      should hear what everybody else is hearing and have no transport controls.
+      It is not built. What it needs is a `WebView` on the same
+      `youtube-nocookie.com` embed with the same postMessage protocol, the
+      `listen.state` case in `CallSocket`, the clock sample off `pong`, and the
+      same reconcile-every-five-seconds loop - roughly a port of
+      `listen-sync.ts` plus a hundred lines of player. `listen.ended` and
+      `listen.meta` should be sent, since both are idempotent and a phone is as
+      good a reporter as anything else. See `ANDROID_TODO.md`.
+- [ ] **Search.** Paste-a-link only. In-app search needs a YouTube Data API key,
+      which is a per-deployment credential and an egress rule - worth doing only
+      if an operator wants it, and it must fail closed to paste-only when the
+      key is absent.
+- [ ] **Spotify.** A second `ListenProvider`, and the reason it is not the first
+      one: it needs an OAuth flow, a Premium account per listener, and the Web
+      Playback SDK, which *is* remote code and so needs the `script-src`
+      conversation this design avoided. The seam is the discriminant on
+      `ListenTrack` and nothing is modelled ahead of it.
+- [ ] **The picture.** Audio only: the player's frame lives in a one-pixel
+      corner of the document because an iframe removed from the document stops
+      playing. Drawing the video needs a component that stays mounted for the
+      life of the call and hands that frame somewhere visible to live.
+- [ ] **One replica.** The session is in process beside the roster, so two
+      `call-service` replicas would each hold half a session. Same upgrade as
+      the roster itself - Redis - and it should be made once, for both.
+- [ ] **Shuffle, repeat, and reordering the queue.** All three are a `rev` and
+      a case in the reducer; none of them were needed to listen to something
+      together and none were built.
+- [ ] **Nobody has run it with two real clients.** The transport and the clock
+      have self-checks; the player, the autoplay refusal and the ducking do not
+      and cannot without a browser. `TESTING.md` has the walkthrough, and the
+      three things most likely to be wrong are the postMessage handshake, the
+      autoplay block on the window that did not start the track, and the
+      ducking chasing itself when both windows are on one machine's speakers.
+
+---
+
 ## Phase 27 — push notifications (Android landed, web and calls open)
 
 Every client today only raises a notification while it is running. A closed tab,

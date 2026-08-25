@@ -709,6 +709,53 @@ so what is being checked is that nothing *moved* wrongly. One client is enough.
    inbound bitrate should sit in the megabits, not the hundreds of kilobits,
    and the frame rate should hold. Nothing in the app reports this yet.
 
+## Listening together
+
+Two windows in one voice channel (`pnpm dev:duo`), and headphones on both if
+they are on one machine - the speakers will otherwise feed the microphones and
+the ducking will chase itself.
+
+1. **Start it.** The music note in the call controls, paste a YouTube link,
+   press add. Both windows should start playing the same track, and the note in
+   the *other* window should go amber without anybody opening its panel.
+2. **The thing to actually check: are they in step.** Play something with a
+   clear beat and take one headphone from each machine. They should sound like
+   one source, not like a round. If they are audibly apart, the clock offset is
+   wrong rather than the seek: check that `pong` is carrying `serverMs` and that
+   the client is measuring against it.
+3. **Anybody can drive it.** Skip from the second window. The first should
+   follow within a beat and the panel should say who changed it. Add a track
+   from each window and the queue should be in the order the gateway saw them.
+4. **Two people at once.** Press skip in both windows inside the same second.
+   Exactly one skip should happen. Two is the ordering failing, and it is the
+   whole reason this is arbitrated at the gateway.
+5. **Ducking.** Talk in one window with the music up. It should drop to about a
+   quarter in both, fade rather than step, and come back a beat after you stop -
+   not instantly, or it will pump through every pause in a sentence. Mute the
+   microphone and it should not duck at all.
+6. **Autoplay.** The window that did *not* add the track may say "your browser
+   blocked the audio". That is the honest case, not a bug: click it and the
+   track should join at the position everybody else is already at, not at the
+   beginning.
+7. **Drift.** Leave it playing for ten minutes and compare again. A correction
+   is a single seek, not a stutter; nothing should be seeking every few
+   seconds. If it is, the tolerance is being read wrong.
+8. **The end of a track.** Let one finish with three windows in the call. The
+   queue should advance **once**. Three advances means the `ended` guard is
+   gone.
+9. **Emptying it.** Remove the last track. The session should close in both
+   windows and the panel should go back to its one-line explanation.
+10. **Leaving.** Hang up in one window; the other keeps playing. Hang up in
+    both and the session is gone - it is not persisted, and rejoining the
+    channel starts from nothing.
+11. **What it costs.** `chrome://webrtc-internals` while music is playing: the
+    call's bitrate should be **unchanged**. If it went up, something is
+    streaming audio and the whole design has been undone.
+
+Rubbish input is worth a minute too: a Spotify link, a bare word, a
+`javascript:` URL. All three should be refused in the composer with "that does
+not look like a YouTube link" and nothing should reach the other window.
+
 ## How a microphone sounds
 
 Settings → Voice & Video. Everything here applies to a call already running,

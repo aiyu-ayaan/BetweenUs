@@ -23,7 +23,7 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Source--Available-blueviolet?style=flat-square" alt="License" /></a>
 </p>
 
-A modern, secure communication platform with end-to-end encrypted messaging, peer-to-peer (P2P) WebRTC voice/video channels, interactive screen sharing, picture-in-picture, and remote desktop access. Built as a high-performance pnpm + Turborepo monorepo of NestJS microservices with Desktop (Electron), Web (React), and Native Mobile (Android Jetpack Compose) clients.
+A modern, secure communication platform with end-to-end encrypted messaging, peer-to-peer (P2P) WebRTC voice/video channels, interactive screen sharing, picture-in-picture, synchronised listening, and remote desktop access. Built as a high-performance pnpm + Turborepo monorepo of NestJS microservices with Desktop (Electron), Web (React), and Native Mobile (Android Jetpack Compose) clients.
 
 Messages, attachments, and call media are end-to-end encrypted: the server stores and routes ciphertext, never holding any key that can decrypt it. Voice, video, and screen sharing stream directly between participants via a peer-to-peer WebRTC mesh with DTLS-SRTP encryption — requiring zero media server infrastructure.
 
@@ -40,6 +40,7 @@ Messages, attachments, and call media are end-to-end encrypted: the server store
 | Channels | Public and private text channels, private channels as an allowlist, direct messages between friends |
 | Messages & Chat | End-to-end encrypted, realtime over WebSocket, history paging in both directions, replies, `:` emoji search, per-server custom emoji including animated, reactions with who-reacted names, drag-and-drop and a preview before sending, full-screen zoomable image viewer, integrated video player, and local media album saving |
 | Voice and video | Peer-to-peer voice channels, camera, one screen share at a time with takeover, join and leave tones, manual quality override, end-to-end encrypted media, no media server |
+| Listen together | A shared YouTube queue inside a voice call: everyone hears the same track in step, from their own connection, at full quality. Anybody can add, skip or pause; music ducks under whoever is talking. No audio is streamed between anybody |
 | Android Client | Native Jetpack Compose + Material 3 app with E2EE messaging, WhatsApp-style media picker and composer, media viewers, and public gallery saving (`Pictures/BetweenUs`, `Movies/BetweenUs`) |
 | Presence | Online / idle / do not disturb / invisible, typing indicators, voice rosters |
 | Notifications | Desktop notifications, system tray, start with the system, per-channel and per-person mute, quiet hours, persisted unread with a line that survives a restart |
@@ -105,6 +106,10 @@ Electron preload bridge, and a browser tab has none of them.
 | Push to talk | ✅ | ✅ | — |
 | Picture-in-picture while minimised | ✅ | — | — |
 | Join and leave tones | ✅ | ✅ | ✅ |
+| **Listen together** | | | |
+| Shared YouTube queue in a call, in step | ✅ | ✅ | — |
+| Add, skip, seek or pause for everybody | ✅ | ✅ | — |
+| Music ducks under whoever is talking | ✅ | ✅ | — |
 | Ongoing-call notification | tray | — | ✅ foreground service |
 | **Presence and notifications** | | | |
 | Online, idle, do not disturb, invisible | ✅ | ✅ | ✅ |
@@ -720,6 +725,7 @@ GET /api/v1/remote/machines/:id/audit
 POST /api/v1/remote/sessions      DELETE /api/v1/remote/sessions/:id
 GET /api/v1/admin/...             (administrators only)
 WS   /ws/chat                     WS  /ws/presence      WS /ws/remote
+WS   /ws/call                     (signalling, and the Listen Together queue)
 GET  /health                      (every service)
 ```
 
@@ -735,6 +741,34 @@ Errors share one shape everywhere:
 
 Newest first. Every one of these is in `development/TRACK.md` with the reason it
 was built the way it was; this is the short version.
+
+### Listen together
+
+- **A shared music queue inside a voice call.** Paste a YouTube link and
+  everybody in the call hears it, in step, while they work. There is no host:
+  anybody can add, skip, seek or pause, and `call-service` decides the order the
+  way it already does for the screen share.
+- **It is not a screen share with the sound on**, and that is the whole design.
+  A share costs the sharer one upload per listener, squeezes music through a
+  codec tuned for speech, and pins them to the tab. Here **no audio crosses the
+  wire at all** - each client plays the track itself, at full quality, from its
+  own connection. What the call agrees on is a queue and a position, which is a
+  few hundred bytes when somebody presses a button and nothing in between.
+- **A session stores where the track was and when**, not where it is - so one
+  message stays correct until somebody presses something. Clients measure their
+  clock against the gateway's the way NTP does, because two laptops disagree
+  about the time by whatever their NTP daemons last settled on, and a session
+  that trusted `Date.now()` would be exactly that far out with nothing on screen
+  to explain it.
+- **Drift is left alone below a second and a half**, then closed in one seek.
+  Correcting tighter means seeking every few minutes, and a seek is a hole in
+  the music where being a second out is only being a second out.
+- **The music ducks under whoever is talking** and fades back a beat after the
+  last word. That is what makes it working together rather than watching a film.
+- **No YouTube script runs in the renderer.** `script-src` stays `'self'`; the
+  embed is driven over the postMessage protocol `iframe_api.js` is a wrapper
+  around, in a sandboxed cross-origin frame. The only directive that changed is
+  `frame-src`. See `docs/docs/architecture/listen-together.md`.
 
 ### Notifications & Android self-update
 
@@ -847,6 +881,9 @@ was built the way it was; this is the short version.
   smoke scripts are the integration tests and they need a database and Redis.
 - Migrations are waiting to be applied - see the list at the bottom of
   `development/TRACK.md`, including two whose names sort backwards.
+- Listen Together has not been run with two real clients: the transport and the
+  clock have self-checks, the player and the ducking do not and cannot without a
+  browser. `development/TESTING.md` has the walkthrough.
 - On Android a GIF emoji shows its first frame: animating one needs Coil's
   `coil-gif` artifact, which is one dependency line.
 
@@ -882,4 +919,5 @@ Third-party dependencies keep their own licences.
 | `development/ANDROID_TODO.md` | Native Android client architecture, roadmap, and completed phases |
 | `development/TRACK.md` | The current track: what has landed this pass, and why it was built the way it was |
 | `FCM/README.md` | Push notification design: why it is data-only, what the server can decide and what only the client can |
+| `docs/docs/architecture/listen-together.md` | Listen Together: the shared clock, why it is not a screen share, and what it deliberately does not do |
 | `push-suppression.md` | Why a phone is not woken for a chat open on another of your devices, and why a notification goes away when you read it elsewhere |

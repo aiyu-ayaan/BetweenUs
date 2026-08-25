@@ -19,6 +19,54 @@ is true of every line of it.
 
 ## Landed
 
+Listen Together:
+
+- [x] **A shared music queue inside a voice call**, on `/ws/call`. A session is
+      a queue, a cursor and a position stamped against the gateway's own clock;
+      `call-service` orders the presses and broadcasts the whole session, and
+      nothing is persisted - it dies with the call.
+- [x] **No audio crosses the wire.** Each client plays the track itself, from
+      YouTube, over its own connection. This is the entire reason the feature
+      exists rather than being "screen share with the sound on": a share is one
+      upload per listener, music through a codec meant for speech, and the
+      sharer pinned to a tab. A timestamp costs nothing and is better in every
+      one of those.
+- [x] **A position that stays true between messages.** The session stores where
+      the track was *and when*, so a client that has heard nothing for ten
+      minutes is still in step. The arithmetic lives in `shared-types`, imported
+      by both sides, because a gateway that advanced it differently from the
+      clients reading it would be a session where nobody is wrong and nobody
+      agrees.
+- [x] **A clock measured the way NTP does.** `pong` carries `serverMs`; the
+      client keeps eight samples and takes the least-delayed one rather than the
+      average, because a slow round trip is biased and not merely noisy.
+- [x] **Drift left alone below 1.5s**, then closed in one seek. The textbook
+      `playbackRate` nudge is not used and cannot be: the YouTube embed
+      quantises rate to its own menu, so 1.04 is refused or rounded to 1.25.
+- [x] **No host.** Anybody may add, skip, seek, pause or stop. `rev` on every
+      change, and a client drops anything numbered at or below what it has
+      already applied, so its own echo cannot undo somebody else's later press.
+- [x] **`listen.ended` from every client, advancing once.** Idempotent by
+      checking the track id rather than by electing a reporter - electing one
+      means the queue stops when that person's window closes.
+- [x] **`listen.meta` for the title.** A pasted link has none, and nothing on
+      the server may go and ask: that would be a backend service with an API
+      key, an egress rule and an opinion about who is listening to what. The
+      clients have the player open; first one to know fills it in, and a later
+      client claiming a different title is ignored.
+- [x] **No YouTube script in the renderer.** `script-src` stays `'self'`. The
+      embed is driven over the postMessage protocol `iframe_api.js` wraps, in a
+      sandboxed cross-origin frame with no `allow-same-origin`, and the only
+      directive that changed is `frame-src`. Origin and source are both checked
+      on every incoming message.
+- [x] **Music ducks under whoever is talking**, faded, held for the gap between
+      sentences, driven by the call's existing speaking detection - so a muted
+      person in a noisy room does not turn anybody's music down.
+- [x] **Two self-checks**: the transport state machine (which found a real bug -
+      re-stamping always makes a new object, so the "nothing changed" identity
+      test never fired and every late metadata report bumped the revision) and
+      the clock, the tolerance and what a pasted link is allowed to become.
+
 Backend:
 
 - [x] **Per-account login rate limit.** A second bucket keyed on the account

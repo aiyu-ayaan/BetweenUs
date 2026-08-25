@@ -194,6 +194,36 @@ gateway code runs. Chat and presence carry subscriptions and typing flags and
 get 64 KB; call and remote carry an SDP and a person's clipboard selection and
 get 256 KB. Nothing on these sockets is bulk — media is a peer connection.
 
+### Listen Together, and the one thing it puts in other people's windows
+
+`/ws/call` also carries a shared listening queue. It is text and it is small,
+like everything else on that socket - no audio goes near it - but one field
+travels further than the rest: a track's `ref` ends up in an `iframe src` in
+**every** other participant's window.
+
+It is therefore treated as a trust boundary twice. The client parses whatever
+was pasted down to a bare eleven-character YouTube id and refuses anything else,
+and the gateway checks it again against the provider's own alphabet before it is
+broadcast - a client is not the thing that gets to decide what URL other people
+load. Titles are bounded, durations are clamped, and the queue has a ceiling,
+because all three are drawn on screens belonging to people who did not choose
+them. The queue-entry id is minted by the gateway rather than by the client, so
+one person cannot name an entry that collides with somebody else's and remove
+the wrong track.
+
+The player itself runs in a sandboxed cross-origin frame with no
+`allow-same-origin`, so YouTube's code cannot reach this document, and
+`script-src` stays `'self'` - the embed is driven over `postMessage` rather than
+by loading YouTube's script into the renderer. Incoming messages are checked for
+both `origin` and `source`; a `message` handler that checks neither is a hole
+any frame on the page can post through.
+
+Membership in the call is the only permission asked for. Everybody in a call can
+change what is playing, which is the intended design and is worth stating
+plainly: it means anybody who can join a voice channel can put a video's audio
+into everybody else's headphones there. The mitigation is the same one that
+applies to speaking in the channel at all - `START_CALL`, and being a member.
+
 Chat re-checks channel access on every `channel.subscribe`, because permissions
 change mid-session. A remote session is authorized by its row, which was issued
 to one person over HTTP after the grant was checked, so presenting somebody

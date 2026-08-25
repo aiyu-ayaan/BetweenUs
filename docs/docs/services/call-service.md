@@ -12,6 +12,22 @@ The switchboard for peer-to-peer calls — never touches media. See
 Roster join/leave, and relay of SDP offers/answers and ICE candidates
 between two peers in the same channel's call.
 
+## Listen Together
+
+The same socket carries a shared listening session: a queue, a cursor into it,
+and a position stamped against the gateway's own clock. No audio goes near it -
+every client plays the track itself, from YouTube, over its own connection - so
+this is signalling exactly like an SDP is, and costs no uplink at all.
+
+`listen.add / remove / play / pause / seek / skip / stop / ended / meta` come in;
+`listen.state` with the whole session goes out to everybody, and `pong` carries
+`serverMs` so a client can measure its clock against this one. There is no host:
+anybody in the call may press anything, and `call-service` is the ordering,
+which is the same job it does for the screen share and for the same reason.
+
+Held in process beside the roster, and it dies with the call. Full design:
+[Listen Together](/architecture/listen-together).
+
 ## `/api/v1/calls`
 
 | Method | Path | What it does |

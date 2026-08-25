@@ -27,6 +27,11 @@ sequenceDiagram
     Note over A,B: DTLS-SRTP media flows directly - never through call-service
 ```
 
+Music is the exception that proves the rule: **Listen Together does not use any
+of this.** Rather than streaming audio to everybody, the call agrees on a queue
+and a timestamp and every client plays the track itself. See
+[Listen Together](/architecture/listen-together).
+
 ## Why: the tunnel can't carry it
 
 Cloudflare Tunnel carries HTTP and WebSocket. It does **not** carry UDP, and

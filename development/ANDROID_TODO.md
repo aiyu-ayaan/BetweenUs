@@ -1456,6 +1456,41 @@ out inside thirty seconds if it was wrong.
 `AppForeground` calls `Connectivity.retry()` on the resume that brings the app
 back, counted so moving between two of its own screens does not.
 
+## Listen Together, as a listener
+
+Desktop and web have it (`docs/docs/architecture/listen-together.md`): a shared
+YouTube queue inside a voice call, where every client plays the track itself and
+the call agrees only on a queue and a position. No audio crosses the wire.
+
+**The agreed scope for the phone is to listen and not to drive.** A phone in the
+call hears what everybody else hears; adding, skipping, seeking and pausing stay
+on the machines people are working at. That is not a limitation being apologised
+for - a transport control on a device in somebody's pocket is a track skipped by
+a coat.
+
+Not built. What it needs:
+
+- [ ] A `WebView` on `https://www.youtube-nocookie.com/embed/<id>?enablejsapi=1`
+      driven over the same `postMessage` protocol the desktop uses - see
+      `apps/desktop/src/services/youtube.ts`, which exists precisely so no
+      YouTube script has to run inside the app. `WebView` with JavaScript on, no
+      file access, no universal access from file URLs, and the same origin check
+      on every message coming back.
+- [ ] `listen.state` in `CallSocket`, and the clock sample off `pong.serverMs`.
+- [ ] A port of `listen-sync.ts`: the NTP-style offset, the least-delayed
+      sample, and the reconcile-every-five-seconds loop with the same 1.5s
+      tolerance. It must be the *same* arithmetic - two clients in one session
+      disagreeing about what "in step" means is worse than one of them being
+      out.
+- [ ] `listen.ended` and `listen.meta` should still be sent. Both are idempotent
+      at the gateway, and a phone is as good a reporter of "this track finished"
+      as anything else - better, if it is the device that stayed awake.
+- [ ] Ducking under the call's own speaking detection, exactly as on desktop.
+- [ ] Audio focus: the player must take and release it properly, or a phone call
+      will fight the queue. This is the one piece with no desktop equivalent.
+- [ ] The ongoing-call foreground notification should say a queue is playing,
+      since that is the thing draining the battery.
+
 ## Deliberately out of scope
 
 - **Live streaming.** Out of scope on every client while media is peer-to-peer.
