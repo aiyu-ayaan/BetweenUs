@@ -1192,6 +1192,52 @@ Phase 12 opened these, and left them open on purpose:
       newest first and registrations keep arriving, so an offset would show the
       same account at the end of one page and the start of the next
 
+## A peer id that survives a reconnect ✅
+
+The call that connects, drops and connects again in a loop, most often on
+mobile data. None of it was ever about the media path.
+
+`call.gateway.ts` minted `peerId: randomUUID()` per **socket**. A phone loses a
+signalling socket constantly — a lift, a train, a screen that went off, a doze
+the system decided on — and comes back a second later under a new name. Both
+ends of every connection in the mesh decide who yields on a collision by
+comparing the two ids, so after a reconnect they disagreed: either nobody
+offered or both did. The clients' only defence was to tear the whole mesh down
+and rebuild it, which is what the loop looked like from the outside.
+
+Two changes, both in the gateway:
+
+- **Identity is per device.** `peer-identity.ts` derives the id from
+  `sha256(userId:device)`, where `device` comes off the handshake query — the
+  installation id the clients already mint for E2EE. Two windows on one account
+  are still two peers, which is the thing the per-socket id was right about; the
+  same window coming back is now the same peer. A client that names no device
+  gets a random id, exactly as before.
+- **A seat is held for fifteen seconds.** A socket that simply *closed* is a
+  network, not a decision, so `peer.left` waits. A peer that rejoins with the
+  same id inside the window cancels it, and its `peer.joined` is suppressed too:
+  nobody else's connection is touched, and ICE — which has its own restart and
+  its own deadline in every client — gets on with the one job that is actually
+  its own. A deliberate `leave` is announced at once, because holding that seat
+  is fifteen seconds of a frozen tile.
+
+The same-peer case is handled where it is easiest to miss: an old socket still
+closing while its replacement joins is *replaced*, not superseded, so it departs
+quietly holding its seat rather than announcing its own exit and re-entry.
+
+Both clients send `&device=` on `/ws/call` — Android on every socket,
+`DeviceIdentity.id()`; desktop from `deviceId()` in `e2ee.ts`.
+
+`src/peer-identity.check.ts` holds the rules that fail silently: same device
+same id, two windows different ids, two accounts on one machine different ids,
+no account or installation readable in the value, and an unbounded `device`
+refused rather than truncated — half an id is a different peer.
+
+Still true and still the operator's decision: a pair of networks that cannot
+form a direct path needs TURN, and TURN is off unless `CLOUDFLARE_TURN_KEY_ID`
+and `CLOUDFLARE_TURN_KEY_API_TOKEN` are set. Symmetric or carrier-grade NAT on
+both ends fails without it, and no amount of signalling repair changes that.
+
 ## Done
 
 ### Phase 1 — dev infrastructure

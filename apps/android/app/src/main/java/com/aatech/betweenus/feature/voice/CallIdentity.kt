@@ -5,11 +5,17 @@ package com.aatech.betweenus.feature.voice
  * both were silently wrong for months and neither is reachable from a test
  * while it lives inside a class that needs WebRTC to construct.
  *
- * A peer id belongs to a *socket*, not to an account and not to a call. The
- * call service mints one when a connection opens and announces it once, in
- * `ready`. Any new socket is a new identity, and everything below is computed
- * from it - which is why an identity that has quietly moved on is not a
- * cosmetic problem.
+ * A peer id belongs to a *device*, not to an account and not to a socket. The
+ * call service derives it from the device this connection named in its
+ * handshake and announces it in `ready`, so a reconnect comes back under the
+ * same name and the mesh is left alone.
+ *
+ * It was per socket, which is why [changed] exists at all: a phone that lost
+ * its signalling for a second came back as a stranger, every link in the call
+ * had been built against an id nobody could see any more, and the only way out
+ * was to throw the whole mesh away and build it again. [changed] is now the
+ * guard for the case that is left - an older service, or a build that names no
+ * device - rather than the thing that happens on every train journey.
  */
 internal object CallIdentity {
 

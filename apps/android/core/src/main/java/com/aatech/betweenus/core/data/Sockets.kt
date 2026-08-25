@@ -97,7 +97,20 @@ open class JsonSocket(private val path: String) {
         val token = this.token ?: return
         if (socket != null) return
 
-        val url = "${Endpoint.webSocket()}$path?token=${URLEncoder.encode(token, "UTF-8")}"
+        // The device goes with the token. `call-service` hangs a peer id on it,
+        // so a peer keeps its name across a reconnect instead of arriving as a
+        // stranger and making everybody rebuild their connection to it. Every
+        // socket carries it; the ones that have no use for it ignore it.
+        val url = buildString {
+            append(Endpoint.webSocket())
+            append(path)
+            append("?token=")
+            append(URLEncoder.encode(token, "UTF-8"))
+            deviceId()?.let {
+                append("&device=")
+                append(URLEncoder.encode(it, "UTF-8"))
+            }
+        }
         socket = Http.client.newWebSocket(
             Request.Builder().url(url).build(),
             object : WebSocketListener() {
@@ -196,6 +209,16 @@ open class JsonSocket(private val path: String) {
     init {
         NetworkWatch.onAvailable { networkReturned() }
     }
+
+    /**
+     * This installation's id, or null before it exists.
+     *
+     * Null is not a failure: a socket opened before `DeviceIdentity.init` has
+     * run gets the old behaviour - a random peer id per connection - rather
+     * than a crash on a `lateinit`.
+     */
+    private fun deviceId(): String? =
+        runCatching { com.aatech.betweenus.core.crypto.DeviceIdentity.id() }.getOrNull()
 
     /** Overridden to re-subscribe: the server keeps nothing across connections. */
     protected open fun onConnected() = Unit

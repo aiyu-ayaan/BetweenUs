@@ -22,7 +22,6 @@
  *   traffic as somebody else.
  */
 import { Injectable, OnModuleDestroy } from '@nestjs/common';
-import { randomUUID } from 'node:crypto';
 import type { Server as HttpServer } from 'node:http';
 import { WebSocket, WebSocketServer } from 'ws';
 import { resolveChannelAccess } from '@betweenus/database';
@@ -36,9 +35,32 @@ import type {
   ServerCallEvent,
 } from '@betweenus/shared-types';
 import { otherDevicesInCall } from './devices';
+import { deviceOf, peerIdFor } from './peer-identity';
 import { CallsService, type ReportedUsage } from './modules/calls/calls.service';
 
 const HEARTBEAT_INTERVAL_MS = 30_000;
+
+/**
+ * How long a peer's seat is held after its socket closes, before the others are
+ * told it has gone.
+ *
+ * A phone loses its signalling socket constantly - a lift, a train, a screen
+ * that went off, a doze the system decided on - and it comes back within a
+ * second or two. Announcing `peer.left` the instant the socket drops made every
+ * one of those a full mesh teardown: everybody closed their peer connection to
+ * it, it rejoined, and everybody built a new one and renegotiated from nothing.
+ * That is the call that connects, drops and connects again in a loop, and none
+ * of it was ever about the media path.
+ *
+ * Inside this window a peer that comes back with the same id is not announced
+ * as leaving or as arriving. Nobody's connection is touched, and ICE - which
+ * has its own restart and its own deadline in every client - is left to do the
+ * one job that is actually its own: find the media a path again.
+ *
+ * Shorter than the heartbeat, so a seat cannot outlive the roster that would
+ * have corrected it, and much shorter than any client's signalling deadline.
+ */
+const REJOIN_GRACE_MS = 15_000;
 
 /**
  * The ceiling the mesh imposes, enforced where it can be said clearly rather
@@ -89,6 +111,17 @@ export class CallGateway implements OnModuleDestroy {
    * gateway can decide.
    */
   private readonly sharing = new Map<string, WebSocket>();
+
+  /**
+   * `channelId\u0000peerId` -> the "they have gone" nobody has been told yet.
+   *
+   * A closed socket takes its seat off the roster straight away - a ghost in
+   * the peer list is somebody a new joiner tries to call and never reaches -
+   * but the *announcement* waits out [REJOIN_GRACE_MS]. A peer that comes back
+   * with the same id cancels it, and the rest of the call never learns anything
+   * happened.
+   */
+  private readonly departing = new Map<string, NodeJS.Timeout>();
 
   constructor(
     private readonly logger: Logger,
@@ -143,12 +176,13 @@ export class CallGateway implements OnModuleDestroy {
         return;
       }
 
-      // A peer id per socket rather than per user: one account with two windows
-      // open is two ends of two different peer connections, and collapsing them
-      // onto one identity is what made the old design disconnect the first
-      // window when the second joined.
+      // A peer id per device, not per socket and not per user. Two windows on
+      // one account are still two peers - that is what stops the second one
+      // disconnecting the first - but a reconnect from the same window is the
+      // same peer, which is what stops a tunnel from rebuilding the mesh. See
+      // `peerIdFor`.
       const state: SocketState = {
-        peerId: randomUUID(),
+        peerId: peerIdFor(user.id, deviceOf(request.url)),
         userId: user.id,
         username: user.username,
         channelId: null,
@@ -169,7 +203,9 @@ export class CallGateway implements OnModuleDestroy {
         void this.handle(socket, raw.toString());
       });
 
-      socket.on('close', () => this.depart(socket));
+      // A socket that simply closed is a network, not a decision - and on a
+      // phone it is a network that comes back in a second. The seat is held.
+      socket.on('close', () => this.depart(socket, { hold: true }));
 
       socket.on('error', (error) => {
         this.logger.warn('Call socket error', { userId: user.id, reason: String(error) });
@@ -235,6 +271,8 @@ export class CallGateway implements OnModuleDestroy {
           bytesReceived: typeof event.bytesReceived === 'number' ? event.bytesReceived : 0,
           links: event.links,
         };
+        // Somebody pressed the button. No grace: they are not coming back, and
+        // holding their seat is fifteen seconds of a frozen tile for everybody.
         this.depart(socket);
         return;
 
@@ -259,6 +297,26 @@ export class CallGateway implements OnModuleDestroy {
     }
   }
 
+  private holdKey(channelId: string, peerId: string): string {
+    return `${channelId}\u0000${peerId}`;
+  }
+
+  /**
+   * Whether this join is the same peer coming back inside its grace window.
+   *
+   * True means the others still hold a live peer connection to it and must not
+   * be told about any of this: no `peer.left` (cancelled here) and no
+   * `peer.joined` (suppressed by the caller).
+   */
+  private resumeHeldSeat(channelId: string, peerId: string): boolean {
+    const key = this.holdKey(channelId, peerId);
+    const timer = this.departing.get(key);
+    if (!timer) return false;
+    clearTimeout(timer);
+    this.departing.delete(key);
+    return true;
+  }
+
   private async join(socket: WebSocket, state: SocketState, channelId: string): Promise<void> {
     const access = await resolveChannelAccess(state.userId, channelId);
     if (!access) {
@@ -278,7 +336,7 @@ export class CallGateway implements OnModuleDestroy {
 
     // One call per socket. Leaving the old one first keeps a roster honest when
     // a client switches channels without saying goodbye to the first.
-    if (state.channelId && state.channelId !== channelId) this.depart(socket, true);
+    if (state.channelId && state.channelId !== channelId) this.depart(socket, { keepOpen: true });
 
     // One call per *account*, across every device it is signed in on. A peer id
     // is still per socket - two windows are still two ends of two connections -
@@ -297,8 +355,20 @@ export class CallGateway implements OnModuleDestroy {
       socket,
     );
     for (const other of otherDevices) {
+      // The same peer id is this device reconnecting, not another one: an old
+      // socket the far end has not finished closing while its replacement is
+      // already joining. It is not superseded, it is replaced - so it goes
+      // quietly, holding its seat for the join happening two lines below. Told
+      // otherwise, a phone with a slow-closing socket would announce its own
+      // departure and arrival on every reconnect, which is the rebuild this
+      // whole change exists to stop.
+      const replaced = this.state.get(other)?.peerId === state.peerId;
+      if (replaced) {
+        this.depart(other, { keepOpen: true, hold: true });
+        continue;
+      }
       this.send(other, { type: 'superseded', channelId });
-      this.depart(other, true);
+      this.depart(other, { keepOpen: true });
       this.logger.info('Call moved to another device', { userId: state.userId, channelId });
     }
 
@@ -332,19 +402,29 @@ export class CallGateway implements OnModuleDestroy {
       peer.metUserIds.add(state.userId);
     }
 
+    // Before the seat is taken back, because taking it back is what decides
+    // whether anybody else is told about it.
+    const resumed = this.resumeHeldSeat(channelId, state.peerId);
+
     members.add(socket);
     this.calls.set(channelId, members);
     state.channelId = channelId;
 
     this.send(socket, { type: 'joined', channelId, peers });
-    this.broadcast(
-      channelId,
-      {
-        type: 'peer.joined',
-        peer: { peerId: state.peerId, userId: state.userId, username: state.username },
-      },
-      socket,
-    );
+    // A peer coming back inside its grace window never left as far as anybody
+    // else is concerned. Announcing it would be an arrival for a connection
+    // every one of them already holds - and the tear-down and rebuild that
+    // follows is the whole of a call that connects and drops in a loop.
+    if (!resumed) {
+      this.broadcast(
+        channelId,
+        {
+          type: 'peer.joined',
+          peer: { peerId: state.peerId, userId: state.userId, username: state.username },
+        },
+        socket,
+      );
+    }
 
     this.announceRoster(channelId);
 
@@ -432,7 +512,8 @@ export class CallGateway implements OnModuleDestroy {
    * `keepOpen` is the channel-switch case: the socket lives on, so its state is
    * kept and only its membership is dropped.
    */
-  private depart(socket: WebSocket, keepOpen = false): void {
+  private depart(socket: WebSocket, options: DepartOptions = {}): void {
+    const { keepOpen = false, hold = false } = options;
     const state = this.state.get(socket);
     if (!state) return;
 
@@ -470,13 +551,38 @@ export class CallGateway implements OnModuleDestroy {
     // Everyone still in the call has a peer connection to this peer that will
     // never produce another frame. Saying so is what closes it; waiting for ICE
     // to time out is thirty seconds of a frozen tile.
-    this.broadcast(channelId, { type: 'peer.left', peerId: state.peerId });
-    this.announceRoster(channelId);
+    //
+    // Unless nobody has said they are leaving. A socket that simply closed is a
+    // network, not a decision, and on a phone it is a network that comes back
+    // in a second - so the seat is held and the announcement waits. See
+    // REJOIN_GRACE_MS.
+    if (!hold) {
+      this.announceDeparture(channelId, state.peerId);
+    } else {
+      const key = this.holdKey(channelId, state.peerId);
+      const held = state.peerId;
+      clearTimeout(this.departing.get(key));
+      this.departing.set(
+        key,
+        setTimeout(() => {
+          this.departing.delete(key);
+          this.announceDeparture(channelId, held);
+        }, REJOIN_GRACE_MS),
+      );
+    }
+
     this.logger.info('Peer left a call', {
       userId: state.userId,
       channelId,
       peers: members.size,
+      held: hold,
     });
+  }
+
+  /** They are not coming back: tell the call, and correct the roster. */
+  private announceDeparture(channelId: string, peerId: string): void {
+    this.broadcast(channelId, { type: 'peer.left', peerId });
+    this.announceRoster(channelId);
   }
 
   private broadcast(channelId: string, event: ServerCallEvent, except?: WebSocket): void {
@@ -492,8 +598,23 @@ export class CallGateway implements OnModuleDestroy {
 
   onModuleDestroy(): void {
     if (this.heartbeat) clearInterval(this.heartbeat);
+    for (const timer of this.departing.values()) clearTimeout(timer);
+    this.departing.clear();
     this.server?.close();
   }
+}
+
+/**
+ * How a socket is being taken off a call.
+ *
+ * `keepOpen` says the socket lives on - a channel switch, or a device being
+ * replaced - so its state is kept and only its membership dropped. `hold` says
+ * nobody has announced anything: the seat is kept for [REJOIN_GRACE_MS] and the
+ * rest of the call is told only if it is not claimed back.
+ */
+interface DepartOptions {
+  keepOpen?: boolean;
+  hold?: boolean;
 }
 
 /** A stay nobody reported on: a window closed mid-call, or an older client. */

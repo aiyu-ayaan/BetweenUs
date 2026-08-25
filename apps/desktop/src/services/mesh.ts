@@ -67,6 +67,7 @@ import type {
   ServerCallEvent,
 } from '@betweenus/shared-types';
 import { wsUrl } from './endpoint';
+import { deviceId } from './e2ee';
 import {
   PLAYOUT_DELAY,
   patchVideoBandwidth,
@@ -1120,7 +1121,12 @@ export class Mesh {
   /** Opens the socket and joins. Resolves once the server has answered. */
   async join(): Promise<void> {
     const { channelId, token } = this.options;
-    const socket = new WebSocket(`${wsUrl()}/ws/call?token=${encodeURIComponent(token)}`);
+    // The device goes with the token. `call-service` hangs this window's peer
+    // id on it, so a signalling reconnect comes back as the same peer rather
+    // than as a stranger everybody has to rebuild a connection to.
+    const socket = new WebSocket(
+      `${wsUrl()}/ws/call?token=${encodeURIComponent(token)}&device=${encodeURIComponent(deviceId())}`,
+    );
     this.socket = socket;
 
     await new Promise<void>((resolve, reject) => {
