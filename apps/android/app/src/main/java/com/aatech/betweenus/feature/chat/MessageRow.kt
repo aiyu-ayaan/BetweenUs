@@ -77,6 +77,7 @@ import androidx.compose.ui.text.Placeholder
 import androidx.compose.ui.text.PlaceholderVerticalAlign
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import coil.compose.AsyncImage
@@ -1309,8 +1310,35 @@ private fun MessageText(readable: ReadableMessage) {
                         .border(1.dp, Edge, RoundedCornerShape(6.dp))
                         .padding(horizontal = 10.dp, vertical = 8.dp),
                 )
+                // The marker sits in a gutter of its own so a wrapped item
+                // lines up under its own first word rather than under the
+                // bullet - which is the only thing that makes a list of long
+                // items readable as a list.
+                Markup.Kind.Bullet -> MarkupItem("•", block, readable.body.emoji)
+                Markup.Kind.Number -> MarkupItem("${block.ordinal}.", block, readable.body.emoji)
             }
         }
+    }
+}
+
+/** One list item: its marker in a fixed gutter, its words hanging beside it. */
+@Composable
+private fun MarkupItem(
+    marker: String,
+    block: Markup.Block,
+    emoji: List<MessageCustomEmoji>,
+) {
+    Row(modifier = Modifier.fillMaxWidth()) {
+        Text(
+            text = marker,
+            style = MaterialTheme.typography.bodyLarge,
+            color = Slate400,
+            textAlign = TextAlign.End,
+            modifier = Modifier
+                .widthIn(min = 20.dp)
+                .padding(end = 8.dp),
+        )
+        MarkupBody(block, emoji)
     }
 }
 
