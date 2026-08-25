@@ -23,9 +23,25 @@ object Markup {
     /** A style over `[start, end)` of the block's own text. */
     data class Span(val start: Int, val end: Int, val style: Style)
 
-    enum class Kind { Body, Quote, Code }
+    enum class Kind { Body, Quote, Code, Bullet, Number }
 
-    data class Block(val kind: Kind, val text: String, val spans: List<Span> = emptyList())
+    /**
+     * One block of a message.
+     *
+     * A list is not a block: every item is its own, and a run of them next to
+     * each other is what a list *is*. That keeps this list flat - no tree, no
+     * nesting - which is the whole of what a chat line needs and a fraction of
+     * what a document parser would cost.
+     *
+     * [ordinal] is the number a `Number` item is drawn with, and zero for
+     * everything else.
+     */
+    data class Block(
+        val kind: Kind,
+        val text: String,
+        val spans: List<Span> = emptyList(),
+        val ordinal: Int = 0,
+    )
 
     private data class Delimiter(val token: String, val style: Style)
 
@@ -40,6 +56,16 @@ object Markup {
     )
 
     private const val ESCAPABLE = "*_~`\\>"
+
+    /**
+     * A list marker, and the space after it.
+     *
+     * The space is what keeps `*bold*` from being a bullet: a marker glued to
+     * its word is a mark, and a marker standing off from it is a list. The
+     * indent is bounded at three so a deliberately indented line stays prose.
+     */
+    private val BULLET = Regex("^ {0,3}[-*+] +(.*)$")
+    private val NUMBER = Regex("^ {0,3}(\\d{1,9})[.)] +(.*)$")
 
     fun parse(text: String): List<Block> {
         val blocks = mutableListOf<Block>()
@@ -76,6 +102,34 @@ object Markup {
                 continue
             }
 
+            // A list item is its own block, so it ends whatever paragraph was
+            // being gathered. Bullets first: `1.` cannot start with `-`, but a
+            // bullet line can perfectly well contain a number.
+            val bullet = BULLET.find(line)
+            if (bullet != null) {
+                flush()
+                blocks += inline(bullet.groupValues[1], Kind.Bullet)
+                i++
+                continue
+            }
+
+            val numbered = NUMBER.find(line)
+            if (numbered != null) {
+                flush()
+                // The run is renumbered from whatever the first item said, so
+                // the `1. 1. 1.` everybody types comes out 1, 2, 3 - and a list
+                // that deliberately starts at 5 still starts at 5.
+                val previous = blocks.lastOrNull()
+                val ordinal = if (previous != null && previous.kind == Kind.Number) {
+                    previous.ordinal + 1
+                } else {
+                    numbered.groupValues[1].toIntOrNull() ?: 1
+                }
+                blocks += inline(numbered.groupValues[2], Kind.Number, ordinal)
+                i++
+                continue
+            }
+
             val quoted = line.startsWith("> ") || line == ">"
             val body = if (quoted) line.removePrefix(">").removePrefix(" ") else line
 
@@ -92,11 +146,11 @@ object Markup {
         return blocks
     }
 
-    private fun inline(source: String, kind: Kind): Block {
+    private fun inline(source: String, kind: Kind, ordinal: Int = 0): Block {
         val out = StringBuilder()
         val spans = mutableListOf<Span>()
         scan(source, out, spans)
-        return Block(kind, out.toString(), spans)
+        return Block(kind, out.toString(), spans, ordinal)
     }
 
     private fun scan(source: String, out: StringBuilder, spans: MutableList<Span>) {
@@ -147,5 +201,7 @@ object Markup {
     /** Whether anything at all would be drawn differently. Saves a rebuild. */
     fun isPlain(text: String): Boolean =
         text.none { it == '*' || it == '_' || it == '~' || it == '`' || it == '\\' } &&
-            !text.startsWith("> ") && !text.contains("\n> ")
+            text.lineSequence().none {
+                it.startsWith("> ") || it == ">" || BULLET.matches(it) || NUMBER.matches(it)
+            }
 }

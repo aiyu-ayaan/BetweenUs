@@ -119,8 +119,88 @@ class MarkupTest {
     }
 
     @Test
+    fun `a bullet is its own block and loses its marker`() {
+        val blocks = Markup.parse("shopping\n- eggs\n- milk")
+        assertEquals(listOf(Kind.Body, Kind.Bullet, Kind.Bullet), blocks.map { it.kind })
+        assertEquals("eggs", blocks[1].text)
+        assertEquals("milk", blocks[2].text)
+    }
+
+    @Test
+    fun `a bullet still carries its inline styles`() {
+        val blocks = Markup.parse("- buy **eggs**")
+        assertEquals("buy eggs", blocks[0].text)
+        assertEquals(listOf(Span(4, 8, Style.Bold)), blocks[0].spans)
+    }
+
+    @Test
+    fun `a numbered run is renumbered from its first item`() {
+        val blocks = Markup.parse("1. one\n1. two\n1. three")
+        assertEquals(listOf(1, 2, 3), blocks.map { it.ordinal })
+        assertEquals(listOf("one", "two", "three"), blocks.map { it.text })
+    }
+
+    @Test
+    fun `a numbered run that starts elsewhere keeps its start`() {
+        val blocks = Markup.parse("5. five\n6. six")
+        assertEquals(listOf(5, 6), blocks.map { it.ordinal })
+    }
+
+    @Test
+    fun `a paragraph between two runs starts the numbering again`() {
+        val blocks = Markup.parse("1. one\nprose\n1. one again")
+        assertEquals(listOf(Kind.Number, Kind.Body, Kind.Number), blocks.map { it.kind })
+        assertEquals(1, blocks[2].ordinal)
+    }
+
+    @Test
+    fun `a close paren numbers a list too`() {
+        assertEquals(Kind.Number, Markup.parse("1) one").single().kind)
+    }
+
+    @Test
+    fun `a marker glued to its word is a mark, not a list`() {
+        // The space after the marker is the whole difference, and it is what
+        // keeps every *italic* in the app from becoming a bullet.
+        val block = one("*italic*")
+        assertEquals(Kind.Body, block.kind)
+        assertEquals("italic", block.text)
+    }
+
+    @Test
+    fun `a hyphen mid-sentence is not a bullet`() {
+        val block = one("well - maybe not")
+        assertEquals(Kind.Body, block.kind)
+        assertEquals("well - maybe not", block.text)
+    }
+
+    @Test
+    fun `a decimal is not a numbered item`() {
+        val block = one("3.14 is pi")
+        assertEquals(Kind.Body, block.kind)
+        assertEquals("3.14 is pi", block.text)
+    }
+
+    @Test
+    fun `a list marker inside a fence is left alone`() {
+        val blocks = Markup.parse("```\n- not a bullet\n```")
+        assertEquals(listOf(Kind.Code), blocks.map { it.kind })
+        assertEquals("- not a bullet", blocks[0].text)
+    }
+
+    @Test
     fun `isPlain agrees with parse doing nothing`() {
-        for (text in listOf("hello", "a b c", "2 > 1 yes", "https://example.com/a_b")) {
+        for (text in listOf(
+            "hello",
+            "a b c",
+            "2 > 1 yes",
+            "https://example.com/a_b",
+            "- a bullet",
+            "1. an item",
+            "1) an item",
+            "well - maybe not",
+            "3.14 is pi",
+        )) {
             val plain = Markup.isPlain(text)
             val unchanged = Markup.parse(text).let {
                 it.size == 1 && it[0].kind == Kind.Body && it[0].text == text && it[0].spans.isEmpty()
