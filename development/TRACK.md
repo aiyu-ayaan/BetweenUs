@@ -62,6 +62,27 @@ Listen Together:
 - [x] **Music ducks under whoever is talking**, faded, held for the gap between
       sentences, driven by the call's existing speaking detection - so a muted
       person in a noisy room does not turn anybody's music down.
+- [x] **The real youtube.com, inside the call, on desktop.** Pasting links was
+      the wrong shape: nobody keeps a list of video ids, they search for a half
+      remembered chorus or open a playlist they made, and two of those need a
+      signed-in account. A `WebContentsView` the main process owns, in its own
+      `persist:youtube` partition, with no preload and navigation confined to
+      Google's hosts. Not `webviewTag`, which would give the renderer the power
+      to mount web content anywhere; not an iframe, which youtube.com refuses
+      outright - so the web client keeps the paste box and is told why.
+- [x] **The video on screen.** Both the player's frame and the browser's view
+      follow the same rule: the thing that plays outlives the component that
+      shows it. A React component offers an empty rectangle and the frame is
+      positioned over it, because a frame destroyed on unmount is a fresh
+      player - back at zero, refused autoplay, out of step with the room.
+- [x] **The bug that made all of it silent.** `sandbox` without
+      `allow-same-origin` gives a frame an opaque origin, so every message it
+      posted arrived as `origin: "null"` and the origin check refused all of it.
+      Handshake never completed, `playVideo` never flushed, player visibly
+      present and permanently mute with nothing in the console. The sandbox
+      bought nothing - a cross-origin frame is already isolated exactly as hard.
+      Alongside it: `origin=file://` is refused by YouTube, which would have
+      broken a packaged build while the dev server worked.
 - [x] **Two self-checks**: the transport state machine (which found a real bug -
       re-stamping always makes a new object, so the "nothing changed" identity
       test never fired and every late metadata report bumped the revision) and

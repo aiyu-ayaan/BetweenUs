@@ -40,7 +40,7 @@ Messages, attachments, and call media are end-to-end encrypted: the server store
 | Channels | Public and private text channels, private channels as an allowlist, direct messages between friends |
 | Messages & Chat | End-to-end encrypted, realtime over WebSocket, history paging in both directions, replies, `:` emoji search, per-server custom emoji including animated, reactions with who-reacted names, drag-and-drop and a preview before sending, full-screen zoomable image viewer, integrated video player, and local media album saving |
 | Voice and video | Peer-to-peer voice channels, camera, one screen share at a time with takeover, join and leave tones, manual quality override, end-to-end encrypted media, no media server |
-| Listen together | A shared YouTube queue inside a voice call: everyone hears the same track in step, from their own connection, at full quality. Anybody can add, skip or pause; music ducks under whoever is talking. No audio is streamed between anybody |
+| Listen together | A shared YouTube queue inside a voice call: everyone hears the same track in step, from their own connection, at full quality, with the video on screen. Browse the real youtube.com inside the app, signed in as yourself, and queue what you are looking at. Anybody can add, skip or pause; music ducks under whoever is talking. No audio is streamed between anybody |
 | Android Client | Native Jetpack Compose + Material 3 app with E2EE messaging, WhatsApp-style media picker and composer, media viewers, and public gallery saving (`Pictures/BetweenUs`, `Movies/BetweenUs`) |
 | Presence | Online / idle / do not disturb / invisible, typing indicators, voice rosters |
 | Notifications | Desktop notifications, system tray, start with the system, per-channel and per-person mute, quiet hours, persisted unread with a line that survives a restart |
@@ -54,7 +54,9 @@ Messages, attachments, and call media are end-to-end encrypted: the server store
 
 Where the three differ it is almost always for one reason: screen capture by
 source, synthetic mouse and keyboard input and the OS keychain live behind the
-Electron preload bridge, and a browser tab has none of them.
+Electron preload bridge, and a browser tab has none of them. Browsing YouTube
+inside the app is the one exception with a different cause - youtube.com refuses
+to be framed, so no browser tab can ever show it.
 
 | | Desktop | Web | Android |
 | --- | :---: | :---: | :---: |
@@ -107,9 +109,11 @@ Electron preload bridge, and a browser tab has none of them.
 | Picture-in-picture while minimised | ✅ | — | — |
 | Join and leave tones | ✅ | ✅ | ✅ |
 | **Listen together** | | | |
-| Shared YouTube queue in a call, in step | ✅ | ✅ | — |
+| Shared queue in a call, in step, video on screen | ✅ | ✅ | — |
 | Add, skip, seek or pause for everybody | ✅ | ✅ | — |
 | Music ducks under whoever is talking | ✅ | ✅ | — |
+| Browse youtube.com in the app, signed in | ✅ | — | — |
+| Paste a link | ✅ | ✅ | — |
 | Ongoing-call notification | tray | — | ✅ foreground service |
 | **Presence and notifications** | | | |
 | Online, idle, do not disturb, invisible | ✅ | ✅ | ✅ |
@@ -744,10 +748,16 @@ was built the way it was; this is the short version.
 
 ### Listen together
 
-- **A shared music queue inside a voice call.** Paste a YouTube link and
-  everybody in the call hears it, in step, while they work. There is no host:
-  anybody can add, skip, seek or pause, and `call-service` decides the order the
-  way it already does for the screen share.
+- **A shared music queue inside a voice call.** Everybody hears the same track,
+  in step, while they work, with the video on screen. There is no host: anybody
+  can add, skip, seek or pause, and `call-service` decides the order the way it
+  already does for the screen share.
+- **The real youtube.com, inside the app, on desktop.** Signed in as you, with
+  search, your playlists and your subscriptions, and a button that queues
+  whatever is on screen - because nobody keeps a list of video ids. It is a
+  `WebContentsView` the main process owns in its own session partition, not a
+  `webview` and not an iframe: youtube.com refuses to be framed, which is why a
+  browser tab gets the paste box and is told why.
 - **It is not a screen share with the sound on**, and that is the whole design.
   A share costs the sharer one upload per listener, squeezes music through a
   codec tuned for speech, and pins them to the tab. Here **no audio crosses the

@@ -211,12 +211,32 @@ them. The queue-entry id is minted by the gateway rather than by the client, so
 one person cannot name an entry that collides with somebody else's and remove
 the wrong track.
 
-The player itself runs in a sandboxed cross-origin frame with no
-`allow-same-origin`, so YouTube's code cannot reach this document, and
-`script-src` stays `'self'` - the embed is driven over `postMessage` rather than
-by loading YouTube's script into the renderer. Incoming messages are checked for
-both `origin` and `source`; a `message` handler that checks neither is a hole
-any frame on the page can post through.
+The player itself runs in a cross-origin frame, so YouTube's code cannot reach
+this document, and `script-src` stays `'self'` - the embed is driven over
+`postMessage` rather than by loading YouTube's script into the renderer.
+Incoming messages are checked for both `origin` and `source`; a `message`
+handler that checks neither is a hole any frame on the page can post through.
+
+The frame deliberately carries **no `sandbox` attribute**, which is worth
+stating because it looks like a missing hardening and is the opposite. A
+`sandbox` without `allow-same-origin` gives a frame an opaque origin, so
+everything it posts arrives as `origin: "null"` and the check above refuses all
+of it - which is exactly what silently broke the feature. It bought nothing
+either: a cross-origin frame is already isolated by the same-origin policy,
+exactly as hard.
+
+### The in-app YouTube browser
+
+Desktop only, and it points at the open web, so it is fenced in three ways.
+`webviewTag` stays **off**: the renderer cannot mount web content and never
+holds the view. The main process owns a `WebContentsView` with **no preload and
+no Node**, so a page loaded there has no bridge back into the application. It
+runs in its own `persist:youtube` session partition, so a signed-in Google
+account is entirely apart from the app's cookies - nothing there can read a
+BetweenUs session, and nothing in the app is reachable from a page loaded there.
+Navigation is confined to Google's own hosts, which is what a sign-in flow needs
+and a great deal less than "the internet"; anything else, and every attempted
+new window, is handed to the user's real browser.
 
 Membership in the call is the only permission asked for. Everybody in a call can
 change what is playing, which is the intended design and is worth stating

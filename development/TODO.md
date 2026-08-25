@@ -85,19 +85,26 @@ part of it deliberately left open:
       `listen-sync.ts` plus a hundred lines of player. `listen.ended` and
       `listen.meta` should be sent, since both are idempotent and a phone is as
       good a reporter as anything else. See `ANDROID_TODO.md`.
-- [ ] **Search.** Paste-a-link only. In-app search needs a YouTube Data API key,
-      which is a per-deployment credential and an egress rule - worth doing only
-      if an operator wants it, and it must fail closed to paste-only when the
-      key is absent.
+- [x] **Browsing, rather than pasting.** Desktop shows youtube.com itself inside
+      the call - signed in, with search, playlists and subscriptions - and
+      queues whatever is on screen. A `WebContentsView` the main process owns,
+      not `webviewTag` and not an iframe.
+- [ ] **The web client is still paste-only, and has to be.** youtube.com sends
+      `X-Frame-Options` and `frame-ancestors`, so no browser tab can show the
+      site inside another page. The only alternative there is a YouTube Data API
+      key, which is a per-deployment credential and an egress rule; if it is ever
+      added it must fail closed to paste-only when the key is absent.
 - [ ] **Spotify.** A second `ListenProvider`, and the reason it is not the first
       one: it needs an OAuth flow, a Premium account per listener, and the Web
       Playback SDK, which *is* remote code and so needs the `script-src`
       conversation this design avoided. The seam is the discriminant on
       `ListenTrack` and nothing is modelled ahead of it.
-- [ ] **The picture.** Audio only: the player's frame lives in a one-pixel
-      corner of the document because an iframe removed from the document stops
-      playing. Drawing the video needs a component that stays mounted for the
-      life of the call and hands that frame somewhere visible to live.
+- [x] **The picture.** On screen and full size. The frame still never moves in
+      the DOM - a component offers an empty rectangle and the frame is
+      positioned over it, so unmounting cannot take the music with it.
+- [ ] **Picture-in-picture for the shared video**, the way the call already has
+      one. The frame follows a rectangle, so the mechanism is already there;
+      what is missing is a rectangle in the PiP window to follow.
 - [ ] **One replica.** The session is in process beside the roster, so two
       `call-service` replicas would each hold half a session. Same upgrade as
       the roster itself - Redis - and it should be made once, for both.
@@ -105,11 +112,24 @@ part of it deliberately left open:
       a case in the reducer; none of them were needed to listen to something
       together and none were built.
 - [ ] **Nobody has run it with two real clients.** The transport and the clock
-      have self-checks; the player, the autoplay refusal and the ducking do not
-      and cannot without a browser. `TESTING.md` has the walkthrough, and the
-      three things most likely to be wrong are the postMessage handshake, the
-      autoplay block on the window that did not start the track, and the
-      ducking chasing itself when both windows are on one machine's speakers.
+      have self-checks; the player, the browser, the autoplay refusal and the
+      ducking do not and cannot without a running Electron. `TESTING.md` has the
+      walkthrough.
+
+      One bug of exactly this kind has already been found and fixed by being
+      run: the player's frame carried `sandbox="allow-scripts"` with no
+      `allow-same-origin`, which gave it an opaque origin, so every message it
+      posted arrived as `origin: "null"` and was refused - a player that was
+      visibly present and permanently silent, with nothing in the console. Two
+      neighbours went with it: `origin=file://` is refused by YouTube outright,
+      so a **packaged build would have failed where the dev server worked**, and
+      the embed was never asked to autoplay in its URL.
+
+      What is most likely to be wrong next: the postMessage handshake against a
+      future embed change, the autoplay block on the window that did not start
+      the track, the ducking chasing itself when both windows share one
+      machine's speakers, and the browser's `Add to queue` button on a YouTube
+      navigation that fires none of the five events it listens for.
 
 ---
 

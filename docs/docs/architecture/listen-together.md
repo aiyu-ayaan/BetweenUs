@@ -174,6 +174,47 @@ clients have the player open anyway. First one to know fills it in; a later
 client reporting a *different* title is ignored, since that is either a regional
 cut or somebody relabelling a track in everybody else's queue after the fact.
 
+## Getting a track in: browse, don't paste
+
+Pasting links was the first version and it was the wrong shape. Nobody keeps a
+list of video ids. People search for a half-remembered chorus, open a playlist
+they made, or look at what their subscriptions posted this morning — and two of
+those need a signed-in account.
+
+So on **desktop**, the panel opens youtube.com itself, inside the call, with an
+**Add to queue** button that is live whenever the page is a video.
+
+### Why it is desktop-only, and why that cannot be fixed
+
+youtube.com sends `X-Frame-Options` and a `frame-ancestors` policy. It refuses
+to be framed, full stop — only `/embed/<id>` is frameable, and that is the
+player and nothing else. No browser tab can show the site inside another page,
+however it is asked, so the web client gets the paste box and is told why rather
+than being shown a frame that will never load.
+
+### Why it is not `webviewTag`
+
+Turning on `webviewTag` would let the renderer mount arbitrary web content
+anywhere, which is precisely the permission the hardening in `electron/main.ts`
+exists to withhold. Instead the **main process** owns a `WebContentsView`
+(`electron/youtube-view.ts`), and the renderer may only ask for it to be put
+over a rectangle and told which way to go. It never gets a handle on the view.
+
+Three things fence it in:
+
+| | |
+| --- | --- |
+| **Its own session** | `persist:youtube`. A signed-in Google account survives a restart and is entirely apart from the app's own cookies — nothing here can read a BetweenUs session, and nothing in the app is reachable from a page loaded here |
+| **No preload, no Node** | An ordinary browser context with no bridge into this application |
+| **It cannot wander** | Navigation is confined to Google's own hosts, which is what a sign-in flow needs and a great deal less than "the internet". Anything else opens in the user's real browser. New windows are refused |
+
+### One native-surface consequence
+
+A `WebContentsView` paints above every pixel of the renderer's DOM, whatever any
+`z-index` says. So the queue popover **hides** the page while it is open — which
+costs nothing, because hiding keeps the sign-in, the scroll position and the
+search. Only ending the call destroys it.
+
 ## The player, and the CSP
 
 The obvious way to embed YouTube is to load `iframe_api.js` and use the object
@@ -192,10 +233,31 @@ the embed speaks anyway, and that protocol is about a hundred lines
 
 So the only directive that changed is `frame-src`, which now names
 `youtube-nocookie.com` and nothing else. YouTube's code runs in YouTube's own
-origin, in a `sandbox="allow-scripts allow-presentation"` frame with no
-`allow-same-origin` — it cannot read this document and this document cannot read
-it — and the entire surface between them is a message channel that checks
+origin, and the entire surface between them is a message channel that checks
 `event.origin` and `event.source` on the way in.
+
+### The `sandbox` attribute that made it silent
+
+The frame carried `sandbox="allow-scripts allow-presentation"` and **nothing
+ever played.** Worth writing down, because it fails in the most expensive
+possible way — no error, no console message, a player that is visibly present
+and simply mute.
+
+A `sandbox` without `allow-same-origin` gives the frame an **opaque** origin, so
+every message it posts arrives with `event.origin === "null"`. The origin check
+then refuses all of it, correctly and permanently: the handshake never
+completes, the queued `playVideo` is never flushed, and the player sits there.
+
+It also bought nothing. A cross-origin frame is already isolated from the
+embedding document by the same-origin policy, exactly as hard as the sandbox was
+pretending to be. There is no `sandbox` attribute now, and that is deliberate
+rather than an omission.
+
+Two neighbours of the same bug, fixed at the same time: `origin=file://` is
+refused by YouTube outright, so a **packaged build would have failed where the
+dev server worked** — the parameter is now sent only for real web origins — and
+the embed was never asked to autoplay in its URL, only commanded to over the
+channel that was broken.
 
 Anything a client pastes is parsed to a bare eleven-character video id before it
 is sent, and checked again at the gateway against the provider's own alphabet.
@@ -204,12 +266,12 @@ window, so it is a trust boundary and it is tested as one.
 
 ## What it deliberately does not do
 
-- **No search.** Paste a link. In-app search needs a YouTube Data API key, which
-  is a per-deployment credential and an egress rule for a convenience.
-- **No video.** The player's frame lives in a one-pixel corner of the document
-  and never moves — an iframe removed from the document stops playing, so
-  putting it inside the panel silenced the music the moment the panel closed.
-  Giving that element somewhere visible to live is what would draw the picture.
+- **No search in the web client.** A browser tab cannot show youtube.com, so
+  there it is paste-a-link. An in-app search box there would need a YouTube Data
+  API key, which is a per-deployment credential and an egress rule.
+- **No YouTube Data API anywhere.** The desktop browser is the real site, so
+  search, playlists and subscriptions come from the user's own session rather
+  than from a key the operator has to obtain.
 - **No Spotify, yet.** It is a second `ListenProvider` and a second class with
   the same four methods, but it needs an OAuth flow, a Premium account per
   listener, and the Web Playback SDK — which *is* remote code, and so needs the
@@ -232,7 +294,29 @@ window, so it is a trust boundary and it is tested as one.
 | Clock and drift | `apps/desktop/src/services/listen-sync.ts` |
 | The YouTube embed | `apps/desktop/src/services/youtube.ts` |
 | Reconciler and ducking | `apps/desktop/src/stores/listen.ts` |
-| The panel | `apps/desktop/src/features/voice/ListenTogether.tsx` |
+| The queue popover | `apps/desktop/src/features/voice/ListenTogether.tsx` |
+| The picture, and the transport | `apps/desktop/src/features/voice/ListenStage.tsx` |
+| The in-app YouTube browser (UI) | `apps/desktop/src/features/voice/ListenBrowser.tsx` |
+| The in-app YouTube browser (main) | `apps/desktop/electron/youtube-view.ts` |
+
+## The rule both surfaces follow
+
+**The thing that plays must outlive the component that shows it.**
+
+An iframe removed from the document stops playing and loses its place. A
+`WebContentsView` that is destroyed loses the sign-in, the scroll position and
+the search. And a rebuilt one is not a recovery — it is a fresh player, back at
+zero, refused autoplay, and out of step with everybody else in the call.
+
+So neither ever moves. A React component offers an **empty rectangle**, and the
+frame or the view is positioned on top of it, tracked on a frame loop (the box
+moves for reasons no `ResizeObserver` reports: a sidebar opening, a banner
+appearing above it, the window crossing to another monitor). When the component
+unmounts, the picture parks in a one-pixel corner and the music carries on.
+
+Parked is one pixel rather than `display: none` on purpose — a hidden iframe is
+one Chromium is entitled to stop, and stopping it is the difference between
+music that survives switching to a text channel and music that does not.
 
 ## A single replica, for now
 
