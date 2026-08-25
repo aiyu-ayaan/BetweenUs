@@ -774,10 +774,21 @@ The browser itself is worth five minutes on its own:
   queue.
 - **Back does.** Play A, then B, then press Back to A. That is a landing on a
   video page and should play A for everybody again.
-- **The site makes no sound and stops when hidden.** With a track playing,
-  press a video in the browse tab. You should hear the shared player only, and
-  once the panel has flipped to Playing the site should not still be running a
-  muted copy underneath.
+- **The site is never a second player.** With a track playing, press a video in
+  the browse tab. You should hear the shared player only, and the watch page
+  behind it should be sitting paused rather than running a muted copy of the
+  same song. Press play on it deliberately and it should stay playing - the
+  pause is aimed at the page's own autoplay, not at you.
+- **The seek bar does not snap back.** Drag the position bar and let go. It
+  should stay where it was put and carry on from there, in both windows. A jump
+  back to the old position followed by a jump forward means the held value is
+  not surviving until the gateway answers.
+
+**Main-process changes need Electron restarted.** `pnpm dev:duo` sets
+`BETWEENUS_NO_ELECTRON=1`, so the plugin rebuilds `dist-electron/main.js` and
+does not relaunch - anything in `electron/` is stale until the script is stopped
+and started again. The renderer hot-reloads, which is what makes this confusing:
+half a change appears to land.
 - **Add does not interrupt.** With something playing, go to Browse and press
   **Add to queue** on another video. The first should keep playing, the panel
   should stay on the site, and the new one should be at the end of the list.

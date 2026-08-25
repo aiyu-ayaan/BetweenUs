@@ -82,12 +82,23 @@ Listen Together:
       two revisions and anything arriving between them moves the index the play
       was aiming at. **Add to queue** stays for the other thing, which is
       choosing what comes after what is on, and still leaves you on the site.
-- [x] **The browser is muted, and paused when hidden.** Clicking a video on
-      youtube.com started it playing there, with sound, over the shared player
-      everybody is already in step with - two copies of the same track, seconds
-      apart, in one person's headphones. Muting fixed the sound; a hidden
-      `WebContentsView` still decodes, so hiding also pauses it. That half of
-      the panel picks; the shared player plays.
+- [x] **The browser is not a second player.** A watch page autoplays, so
+      clicking a thumbnail left the site playing the same song a few seconds out
+      from the shared one, with its own controls and nobody's agreement. Muted
+      on build and on every show - the mute belongs to a page that may since
+      have navigated through a sign-in - and any video page it lands on is
+      paused, four times over a second and a half, because one pause loses the
+      race YouTube runs after an SPA click. Once per video id, so a page
+      somebody deliberately pressed play on is left alone. That half of the
+      panel picks; the shared player plays.
+- [x] **A seek that stopped snapping back.** Letting go of the bar cleared the
+      scrub value and showed the position from the session as it was, until this
+      client's own request had been to the gateway and back - so every seek
+      jumped home and then forward a round trip later, which reads as "it did
+      nothing" and reads worst for whoever is furthest away. The released
+      position is held until a higher `rev` arrives, with a two-second timeout
+      for the answer that never comes; losing pointer capture or focus commits
+      the drag rather than stranding the thumb.
 - [x] **The video on screen.** Both the player's frame and the browser's view
       follow the same rule: the thing that plays outlives the component that
       shows it. A React component offers an empty rectangle and the frame is
