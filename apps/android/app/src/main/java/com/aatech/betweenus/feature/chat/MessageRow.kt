@@ -187,24 +187,25 @@ fun MessageRow(
     /**
      * Swipe-to-reply.
      *
-     * Left to right only, and only far enough to be deliberate: a phone list
+     * Right to left only, and only far enough to be deliberate: a phone list
      * scrolls vertically, so a horizontal drag is unambiguous, while a swipe
      * that fired on any movement at all would answer messages by accident.
+     *
+     * Left to right is the drawer's: `ModalNavigationDrawer` claims a
+     * left-to-right drag anywhere in its content by default, and this row used
+     * to claim the same direction for reply. The two fought over identical
+     * gestures - a reply swipe would sometimes cross the drawer's own open
+     * threshold first and pull the drawer out instead of answering. Splitting
+     * by direction instead of fighting over one gives each gesture the whole
+     * screen and its own, unambiguous meaning.
      *
      * The release is a Material 3 expressive spring rather than a linear slide
      * back - the row overshoots and settles, which is what makes the gesture
      * feel answered rather than merely undone.
      *
-     * **A 48dp gutter down the left is the drawer's, the rest is the reply's.**
-     * A 24dp edge is a gesture people miss, so the drawer needs more than the
-     * edge - but it was tried at half the row and then a third, and both were
-     * measured against the width of the screen. That was tolerable while a
-     * message filled the row and wrong the moment messages became bubbles: a
-     * third of a phone is most of an incoming bubble, so the gesture people
-     * actually make - a swipe on the bubble they are reading - opened the
-     * drawer instead of replying. A fixed gutter does not move when the message
-     * does, and 48dp is the standard minimum touch target: findable without
-     * aiming, and sitting in the avatar gutter rather than on the message.
+     * **A 48dp gutter down the left is left alone.** A left-to-right drag
+     * starting there is the drawer's classic edge-open gesture; the row leaves
+     * it untouched so the drawer sees it uninterrupted.
      *
      * **Nothing is consumed until the gesture has been claimed**, and that is
      * the whole reason this is written by hand rather than with
@@ -249,13 +250,13 @@ fun MessageRow(
         val widest = maxWidth * 0.78f
         // The reply mark underneath, fading in with the drag. Nothing is drawn
         // at rest, which is the point: the gesture costs the row no furniture.
-        val progress = (slide.value / threshold).coerceIn(0f, 1f)
+        val progress = (-slide.value / threshold).coerceIn(0f, 1f)
         if (progress > 0f) {
             Box(
                 modifier = Modifier
                     .matchParentSize()
-                    .padding(start = 14.dp),
-                contentAlignment = Alignment.CenterStart,
+                    .padding(end = 14.dp),
+                contentAlignment = Alignment.CenterEnd,
             ) {
                 BetweenUsIcon(
                     icon = BetweenUsIcons.Reply,
@@ -274,19 +275,9 @@ fun MessageRow(
                 val slop = viewConfiguration.touchSlop
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false)
-                    // A fixed gutter down the left is the drawer's, not a
-                    // fraction of the row. A third was measured against the
-                    // whole width of the screen, which was fine while a message
-                    // filled it and wrong once messages became bubbles: a third
-                    // of a phone is most of an incoming bubble, so the gesture
-                    // people actually make - a swipe on the bubble they are
-                    // reading - opened the drawer instead of replying.
-                    //
-                    // 48dp is the standard minimum touch target: bigger than the
-                    // 24dp edge that was too mean to hit, and narrow enough that
-                    // it lands in the avatar gutter rather than on the message.
-                    // Leave without touching anything, so the drag reaches the
-                    // draggable above.
+                    // A drag starting in the left gutter is the drawer's
+                    // classic edge-open swipe. Leave without touching
+                    // anything, so the drag reaches the draggable above.
                     if (down.position.x < DRAWER_GUTTER.toPx()) return@awaitEachGesture
 
                     var travelX = 0f
@@ -309,16 +300,16 @@ fun MessageRow(
                             // Clearly vertical: hand it over and stay out of
                             // the way for the rest of this gesture.
                             if (abs(travelY) > slop && abs(travelY) >= abs(travelX)) break
-                            // Clearly a rightward swipe: past the slop, and
+                            // Clearly a leftward swipe: past the slop, and
                             // going sideways at least twice as fast as it is
                             // going up or down.
-                            claimed = travelX > slop && travelX > abs(travelY) * 2f
+                            claimed = travelX < -slop && -travelX > abs(travelY) * 2f
                             if (!claimed) continue
                         }
 
-                        val next = (slide.value + delta.x).coerceIn(0f, limit)
+                        val next = (slide.value + delta.x).coerceIn(-limit, 0f)
                         if (next != slide.value) change.consume()
-                        if (!armed && next >= threshold) {
+                        if (!armed && next <= -threshold) {
                             armed = true
                             haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                         }
@@ -326,7 +317,7 @@ fun MessageRow(
                     }
 
                     if (claimed) {
-                        val fired = slide.value >= threshold
+                        val fired = slide.value <= -threshold
                         armed = false
                         scope.launch { slide.animateTo(0f, settle) }
                         if (fired) onReply()
