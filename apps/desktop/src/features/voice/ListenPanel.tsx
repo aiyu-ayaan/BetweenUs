@@ -49,7 +49,6 @@ import {
 export function ListenPanel(): JSX.Element {
   const session = useListenStore((state) => state.session);
   const tab = useListenStore((state) => state.tab);
-  const needsGesture = useListenStore((state) => state.needsGesture);
   const error = useListenStore((state) => state.error);
 
   const playerSlot = useRef<HTMLDivElement>(null);
@@ -136,17 +135,6 @@ export function ListenPanel(): JSX.Element {
 
         <Queue />
       </div>
-
-      {needsGesture && (
-        <button
-          type="button"
-          onClick={() => useListenStore.getState().allow()}
-          className="flex shrink-0 items-center justify-center gap-2 rounded-md bg-amber-500/10 px-3 py-2 text-xs text-amber-200 transition-colors hover:bg-amber-500/20"
-        >
-          <PlayIcon className="h-4 w-4" />
-          Your browser blocked the audio - click to start listening
-        </button>
-      )}
 
       {session && <Transport />}
     </div>
@@ -281,6 +269,18 @@ export function Transport({ compact = false }: { compact?: boolean }): JSX.Eleme
   const session = useListenStore((state) => state.session);
   const volume = useListenStore((state) => state.volume);
   const ducking = useListenStore((state) => state.ducking);
+  /**
+   * This window's player was refused permission to start, and the room's
+   * transport is not the fix for that - a click in *this* window is.
+   *
+   * Drawn here rather than only in the open panel, and it is the bug behind
+   * "the pause button does nothing": the button's shape came from the session,
+   * so a blocked window showed `pause` while it was silent. Pressing it paused
+   * the track for everybody, pressing it again played it for everybody, and
+   * this window stayed exactly as quiet as it was. The one press that would
+   * have helped had no button at all once the panel was closed.
+   */
+  const blocked = useListenStore((state) => state.needsGesture);
   const [position, setPosition] = useState(0);
   const [scrubbing, setScrubbing] = useState<number | null>(null);
   /**
@@ -347,12 +347,32 @@ export function Transport({ compact = false }: { compact?: boolean }): JSX.Eleme
       </button>
       <button
         type="button"
-        onClick={() => useListenStore.getState().playPause()}
-        aria-label={session.paused ? 'Play for everyone' : 'Pause for everyone'}
-        title={session.paused ? 'Play for everyone' : 'Pause for everyone'}
-        className="cursor-pointer rounded p-1.5 text-slate-100 transition-colors hover:bg-white/[0.06]"
+        onClick={() =>
+          blocked ? useListenStore.getState().allow() : useListenStore.getState().playPause()
+        }
+        aria-label={
+          blocked
+            ? 'Start listening in this window'
+            : session.paused
+              ? 'Play for everyone'
+              : 'Pause for everyone'
+        }
+        title={
+          blocked
+            ? 'This window was refused permission to start the audio - click to start it here'
+            : session.paused
+              ? 'Play for everyone'
+              : 'Pause for everyone'
+        }
+        className={`cursor-pointer rounded p-1.5 transition-colors hover:bg-white/[0.06] ${
+          blocked ? 'text-amber-300' : 'text-slate-100'
+        }`}
       >
-        {session.paused ? <PlayIcon className="h-4 w-4" /> : <PauseIcon className="h-4 w-4" />}
+        {session.paused || blocked ? (
+          <PlayIcon className="h-4 w-4" />
+        ) : (
+          <PauseIcon className="h-4 w-4" />
+        )}
       </button>
       <button
         type="button"
@@ -370,6 +390,14 @@ export function Transport({ compact = false }: { compact?: boolean }): JSX.Eleme
             {track.title || 'Loading…'}
           </span>
           <span className="shrink-0 text-[10px] text-slate-600">{track.addedByUsername}</span>
+          {blocked && (
+            <span
+              title="Nothing is playing in this window until it is clicked"
+              className="shrink-0 rounded bg-amber-500/15 px-1 text-[9px] uppercase tracking-wide text-amber-300"
+            >
+              press play here
+            </span>
+          )}
           {ducking && (
             <span
               title="Turned down while somebody is talking"
