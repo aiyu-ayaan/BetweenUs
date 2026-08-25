@@ -35,6 +35,7 @@ import {
 import { absoluteUrl } from '../../services/endpoint';
 import {
   continueList,
+  wantsNewline,
   parse as parseMarkup,
   type Block as MarkupBlockType,
   type Span as MarkupSpan,
@@ -1505,18 +1506,25 @@ function MessageComposer({
   };
 
   const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>): void => {
-    if (event.key === 'Enter' && !event.shiftKey) {
-      event.preventDefault();
-      void submit();
-    }
-
-    // Shift+Enter is the newline here, so it is where a list carries on to its
-    // next item - and where an empty item ends the list rather than offering
-    // one more. The rule itself lives in `markup`, because the android
-    // composer needs exactly the same one.
-    if (event.key === 'Enter' && event.shiftKey) {
+    if (event.key === 'Enter') {
       const area = event.currentTarget;
-      const next = continueList(area.value, area.selectionStart ?? area.value.length);
+      const caret = area.selectionStart ?? area.value.length;
+      // Inside a list, a quote or an open fence, return is a newline rather
+      // than send: those are the three things written across more than one
+      // line, and reaching for shift on every item of a list you are plainly
+      // in the middle of writing is not what anybody means by return.
+      const newline = event.shiftKey || wantsNewline(area.value, caret);
+
+      if (!newline) {
+        event.preventDefault();
+        void submit();
+        return;
+      }
+
+      // A newline inside a list carries it on to its next item - and ends the
+      // list when the item is empty. Anywhere else the box does what it always
+      // did, which is why this can return without preventing the default.
+      const next = continueList(area.value, caret);
       if (!next) return;
       event.preventDefault();
       setContent(next.text);

@@ -213,6 +213,30 @@ function openerAt(source: string, at: number): Delimiter | null {
   return null;
 }
 
+/**
+ * Whether return should make a newline here rather than send the message.
+ *
+ * True inside the three things that are written across more than one line: an
+ * open fence, a list, a quote. Sending a code block one line at a time is not
+ * something anybody wants, and neither is reaching for shift on every item of
+ * a list they are plainly in the middle of writing.
+ *
+ * Desktop only, unlike the rest of this module: on android return already
+ * makes a newline and the button is what sends, so there is no decision to
+ * make.
+ */
+export function wantsNewline(text: string, caret: number): boolean {
+  // An odd number of fences behind the caret means the last one is still open.
+  const fences = text
+    .slice(0, caret)
+    .split('\n')
+    .filter((line) => line.trimStart().startsWith('```')).length;
+  if (fences % 2 === 1) return true;
+
+  const line = text.slice(text.lastIndexOf('\n', caret - 1) + 1, caret);
+  return BULLET.test(line) || NUMBER.test(line) || line.startsWith('> ') || line === '>';
+}
+
 /** The box's text and where the caret sits in it, after a newline was typed. */
 export interface Continuation {
   text: string;

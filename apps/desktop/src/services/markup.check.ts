@@ -13,7 +13,7 @@
  * words and looks almost right.
  */
 import assert from 'node:assert/strict';
-import { continueList, isPlain, parse, type Block, type Span } from './markup';
+import { continueList, isPlain, parse, wantsNewline, type Block, type Span } from './markup';
 
 const one = (text: string): Block => {
   const blocks = parse(text);
@@ -262,5 +262,33 @@ assert.equal(continueList('- eggs\nprose', 12), null);
 
 // A caret in the middle of an item splits it and carries the list on.
 assert.deepEqual(continueList('- eggsmilk', 6), { text: '- eggs\n- milk', caret: 9 });
+
+// --- wantsNewline ---
+
+// Ordinary prose still sends.
+assert.equal(wantsNewline('hello', 5), false);
+assert.equal(wantsNewline('', 0), false);
+
+// The three multi-line things do not.
+assert.equal(wantsNewline('- eggs', 6), true);
+assert.equal(wantsNewline('1. one', 6), true);
+assert.equal(wantsNewline('> quoted', 8), true);
+assert.equal(wantsNewline('>', 1), true);
+
+// An empty item is still in the list: return is what ends it, and it cannot do
+// that if it sent the message instead.
+assert.equal(wantsNewline('- eggs\n- ', 9), true);
+
+// An open fence holds return for as long as it is open, whatever is being
+// typed inside it.
+assert.equal(wantsNewline('```', 3), true);
+assert.equal(wantsNewline('```\nconst a = 1', 15), true);
+// A closed one lets go again.
+assert.equal(wantsNewline('```\nconst a = 1\n```', 19), false);
+// And prose after a closed fence sends as it always did.
+assert.equal(wantsNewline('```\ncode\n```\nthere', 18), false);
+
+// Only the line the caret is on counts.
+assert.equal(wantsNewline('- eggs\nprose', 12), false);
 
 console.log('markup.check.ts ok');
