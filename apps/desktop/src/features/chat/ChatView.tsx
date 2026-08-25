@@ -296,6 +296,7 @@ function MessageList({
   error: string | null;
   channel: Channel;
 }): JSX.Element {
+  const isDirect = channel.type === 'DM';
   const viewport = useRef<HTMLDivElement>(null);
   const list = useRef<HTMLUListElement>(null);
   /**
@@ -576,118 +577,141 @@ function MessageList({
               5 * 60 * 1000;
 
           const deleted = message.deletedAt !== null;
+          const isSelf = message.author.id === me?.id;
+          // The avatar is for someone else's face in a channel - never your
+          // own (the side of the screen already says that), and never in a
+          // direct message, where there are only ever two people in it.
+          const showAvatar = !isSelf && !isDirect;
+          // The one square corner sits on the outer top edge of the first
+          // bubble of a run; a continuation is round on every corner, which is
+          // what makes a run read as one person talking rather than a stack
+          // of separate cards.
+          const bubbleRadius = grouped
+            ? 'rounded-2xl'
+            : isSelf
+              ? 'rounded-2xl rounded-tr-md'
+              : 'rounded-2xl rounded-tl-md';
 
           return (
             <Fragment key={message.id}>
               {dividerId === message.id && <NewMessagesDivider />}
-            <li
-              id={`message-${message.id}`}
-              onContextMenu={(event) => {
-                // A tombstone has nothing left to act on.
-                if (deleted) return;
-                event.preventDefault();
-                setArmedDelete(null);
-                setMenu({ id: message.id, at: { x: event.clientX, y: event.clientY } });
-              }}
-              onMouseDown={(event) => {
-                // The browser selects the word under the cursor on the second
-                // mousedown of a double-click, before onDoubleClick ever
-                // fires - so by the time that handler runs, the selection
-                // guard below always sees a non-collapsed selection and never
-                // fires. Suppressing native selection here, on the second
-                // click only, leaves ordinary click-drag selection untouched.
-                if (event.detail === 2) event.preventDefault();
-              }}
-              onDoubleClick={(event) => {
-                // The shortcut for the one action the menu is opened for most:
-                // reply. A double tap does the same on a touch screen, where
-                // there is no right button to press at all.
-                if (deleted) return;
-                // Not while something is being selected: a drag that was
-                // already selecting text when the double-click landed should
-                // keep selecting, not be hijacked into a reply.
-                if (!window.getSelection()?.isCollapsed) return;
-                event.preventDefault();
-                setReplyTo(quoteOf(message));
-              }}
-              className={`relative rounded-lg px-2 transition-colors duration-500 ${
-                highlighted === message.id
-                  ? 'bg-accent/20'
-                  : message.pinnedAt
-                    ? 'bg-amber-400/[0.04] hover:bg-white/[0.03]'
-                    : 'hover:bg-white/[0.025]'
-              } ${grouped ? 'py-0.5 pl-10 sm:pl-[60px]' : 'mt-4 flex gap-3 py-0.5'}`}
-            >
-              {!grouped && (
-                <Avatar
-                  name={message.author.displayName}
-                  avatarUrl={message.author.avatarUrl}
-                  ringColour="border-surface-900"
-                />
-              )}
-              <div className="min-w-0 flex-1">
-                {!grouped && (
-                  <p className="flex items-baseline gap-2">
-                    <span
-                      className={`font-medium ${
-                        message.author.id === me?.id ? 'font-semibold text-accent' : 'text-slate-50'
-                      }`}
-                    >
-                      {message.author.id === me?.id ? 'You' : message.author.displayName}
-                    </span>
-                    <time dateTime={message.createdAt} className="text-xs text-slate-500">
-                      {formatTime(message.createdAt)}
-                    </time>
-                    {message.pinnedAt && (
-                      <span className="flex items-center gap-1 text-xs text-amber-400/80">
-                        <PinIcon className="h-3 w-3" />
-                        Pinned
-                      </span>
+              <li
+                id={`message-${message.id}`}
+                className={`flex items-start gap-2 px-2 ${grouped ? 'mt-0.5' : 'mt-3'} ${
+                  isSelf ? 'justify-end' : 'justify-start'
+                }`}
+              >
+                {showAvatar &&
+                  (grouped ? (
+                    <div aria-hidden="true" className="h-10 w-10 shrink-0" />
+                  ) : (
+                    <Avatar
+                      name={message.author.displayName}
+                      avatarUrl={message.author.avatarUrl}
+                      ringColour="border-surface-900"
+                    />
+                  ))}
+
+                <div className={`flex min-w-0 max-w-[78%] flex-col ${isSelf ? 'items-end' : 'items-start'}`}>
+                  <div
+                    onContextMenu={(event) => {
+                      // A tombstone has nothing left to act on.
+                      if (deleted) return;
+                      event.preventDefault();
+                      setArmedDelete(null);
+                      setMenu({ id: message.id, at: { x: event.clientX, y: event.clientY } });
+                    }}
+                    onMouseDown={(event) => {
+                      // The browser selects the word under the cursor on the
+                      // second mousedown of a double-click, before
+                      // onDoubleClick ever fires - so by the time that
+                      // handler runs, the selection guard below always sees a
+                      // non-collapsed selection and never fires. Suppressing
+                      // native selection here, on the second click only,
+                      // leaves ordinary click-drag selection untouched.
+                      if (event.detail === 2) event.preventDefault();
+                    }}
+                    onDoubleClick={(event) => {
+                      // The shortcut for the one action the menu is opened
+                      // for most: reply. A double tap does the same on a
+                      // touch screen, where there is no right button at all.
+                      if (deleted) return;
+                      // Not while something is being selected: a drag that
+                      // was already selecting text when the double-click
+                      // landed should keep selecting, not be hijacked into a
+                      // reply.
+                      if (!window.getSelection()?.isCollapsed) return;
+                      event.preventDefault();
+                      setReplyTo(quoteOf(message));
+                    }}
+                    className={`min-w-0 px-3 py-1.5 transition-colors duration-500 ${bubbleRadius} ${
+                      highlighted === message.id
+                        ? 'ring-2 ring-accent/70'
+                        : ''
+                    } ${deleted ? 'bg-surface-800/60' : isSelf ? 'bg-accent/25' : 'bg-surface-800'}`}
+                  >
+                    {/* Who is speaking, once per run and never for you - the
+                        side of the screen your bubble is on already said
+                        that. */}
+                    {!isSelf && !grouped && (
+                      <p className="mb-0.5 truncate text-sm font-semibold text-accent">
+                        {message.author.displayName}
+                      </p>
                     )}
-                  </p>
-                )}
 
-                {/* Above the author line would put it above the avatar; it
-                    belongs to the message, so it sits on top of the body. */}
-                {!deleted && message.replyTo && <QuotedMessage reply={message.replyTo} />}
+                    {/* The quote belongs to the message, so it sits inside
+                        the bubble and above everything the message says. */}
+                    {!deleted && message.replyTo && <QuotedMessage reply={message.replyTo} />}
 
-                {deleted ? (
-                  <Tombstone message={message} />
-                ) : editing === message.id ? (
-                  <MessageEditor message={message} onDone={() => setEditing(null)} />
-                ) : (
-                  <>
-                    {/* A message that is only files has no text line at all. */}
-                    {message.content.length > 0 && (
+                    {deleted ? (
+                      <Tombstone message={message} />
+                    ) : editing === message.id ? (
+                      <MessageEditor message={message} onDone={() => setEditing(null)} />
+                    ) : (
                       <>
-                        <p className="whitespace-pre-wrap break-words leading-relaxed text-slate-200">
-                          <MessageText message={message} />
-                          {message.editedAt && (
-                            <span className="ml-1.5 align-baseline text-xs text-slate-500">
-                              (edited)
-                            </span>
-                          )}
-                        </p>
-                        <MessageLinkPreviews content={message.content} />
+                        {/* A message that is only files has no text line at all. */}
+                        {message.content.length > 0 && (
+                          <>
+                            <p className="whitespace-pre-wrap break-words leading-relaxed text-slate-200">
+                              <MessageText message={message} />
+                            </p>
+                            <MessageLinkPreviews content={message.content} />
+                          </>
+                        )}
+                        <AttachmentList channelId={channel.id} attachments={message.attachments} />
+
+                        {/* The footer, in the corner of the bubble: when it
+                            was said, whether it has changed since, and
+                            whether it is pinned. Inside, because a bubble
+                            that hugs its own text has no margin left to hang
+                            them in. */}
+                        <div className="mt-0.5 flex items-center justify-end gap-1 text-[10px] text-slate-400/70">
+                          {message.pinnedAt && <PinIcon className="h-2.5 w-2.5" aria-label="Pinned" />}
+                          {message.editedAt && <span>edited</span>}
+                          <time dateTime={message.createdAt}>{formatTime(message.createdAt)}</time>
+                        </div>
                       </>
                     )}
-                    <AttachmentList channelId={channel.id} attachments={message.attachments} />
+                  </div>
+
+                  {!deleted && editing !== message.id && (
                     <ReactionRow
                       message={message}
                       meId={me?.id}
                       onToggle={(emoji) => report(react(message.id, emoji))}
                       onMore={(at) => setPicker({ id: message.id, at })}
                     />
-                    {/* Only ever under your own message, and only once each
-                        reader has got this far - see `anchorReceipts`. */}
+                  )}
+                  {/* Only ever under your own message, and only once each
+                      reader has got this far - see `anchorReceipts`. */}
+                  {!deleted && editing !== message.id && (
                     <SeenByRow
                       receipts={anchors[message.id] ?? []}
                       onOpen={() => setSeenFor(message.id)}
                     />
-                  </>
-                )}
-              </div>
-            </li>
+                  )}
+                </div>
+              </li>
             </Fragment>
           );
         })}
