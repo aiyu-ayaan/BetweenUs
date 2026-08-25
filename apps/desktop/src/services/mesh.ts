@@ -64,8 +64,10 @@ import type {
   ClientCallEvent,
   IceCandidatePayload,
   IceServer,
+  ListenSession,
   ServerCallEvent,
 } from '@betweenus/shared-types';
+import type { ClockSample } from './listen-sync';
 import { wsUrl } from './endpoint';
 import { deviceId } from './e2ee';
 import {
@@ -76,6 +78,9 @@ import {
 } from './share-quality';
 import type { MicEncoding } from './voice-quality';
 import { toStats, type LinkSample, type LinkStats } from './call-stats';
+
+/** The Listen Together half of the client protocol, so the store cannot send anything else. */
+export type ListenClientEvent = Extract<ClientCallEvent, { type: `listen.${string}` }>;
 
 /** What a slot carries. The order is the transceiver order and is load-bearing. */
 export const SLOTS = ['mic', 'camera', 'screen', 'screenAudio'] as const;
@@ -155,6 +160,24 @@ export interface MeshEvents {
    * the same moment need one answer, and a mesh has no ordering to give one.
    */
   onScreenHolder?: (peerId: string | null) => void;
+  /**
+   * The call's Listen Together session, or null when there is not one.
+   *
+   * Whole state rather than a delta, and it arrives here rather than on a data
+   * channel deliberately: a data channel is per peer, so a queue sent over one
+   * would be as many queues as there are peers, each with its own idea of what
+   * happened first. The gateway is the only thing in a mesh that can order two
+   * people pressing pause at the same moment.
+   */
+  onListen?: (session: ListenSession | null) => void;
+  /**
+   * One measurement of the gateway's clock against this machine's.
+   *
+   * Listening together means agreeing on a position, and a position is only
+   * meaningful on a clock both ends share - two laptops disagree about the time
+   * by whatever their NTP daemons last settled on. See `listen-sync.ts`.
+   */
+  onServerTime?: (sample: ClockSample) => void;
 }
 
 interface MeshOptions extends MeshEvents {
@@ -1089,6 +1112,8 @@ export class Mesh {
   private closed = false;
   /** The channel key as last read, shared by every link. See `channelKey`. */
   private key: Promise<string> | null = null;
+  /** When the outstanding clock ping went out, or null when none is. */
+  private pingSentAt: number | null = null;
 
   constructor(private readonly options: MeshOptions) {}
 
@@ -1209,6 +1234,24 @@ export class Mesh {
         this.options.onScreenHolder?.(event.peerId);
         return;
 
+      case 'listen.state':
+        this.options.onListen?.(event.session);
+        return;
+
+      case 'pong':
+        // Only useful against the ping that asked for it: an unsolicited pong
+        // has no send time to measure the round trip from, and half of an
+        // unknown round trip is not an offset.
+        if (typeof event.serverMs === 'number' && this.pingSentAt !== null) {
+          this.options.onServerTime?.({
+            sentAtMs: this.pingSentAt,
+            receivedAtMs: Date.now(),
+            serverMs: event.serverMs,
+          });
+          this.pingSentAt = null;
+        }
+        return;
+
       case 'superseded':
         // The same account joined this call somewhere else, so the server has
         // already taken this connection off the roster. Marking the mesh closed
@@ -1227,6 +1270,23 @@ export class Mesh {
       default:
         return;
     }
+  }
+
+  /**
+   * Asks the gateway what time it is.
+   *
+   * Sent only while somebody is listening together, because that is the only
+   * thing that needs a shared clock - a call has no opinion about the time, and
+   * a measurement nobody reads is a message not worth sending.
+   */
+  sampleServerTime(): void {
+    this.pingSentAt = Date.now();
+    this.send({ type: 'ping' });
+  }
+
+  /** One Listen Together action, straight through. The gateway decides. */
+  sendListen(event: ListenClientEvent): void {
+    this.send(event);
   }
 
   /** This client's own peer id, once the gateway has issued one. */

@@ -24,7 +24,7 @@
  * replicas would each hold half a session, and the upgrade path is the same
  * one - the roster in Redis, this state beside it.
  */
-import type { ListenSession, ListenTrack } from '@betweenus/shared-types';
+import { listenPositionAt, type ListenSession, type ListenTrack } from '@betweenus/shared-types';
 
 /**
  * How long a queue may get.
@@ -47,22 +47,19 @@ export type ListenAction =
   | { kind: 'seek'; positionMs: number }
   | { kind: 'skip'; delta: number }
   | { kind: 'ended'; trackId: string }
-  | { kind: 'duration'; trackId: string; durationMs: number }
+  | { kind: 'meta'; trackId: string; title?: string; durationMs?: number }
   | { kind: 'stop' };
 
 /**
  * Where the needle is at `nowMs`.
  *
- * Clamped to the track's length once one is known, so a session left playing
- * while everybody was away does not report a position in the next hour.
+ * The arithmetic lives in `@betweenus/shared-types` and not here, because it is
+ * the meaning of `positionMs` and `atServerMs` rather than a decision this
+ * service makes: a gateway that advanced the position differently from the
+ * clients reading it would be a session where nobody is wrong and nobody
+ * agrees.
  */
-export function positionAt(session: ListenSession, nowMs: number): number {
-  const elapsed = session.paused ? 0 : Math.max(0, nowMs - session.atServerMs);
-  const raw = session.positionMs + elapsed;
-  const track = session.queue[session.index];
-  const duration = track?.durationMs ?? 0;
-  return duration > 0 ? Math.min(raw, duration) : Math.max(0, raw);
-}
+export const positionAt = listenPositionAt;
 
 /**
  * Re-stamps a session at `nowMs` without changing what it is doing.
@@ -233,13 +230,20 @@ function mutate(
       return move(session, session.index + 1, nowMs);
     }
 
-    case 'duration': {
-      const durationMs = clampDuration(action.durationMs);
-      if (durationMs === 0) return session;
+    case 'meta': {
       const at = session.queue.findIndex((track) => track.id === action.trackId);
-      if (at === -1 || session.queue[at]!.durationMs === durationMs) return session;
+      if (at === -1) return session;
+      const existing = session.queue[at]!;
+      const durationMs = clampDuration(action.durationMs ?? 0);
+      // Only what is still missing. A second client reporting the same title is
+      // not news, and a client reporting a *different* one is either a
+      // different regional cut or somebody trying to relabel a track in
+      // everybody else's queue after the fact - either way, first answer holds.
+      const title = existing.title || (action.title ?? '').slice(0, MAX_TITLE);
+      const nextDuration = existing.durationMs || durationMs;
+      if (title === existing.title && nextDuration === existing.durationMs) return session;
       const queue = [...session.queue];
-      queue[at] = { ...queue[at]!, durationMs };
+      queue[at] = { ...existing, title, durationMs: nextDuration };
       return { ...session, queue };
     }
 

@@ -22,6 +22,7 @@ import { isDesktopRuntime } from '../services/platform';
 import { useAuthStore } from './auth';
 import { useChatStore } from './chat';
 import { useShareControlStore } from './shareControl';
+import { useListenStore } from './listen';
 import { useAudioSettings } from './audioSettings';
 import { startPushToTalk, stopPushToTalk } from '../services/push-to-talk';
 import { notBeingHeard, type LinkStats } from '../services/call-stats';
@@ -348,6 +349,11 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
           if (get().channelId !== channelId) return;
           void get().leave(message);
         },
+        onListen: (session) => {
+          if (useVoiceStore.getState().channelId !== channelId) return;
+          useListenStore.getState().receive(session);
+        },
+        onServerTime: (sample) => useListenStore.getState().sampleClock(sample),
         onScreenHolder: (peerId) => {
           if (useVoiceStore.getState().channelId !== channelId) return;
           set({ screenHolder: peerId });
@@ -405,6 +411,10 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
       // Pointers and "give me the mouse" ride the peers' data channels, so they
       // exist for exactly as long as the mesh does.
       useShareControlStore.getState().attach(next);
+      // The shared queue and the clock it runs on live for exactly as long as
+      // the call does. It is not persisted anywhere: the queue two people built
+      // while they worked has no meaning tomorrow.
+      useListenStore.getState().attach(next);
 
       set({
         error: micProblem,
@@ -445,6 +455,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
     const { channelId } = get();
     if (channelId) presenceSocket.send({ type: 'voice.leave', channelId });
     useShareControlStore.getState().detach();
+    useListenStore.getState().detach();
     teardown();
     // Close PiP overlay window if open
     void window.betweenus?.closePip();

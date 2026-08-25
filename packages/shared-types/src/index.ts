@@ -1092,6 +1092,24 @@ export interface ListenSession {
   byUserId: string | null;
 }
 
+/**
+ * Where the needle is at `nowMs`, on a clock shared with the gateway.
+ *
+ * Part of the contract rather than of either side, because it is the whole
+ * meaning of `positionMs` and `atServerMs`: a server that advanced the position
+ * differently from the clients reading it would be a session where nobody is
+ * wrong and nobody agrees. One formula, in the package both sides import.
+ *
+ * Clamped to the track's length once one is known, so a session left playing
+ * while everybody was away does not report a position in the next hour.
+ */
+export function listenPositionAt(session: ListenSession, nowMs: number): number {
+  const elapsed = session.paused ? 0 : Math.max(0, nowMs - session.atServerMs);
+  const raw = session.positionMs + elapsed;
+  const duration = session.queue[session.index]?.durationMs ?? 0;
+  return duration > 0 ? Math.min(raw, duration) : Math.max(0, raw);
+}
+
 export type ClientCallEvent =
   | { type: 'join'; channelId: string }
   /**
@@ -1137,8 +1155,18 @@ export type ClientCallEvent =
    * stops when that person's window closes.
    */
   | { type: 'listen.ended'; trackId: string }
-  /** "My player says this track is this long." First one to know, wins. */
-  | { type: 'listen.duration'; trackId: string; durationMs: number }
+  /**
+   * "My player has learned what this track is called and how long it is."
+   *
+   * The title cannot be known when a track is added, because at that point it
+   * is a link somebody pasted - only a player that has loaded it knows. And
+   * nothing on the server may go and ask: an outbound call from a backend
+   * service to fetch a title is a service that needs an API key, an egress rule
+   * and an opinion about who is listening to what. So the clients, which have
+   * the player open anyway, fill it in. First one to know, wins; the rest are
+   * about a field that is already set and change nothing.
+   */
+  | { type: 'listen.meta'; trackId: string; title?: string; durationMs?: number }
   | { type: 'ping' };
 
 export type ServerCallEvent =

@@ -75,23 +75,46 @@ assert.equal(positionAt(first, T0 + 10 * 60 * 60 * 1000), 180_000);
 
 // A change that is not about the transport must not move the transport. This is
 // the freeze bug: re-stamping without recomputing the position rewinds the
-// track by however long it had been playing.
-const named = apply(resumed, { kind: 'duration', trackId: 'a', durationMs: 200_000 }, 'ana', T0 + 110_000)!;
-assert.equal(positionAt(named, T0 + 110_000), 52_000);
+// track by however long it had been playing. A pasted link has neither a title
+// nor a length until somebody's player says so, which is when this happens.
+const pasted = apply(
+  null,
+  { kind: 'add', track: { ...track('a'), title: '', durationMs: 0 } },
+  'ana',
+  T0,
+)!;
+const named = apply(pasted, { kind: 'meta', trackId: 'a', title: 'Real Title', durationMs: 200_000 }, 'ben', T0 + 52_000)!;
+assert.equal(positionAt(named, T0 + 52_000), 52_000);
 assert.equal(named.queue[0]!.durationMs, 200_000);
+assert.equal(named.queue[0]!.title, 'Real Title');
 
 // --- Two people pressing things ---------------------------------------------
 
 // Every change is ordered by the gateway, so a client can drop its own echo of
 // an older state and keep the newer one somebody else caused.
-assert.equal(named.rev > resumed.rev, true);
 assert.equal(resumed.rev > paused.rev, true);
-assert.equal(named.byUserId, 'ana');
+assert.equal(paused.rev > first.rev, true);
+assert.equal(named.byUserId, 'ben');
 assert.equal(paused.byUserId, 'ben');
+assert.equal(resumed.byUserId, 'ben');
+
+// First answer holds. A second client reporting a different title is either a
+// different regional cut or somebody relabelling a track in everybody else's
+// queue after the fact - either way, not a correction worth taking.
+assert.equal(
+  apply(named, { kind: 'meta', trackId: 'a', title: 'Something Else' }, 'cat', T0 + 53_000)!.queue[0]!.title,
+  'Real Title',
+);
+assert.equal(
+  apply(named, { kind: 'meta', trackId: 'a', durationMs: 999_000 }, 'cat', T0 + 53_000)!.queue[0]!.durationMs,
+  200_000,
+);
+// And metadata for a track nobody here has is about a queue somebody else holds.
+assert.equal(apply(named, { kind: 'meta', trackId: 'nope', title: 'x' }, 'cat', T0 + 54_000), named);
 
 // A change that changes nothing is not a change: no rev, so nobody's player is
 // disturbed by a message that arrived late.
-const again = apply(named, { kind: 'duration', trackId: 'a', durationMs: 200_000 }, 'ben', T0 + 111_000)!;
+const again = apply(named, { kind: 'meta', trackId: 'a', durationMs: 200_000 }, 'cat', T0 + 55_000)!;
 assert.equal(again.rev, named.rev);
 assert.equal(again, named);
 

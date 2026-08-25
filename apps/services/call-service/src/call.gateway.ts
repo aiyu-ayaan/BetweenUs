@@ -363,8 +363,13 @@ export class CallGateway implements OnModuleDestroy {
         this.listen(state, { kind: 'ended', trackId: event.trackId });
         return;
 
-      case 'listen.duration':
-        this.listen(state, { kind: 'duration', trackId: event.trackId, durationMs: event.durationMs });
+      case 'listen.meta':
+        this.listen(state, {
+          kind: 'meta',
+          trackId: event.trackId,
+          title: event.title,
+          durationMs: event.durationMs,
+        });
         return;
 
       default:
