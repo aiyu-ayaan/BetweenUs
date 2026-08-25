@@ -200,7 +200,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   cursors: {},
   loadingOlder: false,
   error: null,
-  rightPanel: 'members',
+  rightPanel: 'none',
   pins: [],
   jumpTo: null,
   receipts: {},
