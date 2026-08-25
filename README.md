@@ -114,6 +114,7 @@ to be framed, so no browser tab can ever show it.
 | Music ducks under whoever is talking | ✅ | ✅ | — |
 | Browse youtube.com in the app, signed in | ✅ | — | — |
 | Paste a link | ✅ | ✅ | — |
+| Video on the stage, with a shared transport | ✅ | ✅ | — |
 | Ongoing-call notification | tray | — | ✅ foreground service |
 | **Presence and notifications** | | | |
 | Online, idle, do not disturb, invisible | ✅ | ✅ | ✅ |

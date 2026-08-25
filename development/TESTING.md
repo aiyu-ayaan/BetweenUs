@@ -769,9 +769,16 @@ The browser itself is worth five minutes on its own:
 - **Collapse costs nothing.** Close the browser, reopen it: same page, same
   scroll, still signed in. Ending the call is the only thing that should reset
   it.
-- **The popover hides it.** Open the queue popover while browsing - the page
-  should get out of the way rather than being drawn over. A `WebContentsView` is
-  native and paints above every pixel of the DOM, whatever `z-index` says.
+- **The tabs swap it.** Switch from Browse to Playing: the site must disappear
+  and the video appear in its place. Both at once means the player is underneath
+  a native surface and invisible - a `WebContentsView` paints above every pixel
+  of the DOM whatever `z-index` says.
+- **One panel, not two.** Open it from the sidebar controls and from the channel
+  view. There must be exactly one panel on screen; two side by side means
+  something is drawing shared state at two render sites again.
+- **It stays inside the window.** Play something with the panel open and check
+  the video is bounded on both axes - capped in width on a wide monitor, and
+  never running past the bottom of the window.
 - **The music does not stop.** Start a track, then collapse the video, then
   switch to a text channel, then come back. It should still be playing, and
   still in step with the other window.

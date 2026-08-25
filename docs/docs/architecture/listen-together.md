@@ -174,6 +174,47 @@ clients have the player open anyway. First one to know fills it in; a later
 client reporting a *different* title is ignored, since that is either a regional
 cut or somebody relabelling a track in everybody else's queue after the fact.
 
+## The panel, and the two bugs its shape came from
+
+Listen Together takes the voice stage, the way a shared screen does, with two
+tabs and a transport bar under them. It was a popover on the call controls, and
+that was wrong twice.
+
+**It drew itself twice.** `VoiceControls` is rendered in two places — the
+sidebar and the channel view — and it drew the panel from a flag in the store.
+One flag, two render sites, two live panels side by side, each with its own seek
+bar. The rule the fix encodes: *shared state may only be drawn once.* The button
+sets the flag and nothing else; `VoiceChannelView` is the single render site,
+and pressing the button from the sidebar navigates there first.
+
+**The video filled the screen.** It was `aspect-video w-full`, which on a 1750px
+stage is a 984px-tall box, and nothing above it was `min-h-0` — so flexbox let
+it push past the bottom of the window. It is now `flex-1 min-h-0` against the
+stage and capped at `max-w-5xl`, with **no aspect ratio of its own**: a 16:9 box
+cannot be bounded on both axes by `aspect-ratio` alone, because whichever axis
+is definite wins and the other one breaks the shape. The player letterboxes
+inside whatever box it is given, exactly as it does on youtube.com, so the black
+surround is free and correct.
+
+The two tabs are tabs, and not two panes, for a reason beyond space: a native
+browser view and an embedded player must never be on screen together. See the
+native-surface note below.
+
+```text
+┌─ Listen together ──── [Browse] [Playing] ───────────────────── ✕ ┐
+│                                              │  Queue            │
+│   youtube.com, or the shared video           │  ▸ track one      │
+│   (bounded: flex-1 min-h-0, max-w-5xl)       │    track two      │
+│                                              │  [paste a link] + │
+├──────────────────────────────────────────────┴───────────────────┤
+│ ⏮ ⏸ ⏭   Title · added by   3:07 ──●────── 6:12   🔊──   Stop     │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+Closing it leaves a one-line bar above the tiles with the same transport on it.
+The picture parks and the music carries on, which is what closing a panel should
+cost.
+
 ## Getting a track in: browse, don't paste
 
 Pasting links was the first version and it was the wrong shape. Nobody keeps a
@@ -211,9 +252,17 @@ Three things fence it in:
 ### One native-surface consequence
 
 A `WebContentsView` paints above every pixel of the renderer's DOM, whatever any
-`z-index` says. So the queue popover **hides** the page while it is open — which
-costs nothing, because hiding keeps the sign-in, the scroll position and the
-search. Only ending the call destroys it.
+`z-index` says. Nothing in the renderer can be drawn on top of it, so anything
+that has to be visible at the same time must instead make it **go away**.
+
+That is why Browse and Playing are tabs. Showing the site and the embedded
+player side by side would mean the player is underneath a native surface and
+invisible, with nothing to explain it. Leaving the browse tab hides the view and
+the player claims its rectangle; entering it releases the player, which parks
+and keeps playing.
+
+Hiding costs nothing — the sign-in, the scroll position and the search all
+survive it. Only ending the call destroys the view.
 
 ## The player, and the CSP
 
