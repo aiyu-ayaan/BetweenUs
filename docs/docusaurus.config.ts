@@ -7,7 +7,7 @@ import type * as Preset from '@docusaurus/preset-classic';
 const config: Config = {
   title: 'BetweenUs',
   tagline: 'A Discord-like communication platform with secure remote desktop access',
-  favicon: 'img/favicon.ico',
+  favicon: 'img/icon.svg',
 
   future: {
     v4: true,
