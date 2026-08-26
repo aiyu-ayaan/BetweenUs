@@ -803,7 +803,13 @@ was built the way it was; this is the short version.
   whatever is on screen - because nobody keeps a list of video ids. It is a
   `WebContentsView` the main process owns in its own session partition, not a
   `webview` and not an iframe: youtube.com refuses to be framed, which is why a
-  browser tab gets the paste box and is told why.
+  browser tab cannot have the site at all.
+- **Search, in the web client, on the same Browse tab.** The gesture is the same
+  - look for something, press it, the call watches it - reached the only way a
+  web page is allowed to reach it: the YouTube Data API, called from the
+  person's own browser, so the search goes to Google and never through
+  BetweenUs. Optional the way TURN is optional; unset `VITE_YOUTUBE_API_KEY` and
+  the paste box carries on.
 - **It is not a screen share with the sound on**, and that is the whole design.
   A share costs the sharer one upload per listener, squeezes music through a
   codec tuned for speech, and pins them to the tab. Here **no audio crosses the

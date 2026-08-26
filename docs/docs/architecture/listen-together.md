@@ -244,13 +244,49 @@ Dragging and releasing the seek slider commits the new timestamp to the server. 
 
 If an operating system or browser policy refuses background autoplay for a particular client window, the transport marks the local state as blocked with an amber prompt ("press play here"). Clicking it starts audio playback locally with a user gesture, without sending an erroneous global pause command to everyone else in the call.
 
-### Why it is desktop-only, and why that cannot be fixed
+### Why the site itself is desktop-only, and why that cannot be fixed
 
 youtube.com sends `X-Frame-Options` and a `frame-ancestors` policy. It refuses
 to be framed, full stop — only `/embed/<id>` is frameable, and that is the
 player and nothing else. No browser tab can show the site inside another page,
-however it is asked, so the web client gets the paste box and is told why rather
-than being shown a frame that will never load.
+however it is asked, so the web client is never shown a frame that will never
+load.
+
+### What the web client gets instead: search
+
+The gesture is the same on both clients — look for something, press it, the
+whole call watches it — so both live on the same **Browse** tab. What differs is
+what Browse *is*:
+
+| | Desktop | Web |
+| --- | --- | --- |
+| Browse tab shows | youtube.com itself, signed in as you | search results in a grid |
+| Search, playlists, subscriptions | the user's own YouTube session | search only |
+| Pressing a result | plays it for the call | plays it for the call |
+| Needs a credential | no | `VITE_YOUTUBE_API_KEY` |
+
+The search is a `fetch` to the YouTube Data API **from the person's own
+browser** (`apps/desktop/src/services/youtube-search.ts`). Nothing about it
+touches a BetweenUs service, which is the same rule `listen.meta` follows: no
+backend of ours ever talks to YouTube, because a backend that did would need an
+API key, an egress rule and an opinion about who is looking for what.
+
+That makes the key a **browser** key, visible to anybody using the site. That is
+what Google's HTTP-referrer restriction on a key is for: enable YouTube Data API
+v3, restrict the key to the deployment's own hostname. Leave
+`VITE_YOUTUBE_API_KEY` unset and the tab says which setting turns it on — the
+paste box beside it needs no key and keeps working. The desktop app never reads
+it.
+
+Two details that are not decoration:
+
+- **Results are filtered to `videoEmbeddable=true`.** The web client plays
+  through the embed, so a video that refuses to be embedded is a black frame for
+  everybody in the call, not just for whoever picked it.
+- **A pasted link in the search box is recognised, not searched for.** Somebody
+  holding the URL already knows which video they mean, and a search costs 100
+  units of a 10,000-unit daily quota. Results are also cached per query for the
+  life of the tab, so retyping a word is not a second search.
 
 ### Why it is not `webviewTag`
 
@@ -334,12 +370,13 @@ window, so it is a trust boundary and it is tested as one.
 
 ## What it deliberately does not do
 
-- **No search in the web client.** A browser tab cannot show youtube.com, so
-  there it is paste-a-link. An in-app search box there would need a YouTube Data
-  API key, which is a per-deployment credential and an egress rule.
-- **No YouTube Data API anywhere.** The desktop browser is the real site, so
-  search, playlists and subscriptions come from the user's own session rather
-  than from a key the operator has to obtain.
+- **No youtube.com in the web client.** The site refuses to be framed, so the
+  web client searches instead of browsing — see above. Playlists and
+  subscriptions stay desktop-only, because those need the user's own session and
+  the only place that session can be shown is the real site.
+- **No YouTube Data API on any server.** The optional search key is read by the
+  browser and used by the browser. No service of ours holds it, sends it or
+  learns what anybody searched for.
 - **No Spotify, yet.** It is a second `ListenProvider` and a second class with
   the same four methods, but it needs an OAuth flow, a Premium account per
   listener, and the Web Playback SDK — which *is* remote code, and so needs the
@@ -374,6 +411,8 @@ the chooser rather than to the call.
 | The queue popover | `apps/desktop/src/features/voice/ListenTogether.tsx` |
 | The picture, and the transport | `apps/desktop/src/features/voice/ListenStage.tsx` |
 | The in-app YouTube browser (UI) | `apps/desktop/src/features/voice/ListenBrowser.tsx` |
+| The web client's search (UI) | `apps/desktop/src/features/voice/ListenSearch.tsx` |
+| The web client's search (API call) | `apps/desktop/src/services/youtube-search.ts` |
 | The in-app YouTube browser (main) | `apps/desktop/electron/youtube-view.ts` |
 
 ## The rule both surfaces follow

@@ -842,8 +842,7 @@ the ducking will chase itself.
    start that track with the picture on screen, and the note in the *other*
    window should go amber without anybody opening its panel. **Add to queue**
    appends instead and leaves you on the site. Pasting a link into the box
-   beside the queue does the same as adding, and is the only way in the web
-   client, which says so.
+   beside the queue does the same as adding.
 2. **The thing to actually check: are they in step.** Play something with a
    clear beat and take one headphone from each machine. They should sound like
    one source, not like a round. If they are audibly apart, the clock offset is
@@ -898,6 +897,29 @@ The browser itself is worth five minutes on its own:
 - **The site is never a second player.** With a track playing, press a video in
   the browse tab. You should hear the shared player only, and the watch page
   behind it should sit paused rather than run a muted copy of the same song.
+
+The web client's Browse tab is a different thing and needs its own pass. Run it
+in a real browser tab (`pnpm dev` and open the Vite URL, not the Electron
+window) with `VITE_YOUTUBE_API_KEY` set:
+
+- **Search, then press one.** Type a song, press Enter. A grid of results with
+  thumbnails, and pressing one should play it for the whole call and flip to
+  Playing - the same behaviour as pressing a thumbnail on the real site in the
+  desktop app. **Queue** on a card appends instead and stays on the results.
+- **A pasted link must not be searched for.** Paste a watch URL into the search
+  box and press Enter. It should play that video immediately. If a grid of
+  search results appears instead, the parse shortcut is gone and every paste is
+  now costing quota.
+- **No key is a sentence, not a blank panel.** Unset `VITE_YOUTUBE_API_KEY`,
+  rebuild, open Browse. It should name the setting and point at the paste box,
+  which must still work.
+- **A refused key says so.** Restrict the key to some other hostname in the
+  Google console and search. The message should mention the referrer
+  restriction or the quota - not "search failed".
+- **Nothing reached our backend.** With the network tab open, search. The only
+  request should be to `googleapis.com`. A request to the BetweenUs gateway
+  means somebody has moved the key server-side, which is the thing this design
+  explicitly does not do.
   Press the page's own play button too: it should stop again immediately. That
   is the point - the picture the call watches is the shared player's, and this
   half of the panel is for choosing.

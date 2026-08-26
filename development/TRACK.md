@@ -189,7 +189,17 @@ Listen Together:
       `persist:youtube` partition, with no preload and navigation confined to
       Google's hosts. Not `webviewTag`, which would give the renderer the power
       to mount web content anywhere; not an iframe, which youtube.com refuses
-      outright - so the web client keeps the paste box and is told why.
+      outright - so the web client cannot have the site itself.
+- [x] **Search in the web client, on the same Browse tab.** A browser tab cannot
+      show youtube.com and never will, but it can search: the YouTube Data API
+      answers CORS requests from the page, so the query goes from the person's
+      own browser to Google and touches nothing of ours. That is deliberate -
+      a backend searching on a client's behalf would need a key, an egress rule
+      and an opinion about who is looking for what. A browser key, restricted by
+      referrer in Google's console, and optional: unset and the paste box stays
+      with a line saying which setting turns it on. Results are filtered to
+      `videoEmbeddable`, because the web client plays through the embed and an
+      unembeddable video is a black frame for the whole call.
 - [x] **Press a video, the call watches it.** No link, no button: landing on a
       video page inside the browser plays it for everybody and flips the panel
       to the player. A button that queued whatever page you were on was still a
