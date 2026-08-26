@@ -8,6 +8,12 @@ interface ImportMetaEnv {
    * the login screen can point this window elsewhere.
    */
   readonly VITE_API_URL?: string;
+  /**
+   * A YouTube Data API browser key, which turns on the search box the web
+   * client uses in place of the site the desktop app can frame. Optional; unset
+   * means the paste box and a line saying why. See `services/youtube-search.ts`.
+   */
+  readonly VITE_YOUTUBE_API_KEY?: string;
 }
 
 interface ImportMeta {

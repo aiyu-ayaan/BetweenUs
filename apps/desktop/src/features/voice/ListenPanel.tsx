@@ -18,8 +18,10 @@
  * `WebContentsView` paints above every pixel of the DOM whatever any `z-index`
  * says, so "both at once" means "the player is invisible and nobody knows why".
  *
- *   Browse   - the real youtube.com, signed in as you. The default, because
- *              looking for something to play is what opening this means.
+ *   Browse   - the real youtube.com, signed in as you, on desktop; search
+ *              results in a browser tab, which is as close as a web page is
+ *              allowed to get. The default, because looking for something to
+ *              play is what opening this means.
  *   Playing  - the video everybody in the call is watching.
  *
  * Neither tab draws anything itself. Both offer an empty rectangle and
@@ -34,6 +36,7 @@ import { useAppsStore } from '../../stores/apps';
 import { formatPosition } from '../../services/listen-sync';
 import { isDesktopRuntime } from '../../services/platform';
 import { ListenBrowser } from './ListenBrowser';
+import { ListenSearch } from './ListenSearch';
 import {
   ChevronLeftIcon,
   CompassIcon,
@@ -54,20 +57,25 @@ export function ListenPanel(): JSX.Element {
   const error = useListenStore((state) => state.error);
 
   const playerSlot = useRef<HTMLDivElement>(null);
-  const canBrowse = isDesktopRuntime() && Boolean(window.betweenus?.youtubeOpen);
-  const showing = canBrowse ? tab : 'playing';
+  /**
+   * The desktop app frames youtube.com itself; a browser tab cannot, and gets
+   * search results instead. Both are the same gesture - find something, press
+   * it, the call watches it - so both live on the same Browse tab rather than
+   * one of them being a lesser thing hidden somewhere else.
+   */
+  const native = isDesktopRuntime() && Boolean(window.betweenus?.youtubeOpen);
 
   // The picture is handed this rectangle only while the player tab has the
   // space. On the browser tab it is released, which parks it - still playing,
   // and no longer sitting invisibly underneath a native view.
   useEffect(() => {
-    if (showing !== 'playing' || !session) {
+    if (tab !== 'playing' || !session) {
       claimListenSlot(null);
       return undefined;
     }
     claimListenSlot(playerSlot.current);
     return () => claimListenSlot(null);
-  }, [showing, session]);
+  }, [tab, session]);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-2">
@@ -89,22 +97,20 @@ export function ListenPanel(): JSX.Element {
         <MusicIcon className="h-4 w-4 shrink-0 text-amber-300" />
         <span className="text-sm font-medium text-slate-200">Listen together</span>
 
-        {canBrowse && (
-          <div className="ml-2 flex items-center gap-0.5 rounded-md bg-surface-900 p-0.5">
-            <Tab active={showing === 'browse'} onClick={() => useListenStore.getState().setTab('browse')}>
-              <CompassIcon className="h-3.5 w-3.5" />
-              Browse
-            </Tab>
-            <Tab
-              active={showing === 'playing'}
-              disabled={!session}
-              onClick={() => useListenStore.getState().setTab('playing')}
-            >
-              <PlayIcon className="h-3.5 w-3.5" />
-              Playing
-            </Tab>
-          </div>
-        )}
+        <div className="ml-2 flex items-center gap-0.5 rounded-md bg-surface-900 p-0.5">
+          <Tab active={tab === 'browse'} onClick={() => useListenStore.getState().setTab('browse')}>
+            <CompassIcon className="h-3.5 w-3.5" />
+            Browse
+          </Tab>
+          <Tab
+            active={tab === 'playing'}
+            disabled={!session}
+            onClick={() => useListenStore.getState().setTab('playing')}
+          >
+            <PlayIcon className="h-3.5 w-3.5" />
+            Playing
+          </Tab>
+        </div>
 
         <button
           type="button"
@@ -121,8 +127,8 @@ export function ListenPanel(): JSX.Element {
 
       <div className="flex min-h-0 flex-1 gap-3">
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-          {showing === 'browse' ? (
-            <ListenBrowser />
+          {tab === 'browse' ? (
+            native ? <ListenBrowser /> : <ListenSearch />
           ) : session ? (
             /* Bounded on both axes, which is the whole of the "it filled the
                entire screen and ran off the bottom" bug.
@@ -145,7 +151,7 @@ export function ListenPanel(): JSX.Element {
               className="mx-auto min-h-0 w-full max-w-5xl flex-1 rounded-lg bg-black"
             />
           ) : (
-            <Empty canBrowse={canBrowse} />
+            <Empty />
           )}
         </div>
 
@@ -157,7 +163,7 @@ export function ListenPanel(): JSX.Element {
   );
 }
 
-function Empty({ canBrowse }: { canBrowse: boolean }): JSX.Element {
+function Empty(): JSX.Element {
   return (
     <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-white/10 p-6 text-center">
       <MusicIcon className="h-8 w-8 text-slate-700" />
@@ -166,22 +172,17 @@ function Empty({ canBrowse }: { canBrowse: boolean }): JSX.Element {
         connection - so it stays at full quality and costs nobody any upload.
         Anybody here can change what is playing.
       </p>
-      {canBrowse ? (
-        <button
-          type="button"
-          onClick={() => useListenStore.getState().setTab('browse')}
-          className="flex cursor-pointer items-center gap-2 rounded-md bg-amber-500/15 px-3 py-2 text-xs font-medium text-amber-200 transition-colors hover:bg-amber-500/25"
-        >
-          <CompassIcon className="h-4 w-4" />
-          Browse YouTube
-        </button>
-      ) : (
-        <p className="max-w-sm text-[11px] leading-relaxed text-slate-500">
-          Browsing YouTube inside the app is desktop-only: youtube.com refuses to
-          be shown inside another page, which is a rule the site sets and a
-          browser tab cannot get around. Paste a link instead.
-        </p>
-      )}
+      {/* One button on both clients. What Browse *is* differs - the site on
+          desktop, search results in a browser tab - and that is a difference
+          worth having behind one word rather than in front of it. */}
+      <button
+        type="button"
+        onClick={() => useListenStore.getState().setTab('browse')}
+        className="flex cursor-pointer items-center gap-2 rounded-md bg-amber-500/15 px-3 py-2 text-xs font-medium text-amber-200 transition-colors hover:bg-amber-500/25"
+      >
+        <CompassIcon className="h-4 w-4" />
+        Browse YouTube
+      </button>
     </div>
   );
 }
