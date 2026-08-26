@@ -41,6 +41,7 @@ Messages, attachments, and call media are end-to-end encrypted: the server store
 | Messages & Chat | End-to-end encrypted, realtime over WebSocket, history paging in both directions, replies, `:` emoji search, per-server custom emoji including animated, reactions with who-reacted names, drag-and-drop and a preview before sending, full-screen zoomable image viewer, integrated video player, and local media album saving |
 | Voice and video | Peer-to-peer voice channels, camera, one screen share at a time with takeover, join and leave tones, manual quality override, end-to-end encrypted media, no media server |
 | Listen together | A shared YouTube queue inside a voice call: everyone hears the same track in step, from their own connection, at full quality, with the video on screen. Browse the real youtube.com inside the app, signed in as yourself, and queue what you are looking at. Anybody can add, skip or pause; music ducks under whoever is talking. No audio is streamed between anybody |
+| Play together | Four board games inside a voice call - Tic-tac-toe, Connect Four, Reversi, Dots and Boxes. One board everybody sees, two chairs anybody can take, and a rematch button. `call-service` referees the moves, so a move is a number on the wire rather than somebody's screen being streamed |
 | Android Client | Native Jetpack Compose + Material 3 app with E2EE messaging, WhatsApp-style media picker and composer, media viewers, and public gallery saving (`Pictures/BetweenUs`, `Movies/BetweenUs`) |
 | Presence | Online / idle / do not disturb / invisible, typing indicators, voice rosters |
 | Notifications | Desktop notifications, system tray, start with the system, per-channel and per-person mute, quiet hours, persisted unread with a line that survives a restart |
@@ -115,6 +116,10 @@ to be framed, so no browser tab can ever show it.
 | Browse youtube.com in the app, signed in | ✅ | — | — |
 | Paste a link | ✅ | ✅ | — |
 | Video on the stage, with a shared transport | ✅ | ✅ | — |
+| **Play together** | | | |
+| Four board games on the call stage | ✅ | ✅ | — |
+| Take a chair, stand up, play again | ✅ | ✅ | — |
+| Watch without playing, and see whose move it is | ✅ | ✅ | — |
 | Ongoing-call notification | tray | — | ✅ foreground service |
 | **Presence and notifications** | | | |
 | Online, idle, do not disturb, invisible | ✅ | ✅ | ✅ |
@@ -730,7 +735,7 @@ GET /api/v1/remote/machines/:id/audit
 POST /api/v1/remote/sessions      DELETE /api/v1/remote/sessions/:id
 GET /api/v1/admin/...             (administrators only)
 WS   /ws/chat                     WS  /ws/presence      WS /ws/remote
-WS   /ws/call                     (signalling, and the Listen Together queue)
+WS   /ws/call                     (signalling, the Listen Together queue, the game board)
 GET  /health                      (every service)
 ```
 
@@ -746,6 +751,25 @@ Errors share one shape everywhere:
 
 Newest first. Every one of these is in `development/TRACK.md` with the reason it
 was built the way it was; this is the short version.
+
+### Play together
+
+- **Four board games inside a voice call.** Tic-tac-toe, Connect Four, Reversi
+  and Dots and Boxes, on the same stage the shared video uses. One board
+  everybody in the call sees, two chairs anybody can take, a tally per chair and
+  a rematch button.
+- **A move is a number, not a picture.** "Column four" crosses the wire and
+  `call-service` applies the rules, so it costs no uplink and nobody has to keep
+  a window open. A shared screen would have been a game one person plays while
+  everybody else watches a recording of it.
+- **The gateway referees.** A client sends what was clicked and never a board,
+  because a board a client can set is a board a client can set to won - and two
+  people clicking the same square need one answer, which is the same job
+  `call-service` already does for the screen share.
+- **The rules are in the contract**, imported by both ends, so what the referee
+  decides and what every window draws cannot drift apart. Adding a fifth game is
+  a file, a line in the registry and a board component; the gateway needs no
+  change at all.
 
 ### Listen together
 
@@ -895,6 +919,9 @@ was built the way it was; this is the short version.
 - Listen Together has not been run with two real clients: the transport and the
   clock have self-checks, the player and the ducking do not and cannot without a
   browser. `development/TESTING.md` has the walkthrough.
+- Play Together has not been run with two real clients either. The referee and
+  the four sets of rules have self-checks, and so does the player's-eye view;
+  the boards themselves need two windows and a person in each.
 - On Android a GIF emoji shows its first frame: animating one needs Coil's
   `coil-gif` artifact, which is one dependency line.
 
@@ -931,4 +958,5 @@ Third-party dependencies keep their own licences.
 | `development/TRACK.md` | The current track: what has landed this pass, and why it was built the way it was |
 | `FCM/README.md` | Push notification design: why it is data-only, what the server can decide and what only the client can |
 | `docs/docs/architecture/listen-together.md` | Listen Together: the shared clock, why it is not a screen share, and what it deliberately does not do |
+| `docs/docs/architecture/play-together.md` | Play Together: why the gateway referees, why the rules live in the contract, and why every game in the library is perfect information |
 | `push-suppression.md` | Why a phone is not woken for a chat open on another of your devices, and why a notification goes away when you read it elsewhere |

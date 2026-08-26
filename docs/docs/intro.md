@@ -23,6 +23,9 @@ today, with web and Android planned in the same backend.
   [Android client](/architecture/android-client).
 - **[Listen Together](/architecture/listen-together)** — synchronized YouTube
   playback inside calls with zero uplink, in-app YouTube browsing, and automatic speech ducking.
+- **[Play Together](/architecture/play-together)** — four board games inside a
+  call, refereed by `call-service`, where a move is a number rather than a
+  shared screen.
 - **[System Design](/system-design/auth-and-permissions)** — auth, RBAC,
   events, ingress through Cloudflare Tunnel.
 - **[Database](/database/schema)** — the Prisma schema, model by model, with
@@ -43,6 +46,7 @@ today, with web and Android planned in the same backend.
 - **End-to-End Encrypted Chat**: Messages, edits, reactions, replies, pins, rich markdown parsing (bulleted/numbered lists, inline marks, code blocks), and encrypted attachments up to 100 MB.
 - **Voice, Video & Screen Share**: Peer-to-peer WebRTC mesh, camera, screen sharing with interactive remote control handover and multi-cursor overlays.
 - **Listen Together**: Synchronized YouTube playback in voice calls, browse youtube.com in-app, click-to-play with zero uplink, and automatic speech ducking.
+- **Play Together**: Tic-tac-toe, Connect Four, Reversi and Dots and Boxes inside a voice call — one board everybody sees, two chairs anybody can take, refereed by the gateway so nothing is played on trust.
 - **Remote Desktop**: Screen viewing, remote control, clipboard sync, multi-monitor selection, granular permission grants with expiry, and audit trail.
 - **Presence & Notifications**: Status selection, typing indicators, desktop tray, quiet hours, push suppression across devices, and FCM push notifications.
 

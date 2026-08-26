@@ -31,6 +31,27 @@ which is the same job it does for the screen share and for the same reason.
 Held in process beside the roster, and it dies with the call. Full design:
 [Listen Together](/architecture/listen-together).
 
+## Play Together
+
+The same socket carries one board game per call, and here `call-service` is the
+referee rather than only the ordering: a client sends `game.move` with a number
+— a square, a column, a line — and the gateway applies the rules, works out
+what the board became, and broadcasts it. A client never sends a board, because
+a board a client can set is a board a client can set to won.
+
+`game.open / sit / move / rematch / close` come in; `game.state` with the whole
+session goes out to everybody, the joiner included. The rules themselves live
+in `@betweenus/shared-types` and are imported by both ends, so what the referee
+decides and what every client draws cannot drift apart.
+
+Anybody in the call may open a game or take an empty chair; only the person in
+a seat may move it, only on their turn, and only once every chair is full. A
+leaver's chair is freed on the same terms their peer seat is — after the rejoin
+grace — and the board is left standing.
+
+Held in process beside the roster, and it dies with the call. Full design:
+[Play Together](/architecture/play-together).
+
 ## `/api/v1/calls`
 
 | Method | Path | What it does |
