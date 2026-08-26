@@ -36,7 +36,10 @@ Held in process beside the roster, and it dies with the call. Full design:
 The same socket carries one board game per call, and here `call-service` is the
 referee rather than only the ordering: a client sends `game.move` with a number
 — a square, a column, a line — and the gateway applies the rules, works out
-what the board became, and broadcasts it. A client never sends a board, because
+what the board became, and broadcasts it. For carrom the move is a shot rather
+than a square: three numbers in `params`, which the gateway bounds and then
+feeds to the same physics simulation every client replays to animate it. For
+ludo the gateway also rolls the die, with `randomInt`. A client never sends a board, because
 a board a client can set is a board a client can set to won.
 
 `game.open / sit / move / rematch / close` come in; `game.state` with the whole

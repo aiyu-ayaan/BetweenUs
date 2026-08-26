@@ -75,7 +75,35 @@ Play Together:
       failure in either is one nobody reports: a wrong "Your move" reads as
       latency, a refused square reads as a broken board, and a move accepted
       from the wrong seat is an opponent who played twice.
-- [x] **Adding a fifth game is a file, a line in the registry and a board
+- [x] **Ludo and Carrom**, which are the two that do not fit a grid - and the
+      contract grew exactly three things to hold them, each of which is now the
+      general answer rather than a special case:
+      `GameState.data` (whatever numbers a game is made of), `params` on a move
+      (a carrom shot is an aim, not an index), and a `random` handed to the
+      rules by the referee (Ludo's die).
+- [x] **Carrom is a real simulation.** Coulomb friction, so a coin slows at a
+      constant rate and stops - a `v *= 0.99` leaves the board creeping for
+      ever. Restitution off coins and off cushions, mass ratios from a real
+      board, sizes from a 74 cm one, and a pocket that takes a piece when its
+      centre crosses it rather than when it touches.
+- [x] **The client animates by re-running the simulation, not by tweening.**
+      The gateway simulates to referee; the client simulates the same shot from
+      the same board to draw it, so the last frame it shows is the board that
+      was already sent. That is only possible because the whole thing is
+      deterministic - fixed timestep, fixed iteration order, no clock - and it
+      is the reason the physics lives in `shared-types` rather than in the
+      service. The alternative was twenty coins sliding through each other in
+      straight lines.
+- [x] **The die belongs to the gateway.** `randomInt`, not `Math.random`,
+      because a predictable die is a game people can beat by counting; and the
+      tumble on screen is started by the *arrival* of the number rather than by
+      the button, because a die animated first and reported afterwards is a
+      client deciding its own sixes.
+- [x] **The sidebar buttons open the options.** Music and gamepad used to set a
+      flag and navigate, which from the sidebar reads as a button that moves you
+      somewhere for no stated reason. They now open the library, or what is
+      playing with a paste box, and picking something takes you to it.
+- [x] **Adding a seventh game is a file, a line in the registry and a board
       component.** The gateway needs no change: it looks the rules up by id and
       referees whatever it finds.
 

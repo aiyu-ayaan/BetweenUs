@@ -90,10 +90,24 @@ Four board games inside a call, refereed by `call-service`; the design is
       the same Connect Four column inside one second, a chair freed by a phone
       that dropped its socket rather than left, and the Dots and Boxes click
       targets, which are the smallest thing anybody has to hit in this app.
-- [ ] **Nothing on Android.** The protocol is there; drawing four boards in
+- [ ] **Four-seat Ludo.** Two players today. Four needs the turn to skip empty
+      chairs, and the rules cannot see chairs - they are handed a board, not a
+      table - so it is a change to the session: a minimum seat count in the
+      definition, and a turn that steps over a chair nobody is in.
+- [ ] **Carrom's tournament edges.** The queen has to be covered, and a striker
+      down a pocket costs a coin. The due, the board fouls, three consecutive
+      fouls and the last-coin rule are not there. None of them is hard; all of
+      them are rules people only reach for when they are arguing.
+- [ ] **The carrom replay is a `setInterval` at 60 Hz.** A tab in the
+      background throttles it, so a shot watched from behind another window
+      plays back in slow motion and then snaps. `requestAnimationFrame` with a
+      time delta is the fix, and it needs the frame index to be derived from
+      elapsed time rather than counted.
+- [ ] **Nothing on Android.** The protocol is there; drawing the boards in
       Compose is the work, and unlike listening there is no reason a phone
       should not *drive* one - a board is not a track skipped by a coat pocket.
-      See `ANDROID_TODO.md`.
+      Carrom in particular wants a finger rather than a mouse. See
+      `ANDROID_TODO.md`.
 - [ ] **No hidden-information games.** Battleship, anything with a hand of
       cards. It follows from broadcasting the whole session, and the fix is a
       real one rather than a flag: per-player views, so the server sends each

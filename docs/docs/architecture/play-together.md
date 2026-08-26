@@ -88,10 +88,79 @@ interface GameRules {
 Pure, total, synchronous. No clock, no randomness, no I/O — so the referee and
 four clients running the same move on the same board always get the same board.
 
-## Why these four games
+## A move that is not a square
 
-Tic-tac-toe, Connect Four, Reversi and Dots and Boxes. All of them
-**perfect information**, and that is a consequence rather than a taste.
+Four of the six games move by naming a square. Two do not, and the contract
+carries both:
+
+- **`params`** — extra numbers on a move. A carrom shot is *where the striker
+  sits, which way it points and how hard it is hit*: three numbers, sent
+  alongside the move rather than packed into it, because a packing is an
+  encoding two ends can disagree about. The gateway bounds and cleans them
+  before the rules ever see them — this is the one field a client fills in with
+  real numbers, and it goes straight into a physics loop.
+- **`random`** — a source of chance, *passed to* the rules by whoever is
+  refereeing. Ludo's die is rolled by `call-service`, with `randomInt` rather
+  than `Math.random`, and arrives in the board like any other change. A client
+  that rolled its own would be a client deciding its own sixes.
+- **`GameState.data`** — whatever numbers a game is actually made of, for the
+  games that are not grids. Ludo is eight token positions, a die and a count of
+  sixes. Carrom is twenty pieces at twenty floating-point positions plus the
+  shot that put them there. The gateway stores it, broadcasts it, and never
+  looks inside.
+
+## Carrom, and why the physics is in the contract
+
+The board is a real simulation: Coulomb friction (a coin loses speed at a
+constant rate and *stops* — a `v *= 0.99` never quite does), restitution off
+coins and cushions, mass ratios from a real board, and a pocket that takes a
+piece when its centre crosses it. The sizes are a 74 cm board's: 3.18 cm men,
+4.13 cm striker, 4.45 cm pockets, in fractions of the playing surface.
+
+It lives in `packages/shared-types/src/games/carrom-physics.ts` because **both
+ends run it**:
+
+```text
+  client                     gateway                      client
+    │  "striker at -0.2,        │                            │
+    │   this angle, 0.8 power"  │                            │
+    ├──────────────────────────►│                            │
+    │                    simulate() ──► the board            │
+    │◄──────────── game.state ──┴──────────────────────────►│
+    │                                                        │
+ simulate() the same shot                          simulate() the same shot
+ and draw the frames                               and draw the frames
+```
+
+What a client animates is therefore not an impression of the shot — it *is* the
+shot, replayed, and its last frame is the board the gateway already sent. That
+only works because the simulation is deterministic: fixed timestep, fixed
+iteration order, no clock, no randomness, and no floating-point that depends on
+how fast a machine is.
+
+The alternative was tweening twenty coins from their old positions to their new
+ones, which is twenty coins sliding through each other in straight lines.
+
+## Ludo, and who rolls the die
+
+The die is the only thing in the library that nobody at the table decides, so
+it is worth being exact: **the gateway rolls.** A roll is a move — "I roll" —
+and the number comes back in the board.
+
+The tumbling die on screen is started by the *arrival* of that number, not by
+the button that asked for it. A die animated first and reported afterwards is a
+client deciding its own sixes; a die animated to a different number than the one
+in play is worse, because both players would be reading a different game off the
+same screen.
+
+Two players, four tokens each, for now. Four-seat ludo needs the turn to skip
+empty chairs, and the rules cannot see chairs — they are handed a board, not a
+table — so it is a change to the session rather than to the rules.
+
+## Why these games
+
+All six are **perfect information**, and that is a consequence rather than a
+taste.
 
 The session is broadcast whole to everybody in the call, so there is nowhere to
 hide anything: a game of Battleship played this way is one where both fleets
@@ -115,6 +184,13 @@ Each one also earns its place:
 - **Dots and Boxes** gives another go for a closed square, which is the whole
   endgame — and the rule an "alternate the turn" reducer silently loses,
   scoring a five-box chain for the wrong person.
+- **Ludo** is the one with chance in it, which is what proves that a random
+  number can live in this design at all: it belongs to the referee, like the
+  ordering does.
+- **Carrom** is the one where the move is continuous rather than discrete, and
+  the board is decided by a simulation instead of by a rule. It is also the
+  proof that "the rules live in the contract" was worth the trouble: the same
+  sentence covers a physics engine.
 
 ## The chairs
 
@@ -172,6 +248,13 @@ pressed. That is not the permission check. The gateway's is.
 | --- | --- |
 | Protocol, session shape | `packages/shared-types/src/index.ts` |
 | The rules of the games (pure, shared) | `packages/shared-types/src/games/` |
+| The carrom simulation (pure, shared) | `packages/shared-types/src/games/carrom-physics.ts` |
+| Carrom rules, queen and fouls | `packages/shared-types/src/games/carrom.ts` |
+| Ludo rules and the die | `packages/shared-types/src/games/ludo.ts` |
+| Ludo and carrom self-check | `apps/services/call-service/src/game-physics.check.ts` |
+| The carrom board and its replay | `apps/desktop/src/features/voice/CarromBoard.tsx` |
+| The ludo board and its die | `apps/desktop/src/features/voice/LudoBoard.tsx` |
+| The sidebar menus behind both buttons | `apps/desktop/src/features/voice/ActivityMenu.tsx` |
 | The referee (pure) | `apps/services/call-service/src/game-session.ts` |
 | Its self-check | `apps/services/call-service/src/game-session.check.ts` |
 | Gateway wiring | `apps/services/call-service/src/call.gateway.ts` |
@@ -181,11 +264,12 @@ pressed. That is not the permission check. The gateway's is.
 | The panel and the library | `apps/desktop/src/features/voice/GamePanel.tsx` |
 | The four boards | `apps/desktop/src/features/voice/GameBoards.tsx` |
 
-## Adding a fifth game
+## Adding a seventh game
 
 One file in `packages/shared-types/src/games/` exporting a `GameRules`, one
 line in the registry, one case in `GameBoard`. The gateway needs no change at
-all — it looks the rules up by id and referees whatever it finds.
+all — it looks the rules up by id and referees whatever it finds, `params`,
+`random` and `data` included.
 
 The two things to get right are the ones the existing four already show: make
 the *move* the thing the player means (a column, not a square, when a column is

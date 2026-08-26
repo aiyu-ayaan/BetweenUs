@@ -760,6 +760,42 @@ is about two.
     move it is; open the game panel again and the music should keep playing with
     its own bar. Neither should ever be on screen at the same time.
 
+### Carrom, and the thing to actually check
+
+13. **Open Carrom** and take both chairs across two windows. Drag along your own
+    baseline: the striker should slide with the pointer and never sit on top of
+    a coin. Pull back from anywhere else on the board and let go - the further
+    you pull, the harder it goes.
+14. **The animation must end where the board is.** Watch a break in *both*
+    windows. The coins should scatter, slow down and stop, and neither window
+    should show a coin jump at the end of the shot. A jump means the animation
+    and the refereed board disagree, which means the simulation is not
+    deterministic - and that is the one failure here that matters, because it
+    means two people are looking at two different boards.
+15. **A shot the watcher sees.** With a third window watching, the same shot
+    should play there too, at the same speed, ending in the same place.
+16. **Pocket one of yours** and you should shoot again. **Pocket the striker**
+    and the turn should pass, with one of your coins back near the centre.
+17. **The queen** is red. Take her and the board should say she is uncovered
+    until you pocket one of your own; fail, and she goes back to the middle.
+
+### Ludo
+
+18. **Roll** and watch both windows: the die should tumble briefly and land on
+    the *same* number in each. Two different numbers means the animation is
+    deciding the roll rather than showing it - which is the failure this design
+    exists to prevent.
+19. **A six** is the only way out of the yard, and it is another go. A three
+    with everything still in the yard should pass the turn on its own, without
+    anybody having to press anything.
+20. **Three sixes** in a row should forfeit the turn.
+21. **Land on an opponent** on an ordinary square: their token goes back to the
+    yard and you go again. Land on them on a starred square and nothing happens
+    to either of you.
+22. **Home has to be exact.** A token one square short cannot take a five, and
+    the turn should pass rather than the board sitting there with nothing to
+    click.
+
 ## Listening together
 
 Two windows in one voice channel (`pnpm dev:duo`), and headphones on both if

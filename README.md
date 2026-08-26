@@ -41,7 +41,7 @@ Messages, attachments, and call media are end-to-end encrypted: the server store
 | Messages & Chat | End-to-end encrypted, realtime over WebSocket, history paging in both directions, replies, `:` emoji search, per-server custom emoji including animated, reactions with who-reacted names, drag-and-drop and a preview before sending, full-screen zoomable image viewer, integrated video player, and local media album saving |
 | Voice and video | Peer-to-peer voice channels, camera, one screen share at a time with takeover, join and leave tones, manual quality override, end-to-end encrypted media, no media server |
 | Listen together | A shared YouTube queue inside a voice call: everyone hears the same track in step, from their own connection, at full quality, with the video on screen. Browse the real youtube.com inside the app, signed in as yourself, and queue what you are looking at. Anybody can add, skip or pause; music ducks under whoever is talking. No audio is streamed between anybody |
-| Play together | Four board games inside a voice call - Tic-tac-toe, Connect Four, Reversi, Dots and Boxes. One board everybody sees, two chairs anybody can take, and a rematch button. `call-service` referees the moves, so a move is a number on the wire rather than somebody's screen being streamed |
+| Play together | Six board games inside a voice call - Tic-tac-toe, Connect Four, Reversi, Dots and Boxes, Ludo, and Carrom with a real physics simulation. One board everybody sees, two chairs anybody can take, and a rematch button. `call-service` referees the moves, so a move is a number on the wire rather than somebody's screen being streamed |
 | Android Client | Native Jetpack Compose + Material 3 app with E2EE messaging, WhatsApp-style media picker and composer, media viewers, and public gallery saving (`Pictures/BetweenUs`, `Movies/BetweenUs`) |
 | Presence | Online / idle / do not disturb / invisible, typing indicators, voice rosters |
 | Notifications | Desktop notifications, system tray, start with the system, per-channel and per-person mute, quiet hours, persisted unread with a line that survives a restart |
@@ -117,7 +117,9 @@ to be framed, so no browser tab can ever show it.
 | Paste a link | ✅ | ✅ | — |
 | Video on the stage, with a shared transport | ✅ | ✅ | — |
 | **Play together** | | | |
-| Four board games on the call stage | ✅ | ✅ | — |
+| Six board games on the call stage | ✅ | ✅ | — |
+| Carrom: aim, power, and a simulated shot both ends replay | ✅ | ✅ | — |
+| Ludo: the die is the server's, the tumble is the animation | ✅ | ✅ | — |
 | Take a chair, stand up, play again | ✅ | ✅ | — |
 | Watch without playing, and see whose move it is | ✅ | ✅ | — |
 | Ongoing-call notification | tray | — | ✅ foreground service |
@@ -754,8 +756,8 @@ was built the way it was; this is the short version.
 
 ### Play together
 
-- **Four board games inside a voice call.** Tic-tac-toe, Connect Four, Reversi
-  and Dots and Boxes, on the same stage the shared video uses. One board
+- **Six board games inside a voice call.** Tic-tac-toe, Connect Four, Reversi,
+  Dots and Boxes, Ludo and Carrom, on the same stage the shared video uses. One board
   everybody in the call sees, two chairs anybody can take, a tally per chair and
   a rematch button.
 - **A move is a number, not a picture.** "Column four" crosses the wire and
@@ -766,6 +768,14 @@ was built the way it was; this is the short version.
   because a board a client can set is a board a client can set to won - and two
   people clicking the same square need one answer, which is the same job
   `call-service` already does for the screen share.
+- **Carrom is a real simulation** - friction that actually stops a coin,
+  restitution off coins and cushions, mass ratios and sizes from a real board.
+  The gateway simulates the shot to referee it and every client simulates the
+  same shot to draw it, so what you watch is the shot rather than an impression
+  of it, and its last frame is the board that was already agreed.
+- **Ludo's die belongs to the server.** The tumble on screen is started by the
+  number arriving, not by the button - a die animated first and reported
+  afterwards is a client deciding its own sixes.
 - **The rules are in the contract**, imported by both ends, so what the referee
   decides and what every window draws cannot drift apart. Adding a fifth game is
   a file, a line in the registry and a board component; the gateway needs no
