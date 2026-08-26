@@ -1491,6 +1491,42 @@ Not built. What it needs:
 - [ ] The ongoing-call foreground notification should say a queue is playing,
       since that is the thing draining the battery.
 
+## Play Together, properly
+
+Desktop and web have it (`docs/docs/architecture/play-together.md`): one board
+game inside a voice call, refereed by `call-service`, where a move is a number
+on the wire and every client draws the board itself.
+
+**The scope for the phone is the whole feature, not half of it.** The listening
+argument does not apply here: a transport control in a pocket is a track skipped
+by a coat, but a board is a thing somebody is looking at while they play it. A
+phone that could only watch would be a phone that cannot take a chair, which is
+the entire feature.
+
+It is also the cheapest client feature on this list, because the hard half is
+already shared: the rules and the referee are on the server and in
+`@betweenus/shared-types`, and none of it needs a `WebView`, a media pipeline or
+a permission.
+
+Not built. What it needs:
+
+- [ ] `game.state` in `CallSocket`, and `game.open / sit / move / rematch /
+      close` on the way out. Whole session per message, dropped when `rev` is at
+      or below what has already been applied - the same rule `listen.state`
+      follows, and for the same reason.
+- [ ] A Kotlin port of the four sets of rules, or - better - only of `moves()`,
+      which is all a client needs to grey out what cannot be pressed. The
+      referee is the server's and must not be duplicated for authority, only for
+      what the board draws. If the two ever disagree, the server wins and the
+      phone is wrong.
+- [ ] Four Compose boards. Tic-tac-toe and Connect Four are a grid; Reversi is
+      the same with a legal-move hint; Dots and Boxes needs real touch targets
+      around thin lines, which on a phone is the whole difficulty of it.
+- [ ] The seat rail: who is in each chair, the tally, "sit here", "stand up".
+- [ ] "Your move" somewhere the person can see without opening the call screen -
+      the ongoing-call notification is the obvious place, and it is already
+      there.
+
 ## Deliberately out of scope
 
 - **Live streaming.** Out of scope on every client while media is peer-to-peer.

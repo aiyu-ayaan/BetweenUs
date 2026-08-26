@@ -20,6 +20,14 @@ try it in, and the four things most likely to be wrong are: the token arriving
 at all, decryption in a cold process woken by a push, the suppression rule with
 the screen locked, and the reply from the shade.
 
+**Play Together has landed on desktop and web** and is the newest thing in
+`TRACK.md`: four board games inside a voice call, refereed by `call-service`,
+where a move is a number rather than somebody's screen being streamed. Nothing
+about it has been in front of a human either - the referee, the rules and the
+player's-eye view have self-checks, and the boards need two windows with a
+person in each. `TESTING.md` has the walkthrough; the Play Together section
+below has what it left open.
+
 Everything else that was still open across web, desktop, Android and the backend
 has been pulled into `TRACK.md`, which is the ordered list of what is being
 built now; the phase sections further down are the record of how each area got
@@ -69,6 +77,48 @@ This file stays what it has always been: the record of how each phase got where
 it is, and the backlog of everything anybody has thought of. Where an item
 appears in both, the phase sections below carry the reasoning and `TRACK.md`
 carries the state.
+
+## Play Together — landed on desktop and web, open elsewhere
+
+Four board games inside a call, refereed by `call-service`; the design is
+`docs/docs/architecture/play-together.md`. What it deliberately left open:
+
+- [ ] **Nobody has run it with two real clients.** The referee, the four sets of
+      rules and the player's-eye view have self-checks; the boards do not and
+      cannot without two windows and a person in each. `TESTING.md` has the
+      walkthrough. What is most likely to be wrong first: two people clicking
+      the same Connect Four column inside one second, a chair freed by a phone
+      that dropped its socket rather than left, and the Dots and Boxes click
+      targets, which are the smallest thing anybody has to hit in this app.
+- [ ] **Nothing on Android.** The protocol is there; drawing four boards in
+      Compose is the work, and unlike listening there is no reason a phone
+      should not *drive* one - a board is not a track skipped by a coat pocket.
+      See `ANDROID_TODO.md`.
+- [ ] **No hidden-information games.** Battleship, anything with a hand of
+      cards. It follows from broadcasting the whole session, and the fix is a
+      real one rather than a flag: per-player views, so the server sends each
+      client only what that client may see. Worth doing when a game wants it,
+      not before.
+- [ ] **Chess and draughts.** Both fit the existing `GameRules` shape - a move
+      would be a from-square and a to-square packed into one number, or the
+      shape grows a second field. Neither was needed to prove the machinery and
+      both are an afternoon of rules each, castling and en passant included.
+- [ ] **One game per call.** Opening a second replaces the first, which is right
+      for a call of four and wrong for a call of eight where two pairs would
+      happily play separate boards. A map keyed by something other than the
+      channel is the change, and nothing about the reducer resists it.
+- [ ] **No spectator anything.** Watchers see the board and cannot react to it,
+      cheer, or take over from somebody who left mid-game. The chair is the only
+      way in.
+- [ ] **No move timer and no undo.** Everybody is already in a call and can say
+      "your move" or "that was a mis-click, put it back". A takeback would be a
+      rev and a case in the reducer, plus an agreement between the two players
+      that the reducer has no way to ask for.
+- [ ] **One replica.** The board is in process beside the roster, exactly like
+      the listening session, so two `call-service` replicas would each referee
+      half a game. Same upgrade as the roster - Redis - made once, for all three.
+
+---
 
 ## Listen Together — landed on desktop and web, open elsewhere
 

@@ -19,6 +19,66 @@ is true of every line of it.
 
 ## Landed
 
+Play Together:
+
+- [x] **Four board games inside a voice call**, on `/ws/call`: Tic-tac-toe,
+      Connect Four, Reversi and Dots and Boxes. One board everybody in the call
+      sees, two chairs anybody can take, a tally per chair and a rematch button.
+      It takes the voice stage the way the listening panel does, and opening
+      either folds the other away - one stage, one thing on it.
+- [x] **A move is a number.** "Column four" crosses the wire; the picture is
+      drawn locally by every client. So it costs no uplink, works wherever the
+      call works, and - the part a screen share cannot manage at all - *both*
+      people can touch it. A shared screen is a game one person plays while
+      everybody else watches a recording of it.
+- [x] **The gateway referees.** A client sends what was clicked and never a
+      board, because a board a client can set is a board a client can set to
+      won. It is also the ordering, which is the same job `call-service` already
+      does for the screen-share claim and for the listening session's pause: two
+      people clicking the same square need one answer and a mesh has none.
+- [x] **The rules are in `shared-types`, imported by both ends.** The referee
+      applies them and every client greys out squares with them. A client that
+      judged a move differently would be a game where nobody is wrong and nobody
+      agrees - the same failure `listenPositionAt` exists to prevent for a
+      shared position, so it is solved the same way, in the same package.
+- [x] **Nothing is played optimistically.** A click sends a move and waits for
+      the refereed board. That is a round trip of latency and it is the right
+      trade: a board that showed a disc before it was agreed would show a
+      different game to the person who played it, and "mine was there a second
+      ago" is the one thing a shared board must never do.
+- [x] **Perfect information only, and that is a consequence.** The session is
+      broadcast whole to the whole call, so there is nowhere to hide a hand:
+      Battleship played this way is one where both fleets are in the message.
+      Hidden-hand games need a server that sends each player a different view,
+      which is a different feature with a different shape.
+- [x] **The four games each earn their place.** Tic-tac-toe proves the
+      machinery in one move. Connect Four takes a *column*, not a square, so two
+      people pressing the same one stack instead of racing for a hole the
+      gateway cannot arbitrate. Reversi passes a turn nobody can play, in the
+      rules rather than behind a button that deadlocks on whoever does not know
+      to press it. Dots and Boxes gives another go for a closed square - the
+      rule an alternating reducer silently loses, scoring a five-box chain for
+      the wrong person.
+- [x] **Chairs behave like the rest of the call.** Opening a game sits you in
+      the first one. Anybody may take an empty one; the second person to reach
+      for the last chair is told by the state everybody already gets rather than
+      by an error. No moves until every chair is full - a board that took moves
+      with one player is somebody playing themselves without noticing. A
+      leaver's chair is freed on exactly the terms their peer seat is, after the
+      rejoin grace, so a phone that drops a socket in a lift does not hand its
+      game away mid-move; the board is left standing, because a dropped socket
+      is not a resignation. The tally belongs to the chair and resets when
+      somebody else sits in it.
+- [x] **Two self-checks, on the two halves that fail silently.** The referee and
+      the rules (`game-session.check.ts`), and the player's-eye view - your
+      seat, what you may click, whose move it is (`game-view.check.ts`). Every
+      failure in either is one nobody reports: a wrong "Your move" reads as
+      latency, a refused square reads as a broken board, and a move accepted
+      from the wrong seat is an opponent who played twice.
+- [x] **Adding a fifth game is a file, a line in the registry and a board
+      component.** The gateway needs no change: it looks the rules up by id and
+      referees whatever it finds.
+
 Listen Together:
 
 - [x] **A shared music queue inside a voice call**, on `/ws/call`. A session is

@@ -709,6 +709,57 @@ so what is being checked is that nothing *moved* wrongly. One client is enough.
    inbound bitrate should sit in the megabits, not the hundreds of kilobits,
    and the frame rate should hold. Nothing in the app reports this yet.
 
+## Playing together
+
+Two windows in one voice channel (`pnpm dev:duo`), signed in as two different
+accounts - one account in two windows is one player, and every seat check below
+is about two.
+
+1. **Start one.** The gamepad in the call controls, then a card from the
+   library. The board should appear in both windows, with the person who opened
+   it already in the first chair and the second chair empty. The gamepad in the
+   *other* window should go green without anybody opening its panel.
+2. **The board takes no moves yet.** Click anywhere in either window with one
+   chair still empty: nothing should happen, and the status line should say it
+   is waiting for a player rather than naming somebody to move.
+3. **Sit down.** Take the empty chair in the second window. Both windows should
+   now say whose move it is - "Your move" in exactly one of them.
+4. **Play a game.** Alternate moves in Tic-tac-toe. Every move should appear in
+   both windows, the turn should pass, and the window that is not to move should
+   have nothing it can click. Win it: the line should be marked, the tally
+   should go up by one for that chair, and **Play again** should appear for the
+   two players and not for anybody watching.
+5. **The thing to actually check: two people at once.** Open Connect Four and
+   press the *same column* in both windows inside one second. Two discs should
+   stack, one on top of the other. One disc, or two discs in one hole, is the
+   ordering failing - and it is the whole reason the move on the wire is a
+   column rather than a square.
+6. **Out of turn.** Click a square in the window that is not to move, hard and
+   twice. Nothing should happen anywhere. If a move lands, the seat check is
+   gone and one person can play both sides.
+7. **Watching.** Join with a third window as a third account. It should see the
+   board, see whose move it is, and be unable to move anything - and it should
+   be able to take a chair the moment one is free.
+8. **Reversi passes.** Play until one side has no legal move. The turn should
+   come straight back to the other player, with no button pressed and no
+   deadlock. The faint spots should mark the legal squares for whoever is to
+   move, and for nobody else.
+9. **Dots and Boxes chains.** Close a box. It should be yours, marked with your
+   initial, and it should still be your move. Close three in a row and all three
+   should be yours - a turn that passed after the first is the rule being lost.
+10. **Leaving mid-game.** Hang up in one window. The chair should be freed
+    within about fifteen seconds - not instantly, because that is the rejoin
+    grace and a phone in a lift must not lose its seat - and the board should be
+    exactly as it was. Rejoin and take the chair back; the game should carry on
+    from the position it was in.
+11. **Closing it.** **End game** in either window. The board should go in both,
+    and the panel should go back to the library. Hang up in both windows and
+    rejoin: there should be no game, because none of it is persisted.
+12. **One stage.** Open the music panel while a game is on the table. The board
+    should fold away and the game bar should appear above the tiles saying whose
+    move it is; open the game panel again and the music should keep playing with
+    its own bar. Neither should ever be on screen at the same time.
+
 ## Listening together
 
 Two windows in one voice channel (`pnpm dev:duo`), and headphones on both if
