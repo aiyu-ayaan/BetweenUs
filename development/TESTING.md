@@ -734,9 +734,10 @@ accounts - one account in two windows is one player, and every seat check below
 is about two.
 
 1. **Start one.** Apps in the call controls, then **Play together**, then a card
-   from the library. The board should appear in both windows, with the person who opened
-   it already in the first chair and the second chair empty. The gamepad in the
-   *other* window should go green without anybody opening its panel.
+   from the library. The board should appear in both windows, with the person
+   who opened it already in the first chair and the second chair empty. The Apps
+   button in the *other* window should get a green dot without anybody opening
+   its menu.
 2. **The board takes no moves yet.** Click anywhere in either window with one
    chair still empty: nothing should happen, and the status line should say it
    is waiting for a player rather than naming somebody to move.
