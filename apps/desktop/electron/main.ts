@@ -40,6 +40,7 @@ import {
   type ViewBounds,
 } from './youtube-view';
 import { EMBED_URLS, embedHeaders } from './youtube-embed';
+import { swapArguments, swapScript, type SwapOptions } from './portable-swap';
 import {
   channelOf,
   downloadAsset,
@@ -1571,17 +1572,31 @@ ipcMain.handle('update:download', async (_event, offer: unknown): Promise<string
 });
 
 /**
+ * Starts the swap script and leaves, so the file it has to replace stops being
+ * open. See electron/portable-swap.ts.
+ */
+function startPortableSwap(options: SwapOptions): void {
+  const scriptPath = path.join(app.getPath('temp'), `betweenus-update-${process.pid}.ps1`);
+  fs.writeFileSync(scriptPath, swapScript(), 'utf8');
+  spawn('powershell.exe', swapArguments(scriptPath, options), {
+    detached: true,
+    stdio: 'ignore',
+    windowsHide: true,
+  }).unref();
+}
+
+/**
  * Hands the machine over to the new build and gets out of the way.
  *
  * Two different jobs behind one button:
  *
  * - **Installed.** Start the NSIS installer and quit. It closes the running app
  *   itself, replaces the installation and starts it again.
- * - **Portable.** There is no installer, so this does the swap: rename the exe
- *   the user keeps out of the way, copy the new one into its place, start it,
- *   quit. Renaming is what makes it work on a file that is running; copying
- *   rather than renaming the download is what makes it work when the temp
- *   directory and the user's folder are on different volumes.
+ * - **Portable.** There is no installer, so a helper script does the swap after
+ *   this process is gone. Doing it here is what produced `EBUSY: resource busy
+ *   or locked, rename ...-Portable.exe`: the portable launcher holds its own
+ *   exe open for as long as the app it unpacked is running, so the one process
+ *   that cannot replace that file is this one.
  *
  * If any of that fails the download is still on the disk and perfectly
  * runnable, so the file is shown in the file manager rather than lost.
@@ -1591,19 +1606,14 @@ ipcMain.handle('update:install', (): { started: boolean; reason?: string } => {
   if (!pending) return { started: false, reason: 'Nothing has been downloaded yet.' };
 
   try {
-    let launch = pending.file;
-
     if (updateFlavor() === 'portable') {
       const current = portableExe();
       if (!current) throw new Error('This portable copy could not find its own exe.');
-      fs.rmSync(`${current}.old`, { force: true });
-      fs.renameSync(current, `${current}.old`);
-      fs.copyFileSync(pending.file, current);
-      fs.rmSync(pending.file, { force: true });
-      launch = current;
+      startPortableSwap({ current, incoming: pending.file, processId: process.pid });
+    } else {
+      spawn(pending.file, [], { detached: true, stdio: 'ignore' }).unref();
     }
 
-    spawn(launch, [], { detached: true, stdio: 'ignore' }).unref();
     quitting = true;
     app.quit();
     return { started: true };
