@@ -39,6 +39,7 @@ import {
   youTubeSearch,
   type ViewBounds,
 } from './youtube-view';
+import { EMBED_URLS, embedHeaders } from './youtube-embed';
 import {
   channelOf,
   downloadAsset,
@@ -1443,6 +1444,18 @@ void app.whenReady().then(() => {
         perm === 'display-capture'
     );
   });
+
+  // The Listen Together embed is loaded by a `file://` renderer in a packaged
+  // build, which sends no referrer - and an embed with no referrer is refused
+  // with error 153. See electron/youtube-embed.ts for why this is a header and
+  // not an `origin=` parameter.
+  session.defaultSession.webRequest.onBeforeSendHeaders(
+    { urls: EMBED_URLS },
+    (details, callback) => {
+      const headers = embedHeaders(details.url, details.requestHeaders);
+      callback(headers ? { requestHeaders: headers } : {});
+    },
+  );
 
   session.defaultSession.setDisplayMediaRequestHandler((request, callback) => {
     // Consumed once: a later capture that skipped the picker falls back to the
