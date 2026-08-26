@@ -238,20 +238,27 @@ gamepad sitting in a row of six controls that belong to the call itself, with
 nothing to say which two were different. A third activity would have made it
 nine icons.
 
+Apps opens a screen **on the voice stage** — the same rectangle the tiles, a
+shared video and a board are all drawn in:
+
 ```text
-   Apps ──► Listen together ──► what is playing, browse, paste a link
-        └─► Play together   ──► the library, or back to the game on the table
+   the stage ── tiles (the call)
+             ├─ Apps ──► Listen together ──► queue, browser, transport
+             │        └─► Play together   ──► the library, then a board
+             ├─ Listen together
+             └─ Play together
 ```
 
-The first screen is the list; picking one opens that app's own screen in the
-same popover, with a way back. Adding a third activity is a row in a list
-rather than another icon in a row.
+One thing on the stage at a time, and a back arrow on each panel returns to the
+chooser rather than to the call — that is where you came from.
 
-The menu is a **portal**. The sidebar is a `.panel`, and `.panel` is
-`overflow-hidden` — an absolutely positioned menu inside it is clipped to
-nothing, which was a menu that rendered, sat in the DOM, and looked exactly
-like a button that does nothing. It hangs off the button's own rectangle in
-`document.body` instead.
+It was a popover first, and a popover was wrong for the ordinary reasons.
+A six-game library in a 17rem box is a list with three rows visible. A menu
+floating over a call covers the faces it is meant to sit beside. And it needed
+portalling out of the sidebar (`.panel` is `overflow-hidden`, so the first
+version was clipped to nothing — rendered, in the DOM, invisible), flipping
+above or below the button, and re-measuring on every scroll: a page of
+machinery to put a list somewhere the app already had a place for.
 
 ### Fullscreen
 
@@ -307,7 +314,8 @@ pressed. That is not the permission check. The gateway's is.
 | Ludo and carrom self-check | `apps/services/call-service/src/game-physics.check.ts` |
 | The carrom board and its replay | `apps/desktop/src/features/voice/CarromBoard.tsx` |
 | The ludo board and its die | `apps/desktop/src/features/voice/LudoBoard.tsx` |
-| Apps: the menu both activities live behind | `apps/desktop/src/features/voice/AppsMenu.tsx` |
+| Apps: the chooser, on the stage | `apps/desktop/src/features/voice/AppsPanel.tsx` |
+| Which activity has the stage | `apps/desktop/src/stores/apps.ts` |
 | The referee (pure) | `apps/services/call-service/src/game-session.ts` |
 | Its self-check | `apps/services/call-service/src/game-session.check.ts` |
 | Gateway wiring | `apps/services/call-service/src/call.gateway.ts` |

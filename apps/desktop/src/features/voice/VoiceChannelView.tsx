@@ -35,6 +35,8 @@ import { VideoSink } from './MediaSink';
 import { ShareStage } from './ShareStage';
 import { ListenBar, ListenPanel } from './ListenPanel';
 import { GameBar, GamePanel } from './GamePanel';
+import { AppsPanel } from './AppsPanel';
+import { useAppsStore } from '../../stores/apps';
 import { useListenStore } from '../../stores/listen';
 import { useGameStore } from '../../stores/game';
 import {
@@ -114,6 +116,7 @@ export function VoiceChannelView({
   const listenOpen = useListenStore((state) => state.open);
   const gameOpen = useGameStore((state) => state.open);
   const gameFullscreen = useGameStore((state) => state.fullscreen);
+  const appsOpen = useAppsStore((state) => state.open);
   const watched = connected ? (shares.find((share) => share.identity === watching) ?? null) : null;
 
   return (
@@ -205,7 +208,12 @@ export function VoiceChannelView({
             screen serves neither; the tiles come straight back on closing it.
             It is also the *only* place this panel is drawn - see the note on
             the button in VoiceControls. */}
-        {listenOpen && connected ? (
+        {appsOpen && connected ? (
+          /* The chooser, on the stage rather than in a popover: a six-game
+             library does not fit in one, and a menu over a call covers the
+             faces it is supposed to sit beside. */
+          <AppsPanel />
+        ) : listenOpen && connected ? (
           <ListenPanel />
         ) : gameOpen && connected && !gameFullscreen ? (
           /* One stage, one thing on it - opening either panel closes the other.

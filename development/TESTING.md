@@ -712,20 +712,21 @@ so what is being checked is that nothing *moved* wrongly. One client is enough.
 ## Apps: where both of these live
 
 The music note and the gamepad are gone from the call controls. There is one
-**Apps** button, and both activities are behind it.
+**Apps** button, and both activities are behind it - as a screen on the voice
+stage, where the tiles and a shared video are drawn, not as a popover.
 
-1. **Press Apps in the sidebar**, with the window narrow enough that the sidebar
-   is a sidebar. The menu must be *visible* - it is portalled to the body
-   precisely because an earlier version was clipped by the sidebar's
-   `overflow-hidden` and was invisible while being perfectly present in the DOM.
-2. **Two rows**, listen and play, each saying whether that app is already
-   running. Pick one and its own screen replaces the list, with a way back.
-3. **Start something from the sidebar** and the client should take you to the
-   voice channel where it is drawn. Starting a game on a screen nobody is
-   looking at is the whole reason this menu exists.
-4. **A dot on the button** while music or a game is on, without the menu open.
-5. **Press Apps in the channel footer**: same menu, and picking an app opens its
-   panel on the stage rather than navigating anywhere.
+1. **Press Apps in the channel footer.** The tiles should be replaced by two
+   cards, listen and play, each saying whether that activity is already running.
+2. **Pick one.** Its panel replaces the chooser on the same stage. The back
+   arrow in its header should return to the chooser - not to the call, and not
+   out of the panel entirely.
+3. **Press Apps again** with a panel open: everything folds away and the tiles
+   come back. Nothing should be left half-open.
+4. **Press Apps in the sidebar**, from a text channel. It should take you to the
+   voice channel and show the chooser there. Starting a game on a screen nobody
+   is looking at is the whole reason that navigation exists.
+5. **A dot on the button** while music or a game is on and the stage is showing
+   the call - amber for music, green for a game.
 
 ## Playing together
 

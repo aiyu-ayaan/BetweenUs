@@ -780,8 +780,10 @@ was built the way it was; this is the short version.
   afterwards is a client deciding its own sixes.
 - **One Apps button.** Both shared activities live behind it rather than
   beside each other in a row of call controls, so the row says what it is - the
-  call - and the things two people do together are one screen in. A third
-  activity is a row in a list rather than a ninth icon.
+  call - and the things two people do together are one screen in, on the voice
+  stage where every shared thing is already drawn. Not a popover: a six-game
+  library does not fit in one, and a menu over a call covers the faces it is
+  meant to sit beside.
 - **Fullscreen for the board**, because carrom's coins are a fiftieth of the
   board across and a stage shared with faces and a seat rail is where a thin cut
   and a miss are four pixels apart.

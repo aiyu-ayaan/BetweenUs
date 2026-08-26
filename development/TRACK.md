@@ -112,9 +112,17 @@ Play Together:
 - [x] **One Apps button, and the activities stack behind it.** A music note
       and a gamepad sat in a row of six controls that belong to the call itself,
       with nothing to say which two were different in kind; a third activity
-      would have made it nine icons. The menu's first screen is now the list of
-      apps and the second is the app, so adding one is a row rather than an
-      icon.
+      would have made it nine icons. Apps is the first screen and the activity
+      is the second, so adding one is a card rather than an icon.
+- [x] **The chooser is a screen on the stage, not a popover.** The stage is
+      where every shared thing in a call is already drawn. A six-game library in
+      a 17rem popover is a list with three rows visible; a menu floating over a
+      call covers the faces it is meant to sit beside; and keeping it on screen
+      at all needed a portal out of the sidebar, a flip above or below the
+      button and a re-measure on every scroll - a page of machinery for a list
+      the app already had somewhere to put. Each panel's back arrow returns to
+      the chooser rather than to the call, because that is where it was reached
+      from.
 - [x] **Fullscreen for the board.** It is the one thing in a call that wants the
       whole window: carrom's coins are about a fiftieth of the board across, so
       on a stage shared with a seat rail and a row of faces the difference
@@ -123,11 +131,6 @@ Play Together:
       player's decision. It is a portal for the same reason the menu is: a
       `fixed inset-0` nested in the voice stage is still clipped by its
       ancestors.
-- [x] **The sidebar menus are portalled.** They were drawn inside a `.panel`,
-      which is `overflow-hidden`, so the first version was clipped to nothing -
-      rendered, in the DOM, and invisible, which looks exactly like a button
-      that does nothing. They now hang off the button's own rectangle in
-      `document.body`.
 - [x] **The sidebar buttons open the options.** Music and gamepad used to set a
       flag and navigate, which from the sidebar reads as a button that moves you
       somewhere for no stated reason. They now open the library, or what is

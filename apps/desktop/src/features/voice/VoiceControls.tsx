@@ -4,8 +4,9 @@
  * It lives in both the sidebar panel and the voice channel screen, so it is its
  * own component: the two places must never disagree about what is on.
  */
-import { useRef, useState, type ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { useVoiceStore } from '../../stores/voice';
+import { useAppsStore } from '../../stores/apps';
 import { useGameStore } from '../../stores/game';
 import { useListenStore } from '../../stores/listen';
 import { useAudioSettings } from '../../stores/audioSettings';
@@ -15,7 +16,6 @@ import { ConnectionPanel } from './ConnectionPanel';
 import { ScreenSharePicker } from './ScreenSharePicker';
 import { DevicePicker } from './DevicePicker';
 import { InvitePicker } from './InvitePicker';
-import { AppsMenu } from './AppsMenu';
 import {
   AppsIcon,
   MicIcon,
@@ -61,13 +61,7 @@ export function VoiceControls({ size = 'sm' }: { size?: 'sm' | 'lg' }): JSX.Elem
   const [inviting, setInviting] = useState(false);
   // Which activity menu is open, in *this* copy of the controls. Local, because
   // this component is rendered twice and a flag in a store would open two.
-  // One menu, and it belongs to this copy of the controls: the component is
-  // rendered twice, and anything it drew from a store was drawn twice.
-  const [appsOpen, setAppsOpen] = useState(false);
-  // The menu is portalled out of the sidebar - `.panel` is `overflow-hidden`
-  // and clipped it into invisibility - so it needs the button's own rectangle
-  // to position itself against.
-  const appsButton = useRef<HTMLDivElement>(null);
+  const appsOpen = useAppsStore((state) => state.open);
   const warning = healthWarning(stats);
   // Whose screen it is, when it is not ours. The holder is a peer id; the name
   // comes from the tiles, and is absent for the instant between somebody
@@ -151,53 +145,50 @@ export function VoiceControls({ size = 'sm' }: { size?: 'sm' | 'lg' }): JSX.Elem
 
           It was two - a music note and a gamepad - in a row that already had
           six controls belonging to the call itself, and nothing in the row said
-          which was which. A third activity would have made it nine icons. So
-          they are stacked behind Apps, and the menu's first screen is the list;
-          adding a fourth is a row rather than another icon.
+          which was which. A third activity would have made it nine icons.
 
-          Amber or green in the dot when one of them is already running, because
-          somebody else may have started it. */}
-      <div ref={appsButton} className="relative">
-        <ControlButton
-          active={appsOpen || listenOpen || gameOpen}
-          disabled={disabled}
-          pad={pad}
-          label={
-            listening && playing
-              ? 'Apps - music and a game are on'
-              : listening
-                ? 'Apps - music is on'
-                : playing
-                  ? 'Apps - a game is on'
-                  : 'Apps'
-          }
-          onClick={() => setAppsOpen((open) => !open)}
-        >
-          <span className="relative flex">
-            <AppsIcon className={icon} />
-            {(listening || playing) && !appsOpen && (
-              <span
-                aria-hidden
-                className={`absolute -right-1 -top-1 h-1.5 w-1.5 rounded-full ${
-                  playing ? 'bg-emerald-300' : 'bg-amber-300'
-                }`}
-              />
-            )}
-          </span>
-        </ControlButton>
-        {appsOpen && (
-          <AppsMenu
-            anchor={appsButton}
-            onClose={() => setAppsOpen(false)}
-            onOpened={() => {
-              // Whichever app was opened is drawn on the voice stage, so this
-              // goes there. Starting something on a screen nobody is looking at
-              // is the complaint this menu exists to answer.
-              if (size !== 'lg') void openCallChannel();
-            }}
-          />
-        )}
-      </div>
+          It opens a screen on the stage rather than a popover. The stage is
+          where every shared thing in a call is already drawn, a six-game
+          library does not fit in a popover, and a menu floating over a call
+          covers the faces it is meant to sit beside.
+
+          A dot while something is already running, because somebody else may
+          have started it. */}
+      <ControlButton
+        active={appsOpen || listenOpen || gameOpen}
+        disabled={disabled}
+        pad={pad}
+        label={
+          listening && playing
+            ? 'Apps - music and a game are on'
+            : listening
+              ? 'Apps - music is on'
+              : playing
+                ? 'Apps - a game is on'
+                : 'Apps'
+        }
+        onClick={() => {
+          // One stage, one thing on it. Opening the chooser folds away whatever
+          // was on it, and pressing the button again puts the call back.
+          const next = !(appsOpen || listenOpen || gameOpen);
+          useListenStore.getState().setOpen(false);
+          useGameStore.getState().setOpen(false);
+          useAppsStore.getState().setOpen(next);
+          if (next) void openCallChannel();
+        }}
+      >
+        <span className="relative flex">
+          <AppsIcon className={icon} />
+          {(listening || playing) && !appsOpen && (
+            <span
+              aria-hidden
+              className={`absolute -right-1 -top-1 h-1.5 w-1.5 rounded-full ${
+                playing ? 'bg-emerald-300' : 'bg-amber-300'
+              }`}
+            />
+          )}
+        </span>
+      </ControlButton>
 
       {/* Amber when something is measurably wrong, so the numbers are worth
           opening before anybody has thought to ask for them. */}

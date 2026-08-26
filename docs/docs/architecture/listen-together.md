@@ -355,9 +355,10 @@ window, so it is a trust boundary and it is tested as one.
 
 Behind the **Apps** button in the call controls, next to
 [Play Together](/architecture/play-together) — one screen in, rather than its
-own icon in a row that otherwise belongs to the call. The menu carries what is
-playing, a paste box and the way into the browser, so adding a link does not
-mean opening the full-width panel at all.
+own icon in a row that otherwise belongs to the call. Apps is a screen on the
+voice stage rather than a popover, so the chooser, the queue and the player are
+all drawn in the same rectangle, and the back arrow on this panel returns to
+the chooser rather than to the call.
 
 ## Where the code is
 

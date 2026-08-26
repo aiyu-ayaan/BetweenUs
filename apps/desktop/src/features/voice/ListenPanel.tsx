@@ -30,10 +30,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { listenPositionAt } from '@betweenus/shared-types';
 import { claimListenSlot, useListenStore } from '../../stores/listen';
+import { useAppsStore } from '../../stores/apps';
 import { formatPosition } from '../../services/listen-sync';
 import { isDesktopRuntime } from '../../services/platform';
 import { ListenBrowser } from './ListenBrowser';
 import {
+  ChevronLeftIcon,
   CompassIcon,
   MusicIcon,
   PauseIcon,
@@ -70,6 +72,20 @@ export function ListenPanel(): JSX.Element {
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-2">
       <div className="flex shrink-0 items-center gap-2">
+        {/* Back to the chooser rather than out of the call - this screen was
+            reached from Apps, and the music carries on either way. */}
+        <button
+          type="button"
+          onClick={() => {
+            useListenStore.getState().setOpen(false);
+            useAppsStore.getState().setOpen(true);
+          }}
+          aria-label="Back to apps"
+          title="Apps"
+          className="-ml-1 cursor-pointer rounded p-1 text-slate-400 transition-colors hover:bg-white/[0.06] hover:text-slate-200"
+        >
+          <ChevronLeftIcon className="h-4 w-4" />
+        </button>
         <MusicIcon className="h-4 w-4 shrink-0 text-amber-300" />
         <span className="text-sm font-medium text-slate-200">Listen together</span>
 

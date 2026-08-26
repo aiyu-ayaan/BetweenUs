@@ -23,8 +23,10 @@ import {
   type GameSession,
 } from '@betweenus/shared-types';
 import { mySeat, turnLine, useGameStore } from '../../stores/game';
+import { useAppsStore } from '../../stores/apps';
 import { GameBoard } from './GameBoards';
 import {
+  ChevronLeftIcon,
   GamepadIcon,
   MaximizeIcon,
   MinimizeIcon,
@@ -71,6 +73,23 @@ function Board(): JSX.Element {
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-2">
       <div className="flex shrink-0 items-center gap-2">
+        {/* Back to the chooser, not out of the call: this screen was reached
+            from Apps, and the way back is where you came from. Hidden in
+            fullscreen, where there is nothing to go back to on screen. */}
+        {!fullscreen && (
+          <button
+            type="button"
+            onClick={() => {
+              useGameStore.getState().setOpen(false);
+              useAppsStore.getState().setOpen(true);
+            }}
+            aria-label="Back to apps"
+            title="Apps"
+            className="-ml-1 cursor-pointer rounded p-1 text-slate-400 transition-colors hover:bg-white/[0.06] hover:text-slate-200"
+          >
+            <ChevronLeftIcon className="h-4 w-4" />
+          </button>
+        )}
         <GamepadIcon className="h-4 w-4 shrink-0 text-emerald-300" />
         <span className="text-sm font-medium text-slate-200">
           {session ? GAMES[session.gameId].definition.name : 'Play together'}
