@@ -1,7 +1,19 @@
 /**
  * API and realtime contracts shared by every service and client.
- * No runtime logic, no service-specific business rules.
+ * No service-specific business rules.
+ *
+ * Almost no runtime logic either, and the exceptions are all one kind of thing:
+ * a rule both ends have to apply *identically* or the contract means nothing.
+ * `listenPositionAt` is where a shared track has got to; `games/` is what a
+ * board becomes when somebody plays a move. A server that computed either
+ * differently from the clients reading it would be a session where nobody is
+ * wrong and nobody agrees, so there is one implementation, in the package both
+ * sides import.
  */
+
+import type { GameId, GameSession } from './games';
+
+export * from './games';
 
 // --- Common ---
 
@@ -1178,6 +1190,23 @@ export type ClientCallEvent =
    * about a field that is already set and change nothing.
    */
   | { type: 'listen.meta'; trackId: string; title?: string; durationMs?: number }
+  /**
+   * Play Together. Anybody in the call may open a game or take an empty chair;
+   * only the person sitting in a seat may move it, and only on their turn.
+   *
+   * A move is a number - a square, a column, a line - and the gateway is the
+   * referee: it applies the rules from `games/` and broadcasts the board that
+   * came out. Nothing here is trusted from the client except which move was
+   * asked for, because a client that could send a board could send any board.
+   */
+  | { type: 'game.open'; gameId: GameId }
+  /** Take an empty chair, or move to one. Standing up is `seat: -1`. */
+  | { type: 'game.sit'; seat: number }
+  | { type: 'game.move'; move: number }
+  /** Deal again with the same people in the same chairs. */
+  | { type: 'game.rematch' }
+  /** Close the game for everybody. */
+  | { type: 'game.close' }
   | { type: 'ping' };
 
 export type ServerCallEvent =
@@ -1211,6 +1240,15 @@ export type ServerCallEvent =
    * has. Sent to everybody on every change, the joiner included.
    */
   | { type: 'listen.state'; session: ListenSession | null }
+  /**
+   * The game being played in this call, or null when there is not one.
+   *
+   * Whole board rather than a move, for the same reason `listen.state` is whole:
+   * a client that missed one message would otherwise hold a position nobody
+   * else has, and two people playing different boards is a failure neither of
+   * them can see. It is a few hundred bytes and it is sent when somebody moves.
+   */
+  | { type: 'game.state'; session: GameSession | null }
   /**
    * `serverMs` is the gateway's clock, which is what makes the shared position
    * mean anything: two machines disagree about what time it is by whatever
