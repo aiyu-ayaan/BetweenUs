@@ -71,9 +71,20 @@ export function GamePanel(): JSX.Element {
           }}
         />
       ) : (
-        <div className="flex min-h-0 flex-1 gap-3">
-          <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-            <GameBoard session={session} onMove={(move) => useGameStore.getState().move(move)} />
+        <div className="flex min-h-0 flex-1 flex-col gap-2 lg:flex-row lg:gap-3">
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2">
+            {/* The chairs, above the board, on any window too narrow for the
+                rail beside it. This is the whole of the "the game is not
+                clickable" bug: the rail was `lg:` only, so on an ordinary
+                window nobody could see an empty chair, let alone take one - and
+                a board with an empty chair takes no moves, correctly and
+                silently. A control that decides whether the thing works may not
+                be the first thing a breakpoint hides. */}
+            <SeatStrip session={session} />
+            <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
+              <GameBoard session={session} onMove={(move) => useGameStore.getState().move(move)} />
+              <WaitingOverlay session={session} />
+            </div>
           </div>
           <Table session={session} />
         </div>
@@ -128,6 +139,97 @@ function Library({ onPick }: { onPick: (gameId: GameId) => void }): JSX.Element 
             </button>
           );
         })}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The chairs, on one line, for a window that has no room for the rail.
+ *
+ * Hidden on `lg` and up, where `Table` says the same things with space for the
+ * tally. Below that this is the only way to sit down, so it is not decoration.
+ */
+function SeatStrip({ session }: { session: GameSession }): JSX.Element {
+  const { definition } = GAMES[session.gameId];
+  const seat = mySeat(session);
+
+  return (
+    <div className="flex shrink-0 flex-wrap items-center gap-1.5 lg:hidden">
+      {session.seats.map((who, index) => {
+        const theirTurn = session.state.winner === null && session.state.turn === index;
+        return (
+          <button
+            key={index}
+            type="button"
+            disabled={Boolean(who) && index !== seat}
+            onClick={() =>
+              index === seat
+                ? useGameStore.getState().stand()
+                : useGameStore.getState().sit(index)
+            }
+            title={
+              who
+                ? index === seat
+                  ? 'Stand up - the chair is freed for somebody else'
+                  : `${who.username} is playing here`
+                : 'Take this chair'
+            }
+            className={`flex items-center gap-1.5 rounded-md border px-2 py-1 text-[11px] transition-colors ${
+              theirTurn && gameReady(session)
+                ? 'border-white/25 bg-white/[0.08] text-slate-100'
+                : 'border-white/10 bg-surface-900 text-slate-300'
+            } ${who && index !== seat ? 'cursor-default' : 'cursor-pointer hover:bg-white/[0.06]'}`}
+          >
+            <span
+              className="h-2.5 w-2.5 shrink-0 rounded-full"
+              style={{ background: definition.seatColours[index] }}
+            />
+            <span className="max-w-[9rem] truncate">
+              {who ? who.username : 'Sit here'}
+            </span>
+            <span className="text-slate-600">{definition.seatNames[index]}</span>
+            {session.wins[index]! > 0 && (
+              <span className="text-amber-300">{session.wins[index]}</span>
+            )}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/**
+ * Why the board is not taking clicks.
+ *
+ * A board waiting for a second player is a board where every square is
+ * correctly refused, and the first version said so only in a status line at
+ * the bottom - which reads exactly like a game that is broken. It says it over
+ * the board instead, with the chair to take right there.
+ */
+function WaitingOverlay({ session }: { session: GameSession }): JSX.Element | null {
+  if (gameReady(session)) return null;
+  const empty = session.seats.findIndex((seat) => seat === null);
+  const watching = mySeat(session) === -1;
+
+  return (
+    <div className="pointer-events-none absolute inset-0 flex items-center justify-center p-4">
+      <div className="pointer-events-auto flex max-w-xs flex-col items-center gap-2 rounded-xl border border-white/10 bg-surface-950/90 px-4 py-3 text-center backdrop-blur-sm">
+        <p className="text-xs text-slate-300">
+          {watching
+            ? 'There is an empty chair. Take it and the game starts.'
+            : 'Waiting for somebody else in the call to take the other chair.'}
+        </p>
+        {watching && empty !== -1 && (
+          <button
+            type="button"
+            onClick={() => useGameStore.getState().sit(empty)}
+            className="flex cursor-pointer items-center gap-1.5 rounded-md bg-emerald-500/20 px-3 py-1.5 text-xs font-medium text-emerald-100 transition-colors hover:bg-emerald-500/30"
+          >
+            <UserIcon className="h-3.5 w-3.5" />
+            Sit down as {GAMES[session.gameId].definition.seatNames[empty]}
+          </button>
+        )}
       </div>
     </div>
   );
