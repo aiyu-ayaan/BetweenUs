@@ -99,6 +99,21 @@ Play Together:
       tumble on screen is started by the *arrival* of the number rather than by
       the button, because a die animated first and reported afterwards is a
       client deciding its own sixes.
+- [x] **The board says why it is refusing a click.** Two of these were the same
+      bug wearing different clothes: something correct happened and nothing on
+      screen said so. A game waiting for a second player refused every square in
+      silence; a ludo roll that nothing could take cleared itself and passed the
+      turn before the number could be drawn. Both now say what happened, and the
+      ludo one needed the rules to keep the last roll separately from the die
+      that is waiting to be spent.
+- [x] **Carrom aims forward.** Press where the striker should go rather than
+      pulling back from it. A catapult is the gesture a pool game teaches, and
+      it is not the one anybody's hand has for a carrom board.
+- [x] **The sidebar menus are portalled.** They were drawn inside a `.panel`,
+      which is `overflow-hidden`, so the first version was clipped to nothing -
+      rendered, in the DOM, and invisible, which looks exactly like a button
+      that does nothing. They now hang off the button's own rectangle in
+      `document.body`.
 - [x] **The sidebar buttons open the options.** Music and gamepad used to set a
       flag and navigate, which from the sidebar reads as a button that moves you
       somewhere for no stated reason. They now open the library, or what is

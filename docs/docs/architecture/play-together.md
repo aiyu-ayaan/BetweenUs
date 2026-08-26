@@ -144,11 +144,23 @@ how fast a machine is.
 The alternative was tweening twenty coins from their old positions to their new
 ones, which is twenty coins sliding through each other in straight lines.
 
+The aim is a flick *forward*: you press where the striker should go, and how far
+out you press is how hard it is hit. The first version pulled backwards like a
+catapult — the gesture a pool game teaches — which is not the gesture anybody's
+hand has for a carrom board.
+
 ## Ludo, and who rolls the die
 
 The die is the only thing in the library that nobody at the table decides, so
 it is worth being exact: **the gateway rolls.** A roll is a move — "I roll" —
 and the number comes back in the board.
+
+What the board draws is the *last roll* - the number, who threw it, and whether
+anything could take it - rather than the die the rules are waiting to have
+spent. Those are different, and the difference was a real bug: with four tokens
+in the yard, anything but a six is unplayable, so the die was cleared and the
+turn passed in the same message it arrived in. A board reading the pending die
+had nothing to show, and pressing roll looked like pressing nothing.
 
 The tumbling die on screen is started by the *arrival* of that number, not by
 the button that asked for it. A die animated first and reported afterwards is a

@@ -764,8 +764,10 @@ is about two.
 
 13. **Open Carrom** and take both chairs across two windows. Drag along your own
     baseline: the striker should slide with the pointer and never sit on top of
-    a coin. Pull back from anywhere else on the board and let go - the further
-    you pull, the harder it goes.
+    a coin. Then press where you want the striker to *go* - the line should run
+    from the striker through your pointer and on into the board, and the further
+    out you press, the harder it goes. Forwards, like a finger; not backwards,
+    like a catapult.
 14. **The animation must end where the board is.** Watch a break in *both*
     windows. The coins should scatter, slow down and stop, and neither window
     should show a coin jump at the end of the shot. A jump means the animation
@@ -781,18 +783,22 @@ is about two.
 
 ### Ludo
 
-18. **Roll** and watch both windows: the die should tumble briefly and land on
+18. **Roll with everything still in the yard.** Four times out of five the
+    number is unplayable and the turn passes - and you should still *see* the
+    number, with a line saying nothing could take it. A roll that shows nothing
+    at all is the pending die being drawn instead of the last roll.
+19. **Roll** and watch both windows: the die should tumble briefly and land on
     the *same* number in each. Two different numbers means the animation is
     deciding the roll rather than showing it - which is the failure this design
     exists to prevent.
-19. **A six** is the only way out of the yard, and it is another go. A three
+20. **A six** is the only way out of the yard, and it is another go. A three
     with everything still in the yard should pass the turn on its own, without
     anybody having to press anything.
-20. **Three sixes** in a row should forfeit the turn.
-21. **Land on an opponent** on an ordinary square: their token goes back to the
+21. **Three sixes** in a row should forfeit the turn.
+22. **Land on an opponent** on an ordinary square: their token goes back to the
     yard and you go again. Land on them on a starred square and nothing happens
     to either of you.
-22. **Home has to be exact.** A token one square short cannot take a five, and
+23. **Home has to be exact.** A token one square short cannot take a five, and
     the turn should pass rather than the board sitting there with nothing to
     click.
 
