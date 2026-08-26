@@ -5,7 +5,7 @@ sidebar_position: 8
 # Play Together
 
 Two people in a voice channel with the same board in front of them, and
-everybody else in the call watching it. Four games in a library, a chair each,
+everybody else in the call watching it. Six games in a library, a chair each,
 and a rematch button.
 
 It is [Listen Together](/architecture/listen-together) with a board instead of
@@ -80,13 +80,16 @@ interface GameRules {
   definition: GameDefinition;         // name, chairs, colours
   create(): GameState;
   moves(state: GameState): number[];  // what may be played now
-  apply(state, seat, move): GameState | null;   // null = not a legal move
+  // `params` is the part of a move an index cannot carry - a carrom shot.
+  // `random` is the die, and it comes from the referee.
+  apply(state, seat, move, params?, random?): GameState | null;  // null = illegal
   score(state: GameState): number[];
 }
 ```
 
-Pure, total, synchronous. No clock, no randomness, no I/O — so the referee and
-four clients running the same move on the same board always get the same board.
+Pure, total, synchronous. No clock, no I/O, and no randomness of their own — so
+the referee and four clients running the same move on the same board, with the
+same `random`, always get the same board.
 
 ## A move that is not a square
 

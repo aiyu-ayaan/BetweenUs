@@ -98,7 +98,7 @@ export function GamePanel(): JSX.Element {
 /**
  * The library.
  *
- * Four games, each a card that starts one. Everything here is playable by two
+ * Six games, each a card that starts one. Everything here is playable by two
  * people with the same board in front of them and nothing hidden, which is not
  * a taste in games: the session is broadcast whole to the whole call, so a game
  * needing a secret hand would be one with everybody's hand in the message.
@@ -112,7 +112,7 @@ function Library({ onPick }: { onPick: (gameId: GameId) => void }): JSX.Element 
         so it costs nobody any upload and works wherever the call does.
       </p>
 
-      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
         {GAME_LIBRARY.map((gameId) => {
           const { name, blurb, seats, length, seatColours } = GAMES[gameId].definition;
           return (
