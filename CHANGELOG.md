@@ -1,5 +1,49 @@
 # Changelog
 
+## [0.0.1-alpha.14](https://github.com/aiyu-ayaan/BetweenUs/compare/v0.0.1-alpha.13...v0.0.1-alpha.14) (2026-08-26)
+
+### Features
+
+* The web client gets a search box, not just a paste box
+* Apps is a screen on the stage, not a popover
+* One Apps button, and a fullscreen board
+* The sidebar music and gamepad buttons open the options
+* Ludo and Carrom, the second with real physics
+* Play Together - a games panel on the voice stage
+* Referee a game on /ws/call
+* The Play Together contract and the rules of four games
+
+### Bug fixes
+
+* The sidebar menu was clipped, the die was never seen, and carrom aimed backwards
+* A game nobody could sit down in looked like a board that ignored clicks
+* Give the Listen Together player a real origin
+* Keep the notice strips clear of the window controls
+* Swap a portable update from a helper script, not from the app
+* Give the YouTube embed a referrer so Listen Together loads
+
+### Other changes
+
+* Changes done for new release
+* Browse means two different things, and says which
+* The gamepad is a dot on the Apps button now
+* The last roll, the forward flick, and the clipped menu
+* The library is six games, and the rules take two more arguments
+* Ludo and Carrom
+* Record Play Together
+* Play Together
+* Record the three desktop fixes and the new portable swap
+* !docs : Docs is done
+* Update favicon and brand logo with app icon
+
+### Artifacts
+
+| Platform | This release |
+| --- | --- |
+| Server images | Built here |
+| Desktop (Windows) | Built here |
+| Android | Built here |
+
 ## [0.0.1-alpha.13](https://github.com/aiyu-ayaan/BetweenUs/compare/v0.0.1-alpha.12...v0.0.1-alpha.13) (2026-08-25)
 
 ### Features
