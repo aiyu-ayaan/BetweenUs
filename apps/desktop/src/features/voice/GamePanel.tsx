@@ -12,7 +12,8 @@
  * library" that abandons a game by accident - changing the game is a deliberate
  * thing, and it is behind the same button that started this one.
  */
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   GAMES,
   GAME_LIBRARY,
@@ -23,11 +24,49 @@ import {
 } from '@betweenus/shared-types';
 import { mySeat, turnLine, useGameStore } from '../../stores/game';
 import { GameBoard } from './GameBoards';
-import { GamepadIcon, RotateIcon, TrophyIcon, UserIcon, XIcon } from '../../components/icons';
+import {
+  GamepadIcon,
+  MaximizeIcon,
+  MinimizeIcon,
+  RotateIcon,
+  TrophyIcon,
+  UserIcon,
+  XIcon,
+} from '../../components/icons';
 
 export function GamePanel(): JSX.Element {
+  const fullscreen = useGameStore((state) => state.fullscreen);
+
+  // Fullscreen is a portal rather than a class on the panel, because the panel
+  // lives inside the voice stage, which is inside a column, inside a `.panel`
+  // that is `overflow-hidden`. A `fixed inset-0` element inside all of that is
+  // still laid out by its ancestors' stacking contexts, and it was clipped.
+  // Attached to the body, it is the window.
+  const panel = <Board />;
+  if (!fullscreen) return panel;
+
+  return createPortal(
+    <div className="fixed inset-0 z-50 flex flex-col gap-2 bg-surface-950 p-4">{panel}</div>,
+    document.body,
+  );
+}
+
+function Board(): JSX.Element {
   const session = useGameStore((state) => state.session);
+  const fullscreen = useGameStore((state) => state.fullscreen);
   const [choosing, setChoosing] = useState(false);
+
+  // Escape leaves fullscreen rather than closing the panel, which is what
+  // Escape means everywhere a thing has taken over a screen. It is only bound
+  // while it has, so it cannot quietly eat the key anywhere else.
+  useEffect(() => {
+    if (!fullscreen) return undefined;
+    const key = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape') useGameStore.getState().setFullscreen(false);
+    };
+    window.addEventListener('keydown', key);
+    return () => window.removeEventListener('keydown', key);
+  }, [fullscreen]);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-2">
@@ -52,12 +91,29 @@ export function GamePanel(): JSX.Element {
           </button>
         )}
 
+        {/* The board is the one thing in the call that wants the whole window.
+            Carrom's coins are a fiftieth of the board across, so the difference
+            between a thin cut and a miss is a few pixels on a shared stage. */}
+        <button
+          type="button"
+          onClick={() => useGameStore.getState().setFullscreen(!fullscreen)}
+          aria-label={fullscreen ? 'Leave fullscreen' : 'Fullscreen'}
+          title={fullscreen ? 'Leave fullscreen - Esc' : 'Fullscreen'}
+          className="ml-auto cursor-pointer rounded p-1 text-slate-400 transition-colors hover:bg-white/[0.06] hover:text-slate-200"
+        >
+          {fullscreen ? (
+            <MinimizeIcon className="h-4 w-4" />
+          ) : (
+            <MaximizeIcon className="h-4 w-4" />
+          )}
+        </button>
+
         <button
           type="button"
           onClick={() => useGameStore.getState().setOpen(false)}
           aria-label="Close play together"
           title="Close - the game stays on the table"
-          className="ml-auto cursor-pointer rounded p-1 text-slate-400 transition-colors hover:bg-white/[0.06] hover:text-slate-200"
+          className="cursor-pointer rounded p-1 text-slate-400 transition-colors hover:bg-white/[0.06] hover:text-slate-200"
         >
           <XIcon className="h-4 w-4" />
         </button>

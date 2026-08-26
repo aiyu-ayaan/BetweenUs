@@ -230,6 +230,44 @@ Everybody in the call sees the board; two of them are playing it.
 There is no host, for the same reason the listening queue has none: a host is a
 person who eventually leaves and takes the game with them.
 
+## Where it is, in the client
+
+Both shared activities live behind one **Apps** button in the call controls,
+and that is a change worth stating plainly: there used to be a music note and a
+gamepad sitting in a row of six controls that belong to the call itself, with
+nothing to say which two were different. A third activity would have made it
+nine icons.
+
+```text
+   Apps ──► Listen together ──► what is playing, browse, paste a link
+        └─► Play together   ──► the library, or back to the game on the table
+```
+
+The first screen is the list; picking one opens that app's own screen in the
+same popover, with a way back. Adding a third activity is a row in a list
+rather than another icon in a row.
+
+The menu is a **portal**. The sidebar is a `.panel`, and `.panel` is
+`overflow-hidden` — an absolutely positioned menu inside it is clipped to
+nothing, which was a menu that rendered, sat in the DOM, and looked exactly
+like a button that does nothing. It hangs off the button's own rectangle in
+`document.body` instead.
+
+### Fullscreen
+
+The board takes the whole window from the header button, and Escape leaves it.
+
+It is the one thing in a call that wants the room. Carrom's coins are about a
+fiftieth of the board across, so on a stage shared with a seat rail, a status
+bar and a row of faces, the difference between a thin cut and a miss is a few
+pixels. Fullscreen is another portal for the same reason the menu is: a
+`fixed inset-0` element nested inside the voice stage is still subject to its
+ancestors' clipping, and it was cropped.
+
+Whether the board is fullscreen is **local**, like whether the panel is open at
+all. How big a board is on one person's screen is not something the other
+player is entitled to decide.
+
 ## Nothing is played locally
 
 A click sends a move and waits. There is no optimistic placement anywhere in
@@ -269,7 +307,7 @@ pressed. That is not the permission check. The gateway's is.
 | Ludo and carrom self-check | `apps/services/call-service/src/game-physics.check.ts` |
 | The carrom board and its replay | `apps/desktop/src/features/voice/CarromBoard.tsx` |
 | The ludo board and its die | `apps/desktop/src/features/voice/LudoBoard.tsx` |
-| The sidebar menus behind both buttons | `apps/desktop/src/features/voice/ActivityMenu.tsx` |
+| Apps: the menu both activities live behind | `apps/desktop/src/features/voice/AppsMenu.tsx` |
 | The referee (pure) | `apps/services/call-service/src/game-session.ts` |
 | Its self-check | `apps/services/call-service/src/game-session.check.ts` |
 | Gateway wiring | `apps/services/call-service/src/call.gateway.ts` |

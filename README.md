@@ -118,6 +118,8 @@ to be framed, so no browser tab can ever show it.
 | Video on the stage, with a shared transport | ✅ | ✅ | — |
 | **Play together** | | | |
 | Six board games on the call stage | ✅ | ✅ | — |
+| One **Apps** button: listen together and play together behind it | ✅ | ✅ | — |
+| Fullscreen board | ✅ | ✅ | — |
 | Carrom: aim, power, and a simulated shot both ends replay | ✅ | ✅ | — |
 | Ludo: the die is the server's, the tumble is the animation | ✅ | ✅ | — |
 | Take a chair, stand up, play again | ✅ | ✅ | — |
@@ -776,6 +778,13 @@ was built the way it was; this is the short version.
 - **Ludo's die belongs to the server.** The tumble on screen is started by the
   number arriving, not by the button - a die animated first and reported
   afterwards is a client deciding its own sixes.
+- **One Apps button.** Both shared activities live behind it rather than
+  beside each other in a row of call controls, so the row says what it is - the
+  call - and the things two people do together are one screen in. A third
+  activity is a row in a list rather than a ninth icon.
+- **Fullscreen for the board**, because carrom's coins are a fiftieth of the
+  board across and a stage shared with faces and a seat rail is where a thin cut
+  and a miss are four pixels apart.
 - **The rules are in the contract**, imported by both ends, so what the referee
   decides and what every window draws cannot drift apart. Adding a fifth game is
   a file, a line in the registry and a board component; the gateway needs no

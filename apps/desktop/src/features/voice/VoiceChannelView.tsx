@@ -113,6 +113,7 @@ export function VoiceChannelView({
   const ordered = useOrderedStage(stage);
   const listenOpen = useListenStore((state) => state.open);
   const gameOpen = useGameStore((state) => state.open);
+  const gameFullscreen = useGameStore((state) => state.fullscreen);
   const watched = connected ? (shares.find((share) => share.identity === watching) ?? null) : null;
 
   return (
@@ -206,10 +207,14 @@ export function VoiceChannelView({
             the button in VoiceControls. */}
         {listenOpen && connected ? (
           <ListenPanel />
-        ) : gameOpen && connected ? (
+        ) : gameOpen && connected && !gameFullscreen ? (
           /* One stage, one thing on it - opening either panel closes the other.
              See `useGameStore.setOpen`, which is where that is decided rather
-             than here, so the sidebar button obeys the same rule. */
+             than here, so the sidebar button obeys the same rule.
+
+             In fullscreen the panel portals itself to the body and this slot
+             draws nothing, so the stage is not laying out a board nobody can
+             see behind the one that has the window. */
           <GamePanel />
         ) : stage.length === 0 ? (
           <EmptyStage />
@@ -218,6 +223,12 @@ export function VoiceChannelView({
         ) : (
           <PagedGrid tiles={ordered} />
         )}
+
+        {/* In fullscreen the panel portals itself to the body, so it is mounted
+            here and drawn nowhere: the stage underneath goes back to being the
+            call rather than laying out a board nobody can see behind the one
+            that has the window. */}
+        {gameOpen && connected && gameFullscreen && <GamePanel />}
 
         {!connected && (
           <div className="flex shrink-0 justify-center">

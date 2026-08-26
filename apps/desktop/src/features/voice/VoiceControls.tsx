@@ -15,15 +15,14 @@ import { ConnectionPanel } from './ConnectionPanel';
 import { ScreenSharePicker } from './ScreenSharePicker';
 import { DevicePicker } from './DevicePicker';
 import { InvitePicker } from './InvitePicker';
-import { GameMenu, ListenMenu } from './ActivityMenu';
+import { AppsMenu } from './AppsMenu';
 import {
-  GamepadIcon,
+  AppsIcon,
   MicIcon,
   MicOffIcon,
   PhoneOffIcon,
   ScreenShareIcon,
   ActivityIcon,
-  MusicIcon,
   SettingsIcon,
   UserPlusIcon,
   VideoIcon,
@@ -62,12 +61,13 @@ export function VoiceControls({ size = 'sm' }: { size?: 'sm' | 'lg' }): JSX.Elem
   const [inviting, setInviting] = useState(false);
   // Which activity menu is open, in *this* copy of the controls. Local, because
   // this component is rendered twice and a flag in a store would open two.
-  const [menu, setMenu] = useState<'listen' | 'game' | null>(null);
-  // The menus are portalled out of the sidebar - `.panel` is `overflow-hidden`
-  // and clipped them into invisibility - so they need the button's own
-  // rectangle to position themselves against.
-  const listenButton = useRef<HTMLDivElement>(null);
-  const gameButton = useRef<HTMLDivElement>(null);
+  // One menu, and it belongs to this copy of the controls: the component is
+  // rendered twice, and anything it drew from a store was drawn twice.
+  const [appsOpen, setAppsOpen] = useState(false);
+  // The menu is portalled out of the sidebar - `.panel` is `overflow-hidden`
+  // and clipped it into invisibility - so it needs the button's own rectangle
+  // to position itself against.
+  const appsButton = useRef<HTMLDivElement>(null);
   const warning = healthWarning(stats);
   // Whose screen it is, when it is not ours. The holder is a peer id; the name
   // comes from the tiles, and is absent for the instant between somebody
@@ -147,77 +147,54 @@ export function VoiceControls({ size = 'sm' }: { size?: 'sm' | 'lg' }): JSX.Elem
         {inviting && <InvitePicker onClose={() => setInviting(false)} />}
       </div>
 
-      {/* Music, and not a screen share with the sound on: every window plays
-          the track itself, so it costs no uplink and stays at full quality.
-          Amber while something is playing, because the queue is shared and
-          somebody else may have started it.
+      {/* Everything two people do *together* in a call, behind one button.
 
-          The button only sets a flag - it draws no panel. This component is
-          rendered twice, in the sidebar and in the channel view, so anything it
-          drew from shared state was drawn twice: two panels, side by side, both
-          live, which is exactly what happened. The panel has one render site,
-          in `VoiceChannelView`, and pressing this from the sidebar goes there
-          first rather than trying to open one where there is no room for it. */}
-      <div ref={listenButton} className="relative">
+          It was two - a music note and a gamepad - in a row that already had
+          six controls belonging to the call itself, and nothing in the row said
+          which was which. A third activity would have made it nine icons. So
+          they are stacked behind Apps, and the menu's first screen is the list;
+          adding a fourth is a row rather than another icon.
+
+          Amber or green in the dot when one of them is already running, because
+          somebody else may have started it. */}
+      <div ref={appsButton} className="relative">
         <ControlButton
-          active={listenOpen || menu === 'listen'}
+          active={appsOpen || listenOpen || gameOpen}
           disabled={disabled}
           pad={pad}
-          label={listening ? 'Listening together' : 'Listen together'}
-          onClick={() => {
-            // In the channel view the panel is right there, so the button is a
-            // toggle. In the sidebar there is nothing to toggle - the panel is
-            // drawn somewhere you are not looking - so it opens the options
-            // instead, and picking one takes you to them.
-            if (size === 'lg') {
-              const next = !listenOpen;
-              useListenStore.getState().setOpen(next);
-              if (next) void openCallChannel();
-              return;
-            }
-            setMenu((open) => (open === 'listen' ? null : 'listen'));
-          }}
+          label={
+            listening && playing
+              ? 'Apps - music and a game are on'
+              : listening
+                ? 'Apps - music is on'
+                : playing
+                  ? 'Apps - a game is on'
+                  : 'Apps'
+          }
+          onClick={() => setAppsOpen((open) => !open)}
         >
-          <MusicIcon className={`${icon} ${listening && !listenOpen ? 'text-amber-300' : ''}`} />
+          <span className="relative flex">
+            <AppsIcon className={icon} />
+            {(listening || playing) && !appsOpen && (
+              <span
+                aria-hidden
+                className={`absolute -right-1 -top-1 h-1.5 w-1.5 rounded-full ${
+                  playing ? 'bg-emerald-300' : 'bg-amber-300'
+                }`}
+              />
+            )}
+          </span>
         </ControlButton>
-        {menu === 'listen' && (
-          <ListenMenu
-            anchor={listenButton}
-            onClose={() => setMenu(null)}
-            onOpened={() => void openCallChannel()}
-          />
-        )}
-      </div>
-
-      {/* A board, on the same terms as the music: the gateway referees the
-          moves and every window draws the same state, so it costs a few bytes
-          a click and works wherever the call does. Green while a game is on the
-          table, because somebody else may have started it. */}
-      <div ref={gameButton} className="relative">
-        <ControlButton
-          active={gameOpen || menu === 'game'}
-          disabled={disabled}
-          pad={pad}
-          label={playing ? 'Playing together' : 'Play together'}
-          onClick={() => {
-            if (size === 'lg') {
-              const next = !gameOpen;
-              useGameStore.getState().setOpen(next);
-              if (next) void openCallChannel();
-              return;
-            }
-            // The library, right here. A menu whose only entry is "open the
-            // panel that shows the library" is a click spent on nothing.
-            setMenu((open) => (open === 'game' ? null : 'game'));
-          }}
-        >
-          <GamepadIcon className={`${icon} ${playing && !gameOpen ? 'text-emerald-300' : ''}`} />
-        </ControlButton>
-        {menu === 'game' && (
-          <GameMenu
-            anchor={gameButton}
-            onClose={() => setMenu(null)}
-            onOpened={() => void openCallChannel()}
+        {appsOpen && (
+          <AppsMenu
+            anchor={appsButton}
+            onClose={() => setAppsOpen(false)}
+            onOpened={() => {
+              // Whichever app was opened is drawn on the voice stage, so this
+              // goes there. Starting something on a screen nobody is looking at
+              // is the complaint this menu exists to answer.
+              if (size !== 'lg') void openCallChannel();
+            }}
           />
         )}
       </div>

@@ -109,6 +109,20 @@ Play Together:
 - [x] **Carrom aims forward.** Press where the striker should go rather than
       pulling back from it. A catapult is the gesture a pool game teaches, and
       it is not the one anybody's hand has for a carrom board.
+- [x] **One Apps button, and the activities stack behind it.** A music note
+      and a gamepad sat in a row of six controls that belong to the call itself,
+      with nothing to say which two were different in kind; a third activity
+      would have made it nine icons. The menu's first screen is now the list of
+      apps and the second is the app, so adding one is a row rather than an
+      icon.
+- [x] **Fullscreen for the board.** It is the one thing in a call that wants the
+      whole window: carrom's coins are about a fiftieth of the board across, so
+      on a stage shared with a seat rail and a row of faces the difference
+      between a thin cut and a miss is a few pixels. Escape leaves it, and the
+      flag is local - how big a board is on one person's screen is not the other
+      player's decision. It is a portal for the same reason the menu is: a
+      `fixed inset-0` nested in the voice stage is still clipped by its
+      ancestors.
 - [x] **The sidebar menus are portalled.** They were drawn inside a `.panel`,
       which is `overflow-hidden`, so the first version was clipped to nothing -
       rendered, in the DOM, and invisible, which looks exactly like a button

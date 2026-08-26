@@ -351,6 +351,14 @@ window, so it is a trust boundary and it is tested as one.
 - **Android listens but does not drive** — and today does neither. See
   [Android client](/architecture/android-client).
 
+## Where it is, in the client
+
+Behind the **Apps** button in the call controls, next to
+[Play Together](/architecture/play-together) — one screen in, rather than its
+own icon in a row that otherwise belongs to the call. The menu carries what is
+playing, a paste box and the way into the browser, so adding a link does not
+mean opening the full-width panel at all.
+
 ## Where the code is
 
 | Piece | File |

@@ -709,14 +709,32 @@ so what is being checked is that nothing *moved* wrongly. One client is enough.
    inbound bitrate should sit in the megabits, not the hundreds of kilobits,
    and the frame rate should hold. Nothing in the app reports this yet.
 
+## Apps: where both of these live
+
+The music note and the gamepad are gone from the call controls. There is one
+**Apps** button, and both activities are behind it.
+
+1. **Press Apps in the sidebar**, with the window narrow enough that the sidebar
+   is a sidebar. The menu must be *visible* - it is portalled to the body
+   precisely because an earlier version was clipped by the sidebar's
+   `overflow-hidden` and was invisible while being perfectly present in the DOM.
+2. **Two rows**, listen and play, each saying whether that app is already
+   running. Pick one and its own screen replaces the list, with a way back.
+3. **Start something from the sidebar** and the client should take you to the
+   voice channel where it is drawn. Starting a game on a screen nobody is
+   looking at is the whole reason this menu exists.
+4. **A dot on the button** while music or a game is on, without the menu open.
+5. **Press Apps in the channel footer**: same menu, and picking an app opens its
+   panel on the stage rather than navigating anywhere.
+
 ## Playing together
 
 Two windows in one voice channel (`pnpm dev:duo`), signed in as two different
 accounts - one account in two windows is one player, and every seat check below
 is about two.
 
-1. **Start one.** The gamepad in the call controls, then a card from the
-   library. The board should appear in both windows, with the person who opened
+1. **Start one.** Apps in the call controls, then **Play together**, then a card
+   from the library. The board should appear in both windows, with the person who opened
    it already in the first chair and the second chair empty. The gamepad in the
    *other* window should go green without anybody opening its panel.
 2. **The board takes no moves yet.** Click anywhere in either window with one
@@ -755,50 +773,55 @@ is about two.
 11. **Closing it.** **End game** in either window. The board should go in both,
     and the panel should go back to the library. Hang up in both windows and
     rejoin: there should be no game, because none of it is persisted.
-12. **One stage.** Open the music panel while a game is on the table. The board
+12. **Fullscreen.** The button in the panel header should give the board the
+    whole window - the tiles, the sidebar and the controls all gone - and Escape
+    should bring it back. Closing the panel while fullscreen and reopening it
+    must not come back fullscreen. Try it in carrom especially: that is the
+    board the feature is for.
+13. **One stage.** Open the music panel while a game is on the table. The board
     should fold away and the game bar should appear above the tiles saying whose
     move it is; open the game panel again and the music should keep playing with
     its own bar. Neither should ever be on screen at the same time.
 
 ### Carrom, and the thing to actually check
 
-13. **Open Carrom** and take both chairs across two windows. Drag along your own
+14. **Open Carrom** and take both chairs across two windows. Drag along your own
     baseline: the striker should slide with the pointer and never sit on top of
     a coin. Then press where you want the striker to *go* - the line should run
     from the striker through your pointer and on into the board, and the further
     out you press, the harder it goes. Forwards, like a finger; not backwards,
     like a catapult.
-14. **The animation must end where the board is.** Watch a break in *both*
+15. **The animation must end where the board is.** Watch a break in *both*
     windows. The coins should scatter, slow down and stop, and neither window
     should show a coin jump at the end of the shot. A jump means the animation
     and the refereed board disagree, which means the simulation is not
     deterministic - and that is the one failure here that matters, because it
     means two people are looking at two different boards.
-15. **A shot the watcher sees.** With a third window watching, the same shot
+16. **A shot the watcher sees.** With a third window watching, the same shot
     should play there too, at the same speed, ending in the same place.
-16. **Pocket one of yours** and you should shoot again. **Pocket the striker**
+17. **Pocket one of yours** and you should shoot again. **Pocket the striker**
     and the turn should pass, with one of your coins back near the centre.
-17. **The queen** is red. Take her and the board should say she is uncovered
+18. **The queen** is red. Take her and the board should say she is uncovered
     until you pocket one of your own; fail, and she goes back to the middle.
 
 ### Ludo
 
-18. **Roll with everything still in the yard.** Four times out of five the
+19. **Roll with everything still in the yard.** Four times out of five the
     number is unplayable and the turn passes - and you should still *see* the
     number, with a line saying nothing could take it. A roll that shows nothing
     at all is the pending die being drawn instead of the last roll.
-19. **Roll** and watch both windows: the die should tumble briefly and land on
+20. **Roll** and watch both windows: the die should tumble briefly and land on
     the *same* number in each. Two different numbers means the animation is
     deciding the roll rather than showing it - which is the failure this design
     exists to prevent.
-20. **A six** is the only way out of the yard, and it is another go. A three
+21. **A six** is the only way out of the yard, and it is another go. A three
     with everything still in the yard should pass the turn on its own, without
     anybody having to press anything.
-21. **Three sixes** in a row should forfeit the turn.
-22. **Land on an opponent** on an ordinary square: their token goes back to the
+22. **Three sixes** in a row should forfeit the turn.
+23. **Land on an opponent** on an ordinary square: their token goes back to the
     yard and you go again. Land on them on a starred square and nothing happens
     to either of you.
-23. **Home has to be exact.** A token one square short cannot take a five, and
+24. **Home has to be exact.** A token one square short cannot take a five, and
     the turn should pass rather than the board sitting there with nothing to
     click.
 
@@ -808,7 +831,8 @@ Two windows in one voice channel (`pnpm dev:duo`), and headphones on both if
 they are on one machine - the speakers will otherwise feed the microphones and
 the ducking will chase itself.
 
-1. **Start it.** The music note in the call controls, then **Browse YouTube**.
+1. **Start it.** Apps in the call controls, then **Listen together**, then
+   **Browse for something to play**.
    The real site should open inside the call - sign in if you want your own
    playlists and subscriptions, and it should still be signed in next time.
    Click any video on the page - a thumbnail on the home page is the case to

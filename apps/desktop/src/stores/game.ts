@@ -31,12 +31,23 @@ interface GameState {
    * twice and a flag it drew from would draw two live panels side by side.
    */
   open: boolean;
+  /**
+   * Whether the board has the whole window.
+   *
+   * Local, like `open`, and for the same reason: how big a board is on one
+   * person's screen is not a thing the other player is entitled to decide.
+   * Carrom in particular wants the room - the coins are a fiftieth of the board
+   * across, and a board sharing a stage with a seat rail and a row of faces is
+   * a board where the difference between a thin cut and a miss is four pixels.
+   */
+  fullscreen: boolean;
 
   attach: (mesh: Mesh) => void;
   detach: () => void;
   receive: (session: GameSession | null) => void;
 
   setOpen: (open: boolean) => void;
+  setFullscreen: (fullscreen: boolean) => void;
   /** Put a game on the table. Whoever does it takes the first chair. */
   openGame: (gameId: GameId) => void;
   sit: (seat: number) => void;
@@ -51,6 +62,7 @@ let mesh: Mesh | null = null;
 export const useGameStore = create<GameState>((set, get) => ({
   session: null,
   open: false,
+  fullscreen: false,
 
   attach: (next) => {
     mesh = next;
@@ -58,7 +70,7 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   detach: () => {
     mesh = null;
-    set({ session: null, open: false });
+    set({ session: null, open: false, fullscreen: false });
   },
 
   receive: (session) => {
@@ -77,8 +89,13 @@ export const useGameStore = create<GameState>((set, get) => ({
     // and a native browser view painting over a board would be the worse half
     // of that failure. The music itself carries on; only the panel folds away.
     if (open) useListenStore.getState().setOpen(false);
-    set({ open });
+    // Closing the panel drops fullscreen with it. A hidden panel that is still
+    // "fullscreen" is a flag waiting to swallow the window the next time
+    // somebody opens a game.
+    set(open ? { open } : { open, fullscreen: false });
   },
+
+  setFullscreen: (fullscreen) => set({ fullscreen }),
 
   openGame: (gameId) => mesh?.sendGame({ type: 'game.open', gameId }),
   sit: (seat) => mesh?.sendGame({ type: 'game.sit', seat }),

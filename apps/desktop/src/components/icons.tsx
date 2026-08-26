@@ -488,3 +488,12 @@ export const TrophyIcon = (props: IconProps): JSX.Element => (
     <path d="M7 5H4a3 3 0 0 0 3 3" />
   </Base>
 );
+
+export const AppsIcon = (props: IconProps): JSX.Element => (
+  <Base {...props}>
+    <rect x="3" y="3" width="7" height="7" rx="1.5" />
+    <rect x="14" y="3" width="7" height="7" rx="1.5" />
+    <rect x="3" y="14" width="7" height="7" rx="1.5" />
+    <rect x="14" y="14" width="7" height="7" rx="1.5" />
+  </Base>
+);
