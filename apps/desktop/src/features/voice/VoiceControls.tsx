@@ -6,6 +6,7 @@
  */
 import { useState, type ReactNode } from 'react';
 import { useVoiceStore } from '../../stores/voice';
+import { useGameStore } from '../../stores/game';
 import { useListenStore } from '../../stores/listen';
 import { useAudioSettings } from '../../stores/audioSettings';
 import { describeKey } from '../../services/talk-key';
@@ -15,6 +16,7 @@ import { ScreenSharePicker } from './ScreenSharePicker';
 import { DevicePicker } from './DevicePicker';
 import { InvitePicker } from './InvitePicker';
 import {
+  GamepadIcon,
   MicIcon,
   MicOffIcon,
   PhoneOffIcon,
@@ -44,6 +46,8 @@ export function VoiceControls({ size = 'sm' }: { size?: 'sm' | 'lg' }): JSX.Elem
   const stats = useVoiceStore((state) => state.stats);
   const listening = useListenStore((state) => state.session !== null);
   const listenOpen = useListenStore((state) => state.open);
+  const playing = useGameStore((state) => state.session !== null);
+  const gameOpen = useGameStore((state) => state.open);
   const openCallChannel = useVoiceStore((state) => state.openCallChannel);
 
   // Starting a share asks what to share first; stopping is immediate.
@@ -157,6 +161,24 @@ export function VoiceControls({ size = 'sm' }: { size?: 'sm' | 'lg' }): JSX.Elem
         }}
       >
         <MusicIcon className={`${icon} ${listening && !listenOpen ? 'text-amber-300' : ''}`} />
+      </ControlButton>
+
+      {/* A board, on the same terms as the music: the gateway referees the
+          moves and every window draws the same state, so it costs a few bytes
+          a click and works wherever the call does. Green while a game is on the
+          table, because somebody else may have started it. */}
+      <ControlButton
+        active={gameOpen}
+        disabled={disabled}
+        pad={pad}
+        label={playing ? 'Playing together' : 'Play together'}
+        onClick={() => {
+          const next = !gameOpen;
+          useGameStore.getState().setOpen(next);
+          if (next) void openCallChannel();
+        }}
+      >
+        <GamepadIcon className={`${icon} ${playing && !gameOpen ? 'text-emerald-300' : ''}`} />
       </ControlButton>
 
       {/* Amber when something is measurably wrong, so the numbers are worth

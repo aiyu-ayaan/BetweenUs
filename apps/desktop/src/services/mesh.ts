@@ -63,6 +63,7 @@ import type {
   CallSignal,
   ClientCallEvent,
   IceCandidatePayload,
+  GameSession,
   IceServer,
   ListenSession,
   ServerCallEvent,
@@ -81,6 +82,9 @@ import { toStats, type LinkSample, type LinkStats } from './call-stats';
 
 /** The Listen Together half of the client protocol, so the store cannot send anything else. */
 export type ListenClientEvent = Extract<ClientCallEvent, { type: `listen.${string}` }>;
+
+/** The Play Together half, on the same terms. */
+export type GameClientEvent = Extract<ClientCallEvent, { type: `game.${string}` }>;
 
 /** What a slot carries. The order is the transceiver order and is load-bearing. */
 export const SLOTS = ['mic', 'camera', 'screen', 'screenAudio'] as const;
@@ -170,6 +174,15 @@ export interface MeshEvents {
    * people pressing pause at the same moment.
    */
   onListen?: (session: ListenSession | null) => void;
+  /**
+   * The game being played in this call, or null when there is not one.
+   *
+   * Here rather than on a data channel for the reason the listening session is:
+   * a data channel is per peer, so a board sent over one would be as many
+   * boards as there are peers, each with its own idea of which click came
+   * first. The gateway referees, and this is what it says came of a move.
+   */
+  onGame?: (session: GameSession | null) => void;
   /**
    * One measurement of the gateway's clock against this machine's.
    *
@@ -1238,6 +1251,10 @@ export class Mesh {
         this.options.onListen?.(event.session);
         return;
 
+      case 'game.state':
+        this.options.onGame?.(event.session);
+        return;
+
       case 'pong':
         // Only useful against the ping that asked for it: an unsolicited pong
         // has no send time to measure the round trip from, and half of an
@@ -1286,6 +1303,11 @@ export class Mesh {
 
   /** One Listen Together action, straight through. The gateway decides. */
   sendListen(event: ListenClientEvent): void {
+    this.send(event);
+  }
+
+  /** One Play Together action. The gateway referees it and tells everybody. */
+  sendGame(event: GameClientEvent): void {
     this.send(event);
   }
 

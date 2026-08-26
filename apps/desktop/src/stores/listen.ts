@@ -32,6 +32,7 @@ import {
 } from '../services/listen-sync';
 import { YouTubePlayer, parseYouTube } from '../services/youtube';
 import { useVoiceStore } from './voice';
+import { useGameStore } from './game';
 
 /**
  * How loud the music is while somebody is talking, as a fraction of the volume
@@ -329,7 +330,13 @@ export const useListenStore = create<ListenState>((set, get) => ({
     if (offset !== get().clockOffset) set({ clockOffset: offset });
   },
 
-  setOpen: (open) => set({ open }),
+  setOpen: (open) => {
+    // The stage holds one thing. Opening this folds the games panel away, and
+    // opening that folds this one - decided in the stores rather than in the
+    // view, because the button exists twice and the rule must not.
+    if (open) useGameStore.getState().setOpen(false);
+    set({ open });
+  },
   setTab: (tab) => set({ tab }),
 
   setVolume: (volume) => {

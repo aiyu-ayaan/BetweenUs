@@ -34,7 +34,9 @@ import { NotHeardNotice } from './NotHeardNotice';
 import { VideoSink } from './MediaSink';
 import { ShareStage } from './ShareStage';
 import { ListenBar, ListenPanel } from './ListenPanel';
+import { GameBar, GamePanel } from './GamePanel';
 import { useListenStore } from '../../stores/listen';
+import { useGameStore } from '../../stores/game';
 import {
   ChevronLeftIcon,
   ChevronRightIcon,
@@ -110,6 +112,7 @@ export function VoiceChannelView({
 
   const ordered = useOrderedStage(stage);
   const listenOpen = useListenStore((state) => state.open);
+  const gameOpen = useGameStore((state) => state.open);
   const watched = connected ? (shares.find((share) => share.identity === watching) ?? null) : null;
 
   return (
@@ -190,6 +193,11 @@ export function VoiceChannelView({
             thing that is happening. Draws nothing when nothing is. */}
         <ListenBar />
 
+        {/* And one line saying what is on the table, on the same terms. It says
+            whose move it is, which is the only part of a game anybody needs
+            while they are looking at faces. */}
+        <GameBar />
+
         {/* Listening takes the stage while it is open. Picking the next track
             is a thing somebody does with their whole attention for twenty
             seconds, and shrinking YouTube into a corner to keep nine faces on
@@ -198,6 +206,11 @@ export function VoiceChannelView({
             the button in VoiceControls. */}
         {listenOpen && connected ? (
           <ListenPanel />
+        ) : gameOpen && connected ? (
+          /* One stage, one thing on it - opening either panel closes the other.
+             See `useGameStore.setOpen`, which is where that is decided rather
+             than here, so the sidebar button obeys the same rule. */
+          <GamePanel />
         ) : stage.length === 0 ? (
           <EmptyStage />
         ) : watched ? (

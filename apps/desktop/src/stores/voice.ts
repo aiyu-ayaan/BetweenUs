@@ -22,6 +22,7 @@ import { isDesktopRuntime } from '../services/platform';
 import { useAuthStore } from './auth';
 import { useChatStore } from './chat';
 import { useShareControlStore } from './shareControl';
+import { useGameStore } from './game';
 import { useListenStore } from './listen';
 import { useAudioSettings } from './audioSettings';
 import { startPushToTalk, stopPushToTalk } from '../services/push-to-talk';
@@ -353,6 +354,10 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
           if (useVoiceStore.getState().channelId !== channelId) return;
           useListenStore.getState().receive(session);
         },
+        onGame: (session) => {
+          if (useVoiceStore.getState().channelId !== channelId) return;
+          useGameStore.getState().receive(session);
+        },
         onServerTime: (sample) => useListenStore.getState().sampleClock(sample),
         onScreenHolder: (peerId) => {
           if (useVoiceStore.getState().channelId !== channelId) return;
@@ -415,6 +420,9 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
       // the call does. It is not persisted anywhere: the queue two people built
       // while they worked has no meaning tomorrow.
       useListenStore.getState().attach(next);
+      // The board goes the same way as the queue: it belongs to the call, it is
+      // refereed by the gateway, and it is not written down anywhere.
+      useGameStore.getState().attach(next);
 
       set({
         error: micProblem,
@@ -456,6 +464,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
     if (channelId) presenceSocket.send({ type: 'voice.leave', channelId });
     useShareControlStore.getState().detach();
     useListenStore.getState().detach();
+    useGameStore.getState().detach();
     teardown();
     // Close PiP overlay window if open
     void window.betweenus?.closePip();

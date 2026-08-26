@@ -461,3 +461,30 @@ export const SkipForwardIcon = (props: IconProps): JSX.Element => (
     <line x1="19" y1="5" x2="19" y2="19" />
   </Base>
 );
+
+export const GamepadIcon = (props: IconProps): JSX.Element => (
+  <Base {...props}>
+    <line x1="6" y1="12" x2="10" y2="12" />
+    <line x1="8" y1="10" x2="8" y2="14" />
+    <line x1="15" y1="13" x2="15.01" y2="13" />
+    <line x1="18" y1="11" x2="18.01" y2="11" />
+    <rect x="2" y="6" width="20" height="12" rx="6" />
+  </Base>
+);
+
+export const RotateIcon = (props: IconProps): JSX.Element => (
+  <Base {...props}>
+    <polyline points="1 4 1 10 7 10" />
+    <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
+  </Base>
+);
+
+export const TrophyIcon = (props: IconProps): JSX.Element => (
+  <Base {...props}>
+    <path d="M8 21h8" />
+    <path d="M12 17v4" />
+    <path d="M7 4h10v5a5 5 0 0 1-10 0V4z" />
+    <path d="M17 5h3a3 3 0 0 1-3 3" />
+    <path d="M7 5H4a3 3 0 0 0 3 3" />
+  </Base>
+);

@@ -13,7 +13,50 @@
 
 import type { GameId, GameSession } from './games';
 
-export * from './games';
+// Named one by one rather than `export *`, and that is not a style choice: the
+// package builds to CommonJS for the Node services, and the ESM clients import
+// it through Node's interop, which finds named exports by *reading* the emitted
+// file. A star re-export compiles to a runtime loop it cannot see through, so
+// `GAMES` would exist at runtime and be missing at import - which is a check
+// that fails and a renderer that does not.
+export {
+  GAMES,
+  GAME_LIBRARY,
+  gameRules,
+  gameReady,
+  gameScore,
+  isTurnOf,
+  seatOf,
+  // Connect Four
+  COLUMNS,
+  ROWS,
+  connectFourAt,
+  landing,
+  winningRun,
+  // Dots and Boxes
+  CELLS,
+  DOTS,
+  LINES,
+  boxLines,
+  horizontal,
+  vertical,
+  // Reversi
+  REVERSI_SIZE,
+  reversiAt,
+  flips,
+  movesFor,
+  // Tic-tac-toe
+  lineWinner,
+  winningLine,
+} from './games';
+export type {
+  GameDefinition,
+  GameId,
+  GameRules,
+  GameSeat,
+  GameSession,
+  GameState,
+} from './games';
 
 // --- Common ---
 
