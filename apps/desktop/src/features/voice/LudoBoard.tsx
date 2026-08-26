@@ -24,6 +24,7 @@ import {
   YARD,
   dieOf,
   lastCapture,
+  lastRoll,
   progressOf,
   tokenIndex,
   tokenMoves,
@@ -119,21 +120,26 @@ interface Props {
 export function LudoBoard({ session, onMove }: Props): JSX.Element {
   const { seatColours } = GAMES.ludo.definition;
   const seat = mySeat(session);
-  const die = dieOf(session.state);
   const playable = new Set(seat === session.state.turn ? tokenMoves(session.state) : []);
   const captured = lastCapture(session.state);
 
   // The tumble: a face that changes quickly and then stops on the real one. It
   // is started by the *arrival* of a die, never by pressing the button, so what
   // it lands on is always what is in play.
+  const roll = lastRoll(session.state);
   const [tumbling, setTumbling] = useState<number | null>(null);
-  const shown = useRef(0);
+  // Keyed on the *move count*, not on the die: the commonest roll in the game -
+  // anything but a six with four tokens in the yard - is spent and cleared in
+  // the same message it arrives in, so a tumble that waited for `dieOf` to
+  // change never ran, and the number was never on screen at all. That was the
+  // whole of "the dice roll does not work".
+  const shown = useRef(-1);
   useEffect(() => {
-    if (die === 0 || die === shown.current) {
-      shown.current = die;
+    if (roll.value === 0 || session.state.moveCount === shown.current) {
+      shown.current = session.state.moveCount;
       return undefined;
     }
-    shown.current = die;
+    shown.current = session.state.moveCount;
     const spin = window.setInterval(() => setTumbling(1 + Math.floor(Math.random() * 6)), 60);
     const stop = window.setTimeout(() => {
       window.clearInterval(spin);
@@ -144,7 +150,7 @@ export function LudoBoard({ session, onMove }: Props): JSX.Element {
       window.clearTimeout(stop);
       setTumbling(null);
     };
-  }, [die]);
+  }, [roll.value, session.state.moveCount]);
 
   const centreOf = (owner: number, token: number): { x: number; y: number } => {
     const progress = progressOf(session.state, owner, token);
@@ -279,13 +285,19 @@ export function LudoBoard({ session, onMove }: Props): JSX.Element {
 
       <Die
         session={session}
-        face={tumbling ?? die}
+        face={tumbling ?? roll.value}
         rolling={tumbling !== null}
         canRoll={canPlay(session, ROLL)}
         onRoll={() => onMove(ROLL)}
       />
     </div>
   );
+}
+
+/** Whoever is in a seat, or the colour's name when the chair is empty. */
+function nameOf(session: GameSession, seat: number): string {
+  if (seat < 0) return 'Nobody';
+  return session.seats[seat]?.username ?? GAMES.ludo.definition.seatNames[seat] ?? 'They';
 }
 
 /** The die: a button before it is thrown, a face afterwards. */
@@ -303,6 +315,7 @@ function Die({
   onRoll: () => void;
 }): JSX.Element {
   const { seatColours } = GAMES.ludo.definition;
+  const roll = lastRoll(session.state);
   const pips: Record<number, [number, number][]> = {
     1: [[0.5, 0.5]],
     2: [
@@ -362,14 +375,21 @@ function Die({
         )}
       </button>
 
-      <p className="max-w-[14rem] text-[11px] leading-relaxed text-slate-500">
+      <p className="max-w-[15rem] text-[11px] leading-relaxed text-slate-500">
         {session.state.winner !== null
           ? 'That is the game.'
-          : dieOf(session.state) === 0
-            ? 'The die is rolled by the server, so both of you get the same number - the tumble is only the animation.'
-            : canPlay(session, tokenMoves(session.state)[0] ?? -1)
+          : dieOf(session.state) > 0
+            ? canPlay(session, tokenMoves(session.state)[0] ?? -1)
               ? 'Pick a token. A six gets one out of the yard, and gives you another go.'
-              : `${session.seats[session.state.turn]?.username ?? 'They'} are choosing a token.`}
+              : `${session.seats[session.state.turn]?.username ?? 'They'} are choosing a token.`
+            : roll.dead
+              // The line that was missing. A roll nothing could take used to
+              // clear itself and pass the turn in silence, which reads as a
+              // button that did nothing at all.
+              ? `${nameOf(session, roll.seat)} rolled ${roll.value} - nothing could take it, so the turn passed.`
+              : roll.value > 0
+                ? `${nameOf(session, roll.seat)} rolled ${roll.value}.`
+                : 'The die is rolled by the server, so both of you get the same number - the tumble is only the animation.'}
       </p>
       <span
         className="h-3 w-3 shrink-0 rounded-full"

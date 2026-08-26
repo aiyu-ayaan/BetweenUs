@@ -26,6 +26,7 @@ import {
   carromShot,
   coinsOf,
   dieOf,
+  lastRoll,
   placeStriker,
   progressOf,
   simulate,
@@ -261,6 +262,23 @@ import {
   assert.ok(rolledThree);
   assert.equal(rolledThree.turn, 1, 'nothing can move on a three from the yard');
   assert.equal(dieOf(rolledThree), 0);
+
+  // ...but the number it was is still there to be shown. This is the commonest
+  // roll in the game - four tokens in the yard and anything but a six - and
+  // when the board could only read `dieOf`, it was spent and cleared in the
+  // same message it arrived in: a player pressed roll, saw nothing at all, and
+  // watched the turn go to the other person.
+  assert.deepEqual(lastRoll(rolledThree), { value: 3, seat: 0, dead: true });
+}
+
+{
+  // A roll that *can* be played is recorded the same way, and is not marked
+  // dead - so the board can say "a six" without saying it was wasted.
+  const ludo = GAMES.ludo;
+  const six = ludo.apply(ludo.create(), 0, ROLL, undefined, () => 0.99);
+  assert.ok(six);
+  assert.deepEqual(lastRoll(six), { value: 6, seat: 0, dead: false });
+  assert.equal(dieOf(six), 6);
 }
 
 {

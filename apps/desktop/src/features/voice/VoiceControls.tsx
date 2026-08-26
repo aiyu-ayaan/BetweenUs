@@ -4,7 +4,7 @@
  * It lives in both the sidebar panel and the voice channel screen, so it is its
  * own component: the two places must never disagree about what is on.
  */
-import { useState, type ReactNode } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 import { useVoiceStore } from '../../stores/voice';
 import { useGameStore } from '../../stores/game';
 import { useListenStore } from '../../stores/listen';
@@ -63,6 +63,11 @@ export function VoiceControls({ size = 'sm' }: { size?: 'sm' | 'lg' }): JSX.Elem
   // Which activity menu is open, in *this* copy of the controls. Local, because
   // this component is rendered twice and a flag in a store would open two.
   const [menu, setMenu] = useState<'listen' | 'game' | null>(null);
+  // The menus are portalled out of the sidebar - `.panel` is `overflow-hidden`
+  // and clipped them into invisibility - so they need the button's own
+  // rectangle to position themselves against.
+  const listenButton = useRef<HTMLDivElement>(null);
+  const gameButton = useRef<HTMLDivElement>(null);
   const warning = healthWarning(stats);
   // Whose screen it is, when it is not ours. The holder is a peer id; the name
   // comes from the tiles, and is absent for the instant between somebody
@@ -153,7 +158,7 @@ export function VoiceControls({ size = 'sm' }: { size?: 'sm' | 'lg' }): JSX.Elem
           live, which is exactly what happened. The panel has one render site,
           in `VoiceChannelView`, and pressing this from the sidebar goes there
           first rather than trying to open one where there is no room for it. */}
-      <div className="relative">
+      <div ref={listenButton} className="relative">
         <ControlButton
           active={listenOpen || menu === 'listen'}
           disabled={disabled}
@@ -176,7 +181,11 @@ export function VoiceControls({ size = 'sm' }: { size?: 'sm' | 'lg' }): JSX.Elem
           <MusicIcon className={`${icon} ${listening && !listenOpen ? 'text-amber-300' : ''}`} />
         </ControlButton>
         {menu === 'listen' && (
-          <ListenMenu onClose={() => setMenu(null)} onOpened={() => void openCallChannel()} />
+          <ListenMenu
+            anchor={listenButton}
+            onClose={() => setMenu(null)}
+            onOpened={() => void openCallChannel()}
+          />
         )}
       </div>
 
@@ -184,7 +193,7 @@ export function VoiceControls({ size = 'sm' }: { size?: 'sm' | 'lg' }): JSX.Elem
           moves and every window draws the same state, so it costs a few bytes
           a click and works wherever the call does. Green while a game is on the
           table, because somebody else may have started it. */}
-      <div className="relative">
+      <div ref={gameButton} className="relative">
         <ControlButton
           active={gameOpen || menu === 'game'}
           disabled={disabled}
@@ -205,7 +214,11 @@ export function VoiceControls({ size = 'sm' }: { size?: 'sm' | 'lg' }): JSX.Elem
           <GamepadIcon className={`${icon} ${playing && !gameOpen ? 'text-emerald-300' : ''}`} />
         </ControlButton>
         {menu === 'game' && (
-          <GameMenu onClose={() => setMenu(null)} onOpened={() => void openCallChannel()} />
+          <GameMenu
+            anchor={gameButton}
+            onClose={() => setMenu(null)}
+            onOpened={() => void openCallChannel()}
+          />
         )}
       </div>
 

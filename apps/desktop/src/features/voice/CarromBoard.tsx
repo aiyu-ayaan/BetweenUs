@@ -11,11 +11,15 @@
  * already sent, because the simulation is deterministic - so the animation
  * cannot end anywhere except the truth.
  *
- * **The aim is a drag, backwards.** Pull away from the striker and let go, the
- * way a real flick works and the way every pool game already taught everybody's
- * hands. Distance is power. The striker itself slides along your own baseline,
- * dragged left and right, which is the other half of a carrom shot and the half
- * that a board without it makes impossible.
+ * **You point at where it should go.** Press on the board and the striker aims
+ * at your pointer; drag further out for more power and let go to flick it,
+ * which is what a finger does to a striker on a real board. The first version
+ * had it backwards - pull away from the striker like a catapult, the way a pool
+ * game does - and a catapult is not the gesture anybody has for carrom.
+ *
+ * The striker itself slides along your own baseline, dragged left and right,
+ * which is the other half of a carrom shot and the half a board without it
+ * makes impossible.
  */
 import { useEffect, useRef, useState } from 'react';
 import {
@@ -119,16 +123,19 @@ export function CarromBoard({ session, onMove }: Props): JSX.Element {
       setAim((current) => ({ ...current, pullX: null, pullY: null }));
       return;
     }
-    const dx = strikerAt.x - aim.pullX;
-    const dy = strikerAt.y - aim.pullY;
+    // Towards the pointer, not away from it: the striker goes where you are
+    // pointing, and how far out you are pointing is how hard it is hit.
+    const dx = aim.pullX - strikerAt.x;
+    const dy = aim.pullY - strikerAt.y;
     const distance = Math.sqrt(dx * dx + dy * dy);
     setAim((current) => ({ ...current, pullX: null, pullY: null }));
     // A tap is not a shot. Somebody who clicked the board to see what happens
     // should not lose a turn to a striker that dribbles two inches.
     if (distance < MIN_DRAG) return;
-    const power = Math.min(1, (distance - MIN_DRAG) / (MAX_DRAG - MIN_DRAG) + 0.08);
-    onMove(0, [aim.x, Math.atan2(dy, dx), power]);
+    onMove(0, [aim.x, Math.atan2(dy, dx), powerFrom(distance)]);
   };
+
+  const power = pullPower(strikerAt, aim);
 
   const pull =
     aim.pullX !== null && aim.pullY !== null
@@ -264,22 +271,31 @@ export function CarromBoard({ session, onMove }: Props): JSX.Element {
             />
             {pull && (
               <>
+                {/* Where it is going: from the striker, through the pointer,
+                    on into the board. It is drawn past the pointer because the
+                    striker does not stop there - the line is the shot, not the
+                    drag. */}
                 <line
                   x1={strikerAt.x}
                   y1={strikerAt.y}
-                  x2={strikerAt.x + (strikerAt.x - pull.x) * 2.2}
-                  y2={strikerAt.y + (strikerAt.y - pull.y) * 2.2}
+                  x2={strikerAt.x + (pull.x - strikerAt.x) * 4}
+                  y2={strikerAt.y + (pull.y - strikerAt.y) * 4}
                   stroke="#fbbf24"
                   strokeWidth={0.006}
                   strokeDasharray="0.02 0.015"
                 />
+                <circle cx={pull.x} cy={pull.y} r={0.012} fill="#fbbf24" />
+                {/* How hard, as a bar that fills along the line of the shot.
+                    Power is a distance, and a number nobody can see is a number
+                    nobody can aim with. */}
                 <line
                   x1={strikerAt.x}
                   y1={strikerAt.y}
-                  x2={pull.x}
-                  y2={pull.y}
-                  stroke="#f8fafc66"
-                  strokeWidth={0.004}
+                  x2={strikerAt.x + (pull.x - strikerAt.x) * Math.min(1, power)}
+                  y2={strikerAt.y + (pull.y - strikerAt.y) * Math.min(1, power)}
+                  stroke={power > 0.85 ? '#f87171' : '#fde68a'}
+                  strokeWidth={0.014}
+                  strokeLinecap="round"
                 />
               </>
             )}
@@ -291,13 +307,26 @@ export function CarromBoard({ session, onMove }: Props): JSX.Element {
         {frame !== null
           ? 'Playing the shot…'
           : shooting
-            ? 'Drag the striker along your line to place it, then pull back anywhere on the board and let go.'
+            ? 'Slide the striker along your line to place it. Then press where you want it to go - further out is harder - and let go.'
             : queenPending(session.state) !== -1
               ? 'The queen is uncovered - whoever took her must pocket one of their own next.'
               : 'Watching.'}
       </p>
     </div>
   );
+}
+
+/** How hard a drag of this length hits, 0 to 1. */
+function powerFrom(distance: number): number {
+  return Math.min(1, (distance - MIN_DRAG) / (MAX_DRAG - MIN_DRAG) + 0.08);
+}
+
+/** The power of the drag in progress, for the bar that shows it. */
+function pullPower(striker: { x: number; y: number }, aim: Aim): number {
+  if (aim.pullX === null || aim.pullY === null) return 0;
+  const dx = aim.pullX - striker.x;
+  const dy = aim.pullY - striker.y;
+  return powerFrom(Math.sqrt(dx * dx + dy * dy));
 }
 
 /** A board x, turned into the -1..1 the rules take. */

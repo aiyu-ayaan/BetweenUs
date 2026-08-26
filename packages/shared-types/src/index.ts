@@ -62,6 +62,7 @@ export {
   YARD,
   dieOf,
   lastCapture,
+  lastRoll,
   lastTokenMoved,
   progressOf,
   tokenIndex,

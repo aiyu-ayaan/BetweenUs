@@ -49,7 +49,22 @@ const DIE = TOKENS * 2;
 const SIXES = DIE + 1;
 const LAST_TOKEN = DIE + 2;
 const LAST_CAPTURE = DIE + 3;
-const DATA_LENGTH = DIE + 4;
+/**
+ * The number that was last thrown, and by whom - kept after the die itself is
+ * spent.
+ *
+ * `DIE` is "a number waiting to be used", so it is cleared the moment it is
+ * used *and* the moment it turns out to be unusable. That made the commonest
+ * roll in the game invisible: with four tokens in the yard, anything but a six
+ * clears itself and passes the turn in the same message, so a player pressed
+ * roll, saw nothing at all, and watched the turn go to the other person. These
+ * two exist so the board can say "a three, and nothing could take it".
+ */
+const LAST_ROLL = DIE + 4;
+const LAST_ROLL_SEAT = DIE + 5;
+/** 1 when the last roll could not be played at all. */
+const LAST_ROLL_DEAD = DIE + 6;
+const DATA_LENGTH = DIE + 7;
 
 function create(): GameState {
   const data = Array<number>(DATA_LENGTH).fill(0);
@@ -58,6 +73,9 @@ function create(): GameState {
   data[SIXES] = 0;
   data[LAST_TOKEN] = -1;
   data[LAST_CAPTURE] = -1;
+  data[LAST_ROLL] = 0;
+  data[LAST_ROLL_SEAT] = -1;
+  data[LAST_ROLL_DEAD] = 0;
   return {
     gameId: 'ludo',
     cells: [],
@@ -83,6 +101,19 @@ export function progressOf(state: GameState, seat: number, token: number): numbe
 /** The die showing, or 0 when it has not been rolled this turn. */
 export function dieOf(state: GameState): number {
   return state.data[DIE] ?? 0;
+}
+
+/**
+ * The last number thrown, whether or not it could be used, with who threw it
+ * and whether it was playable. This is what a board shows; `dieOf` is what the
+ * rules are waiting to have spent.
+ */
+export function lastRoll(state: GameState): { value: number; seat: number; dead: boolean } {
+  return {
+    value: state.data[LAST_ROLL] ?? 0,
+    seat: state.data[LAST_ROLL_SEAT] ?? -1,
+    dead: (state.data[LAST_ROLL_DEAD] ?? 0) === 1,
+  };
 }
 
 /** The token that last moved, as a `data` index, or -1. */
@@ -178,6 +209,11 @@ export const ludo: GameRules = {
 
       data[LAST_CAPTURE] = -1;
       data[LAST_TOKEN] = -1;
+      // Recorded before anything else can decide the number is useless, so the
+      // board can always show what was thrown.
+      data[LAST_ROLL] = rolled;
+      data[LAST_ROLL_SEAT] = seat;
+      data[LAST_ROLL_DEAD] = 0;
 
       // Three sixes and the turn is gone. Without it, a run of sixes is a run
       // of free moves and the rule everybody plays by is missing.
@@ -203,6 +239,7 @@ export const ludo: GameRules = {
       if (playable.length === 0) {
         data[DIE] = 0;
         data[SIXES] = 0;
+        data[LAST_ROLL_DEAD] = 1;
         return {
           ...state,
           data,

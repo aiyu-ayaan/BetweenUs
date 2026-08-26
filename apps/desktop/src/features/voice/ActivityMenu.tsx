@@ -17,25 +17,88 @@
  * and in the channel view, and the last thing drawn from shared state appeared
  * twice, side by side, both live. A `useState` belongs to the copy that was
  * clicked.
+ *
+ * ## Why it is a portal
+ *
+ * Because the first version of this was invisible, and an invisible menu looks
+ * exactly like a button that still does nothing.
+ *
+ * The sidebar is a `.panel`, and `.panel` is `overflow-hidden`. An absolutely
+ * positioned menu inside it is clipped by that: it was rendered, it was in the
+ * DOM, and none of it was on screen. So the menu goes to `document.body` and is
+ * positioned `fixed` against the button's own rectangle, which no ancestor can
+ * crop. It flips above or below depending on which side has room, and it is
+ * clamped to the window on the other axis.
  */
-import { useEffect, useRef } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { GAMES, GAME_LIBRARY, type GameId } from '@betweenus/shared-types';
 import { useGameStore } from '../../stores/game';
 import { useListenStore } from '../../stores/listen';
 import { CompassIcon, GamepadIcon, MusicIcon, PlusIcon } from '../../components/icons';
 
-/** Closes on a click anywhere else, and on Escape. Both are expected of a menu. */
-function useDismiss(onClose: () => void): React.RefObject<HTMLDivElement> {
+/** How wide a menu is, and how far it keeps from the edge of the window. */
+const MENU_WIDTH = 264;
+const MARGIN = 8;
+
+/** Where a menu sits, given the button it belongs to, and when it closes. */
+function useAnchored(
+  anchor: React.RefObject<HTMLElement>,
+  onClose: () => void,
+): { box: React.RefObject<HTMLDivElement>; style: React.CSSProperties } {
   const box = useRef<HTMLDivElement>(null);
+  const [style, setStyle] = useState<React.CSSProperties>({
+    position: 'fixed',
+    left: 0,
+    top: 0,
+    opacity: 0,
+  });
+
+  // Measured before the browser paints, so the menu is never in the wrong place
+  // for a frame on its way to the right one.
+  useLayoutEffect(() => {
+    const place = (): void => {
+      const button = anchor.current?.getBoundingClientRect();
+      if (!button) return;
+      const height = box.current?.offsetHeight ?? 320;
+      // Above the button when there is room - these buttons sit at the bottom
+      // of the window - and below it when there is not.
+      const above = button.top - MARGIN - height;
+      const top =
+        above >= MARGIN
+          ? above
+          : Math.min(button.bottom + MARGIN, window.innerHeight - height - MARGIN);
+      const left = Math.max(
+        MARGIN,
+        Math.min(button.left, window.innerWidth - MENU_WIDTH - MARGIN),
+      );
+      setStyle({ position: 'fixed', left, top, width: MENU_WIDTH, opacity: 1, zIndex: 60 });
+    };
+    place();
+    // A menu anchored to a rectangle has to follow it: the window resizes, and
+    // a scroll underneath a `fixed` element leaves it pointing at nothing.
+    window.addEventListener('resize', place);
+    window.addEventListener('scroll', place, true);
+    return () => {
+      window.removeEventListener('resize', place);
+      window.removeEventListener('scroll', place, true);
+    };
+  }, [anchor]);
+
   useEffect(() => {
     const away = (event: MouseEvent): void => {
-      if (box.current && !box.current.contains(event.target as Node)) onClose();
+      const target = event.target as Node;
+      if (box.current?.contains(target)) return;
+      // The button itself is left alone, so its own click closes the menu by
+      // toggling rather than being handled twice and reopening it.
+      if (anchor.current?.contains(target)) return;
+      onClose();
     };
     const key = (event: KeyboardEvent): void => {
       if (event.key === 'Escape') onClose();
     };
-    // Captured, and on the next tick: the click that opened this is still on
-    // its way up, and without the delay the menu closes on its own opening.
+    // On the next tick: the click that opened this is still on its way up, and
+    // without the delay the menu closes on its own opening.
     const timer = window.setTimeout(() => document.addEventListener('mousedown', away), 0);
     document.addEventListener('keydown', key);
     return () => {
@@ -43,12 +106,12 @@ function useDismiss(onClose: () => void): React.RefObject<HTMLDivElement> {
       document.removeEventListener('mousedown', away);
       document.removeEventListener('keydown', key);
     };
-  }, [onClose]);
-  return box;
+  }, [anchor, onClose]);
+
+  return { box, style };
 }
 
-const SHELL =
-  'absolute bottom-full z-30 mb-2 w-64 rounded-xl border border-white/10 bg-surface-900 p-2 shadow-2xl';
+const SHELL = 'rounded-xl border border-white/10 bg-surface-900 p-2 shadow-2xl';
 
 /**
  * The games, as a list you can start one from.
@@ -58,15 +121,18 @@ const SHELL =
  * spent on nothing.
  */
 export function GameMenu({
+  anchor,
   onClose,
   onOpened,
 }: {
+  /** The button this hangs off. The menu is placed against its rectangle. */
+  anchor: React.RefObject<HTMLElement>;
   onClose: () => void;
   /** Called after something is started, so the caller can go to the board. */
   onOpened: () => void;
 }): JSX.Element {
   const session = useGameStore((state) => state.session);
-  const box = useDismiss(onClose);
+  const { box, style } = useAnchored(anchor, onClose);
 
   const start = (gameId: GameId): void => {
     useGameStore.getState().openGame(gameId);
@@ -75,8 +141,8 @@ export function GameMenu({
     onOpened();
   };
 
-  return (
-    <div ref={box} className={SHELL}>
+  return createPortal(
+    <div ref={box} style={style} className={SHELL}>
       <div className="flex items-center gap-2 px-1.5 pb-1.5">
         <GamepadIcon className="h-3.5 w-3.5 text-emerald-300" />
         <span className="text-[11px] font-medium text-slate-300">Play together</span>
@@ -132,7 +198,8 @@ export function GameMenu({
           );
         })}
       </ul>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -144,14 +211,16 @@ export function GameMenu({
  * and carry on talking.
  */
 export function ListenMenu({
+  anchor,
   onClose,
   onOpened,
 }: {
+  anchor: React.RefObject<HTMLElement>;
   onClose: () => void;
   onOpened: () => void;
 }): JSX.Element {
   const session = useListenStore((state) => state.session);
-  const box = useDismiss(onClose);
+  const { box, style } = useAnchored(anchor, onClose);
   const link = useRef<HTMLInputElement>(null);
 
   const open = (tab: 'browse' | 'playing'): void => {
@@ -163,8 +232,8 @@ export function ListenMenu({
 
   const track = session?.queue[session.index];
 
-  return (
-    <div ref={box} className={SHELL}>
+  return createPortal(
+    <div ref={box} style={style} className={SHELL}>
       <div className="flex items-center gap-2 px-1.5 pb-1.5">
         <MusicIcon className="h-3.5 w-3.5 text-amber-300" />
         <span className="text-[11px] font-medium text-slate-300">Listen together</span>
@@ -221,6 +290,7 @@ export function ListenMenu({
           <PlusIcon className="h-3.5 w-3.5" />
         </button>
       </form>
-    </div>
+    </div>,
+    document.body,
   );
 }
