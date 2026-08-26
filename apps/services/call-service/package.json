@@ -7,7 +7,7 @@
     "build": "nest build",
     "dev": "nest start --watch",
     "start": "node dist/main.js",
-    "check": "tsx src/devices.check.ts && tsx src/peer-identity.check.ts && tsx src/listen-session.check.ts && tsx src/modules/calls/ring-cooldown.check.ts && tsx src/modules/calls/usage.check.ts",
+    "check": "tsx src/devices.check.ts && tsx src/peer-identity.check.ts && tsx src/listen-session.check.ts && tsx src/game-session.check.ts && tsx src/modules/calls/ring-cooldown.check.ts && tsx src/modules/calls/usage.check.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {

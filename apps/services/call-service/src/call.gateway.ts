@@ -33,9 +33,11 @@ import { SIGNAL_MAX_PAYLOAD, authenticateHandshake } from '@betweenus/websocket'
 import type {
   CallPeer,
   ClientCallEvent,
+  GameSession,
   ListenSession,
   ServerCallEvent,
 } from '@betweenus/shared-types';
+import { apply as applyGame, type GameAction } from './game-session';
 import { apply as applyListen, type ListenAction } from './listen-session';
 import { otherDevicesInCall } from './devices';
 import { deviceOf, peerIdFor } from './peer-identity';
@@ -131,6 +133,22 @@ export class CallGateway implements OnModuleDestroy {
    * codec meant for speech.
    */
   private readonly listening = new Map<string, ListenSession>();
+
+  /**
+   * channelId -> the game being played in that call, if there is one.
+   *
+   * Here for the third time and for the same reason as `sharing` and
+   * `listening`: two people clicking the same square at the same moment need
+   * one answer, and a mesh has no ordering to produce one. This gateway holds
+   * the sockets, so it is the only thing that can say which click was second -
+   * and it is also the referee, because a board a client could set is a board a
+   * client could set to won.
+   *
+   * Nothing here is persisted. The game lives beside the roster and dies with
+   * the call, which is what it is: three rounds of Connect Four while two
+   * people waited for a build has no meaning tomorrow.
+   */
+  private readonly playing = new Map<string, GameSession>();
 
   /**
    * `channelId\u0000peerId` -> the "they have gone" nobody has been told yet.
@@ -373,6 +391,26 @@ export class CallGateway implements OnModuleDestroy {
         });
         return;
 
+      case 'game.open':
+        this.game(state, { kind: 'open', gameId: event.gameId });
+        return;
+
+      case 'game.sit':
+        this.game(state, { kind: 'sit', seat: event.seat });
+        return;
+
+      case 'game.move':
+        this.game(state, { kind: 'move', move: event.move });
+        return;
+
+      case 'game.rematch':
+        this.game(state, { kind: 'rematch' });
+        return;
+
+      case 'game.close':
+        this.game(state, { kind: 'close' });
+        return;
+
       default:
         this.send(socket, { type: 'error', code: 'UNKNOWN_EVENT', message: 'Unsupported event' });
     }
@@ -515,6 +553,12 @@ export class CallGateway implements OnModuleDestroy {
     const listening = this.listening.get(channelId);
     if (listening) this.send(socket, { type: 'listen.state', session: listening });
 
+    // And whatever is on the table, to the newcomer only. They arrive at the
+    // board as it stands rather than at an empty one, which is the difference
+    // between joining a game and being told there is one.
+    const playing = this.playing.get(channelId);
+    if (playing) this.send(socket, { type: 'game.state', session: playing });
+
     // The log row is opened here because here is where the join is known to
     // have been allowed. If they left while this was being written - a socket
     // that closes mid-await - it is closed straight away rather than left open
@@ -592,6 +636,47 @@ export class CallGateway implements OnModuleDestroy {
     this.broadcast(channelId, { type: 'listen.state', session: after });
   }
 
+  /**
+   * Runs one Play Together action and tells the call what came of it.
+   *
+   * The gateway is the referee, and this is the only place a board is ever
+   * made: a client sends "column four", never a board. The rules come from
+   * `@betweenus/shared-types`, which is also where the clients read them, so
+   * what everybody draws and what is agreed here cannot drift apart.
+   *
+   * Membership is the only permission asked for. Who may *move* is a question
+   * about the seats rather than about the channel, and the reducer answers it.
+   */
+  private game(state: SocketState, action: GameAction): void {
+    if (!state.channelId) return;
+    this.runGame(state.channelId, { userId: state.userId, username: state.username }, action);
+  }
+
+  /**
+   * The same thing, addressed by channel rather than by socket.
+   *
+   * `depart` needs this: it clears `state.channelId` before it does anything
+   * else, so by the time a leaver's chair has to be freed the socket no longer
+   * knows which call it was in.
+   */
+  private runGame(
+    channelId: string,
+    actor: { userId: string; username: string },
+    action: GameAction,
+  ): void {
+    const before = this.playing.get(channelId) ?? null;
+    const after = applyGame(before, action, actor);
+    // Nothing happened: an illegal move, a chair that filled while the click
+    // was in flight, a rematch from somebody watching. Broadcasting anyway
+    // would make every client redraw a board it already has.
+    if (after === before) return;
+
+    if (after) this.playing.set(channelId, after);
+    else this.playing.delete(channelId);
+
+    this.broadcast(channelId, { type: 'game.state', session: after });
+  }
+
   private announceScreen(channelId: string): void {
     const holder = this.sharing.get(channelId);
     const peer = holder ? this.state.get(holder) : undefined;
@@ -662,6 +747,10 @@ export class CallGateway implements OnModuleDestroy {
       // mean the next person to join a quiet channel is played whatever the
       // last people left half-finished.
       this.listening.delete(channelId);
+      // Same for the board: nobody is at the table, so there is no game. A kept
+      // one would be a half-finished Reversi position waiting for whoever walks
+      // into a quiet channel next.
+      this.playing.delete(channelId);
     }
 
     // Somebody who left is not still sharing. Without this the screen stays
@@ -680,8 +769,14 @@ export class CallGateway implements OnModuleDestroy {
     // network, not a decision, and on a phone it is a network that comes back
     // in a second - so the seat is held and the announcement waits. See
     // REJOIN_GRACE_MS.
+    //
+    // The chair at the game table is held on exactly the same terms, and it
+    // has to be: freeing it the instant a socket blinks would let somebody else
+    // sit down mid-game while the player it belongs to is still reconnecting.
+    const actor = { userId: state.userId, username: state.username };
     if (!hold) {
       this.announceDeparture(channelId, state.peerId);
+      this.runGame(channelId, actor, { kind: 'vacate', userId: state.userId });
     } else {
       const key = this.holdKey(channelId, state.peerId);
       const held = state.peerId;
@@ -691,6 +786,7 @@ export class CallGateway implements OnModuleDestroy {
         setTimeout(() => {
           this.departing.delete(key);
           this.announceDeparture(channelId, held);
+          this.runGame(channelId, actor, { kind: 'vacate', userId: actor.userId });
         }, REJOIN_GRACE_MS),
       );
     }
