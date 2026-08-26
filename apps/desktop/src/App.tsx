@@ -443,14 +443,20 @@ function Workbench(): JSX.Element {
 
   return (
     <div className="flex h-full h-[100dvh] flex-col overflow-hidden">
-      <ConnectionNotice />
-      <VersionNotice />
-      <UpdateNotice />
+      {/* The strips go *under* the top bar, not over it. Windows draws the
+          minimise/maximise/close overlay into the top forty pixels of the
+          window whatever is painted there, and TopBar is the only row that
+          leaves a gap for it - a notice on top instead had its button sliced
+          in half by the close button, which is what "Res" in the update strip
+          was. */}
       <TopBar
         onOpenSwitcher={() => setSwitcher(true)}
         sidebarOpen={sidebarOpen}
         onToggleSidebar={() => setSidebarOpen((open) => !open)}
       />
+      <ConnectionNotice />
+      <VersionNotice />
+      <UpdateNotice />
 
       <div className="flex min-h-0 flex-1 gap-1.5 px-1.5 pb-1.5">
         <ServerRail className="hidden md:flex" />
