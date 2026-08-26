@@ -15,6 +15,7 @@ import { ConnectionPanel } from './ConnectionPanel';
 import { ScreenSharePicker } from './ScreenSharePicker';
 import { DevicePicker } from './DevicePicker';
 import { InvitePicker } from './InvitePicker';
+import { GameMenu, ListenMenu } from './ActivityMenu';
 import {
   GamepadIcon,
   MicIcon,
@@ -59,6 +60,9 @@ export function VoiceControls({ size = 'sm' }: { size?: 'sm' | 'lg' }): JSX.Elem
   // Ringing somebody in belongs where the call is, not only in the member list:
   // the full-screen voice view has no member list on it to reach for.
   const [inviting, setInviting] = useState(false);
+  // Which activity menu is open, in *this* copy of the controls. Local, because
+  // this component is rendered twice and a flag in a store would open two.
+  const [menu, setMenu] = useState<'listen' | 'game' | null>(null);
   const warning = healthWarning(stats);
   // Whose screen it is, when it is not ours. The holder is a peer id; the name
   // comes from the tiles, and is absent for the instant between somebody
@@ -149,37 +153,61 @@ export function VoiceControls({ size = 'sm' }: { size?: 'sm' | 'lg' }): JSX.Elem
           live, which is exactly what happened. The panel has one render site,
           in `VoiceChannelView`, and pressing this from the sidebar goes there
           first rather than trying to open one where there is no room for it. */}
-      <ControlButton
-        active={listenOpen}
-        disabled={disabled}
-        pad={pad}
-        label={listening ? 'Listening together' : 'Listen together'}
-        onClick={() => {
-          const next = !listenOpen;
-          useListenStore.getState().setOpen(next);
-          if (next) void openCallChannel();
-        }}
-      >
-        <MusicIcon className={`${icon} ${listening && !listenOpen ? 'text-amber-300' : ''}`} />
-      </ControlButton>
+      <div className="relative">
+        <ControlButton
+          active={listenOpen || menu === 'listen'}
+          disabled={disabled}
+          pad={pad}
+          label={listening ? 'Listening together' : 'Listen together'}
+          onClick={() => {
+            // In the channel view the panel is right there, so the button is a
+            // toggle. In the sidebar there is nothing to toggle - the panel is
+            // drawn somewhere you are not looking - so it opens the options
+            // instead, and picking one takes you to them.
+            if (size === 'lg') {
+              const next = !listenOpen;
+              useListenStore.getState().setOpen(next);
+              if (next) void openCallChannel();
+              return;
+            }
+            setMenu((open) => (open === 'listen' ? null : 'listen'));
+          }}
+        >
+          <MusicIcon className={`${icon} ${listening && !listenOpen ? 'text-amber-300' : ''}`} />
+        </ControlButton>
+        {menu === 'listen' && (
+          <ListenMenu onClose={() => setMenu(null)} onOpened={() => void openCallChannel()} />
+        )}
+      </div>
 
       {/* A board, on the same terms as the music: the gateway referees the
           moves and every window draws the same state, so it costs a few bytes
           a click and works wherever the call does. Green while a game is on the
           table, because somebody else may have started it. */}
-      <ControlButton
-        active={gameOpen}
-        disabled={disabled}
-        pad={pad}
-        label={playing ? 'Playing together' : 'Play together'}
-        onClick={() => {
-          const next = !gameOpen;
-          useGameStore.getState().setOpen(next);
-          if (next) void openCallChannel();
-        }}
-      >
-        <GamepadIcon className={`${icon} ${playing && !gameOpen ? 'text-emerald-300' : ''}`} />
-      </ControlButton>
+      <div className="relative">
+        <ControlButton
+          active={gameOpen || menu === 'game'}
+          disabled={disabled}
+          pad={pad}
+          label={playing ? 'Playing together' : 'Play together'}
+          onClick={() => {
+            if (size === 'lg') {
+              const next = !gameOpen;
+              useGameStore.getState().setOpen(next);
+              if (next) void openCallChannel();
+              return;
+            }
+            // The library, right here. A menu whose only entry is "open the
+            // panel that shows the library" is a click spent on nothing.
+            setMenu((open) => (open === 'game' ? null : 'game'));
+          }}
+        >
+          <GamepadIcon className={`${icon} ${playing && !gameOpen ? 'text-emerald-300' : ''}`} />
+        </ControlButton>
+        {menu === 'game' && (
+          <GameMenu onClose={() => setMenu(null)} onOpened={() => void openCallChannel()} />
+        )}
+      </div>
 
       {/* Amber when something is measurably wrong, so the numbers are worth
           opening before anybody has thought to ask for them. */}
