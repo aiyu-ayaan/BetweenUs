@@ -1360,6 +1360,31 @@ Calls — the second pass over the call screen:
       application. Suppressed on the bubble phase, so React's handlers still run
       and the message menu opens as before. The Electron build has no such menu
       to suppress.
+- [x] **Error 153 on every Listen Together track in a packaged build.** The
+      renderer is served from `file://` there, and a `file://` document sends no
+      `Referer` at all - so the embed could not tell what page it was being put
+      on and refused to configure a player, which is what "Video player
+      configuration error" means. The main process now fills the header in for
+      `/embed/` document requests that arrive without one
+      (`electron/youtube-embed.ts`), and only those. The `origin=` parameter
+      stays omitted on purpose: the player uses it as the target origin for its
+      own messages, so claiming to be on youtube.com there would buy a player
+      that plays and never reports its position.
+- [x] **`EBUSY` on every portable update.** The portable launcher holds its own
+      exe open while the app it unpacked is running, so the one process that
+      could never rename that file was the app doing the renaming - and the
+      update strip said so, with the download left in a folder to be run by
+      hand. The swap is now a PowerShell script that outlives the app: wait for
+      the process to exit, retry while the handle clears, copy the new build
+      over the kept exe, start it (`electron/portable-swap.ts`). Its check runs
+      the real script against an exe held with an exclusive handle by a live
+      process, and asserts first that an in-process rename genuinely fails.
+- [x] **The window controls sat on top of the notice strips.** Windows paints
+      the minimise/maximise/close overlay into the top forty pixels of the
+      window whatever the renderer draws there, and `TopBar` is the only row
+      that leaves a gap for it. The connection, version and update strips were
+      above it, so "Restart and install" came out as "Res". They render under
+      `TopBar` now, with a check on that order.
 
 ---
 

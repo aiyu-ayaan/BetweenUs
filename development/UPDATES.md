@@ -10,7 +10,7 @@ only thing that differs is what a client can do with what it finds.
 | Client | What an update is | Who does the installing |
 | --- | --- | --- |
 | Desktop, installed | `BetweenUs-<version>-Setup.exe` | the NSIS installer |
-| Desktop, portable | `BetweenUs-<version>-Portable.exe` | the app, by swapping its own exe |
+| Desktop, portable | `BetweenUs-<version>-Portable.exe` | a helper script, after the app quits |
 | Android | `BetweenUs-<version>-<abi>.apk` | Android's package installer |
 | Web | a reload | nobody - the deployment was already updated |
 
@@ -51,28 +51,47 @@ one and not the other offers nothing rather than the wrong one.
 **Installed.** Start the setup exe and quit. NSIS closes the running app,
 replaces the installation and starts it again.
 
-**Portable.** There is no installer, so the app does the swap itself:
+**Portable.** There is no installer, and the app cannot do the swap itself.
+The portable launcher keeps its own exe open for as long as the app it
+unpacked is alive, so a rename from inside that app comes back
 
 ```text
-1. rename  BetweenUs.exe  ->  BetweenUs.exe.old     (Windows allows this on a
-                                                     running executable; it does
-                                                     not allow deleting one)
-2. copy    the download   ->  BetweenUs.exe          (copy, not rename: the
+EBUSY: resource busy or locked, rename 'F:\BetweenUs-0.0.1-alpha.11-Portable.exe'
+```
+
+which is what shipped until `electron/portable-swap.ts`. The swap is handed to
+a PowerShell script that outlives the process:
+
+```text
+1. app writes the script to temp, starts it detached, and quits
+2. script waits for the app process to exit          (Wait-Process)
+3. rename  BetweenUs.exe  ->  BetweenUs.exe.old      retried for 30s, because a
+                                                     scanner or a thumbnailer
+                                                     often takes the file the
+                                                     instant the app lets go
+4. copy    the download   ->  BetweenUs.exe          (copy, not rename: the
                                                      download is in the user
                                                      data directory, which may
                                                      be on another volume)
-3. start   BetweenUs.exe, quit
-4. next launch: delete BetweenUs.exe.old
+5. delete  the download and BetweenUs.exe.old
+6. start   BetweenUs.exe
 ```
 
 The user's copy stays exactly where they put it, which is the point of a
-portable build.
+portable build. Paths are passed to the script as parameters rather than
+pasted into its text - a portable build lives in "My Apps" or on a USB stick
+as often as not.
 
-If any step fails - a read-only folder, a locked file, a copy that ran out of
-disk - the download is still on the disk and still runnable, so the file
-manager is opened on it and the reason is shown. Nothing is left half-swapped:
-the rename happens before the copy, so the worst case is the old exe under its
-`.old` name and the new one alongside it.
+If the file is still held after every attempt the script starts the download
+where it sits, so the update still happens; only the tidy filename is lost,
+and the next update swaps that copy normally. If the app cannot start the
+script at all, the download is on the disk and runnable, so the file manager
+is opened on it and the reason is shown.
+
+`electron/portable-swap.check.ts` runs the real script against an exe held
+with an exclusive handle by a live process, and asserts first that an
+in-process rename genuinely fails - so the test proves the fix rather than
+the absence of a lock.
 
 ### Channels
 
@@ -104,7 +123,9 @@ reported rather than retried.
 It would want a `latest.yml` published alongside the assets, a `publish` block
 in the builder config, and a second release path to keep working. And it still
 could not update the portable build, which is half of what ships. The rules
-above are two hundred lines with a self-check (`electron/updates.check.ts`).
+above are two hundred lines with a self-check (`electron/updates.check.ts`),
+and the portable swap it could not do at all is another hundred with one of
+its own (`electron/portable-swap.check.ts`).
 
 ---
 
