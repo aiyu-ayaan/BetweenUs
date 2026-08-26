@@ -8,23 +8,76 @@
  * gateway, a case in the store and a case in the panel, three places that can
  * disagree.
  */
+import { carrom } from './carrom';
 import { connectFour } from './connect-four';
 import { dotsAndBoxes } from './dots-and-boxes';
+import { ludo } from './ludo';
 import { reversi } from './reversi';
 import { ticTacToe } from './tic-tac-toe';
 import type { GameId, GameRules, GameSession, GameState } from './types';
 
 export * from './types';
+export type { Piece, ShotResult } from './carrom-physics';
 export { COLUMNS, ROWS, at as connectFourAt, landing, winningRun } from './connect-four';
 export { CELLS, DOTS, LINES, boxLines, horizontal, vertical } from './dots-and-boxes';
 export { SIZE as REVERSI_SIZE, at as reversiAt, flips, movesFor } from './reversi';
 export { lineWinner, winningLine } from './tic-tac-toe';
+export {
+  BASELINE,
+  BASELINE_HALF_WIDTH,
+  BLACK,
+  PIECES,
+  QUEEN,
+  QUEEN_VALUE,
+  STRIKER,
+  WHITE,
+  aimOf,
+  baselineY,
+  carromPieces,
+  carromShot,
+  coinsOf,
+  lastShot,
+  placeStriker,
+  queenOwner,
+  queenPending,
+} from './carrom';
+export {
+  BOARD,
+  COIN_RADIUS,
+  DT,
+  POCKETS,
+  POCKET_INSET,
+  POCKET_RADIUS,
+  STEPS_PER_FRAME,
+  STRIKER_RADIUS,
+  coin,
+  simulate,
+} from './carrom-physics';
+export {
+  HOME,
+  LAST_TRACK_STEP,
+  ROLL,
+  SAFE,
+  START,
+  TOKENS,
+  TRACK,
+  YARD,
+  dieOf,
+  lastCapture,
+  lastTokenMoved,
+  progressOf,
+  tokenIndex,
+  tokenMoves,
+  trackSquare,
+} from './ludo';
 
 export const GAMES: Record<GameId, GameRules> = {
   'tic-tac-toe': ticTacToe,
   'connect-four': connectFour,
   reversi,
   'dots-and-boxes': dotsAndBoxes,
+  ludo,
+  carrom,
 };
 
 /**
@@ -38,6 +91,8 @@ export const GAME_LIBRARY: GameId[] = [
   'connect-four',
   'reversi',
   'dots-and-boxes',
+  'ludo',
+  'carrom',
 ];
 
 /** The rules for an id, or null when a client sent one this build has never heard of. */

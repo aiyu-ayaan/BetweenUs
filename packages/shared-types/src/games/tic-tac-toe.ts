@@ -24,6 +24,7 @@ function create(): GameState {
     gameId: 'tic-tac-toe',
     cells: Array<number>(9).fill(-1),
     boxes: [],
+    data: [],
     turn: 0,
     winner: null,
     lastMove: null,

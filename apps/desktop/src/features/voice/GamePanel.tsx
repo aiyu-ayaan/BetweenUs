@@ -82,7 +82,7 @@ export function GamePanel(): JSX.Element {
                 be the first thing a breakpoint hides. */}
             <SeatStrip session={session} />
             <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
-              <GameBoard session={session} onMove={(move) => useGameStore.getState().move(move)} />
+              <GameBoard session={session} onMove={(move, params) => useGameStore.getState().move(move, params)} />
               <WaitingOverlay session={session} />
             </div>
           </div>

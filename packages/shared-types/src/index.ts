@@ -23,6 +23,50 @@ export {
   GAMES,
   GAME_LIBRARY,
   gameRules,
+  // Carrom: the board, the physics, and the shot both ends replay
+  BASELINE,
+  BASELINE_HALF_WIDTH,
+  BLACK,
+  BOARD,
+  COIN_RADIUS,
+  DT,
+  PIECES,
+  POCKETS,
+  POCKET_INSET,
+  POCKET_RADIUS,
+  QUEEN,
+  QUEEN_VALUE,
+  STEPS_PER_FRAME,
+  STRIKER,
+  STRIKER_RADIUS,
+  WHITE,
+  aimOf,
+  baselineY,
+  carromPieces,
+  carromShot,
+  coin,
+  coinsOf,
+  lastShot,
+  placeStriker,
+  queenOwner,
+  queenPending,
+  simulate,
+  // Ludo
+  HOME,
+  LAST_TRACK_STEP,
+  ROLL,
+  SAFE,
+  START,
+  TOKENS,
+  TRACK,
+  YARD,
+  dieOf,
+  lastCapture,
+  lastTokenMoved,
+  progressOf,
+  tokenIndex,
+  tokenMoves,
+  trackSquare,
   gameReady,
   gameScore,
   isTurnOf,
@@ -56,6 +100,9 @@ export type {
   GameSeat,
   GameSession,
   GameState,
+  Piece,
+  RandomSource,
+  ShotResult,
 } from './games';
 
 // --- Common ---
@@ -1245,7 +1292,17 @@ export type ClientCallEvent =
   | { type: 'game.open'; gameId: GameId }
   /** Take an empty chair, or move to one. Standing up is `seat: -1`. */
   | { type: 'game.sit'; seat: number }
-  | { type: 'game.move'; move: number }
+  /**
+   * A move, and - for a game where a move is not an index - the numbers that
+   * complete it. A carrom shot is where the striker sits, which way it points
+   * and how hard it is hit; packing three numbers into one would be an encoding
+   * the two ends could disagree about.
+   *
+   * The gateway checks them and runs the physics itself. What is never sent is
+   * a board: a client that could send twenty coin positions could send twenty
+   * coins in the pockets.
+   */
+  | { type: 'game.move'; move: number; params?: number[] }
   /** Deal again with the same people in the same chairs. */
   | { type: 'game.rematch' }
   /** Close the game for everybody. */

@@ -39,6 +39,7 @@ function create(): GameState {
     gameId: 'reversi',
     cells,
     boxes: [],
+    data: [],
     turn: 0,
     winner: null,
     lastMove: null,

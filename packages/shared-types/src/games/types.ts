@@ -25,7 +25,13 @@
  */
 
 /** The games in the library. One id per set of rules. */
-export type GameId = 'tic-tac-toe' | 'connect-four' | 'reversi' | 'dots-and-boxes';
+export type GameId =
+  | 'tic-tac-toe'
+  | 'connect-four'
+  | 'reversi'
+  | 'dots-and-boxes'
+  | 'ludo'
+  | 'carrom';
 
 /** What a game is called and how many chairs it has. */
 export interface GameDefinition {
@@ -46,6 +52,15 @@ export interface GameDefinition {
   /** Roughly how long a game takes, for the card. Cosmetic. */
   length: string;
 }
+
+/**
+ * A source of randomness, supplied by whoever is refereeing.
+ *
+ * `() => number` in [0, 1), like `Math.random`. It is a parameter rather than a
+ * global so that a rules module stays pure and testable: a check can hand it a
+ * sequence and assert on the game that comes out.
+ */
+export type RandomSource = () => number;
 
 /** Somebody sitting in a seat. Null in `GameSession.seats` means an empty chair. */
 export interface GameSeat {
@@ -71,6 +86,17 @@ export interface GameState {
   gameId: GameId;
   cells: number[];
   boxes: number[];
+  /**
+   * Whatever else the game is made of, in numbers of its own choosing.
+   *
+   * Two of the games are not grids at all. Ludo is eight token positions, a
+   * die and a count of sixes; Carrom is twenty pieces at twenty floating-point
+   * positions plus the shot that put them there. Neither fits `cells`, and
+   * neither is worth a discriminated union the gateway would then have to know
+   * how to discriminate - it stores this, broadcasts it, and never looks
+   * inside. Only the rules module for `gameId` reads the numbers.
+   */
+  data: number[];
   /** The seat to move. */
   turn: number;
   /** The seat that won, -1 for a draw, or null while the game is still on. */
@@ -103,10 +129,34 @@ export interface GameRules {
    * do - wrong seat, wrong turn, occupied square, finished game. Null is the
    * gateway's cue to say nothing at all, because an illegal move is a message
    * that raced rather than a thing that happened.
+   *
+   * `params` carries the part of a move that is not a square. A carrom shot is
+   * an aim and a power, which is three numbers rather than one index, and
+   * packing them into `move` would be an encoding two sides could disagree
+   * about. Games that do not need it ignore it.
+   *
+   * `random` is the only impurity any game is allowed, and it is passed in
+   * rather than reached for: the die is rolled by the *gateway*, so the roll is
+   * one number decided in one place. A client that rolled its own would be a
+   * client that decides its own sixes. Given the same `random`, this function
+   * is as deterministic as the rest.
    */
-  apply(state: GameState, seat: number, move: number): GameState | null;
-  /** How the score reads while a game is on, per seat. Discs, boxes, or lines. */
+  apply(
+    state: GameState,
+    seat: number,
+    move: number,
+    params?: number[],
+    random?: RandomSource,
+  ): GameState | null;
+  /** How the score reads while a game is on, per seat. Discs, boxes, or coins. */
   score(state: GameState): number[];
+  /**
+   * True when a move needs numbers the board cannot express as an index - a
+   * carrom shot. The client's board supplies them; nothing else changes.
+   */
+  aimed?: boolean;
+  /** True when the gateway must hand `apply` a random source. Ludo's die. */
+  chance?: boolean;
 }
 
 /**

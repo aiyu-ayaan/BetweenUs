@@ -24,6 +24,7 @@ function create(): GameState {
     gameId: 'connect-four',
     cells: Array<number>(COLUMNS * ROWS).fill(-1),
     boxes: [],
+    data: [],
     turn: 0,
     winner: null,
     lastMove: null,

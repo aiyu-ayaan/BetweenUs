@@ -78,6 +78,33 @@ const REJOIN_GRACE_MS = 15_000;
  */
 const MAX_PEERS_PER_CALL = 8;
 
+/**
+ * How many numbers a move may carry beyond its index. A carrom shot needs
+ * three; nothing needs more, and an array a client chose the length of is an
+ * array a client chose the length of.
+ */
+const MAX_MOVE_PARAMS = 4;
+
+/**
+ * The numbers that complete a move, trimmed to something the rules can be
+ * handed safely.
+ *
+ * This is the one field a client fills in with real numbers rather than an
+ * index, and it goes straight into a physics simulation - so a NaN, an infinity
+ * or an array of ten thousand entries would each be a shot that never comes to
+ * rest, in a loop this process is running. Anything unusable becomes
+ * `undefined`, which every rules module reads as "no aim given" and refuses.
+ */
+function sanitiseParams(params: unknown): number[] | undefined {
+  if (!Array.isArray(params)) return undefined;
+  if (params.length === 0 || params.length > MAX_MOVE_PARAMS) return undefined;
+  const numbers = params.filter(
+    (value): value is number => typeof value === 'number' && Number.isFinite(value),
+  );
+  if (numbers.length !== params.length) return undefined;
+  return numbers;
+}
+
 interface SocketState extends CallPeer {
   channelId: string | null;
   alive: boolean;
@@ -400,7 +427,15 @@ export class CallGateway implements OnModuleDestroy {
         return;
 
       case 'game.move':
-        this.game(state, { kind: 'move', move: event.move });
+        this.game(state, {
+          kind: 'move',
+          move: event.move,
+          // Bounded and cleaned here rather than trusted: this is the one field
+          // a client fills in with real numbers, and it goes straight into a
+          // physics simulation. A NaN, an array of ten thousand, or an infinity
+          // would each be a shot that never comes to rest.
+          params: sanitiseParams(event.params),
+        });
         return;
 
       case 'game.rematch':

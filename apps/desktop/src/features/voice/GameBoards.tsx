@@ -29,10 +29,16 @@ import {
   type GameSession,
 } from '@betweenus/shared-types';
 import { canPlay } from '../../stores/game';
+import { CarromBoard } from './CarromBoard';
+import { LudoBoard } from './LudoBoard';
 
 interface BoardProps {
   session: GameSession;
-  onMove: (move: number) => void;
+  /**
+   * `params` completes a move an index cannot express - a carrom shot's
+   * placement, aim and power. Every other board ignores it.
+   */
+  onMove: (move: number, params?: number[]) => void;
 }
 
 /** The board for whichever game is on the table. */
@@ -46,6 +52,10 @@ export function GameBoard({ session, onMove }: BoardProps): JSX.Element {
       return <ReversiBoard session={session} onMove={onMove} />;
     case 'dots-and-boxes':
       return <DotsAndBoxesBoard session={session} onMove={onMove} />;
+    case 'ludo':
+      return <LudoBoard session={session} onMove={onMove} />;
+    case 'carrom':
+      return <CarromBoard session={session} onMove={onMove} />;
     default:
       // A game this build has never heard of, which is what an older client
       // looking at a newer call looks like. Saying so beats an empty rectangle.

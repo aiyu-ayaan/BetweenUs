@@ -40,6 +40,7 @@ function create(): GameState {
     gameId: 'dots-and-boxes',
     cells: Array<number>(LINES).fill(-1),
     boxes: Array<number>(CELLS * CELLS).fill(-1),
+    data: [],
     turn: 0,
     winner: null,
     lastMove: null,

@@ -21,6 +21,7 @@
  * the listening session. Two call-service replicas would each referee half a
  * game; the upgrade path is the same one - the roster in Redis, this beside it.
  */
+import { randomInt } from 'node:crypto';
 import {
   GAMES,
   gameRules,
@@ -34,11 +35,27 @@ export type GameAction =
   | { kind: 'open'; gameId: GameId }
   /** `seat` of -1 is standing up: still in the call, no longer playing. */
   | { kind: 'sit'; seat: number }
-  | { kind: 'move'; move: number }
+  /**
+   * `params` completes a move that an index cannot express - a carrom shot's
+   * placement, aim and power. The rules validate it; nothing here reads it.
+   */
+  | { kind: 'move'; move: number; params?: number[] }
   | { kind: 'rematch' }
   | { kind: 'close' }
   /** Not a button anybody presses - somebody left the call. See `vacate`. */
   | { kind: 'vacate'; userId: string };
+
+/**
+ * The die, and the only randomness in any of this.
+ *
+ * It is here rather than in the rules because the roll has to be decided once,
+ * by the referee: a client that rolled its own would be a client that decides
+ * its own sixes. `randomInt` rather than `Math.random` because a predictable
+ * die in a game people are competing at is worth one import - the sequence a
+ * seeded PRNG produces can be worked out from the rolls everybody has already
+ * seen.
+ */
+const roll: () => number = () => randomInt(0, 1_000_000) / 1_000_000;
 
 /** Who is acting, from the socket rather than from the message. */
 export interface Actor {
@@ -160,7 +177,7 @@ function mutate(
       // the game could play both sides of it while they waited.
       if (session.seats.some((chair) => chair === null)) return session;
 
-      const state = rules.apply(session.state, seat, action.move);
+      const state = rules.apply(session.state, seat, action.move, action.params, roll);
       // Illegal, or simply late: the rules said no. Saying so back would be a
       // message about a board the sender already has.
       if (!state) return session;

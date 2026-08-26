@@ -41,7 +41,7 @@ interface GameState {
   openGame: (gameId: GameId) => void;
   sit: (seat: number) => void;
   stand: () => void;
-  move: (move: number) => void;
+  move: (move: number, params?: number[]) => void;
   rematch: () => void;
   close: () => void;
 }
@@ -83,7 +83,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   openGame: (gameId) => mesh?.sendGame({ type: 'game.open', gameId }),
   sit: (seat) => mesh?.sendGame({ type: 'game.sit', seat }),
   stand: () => mesh?.sendGame({ type: 'game.sit', seat: -1 }),
-  move: (move) => mesh?.sendGame({ type: 'game.move', move }),
+  move: (move, params) => mesh?.sendGame({ type: 'game.move', move, params }),
   rematch: () => mesh?.sendGame({ type: 'game.rematch' }),
   close: () => mesh?.sendGame({ type: 'game.close' }),
 }));
