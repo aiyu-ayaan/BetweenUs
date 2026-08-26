@@ -53,6 +53,39 @@ export const YOUTUBE_ORIGINS = [
   'https://www.youtube.com',
 ];
 
+/**
+ * The frame this window actually holds, which is not always the embed.
+ *
+ * A packaged desktop build serves this document from `file://`, and a YouTube
+ * embed framed by a `file://` document is refused outright - error 153, "Video
+ * player configuration error", on every track. The player decides that from the
+ * page it is embedded in, so neither a `Referer` header nor a custom `app://`
+ * scheme moves it; both were measured, and both still refuse.
+ *
+ * So on desktop the main process serves one page over loopback and this window
+ * frames that, and it frames the embed. The protocol is unchanged - the same
+ * `listening` handshake and the same commands - it just passes through one more
+ * window, which relays in both directions. See electron/youtube-relay.ts.
+ *
+ * Everywhere with a real origin already - the web client, a dev run over
+ * http://localhost - the embed is framed directly, as before.
+ */
+export function playerSrc(videoId: string, origin: string, relay: string | null): string {
+  if (!relay) return embedUrl(videoId, origin);
+  const separator = relay.includes('?') ? '&' : '?';
+  return `${relay}${separator}v=${encodeURIComponent(videoId)}`;
+}
+
+/** The origins a message may legitimately arrive on, relay included. */
+export function messageOrigins(relay: string | null): string[] {
+  if (!relay) return YOUTUBE_ORIGINS;
+  try {
+    return [...YOUTUBE_ORIGINS, new URL(relay).origin];
+  } catch {
+    return YOUTUBE_ORIGINS;
+  }
+}
+
 /** What the embed reports about itself. */
 export interface YouTubeState {
   /** Seconds, as the player reports them. */
@@ -165,12 +198,17 @@ export class YouTubePlayer {
   private readonly listener: (event: MessageEvent) => void;
   private handshake: number | null = null;
 
+  /** Where a message may come from: the embed, or the relay standing in for it. */
+  private readonly origins: string[];
+
   constructor(
     videoId: string,
     private readonly onState: (state: YouTubeState) => void,
   ) {
+    const relay = typeof window !== 'undefined' ? (window.betweenus?.youtubeRelay ?? null) : null;
+    this.origins = messageOrigins(relay);
     this.frame = document.createElement('iframe');
-    this.frame.src = embedUrl(videoId, window.location.origin);
+    this.frame.src = playerSrc(videoId, window.location.origin, relay);
     this.frame.allow = 'autoplay; encrypted-media; fullscreen; picture-in-picture';
     this.frame.setAttribute('allowfullscreen', 'true');
     // No `sandbox` attribute, and that is deliberate rather than an omission.
@@ -219,7 +257,7 @@ export class YouTubePlayer {
     // The check that makes this safe. Without it any frame or opener on the
     // page can post a message shaped like YouTube's and drive the player - or
     // worse, be believed about a title that is then drawn.
-    if (!YOUTUBE_ORIGINS.includes(event.origin)) return;
+    if (!this.origins.includes(event.origin)) return;
     if (event.source !== this.frame.contentWindow) return;
 
     let message: { event?: string; info?: Record<string, unknown> };

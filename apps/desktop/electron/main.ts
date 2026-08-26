@@ -39,7 +39,7 @@ import {
   youTubeSearch,
   type ViewBounds,
 } from './youtube-view';
-import { EMBED_URLS, embedHeaders } from './youtube-embed';
+import { startYouTubeRelay, type Relay } from './youtube-relay';
 import { swapArguments, swapScript, type SwapOptions } from './portable-swap';
 import {
   channelOf,
@@ -899,6 +899,25 @@ function watchDisplays(): void {
   screen.on('display-metrics-changed', broadcastDisplays);
 }
 
+// --- The Listen Together player's origin -------------------------------------
+//
+// A `file://` renderer cannot frame a YouTube embed: the player refuses to
+// configure itself, which is the "Video player configuration error" people saw
+// on every track in a packaged build. See electron/youtube-relay.ts for what
+// was measured and why the fix is one loopback page rather than moving the
+// whole renderer to an http origin.
+
+let youTubeRelay: Relay | null = null;
+
+/**
+ * Answered synchronously because the renderer needs it before it builds its
+ * first player, and an await there would be a frame pointed at the wrong URL
+ * for the first track of a session. It is one string, once, at preload time.
+ */
+ipcMain.on('youtube:relay', (event) => {
+  event.returnValue = youTubeRelay?.url ?? null;
+});
+
 // --- The real youtube.com, inside the window ---------------------------------
 //
 // The renderer may ask for it to be shown over a rectangle and may drive its
@@ -1446,18 +1465,6 @@ void app.whenReady().then(() => {
     );
   });
 
-  // The Listen Together embed is loaded by a `file://` renderer in a packaged
-  // build, which sends no referrer - and an embed with no referrer is refused
-  // with error 153. See electron/youtube-embed.ts for why this is a header and
-  // not an `origin=` parameter.
-  session.defaultSession.webRequest.onBeforeSendHeaders(
-    { urls: EMBED_URLS },
-    (details, callback) => {
-      const headers = embedHeaders(details.url, details.requestHeaders);
-      callback(headers ? { requestHeaders: headers } : {});
-    },
-  );
-
   session.defaultSession.setDisplayMediaRequestHandler((request, callback) => {
     // Consumed once: a later capture that skipped the picker falls back to the
     // primary screen rather than silently re-sharing the last choice.
@@ -1491,7 +1498,16 @@ void app.whenReady().then(() => {
   // The exe a portable update replaced, now that nothing is running it.
   sweepRetiredPortable();
 
-  createWindow(startedHidden());
+  // Before the window, because the renderer reads the URL out of preload as it
+  // starts. A failure is not fatal: the renderer frames the embed directly,
+  // which is what the web client does and what a dev run over http needs.
+  startYouTubeRelay().then(
+    (relay) => {
+      youTubeRelay = relay;
+      createWindow(startedHidden());
+    },
+    () => createWindow(startedHidden()),
+  );
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();

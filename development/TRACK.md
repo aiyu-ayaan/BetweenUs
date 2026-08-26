@@ -1360,16 +1360,30 @@ Calls — the second pass over the call screen:
       application. Suppressed on the bubble phase, so React's handlers still run
       and the message menu opens as before. The Electron build has no such menu
       to suppress.
-- [x] **Error 153 on every Listen Together track in a packaged build.** The
-      renderer is served from `file://` there, and a `file://` document sends no
-      `Referer` at all - so the embed could not tell what page it was being put
-      on and refused to configure a player, which is what "Video player
-      configuration error" means. The main process now fills the header in for
-      `/embed/` document requests that arrive without one
-      (`electron/youtube-embed.ts`), and only those. The `origin=` parameter
-      stays omitted on purpose: the player uses it as the target origin for its
-      own messages, so claiming to be on youtube.com there would buy a player
-      that plays and never reports its position.
+- [x] **Error 153 on every Listen Together track in a packaged build.** A
+      packaged build serves the renderer from `file://`, and a YouTube embed
+      framed by a `file://` document is refused outright - "Video player
+      configuration error" over a black frame, on every track. Two obvious
+      fixes were measured and neither works: filling in the `Referer` header
+      moves the refusal from 153 to 152 and fetches no media at all, and
+      serving the renderer from a custom `app://` scheme registered standard
+      and secure behaves identically. Only an `http`/`https` ancestor counts.
+
+      So the main process serves one page over loopback -
+      `http://127.0.0.1:<port>`, a port the OS picks, behind a random path -
+      and the renderer frames that; the page frames the embed and relays
+      messages both ways, checking origin and source in each direction. The
+      protocol in `services/youtube.ts` is unchanged and the app's own origin
+      does not move, which is the point: serving the whole renderer over
+      loopback would work too and would move every user's device identity,
+      endpoint and settings to a new origin - a re-login and a re-keyed E2EE
+      device for a music player. Where the origin is real already - the web
+      client, a dev run - the embed is framed directly, as before.
+
+      Checked end to end under Electron with the real `YouTubePlayer`, from a
+      `file://` document: position, duration and title arrive and the media
+      requests flow (`electron/youtube-relay.check.ts`,
+      `src/services/youtube.check.ts`).
 - [x] **`EBUSY` on every portable update.** The portable launcher holds its own
       exe open while the app it unpacked is running, so the one process that
       could never rename that file was the app doing the renaming - and the

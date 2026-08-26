@@ -144,6 +144,13 @@ interface Window {
     updateInstall?: () => Promise<{ started: boolean; reason?: string }>;
 
     /**
+     * Where the Listen Together player lives - a loopback page the main
+     * process serves, because a `file://` document cannot frame a YouTube
+     * embed. Null when there is none, and the embed is framed directly.
+     */
+    youtubeRelay?: string | null;
+
+    /**
      * The real youtube.com, shown over a rectangle of this window.
      *
      * All optional: this is the Electron bridge, and a browser tab has none of

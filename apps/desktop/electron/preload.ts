@@ -223,6 +223,21 @@ const api = {
     ipcRenderer.invoke('update:install'),
 
   /**
+   * Where the Listen Together player lives.
+   *
+   * A `file://` document cannot frame a YouTube embed - the player refuses to
+   * configure itself - so the main process serves one page over loopback and
+   * the renderer frames that instead. Null when the relay could not start, and
+   * the renderer then frames the embed directly, which is right for a dev run
+   * and for the web client.
+   *
+   * Synchronous on purpose: the first player is built before any promise here
+   * could settle, and a frame pointed at the wrong URL for the first track is
+   * exactly the bug this is fixing.
+   */
+  youtubeRelay: (ipcRenderer.sendSync('youtube:relay') as string | null) ?? null,
+
+  /**
    * The real youtube.com, shown over a rectangle of this window.
    *
    * Desktop only, and unavoidably so: youtube.com refuses to be framed, so a
