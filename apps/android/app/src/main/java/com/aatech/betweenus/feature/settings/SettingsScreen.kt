@@ -92,6 +92,7 @@ fun SettingsScreen(
     onPermissions: () -> Unit,
     onAutoUpdate: () -> Unit,
     onCallUsage: () -> Unit,
+    onThemes: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -572,220 +573,15 @@ fun SettingsScreen(
             SectionLabel("Appearance")
             val currentTheme by ThemePreferences.selectedTheme.collectAsState()
             val followSys by ThemePreferences.followSystem.collectAsState()
-            val currentAccent by ThemePreferences.customAccentId.collectAsState()
+            val activeDef = ANDROID_THEMES[currentTheme] ?: ANDROID_THEMES["dark"]!!
 
             ListRow(
-                title = "Sync with system theme",
-                subtitle = "Switch between Daylight and dark themes based on Android system appearance",
+                title = "Themes & appearance",
+                subtitle = "${activeDef.name} · ${if (followSys) "Sync with system" else activeDef.category} · 16 themes",
                 leading = { BetweenUsIcon(BetweenUsIcons.Palette) },
-                trailing = {
-                    Switch(
-                        checked = followSys,
-                        onCheckedChange = { ThemePreferences.setFollowSystem(it) },
-                        colors = switchColours(),
-                    )
-                },
+                trailing = { BetweenUsIcon(BetweenUsIcons.ChevronRight, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
+                onClick = onThemes,
             )
-
-            var themeCategory by remember { mutableStateOf("all") }
-            val themeList = remember { ANDROID_THEMES.values.toList() }
-            val filteredAndroidThemes = remember(themeCategory) {
-                themeList.filter { theme ->
-                    when (themeCategory) {
-                        "all" -> true
-                        "light" -> !theme.isDark
-                        "developer" -> theme.category == "Developer"
-                        "vibrant" -> theme.category == "Vibrant" || theme.category == "Warm" || theme.category == "Pastel"
-                        "signature" -> theme.category == "Signature" || theme.category == "Monochrome" || theme.category == "Palette"
-                        else -> true
-                    }
-                }
-            }
-
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState())
-                    .padding(horizontal = 16.dp, vertical = 6.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                listOf(
-                    "all" to "All (${themeList.size})",
-                    "signature" to "Signature & Dark",
-                    "light" to "Light Mode",
-                    "developer" to "Developer",
-                    "vibrant" to "Vibrant & Warm",
-                ).forEach { (id, label) ->
-                    val isCatActive = themeCategory == id
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(if (isCatActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHigh)
-                            .clickable { themeCategory = id }
-                            .padding(horizontal = 12.dp, vertical = 6.dp),
-                    ) {
-                        Text(
-                            text = label,
-                            style = MaterialTheme.typography.labelMedium,
-                            color = if (isCatActive) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
-            }
-
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 4.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                filteredAndroidThemes.chunked(2).forEach { rowThemes ->
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    ) {
-                        rowThemes.forEach { theme ->
-                            val isSelected = currentTheme == theme.id
-                            Box(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .clip(RoundedCornerShape(12.dp))
-                                    .background(MaterialTheme.colorScheme.surfaceContainer)
-                                    .border(
-                                        width = if (isSelected) 2.dp else 1.dp,
-                                        color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
-                                        shape = RoundedCornerShape(12.dp),
-                                    )
-                                    .clickable { ThemePreferences.setTheme(theme.id) }
-                                    .padding(10.dp),
-                            ) {
-                                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                    Box(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .height(36.dp)
-                                            .clip(RoundedCornerShape(8.dp))
-                                            .background(theme.previewGround),
-                                    ) {
-                                        Row(
-                                            modifier = Modifier
-                                                .fillMaxSize()
-                                                .padding(4.dp),
-                                            horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                            verticalAlignment = Alignment.CenterVertically,
-                                        ) {
-                                            Box(
-                                                modifier = Modifier
-                                                    .width(16.dp)
-                                                    .fillMaxHeight()
-                                                    .clip(RoundedCornerShape(4.dp))
-                                                    .background(theme.palette.surface950),
-                                            )
-                                            Box(
-                                                modifier = Modifier
-                                                    .weight(1f)
-                                                    .fillMaxHeight()
-                                                    .clip(RoundedCornerShape(4.dp))
-                                                    .background(theme.previewSurface),
-                                            ) {
-                                                Box(
-                                                    modifier = Modifier
-                                                        .padding(4.dp)
-                                                        .size(8.dp)
-                                                        .clip(RoundedCornerShape(4.dp))
-                                                        .background(theme.previewAccent),
-                                                )
-                                            }
-                                        }
-                                    }
-
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically,
-                                    ) {
-                                        Text(
-                                            text = theme.name,
-                                            style = MaterialTheme.typography.titleSmall,
-                                            color = MaterialTheme.colorScheme.onSurface,
-                                            maxLines = 1,
-                                            modifier = Modifier.weight(1f, fill = false),
-                                        )
-                                        if (isSelected) {
-                                            BetweenUsIcon(
-                                                BetweenUsIcons.Check,
-                                                tint = MaterialTheme.colorScheme.primary,
-                                                size = 16.dp,
-                                            )
-                                        }
-                                    }
-
-                                    Text(
-                                        text = theme.category,
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                }
-                            }
-                        }
-                        if (rowThemes.size == 1) {
-                            Spacer(Modifier.weight(1f))
-                        }
-                    }
-                }
-            }
-
-            Spacer(Modifier.height(8.dp))
-            Text(
-                text = "Accent tint",
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
-            )
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState())
-                    .padding(horizontal = 16.dp, vertical = 6.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                ACCENT_PRESETS.forEach { preset ->
-                    val isAccentSelected = currentAccent == preset.id
-                    val dotColor = preset.color ?: MaterialTheme.colorScheme.primary
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(16.dp))
-                            .background(
-                                if (isAccentSelected) MaterialTheme.colorScheme.surfaceContainerHigh
-                                else MaterialTheme.colorScheme.surfaceContainer
-                            )
-                            .border(
-                                width = if (isAccentSelected) 2.dp else 1.dp,
-                                color = if (isAccentSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
-                                shape = RoundedCornerShape(16.dp),
-                            )
-                            .clickable { ThemePreferences.setCustomAccent(preset.id) }
-                            .padding(horizontal = 12.dp, vertical = 8.dp),
-                    ) {
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(12.dp)
-                                    .clip(RoundedCornerShape(6.dp))
-                                    .background(dotColor),
-                            )
-                            Text(
-                                text = preset.label,
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onSurface,
-                            )
-                        }
-                    }
-                }
-            }
 
             // --- deployment ---
             SectionLabel("Deployment")

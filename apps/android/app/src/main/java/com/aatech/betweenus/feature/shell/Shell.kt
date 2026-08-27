@@ -60,6 +60,7 @@ import com.aatech.betweenus.feature.settings.BetweenUsPermissions
 import com.aatech.betweenus.feature.settings.CallUsageScreen
 import com.aatech.betweenus.feature.settings.PermissionsScreen
 import com.aatech.betweenus.feature.settings.SettingsScreen
+import com.aatech.betweenus.feature.settings.ThemesScreen
 import com.aatech.betweenus.feature.update.AutoUpdateScreen
 import com.aatech.betweenus.feature.update.UpdateSheet
 import com.aatech.betweenus.feature.update.UpdateState
@@ -444,7 +445,11 @@ fun Shell(user: PublicUser) {
                             onPermissions = { navigation.navigate(Route.Permissions) },
                             onAutoUpdate = { navigation.navigate(Route.AutoUpdate) },
                             onCallUsage = { navigation.navigate(Route.CallUsage) },
+                            onThemes = { navigation.navigate(Route.Themes) },
                         )
+                    }
+                    composable(Route.Themes) {
+                        ThemesScreen(onBack = { navigation.popBackStack() })
                     }
                     composable(Route.CallUsage) {
                         CallUsageScreen(onBack = { navigation.popBackStack() })
@@ -538,6 +543,7 @@ object Route {
     const val Members = "members"
     const val Voice = "voice"
     const val Settings = "settings"
+    const val Themes = "themes"
     const val ServerSettings = "server-settings"
     const val Permissions = "permissions"
     const val AutoUpdate = "auto-update"

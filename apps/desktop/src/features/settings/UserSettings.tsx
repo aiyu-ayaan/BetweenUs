@@ -72,7 +72,7 @@ const SECTIONS: Array<{ id: Section; label: string; icon: typeof UserIcon }> = [
   ...(isDesktopRuntime()
     ? [{ id: 'remote' as const, label: 'Remote Access', icon: MonitorIcon }]
     : []),
-  { id: 'appearance', label: 'Appearance', icon: PaletteIcon },
+  { id: 'appearance', label: 'Themes & Appearance', icon: PaletteIcon },
   { id: 'updates', label: 'Updates', icon: DownloadIcon },
 ];
 
@@ -1570,7 +1570,7 @@ function AppearanceSection(): JSX.Element {
     <>
       <div className="flex items-baseline justify-between gap-4">
         <div>
-          <h1 className="text-xl font-semibold text-slate-50">Appearance</h1>
+          <h1 className="text-xl font-semibold text-slate-50">Themes & Appearance</h1>
           <p className="mt-1.5 text-sm text-slate-400">
             Customize the look and feel of the BetweenUs workbench across floating surfaces, accents, and tones.
           </p>
