@@ -9,8 +9,9 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.systemBarsPadding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.HorizontalDivider
@@ -80,9 +81,13 @@ fun RemoteMachinesScreen(onBack: () -> Unit, onOpenSession: (String) -> Unit) {
 
     LaunchedEffect(Unit) { reload() }
 
-    Column(Modifier.fillMaxSize().background(Ground).systemBarsPadding()) {
+    Column(Modifier.fillMaxSize().background(Ground).navigationBarsPadding()) {
         Row(
-            modifier = Modifier.fillMaxWidth().background(Surface950).padding(4.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(Surface950)
+                .statusBarsPadding()
+                .padding(4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             IconAction(BetweenUsIcons.ChevronLeft, "Back", onBack)
@@ -190,9 +195,13 @@ fun RemoteSessionScreen(machineId: String, onBack: () -> Unit) {
     LaunchedEffect(machineId) { engine.start(machineId) }
     DisposableEffect(engine) { onDispose { engine.dispose() } }
 
-    Column(Modifier.fillMaxSize().background(Ground).systemBarsPadding()) {
+    Column(Modifier.fillMaxSize().background(Ground).navigationBarsPadding()) {
         Row(
-            modifier = Modifier.fillMaxWidth().background(Surface950).padding(4.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(Surface950)
+                .statusBarsPadding()
+                .padding(4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             IconAction(BetweenUsIcons.ChevronLeft, "Back", { engine.end(); onBack() })
