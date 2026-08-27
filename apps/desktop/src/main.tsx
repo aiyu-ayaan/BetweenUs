@@ -2,6 +2,10 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 import './index.css';
+import { initTheme } from './stores/theme';
+
+// Apply saved theme immediately before render
+initTheme();
 
 // The browser context menu has nothing on it we want: reload, view source,
 // inspect. Editable fields keep theirs, because cut/copy/paste live there.

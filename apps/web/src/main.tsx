@@ -11,6 +11,10 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from '../../desktop/src/App';
 import '../../desktop/src/index.css';
+import { initTheme } from '../../desktop/src/stores/theme';
+
+// Apply saved theme immediately before render
+initTheme();
 
 /**
  * No browser context menu, anywhere.

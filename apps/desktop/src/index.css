@@ -5,6 +5,32 @@
 @layer base {
   :root {
     color-scheme: dark;
+    --color-ground: 6 7 10;
+    --color-surface-950: 11 13 18;
+    --color-surface-900: 21 24 31;
+    --color-surface-850: 15 17 23;
+    --color-surface-800: 16 19 25;
+    --color-surface-700: 34 39 52;
+    --color-surface-600: 26 30 39;
+    --color-surface-500: 51 58 74;
+    --color-accent: 124 92 255;
+    --color-accent-hover: 106 68 245;
+    --color-edge: rgba(255, 255, 255, 0.07);
+    --color-slate-50: 248 250 252;
+    --color-slate-100: 241 245 249;
+    --color-slate-200: 226 232 240;
+    --color-slate-300: 203 213 225;
+    --color-slate-400: 148 163 184;
+    --color-slate-500: 100 116 139;
+    --color-slate-600: 71 85 105;
+    --color-slate-700: 51 65 85;
+    --color-slate-800: 30 41 59;
+    --color-slate-900: 15 23 42;
+    --color-slate-950: 2 6 23;
+    --color-row-active: rgba(255, 255, 255, 0.07);
+    --color-row-idle-hover: rgba(255, 255, 255, 0.04);
+    --color-scrollbar-thumb: rgba(255, 255, 255, 0.06);
+    --color-scrollbar-thumb-hover: rgba(255, 255, 255, 0.15);
   }
 
   html,
@@ -23,6 +49,7 @@
     @apply bg-ground text-slate-100 antialiased;
     font-size: 16px;
     line-height: 1.6;
+    transition: background-color 150ms ease, color 150ms ease;
   }
 
   /*
@@ -38,25 +65,13 @@
 
   /*
    * Focus for keyboard users, and only for them.
-   *
-   * The accent ring with an offset drew a heavy blue box around whatever was
-   * clicked - the composer while typing in it, a server pill after a click -
-   * which reads as an error state rather than as focus. What replaces it is a
-   * thin neutral ring, and text fields opt out entirely: a caret is already an
-   * unmistakable focus indicator, and boxing the composer as well is noise.
-   */
-  /*
-   * Chromium's own focus ring is the blue one, and it is drawn on :focus even
-   * where no ring of ours is - a server pill keeps it after a click. Turning
-   * the platform outline off everywhere and drawing our own on :focus-visible
-   * is the only way to be sure which one is on screen.
    */
   :focus {
     outline: none;
   }
 
   :focus-visible {
-    @apply outline-none ring-1 ring-slate-400/50;
+    @apply outline-none ring-1 ring-accent/60;
   }
 
   input:focus,
@@ -68,21 +83,18 @@
   }
 
   /*
-   * A thin thumb that only shows itself on the way past. A 10px bar with a
-   * permanent fill is a second border down the side of every panel.
+   * A thin thumb that only shows itself on the way past.
    */
   ::-webkit-scrollbar {
     width: 8px;
     height: 8px;
   }
   ::-webkit-scrollbar-thumb {
-    @apply rounded-full bg-white/[0.06];
+    border-radius: 9999px;
+    background-color: var(--color-scrollbar-thumb);
   }
   *:hover::-webkit-scrollbar-thumb {
-    @apply bg-white/[0.12];
-  }
-  ::-webkit-scrollbar-thumb:hover {
-    @apply bg-white/20;
+    background-color: var(--color-scrollbar-thumb-hover);
   }
   ::-webkit-scrollbar-track,
   ::-webkit-scrollbar-corner {
@@ -99,6 +111,7 @@
    */
   .panel {
     @apply min-h-0 overflow-hidden rounded-panel border border-edge shadow-panel;
+    transition: background-color 150ms ease, border-color 150ms ease;
   }
 
   /**
@@ -107,11 +120,16 @@
    * looking at".
    */
   .row-active {
-    @apply bg-white/[0.07] text-slate-50;
+    background-color: var(--color-row-active);
+    color: var(--color-slate-50);
   }
 
   .row-idle {
-    @apply text-slate-400 hover:bg-white/[0.04] hover:text-slate-200;
+    color: var(--color-slate-400);
+  }
+  .row-idle:hover {
+    background-color: var(--color-row-idle-hover);
+    color: var(--color-slate-200);
   }
 
   /** The Electron title bar is ours, so it has to say which parts drag. */

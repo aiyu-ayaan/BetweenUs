@@ -26,10 +26,9 @@ export const theme = {
   extend: {
     colors: {
       /**
-       * The ground the panels float on. Nothing else is this dark, which is
-       * what makes a gutter read as a gutter rather than as a border.
+       * The ground the panels float on. Dynamically mapped through theme CSS variables.
        */
-      ground: '#06070a',
+      ground: 'rgb(var(--color-ground) / <alpha-value>)',
 
       // Surface ramp. The names are positional so a component never has to
       // know which shade it is standing on:
@@ -37,17 +36,30 @@ export const theme = {
       //   900 main panel      600 raised card       700 input / hover / active
       //   500 divider, scrollbar thumb, strongest fill
       surface: {
-        950: '#0b0d12',
-        900: '#15181f',
-        850: '#0f1117',
-        800: '#101319',
-        700: '#222734',
-        600: '#1a1e27',
-        500: '#333a4a',
+        950: 'rgb(var(--color-surface-950) / <alpha-value>)',
+        900: 'rgb(var(--color-surface-900) / <alpha-value>)',
+        850: 'rgb(var(--color-surface-850) / <alpha-value>)',
+        800: 'rgb(var(--color-surface-800) / <alpha-value>)',
+        700: 'rgb(var(--color-surface-700) / <alpha-value>)',
+        600: 'rgb(var(--color-surface-600) / <alpha-value>)',
+        500: 'rgb(var(--color-surface-500) / <alpha-value>)',
       },
       accent: {
-        DEFAULT: '#7c5cff',
-        hover: '#6a44f5',
+        DEFAULT: 'rgb(var(--color-accent) / <alpha-value>)',
+        hover: 'rgb(var(--color-accent-hover) / <alpha-value>)',
+      },
+      slate: {
+        50: 'rgb(var(--color-slate-50) / <alpha-value>)',
+        100: 'rgb(var(--color-slate-100) / <alpha-value>)',
+        200: 'rgb(var(--color-slate-200) / <alpha-value>)',
+        300: 'rgb(var(--color-slate-300) / <alpha-value>)',
+        400: 'rgb(var(--color-slate-400) / <alpha-value>)',
+        500: 'rgb(var(--color-slate-500) / <alpha-value>)',
+        600: 'rgb(var(--color-slate-600) / <alpha-value>)',
+        700: 'rgb(var(--color-slate-700) / <alpha-value>)',
+        800: 'rgb(var(--color-slate-800) / <alpha-value>)',
+        900: 'rgb(var(--color-slate-900) / <alpha-value>)',
+        950: 'rgb(var(--color-slate-950) / <alpha-value>)',
       },
       // Status dots, and the only place these hues are used.
       status: {
@@ -63,7 +75,7 @@ export const theme = {
     },
     borderColor: {
       /** The hairline every panel is drawn with. One value, used everywhere. */
-      edge: 'rgba(255, 255, 255, 0.07)',
+      edge: 'var(--color-edge, rgba(255, 255, 255, 0.07))',
     },
     borderRadius: {
       panel: '0.75rem',

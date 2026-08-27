@@ -33,6 +33,7 @@ import { PicturePicker } from '../../components/PicturePicker';
 import {
   BellIcon,
   BetweenUsLogoIcon,
+  CheckIcon,
   ChevronLeftIcon,
   DownloadIcon,
   LogOutIcon,
@@ -44,6 +45,11 @@ import {
   XIcon,
 } from '../../components/icons';
 import { useUpdateStore } from '../../stores/updates';
+import {
+  useThemeStore,
+  THEMES,
+  ACCENT_PRESETS,
+} from '../../stores/theme';
 
 const isMac = typeof window !== 'undefined' && window.betweenus?.platform === 'darwin';
 
@@ -1540,17 +1546,266 @@ const UPDATE_CHANNELS: Array<{ id: DesktopUpdateChannel; label: string; detail: 
 ];
 
 function AppearanceSection(): JSX.Element {
+  const settings = useThemeStore((state) => state.settings);
+  const resolvedTheme = useThemeStore((state) => state.resolvedTheme);
+  const setTheme = useThemeStore((state) => state.setTheme);
+  const setFollowSystem = useThemeStore((state) => state.setFollowSystem);
+  const setCustomAccent = useThemeStore((state) => state.setCustomAccent);
+
+  const themeList = Object.values(THEMES);
+  const activeDef = THEMES[resolvedTheme] ?? THEMES.dark;
+
   return (
     <>
-      <h1 className="text-xl font-semibold text-slate-50">Appearance</h1>
-      <p className="mt-2 text-sm text-slate-400">
-        BetweenUs is dark. A light theme is not built yet, and a switch that does nothing is worse
-        than no switch.
-      </p>
-      <div className="mt-5 flex gap-3">
-        <div className="w-40 overflow-hidden rounded-lg ring-2 ring-accent">
-          <div className="h-20 bg-surface-900" />
-          <p className="bg-surface-800 px-3 py-2 text-sm text-slate-100">Dark</p>
+      <div className="flex items-baseline justify-between gap-4">
+        <div>
+          <h1 className="text-xl font-semibold text-slate-50">Appearance</h1>
+          <p className="mt-1.5 text-sm text-slate-400">
+            Customize the look and feel of the BetweenUs workbench across floating surfaces, accents, and tones.
+          </p>
+        </div>
+      </div>
+
+      {/* System Sync Switch */}
+      <div className="mt-6 rounded-lg bg-surface-800 p-4 border border-edge">
+        <Switch
+          label="Sync with computer theme"
+          hint="Automatically switch BetweenUs between Daylight and dark themes based on your system appearance."
+          checked={settings.followSystem}
+          onChange={setFollowSystem}
+        />
+      </div>
+
+      {/* Themes Gallery */}
+      <div className="mt-8">
+        <div className="flex items-center justify-between">
+          <h2 className="text-xs font-bold uppercase tracking-wide text-slate-400">
+            Theme collection
+          </h2>
+          <span className="text-xs text-slate-400">
+            Active: <span className="font-semibold text-slate-100">{activeDef.name}</span>
+            {settings.followSystem && <span className="ml-1 text-accent">(Auto)</span>}
+          </span>
+        </div>
+
+        <div className="mt-3.5 grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+          {themeList.map((theme) => {
+            const isSelected = resolvedTheme === theme.id;
+            return (
+              <button
+                key={theme.id}
+                type="button"
+                onClick={() => setTheme(theme.id)}
+                aria-pressed={isSelected}
+                className={`group relative flex flex-col text-left cursor-pointer overflow-hidden rounded-xl border transition-all duration-200 focus:outline-none ${
+                  isSelected
+                    ? 'border-accent bg-surface-800 ring-2 ring-accent/30 shadow-md scale-[1.01]'
+                    : 'border-edge bg-surface-850 hover:border-slate-500/30 hover:bg-surface-800 active:scale-[0.99]'
+                }`}
+              >
+                {/* Workbench Mockup Preview */}
+                <div
+                  className="relative h-28 w-full p-2.5 overflow-hidden transition-transform duration-200 group-hover:scale-[1.02]"
+                  style={{ backgroundColor: theme.preview.ground }}
+                >
+                  <div className="flex h-full gap-1.5 rounded-lg overflow-hidden">
+                    {/* Rail mock */}
+                    <div
+                      className="w-5 shrink-0 rounded flex flex-col items-center py-1.5 gap-1 border border-white/5"
+                      style={{ backgroundColor: theme.colors['--color-surface-950'] }}
+                    >
+                      <div
+                        className="h-2 w-2 rounded-full"
+                        style={{ backgroundColor: theme.preview.accent }}
+                      />
+                      <div className="h-1.5 w-2 rounded-sm bg-white/20" />
+                      <div className="h-1.5 w-2 rounded-sm bg-white/10" />
+                    </div>
+
+                    {/* Sidebar mock */}
+                    <div
+                      className="w-14 shrink-0 rounded p-1 flex flex-col gap-1 border border-white/5"
+                      style={{ backgroundColor: theme.colors['--color-surface-800'] }}
+                    >
+                      <div className="h-1.5 w-7 rounded bg-white/30" />
+                      <div
+                        className="h-3 w-full rounded px-1 flex items-center gap-1"
+                        style={{
+                          backgroundColor: isSelected
+                            ? theme.colors['--color-row-active']
+                            : 'transparent',
+                        }}
+                      >
+                        <div
+                          className="h-1 w-1 rounded-full"
+                          style={{ backgroundColor: theme.preview.accent }}
+                        />
+                        <div className="h-1 w-6 rounded bg-white/40" />
+                      </div>
+                      <div className="h-1.5 w-8 rounded bg-white/15 ml-1" />
+                      <div className="h-1.5 w-6 rounded bg-white/15 ml-1" />
+                    </div>
+
+                    {/* Main Surface mock */}
+                    <div
+                      className="flex-1 rounded p-1.5 flex flex-col justify-between border border-white/5"
+                      style={{ backgroundColor: theme.preview.surface }}
+                    >
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-1">
+                          <div
+                            className="h-2.5 w-2.5 rounded-full"
+                            style={{ backgroundColor: theme.preview.accent }}
+                          />
+                          <div className="h-1.5 w-12 rounded bg-white/40" />
+                        </div>
+                        <div className="h-1 w-16 rounded bg-white/20 ml-3.5" />
+                      </div>
+
+                      {/* Mock chat bubble */}
+                      <div
+                        className="self-end rounded px-1.5 py-0.5 max-w-[80%]"
+                        style={{ backgroundColor: theme.preview.accent }}
+                      >
+                        <div className="h-1 w-10 rounded bg-white/90" />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Active Indicator Checkmark */}
+                  {isSelected && (
+                    <div className="absolute top-2.5 right-2.5 flex h-5 w-5 items-center justify-center rounded-full bg-accent text-white shadow-sm ring-2 ring-surface-900">
+                      <CheckIcon className="h-3.5 w-3.5 stroke-[3]" />
+                    </div>
+                  )}
+                </div>
+
+                {/* Card Info */}
+                <div className="flex items-start justify-between gap-2 p-3.5 border-t border-edge bg-surface-850">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold text-sm text-slate-100">{theme.name}</span>
+                      <span className="rounded-full bg-surface-700/80 px-2 py-0.5 text-[10px] font-medium text-slate-300">
+                        {theme.category}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-xs text-slate-400 line-clamp-2 leading-relaxed">
+                      {theme.description}
+                    </p>
+                  </div>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Accent Color Customizer */}
+      <div className="mt-8 border-t border-edge pt-7">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-xs font-bold uppercase tracking-wide text-slate-400">
+              Accent tint
+            </h2>
+            <p className="mt-1 text-sm text-slate-400">
+              Choose a custom accent color for buttons, active channel indicators, and focus rings.
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-4 flex flex-wrap items-center gap-2.5">
+          {ACCENT_PRESETS.map((preset) => {
+            const isPresetActive = settings.customAccentId === preset.id;
+            const swatchBg = preset.value || activeDef.preview.accent;
+
+            return (
+              <button
+                key={preset.id}
+                type="button"
+                onClick={() => setCustomAccent(preset.id)}
+                title={preset.label}
+                aria-label={`Select ${preset.label} accent`}
+                aria-pressed={isPresetActive}
+                className={`group flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium transition-all duration-150 cursor-pointer ${
+                  isPresetActive
+                    ? 'border-accent bg-accent/15 text-slate-100 ring-2 ring-accent/30'
+                    : 'border-edge bg-surface-800 text-slate-300 hover:bg-surface-700 hover:border-slate-500/40'
+                }`}
+              >
+                <span
+                  className="h-3.5 w-3.5 rounded-full shrink-0 shadow-sm flex items-center justify-center"
+                  style={{ backgroundColor: swatchBg }}
+                >
+                  {isPresetActive && (
+                    <span className="h-1.5 w-1.5 rounded-full bg-white shadow-xs" />
+                  )}
+                </span>
+                <span>{preset.label}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Live Preview Sandbox */}
+      <div className="mt-8 border-t border-edge pt-7">
+        <h2 className="text-xs font-bold uppercase tracking-wide text-slate-400">
+          Workbench Preview
+        </h2>
+        <div className="mt-3.5 rounded-xl border border-edge bg-ground p-4">
+          <div className="flex flex-col sm:flex-row gap-3">
+            {/* Sidebar snippet */}
+            <div className="w-full sm:w-48 rounded-lg bg-surface-800 p-2.5 border border-edge flex flex-col gap-1.5">
+              <div className="px-2 py-1 text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                Channels
+              </div>
+              <div className="row-active flex items-center gap-2 rounded px-2 py-1.5 text-xs font-medium cursor-pointer">
+                <span className="text-accent font-bold">#</span>
+                <span>general</span>
+                <span className="ml-auto flex h-2 w-2 rounded-full bg-status-online" />
+              </div>
+              <div className="row-idle flex items-center gap-2 rounded px-2 py-1.5 text-xs font-medium cursor-pointer">
+                <span className="text-slate-500 font-bold">#</span>
+                <span>voice-lounge</span>
+              </div>
+            </div>
+
+            {/* Main panel snippet */}
+            <div className="flex-1 rounded-lg bg-surface-900 p-3.5 border border-edge flex flex-col justify-between gap-3">
+              <div>
+                <div className="flex items-center gap-2 pb-2 border-b border-edge">
+                  <span className="font-semibold text-xs text-slate-100"># general</span>
+                  <span className="text-[11px] text-slate-400">· BetweenUs Team</span>
+                </div>
+                <div className="mt-2.5 space-y-2">
+                  <div className="flex items-start gap-2">
+                    <div className="h-6 w-6 rounded-full bg-accent flex items-center justify-center text-white text-[10px] font-bold">
+                      BU
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-baseline gap-1.5">
+                        <span className="font-medium text-xs text-slate-100">BetweenUs</span>
+                        <span className="text-[10px] text-slate-400">Today at 5:30 PM</span>
+                      </div>
+                      <p className="text-xs text-slate-300 mt-0.5">
+                        Welcome to BetweenUs! Theme colors adjust across all floating surfaces seamlessly.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  className="rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-white transition-colors duration-150 hover:bg-accent-hover active:scale-[0.98]"
+                >
+                  Primary Action
+                </button>
+                <span className="text-xs text-slate-400">Floating panel aesthetic</span>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </>
