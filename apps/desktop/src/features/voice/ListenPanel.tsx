@@ -284,6 +284,7 @@ function Queue(): JSX.Element {
  */
 export function Transport({ compact = false }: { compact?: boolean }): JSX.Element | null {
   const session = useListenStore((state) => state.session);
+  const open = useListenStore((state) => state.open);
   const volume = useListenStore((state) => state.volume);
   const ducking = useListenStore((state) => state.ducking);
   /**
@@ -403,9 +404,20 @@ export function Transport({ compact = false }: { compact?: boolean }): JSX.Eleme
 
       <div className="ml-1 flex min-w-0 flex-1 flex-col gap-0.5">
         <div className="flex items-center gap-2">
-          <span className="truncate text-xs text-slate-200" title={track.title || track.ref}>
-            {track.title || 'Loading…'}
-          </span>
+          {!open ? (
+            <button
+              type="button"
+              onClick={() => useListenStore.getState().setOpen(true)}
+              className="truncate text-left text-xs font-medium text-slate-200 transition-colors hover:text-amber-200 cursor-pointer"
+              title={`${track.title || track.ref} · Click to open Listen Together`}
+            >
+              {track.title || 'Loading…'}
+            </button>
+          ) : (
+            <span className="truncate text-xs text-slate-200" title={track.title || track.ref}>
+              {track.title || 'Loading…'}
+            </span>
+          )}
           <span className="shrink-0 text-[10px] text-slate-600">{track.addedByUsername}</span>
           {blocked && (
             <span
@@ -467,6 +479,16 @@ export function Transport({ compact = false }: { compact?: boolean }): JSX.Eleme
             onChange={(event) => useListenStore.getState().setVolume(Number(event.target.value))}
             className="h-1 w-20 cursor-pointer accent-slate-400"
           />
+          {!open && (
+            <button
+              type="button"
+              onClick={() => useListenStore.getState().setOpen(true)}
+              className="shrink-0 cursor-pointer rounded bg-amber-500/15 px-2 py-1 text-[11px] font-medium text-amber-200 transition-colors hover:bg-amber-500/25"
+              title="Open the Listen Together stage"
+            >
+              Open
+            </button>
+          )}
           <button
             type="button"
             onClick={() => useListenStore.getState().stop()}

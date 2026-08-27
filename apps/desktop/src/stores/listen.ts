@@ -172,7 +172,7 @@ function playerHost(): HTMLDivElement {
   if (host) return host;
   host = document.createElement('div');
   host.style.cssText =
-    'position:fixed;z-index:20;overflow:hidden;background:#000;border-radius:0.5rem;';
+    'position:fixed;top:-9999px;left:-9999px;width:320px;height:180px;pointer-events:none;overflow:hidden;background:#000;border-radius:0.5rem;';
   document.body.append(host);
   follow();
   return host;
@@ -181,15 +181,16 @@ function playerHost(): HTMLDivElement {
 /**
  * Puts the frame where the claimed slot is, or parks it when there is none.
  *
- * Parked is one pixel in a corner rather than `display:none`: a hidden iframe is
- * one Chromium is entitled to stop, and stopping it is the difference between
- * music that carries on while you read a channel and music that does not.
+ * Parked is positioned off-screen with valid video dimensions (320x180) rather
+ * than 1px x 1px with zero opacity: Chromium treats 1px or zero-opacity
+ * cross-origin iframes as invisible/dead, throttling their message loops,
+ * background JS execution, and blocking audio/video playback.
  */
 function follow(): void {
   if (!host) return;
   if (!slot || !slot.isConnected) {
     host.style.cssText =
-      'position:fixed;bottom:0;left:0;width:1px;height:1px;opacity:0;pointer-events:none;overflow:hidden;';
+      'position:fixed;top:-9999px;left:-9999px;width:320px;height:180px;pointer-events:none;overflow:hidden;';
     return;
   }
   const box = slot.getBoundingClientRect();
@@ -334,7 +335,10 @@ export const useListenStore = create<ListenState>((set, get) => ({
     // The stage holds one thing. Opening this folds the games panel away, and
     // opening that folds this one - decided in the stores rather than in the
     // view, because the button exists twice and the rule must not.
-    if (open) useGameStore.getState().setOpen(false);
+    if (open) {
+      useGameStore.getState().setOpen(false);
+      if (get().session) set({ tab: 'playing' });
+    }
     set({ open });
   },
   setTab: (tab) => set({ tab }),
