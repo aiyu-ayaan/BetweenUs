@@ -1,0 +1,3 @@
+[submodule "development"]
+	path = development
+	url = https://github.com/aiyu-ayaan/BetweenUs-Dev-Docs.git
