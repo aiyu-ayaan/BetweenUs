@@ -1555,6 +1555,17 @@ function AppearanceSection(): JSX.Element {
   const themeList = Object.values(THEMES);
   const activeDef = THEMES[resolvedTheme] ?? THEMES.dark;
 
+  const [categoryFilter, setCategoryFilter] = useState<'all' | 'light' | 'developer' | 'vibrant' | 'signature'>('all');
+
+  const filteredThemes = themeList.filter((theme) => {
+    if (categoryFilter === 'all') return true;
+    if (categoryFilter === 'light') return theme.type === 'light';
+    if (categoryFilter === 'developer') return theme.category === 'Developer';
+    if (categoryFilter === 'vibrant') return theme.category === 'Vibrant' || theme.category === 'Warm' || theme.category === 'Pastel';
+    if (categoryFilter === 'signature') return theme.category === 'Signature' || theme.category === 'Monochrome' || theme.category === 'Palette';
+    return true;
+  });
+
   return (
     <>
       <div className="flex items-baseline justify-between gap-4">
@@ -1578,18 +1589,44 @@ function AppearanceSection(): JSX.Element {
 
       {/* Themes Gallery */}
       <div className="mt-8">
-        <div className="flex items-center justify-between">
-          <h2 className="text-xs font-bold uppercase tracking-wide text-slate-400">
-            Theme collection
-          </h2>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <h2 className="text-xs font-bold uppercase tracking-wide text-slate-400">
+              Theme collection ({themeList.length})
+            </h2>
+          </div>
           <span className="text-xs text-slate-400">
             Active: <span className="font-semibold text-slate-100">{activeDef.name}</span>
             {settings.followSystem && <span className="ml-1 text-accent">(Auto)</span>}
           </span>
         </div>
 
+        {/* Category Filter Pills */}
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          {[
+            { id: 'all', label: `All (${themeList.length})` },
+            { id: 'signature', label: 'Signature & Dark' },
+            { id: 'light', label: 'Light Mode' },
+            { id: 'developer', label: 'Developer' },
+            { id: 'vibrant', label: 'Vibrant & Warm' },
+          ].map((cat) => (
+            <button
+              key={cat.id}
+              type="button"
+              onClick={() => setCategoryFilter(cat.id as typeof categoryFilter)}
+              className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors duration-150 cursor-pointer ${
+                categoryFilter === cat.id
+                  ? 'bg-accent text-white'
+                  : 'bg-surface-800 text-slate-300 hover:bg-surface-700 hover:text-slate-100 border border-edge'
+              }`}
+            >
+              {cat.label}
+            </button>
+          ))}
+        </div>
+
         <div className="mt-3.5 grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-          {themeList.map((theme) => {
+          {filteredThemes.map((theme) => {
             const isSelected = resolvedTheme === theme.id;
             return (
               <button
