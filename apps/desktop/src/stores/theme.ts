@@ -30,6 +30,10 @@ export interface ThemeDefinition {
     accent: string;
     text: string;
   };
+  titleBarOverlay: {
+    color: string;
+    symbolColor: string;
+  };
   colors: Record<string, string>;
 }
 
@@ -64,6 +68,10 @@ export const THEMES: Record<ThemeId, ThemeDefinition> = {
       surface: '#15181f',
       accent: '#7c5cff',
       text: '#f1f5f9',
+    },
+    titleBarOverlay: {
+      color: '#06070a',
+      symbolColor: '#94a3b8',
     },
     colors: {
       '--color-ground': '6 7 10',
@@ -106,6 +114,10 @@ export const THEMES: Record<ThemeId, ThemeDefinition> = {
       accent: '#6355d8',
       text: '#0f172a',
     },
+    titleBarOverlay: {
+      color: '#e9edf4',
+      symbolColor: '#0f172a',
+    },
     colors: {
       '--color-ground': '233 237 244',
       '--color-surface-950': '255 255 255',
@@ -146,6 +158,10 @@ export const THEMES: Record<ThemeId, ThemeDefinition> = {
       surface: '#0d0d11',
       accent: '#8b5cf6',
       text: '#f3f4f6',
+    },
+    titleBarOverlay: {
+      color: '#000000',
+      symbolColor: '#9ca3af',
     },
     colors: {
       '--color-ground': '0 0 0',
@@ -188,6 +204,10 @@ export const THEMES: Record<ThemeId, ThemeDefinition> = {
       accent: '#88c0d0',
       text: '#eceff4',
     },
+    titleBarOverlay: {
+      color: '#242933',
+      symbolColor: '#eceff4',
+    },
     colors: {
       '--color-ground': '36 41 51',
       '--color-surface-950': '43 48 60',
@@ -228,6 +248,10 @@ export const THEMES: Record<ThemeId, ThemeDefinition> = {
       surface: '#1e1e2e',
       accent: '#cba6f7',
       text: '#cdd6f4',
+    },
+    titleBarOverlay: {
+      color: '#11111b',
+      symbolColor: '#cdd6f4',
     },
     colors: {
       '--color-ground': '17 17 27',
@@ -270,6 +294,10 @@ export const THEMES: Record<ThemeId, ThemeDefinition> = {
       accent: '#7aa2f7',
       text: '#c0caf5',
     },
+    titleBarOverlay: {
+      color: '#13141c',
+      symbolColor: '#c0caf5',
+    },
     colors: {
       '--color-ground': '19 20 28',
       '--color-surface-950': '22 22 30',
@@ -311,6 +339,10 @@ export const THEMES: Record<ThemeId, ThemeDefinition> = {
       accent: '#f43f5e',
       text: '#ffe4e6',
     },
+    titleBarOverlay: {
+      color: '#0f090d',
+      symbolColor: '#ffe4e6',
+    },
     colors: {
       '--color-ground': '15 9 13',
       '--color-surface-950': '22 13 19',
@@ -351,6 +383,10 @@ export const THEMES: Record<ThemeId, ThemeDefinition> = {
       surface: '#0e1c16',
       accent: '#10b981',
       text: '#d1fae5',
+    },
+    titleBarOverlay: {
+      color: '#060d09',
+      symbolColor: '#d1fae5',
     },
     colors: {
       '--color-ground': '6 13 9',
@@ -437,6 +473,11 @@ function applyThemeToDocument(resolvedThemeId: ThemeId, customAccentId: string):
       target.style.setProperty('--color-accent', themeDef.colors['--color-accent'] ?? '124 92 255');
       target.style.setProperty('--color-accent-hover', themeDef.colors['--color-accent-hover'] ?? '106 68 245');
     }
+  }
+
+  // Update native window titlebar controls overlay (Windows hidden titlebar)
+  if (typeof window !== 'undefined' && window.betweenus?.setTitleBarOverlay) {
+    window.betweenus.setTitleBarOverlay(themeDef.titleBarOverlay);
   }
 }
 

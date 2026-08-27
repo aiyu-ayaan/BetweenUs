@@ -1364,6 +1364,27 @@ ipcMain.on('unread:set', (_event, count: unknown) => {
   if (app.isReady()) app.setBadgeCount(unreadCount);
 });
 
+ipcMain.on('window:titlebar-overlay', (event, overlay: unknown) => {
+  const window = BrowserWindow.fromWebContents(event.sender) ?? mainWindow;
+  if (!window || process.platform !== 'win32') return;
+
+  if (typeof overlay === 'object' && overlay !== null) {
+    const raw = overlay as { color?: string; symbolColor?: string };
+    try {
+      if (typeof (window as unknown as { setTitleBarOverlay?: (opts: unknown) => void }).setTitleBarOverlay === 'function') {
+        (window as unknown as { setTitleBarOverlay: (opts: unknown) => void }).setTitleBarOverlay({
+          color: raw.color ?? '#06070a',
+          symbolColor: raw.symbolColor ?? '#94a3b8',
+          height: 40,
+        });
+      }
+      if (raw.color) {
+        window.setBackgroundColor(raw.color);
+      }
+    } catch {}
+  }
+});
+
 // --- OAuth sign-in ----------------------------------------------------------
 //
 // The provider page opens in the user's real browser, not in an Electron

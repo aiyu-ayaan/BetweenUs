@@ -61,6 +61,8 @@ interface Window {
     onNotificationActivate: (handler: (channelId: string) => void) => () => void;
     /** Total unread, for the tray tooltip and the dock badge. */
     setUnreadCount: (count: number) => void;
+    /** Dynamically adjust window titlebar controls overlay color to match theme. */
+    setTitleBarOverlay?: (overlay: { color: string; symbolColor: string }) => void;
     /** Machine-local switches; account preferences live in notification-service. */
     getAppSettings: () => Promise<{
       launchOnStartup: boolean;

@@ -29,6 +29,10 @@ const api = {
   setUnreadCount: (count: number): void => {
     ipcRenderer.send('unread:set', count);
   },
+  /** Dynamically adjust window titlebar controls overlay color to match the theme. */
+  setTitleBarOverlay: (overlay: { color: string; symbolColor: string }): void => {
+    ipcRenderer.send('window:titlebar-overlay', overlay);
+  },
   /**
    * Machine-local switches: start with the system, and close to the tray.
    * `canManageAutoStart` is false in a development window, which must not
