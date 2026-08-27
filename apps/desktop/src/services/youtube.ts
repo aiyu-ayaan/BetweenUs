@@ -38,21 +38,20 @@
  */
 
 /** The origin the frame is loaded from. */
-export const YOUTUBE_ORIGIN = 'https://www.youtube-nocookie.com';
+export const YOUTUBE_ORIGIN = 'https://www.youtube.com';
 
 /**
  * Origins a message from the player may arrive on.
  *
- * Both, because the embed is served from the no-cookie host and its player code
- * sometimes posts as `www.youtube.com`. Anything else is another frame on the
- * page pretending, and is dropped - a `message` handler that does not check
- * this is a hole any frame can post through.
+ * Both, because the embed is served from youtube.com and its player code
+ * sometimes posts as youtube-nocookie.com or mobile subdomains. Anything else
+ * is another frame on the page pretending, and is dropped.
  */
 export const YOUTUBE_ORIGINS = [
-  'https://www.youtube-nocookie.com',
   'https://www.youtube.com',
-  'https://youtube-nocookie.com',
+  'https://www.youtube-nocookie.com',
   'https://youtube.com',
+  'https://youtube-nocookie.com',
   'https://m.youtube.com',
   'https://music.youtube.com',
 ];
@@ -176,7 +175,10 @@ export function embedUrl(videoId: string, origin: string): string {
     playsinline: '1',
     fs: '1',
   });
-  if (/^https?:\/\//.test(origin)) params.set('origin', origin);
+  if (/^https?:\/\//.test(origin)) {
+    params.set('origin', origin);
+    params.set('widget_referrer', origin);
+  }
   return `${YOUTUBE_ORIGIN}/embed/${videoId}?${params.toString()}`;
 }
 
@@ -215,6 +217,8 @@ export class YouTubePlayer {
     this.frame.src = playerSrc(videoId, window.location.origin, relay);
     this.frame.allow = 'autoplay; encrypted-media; fullscreen; picture-in-picture';
     this.frame.setAttribute('allowfullscreen', 'true');
+    this.frame.setAttribute('referrerpolicy', 'strict-origin-when-cross-origin');
+    this.frame.referrerPolicy = 'strict-origin-when-cross-origin';
     // No `sandbox` attribute, and that is deliberate rather than an omission.
     //
     // It was `sandbox="allow-scripts allow-presentation"` and that is why

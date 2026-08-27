@@ -47,11 +47,15 @@ import { randomBytes } from 'node:crypto';
 
 /** The only origins the relay will speak to, in either direction. */
 export const YOUTUBE_ORIGINS = [
-  'https://www.youtube-nocookie.com',
   'https://www.youtube.com',
+  'https://www.youtube-nocookie.com',
+  'https://youtube.com',
+  'https://youtube-nocookie.com',
+  'https://m.youtube.com',
+  'https://music.youtube.com',
 ];
 
-const EMBED_HOST = 'https://www.youtube-nocookie.com';
+const EMBED_HOST = 'https://www.youtube.com';
 
 /** YouTube's id shape. Anything else is not put into a frame `src`. */
 export function validVideoId(value: string | null): string | null {
@@ -77,7 +81,8 @@ export function relayHtml(): string {
 <head>
 <meta charset="utf-8">
 <title>BetweenUs player</title>
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; frame-src ${EMBED_HOST}; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; frame-src https://www.youtube.com https://www.youtube-nocookie.com https://youtube.com https://youtube-nocookie.com; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
+<meta name="referrer" content="strict-origin-when-cross-origin">
 <style>html,body{margin:0;height:100%;background:#000;overflow:hidden}iframe{border:0;width:100%;height:100%;display:block}</style>
 </head>
 <body>
@@ -99,12 +104,15 @@ export function relayHtml(): string {
     // This page is a real web origin, which is the whole reason it exists, so
     // the player is told what it is and posts its state back to exactly here.
     origin: location.origin,
+    widget_referrer: location.origin,
   });
 
   var frame = document.createElement('iframe');
   frame.title = 'Listen Together';
   frame.allow = 'autoplay; encrypted-media; fullscreen; picture-in-picture';
   frame.setAttribute('allowfullscreen', 'true');
+  frame.setAttribute('referrerpolicy', 'strict-origin-when-cross-origin');
+  frame.referrerPolicy = 'strict-origin-when-cross-origin';
   frame.src = '${EMBED_HOST}/embed/' + id + '?' + params.toString();
   document.body.appendChild(frame);
 

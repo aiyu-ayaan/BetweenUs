@@ -4,7 +4,7 @@ import { relayHtml, startYouTubeRelay, validVideoId, YOUTUBE_ORIGINS } from './y
 // --- The page ---------------------------------------------------------------
 
 const html = relayHtml();
-assert.match(html, /youtube-nocookie\.com\/embed\//, 'it frames the embed');
+assert.match(html, /youtube\.com\/embed\//, 'it frames the embed');
 assert.match(html, /origin: location\.origin/, 'and tells the player where it really is');
 assert.match(
   html,
@@ -20,8 +20,12 @@ assert.equal(validVideoId('dQw4w9WgXcQ'), 'dQw4w9WgXcQ');
 assert.equal(validVideoId('../../etc/passwd'), null);
 assert.equal(validVideoId(null), null);
 assert.deepEqual(YOUTUBE_ORIGINS, [
-  'https://www.youtube-nocookie.com',
   'https://www.youtube.com',
+  'https://www.youtube-nocookie.com',
+  'https://youtube.com',
+  'https://youtube-nocookie.com',
+  'https://m.youtube.com',
+  'https://music.youtube.com',
 ]);
 
 // --- The server -------------------------------------------------------------
