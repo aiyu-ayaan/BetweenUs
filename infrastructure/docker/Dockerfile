@@ -15,7 +15,16 @@
 # `COPY --parents`; it is what lets the dependency stage take the workspace
 # manifests without dragging the source in behind them.
 
-FROM node:20-alpine AS base
+# Base images come through a variable so CI can pull them from somewhere other
+# than Docker Hub. Eighteen build jobs a release, each pulling node and nginx,
+# runs an account past Docker Hub's authenticated pull limit and every job dies
+# on `429 Too Many Requests` - so release.yml points these at the ECR Public
+# mirror of the same official images, which has no such limit. The defaults are
+# Docker Hub, because a local `docker build` is a handful of pulls, not 36.
+ARG NODE_IMAGE=node:20-alpine
+ARG NGINX_IMAGE=nginx:1.27-alpine
+
+FROM ${NODE_IMAGE} AS base
 # Prisma's query engine links against OpenSSL, which the alpine image omits.
 RUN apk add --no-cache openssl && corepack enable
 WORKDIR /repo
@@ -136,13 +145,13 @@ FROM service AS remote-gateway
 WORKDIR /repo/apps/services/remote-gateway
 
 # Static files only: the panel talks to the gateway, which sits in front of it.
-FROM nginx:1.27-alpine AS admin-web
+FROM ${NGINX_IMAGE} AS admin-web
 COPY --from=build /repo/apps/admin/dist /usr/share/nginx/html/admin
 COPY apps/admin/nginx.conf /etc/nginx/conf.d/default.conf
 EXPOSE 80
 
 # The web client, same arrangement, served at the root of the gateway.
-FROM nginx:1.27-alpine AS web
+FROM ${NGINX_IMAGE} AS web
 COPY --from=build /repo/apps/web/dist /usr/share/nginx/html
 COPY apps/web/nginx.conf /etc/nginx/conf.d/default.conf
 EXPOSE 80

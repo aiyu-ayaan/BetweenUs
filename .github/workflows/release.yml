@@ -466,6 +466,14 @@ jobs:
           file: infrastructure/docker/Dockerfile
           target: ${{ matrix.target }}
           platforms: linux/${{ matrix.arch }}
+          # The ECR Public mirror of the same two official images. Eighteen jobs
+          # pulling node and nginx from Docker Hub - twice over, once per arch -
+          # exhausts the account's authenticated pull limit within an hour of
+          # releases, and every job then fails on `429 Too Many Requests` before
+          # it builds anything. The mirror is unmetered and needs no login.
+          build-args: |
+            NODE_IMAGE=public.ecr.aws/docker/library/node:20-alpine
+            NGINX_IMAGE=public.ecr.aws/docker/library/nginx:1.27-alpine
           # Pushed with no tag at all: the blobs and a manifest land in the
           # repository addressable only by digest, and stay off the tag page
           # until `manifest` names them.
