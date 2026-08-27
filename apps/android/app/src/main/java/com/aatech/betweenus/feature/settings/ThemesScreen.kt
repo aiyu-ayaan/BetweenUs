@@ -47,6 +47,7 @@ import com.aatech.betweenus.ui.components.BetweenUsIcon
 import com.aatech.betweenus.ui.components.BetweenUsIcons
 import com.aatech.betweenus.ui.components.IconAction
 import com.aatech.betweenus.ui.components.SectionLabel
+import android.os.Build
 import com.aatech.betweenus.ui.theme.ACCENT_PRESETS
 import com.aatech.betweenus.ui.theme.ANDROID_THEMES
 import com.aatech.betweenus.ui.theme.BetweenUsMotion
@@ -55,7 +56,8 @@ import com.aatech.betweenus.ui.theme.BetweenUsMotion
  * Dedicated Themes & Appearance screen for BetweenUs Android.
  *
  * Provides a dedicated workbench preview, OS scheme synchronization,
- * category filtering, 16 curated theme cards, and custom accent tint pickers.
+ * Material You dynamic theming, category filtering, 16 curated theme cards,
+ * and custom accent tint pickers.
  */
 @Composable
 fun ThemesScreen(
@@ -63,8 +65,10 @@ fun ThemesScreen(
 ) {
     val currentTheme by ThemePreferences.selectedTheme.collectAsState()
     val followSystem by ThemePreferences.followSystem.collectAsState()
+    val dynamicColor by ThemePreferences.dynamicColor.collectAsState()
     val currentAccent by ThemePreferences.customAccentId.collectAsState()
 
+    val isDynamicSupported = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
     val activeDef = ANDROID_THEMES[currentTheme] ?: ANDROID_THEMES["dark"]!!
 
     var categoryFilter by remember { mutableStateOf("all") }
@@ -229,6 +233,50 @@ fun ThemesScreen(
                             uncheckedTrackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
                         ),
                     )
+                }
+            }
+
+            // Dynamic Theming (Material You) Switch
+            if (isDynamicSupported) {
+                Spacer(Modifier.height(10.dp))
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(MaterialTheme.colorScheme.surfaceContainer)
+                        .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(12.dp))
+                        .padding(16.dp),
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(Modifier.weight(1f).padding(end = 12.dp)) {
+                            Text(
+                                text = "Dynamic theming (Material You)",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.onSurface,
+                            )
+                            Spacer(Modifier.height(2.dp))
+                            Text(
+                                text = "Extract palette and accent tones dynamically from your Android wallpaper colors.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Switch(
+                            checked = dynamicColor,
+                            onCheckedChange = { ThemePreferences.setDynamicColor(it) },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
+                                checkedTrackColor = MaterialTheme.colorScheme.primary,
+                                uncheckedThumbColor = MaterialTheme.colorScheme.outline,
+                                uncheckedTrackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                            ),
+                        )
+                    }
                 }
             }
 

@@ -9,7 +9,8 @@ import kotlinx.coroutines.flow.asStateFlow
 /**
  * Persisted theme and appearance preferences for BetweenUs Android.
  *
- * Saves selected theme, system auto-sync state, and custom accent tint.
+ * Saves selected theme, system auto-sync state, dynamic wallpaper theming (Material You),
+ * and custom accent tint.
  */
 object ThemePreferences {
     private lateinit var prefs: SharedPreferences
@@ -17,6 +18,7 @@ object ThemePreferences {
     private const val PREFS_NAME = "betweenus.theme"
     private const val KEY_THEME = "selectedTheme"
     private const val KEY_FOLLOW_SYSTEM = "followSystem"
+    private const val KEY_DYNAMIC_COLOR = "dynamicColor"
     private const val KEY_ACCENT = "customAccentId"
 
     private val _selectedTheme = MutableStateFlow("dark")
@@ -25,6 +27,9 @@ object ThemePreferences {
     private val _followSystem = MutableStateFlow(false)
     val followSystem: StateFlow<Boolean> = _followSystem.asStateFlow()
 
+    private val _dynamicColor = MutableStateFlow(false)
+    val dynamicColor: StateFlow<Boolean> = _dynamicColor.asStateFlow()
+
     private val _customAccentId = MutableStateFlow("default")
     val customAccentId: StateFlow<String> = _customAccentId.asStateFlow()
 
@@ -32,16 +37,19 @@ object ThemePreferences {
         prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         _selectedTheme.value = prefs.getString(KEY_THEME, "dark") ?: "dark"
         _followSystem.value = prefs.getBoolean(KEY_FOLLOW_SYSTEM, false)
+        _dynamicColor.value = prefs.getBoolean(KEY_DYNAMIC_COLOR, false)
         _customAccentId.value = prefs.getString(KEY_ACCENT, "default") ?: "default"
     }
 
     fun setTheme(themeId: String) {
         _selectedTheme.value = themeId
         _followSystem.value = false // Explicit theme selection disables follow system
+        _dynamicColor.value = false
         if (::prefs.isInitialized) {
             prefs.edit()
                 .putString(KEY_THEME, themeId)
                 .putBoolean(KEY_FOLLOW_SYSTEM, false)
+                .putBoolean(KEY_DYNAMIC_COLOR, false)
                 .apply()
         }
     }
@@ -50,6 +58,13 @@ object ThemePreferences {
         _followSystem.value = follow
         if (::prefs.isInitialized) {
             prefs.edit().putBoolean(KEY_FOLLOW_SYSTEM, follow).apply()
+        }
+    }
+
+    fun setDynamicColor(dynamic: Boolean) {
+        _dynamicColor.value = dynamic
+        if (::prefs.isInitialized) {
+            prefs.edit().putBoolean(KEY_DYNAMIC_COLOR, dynamic).apply()
         }
     }
 
