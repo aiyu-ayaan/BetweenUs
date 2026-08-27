@@ -71,9 +71,10 @@ Users can optionally override the theme's default brand accent with personalized
 - Located in `apps/android/ui-common/.../theme/`:
   - [`Color.kt`](file:///D:/VS-Code/AI%20Expermients/Betweenus/apps/android/ui-common/src/main/java/com/aatech/betweenus/ui/theme/Color.kt): Contains all 16 `BetweenUsColorPalette` definitions, `ACCENT_PRESETS`, and `BetweenUsThemeTokens`.
   - [`Theme.kt`](file:///D:/VS-Code/AI%20Expermients/Betweenus/apps/android/ui-common/src/main/java/com/aatech/betweenus/ui/theme/Theme.kt): Generates dynamic `darkColorScheme` and `lightColorScheme` container ramps and provides `LocalBetweenUsColors` CompositionLocal.
+  - **Material You Dynamic Theming (Android 12+)**: Uses `dynamicDarkColorScheme(context)` and `dynamicLightColorScheme(context)` to automatically extract palette and accent tokens from the device's wallpaper.
   - [`ThemePreferences.kt`](file:///D:/VS-Code/AI%20Expermients/Betweenus/apps/android/core/src/main/java/com/aatech/betweenus/core/store/ThemePreferences.kt): Persists choices in `SharedPreferences` with reactive Kotlin `StateFlow`.
 
 ### Dedicated Themes Page & Fluid Motion
 - Accessible via `Route.Themes` in [`ThemesScreen.kt`](file:///D:/VS-Code/AI%20Expermients/Betweenus/apps/android/app/src/main/java/com/aatech/betweenus/feature/settings/ThemesScreen.kt).
-- Features a **Live Preview Sandbox**, **System Sync toggle**, **Animated Category Filter Pills** (`AnimatedContent`), and **2-Column Interactive Theme Cards**.
+- Features a **Live Preview Sandbox**, **System Sync toggle**, **Dynamic Theming (Material You) toggle**, **Animated Category Filter Pills** (`AnimatedContent`), and **2-Column Interactive Theme Cards**.
 - Forward and backward transitions use Material 3 Expressive spring physics (`slideInHorizontally(travel) { it } + fadeIn(fade)` and `popExitTransition = { slideOutHorizontally(travel) { it } + fadeOut(fade) }`).
