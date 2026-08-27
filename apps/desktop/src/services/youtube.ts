@@ -83,7 +83,10 @@ export function playerSrc(videoId: string, origin: string, relay: string | null)
 export function messageOrigins(relay: string | null): string[] {
   if (!relay) return YOUTUBE_ORIGINS;
   try {
-    return [...YOUTUBE_ORIGINS, new URL(relay).origin];
+    const origin = new URL(relay).origin;
+    const localhostOrigin = origin.replace('127.0.0.1', 'localhost');
+    const ipOrigin = origin.replace('localhost', '127.0.0.1');
+    return Array.from(new Set([...YOUTUBE_ORIGINS, origin, localhostOrigin, ipOrigin]));
   } catch {
     return YOUTUBE_ORIGINS;
   }
@@ -97,6 +100,7 @@ export interface YouTubeState {
   playing: boolean;
   ended: boolean;
   title: string | null;
+  error: number | null;
 }
 
 /**
@@ -176,8 +180,9 @@ export function embedUrl(videoId: string, origin: string): string {
     fs: '1',
   });
   if (/^https?:\/\//.test(origin)) {
-    params.set('origin', origin);
-    params.set('widget_referrer', origin);
+    const safeOrigin = origin.replace('127.0.0.1', 'localhost');
+    params.set('origin', safeOrigin);
+    params.set('widget_referrer', safeOrigin);
   }
   return `${YOUTUBE_ORIGIN}/embed/${videoId}?${params.toString()}`;
 }
@@ -197,6 +202,7 @@ export class YouTubePlayer {
     playing: false,
     ended: false,
     title: null,
+    error: null,
   };
   private ready = false;
   /** Commands sent before the frame answered, replayed once it does. */
@@ -279,6 +285,18 @@ export class YouTubePlayer {
     if (message.event === 'onReady' || message.event === 'initialDelivery') {
       this.flush();
     }
+    if (message.event === 'onError') {
+      const code =
+        typeof message.info === 'number'
+          ? message.info
+          : typeof message.info === 'object' && message.info && typeof (message.info as { errorCode?: unknown }).errorCode === 'number'
+            ? (message.info as { errorCode: number }).errorCode
+            : 150;
+      const next = { ...this.state, error: code };
+      this.state = next;
+      this.onState(next);
+      return;
+    }
     if (message.event !== 'infoDelivery' && message.event !== 'initialDelivery') return;
 
     const info = message.info ?? {};
@@ -293,6 +311,10 @@ export class YouTubePlayer {
       // The first state that is not "unstarted" is the frame saying it exists,
       // which is when queued commands are worth sending.
       if (info.playerState !== UNSTARTED) this.flush();
+      if (info.playerState === PLAYING) next.error = null;
+    }
+    if (typeof info.errorCode === 'number') {
+      next.error = info.errorCode;
     }
     const data = info.videoData as { title?: unknown } | undefined;
     if (data && typeof data.title === 'string' && data.title) next.title = data.title;

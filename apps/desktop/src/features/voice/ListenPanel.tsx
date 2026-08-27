@@ -55,6 +55,7 @@ export function ListenPanel(): JSX.Element {
   const session = useListenStore((state) => state.session);
   const tab = useListenStore((state) => state.tab);
   const error = useListenStore((state) => state.error);
+  const currentTrack = session ? session.queue[session.index] : undefined;
 
   const playerSlot = useRef<HTMLDivElement>(null);
   /**
@@ -123,7 +124,33 @@ export function ListenPanel(): JSX.Element {
         </button>
       </div>
 
-      {error && <p className="shrink-0 text-xs text-red-400">{error}</p>}
+      {error && (
+        <div className="flex shrink-0 items-center justify-between gap-3 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="shrink-0 font-medium text-amber-400">Notice:</span>
+            <span className="truncate">{error}</span>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            {currentTrack && (
+              <a
+                href={`https://www.youtube.com/watch?v=${currentTrack.ref}`}
+                target="_blank"
+                rel="noreferrer noopener"
+                className="rounded bg-white/10 px-2 py-1 text-[11px] font-medium text-slate-200 transition-colors hover:bg-white/20"
+              >
+                Watch on YouTube
+              </a>
+            )}
+            <button
+              type="button"
+              onClick={() => useListenStore.getState().skip(1)}
+              className="cursor-pointer rounded bg-amber-500/20 px-2 py-1 text-[11px] font-medium text-amber-200 transition-colors hover:bg-amber-500/30"
+            >
+              Skip Track
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="flex min-h-0 flex-1 gap-3">
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">

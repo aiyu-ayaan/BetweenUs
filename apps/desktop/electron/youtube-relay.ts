@@ -92,20 +92,21 @@ export function relayHtml(): string {
   var id = new URLSearchParams(location.search).get('v') || '';
   if (!/^[A-Za-z0-9_-]{11}$/.test(id)) return;
 
-  var params = new URLSearchParams({
-    enablejsapi: '1',
-    autoplay: '1',
-    controls: '0',
-    disablekb: '1',
-    rel: '0',
-    modestbranding: '1',
-    playsinline: '1',
-    fs: '1',
-    // This page is a real web origin, which is the whole reason it exists, so
-    // the player is told what it is and posts its state back to exactly here.
-    origin: location.origin,
-    widget_referrer: location.origin,
-  });
+    var safeOrigin = location.origin.replace('127.0.0.1', 'localhost');
+    var params = new URLSearchParams({
+      enablejsapi: '1',
+      autoplay: '1',
+      controls: '0',
+      disablekb: '1',
+      rel: '0',
+      modestbranding: '1',
+      playsinline: '1',
+      fs: '1',
+      // The player is told what origin it runs on, mapped to localhost hostname
+      // rather than raw 127.0.0.1 which triggers YouTube's domain filters.
+      origin: safeOrigin,
+      widget_referrer: safeOrigin,
+    });
 
   var frame = document.createElement('iframe');
   frame.title = 'Listen Together';

@@ -36,7 +36,7 @@ assert.equal(
 assert.deepEqual(messageOrigins(null), YOUTUBE_ORIGINS, 'without a relay, YouTube and nobody else');
 assert.deepEqual(
   messageOrigins(relay),
-  [...YOUTUBE_ORIGINS, 'http://127.0.0.1:51234'],
+  [...YOUTUBE_ORIGINS, 'http://127.0.0.1:51234', 'http://localhost:51234'],
   'with one, the relay speaks for the embed and is named exactly - port included',
 );
 assert.deepEqual(messageOrigins('not a url'), YOUTUBE_ORIGINS, 'a URL that is not one adds nobody');
@@ -49,6 +49,8 @@ assert.ok(
 
 const web = new URL(embedUrl('dQw4w9WgXcQ', 'https://app.example'));
 assert.equal(web.searchParams.get('origin'), 'https://app.example');
+const loopback = new URL(embedUrl('dQw4w9WgXcQ', 'http://127.0.0.1:51234'));
+assert.equal(loopback.searchParams.get('origin'), 'http://localhost:51234');
 assert.equal(
   new URL(embedUrl('dQw4w9WgXcQ', 'file://')).searchParams.get('origin'),
   null,

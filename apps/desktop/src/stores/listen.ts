@@ -462,10 +462,24 @@ function onPlayerState(state: ReturnType<YouTubePlayer['current']>): void {
     return;
   }
 
+  if (state.error) {
+    let errorText = 'This video is unavailable for embedding on third-party sites.';
+    if (state.error === 101 || state.error === 150) {
+      errorText = 'The video owner does not allow embedding on third-party sites.';
+    } else if (state.error === 2) {
+      errorText = 'Invalid YouTube video link or ID.';
+    } else if (state.error === 5) {
+      errorText = 'HTML5 playback error on this video.';
+    }
+    if (store.error !== errorText) useListenStore.setState({ error: errorText });
+  } else if (state.playing && store.error) {
+    useListenStore.setState({ error: null });
+  }
+
   // Told to play, loaded, and not playing: the browser refused. Nothing here
   // can fix that - a gesture in this window can, and saying so is the only
   // honest thing to put on screen.
-  if (!session.paused && !state.playing && !state.ended && state.durationMs > 0) {
+  if (!session.paused && !state.playing && !state.ended && state.durationMs > 0 && !state.error) {
     if (!store.needsGesture) useListenStore.setState({ needsGesture: true });
   } else if (store.needsGesture && state.playing) {
     useListenStore.setState({ needsGesture: false });
@@ -518,4 +532,5 @@ function teardownPlayer(): void {
   player?.close();
   player = null;
   loadedTrackId = null;
+  if (useListenStore.getState().error) useListenStore.setState({ error: null });
 }

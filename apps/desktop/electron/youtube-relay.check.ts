@@ -5,7 +5,7 @@ import { relayHtml, startYouTubeRelay, validVideoId, YOUTUBE_ORIGINS } from './y
 
 const html = relayHtml();
 assert.match(html, /youtube\.com\/embed\//, 'it frames the embed');
-assert.match(html, /origin: location\.origin/, 'and tells the player where it really is');
+assert.match(html, /origin: safeOrigin/, 'and tells the player where it really is');
 assert.match(
   html,
   /\^\[A-Za-z0-9_-\]\{11\}\$/,
