@@ -32,6 +32,7 @@ import { ServerIcon } from '../../components/ServerIcon';
 import { useChatStore } from '../../stores/chat';
 import { Avatar } from '../../components/Avatar';
 import {
+  BetweenUsLogoIcon,
   ChevronLeftIcon,
   HashIcon,
   LockIcon,
@@ -42,6 +43,8 @@ import {
   SmileIcon,
   XIcon,
 } from '../../components/icons';
+
+const isMac = typeof window !== 'undefined' && window.betweenus?.platform === 'darwin';
 
 type Section = 'overview' | 'roles' | 'members' | 'channels' | 'invites' | 'emoji';
 
@@ -85,7 +88,7 @@ export function ServerSettings({ onClose }: { onClose: () => void }): JSX.Elemen
       role="dialog"
       aria-modal="true"
       aria-label={`${server.name} settings`}
-      className="fixed inset-0 z-50 flex flex-col md:flex-row animate-fade gap-0 md:gap-1.5 bg-ground p-0 md:p-1.5"
+      className="fixed inset-0 z-50 flex flex-col animate-fade bg-ground"
     >
       {/* Mobile sticky top bar */}
       <div className="md:hidden flex h-12 shrink-0 items-center justify-between border-b border-edge bg-surface-850 px-3 z-10">
@@ -129,10 +132,27 @@ export function ServerSettings({ onClose }: { onClose: () => void }): JSX.Elemen
         ))}
       </div>
 
-      <nav
-        aria-label="Server settings sections"
-        className="panel hidden md:flex w-[232px] shrink-0 flex-col items-end overflow-y-auto bg-surface-800 py-8 pr-2"
-      >
+      {/* Desktop Top Bar / Window Controls Header */}
+      <header className="drag-region hidden md:flex h-10 shrink-0 items-center justify-between px-2.5">
+        <div className={`flex items-center gap-1.5 ${isMac ? 'pl-[72px]' : 'pl-1'}`}>
+          <BetweenUsLogoIcon className="h-[18px] w-[18px] shrink-0 text-accent" aria-hidden="true" />
+          <span className="truncate text-[13px] font-semibold tracking-tight text-slate-300">
+            BetweenUs
+          </span>
+          <span className="text-slate-600 text-xs">/</span>
+          <span className="truncate max-w-[200px] text-[13px] font-medium text-slate-400">
+            {server.name} Settings
+          </span>
+        </div>
+        <div className={`hidden shrink-0 md:block ${isMac ? 'w-36' : 'w-[146px]'}`} />
+      </header>
+
+      {/* Main Settings Panels */}
+      <div className="flex min-h-0 flex-1 gap-0 md:gap-1.5 p-0 md:px-1.5 md:pb-1.5">
+        <nav
+          aria-label="Server settings sections"
+          className="panel hidden md:flex w-[232px] shrink-0 flex-col items-end overflow-y-auto bg-surface-800 py-8 pr-2"
+        >
         <div className="w-[192px]">
           <p className="truncate px-2.5 pb-1 text-xs font-bold uppercase tracking-wide text-slate-400">
             {server.name}
@@ -169,15 +189,25 @@ export function ServerSettings({ onClose }: { onClose: () => void }): JSX.Elemen
           {section === 'emoji' && <EmojiSection />}
         </div>
 
-        <button
-          type="button"
-          onClick={onClose}
-          aria-label="Close server settings"
-          className="hidden md:flex absolute right-8 top-8 h-9 w-9 cursor-pointer items-center justify-center rounded-full border-2 border-slate-500 text-slate-400 transition-colors duration-200 hover:bg-white/[0.07] hover:text-slate-100"
-        >
-          <XIcon className="h-4 w-4" />
-        </button>
+        {/* Desktop Close ESC button */}
+        <div className="fixed top-14 right-8 md:right-10 z-50 hidden md:block no-drag">
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close server settings (Escape)"
+            title="Close server settings (ESC)"
+            className="group flex flex-col items-center gap-1 cursor-pointer select-none focus:outline-none"
+          >
+            <div className="flex h-9 w-9 items-center justify-center rounded-full border-2 border-slate-500 text-slate-400 transition-all duration-150 group-hover:border-slate-300 group-hover:bg-white/[0.08] group-hover:text-slate-100 active:scale-95">
+              <XIcon className="h-4 w-4" />
+            </div>
+            <span className="text-[11px] font-bold tracking-wider text-slate-500 transition-colors duration-150 group-hover:text-slate-300">
+              ESC
+            </span>
+          </button>
+        </div>
       </div>
+    </div>
     </div>
   );
 }
