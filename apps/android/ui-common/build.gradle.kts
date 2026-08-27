@@ -46,6 +46,7 @@ kotlin {
 
 dependencies {
     coreLibraryDesugaring(libs.desugar.jdk.libs)
+    api(project(":core"))
     // Compose is the whole surface of this module - a feature that depends on
     // it is going to write @Composable functions, so it gets the toolkit too.
     api(platform(libs.androidx.compose.bom))

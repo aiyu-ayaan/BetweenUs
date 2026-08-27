@@ -16,6 +16,7 @@ import com.aatech.betweenus.core.store.Cache
 import com.aatech.betweenus.core.store.ChannelFocus
 import com.aatech.betweenus.core.store.AppForeground
 import com.aatech.betweenus.core.store.LastPlace
+import com.aatech.betweenus.core.store.ThemePreferences
 import com.aatech.betweenus.feature.chat.Outbox
 import com.aatech.betweenus.feature.notifications.Push
 import com.aatech.betweenus.feature.settings.CrashReports
@@ -42,6 +43,7 @@ class BetweenUsApp : Application(), ImageLoaderFactory {
         E2ee.init(this)
         LastPlace.init(this)
         Cache.init(this)
+        ThemePreferences.init(this)
         CallTones.init(this)
         AudioPrefs.init(this)
         // What channel this device follows, and whether it has been asked

@@ -1,91 +1,119 @@
 package com.aatech.betweenus.ui.theme
 
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.MaterialExpressiveTheme
 import androidx.compose.material3.MotionScheme
 import androidx.compose.material3.Shapes
 import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import com.aatech.betweenus.core.store.ThemePreferences
 
 /**
- * The BetweenUs theme: Material 3 Expressive, dark, iris.
- *
- * Expressive is three things at once and this file carries all three:
- *
- * - **A wider colour scheme.** Not one accent and a grey, but three tonal
- *   families (iris, teal, rose) and a five-step container ramp, so a screen can
- *   separate regions with tone instead of borders.
- * - **A bigger shape scale.** Corners run to 48dp, and the scale has the
- *   half-steps expressive components morph between when they are pressed.
- * - **A motion scheme.** Spring-based, and slightly overshooting - the thing
- *   that makes the toolkit's own components feel like this rather than like
- *   the default. Components read it through `MaterialTheme.motionScheme`, which
- *   only exists because the theme is built here rather than with
- *   `MaterialTheme`.
- *
- * There is deliberately no light scheme and no dynamic colour: the three
- * clients are meant to look like one product, and Material You would repaint
- * this one to match a wallpaper.
+ * Build a Material3 ColorScheme dynamically derived from a BetweenUsColorPalette.
  */
-private val BetweenUsColors = darkColorScheme(
-    // Primary: the iris the whole product is named after.
-    primary = Iris80,
-    onPrimary = Iris20,
-    primaryContainer = Iris30,
-    onPrimaryContainer = Iris90,
-    inversePrimary = Iris40,
+private fun buildColorScheme(palette: BetweenUsColorPalette): ColorScheme {
+    return if (palette.isDark) {
+        darkColorScheme(
+            primary = palette.accent,
+            onPrimary = palette.surface950,
+            primaryContainer = palette.surface800,
+            onPrimaryContainer = palette.slate50,
+            inversePrimary = palette.accentHover,
 
-    // Secondary: teal. Presence, live state, the quieter of two actions.
-    secondary = Teal80,
-    onSecondary = Teal20,
-    secondaryContainer = Teal30,
-    onSecondaryContainer = Teal90,
+            secondary = palette.accentHover,
+            onSecondary = palette.surface950,
+            secondaryContainer = palette.surface700,
+            onSecondaryContainer = palette.slate100,
 
-    // Tertiary: rose. Mentions, reactions, an incoming call - the moments that
-    // are neither the primary action nor a failure.
-    tertiary = Rose80,
-    onTertiary = Rose20,
-    tertiaryContainer = Rose30,
-    onTertiaryContainer = Rose90,
+            tertiary = Rose80,
+            onTertiary = Rose20,
+            tertiaryContainer = Rose30,
+            onTertiaryContainer = Rose90,
 
-    error = Red80,
-    onError = Red20,
-    errorContainer = Red30,
-    onErrorContainer = Red90,
+            error = Red80,
+            onError = Red20,
+            errorContainer = Red30,
+            onErrorContainer = Red90,
 
-    // The ground, and the ramp of containers standing on it. Expressive builds
-    // depth out of this ramp rather than out of elevation shadows, which is why
-    // there are five of them and why nothing here casts one.
-    background = Neutral4,
-    onBackground = Neutral95,
-    surface = Neutral4,
-    onSurface = Neutral95,
-    surfaceDim = Neutral4,
-    surfaceBright = Neutral24,
-    surfaceContainerLowest = Neutral4,
-    surfaceContainerLow = Neutral6,
-    surfaceContainer = Neutral12,
-    surfaceContainerHigh = Neutral17,
-    surfaceContainerHighest = Neutral22,
-    surfaceVariant = Neutral17,
-    onSurfaceVariant = NeutralVariant60,
+            background = palette.ground,
+            onBackground = palette.slate100,
+            surface = palette.surface900,
+            onSurface = palette.slate100,
+            surfaceDim = palette.ground,
+            surfaceBright = palette.surface700,
+            surfaceContainerLowest = palette.ground,
+            surfaceContainerLow = palette.surface950,
+            surfaceContainer = palette.surface900,
+            surfaceContainerHigh = palette.surface800,
+            surfaceContainerHighest = palette.surface700,
+            surfaceVariant = palette.surface800,
+            onSurfaceVariant = palette.slate400,
 
-    outline = NeutralVariant50,
-    outlineVariant = NeutralVariant30,
+            outline = palette.slate500,
+            outlineVariant = palette.edge,
 
-    inverseSurface = Neutral90,
-    inverseOnSurface = Neutral12,
-    scrim = Iris0,
-)
+            inverseSurface = palette.slate100,
+            inverseOnSurface = palette.surface900,
+            scrim = Color.Black,
+        )
+    } else {
+        lightColorScheme(
+            primary = palette.accent,
+            onPrimary = Color.White,
+            primaryContainer = palette.surface800,
+            onPrimaryContainer = palette.slate50,
+            inversePrimary = palette.accentHover,
+
+            secondary = palette.accentHover,
+            onSecondary = Color.White,
+            secondaryContainer = palette.surface700,
+            onSecondaryContainer = palette.slate100,
+
+            tertiary = Rose40,
+            onTertiary = Color.White,
+            tertiaryContainer = Rose90,
+            onTertiaryContainer = Rose10,
+
+            error = Red60,
+            onError = Color.White,
+            errorContainer = Red90,
+            onErrorContainer = Red10,
+
+            background = palette.ground,
+            onBackground = palette.slate100,
+            surface = palette.surface900,
+            onSurface = palette.slate100,
+            surfaceDim = palette.surface800,
+            surfaceBright = palette.surface950,
+            surfaceContainerLowest = palette.surface950,
+            surfaceContainerLow = palette.surface850,
+            surfaceContainer = palette.surface800,
+            surfaceContainerHigh = palette.surface700,
+            surfaceContainerHighest = palette.surface600,
+            surfaceVariant = palette.surface800,
+            onSurfaceVariant = palette.slate400,
+
+            outline = palette.slate500,
+            outlineVariant = palette.edge,
+
+            inverseSurface = palette.slate900,
+            inverseOnSurface = palette.slate50,
+            scrim = Color.Black,
+        )
+    }
+}
 
 /**
  * The expressive corner scale.
- *
- * The three `*Increased` steps are not decoration: they are the shapes the
- * toolkit's buttons and sheets morph *to* when pressed or dragged, so leaving
- * them at the default would flatten every one of those animations.
  */
 private val BetweenUsShapes = Shapes(
     extraSmall = RoundedCornerShape(4.dp),
@@ -100,15 +128,48 @@ private val BetweenUsShapes = Shapes(
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-fun BetweenUsTheme(content: @Composable () -> Unit) {
-    MaterialExpressiveTheme(
-        colorScheme = BetweenUsColors,
-        typography = BetweenUsTypography,
-        shapes = BetweenUsShapes,
-        // Expressive rather than standard: springier, with a little overshoot.
-        // Every animation the toolkit runs for us - a button's press morph, a
-        // sheet settling, a nav item swapping - is read off this.
-        motionScheme = MotionScheme.expressive(),
-        content = content,
-    )
+fun BetweenUsTheme(
+    content: @Composable () -> Unit,
+) {
+    val selectedTheme by ThemePreferences.selectedTheme.collectAsState()
+    val followSystem by ThemePreferences.followSystem.collectAsState()
+    val customAccentId by ThemePreferences.customAccentId.collectAsState()
+
+    val isSystemDark = isSystemInDarkTheme()
+
+    val effectiveThemeId = if (followSystem) {
+        if (!isSystemDark) "light"
+        else if (selectedTheme == "light") "dark"
+        else selectedTheme
+    } else {
+        selectedTheme
+    }
+
+    val themeDef = ANDROID_THEMES[effectiveThemeId] ?: ANDROID_THEMES["dark"] ?: error("Dark theme missing")
+    val basePalette = themeDef.palette
+
+    val customAccent = ACCENT_PRESETS.find { it.id == customAccentId }?.color
+    val customAccentHover = ACCENT_PRESETS.find { it.id == customAccentId }?.hover
+
+    val activePalette = if (customAccent != null && customAccentHover != null) {
+        basePalette.copy(
+            accent = customAccent,
+            accentHover = customAccentHover,
+        )
+    } else {
+        basePalette
+    }
+
+    BetweenUsThemeTokens.current = activePalette
+    val colorScheme = buildColorScheme(activePalette)
+
+    CompositionLocalProvider(LocalBetweenUsColors provides activePalette) {
+        MaterialExpressiveTheme(
+            colorScheme = colorScheme,
+            typography = BetweenUsTypography,
+            shapes = BetweenUsShapes,
+            motionScheme = MotionScheme.expressive(),
+            content = content,
+        )
+    }
 }
