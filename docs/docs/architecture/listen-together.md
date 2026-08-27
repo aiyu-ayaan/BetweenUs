@@ -372,9 +372,15 @@ video dimensions and standard opacity.
 
 Two neighbours of the same bug, fixed at the same time: `origin=file://` is
 refused by YouTube outright, so a **packaged build would have failed where the
-dev server worked** — the parameter is now sent only for real web origins — and
+dev server worked** — the parameter is now sent only for real web origins (with
+`127.0.0.1` mapped to `localhost` to satisfy YouTube domain origin security) — and
 the embed was never asked to autoplay in its URL, only commanded to over the
 channel that was broken.
+
+When a video owner restricts third-party embedding entirely or YouTube returns
+`onError` (codes 101, 150, 2, 5), the store records the error state and displays
+an actionable notification banner allowing users to skip the track or open it directly
+on YouTube.
 
 Anything a client pastes is parsed to a bare eleven-character video id before it
 is sent, and checked again at the gateway against the provider's own alphabet.
