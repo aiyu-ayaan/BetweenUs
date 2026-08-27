@@ -335,9 +335,12 @@ the embed speaks anyway, and that protocol is about a hundred lines
 - it posts `{event: 'infoDelivery', info: {...}}` with position, player state,
   duration and title.
 
-So the only directive that changed is `frame-src`, which now names
-`youtube-nocookie.com` and nothing else. YouTube's code runs in YouTube's own
-origin, and the entire surface between them is a message channel that checks
+So the directive that changed is `frame-src`, which permits `youtube.com` and
+`youtube-nocookie.com`. The embed uses `https://www.youtube.com/embed/<id>` with
+`referrerpolicy="strict-origin-when-cross-origin"` and `widget_referrer` parameters
+so that Content ID licensed music (e.g. record label videos) plays cleanly without
+"Video unavailable" (error 150/101) restrictions. YouTube's code runs in YouTube's
+own origin, and the entire surface between them is a message channel that checks
 `event.origin` and `event.source` on the way in.
 
 ### The `sandbox` attribute that made it silent
@@ -356,6 +359,16 @@ It also bought nothing. A cross-origin frame is already isolated from the
 embedding document by the same-origin policy, exactly as hard as the sandbox was
 pretending to be. There is no `sandbox` attribute now, and that is deliberate
 rather than an omission.
+
+### Cross-Origin Iframe Parking on the Web
+
+In web browsers, cross-origin iframes that are rendered with `1px x 1px` dimensions
+or `opacity: 0` are flagged as invisible/background frames. Modern browser engines
+aggressively throttle timers and block autoplay/postMessage handshakes on invisible
+cross-origin frames. To prevent the audio stream and handshake from freezing when
+navigating away from the active video stage, the player host element is parked
+off-screen (`top: -9999px; left: -9999px; width: 320px; height: 180px;`) with valid
+video dimensions and standard opacity.
 
 Two neighbours of the same bug, fixed at the same time: `origin=file://` is
 refused by YouTube outright, so a **packaged build would have failed where the
