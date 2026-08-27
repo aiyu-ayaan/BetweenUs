@@ -21,6 +21,7 @@ today, with web and Android planned in the same backend.
 - **[Architecture](/architecture/overview)** — the microservices, the
   peer-to-peer media design, why there is no media server, and the
   [Android client](/architecture/android-client).
+- **[Multi-Theme System](/architecture/themes)** — 16 curated themes, custom accent tints, dynamic OS synchronization, and dedicated appearance settings across desktop, web, and Android.
 - **[Listen Together](/architecture/listen-together)** — synchronized YouTube
   playback inside calls with zero uplink, in-app YouTube browsing, and automatic speech ducking.
 - **[Play Together](/architecture/play-together)** — six board games inside a
@@ -43,6 +44,7 @@ today, with web and Android planned in the same backend.
 ## Core capabilities
 
 - **Authentication & Accounts**: JWT + refresh-token rotation with reuse detection, Google & GitHub OAuth sign-in.
+- **Multi-Theme Engine**: 16 handcrafted dark, light, developer, and vibrant themes with 8 customizable accent tints, OS auto-sync, and dedicated settings pages on all platforms.
 - **Servers & Channels**: Public and private channels, custom roles with colors, per-member overrides, invite links with limits.
 - **End-to-End Encrypted Chat**: Messages, edits, reactions, replies, pins, rich markdown parsing (bulleted/numbered lists, inline marks, code blocks), and encrypted attachments up to 100 MB.
 - **Voice, Video & Screen Share**: Peer-to-peer WebRTC mesh, camera, screen sharing with interactive remote control handover and multi-cursor overlays.

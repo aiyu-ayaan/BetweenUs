@@ -64,6 +64,7 @@ feature/remote          feature/update        feature/voice
   control an enrolled machine; it can't itself be enrolled as a target,
   since nothing on a phone can move a desktop's mouse. Same asymmetry as
   the web client (see [Architecture Overview](/architecture/overview)).
+- **`settings`** — account profile, local crash reporter, call data usage, and a dedicated **`ThemesScreen`** (`Route.Themes`) providing live interactive workbench previews, 16 curated themes across 5 categories, and custom accent tint swatches with spring transitions.
 - **`update`** — checks the app's own GitHub releases on launch (channel:
   alpha/beta/stable), downloads the APK built for the device's real ABI
   rather than the universal one, and hands it to Android's installer.
@@ -73,9 +74,11 @@ feature/remote          feature/update        feature/voice
 
 ### `ui-common`
 
-A Compose design system shared across every feature module, so a screen
-doesn't hand-roll its own button and card styles — the Android equivalent
-of the desktop's shared Tailwind theme.
+A dynamic Material 3 Expressive Compose design system shared across every feature module. Features:
+- **Dynamic 16-Theme Palette Generation** (`BetweenUsColorPalette`, `LocalBetweenUsColors`, and `BetweenUsThemeTokens`).
+- **Accent Customizer**: Dynamic override of active tokens across all Composable surfaces.
+- **Spring Motion Scheme** (`BetweenUsMotion.spatial`, `BetweenUsMotion.effect`) driving predictive push/pop navigation transitions and animated category filtering.
+- **Legacy Compatibility Layer**: Seamlessly binds `Ground`, `Surface*`, `Accent`, and `Slate*` call sites to dynamic active tokens.
 
 ## End-to-end encryption on Android
 
