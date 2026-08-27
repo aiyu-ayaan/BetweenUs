@@ -1,5 +1,54 @@
 # Changelog
 
+## [0.0.1-alpha.15](https://github.com/aiyu-ayaan/BetweenUs/compare/v0.0.1-alpha.14...v0.0.1-alpha.15) (2026-08-27)
+
+### Features
+
+* Add dynamic wallpaper theming (Material You) toggle and system palette generator
+* Add fluid slide & fade transitions and animated theme grid for themes screen
+* Create dedicated theme pages and navigation across all platforms
+* Add 16-theme suite, custom accents, system sync, and appearance settings
+* Expand theme suite to 16 themes with category filtering
+* Add theme suite with system sync and custom accents
+* Enhance user and server settings UI with desktop header and close button
+* Add betweenus skill configuration for agents and claude
+
+### Bug fixes
+
+* Eliminate status bar color seam across chat, friends, servers, and sub-screens
+* Match status bar and toolbar background across settings and themes screens
+* Dynamic status bar icon tinting on light themes & update documentation
+* Sync native window titlebar overlay with active theme
+* Ensure live theme switching with css rules and dual-target property injection
+* Map loopback origins to localhost and handle youtube embed errors gracefully
+* Use youtube.com embed with strict-origin referrer to fix video unavailable error
+* Fix player host offscreen parking and tab switching for web sync
+* Broaden youtube origins and CSP frame-src for web client
+
+### Other changes
+
+* Changes done for new release
+* Document Android Material You dynamic wallpaper theming
+* Update guidelines for AI assistants and contributors in SKILL.md
+* Document loopback origin security mapping and embed error handling
+* Update architecture and development documentation with sync and embed fixes
+* Update references to CLAUDE.md and add commit guidelines
+* Add AGENTS.md symlink pointing to CLAUDE.md
+* Update master reference index and submodule pointer
+* Update development submodule ref to include README
+* Add root CLAUDE.md to repository
+* Organize devdocs folder and link root claude.md
+* Add root CLAUDE.md pointer to private development docs
+* Migrate development documentation and claude.md to private submodule
+
+### Artifacts
+
+| Platform | This release |
+| --- | --- |
+| Server images | Built here |
+| Desktop (Windows) | Built here |
+| Android | Built here |
+
 ## [0.0.1-alpha.14](https://github.com/aiyu-ayaan/BetweenUs/compare/v0.0.1-alpha.13...v0.0.1-alpha.14) (2026-08-26)
 
 ### Features
