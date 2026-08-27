@@ -416,21 +416,27 @@ function applyThemeToDocument(resolvedThemeId: ThemeId, customAccentId: string):
   if (typeof document === 'undefined') return;
 
   const themeDef = THEMES[resolvedThemeId] ?? THEMES.dark;
-  const root = document.documentElement;
+  const targets = [document.documentElement, document.body].filter(Boolean) as HTMLElement[];
 
-  root.setAttribute('data-theme', themeDef.id);
-  root.style.colorScheme = themeDef.type;
+  for (const target of targets) {
+    target.setAttribute('data-theme', themeDef.id);
+    target.style.colorScheme = themeDef.type;
 
-  // Apply CSS color variables
-  for (const [key, value] of Object.entries(themeDef.colors)) {
-    root.style.setProperty(key, value);
-  }
+    // Apply CSS color variables
+    for (const [key, value] of Object.entries(themeDef.colors)) {
+      target.style.setProperty(key, value);
+    }
 
-  // If a custom accent was chosen, override the accent variables
-  const accent = ACCENT_PRESETS.find((preset) => preset.id === customAccentId);
-  if (accent && accent.value) {
-    root.style.setProperty('--color-accent', accent.value);
-    root.style.setProperty('--color-accent-hover', accent.hover);
+    // If a custom accent was chosen, override the accent variables
+    const accent = ACCENT_PRESETS.find((preset) => preset.id === customAccentId);
+    if (accent && accent.value) {
+      target.style.setProperty('--color-accent', accent.value);
+      target.style.setProperty('--color-accent-hover', accent.hover);
+    } else {
+      // Revert to theme's defined accent
+      target.style.setProperty('--color-accent', themeDef.colors['--color-accent'] ?? '124 92 255');
+      target.style.setProperty('--color-accent-hover', themeDef.colors['--color-accent-hover'] ?? '106 68 245');
+    }
   }
 }
 

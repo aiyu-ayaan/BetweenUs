@@ -3,7 +3,9 @@
 @tailwind utilities;
 
 @layer base {
-  :root {
+  :root,
+  :root[data-theme="dark"],
+  [data-theme="dark"] {
     color-scheme: dark;
     --color-ground: 6 7 10;
     --color-surface-950: 11 13 18;
@@ -31,6 +33,223 @@
     --color-row-idle-hover: rgba(255, 255, 255, 0.04);
     --color-scrollbar-thumb: rgba(255, 255, 255, 0.06);
     --color-scrollbar-thumb-hover: rgba(255, 255, 255, 0.15);
+  }
+
+  :root[data-theme="light"],
+  [data-theme="light"] {
+    color-scheme: light;
+    --color-ground: 233 237 244;
+    --color-surface-950: 255 255 255;
+    --color-surface-900: 255 255 255;
+    --color-surface-850: 248 250 252;
+    --color-surface-800: 241 245 249;
+    --color-surface-700: 226 232 240;
+    --color-surface-600: 203 213 225;
+    --color-surface-500: 148 163 184;
+    --color-accent: 99 85 216;
+    --color-accent-hover: 80 66 196;
+    --color-edge: rgba(15, 23, 42, 0.09);
+    --color-slate-50: 9 13 22;
+    --color-slate-100: 15 23 42;
+    --color-slate-200: 30 41 59;
+    --color-slate-300: 51 65 85;
+    --color-slate-400: 100 116 139;
+    --color-slate-500: 148 163 184;
+    --color-slate-600: 203 213 225;
+    --color-slate-700: 226 232 240;
+    --color-slate-800: 241 245 249;
+    --color-slate-900: 248 250 252;
+    --color-slate-950: 255 255 255;
+    --color-row-active: rgba(15, 23, 42, 0.06);
+    --color-row-idle-hover: rgba(15, 23, 42, 0.035);
+    --color-scrollbar-thumb: rgba(15, 23, 42, 0.12);
+    --color-scrollbar-thumb-hover: rgba(15, 23, 42, 0.22);
+  }
+
+  :root[data-theme="midnight"],
+  [data-theme="midnight"] {
+    color-scheme: dark;
+    --color-ground: 0 0 0;
+    --color-surface-950: 6 6 8;
+    --color-surface-900: 13 13 17;
+    --color-surface-850: 8 8 10;
+    --color-surface-800: 9 9 13;
+    --color-surface-700: 25 25 34;
+    --color-surface-600: 19 19 26;
+    --color-surface-500: 42 42 56;
+    --color-accent: 139 92 246;
+    --color-accent-hover: 124 58 237;
+    --color-edge: rgba(255, 255, 255, 0.09);
+    --color-slate-50: 255 255 255;
+    --color-slate-100: 243 244 246;
+    --color-slate-200: 229 231 235;
+    --color-slate-300: 209 213 219;
+    --color-slate-400: 156 163 175;
+    --color-slate-500: 107 114 128;
+    --color-slate-600: 75 85 99;
+    --color-slate-700: 55 65 81;
+    --color-slate-800: 31 41 55;
+    --color-slate-900: 17 24 39;
+    --color-slate-950: 3 7 18;
+    --color-row-active: rgba(255, 255, 255, 0.08);
+    --color-row-idle-hover: rgba(255, 255, 255, 0.04);
+    --color-scrollbar-thumb: rgba(255, 255, 255, 0.07);
+    --color-scrollbar-thumb-hover: rgba(255, 255, 255, 0.16);
+  }
+
+  :root[data-theme="nord"],
+  [data-theme="nord"] {
+    color-scheme: dark;
+    --color-ground: 36 41 51;
+    --color-surface-950: 43 48 60;
+    --color-surface-900: 59 66 82;
+    --color-surface-850: 46 52 64;
+    --color-surface-800: 50 56 70;
+    --color-surface-700: 67 76 94;
+    --color-surface-600: 76 86 106;
+    --color-surface-500: 216 222 233;
+    --color-accent: 136 192 208;
+    --color-accent-hover: 129 161 193;
+    --color-edge: rgba(216, 222, 233, 0.09);
+    --color-slate-50: 236 239 244;
+    --color-slate-100: 229 233 240;
+    --color-slate-200: 216 222 233;
+    --color-slate-300: 194 200 210;
+    --color-slate-400: 154 162 177;
+    --color-slate-500: 120 130 148;
+    --color-slate-600: 76 86 106;
+    --color-slate-700: 67 76 94;
+    --color-slate-800: 59 66 82;
+    --color-slate-900: 46 52 64;
+    --color-slate-950: 36 41 51;
+    --color-row-active: rgba(216, 222, 233, 0.08);
+    --color-row-idle-hover: rgba(216, 222, 233, 0.04);
+    --color-scrollbar-thumb: rgba(216, 222, 233, 0.08);
+    --color-scrollbar-thumb-hover: rgba(216, 222, 233, 0.16);
+  }
+
+  :root[data-theme="catppuccin"],
+  [data-theme="catppuccin"] {
+    color-scheme: dark;
+    --color-ground: 17 17 27;
+    --color-surface-950: 24 24 37;
+    --color-surface-900: 30 30 46;
+    --color-surface-850: 24 24 37;
+    --color-surface-800: 27 27 42;
+    --color-surface-700: 49 50 68;
+    --color-surface-600: 69 71 90;
+    --color-surface-500: 88 91 112;
+    --color-accent: 203 166 247;
+    --color-accent-hover: 180 190 254;
+    --color-edge: rgba(205, 214, 244, 0.1);
+    --color-slate-50: 205 214 244;
+    --color-slate-100: 186 194 222;
+    --color-slate-200: 166 173 200;
+    --color-slate-300: 147 153 178;
+    --color-slate-400: 127 132 156;
+    --color-slate-500: 108 112 134;
+    --color-slate-600: 88 91 112;
+    --color-slate-700: 69 71 90;
+    --color-slate-800: 49 50 68;
+    --color-slate-900: 30 30 46;
+    --color-slate-950: 17 17 27;
+    --color-row-active: rgba(205, 214, 244, 0.08);
+    --color-row-idle-hover: rgba(205, 214, 244, 0.04);
+    --color-scrollbar-thumb: rgba(205, 214, 244, 0.08);
+    --color-scrollbar-thumb-hover: rgba(205, 214, 244, 0.16);
+  }
+
+  :root[data-theme="tokyo-night"],
+  [data-theme="tokyo-night"] {
+    color-scheme: dark;
+    --color-ground: 19 20 28;
+    --color-surface-950: 22 22 30;
+    --color-surface-900: 26 27 38;
+    --color-surface-850: 22 22 34;
+    --color-surface-800: 24 25 36;
+    --color-surface-700: 36 40 59;
+    --color-surface-600: 47 53 73;
+    --color-surface-500: 65 72 104;
+    --color-accent: 122 162 247;
+    --color-accent-hover: 97 139 245;
+    --color-edge: rgba(122, 162, 247, 0.12);
+    --color-slate-50: 192 202 245;
+    --color-slate-100: 169 177 214;
+    --color-slate-200: 154 165 206;
+    --color-slate-300: 122 162 247;
+    --color-slate-400: 86 95 137;
+    --color-slate-500: 65 72 104;
+    --color-slate-600: 52 59 88;
+    --color-slate-700: 36 40 59;
+    --color-slate-800: 31 35 53;
+    --color-slate-900: 26 27 38;
+    --color-slate-950: 19 20 28;
+    --color-row-active: rgba(122, 162, 247, 0.1);
+    --color-row-idle-hover: rgba(122, 162, 247, 0.05);
+    --color-scrollbar-thumb: rgba(122, 162, 247, 0.1);
+    --color-scrollbar-thumb-hover: rgba(122, 162, 247, 0.2);
+  }
+
+  :root[data-theme="crimson"],
+  [data-theme="crimson"] {
+    color-scheme: dark;
+    --color-ground: 15 9 13;
+    --color-surface-950: 22 13 19;
+    --color-surface-900: 30 18 27;
+    --color-surface-850: 24 14 21;
+    --color-surface-800: 26 15 24;
+    --color-surface-700: 51 28 44;
+    --color-surface-600: 41 22 36;
+    --color-surface-500: 74 41 64;
+    --color-accent: 244 63 94;
+    --color-accent-hover: 225 29 72;
+    --color-edge: rgba(244, 63, 94, 0.12);
+    --color-slate-50: 255 228 230;
+    --color-slate-100: 254 205 211;
+    --color-slate-200: 253 164 175;
+    --color-slate-300: 251 113 133;
+    --color-slate-400: 244 63 94;
+    --color-slate-500: 159 18 57;
+    --color-slate-600: 136 19 55;
+    --color-slate-700: 76 5 25;
+    --color-slate-800: 30 18 27;
+    --color-slate-900: 22 13 19;
+    --color-slate-950: 15 9 13;
+    --color-row-active: rgba(244, 63, 94, 0.1);
+    --color-row-idle-hover: rgba(244, 63, 94, 0.05);
+    --color-scrollbar-thumb: rgba(244, 63, 94, 0.1);
+    --color-scrollbar-thumb-hover: rgba(244, 63, 94, 0.2);
+  }
+
+  :root[data-theme="emerald"],
+  [data-theme="emerald"] {
+    color-scheme: dark;
+    --color-ground: 6 13 9;
+    --color-surface-950: 10 20 15;
+    --color-surface-900: 14 28 22;
+    --color-surface-850: 12 23 18;
+    --color-surface-800: 13 25 19;
+    --color-surface-700: 25 51 39;
+    --color-surface-600: 20 41 32;
+    --color-surface-500: 39 79 61;
+    --color-accent: 16 185 129;
+    --color-accent-hover: 5 150 105;
+    --color-edge: rgba(16, 185, 129, 0.12);
+    --color-slate-50: 209 250 229;
+    --color-slate-100: 167 243 208;
+    --color-slate-200: 110 231 183;
+    --color-slate-300: 52 211 153;
+    --color-slate-400: 16 185 129;
+    --color-slate-500: 5 150 105;
+    --color-slate-600: 4 120 87;
+    --color-slate-700: 6 95 70;
+    --color-slate-800: 6 78 59;
+    --color-slate-900: 14 28 22;
+    --color-slate-950: 6 13 9;
+    --color-row-active: rgba(16, 185, 129, 0.1);
+    --color-row-idle-hover: rgba(16, 185, 129, 0.05);
+    --color-scrollbar-thumb: rgba(16, 185, 129, 0.1);
+    --color-scrollbar-thumb-hover: rgba(16, 185, 129, 0.2);
   }
 
   html,
