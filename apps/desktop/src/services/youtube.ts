@@ -51,6 +51,10 @@ export const YOUTUBE_ORIGIN = 'https://www.youtube-nocookie.com';
 export const YOUTUBE_ORIGINS = [
   'https://www.youtube-nocookie.com',
   'https://www.youtube.com',
+  'https://youtube-nocookie.com',
+  'https://youtube.com',
+  'https://m.youtube.com',
+  'https://music.youtube.com',
 ];
 
 /**
