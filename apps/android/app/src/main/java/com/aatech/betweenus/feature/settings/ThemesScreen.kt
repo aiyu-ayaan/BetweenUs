@@ -35,6 +35,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.togetherWith
 import com.aatech.betweenus.core.store.ThemePreferences
 import com.aatech.betweenus.ui.components.BetweenUsIcon
 import com.aatech.betweenus.ui.components.BetweenUsIcons
@@ -42,6 +49,7 @@ import com.aatech.betweenus.ui.components.IconAction
 import com.aatech.betweenus.ui.components.SectionLabel
 import com.aatech.betweenus.ui.theme.ACCENT_PRESETS
 import com.aatech.betweenus.ui.theme.ANDROID_THEMES
+import com.aatech.betweenus.ui.theme.BetweenUsMotion
 
 /**
  * Dedicated Themes & Appearance screen for BetweenUs Android.
@@ -261,119 +269,136 @@ fun ThemesScreen(
 
             Spacer(Modifier.height(8.dp))
 
-            // Theme Grid
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                filteredThemes.chunked(2).forEach { rowThemes ->
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    ) {
-                        rowThemes.forEach { theme ->
-                            val isSelected = currentTheme == theme.id
-                            Box(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .clip(RoundedCornerShape(14.dp))
-                                    .background(MaterialTheme.colorScheme.surfaceContainer)
-                                    .border(
-                                        width = if (isSelected) 2.dp else 1.dp,
-                                        color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
-                                        shape = RoundedCornerShape(14.dp),
-                                    )
-                                    .clickable { ThemePreferences.setTheme(theme.id) }
-                                    .padding(10.dp),
-                            ) {
-                                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                    // Visual Palette Box
-                                    Box(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .height(44.dp)
-                                            .clip(RoundedCornerShape(8.dp))
-                                            .background(theme.previewGround),
-                                    ) {
-                                        Row(
+            val effectSpec = BetweenUsMotion.effect<Float>()
+            val spatialFastSpec = BetweenUsMotion.spatialFast<Float>()
+
+            // Animated Theme Grid
+            AnimatedContent(
+                targetState = filteredThemes,
+                transitionSpec = {
+                    (fadeIn(effectSpec) + scaleIn(spatialFastSpec, initialScale = 0.98f))
+                        .togetherWith(fadeOut(effectSpec) + scaleOut(spatialFastSpec, targetScale = 0.98f))
+                },
+                label = "ThemeGridTransition",
+            ) { themes ->
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    themes.chunked(2).forEach { rowThemes ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            rowThemes.forEach { theme ->
+                                val isSelected = currentTheme == theme.id
+                                val borderColor by animateColorAsState(
+                                    targetValue = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
+                                    animationSpec = BetweenUsMotion.effect(),
+                                    label = "CardBorderColor",
+                                )
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .clip(RoundedCornerShape(14.dp))
+                                        .background(MaterialTheme.colorScheme.surfaceContainer)
+                                        .border(
+                                            width = if (isSelected) 2.dp else 1.dp,
+                                            color = borderColor,
+                                            shape = RoundedCornerShape(14.dp),
+                                        )
+                                        .clickable { ThemePreferences.setTheme(theme.id) }
+                                        .padding(10.dp),
+                                ) {
+                                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                        // Visual Palette Box
+                                        Box(
                                             modifier = Modifier
-                                                .fillMaxSize()
-                                                .padding(4.dp),
-                                            horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                            verticalAlignment = Alignment.CenterVertically,
+                                                .fillMaxWidth()
+                                                .height(44.dp)
+                                                .clip(RoundedCornerShape(8.dp))
+                                                .background(theme.previewGround),
                                         ) {
-                                            Box(
+                                            Row(
                                                 modifier = Modifier
-                                                    .width(18.dp)
-                                                    .fillMaxHeight()
-                                                    .clip(RoundedCornerShape(4.dp))
-                                                    .background(theme.palette.surface950),
-                                            )
-                                            Box(
-                                                modifier = Modifier
-                                                    .weight(1f)
-                                                    .fillMaxHeight()
-                                                    .clip(RoundedCornerShape(4.dp))
-                                                    .background(theme.previewSurface),
+                                                    .fillMaxSize()
+                                                    .padding(4.dp),
+                                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                                verticalAlignment = Alignment.CenterVertically,
                                             ) {
                                                 Box(
                                                     modifier = Modifier
-                                                        .padding(5.dp)
-                                                        .size(10.dp)
-                                                        .clip(CircleShape)
-                                                        .background(theme.previewAccent),
+                                                        .width(18.dp)
+                                                        .fillMaxHeight()
+                                                        .clip(RoundedCornerShape(4.dp))
+                                                        .background(theme.palette.surface950),
+                                                )
+                                                Box(
+                                                    modifier = Modifier
+                                                        .weight(1f)
+                                                        .fillMaxHeight()
+                                                        .clip(RoundedCornerShape(4.dp))
+                                                        .background(theme.previewSurface),
+                                                ) {
+                                                    Box(
+                                                        modifier = Modifier
+                                                            .padding(5.dp)
+                                                            .size(10.dp)
+                                                            .clip(CircleShape)
+                                                            .background(theme.previewAccent),
+                                                    )
+                                                }
+                                            }
+                                        }
+
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically,
+                                        ) {
+                                            Text(
+                                                text = theme.name,
+                                                style = MaterialTheme.typography.titleSmall,
+                                                color = MaterialTheme.colorScheme.onSurface,
+                                                maxLines = 1,
+                                                modifier = Modifier.weight(1f, fill = false),
+                                            )
+                                            if (isSelected) {
+                                                BetweenUsIcon(
+                                                    BetweenUsIcons.Check,
+                                                    tint = MaterialTheme.colorScheme.primary,
+                                                    size = 16.dp,
                                                 )
                                             }
                                         }
-                                    }
 
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically,
-                                    ) {
                                         Text(
-                                            text = theme.name,
-                                            style = MaterialTheme.typography.titleSmall,
-                                            color = MaterialTheme.colorScheme.onSurface,
-                                            maxLines = 1,
-                                            modifier = Modifier.weight(1f, fill = false),
+                                            text = theme.description,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            maxLines = 2,
                                         )
-                                        if (isSelected) {
-                                            BetweenUsIcon(
-                                                BetweenUsIcons.Check,
-                                                tint = MaterialTheme.colorScheme.primary,
-                                                size = 16.dp,
+
+                                        Box(
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(6.dp))
+                                                .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                                                .padding(horizontal = 6.dp, vertical = 2.dp),
+                                        ) {
+                                            Text(
+                                                text = theme.category,
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                                             )
                                         }
                                     }
-
-                                    Text(
-                                        text = theme.description,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        maxLines = 2,
-                                    )
-
-                                    Box(
-                                        modifier = Modifier
-                                            .clip(RoundedCornerShape(6.dp))
-                                            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-                                            .padding(horizontal = 6.dp, vertical = 2.dp),
-                                    ) {
-                                        Text(
-                                            text = theme.category,
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        )
-                                    }
                                 }
                             }
-                        }
-                        if (rowThemes.size == 1) {
-                            Spacer(Modifier.weight(1f))
+                            if (rowThemes.size == 1) {
+                                Spacer(Modifier.weight(1f))
+                            }
                         }
                     }
                 }

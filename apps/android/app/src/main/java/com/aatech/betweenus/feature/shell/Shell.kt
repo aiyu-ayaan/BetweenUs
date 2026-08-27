@@ -448,7 +448,21 @@ fun Shell(user: PublicUser) {
                             onThemes = { navigation.navigate(Route.Themes) },
                         )
                     }
-                    composable(Route.Themes) {
+                    composable(
+                        Route.Themes,
+                        enterTransition = {
+                            slideInHorizontally(travel) { it } + fadeIn(fade)
+                        },
+                        exitTransition = {
+                            slideOutHorizontally(travel) { -it / 3 } + fadeOut(fade)
+                        },
+                        popEnterTransition = {
+                            slideInHorizontally(travel) { -it / 3 } + fadeIn(fade)
+                        },
+                        popExitTransition = {
+                            slideOutHorizontally(travel) { it } + fadeOut(fade)
+                        },
+                    ) {
                         ThemesScreen(onBack = { navigation.popBackStack() })
                     }
                     composable(Route.CallUsage) {
