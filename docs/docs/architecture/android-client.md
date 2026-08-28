@@ -28,7 +28,8 @@ two-device**, which is what a mesh needs to prove anything, along with push
 notifications on a real phone, the local cache offline, and the APK
 self-updater. Blocking, clearing your own history, password recovery and the
 live username check landed since and compile and unit-test green, but have not
-been on a device yet. Full status, phase by phase:
+been on a device yet. So has the adaptive shell — two panes on tablets and
+unfolded foldables — which has not been on one of those either. Full status, phase by phase:
 [`development/ANDROID_TODO.md`](https://github.com/aiyu-ayaan/BetweenUs/blob/master/development/ANDROID_TODO.md).
 
 ## Modules
@@ -77,9 +78,53 @@ feature/remote          feature/update        feature/voice
   [Peer-to-Peer Media](/architecture/media), Android's own
   `RTCPeerConnection` bindings instead of the browser's.
 
+## One shell, two shapes
+
+The client used to draw a conversation with the channel list behind a
+hamburger, on every device. That is right on a phone and wrong on everything
+else — a tablet or an unfolded foldable has room for both, and hiding one
+behind a button is throwing the screen away.
+
+`shellFrame(width, hingeStart, hingeEnd)` in `:ui-common` decides:
+
+| Window | Shape |
+| --- | --- |
+| `< 600.dp` | One pane. The channel list is a `ModalNavigationDrawer`. |
+| `>= 600.dp` | Two panes. The list is permanent beside the conversation and the hamburger is **omitted**. |
+| Vertical separating fold | The split lands on the fold and the seam is left empty. |
+| Fold too near an edge | Ignored — a bounded proportional split (`280.dp`–`360.dp`) instead. |
+
+It is a **pure function**, deliberately separated from the four lines of
+`rememberShellFrame()` that read the window and the posture, because every
+interesting case is a device nobody testing it will be holding: a foldable
+half-opened, a hinge nearer one edge than the other, a folded foldable that is
+a narrow phone with a seam behind the screen, a freeform window dragged narrower
+while the app runs. Ten of them are asserted in `ShellFrameTest`.
+
+Three details that are decisions rather than defaults:
+
+- **The hamburger goes, rather than being drawn dead.** A button that opens a
+  panel already open is a control that appears to do nothing, so the screens
+  that draw one take a nullable callback.
+- **A horizontal fold is not a hinge here.** Laptop posture does not divide the
+  window left from right, so it never reaches the function.
+- **Both layouts call the same two composables.** They are extracted rather
+  than written once per branch — a second copy is a second place to add a
+  callback to, and the one that gets forgotten is always the one on the device
+  nobody is holding.
+
+One dependency does it: `androidx.compose.material3.adaptive:adaptive`, whose
+`currentWindowAdaptiveInfo()` answers both "how much room is there" and "is
+there a hinge across it". `MainActivity` already declared
+`screenSize|screenLayout|smallestScreenSize` in `configChanges`, so unfolding
+resizes and recomposes instead of recreating the activity.
+
+Not yet done: a third pane for the member list, which a 1280dp tablet has room
+for and the desktop client already shows.
+
 ### `ui-common`
 
-A dynamic Material 3 Expressive Compose design system shared across every feature module. Features:
+A dynamic Material 3 Expressive Compose design system shared across every feature module, plus `Adaptive.kt` — the window-size and folding-feature decision described above. Features:
 - **Dynamic 16-Theme Palette Generation** (`BetweenUsColorPalette`, `LocalBetweenUsColors`, and `BetweenUsThemeTokens`).
 - **Accent Customizer**: Dynamic override of active tokens across all Composable surfaces.
 - **Spring Motion Scheme** (`BetweenUsMotion.spatial`, `BetweenUsMotion.effect`) driving predictive push/pop navigation transitions and animated category filtering.

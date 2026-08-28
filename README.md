@@ -70,6 +70,7 @@ to be framed, so no browser tab can ever show it.
 | Encryption identity: unlock, backup secret | ✅ | ✅ | ✅ |
 | Device list and revoking a device | ✅ | ✅ | — |
 | Point the client at another deployment | ✅ | ✅ | ✅ |
+| Adaptive layout: two panes on tablets and unfolded foldables | ✅ | ✅ | ✅ |
 | Admin panel | \* | \* | \* |
 | **Servers and channels** | | | |
 | Create a server, join one, leave or delete | ✅ | ✅ | ✅ |
@@ -774,6 +775,20 @@ Errors share one shape everywhere:
 
 Newest first. Every one of these is in `development/TRACK.md` with the reason it
 was built the way it was; this is the short version.
+
+### An Android layout that uses the screen it is on
+
+The Android client drew a phone layout everywhere: a conversation, with the
+channel list behind a hamburger. On a tablet or an unfolded foldable it now
+puts the list permanently beside the conversation and drops the hamburger, and
+where there is a fold the split lands **on** it with the seam left empty rather
+than drawing content across a hinge. A fold too near an edge is ignored instead
+of obeyed into a pane nothing fits in. Folding the device back up returns to one
+pane without restarting the app.
+
+The decision is a pure function with ten assertions behind it, because every
+case it has to get right is a device or a posture that is impractical to sit
+and hold.
 
 ### Accounts: blocking, clearing, and a way back in
 
