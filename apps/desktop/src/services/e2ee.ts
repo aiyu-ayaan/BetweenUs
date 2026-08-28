@@ -527,8 +527,12 @@ async function loadChannelKey(channelId: string): Promise<ChannelKeyState> {
   // lets any member with SEND_MESSAGE do. Earlier epochs are untouched, so the
   // history from before we were a member stays closed to us.
   if (!keys.has(response.epoch) && !rekeyed.has(channelId)) {
-    rekeyed.add(channelId);
+    // Marked only after the mint succeeds. Marking it first meant a transient
+    // failure here - a dropped request, a moment offline - poisoned the guard
+    // for the rest of the session: every later message in this channel skipped
+    // straight to "no key" instead of trying again next time it was opened.
     await createChannelKey(channelId, response.epoch + 1);
+    rekeyed.add(channelId);
     // Re-read rather than trusting our own write: another member may have won
     // the race, and then theirs is the epoch that counts.
     response = await api.channelKeys(channelId);

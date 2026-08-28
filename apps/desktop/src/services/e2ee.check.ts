@@ -54,6 +54,8 @@ let stored: StoredKey[] = [];
 let caller = 'alice';
 /** Every epoch that was published, in order, so a re-key loop is visible. */
 let published: number[] = [];
+/** One-shot fault: the next publish behaves like a dropped request. */
+let failNextPublish = false;
 
 function latestEpoch(): number {
   return stored.reduce((max, row) => Math.max(max, row.epoch), 0);
@@ -220,6 +222,10 @@ function stubDirectory(): void {
     }
 
     if (url.pathname === '/api/v1/e2ee/keys' && method === 'POST') {
+      if (failNextPublish) {
+        failNextPublish = false;
+        return Promise.reject(new Error('network down'));
+      }
       return Promise.resolve(publish(body as PublishChannelKeysRequest));
     }
 
@@ -461,6 +467,45 @@ async function main(): Promise<void> {
     await decryptForChannel(CHANNEL, afterRevoke),
     UNDECRYPTABLE,
     'a revoked machine must not read what was sent after it was revoked',
+  );
+
+  // --- A dropped request during self-heal must not brick the channel -------
+  //
+  // Dave joins a channel alice already keyed, offline. Opening it makes his
+  // client mint its own epoch the same way bob's did above - but this time the
+  // publish call itself fails (a network blip), not a race another member won.
+  // The old code marked the channel "already tried" before that call returned,
+  // so every later attempt this session skipped straight to "no key" instead
+  // of trying again. It must retry instead.
+  const CHANNEL_2 = 'channel-random';
+  MEMBERS = ['alice', 'dave'];
+  await signIn('alice');
+  const beforeDave = await encryptForChannel(CHANNEL_2, 'hello before dave');
+
+  await signIn('dave');
+  failNextPublish = true;
+  assert.equal(
+    await decryptForChannel(CHANNEL_2, beforeDave),
+    UNDECRYPTABLE,
+    'a dropped request during self-heal still renders as undecryptable, not a crash',
+  );
+  assert.equal(
+    await decryptForChannel(CHANNEL_2, beforeDave),
+    UNDECRYPTABLE,
+    'the message dave was never sealed for stays closed - that part is by design',
+  );
+  const fromDave = await encryptForChannel(CHANNEL_2, 'hi from dave');
+  assert.notEqual(
+    fromDave,
+    undefined,
+    'a retry after the dropped request must mint dave a working epoch, not stay locked out',
+  );
+
+  await signIn('alice');
+  assert.equal(
+    await decryptForChannel(CHANNEL_2, fromDave),
+    'hi from dave',
+    'alice must read what dave sent once his self-heal succeeded on retry',
   );
 
   console.log('e2ee.check.ts: ok');
