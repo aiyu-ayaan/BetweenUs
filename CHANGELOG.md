@@ -1,5 +1,59 @@
 # Changelog
 
+## [0.0.1-alpha.16](https://github.com/aiyu-ayaan/BetweenUs/compare/v0.0.1-alpha.15...v0.0.1-alpha.16) (2026-08-28)
+
+### Features
+
+* Draw release notes as markdown on the sheet and the screen
+* Draw release notes as markdown rather than as their source
+* Give adding a friend its own screen
+* Add project code style configuration and permissions settings
+* Adaptive shell for tablets and foldables
+* Clear one conversation, from a three-dot menu in its header
+* Blocking, clearing your own history, and a way back into a forgotten account
+* Outgoing mail settings and a per-account password reset
+* Forgotten passwords, admin-configured SMTP, and a Bloom-filtered username check
+* Block a user, and clear your own history everywhere
+* Blocks, password resets, SMTP settings and a cleared-chats marker
+
+### Bug fixes
+
+* A blank line is a paragraph break when the notes are read
+* Download the update without being asked, and say which channel is on
+* Take the new-messages bar away the moment it is read
+* Stop offering yourself a conversation with yourself
+* Stop a refused DM crashing the members list
+* Draw a person's name once
+* Retry channel self-heal after a dropped mint request
+
+### Other changes
+
+* Changes done for alpha release
+* Release notes are drawn as markdown on every client
+* Point the submodule at the updates rewrite
+* One Windows installer, a download that happens on its own, two Android jobs
+* One Windows build, and make it a real installer
+* Point at the members-list follow-up
+* Describe the two searches and the row that refuses
+* Downgrade Java version to 17 in project configuration files
+* Point at submodule safety guidance
+* Point at pushed dev-docs, including the consistency guideline
+* Android uses the screen it is on
+* Clearing one conversation
+* Android has the accounts pass too
+* The accounts pass across the public docs and README
+* Point at the accounts-pass tracker
+* Correct README "no light theme" claim
+* Record device and cross-network verification across clients
+
+### Artifacts
+
+| Platform | This release |
+| --- | --- |
+| Server images | Built here |
+| Desktop (Windows) | Built here |
+| Android | Built here |
+
 ## [0.0.1-alpha.15](https://github.com/aiyu-ayaan/BetweenUs/compare/v0.0.1-alpha.14...v0.0.1-alpha.15) (2026-08-27)
 
 ### Features
