@@ -21,6 +21,7 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import com.aatech.betweenus.core.data.BetweenUsApi
+import com.aatech.betweenus.core.data.FriendshipStatus
 import com.aatech.betweenus.core.data.ServerMember
 import com.aatech.betweenus.core.store.Workspace
 import com.aatech.betweenus.feature.notifications.PushGate
@@ -51,6 +52,9 @@ fun MemberMenuSheet(
     member: ServerMember,
     onDismiss: () -> Unit,
     onOpenDirect: () -> Unit,
+    /** Whether this account may change [member]'s role. An owner's is fixed. */
+    mayEditRole: Boolean = false,
+    onEditRole: () -> Unit = {},
 ) {
     val sheet = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val scope = rememberCoroutineScope()
@@ -58,12 +62,17 @@ fun MemberMenuSheet(
 
     var muted by remember { mutableStateOf(false) }
     var note by remember { mutableStateOf<String?>(null) }
+    // Three states, not two: a friendship that is only asked for opens no
+    // conversation and takes no second request.
     var friend by remember { mutableStateOf(true) }
+    var asked by remember { mutableStateOf(false) }
 
     LaunchedEffect(member.userId) {
         val preferences = PushGate.preferences()
         muted = preferences?.mutedUserIds?.contains(member.userId) == true
-        friend = Workspace.friends.value.any { it.user.id == member.userId }
+        val friendship = Workspace.friends.value.firstOrNull { it.user.id == member.userId }
+        friend = friendship?.status == FriendshipStatus.ACCEPTED
+        asked = friendship != null && !friend
     }
 
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheet) {
@@ -77,6 +86,10 @@ fun MemberMenuSheet(
 
             ListRow(
                 title = "Message",
+                // Said before it is tried rather than after it is refused: a
+                // direct message needs an accepted friendship, and the row
+                // below is how one is asked for.
+                subtitle = if (friend) null else "Only after they accept your friend request",
                 leading = { BetweenUsIcon(BetweenUsIcons.Message, tint = Slate400) },
                 onClick = {
                     onOpenDirect()
@@ -89,16 +102,21 @@ fun MemberMenuSheet(
             // offered a button that does nothing.
             if (!friend) {
                 ListRow(
-                    title = "Add friend",
+                    title = if (asked) "Friend request pending" else "Add friend",
+                    subtitle = if (asked) "Waiting on one of you to accept" else null,
                     leading = { BetweenUsIcon(BetweenUsIcons.UserPlus, tint = Slate400) },
-                    onClick = {
-                        scope.launch {
-                            note = runCatching {
-                                BetweenUsApi.addFriend(member.username)
-                                Workspace.loadFriends()
-                                friend = true
-                                "Request sent"
-                            }.getOrElse { it.message ?: "That did not work" }
+                    onClick = if (asked) {
+                        null
+                    } else {
+                        {
+                            scope.launch {
+                                note = runCatching {
+                                    BetweenUsApi.addFriend(member.username)
+                                    Workspace.loadFriends()
+                                    asked = true
+                                    "Request sent"
+                                }.getOrElse { it.message ?: "That did not work" }
+                            }
                         }
                     },
                 )
@@ -132,6 +150,17 @@ fun MemberMenuSheet(
                     }
                 },
             )
+
+            if (mayEditRole) {
+                ListRow(
+                    title = "Role and permissions",
+                    leading = { BetweenUsIcon(BetweenUsIcons.Shield, tint = Slate400) },
+                    onClick = {
+                        onDismiss()
+                        onEditRole()
+                    },
+                )
+            }
 
             ListRow(
                 title = "Copy user ID",

@@ -26,10 +26,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import com.aatech.betweenus.core.data.Endpoint
+import com.aatech.betweenus.core.data.ApiError
 import com.aatech.betweenus.core.data.BetweenUsApi
 import com.aatech.betweenus.core.data.PresenceStatus
 import com.aatech.betweenus.core.data.ServerMember
 import com.aatech.betweenus.core.data.ServerRole
+import com.aatech.betweenus.core.data.Session
 import com.aatech.betweenus.core.data.UserSummary
 import com.aatech.betweenus.core.store.Presence
 import com.aatech.betweenus.core.store.Workspace
@@ -82,6 +84,34 @@ fun MembersScreen(
 
     LaunchedEffect(serverId) { serverId?.let { Workspace.loadMembers(it, force = true) } }
 
+    /**
+     * Opening a conversation with a member, which is allowed to be refused.
+     *
+     * A server puts people in the same room; it does not make them friends, and
+     * `POST /api/v1/dm` refuses a stranger. Letting that throw out of the
+     * launched coroutine took the whole app down - an uncaught exception in a
+     * coroutine is a crash, not a failed request - so the refusal is caught
+     * here and said in a sentence instead.
+     */
+    fun openDirect(member: ServerMember) {
+        scope.launch {
+            note = runCatching { onOpenDirect(Workspace.openDirect(member.userId).channelId) }
+                .exceptionOrNull()
+                ?.let {
+                    // FRIENDSHIP_NOT_FOUND is "you never asked"; NOT_FRIENDS is
+                    // "you asked and it has not been accepted". Both mean the
+                    // same thing to the person tapping, and neither is an error
+                    // worth showing the server's wording for.
+                    if (it is ApiError && it.code in setOf("FRIENDSHIP_NOT_FOUND", "NOT_FRIENDS")) {
+                        "You and ${member.label} are not friends yet, so there is no " +
+                            "conversation to open. Tap More on their row to send a request."
+                    } else {
+                        Session.messageOf(it)
+                    }
+                }
+        }
+    }
+
     val members = serverId?.let { membersByServer[it] }.orEmpty()
     val online = members.filter {
         (statuses[it.userId] ?: PresenceStatus.OFFLINE) != PresenceStatus.OFFLINE
@@ -120,6 +150,10 @@ fun MembersScreen(
         }
         HorizontalDivider(color = Edge)
 
+        note?.let {
+            Notice(it, Danger, Modifier.padding(horizontal = 12.dp, vertical = 8.dp))
+        }
+
         if (serverId == null) {
             EmptyState(
                 icon = BetweenUsIcons.Users,
@@ -144,7 +178,6 @@ fun MembersScreen(
                             placeholder = "A friend's username",
                             imeAction = ImeAction.Search,
                         )
-                        note?.let { Notice(it, Danger, Modifier.padding(top = 8.dp)) }
                         if (adding.trim().length >= 2 && candidates.isEmpty() && note == null) {
                             Notice(
                                 "No friend by that name. Only friends can be added; " +
@@ -159,7 +192,7 @@ fun MembersScreen(
                 items(candidates, key = { "add-${it.id}" }) { user ->
                     ListRow(
                         title = user.label,
-                        subtitle = "@${user.username}",
+                        subtitle = user.handle,
                         leading = {
                             AvatarWithStatus(
                                 id = user.id,
@@ -186,18 +219,22 @@ fun MembersScreen(
 
             if (online.isNotEmpty()) item { SectionLabel("Online — ${online.size}") }
             items(online, key = { "on-${it.userId}" }) { member ->
-                MemberRow(member, statuses[member.userId]?.wire ?: "online", mayManage,
-                    onOpenDirect = { scope.launch { onOpenDirect(Workspace.openDirect(member.userId).channelId) } },
-                    onEdit = { editing = member },
-                    onMenu = { menuFor = member })
+                MemberRow(
+                    member = member,
+                    status = statuses[member.userId]?.wire ?: "online",
+                    onOpenDirect = { openDirect(member) },
+                    onMenu = { menuFor = member },
+                )
             }
 
             if (offline.isNotEmpty()) item { SectionLabel("Offline — ${offline.size}") }
             items(offline, key = { "off-${it.userId}" }) { member ->
-                MemberRow(member, "offline", mayManage,
-                    onOpenDirect = { scope.launch { onOpenDirect(Workspace.openDirect(member.userId).channelId) } },
-                    onEdit = { editing = member },
-                    onMenu = { menuFor = member })
+                MemberRow(
+                    member = member,
+                    status = "offline",
+                    onOpenDirect = { openDirect(member) },
+                    onMenu = { menuFor = member },
+                )
             }
         }
     }
@@ -205,10 +242,13 @@ fun MembersScreen(
     menuFor?.let { member ->
         MemberMenuSheet(
             member = member,
+            // The role editor lives behind the same sheet as everything else a
+            // row offers. It used to be a fourth icon on the row itself, which
+            // is what left the name with two characters of width to fit in.
+            mayEditRole = mayManage && member.role != ServerRole.OWNER,
             onDismiss = { menuFor = null },
-            onOpenDirect = {
-                scope.launch { onOpenDirect(Workspace.openDirect(member.userId).channelId) }
-            },
+            onOpenDirect = { openDirect(member) },
+            onEditRole = { editing = member },
         )
     }
 
@@ -222,18 +262,24 @@ fun MembersScreen(
     }
 }
 
+/**
+ * One person in the server.
+ *
+ * Two actions and at most one pill, deliberately. A row is a name first: with a
+ * role chip and four buttons on the end of it, the weighted name column was
+ * measured last and got what was left, which on a phone was an ellipsis. The
+ * rest is a tap away in [MemberMenuSheet].
+ */
 @Composable
 private fun MemberRow(
     member: ServerMember,
     status: String,
-    mayManage: Boolean,
     onOpenDirect: () -> Unit,
-    onEdit: () -> Unit,
     onMenu: () -> Unit,
 ) {
     ListRow(
         title = member.label,
-        subtitle = "@${member.username}",
+        subtitle = member.handle,
         leading = {
             AvatarWithStatus(
                 id = member.userId,
@@ -245,11 +291,8 @@ private fun MemberRow(
         },
         trailing = {
             if (member.role != ServerRole.MEMBER) Chip(member.role.name.lowercase())
-            IconAction(BetweenUsIcons.Message, "Message", onOpenDirect)
-            IconAction(BetweenUsIcons.User, "More", onMenu)
-            if (mayManage && member.role != ServerRole.OWNER) {
-                IconAction(BetweenUsIcons.Shield, "Role and permissions", onEdit)
-            }
+            IconAction(BetweenUsIcons.Message, "Message ${member.label}", onOpenDirect, compact = true)
+            IconAction(BetweenUsIcons.User, "More about ${member.label}", onMenu, compact = true)
         },
         onClick = onOpenDirect,
     )
