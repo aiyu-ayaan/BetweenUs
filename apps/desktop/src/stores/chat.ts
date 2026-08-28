@@ -251,13 +251,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
       setUnread(unread);
     }
 
-    // The line goes too, a moment later. It is placed when messages arrive at a
-    // window nobody is looking at, and coming back to that window is reading
-    // them - so a line that stayed until the channel was opened again meant
-    // reloading the page to be rid of it. The delay is what makes it useful at
-    // all: long enough to see where the new messages started, short enough not
-    // to be furniture.
-    fadeDivider(channelId);
+    // The line and the banner above it go with it, now rather than in five
+    // seconds. They are placed when messages arrive at a window nobody is
+    // looking at, and coming back to that window is reading them - a bar that
+    // says "new messages" over messages already on screen is just wrong, and
+    // sitting there for five seconds is long enough to be read as stuck.
+    if (get().divider[channelId]) {
+      set({ divider: { ...get().divider, [channelId]: null } });
+    }
 
     void api
       .markChannelRead(channelId)
@@ -773,33 +774,6 @@ function forgetMarkers(): void {
   markersReady = new Promise<void>((resolve) => {
     markersKnown = resolve;
   });
-}
-
-/**
- * Takes the "new messages" line away, once it has been read.
- *
- * Only from a channel that is on screen in a focused window: everywhere else
- * the line is a place to come back to, which is what it is for.
- */
-let fadeTimer: number | null = null;
-let fadingChannelId: string | null = null;
-const DIVIDER_FADE_MS = 5_000;
-
-function fadeDivider(channelId: string): void {
-  if (!useChatStore.getState().divider[channelId]) return;
-  if (fadeTimer !== null && fadingChannelId === channelId) return;
-  if (fadeTimer !== null) window.clearTimeout(fadeTimer);
-
-  fadingChannelId = channelId;
-  fadeTimer = window.setTimeout(() => {
-    fadeTimer = null;
-    fadingChannelId = null;
-    const state = useChatStore.getState();
-    // Still the channel in front of somebody, and still nothing unread in it.
-    if (state.activeChannelId !== channelId || state.unread[channelId]) return;
-    if (!state.divider[channelId]) return;
-    useChatStore.setState({ divider: { ...state.divider, [channelId]: null } });
-  }, DIVIDER_FADE_MS);
 }
 
 let readTimer: number | null = null;
