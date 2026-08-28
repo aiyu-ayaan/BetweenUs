@@ -71,12 +71,35 @@ feature/remote          feature/update        feature/voice
 - **`settings`** — account profile, local crash reporter, call data usage, a
   **`PrivacyScreen`** (`Route.Privacy`) holding the block list and *Clear all my
   messages*, and a dedicated **`ThemesScreen`** (`Route.Themes`) providing live interactive workbench previews, 16 curated themes across 5 categories, and custom accent tint swatches with spring transitions.
+- **`home`** — the friends list, and **`AddFriendScreen`** (`Route.AddFriend`)
+  beside it. Two searches, deliberately kept apart, matching the desktop's
+  **Add friend** tab: the field on the friends list filters the people you
+  already have, and the separate screen searches the directory and drops
+  anyone already on the list from its results. Opening a direct message from
+  either is the only way one gets created, on every client.
+- **`members`** — who is in the server, and what a row offers. *Message* is
+  allowed to be refused — a server puts people in the same room, it does not
+  make them friends, so `POST /api/v1/dm` answers `FRIENDSHIP_NOT_FOUND` or
+  `NOT_FRIENDS` and the screen says so rather than throwing out of a coroutine.
+  Everything past *Message* and *More* lives in `MemberMenuSheet`, including
+  the role editor: a row is a name first, and a name measured after four
+  trailing buttons is an ellipsis.
 - **`update`** — checks the app's own GitHub releases on launch (channel:
   alpha/beta/stable), downloads the APK built for the device's real ABI
   rather than the universal one, and hands it to Android's installer.
 - **`voice`** — the same WebRTC mesh described in
   [Peer-to-Peer Media](/architecture/media), Android's own
   `RTCPeerConnection` bindings instead of the browser's.
+
+## One name, drawn once
+
+Every list of people draws a display name over an `@handle`. An account that
+never set a display name has the two be the same string, and the row then reads
+"test" over "@test" — which looks like a rendering fault rather than a name.
+`UserSummary.handle`, `ServerMember.handle` and `PublicUser.handle` answer null
+when the second line would only repeat the first, so the rule lives in `core`
+once instead of in each of the five screens that draw a person, and
+`PersonLabelTest` holds it — case-insensitively, and for a blank display name.
 
 ## One shell, two shapes
 
