@@ -132,11 +132,18 @@ export const useUpdateStore = create<UpdateState>((set, get) => ({
     try {
       const offer = await bridge.updateCheck();
       const info = (await bridge.updateInfo?.()) ?? get().info;
-      set({
-        info,
-        offer,
-        stage: offer ? (info?.downloaded?.version === offer.version ? 'ready' : 'available') : 'idle',
-      });
+      const stage = offer
+        ? info?.downloaded?.version === offer.version
+          ? 'ready'
+          : 'available'
+        : 'idle';
+      set({ info, offer, stage });
+      // The "auto" in auto update. Waiting for a click before starting a
+      // ninety-megabyte download meant the button that mattered - Restart and
+      // install - was ten minutes away from every person who pressed the first
+      // one. Nothing is ever installed without being asked: the download is
+      // the slow half, and it is the half that can happen quietly.
+      if (stage === 'available') await get().download();
     } catch (error) {
       set({ stage: 'failed', error: (error as Error).message });
     }
@@ -169,10 +176,19 @@ export const useUpdateStore = create<UpdateState>((set, get) => ({
   },
 
   setChannel: async (channel) => {
-    await window.betweenus?.setAppSettings?.({ updateChannel: channel });
-    // The offer in hand was picked on the old channel and may not be on the new
-    // one, so it is thrown away rather than left looking current.
-    set({ offer: null, stage: 'idle' });
+    const settings = await window.betweenus?.setAppSettings?.({ updateChannel: channel });
+    const info = get().info;
+    // Said here rather than waited for: the settings screen draws the chosen
+    // channel from `info`, and `info` was only refreshed by the check below -
+    // so a check that failed, or was merely slow, left the button looking as
+    // though the channel had not changed at all.
+    set({
+      offer: null,
+      stage: 'idle',
+      // The offer in hand was picked on the old channel and may not be on the
+      // new one, so it is thrown away rather than left looking current.
+      info: info ? { ...info, channel: settings?.updateChannel ?? channel } : info,
+    });
     await get().check();
   },
 

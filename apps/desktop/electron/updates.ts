@@ -207,6 +207,18 @@ export function assetFor(release: Release, flavor: Flavor): ReleaseAsset | null 
   return release.assets.find((asset) => asset.name.toLowerCase().endsWith('-setup.exe')) ?? null;
 }
 
+/**
+ * The version in a downloaded file's name, or null if it is not one of ours.
+ *
+ * The other half of the naming contract `assetFor` matches on: the release
+ * workflow names the asset, this reads it back, and the directory a download
+ * waits in needs nothing written down beside it. See main.ts.
+ */
+export function versionOfFile(name: string): string | null {
+  const label = /^BetweenUs-(.+)-Setup\.exe$/i.exec(name)?.[1];
+  return label && parseVersion(label) ? label : null;
+}
+
 // --- The network side -------------------------------------------------------
 
 export interface UpdateOffer {

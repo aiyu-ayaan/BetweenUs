@@ -48,6 +48,7 @@ import {
   flavorFrom,
   isChannel,
   parseVersion,
+  versionOfFile,
   type Channel,
   type Flavor,
   type UpdateOffer,
@@ -1573,7 +1574,7 @@ function sweepDownloads(): void {
   const directory = updateDirectory();
   for (const name of fs.readdirSync(directory)) {
     const file = path.join(directory, name);
-    const label = /^BetweenUs-(.+)-Setup\.exe$/i.exec(name)?.[1];
+    const label = versionOfFile(name);
     const version = parseVersion(label);
     const held = downloadedUpdate ? parseVersion(downloadedUpdate.version) : null;
     // Worth keeping only if it is an upgrade on what is running, and only the

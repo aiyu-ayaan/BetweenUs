@@ -13,6 +13,7 @@ import {
   parseReleases,
   parseVersion,
   pickRelease,
+  versionOfFile,
   type Release,
 } from './updates';
 
@@ -120,6 +121,15 @@ const portableOnly: Release = {
   assets: beta.assets.filter((asset) => asset.name.endsWith('-Portable.exe')),
 };
 assert.equal(assetFor(portableOnly, 'installer'), null);
+
+// A downloaded file names its own version, which is what makes the updates
+// directory the record of what is waiting. Round-trip against the name the
+// release workflow actually attaches.
+assert.equal(versionOfFile('BetweenUs-0.0.3-beta.1-Setup.exe'), '0.0.3-beta.1');
+assert.equal(versionOfFile('BetweenUs-1.4.2-Setup.exe'), '1.4.2');
+assert.equal(versionOfFile('BetweenUs-0.0.3-Portable.exe'), null, 'not ours to keep');
+assert.equal(versionOfFile('BetweenUs-nightly-Setup.exe'), null, 'an unparseable version is not one');
+assert.equal(versionOfFile('BetweenUs-0.0.3-Setup.exe.part'), null, 'a half-finished download');
 
 // --- findUpdate -------------------------------------------------------------
 
