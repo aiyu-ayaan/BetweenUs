@@ -13,6 +13,8 @@ import {
 import { IsString, IsUUID, Length } from 'class-validator';
 import { CurrentUser, JwtAuthGuard, type AuthenticatedUser } from '@betweenus/auth';
 import type {
+  BlockedUser,
+  BlockUserRequest,
   DirectChannel,
   Friend,
   OpenDirectChannelRequest,
@@ -28,6 +30,11 @@ export class SendFriendRequestDto implements SendFriendRequestRequest {
 }
 
 export class OpenDirectChannelDto implements OpenDirectChannelRequest {
+  @IsUUID()
+  userId!: string;
+}
+
+export class BlockUserDto implements BlockUserRequest {
   @IsUUID()
   userId!: string;
 }
@@ -81,6 +88,36 @@ export class FriendsController {
     @Param('userId', ParseUUIDPipe) otherUserId: string,
   ): Promise<void> {
     return this.friends.remove(user.id, otherUserId);
+  }
+}
+
+/**
+ * The block list. Its own controller rather than a verb on `/friends`, because
+ * blocking somebody you were never friends with is the ordinary case - the
+ * relationship it ends is optional, and the one it creates is not a friendship.
+ */
+@Controller('blocks')
+@UseGuards(JwtAuthGuard)
+export class BlocksController {
+  constructor(private readonly friends: FriendsService) {}
+
+  @Get()
+  list(@CurrentUser() user: AuthenticatedUser): Promise<BlockedUser[]> {
+    return this.friends.blocked(user.id);
+  }
+
+  @Post()
+  block(@CurrentUser() user: AuthenticatedUser, @Body() dto: BlockUserDto): Promise<BlockedUser> {
+    return this.friends.block(user.id, dto.userId);
+  }
+
+  @Delete(':userId')
+  @HttpCode(204)
+  unblock(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('userId', ParseUUIDPipe) otherUserId: string,
+  ): Promise<void> {
+    return this.friends.unblock(user.id, otherUserId);
   }
 }
 

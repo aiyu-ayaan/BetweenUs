@@ -13,6 +13,7 @@ import { AttachmentSweeper } from './modules/uploads/attachment-sweeper';
 import { E2eeController } from './modules/e2ee/e2ee.controller';
 import { E2eeService } from './modules/e2ee/e2ee.service';
 import {
+  BlocksController,
   DirectChannelsController,
   FriendsController,
   UserSearchController,
@@ -29,6 +30,7 @@ const SERVICE_NAME = 'chat-service';
     E2eeController,
     UserSearchController,
     FriendsController,
+    BlocksController,
     DirectChannelsController,
     createHealthController(SERVICE_NAME, pingDatabase),
   ],

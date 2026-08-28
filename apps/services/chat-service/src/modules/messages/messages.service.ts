@@ -2,7 +2,12 @@ import { BadRequestException, ForbiddenException, Injectable, NotFoundException 
 import { prisma, resolveChannelAccess, type ChannelAccess } from '@betweenus/database';
 import { EVENTS, EventBus } from '@betweenus/events';
 import { PERMISSIONS, type Permission } from '@betweenus/permissions';
-import type { Message, MessageReactionSummary, Paginated } from '@betweenus/shared-types';
+import type {
+  ClearChatsResponse,
+  Message,
+  MessageReactionSummary,
+  Paginated,
+} from '@betweenus/shared-types';
 
 const PAGE_SIZE = 50;
 // Content is an encrypted envelope, so the limit covers base64 expansion of a
@@ -44,10 +49,18 @@ export class MessagesService {
       ? await prisma.message.findUnique({ where: { id: before }, select: { createdAt: true } })
       : null;
 
+    const clearedAt = await this.clearedAt(userId);
     const rows = await prisma.message.findMany({
       where: {
         channelId,
-        ...(cursor ? { createdAt: { lt: cursor.createdAt } } : {}),
+        ...(cursor || clearedAt
+          ? {
+              createdAt: {
+                ...(cursor ? { lt: cursor.createdAt } : {}),
+                ...(clearedAt ? { gt: clearedAt } : {}),
+              },
+            }
+          : {}),
       },
       include: MESSAGE_INCLUDE,
       orderBy: { createdAt: 'desc' },
@@ -66,13 +79,63 @@ export class MessagesService {
   async pins(userId: string, channelId: string): Promise<Message[]> {
     await this.requireChannelAccess(userId, channelId, PERMISSIONS.VIEW_CHANNEL);
 
+    const clearedAt = await this.clearedAt(userId);
     const rows = await prisma.message.findMany({
-      where: { channelId, pinnedAt: { not: null }, deletedAt: null },
+      where: {
+        channelId,
+        pinnedAt: { not: null },
+        deletedAt: null,
+        ...(clearedAt ? { createdAt: { gt: clearedAt } } : {}),
+      },
       include: MESSAGE_INCLUDE,
       orderBy: { pinnedAt: 'desc' },
       take: 100,
     });
     return rows.map(toMessage);
+  }
+
+  /**
+   * Hides everything this account can currently see, everywhere, on every one
+   * of its devices.
+   *
+   * Nothing is deleted. It cannot be: a message has two ends, the other one is
+   * somebody else's history, and a button on this side that reached across and
+   * took it away would be a different feature with a different name. What this
+   * does is move one marker on the account, which every read path already
+   * respects - so the other participant's view is untouched and this account's
+   * phone, laptop and browser all agree without any of them being told
+   * individually what to forget.
+   *
+   * "Everything it can currently see" and not "everything up to now": the cut
+   * is stamped at the moment of the call, so a message that arrives a second
+   * later is new mail rather than something the button quietly ate.
+   */
+  async clearChats(userId: string): Promise<ClearChatsResponse> {
+    const clearedAt = new Date();
+    await prisma.user.update({ where: { id: userId }, data: { chatsClearedAt: clearedAt } });
+
+    // The other devices are holding decrypted copies in their own caches, which
+    // no refetch would clear - so this is carried rather than announced.
+    await this.events.publish(EVENTS.CHATS_CLEARED, {
+      userId,
+      clearedAt: clearedAt.toISOString(),
+    });
+    return { clearedAt: clearedAt.toISOString() };
+  }
+
+  /**
+   * The account's own cut-off, or null when it has never cleared anything.
+   *
+   * ponytail: one lookup per history page. It is a primary-key read on a row
+   * the request has already touched through the auth guard; cache it against
+   * the access token if a profiler ever says otherwise.
+   */
+  private async clearedAt(userId: string): Promise<Date | null> {
+    const row = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { chatsClearedAt: true },
+    });
+    return row?.chatsClearedAt ?? null;
   }
 
   async send(

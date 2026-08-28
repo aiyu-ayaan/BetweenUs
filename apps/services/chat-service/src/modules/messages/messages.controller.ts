@@ -13,7 +13,12 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { CurrentUser, JwtAuthGuard, type AuthenticatedUser } from '@betweenus/auth';
-import type { LinkPreview, Message, Paginated } from '@betweenus/shared-types';
+import type {
+  ClearChatsResponse,
+  LinkPreview,
+  Message,
+  Paginated,
+} from '@betweenus/shared-types';
 import { MessagesService } from './messages.service';
 import { UnfurlService } from './unfurl.service';
 import {
@@ -54,6 +59,16 @@ export class MessagesController {
     @Query() query: PinQueryDto,
   ): Promise<Message[]> {
     return this.messages.pins(user.id, query.channelId);
+  }
+
+  /**
+   * Hides this account's own history everywhere. Ahead of `:messageId`, or
+   * `clear` is read as a message id.
+   */
+  @Post('clear')
+  @HttpCode(200)
+  clear(@CurrentUser() user: AuthenticatedUser): Promise<ClearChatsResponse> {
+    return this.messages.clearChats(user.id);
   }
 
   @Post()

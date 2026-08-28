@@ -124,6 +124,15 @@ export class ChatGateway implements OnModuleDestroy {
       this.broadcast(channelRoom(channelId), { type: 'channel.read', channelId, userId, at });
     });
 
+    // Somebody cleared their own history. It goes to that account's room and
+    // nowhere else: every other participant's copy is exactly what it was, and
+    // the only sockets that have anything to do are the ones holding this
+    // account's own decrypted cache.
+    await this.events.subscribe(EVENTS.CHATS_CLEARED, (envelope) => {
+      const { userId, clearedAt } = envelope.payload;
+      this.broadcast(userRoom(userId), { type: 'chats.cleared', clearedAt });
+    });
+
     await this.events.subscribe(EVENTS.FRIEND_CHANGED, (envelope) => {
       for (const userId of envelope.payload.userIds) {
         this.broadcast(userRoom(userId), { type: 'friends.changed' });

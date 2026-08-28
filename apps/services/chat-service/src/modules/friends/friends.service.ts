@@ -7,9 +7,10 @@
  * a channel and chat-service already owns everything downstream of a channel id.
  */
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import { friendIdsOf, prisma } from '@betweenus/database';
+import { blockedIdsAround, friendIdsOf, isBlockedBetween, prisma } from '@betweenus/database';
 import { EVENTS, EventBus } from '@betweenus/events';
 import type {
+  BlockedUser,
   DirectChannel,
   Friend,
   FriendshipStatus,
@@ -55,9 +56,19 @@ export class FriendsService {
     // it is answered here rather than handed to the query.
     if (friendIds?.length === 0) return [];
 
+    // Blocked in either direction is not findable. Both halves matter and for
+    // different reasons: somebody this account blocked should not reappear in
+    // the box it just removed them from, and somebody who blocked *it* must not
+    // be reachable by typing their name in again.
+    const hidden = await blockedIdsAround(userId);
+    const visibleFriendIds = friendIds?.filter((id) => !hidden.has(id));
+    if (visibleFriendIds?.length === 0) return [];
+
     const rows = await prisma.user.findMany({
       where: {
-        id: friendIds ? { in: friendIds } : { not: userId },
+        id: visibleFriendIds
+          ? { in: visibleFriendIds }
+          : { not: userId, ...(hidden.size > 0 ? { notIn: [...hidden] } : {}) },
         disabledAt: null,
         OR: [
           { username: { contains: term, mode: 'insensitive' } },
@@ -106,6 +117,13 @@ export class FriendsService {
         code: 'CANNOT_FRIEND_SELF',
         message: 'You are already your own company',
       });
+    }
+
+    // Same answer whichever way the block runs. Telling the sender "they have
+    // blocked you" would make the request form a way to test for it, which is
+    // the one thing the person who blocked them was trying to stop.
+    if (await isBlockedBetween(userId, target.id)) {
+      throw new NotFoundException({ code: 'USER_NOT_FOUND', message: 'No such user' });
     }
 
     const [userAId, userBId] = orderedPair(userId, target.id);
@@ -180,6 +198,70 @@ export class FriendsService {
     });
   }
 
+  /** Everyone this account has blocked, most recent first. */
+  async blocked(userId: string): Promise<BlockedUser[]> {
+    const rows = await prisma.userBlock.findMany({
+      where: { blockerId: userId },
+      include: { blocked: true },
+      orderBy: { createdAt: 'desc' },
+    });
+    return rows.map((row) => ({
+      user: toSummary(row.blocked),
+      blockedAt: row.createdAt.toISOString(),
+    }));
+  }
+
+  /**
+   * Blocks somebody, and ends whatever relationship there was.
+   *
+   * The friendship goes with it rather than being left in place, because a
+   * blocked friend is a contradiction the rest of the app has no rendering
+   * for: they would sit in the friend list with a conversation that answers
+   * 404. The direct message channel is *not* deleted - it holds both people's
+   * history, and one of them deciding to stop talking is not a reason to take
+   * the other's copy away. `resolveChannelAccess` closes it for both while the
+   * block stands, and unblocking opens the same channel again.
+   */
+  async block(userId: string, otherUserId: string): Promise<BlockedUser> {
+    if (userId === otherUserId) {
+      throw new BadRequestException({
+        code: 'CANNOT_BLOCK_SELF',
+        message: 'You cannot block yourself',
+      });
+    }
+    const target = await prisma.user.findUnique({ where: { id: otherUserId } });
+    if (!target) throw new NotFoundException({ code: 'USER_NOT_FOUND', message: 'No such user' });
+
+    const [userAId, userBId] = orderedPair(userId, otherUserId);
+    // One transaction: a block that landed without the friendship going with it
+    // leaves exactly the contradiction above, and the window for it is a
+    // request in flight rather than something rare.
+    const row = await prisma.$transaction(async (tx) => {
+      await tx.friendship.deleteMany({ where: { userAId, userBId } });
+      return tx.userBlock.upsert({
+        where: { blockerId_blockedId: { blockerId: userId, blockedId: otherUserId } },
+        create: { blockerId: userId, blockedId: otherUserId },
+        update: {},
+      });
+    });
+
+    // Both sides reload. The far side is not told *why* their friend list got
+    // shorter - it is the same event an ordinary removal sends.
+    await this.announce(userId, otherUserId, 'removed');
+    return { user: toSummary(target), blockedAt: row.createdAt.toISOString() };
+  }
+
+  /** Lifts a block. It does not restore the friendship the block ended. */
+  async unblock(userId: string, otherUserId: string): Promise<void> {
+    const { count } = await prisma.userBlock.deleteMany({
+      where: { blockerId: userId, blockedId: otherUserId },
+    });
+    if (count === 0) {
+      throw new NotFoundException({ code: 'BLOCK_NOT_FOUND', message: 'They are not blocked' });
+    }
+    await this.announce(userId, otherUserId, 'removed');
+  }
+
   /** Direct message channels this user is part of, most recent first. */
   async directChannels(userId: string): Promise<DirectChannel[]> {
     const channels = await prisma.channel.findMany({
@@ -188,10 +270,15 @@ export class FriendsService {
       orderBy: { createdAt: 'desc' },
     });
 
+    // A conversation closed by a block is dropped from the list rather than
+    // left in it to answer 404 when it is clicked. The rows are untouched: the
+    // channel comes back, with its history, the moment the block is lifted.
+    const hidden = await blockedIdsAround(userId);
+
     return channels
       .map((channel) => {
         const other = channel.members.find((member) => member.userId !== userId);
-        if (!other) return null;
+        if (!other || hidden.has(other.userId)) return null;
         return {
           channelId: channel.id,
           participant: toSummary(other.user),
@@ -207,6 +294,9 @@ export class FriendsService {
    * to put a message in front of anyone at all.
    */
   async openDirectChannel(userId: string, otherUserId: string): Promise<DirectChannel> {
+    if (await isBlockedBetween(userId, otherUserId)) {
+      throw new NotFoundException({ code: 'USER_NOT_FOUND', message: 'No such user' });
+    }
     const friendship = await this.require(userId, otherUserId);
     if (friendship.status !== 'ACCEPTED') {
       throw new ForbiddenException({

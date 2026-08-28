@@ -115,6 +115,14 @@ export class NotificationsService {
       select: { id: true, serverId: true, createdAt: true },
     });
 
+    // An account that cleared its history must not be told it has unread
+    // messages it can no longer open. The cut is a floor under every channel's
+    // cutoff rather than a separate rule - see `chatsClearedAt`.
+    const cleared = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { chatsClearedAt: true },
+    });
+
     const reads = await prisma.channelRead.findMany({
       where: { userId, channelId: { in: channels.map((channel) => channel.id) } },
       select: { channelId: true, lastReadAt: true },
@@ -126,11 +134,13 @@ export class NotificationsService {
     return Promise.all(
       channels.map(async (channel) => {
         const marker = readAt.get(channel.id);
-        const since =
+        const from =
           marker ??
           joinedChannel.get(channel.id) ??
           (channel.serverId ? joinedServer.get(channel.serverId) : undefined) ??
           channel.createdAt;
+        const clearedAt = cleared?.chatsClearedAt;
+        const since = clearedAt && clearedAt > from ? clearedAt : from;
 
         const count = await prisma.message.count({
           where: {
