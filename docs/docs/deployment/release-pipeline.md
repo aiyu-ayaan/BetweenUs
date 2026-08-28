@@ -27,7 +27,8 @@ flowchart LR
    what's being built in `.github/release-targets`. Nothing is built yet —
    the diff is the last look before it ships.
 2. **Merging that PR is what releases.** Images → desktop installer →
-   Android APKs/AAB → the tag and GitHub Release → the moving tags
+   Android APKs and AAB (one job each, in parallel) → the tag and GitHub
+   Release → the moving tags
    (`latest`, `alpha`/`beta`) re-pointed dead last, only once every artifact
    and the Release itself exist.
 

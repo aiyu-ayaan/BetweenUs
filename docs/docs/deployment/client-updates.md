@@ -14,54 +14,58 @@ same release list; what differs is what it can do with what it finds.
 
 | Client | What an update is | Who installs it |
 | --- | --- | --- |
-| Desktop, installed | `BetweenUs-<version>-Setup.exe` | the NSIS installer |
-| Desktop, portable | `BetweenUs-<version>-Portable.exe` | the app, by swapping its own exe |
+| Desktop | `BetweenUs-<version>-Setup.exe` | the NSIS installer, silently |
 | Android | `BetweenUs-<version>-<abi>.apk` | Android's package installer |
 | Web | a reload | nobody — the deployment was already updated |
 
-## Desktop: the flavour decides everything
+## Desktop
 
-Windows ships as two builds from one `electron-builder.yml`. They are not
-interchangeable: handing a portable copy the installer doesn't update it, it
-installs a *second* BetweenUs into Program Files and leaves the portable one
-running and out of date.
+Windows ships one build: an installer. A portable exe shipped beside it until
+the pair of them made every update a question of which build was asking, and
+handing a portable copy the installer installs a *second* BetweenUs rather than
+updating the first. One build, one asset, no question.
 
 ```mermaid
 flowchart TD
     A[Launch] --> B{app.isPackaged?}
     B -->|no| C["unpacked — a dev run,<br/>no update is ever offered"]
-    B -->|yes| D{PORTABLE_EXECUTABLE_FILE set?}
-    D -->|yes| E["portable — only ever<br/>-Portable.exe"]
-    D -->|no| F["installer — only ever<br/>-Setup.exe"]
-    E --> G["swap the running exe in place"]
-    F --> H["run the NSIS installer, quit"]
+    B -->|yes| D["installer — only ever<br/>-Setup.exe"]
+    D --> E["download it in the background"]
+    E --> F["on Restart and install:<br/>run it silently, quit"]
 ```
 
-`PORTABLE_EXECUTABLE_FILE` is set by electron-builder's portable target and is
-the only runtime difference between the two builds — the portable exe unpacks
-itself to a temp directory and runs from there, so `process.execPath` is the
-unpacked copy while that variable is the file the user keeps.
+A release that built the other platforms only offers Windows nothing, rather
+than something it cannot apply.
 
-There is no fallback between the two assets. A release that built one and not
-the other offers nothing rather than the wrong one.
+### The installer
+
+Assisted rather than one-click, and per user:
+
+| | |
+| --- | --- |
+| Where it goes | the user chooses, and an update keeps that choice |
+| Elevation | none — a per-user install never asks for an administrator |
+| Shortcuts | desktop and start menu |
+| Uninstall | leaves AppData, so reinstalling does not lose anyone's keys |
 
 ### Applying it
 
-**Installed** — start the setup exe and quit; NSIS closes the app, replaces the
-installation and starts it again.
+The download waits in `<userData>/updates`. **Restart and install** starts it
+as `--updated /S --force-run` — silent, into the directory already chosen, and
+BetweenUs starts again when it is done — and this process quits so NSIS has
+nothing left to close. Started with no arguments it opens its wizard behind the
+running app, which is exactly what made the button look dead.
 
-**Portable** — there is no installer, so the app does the swap itself:
+If it cannot be started at all, the download is on the disk and runnable, so
+the file manager opens on it and the reason is shown.
 
-1. Rename `BetweenUs.exe` to `BetweenUs.exe.old`. Windows allows renaming a
-   running executable; it does not allow deleting one.
-2. Copy the download over `BetweenUs.exe`. A copy rather than a rename, because
-   the download is in the user-data directory and may be on another volume.
-3. Start it and quit.
-4. On the next launch, delete the `.old` file — by then nothing is running it.
+### When it downloads
 
-The copy stays exactly where the user put it, which is the point of a portable
-build. If any step fails the download is still on the disk and still runnable,
-so the file manager opens on it and the reason is shown.
+A check finds an offer and fetches it there and then: the download is the slow
+half and it is the half that can happen quietly. Installing is always asked
+for. A download that is still waiting when the app is closed is picked back up
+on the next launch — the file name carries the version — and anything that is
+no longer an upgrade on this build is deleted.
 
 ### Channels
 
@@ -76,7 +80,9 @@ Cumulative, and the same three as Android:
 The default is the channel this build belongs to, so an alpha install isn't
 stranded on stable until the version it's running is released. It's stored in
 `betweenus-settings.json` — a property of this copy of the app, not of the
-account.
+account. Changing it in Settings → Updates takes effect on the spot and
+re-checks; the offer in hand is dropped, because it was picked on the old
+channel.
 
 "Newer" is by version and never by publish date: a stable release cut after an
 alpha is not an upgrade for somebody running that alpha.
@@ -88,9 +94,10 @@ than retried.
 
 ### Why not electron-updater
 
-It would want a `latest.yml` published alongside the assets and a `publish`
-block in the builder config, and it still couldn't update the portable build —
-half of what ships.
+It would want a `latest.yml` published alongside the assets, a `publish` block
+in the builder config, and a second release path to keep working. The rules
+here are two hundred lines with a self-check beside them
+(`electron/updates.check.ts`).
 
 ## Web: notice, then reload
 
@@ -131,7 +138,6 @@ nobody has opened, the per-ABI APK rather than the universal one, and
 
 ```text
 BetweenUs-<version>-Setup.exe        desktop, installed
-BetweenUs-<version>-Portable.exe     desktop, portable
 BetweenUs-<version>-<abi>.apk        Android, per ABI
 BetweenUs-<version>-universal.apk    Android, fallback
 ```
