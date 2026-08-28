@@ -232,6 +232,14 @@ export const ShieldIcon = (props: IconProps): JSX.Element => (
   </Base>
 );
 
+/** A circle with a bar through it: the universal "no". Used for blocking. */
+export const BlockIcon = (props: IconProps): JSX.Element => (
+  <Base {...props}>
+    <circle cx="12" cy="12" r="10" />
+    <line x1="4.93" y1="4.93" x2="19.07" y2="19.07" />
+  </Base>
+);
+
 export const BellIcon = (props: IconProps): JSX.Element => (
   <Base {...props}>
     <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />

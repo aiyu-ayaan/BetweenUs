@@ -3,6 +3,10 @@ import type {
   ApiErrorBody,
   AuthResponse,
   AuthTokens,
+  BlockedUser,
+  ClearChatsResponse,
+  ForgotPasswordResponse,
+  UsernameAvailability,
   CallAnalytics,
   CallHistoryEntry,
   CallIceResponse,
@@ -264,6 +268,35 @@ export const api = {
       body: JSON.stringify({ currentPassword, newPassword }),
     }),
 
+  /**
+   * Whether a username can be registered. Cheap on the server - a Bloom filter
+   * answers the common case without a query - so the sign-up form can ask while
+   * somebody is still typing rather than when they press the button.
+   */
+  usernameAvailable: (username: string): Promise<UsernameAvailability> =>
+    publicRequest(`/api/v1/auth/username-available?username=${encodeURIComponent(username)}`),
+
+  /**
+   * What can be done about a forgotten password here.
+   *
+   * Three answers and only one of them is about the account: a link was sent
+   * (or the account does not exist - deliberately the same answer), an
+   * administrator has already authorised a reset and here is the token, or this
+   * deployment has no mail server and the person should ask an administrator.
+   */
+  forgotPassword: (identifier: string): Promise<ForgotPasswordResponse> =>
+    publicRequest('/api/v1/auth/forgot-password', {
+      method: 'POST',
+      body: JSON.stringify({ identifier }),
+    }),
+
+  /** Spends a reset token. The only way to set a password without the old one. */
+  resetPassword: (token: string, newPassword: string): Promise<AuthResponse> =>
+    publicRequest('/api/v1/auth/reset-password', {
+      method: 'POST',
+      body: JSON.stringify({ token, newPassword }),
+    }),
+
   /** Providers the operator enabled in the admin panel, for the login screen. */
   oauthProviders: (): Promise<OAuthProviderSummary[]> =>
     publicRequest('/api/v1/auth/oauth/providers'),
@@ -516,6 +549,27 @@ export const api = {
 
   removeFriend: (userId: string): Promise<void> =>
     request(`/api/v1/friends/${userId}`, { method: 'DELETE' }),
+
+  /** Everyone this account has blocked, most recent first. */
+  blocked: (): Promise<BlockedUser[]> => request('/api/v1/blocks'),
+
+  /**
+   * Blocks somebody. It also ends the friendship, and closes the conversation
+   * for both sides - the messages stay where they are, and come back if the
+   * block is ever lifted.
+   */
+  blockUser: (userId: string): Promise<BlockedUser> =>
+    request('/api/v1/blocks', { method: 'POST', body: JSON.stringify({ userId }) }),
+
+  unblockUser: (userId: string): Promise<void> =>
+    request(`/api/v1/blocks/${userId}`, { method: 'DELETE' }),
+
+  /**
+   * Hides every message this account can currently see, on all of its devices.
+   * Nobody else's copy moves - see the server's `clearChats`.
+   */
+  clearChats: (): Promise<ClearChatsResponse> =>
+    request('/api/v1/messages/clear', { method: 'POST' }),
 
   directChannels: (): Promise<DirectChannel[]> => request('/api/v1/dm'),
 

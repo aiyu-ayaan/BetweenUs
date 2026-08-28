@@ -34,6 +34,17 @@ interface AuthState {
   login: (email: string, password: string) => Promise<void>;
   loginWithProvider: (provider: string) => Promise<void>;
   register: (email: string, username: string, password: string) => Promise<void>;
+  /**
+   * Spends a reset token and signs in on the new password.
+   *
+   * Worth knowing what it costs: the identity backup is sealed with the *old*
+   * password, so a reset leaves it unreadable. This machine keeps the key it
+   * already holds and carries on; a machine signing in for the first time after
+   * a reset gets a new device key and can read what arrives from then on, not
+   * what came before. That is the price of a password nobody remembers, and it
+   * is the same price every end-to-end encrypted system charges.
+   */
+  resetPassword: (token: string, newPassword: string) => Promise<void>;
   restore: () => Promise<void>;
   /** Re-reads the profile after it has been edited in settings. */
   refreshUser: () => Promise<void>;
@@ -113,6 +124,21 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       });
     } catch (error) {
       set({ status: 'idle', error: messageOf(error) });
+    }
+  },
+
+  resetPassword: async (token, newPassword) => {
+    set({ status: 'loading', error: null });
+    try {
+      const result = await api.resetPassword(token, newPassword);
+      localStorage.setItem(EMAIL_KEY, result.user.email);
+      applySession(set, result.accessToken, result.refreshToken, result.user, {
+        value: newPassword,
+        kind: 'password',
+      });
+    } catch (error) {
+      set({ status: 'idle', error: messageOf(error) });
+      throw error;
     }
   },
 

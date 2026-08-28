@@ -959,6 +959,22 @@ chatSocket.on((event) => {
     return;
   }
 
+  /**
+   * This account cleared its own history, here or on another of its devices.
+   *
+   * Everything on screen and everything on disk goes: the cache holds sealed
+   * envelopes the server will no longer hand back, and the open channel holds
+   * the decrypted ones. Refetching is what fills both again, and what comes
+   * back is whatever arrived after the cut.
+   */
+  if (event.type === 'chats.cleared') {
+    void cache.clear().catch(() => undefined);
+    const { activeChannelId } = useChatStore.getState();
+    useChatStore.setState({ messages: [], pins: [], divider: {}, receipts: {} });
+    if (activeChannelId) void useChatStore.getState().selectChannel(activeChannelId);
+    return;
+  }
+
   if (event.type === 'message.updated') {
     // An edit, a deletion, a pin and a reaction all replace the stored row, so
     // the cache does not hand back a message that was taken down an hour ago.

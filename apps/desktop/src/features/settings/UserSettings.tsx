@@ -24,6 +24,7 @@ import {
 import { serverUrl } from '../../services/endpoint';
 import { backupIdentity, deviceId, rewrapBackupForPassword } from '../../services/e2ee';
 import { useIdentityStore } from '../../stores/identity';
+import { useFriendsStore } from '../../stores/friends';
 import { useAgentStore } from '../../services/remote-agent';
 import { isDesktopRuntime } from '../../services/platform';
 import { startWebPush } from '../../services/web-push';
@@ -33,6 +34,7 @@ import { PicturePicker } from '../../components/PicturePicker';
 import {
   BellIcon,
   BetweenUsLogoIcon,
+  BlockIcon,
   CheckIcon,
   ChevronLeftIcon,
   DownloadIcon,
@@ -41,6 +43,7 @@ import {
   MonitorIcon,
   PaletteIcon,
   PhoneIcon,
+  ShieldIcon,
   UserIcon,
   XIcon,
 } from '../../components/icons';
@@ -55,6 +58,7 @@ const isMac = typeof window !== 'undefined' && window.betweenus?.platform === 'd
 
 type Section =
   | 'account'
+  | 'privacy'
   | 'voice'
   | 'calls'
   | 'notifications'
@@ -66,6 +70,7 @@ type Section =
 // cannot do - so the web client has no such section. See services/platform.ts.
 const SECTIONS: Array<{ id: Section; label: string; icon: typeof UserIcon }> = [
   { id: 'account', label: 'My Account', icon: UserIcon },
+  { id: 'privacy', label: 'Privacy & Safety', icon: ShieldIcon },
   { id: 'voice', label: 'Voice & Video', icon: MicIcon },
   { id: 'calls', label: 'Calls & Data', icon: PhoneIcon },
   { id: 'notifications', label: 'Notifications', icon: BellIcon },
@@ -203,6 +208,7 @@ export function UserSettings({ onClose }: { onClose: () => void }): JSX.Element 
       <div className="panel relative flex-1 overflow-y-auto bg-surface-900 px-4 py-6 md:px-10 md:py-10 rounded-none md:rounded-panel border-0 md:border border-edge">
         <div className="max-w-[660px]">
           {section === 'account' && <AccountSection />}
+          {section === 'privacy' && <PrivacySection />}
           {section === 'voice' && <VoiceSection />}
           {section === 'calls' && <CallUsageSection />}
           {section === 'notifications' && <NotificationsSection />}
@@ -231,6 +237,142 @@ export function UserSettings({ onClose }: { onClose: () => void }): JSX.Element 
       </div>
     </div>
     </div>
+  );
+}
+
+/**
+ * The two things somebody does about other people rather than about the app:
+ * refusing one of them, and taking their own history off every screen.
+ *
+ * They share a page because they share a shape - both are one-sided, both are
+ * about this account's view, and neither reaches across and changes what
+ * anybody else sees.
+ */
+function PrivacySection(): JSX.Element {
+  const blocked = useFriendsStore((state) => state.blocked);
+  const load = useFriendsStore((state) => state.load);
+  const unblock = useFriendsStore((state) => state.unblock);
+
+  const [clearing, setClearing] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  // The friends screen loads this too, but settings can be opened without ever
+  // having been there.
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const clearChats = async (): Promise<void> => {
+    // Typed rather than clicked. It is not reversible from inside the app, and
+    // "are you sure" next to a button somebody already meant to press is not a
+    // question, it is a speed bump.
+    const typed = prompt(
+      'This hides every message you can currently see, in every conversation, on ' +
+        'every device you are signed in on.\n\n' +
+        'Nobody else loses anything - the other side of each conversation still ' +
+        'has their copy, and new messages still arrive.\n\n' +
+        'Type CLEAR to confirm.',
+    );
+    if (typed?.trim().toUpperCase() !== 'CLEAR') return;
+
+    setClearing(true);
+    setError(null);
+    setNote(null);
+    try {
+      await api.clearChats();
+      // The server publishes the cut to this account's sockets, and the chat
+      // store drops the caches when it lands - including this window's. There
+      // is nothing to do here but say so.
+      setNote('Cleared. Your other devices are catching up.');
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Could not clear your messages.');
+    } finally {
+      setClearing(false);
+    }
+  };
+
+  return (
+    <>
+      <h1 className="text-xl font-semibold text-slate-50">Privacy &amp; Safety</h1>
+      <p className="mt-2 text-sm text-slate-400">
+        Who can reach you, and what stays on your screens.
+      </p>
+
+      <section className="mt-6">
+        <h2 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-slate-300">
+          <BlockIcon className="h-4 w-4" />
+          Blocked people
+        </h2>
+        <p className="mt-1.5 text-sm text-slate-400">
+          A blocked person cannot message you or send you a request, and your conversation
+          disappears for both of you. Nothing is deleted - unblocking brings it back.
+        </p>
+
+        {blocked.length === 0 ? (
+          <p className="mt-4 rounded-lg border border-edge bg-surface-950 px-4 py-6 text-center text-sm text-slate-500">
+            You have not blocked anyone.
+          </p>
+        ) : (
+          <ul className="mt-4 divide-y divide-surface-700/60 rounded-lg border border-edge bg-surface-950">
+            {blocked.map((entry) => (
+              <li key={entry.user.id} className="flex items-center gap-3 px-4 py-3">
+                <Avatar
+                  name={entry.user.displayName}
+                  avatarUrl={entry.user.avatarUrl}
+                  ringColour="border-surface-950"
+                />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-medium text-slate-100">{entry.user.displayName}</p>
+                  <p className="truncate text-xs text-slate-500">
+                    @{entry.user.username} · blocked{' '}
+                    {new Date(entry.blockedAt).toLocaleDateString()}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => void unblock(entry.user.id)}
+                  className="shrink-0 cursor-pointer rounded-md border border-edge px-3 py-1.5 text-xs text-slate-300 transition-colors duration-200 hover:border-accent hover:text-slate-100"
+                >
+                  Unblock
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <section className="mt-8 border-t border-edge pt-6">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-300">
+          Clear my messages
+        </h2>
+        <p className="mt-1.5 text-sm text-slate-400">
+          Hides everything you can currently see, in every conversation, on every device you are
+          signed in on. The people you were talking to keep their own copies - a conversation has
+          two ends, and this button only reaches one of them.
+        </p>
+
+        <button
+          type="button"
+          disabled={clearing}
+          onClick={() => void clearChats()}
+          className="mt-4 cursor-pointer rounded-md border border-danger/40 px-4 py-2 text-sm text-danger transition-colors duration-200 hover:border-danger hover:bg-danger/10 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {clearing ? 'Clearing…' : 'Clear all my messages'}
+        </button>
+
+        {note && (
+          <p role="status" className="mt-3 text-sm text-status-online">
+            {note}
+          </p>
+        )}
+        {error && (
+          <p role="alert" className="mt-3 text-sm text-danger">
+            {error}
+          </p>
+        )}
+      </section>
+    </>
   );
 }
 

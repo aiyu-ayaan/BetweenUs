@@ -4,6 +4,7 @@ import { useFriendsStore } from '../../stores/friends';
 import { usePresenceStore, useStatusOf } from '../../stores/presence';
 import { Avatar } from '../../components/Avatar';
 import {
+  BlockIcon,
   CheckIcon,
   MenuIcon,
   MessageIcon,
@@ -153,6 +154,7 @@ function FriendList({ friends, tab }: { friends: Friend[]; tab: Tab }): JSX.Elem
   const statusOf = useStatusOf();
   const accept = useFriendsStore((state) => state.accept);
   const remove = useFriendsStore((state) => state.remove);
+  const block = useFriendsStore((state) => state.block);
   const openDirect = useFriendsStore((state) => state.openDirect);
 
   if (friends.length === 0) {
@@ -225,6 +227,28 @@ function FriendList({ friends, tab }: { friends: Friend[]; tab: Tab }): JSX.Elem
                 hoverClasses="hover:text-danger"
               >
                 <XIcon className="h-5 w-5" />
+              </IconButton>
+              <IconButton
+                label={`Block ${friend.user.displayName}`}
+                onClick={() => {
+                  // Confirmed, because it is not the same button as Remove: it
+                  // ends the friendship *and* closes the conversation, and
+                  // neither side can start it again while it stands.
+                  if (
+                    !confirm(
+                      `Block ${friend.user.displayName}?\n\n` +
+                        'They will not be able to message you or send a request, and your ' +
+                        'conversation disappears for both of you. Nothing is deleted - ' +
+                        'unblocking brings it back. You can undo this in Settings.',
+                    )
+                  ) {
+                    return;
+                  }
+                  void block(friend.user.id);
+                }}
+                hoverClasses="hover:text-danger"
+              >
+                <BlockIcon className="h-5 w-5" />
               </IconButton>
             </div>
           </li>

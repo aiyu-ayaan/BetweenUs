@@ -4,9 +4,10 @@ import { rememberedEmail, useAuthStore } from '../../stores/auth';
 import { api } from '../../services/api';
 import { GlobeIcon, BetweenUsLogoIcon } from '../../components/icons';
 import { ServerPicker, serverLabel } from './ServerPicker';
+import { ForgotPassword } from './ForgotPassword';
 
 export function LoginScreen(): JSX.Element {
-  const [mode, setMode] = useState<'login' | 'register'>('login');
+  const [mode, setMode] = useState<'login' | 'register' | 'forgot'>('login');
   const [pickingServer, setPickingServer] = useState(false);
   // Signing in again on this machine should not mean typing the address again.
   const [email, setEmail] = useState(rememberedEmail);
@@ -26,11 +27,49 @@ export function LoginScreen(): JSX.Element {
       .catch(() => setProviders([]));
   }, []);
 
+  /**
+   * Whether the typed username is free, as the server last answered.
+   *
+   * Asked while somebody types rather than when they press the button, which
+   * the server can afford: a Bloom filter answers the common case - a name
+   * nobody has - without touching the database. Null means nothing has been
+   * asked yet, which is also what a short or half-typed name gets.
+   */
+  const [nameCheck, setNameCheck] = useState<{ available: boolean; reason?: string } | null>(null);
+
+  useEffect(() => {
+    if (mode !== 'register' || username.trim().length < 3) {
+      setNameCheck(null);
+      return;
+    }
+    // Debounced, so a name is checked once rather than once per keystroke.
+    const timer = setTimeout(() => {
+      void api
+        .usernameAvailable(username.trim())
+        .then((answer) => setNameCheck({ available: answer.available, reason: answer.reason }))
+        // A server that cannot answer means no hint, never a false refusal:
+        // the registration itself is still gated by the unique index.
+        .catch(() => setNameCheck(null));
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [username, mode]);
+
   const submit = async (event: FormEvent): Promise<void> => {
     event.preventDefault();
     if (mode === 'login') await login(email, password);
     else await register(email, username, password);
   };
+
+  if (mode === 'forgot') {
+    return (
+      <ForgotPassword
+        onDone={() => {
+          setMode('login');
+          clearError();
+        }}
+      />
+    );
+  }
 
   return (
     <div className="relative flex h-full items-center justify-center bg-ground px-4">
@@ -103,6 +142,19 @@ export function LoginScreen(): JSX.Element {
                 className="w-full rounded-md border border-edge bg-surface-950 px-3 py-2 text-slate-100 placeholder-slate-500 transition-colors duration-200 focus:border-accent"
                 placeholder="ayaan"
               />
+              {nameCheck && (
+                <p
+                  className={`mt-1 text-xs ${
+                    nameCheck.available ? 'text-emerald-400' : 'text-danger'
+                  }`}
+                >
+                  {nameCheck.available
+                    ? `${username.trim().toLowerCase()} is available`
+                    : nameCheck.reason === 'invalid'
+                      ? 'Letters, numbers, dot, dash and underscore only'
+                      : 'That username is already taken'}
+                </p>
+              )}
             </div>
           )}
 
@@ -127,8 +179,19 @@ export function LoginScreen(): JSX.Element {
               className="w-full rounded-md border border-edge bg-surface-950 px-3 py-2 text-slate-100 placeholder-slate-500 transition-colors duration-200 focus:border-accent"
               placeholder="At least 8 characters"
             />
-            {mode === 'register' && (
+            {mode === 'register' ? (
               <p className="mt-1 text-xs text-slate-500">Must contain a letter and a number.</p>
+            ) : (
+              <button
+                type="button"
+                onClick={() => {
+                  setMode('forgot');
+                  clearError();
+                }}
+                className="mt-1.5 cursor-pointer text-xs text-slate-500 transition-colors duration-200 hover:text-slate-300"
+              >
+                Forgot your password?
+              </button>
             )}
           </div>
 
