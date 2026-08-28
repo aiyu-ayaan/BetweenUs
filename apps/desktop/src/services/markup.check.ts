@@ -18,6 +18,8 @@ import {
   highlight,
   isPlain,
   parse,
+  parseNotes,
+  styleRuns,
   wantsNewline,
   type Block,
   type Span,
@@ -362,5 +364,86 @@ assert.equal(wantsNewline('```\ncode\n```\nthere', 18), false);
 
 // Only the line the caret is on counts.
 assert.equal(wantsNewline('- eggs\nprose', 12), false);
+
+// --- Release notes are the same parser with headings on ----------------------
+
+// A chat line must not grow headings: "### not a heading" is what somebody
+// typed, and drawing it as one is the reason `parse` does not have them.
+assert.deepEqual(
+  parse('### Features').map((block) => block.kind),
+  ['body'],
+);
+assert.equal(parse('### Features')[0]?.text, '### Features');
+
+// The same line, read as a document.
+const heading = parseNotes('### Features')[0];
+assert.equal(heading?.kind, 'heading');
+assert.equal(heading?.text, 'Features');
+assert.equal(heading?.ordinal, 3, 'the level, so a renderer can size it');
+assert.equal(parseNotes('## Install')[0]?.ordinal, 2);
+assert.equal(parseNotes('# One')[0]?.ordinal, 1);
+
+// A hash with no space after it is not a heading on either side of the switch:
+// `#general` is a channel, and `#` alone is a stray character.
+assert.equal(parseNotes('#general is quiet')[0]?.kind, 'body');
+assert.equal(parseNotes('#')[0]?.kind, 'body');
+
+// Closing hashes are decoration, not text.
+assert.equal(parseNotes('## Install ##')[0]?.text, 'Install');
+
+// Marks still apply inside a heading, and the offsets are into the text that
+// comes back rather than the source.
+const marked = parseNotes('### The **Artifacts** table')[0];
+assert.equal(marked?.text, 'The Artifacts table');
+assert.deepEqual(marked?.spans, [{ start: 4, end: 13, style: 'bold' }]);
+
+// The `| --- | --- |` under a table header is swallowed; the rows are left as
+// the pipes they are, one paragraph, which draws as the two lines it was
+// because a paragraph keeps its newlines. That is legible and is not a table
+// parser.
+assert.deepEqual(
+  parseNotes('| Platform | This release |\n| --- | --- |\n| Android | Built here |').map(
+    (block) => block.text,
+  ),
+  ['| Platform | This release |\n| Android | Built here |'],
+);
+// A chat line of dashes and pipes is untouched.
+assert.equal(parse('| --- | --- |')[0]?.text, '| --- | --- |');
+
+// The shape a real release note actually has: a heading, a `*` list under it,
+// and a fenced block - all three from one pass. The blank lines between them
+// come back as empty `body` blocks, which is what a blank line in a message is
+// and is why the notes renderer drops them rather than the parser.
+assert.deepEqual(
+  parseNotes(
+    ['### Bug fixes', '', '* Fixed the thing', '* Fixed the other', '', '```bash', 'docker compose pull', '```'].join('\n'),
+  )
+    .filter((block) => block.kind !== 'body' || block.text !== '')
+    .map((block) => [block.kind, block.text]),
+  [
+    ['heading', 'Bug fixes'],
+    ['bullet', 'Fixed the thing'],
+    ['bullet', 'Fixed the other'],
+    ['code', 'docker compose pull'],
+  ],
+);
+
+// --- styleRuns ---------------------------------------------------------------
+
+// Moved out of ChatView so the release notes can draw the same runs. Nesting is
+// the case it exists for: bold around italic is two overlapping spans.
+assert.deepEqual(styleRuns('plain', []), [{ text: 'plain', styles: [] }]);
+assert.deepEqual(styleRuns('', []), []);
+assert.deepEqual(
+  styleRuns('abc', [
+    { start: 0, end: 3, style: 'bold' },
+    { start: 1, end: 2, style: 'italic' },
+  ]),
+  [
+    { text: 'a', styles: ['bold'] },
+    { text: 'b', styles: ['bold', 'italic'] },
+    { text: 'c', styles: ['bold'] },
+  ],
+);
 
 console.log('markup.check.ts ok');

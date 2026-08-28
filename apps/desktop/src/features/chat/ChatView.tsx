@@ -39,11 +39,11 @@ import {
   highlight,
   wantsNewline,
   parse as parseMarkup,
+  styleRuns,
   type Block as MarkupBlockType,
   type Highlight,
   type HighlightStyle,
-  type Span as MarkupSpan,
-  type Style as MarkupStyle,
+  type Run as MarkupRun,
 } from '../../services/markup';
 import { emojiQueryAt } from './emoji-names';
 import { nextFollow } from './follow';
@@ -1155,40 +1155,7 @@ function MarkupInline({
   );
 }
 
-/** A stretch of text over which exactly the same set of styles is active. */
-interface Run {
-  text: string;
-  styles: MarkupStyle[];
-}
-
-/**
- * Cuts a block's text into runs of uniform styling.
- *
- * Spans nest - bold around italic is two spans over overlapping ranges - so
- * this cannot walk them one at a time. It asks each character which styles
- * cover it and groups the neighbours that agree, which is the one approach
- * that handles nesting without building a tree.
- */
-function styleRuns(text: string, spans: MarkupSpan[]): Run[] {
-  if (spans.length === 0) return text ? [{ text, styles: [] }] : [];
-
-  const runs: Run[] = [];
-  let current: Run | null = null;
-
-  for (let at = 0; at < text.length; at++) {
-    const styles = spans.filter((span) => at >= span.start && at < span.end).map((span) => span.style);
-    const key = styles.join(',');
-    if (current && current.styles.join(',') === key) {
-      current.text += text[at];
-    } else {
-      current = { text: text[at] ?? '', styles };
-      runs.push(current);
-    }
-  }
-  return runs;
-}
-
-function StyledRun({ run, emoji }: { run: Run; emoji: MessageCustomEmoji[] }): JSX.Element {
+function StyledRun({ run, emoji }: { run: MarkupRun; emoji: MessageCustomEmoji[] }): JSX.Element {
   // Code is literal - it is where somebody puts the text they did not want
   // touched - so neither the emoji splitter nor the link matcher runs inside
   // it. Everything else gets both.

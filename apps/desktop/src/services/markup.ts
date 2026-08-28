@@ -4,9 +4,13 @@
  * `message-body.ts` decides what a message *is* - words, attachments and the
  * quote above a reply. This decides how the words read: the small set of marks
  * every chat app has trained people to type, and nothing else. There is no link
- * syntax, because a bare URL is already a link on every client; no headings,
- * because a heading in a chat line is shouting; and no images, because an
- * attachment is not a body.
+ * syntax, because a bare URL is already a link on every client, and no images,
+ * because an attachment is not a body.
+ *
+ * Headings are the one thing that depends on what is being read. A heading in a
+ * chat line is shouting, so `parse` does not have them; release notes are a
+ * document and are nothing but headings, so `parseNotes` does. It is the same
+ * parser with one rule switched on - see the bottom of this file.
  *
  * Pure and offset-exact, which is the whole reason it is here rather than in
  * the renderer: the marks are *removed* from the text, so every span is an
@@ -27,7 +31,7 @@ export interface Span {
   style: Style;
 }
 
-export type Kind = 'body' | 'quote' | 'code' | 'bullet' | 'number';
+export type Kind = 'body' | 'quote' | 'code' | 'bullet' | 'number' | 'heading';
 
 /**
  * One block of a message.
@@ -37,8 +41,8 @@ export type Kind = 'body' | 'quote' | 'code' | 'bullet' | 'number';
  * which is the whole of what a chat line needs and a fraction of what a
  * document parser would cost.
  *
- * `ordinal` is the number a `number` item is drawn with, and zero for
- * everything else.
+ * `ordinal` is the number a `number` item is drawn with, and the level of a
+ * `heading` - `## Install` is 2. Zero for everything else.
  */
 export interface Block {
   kind: Kind;
@@ -74,7 +78,19 @@ const ESCAPABLE = '*_~`\\>';
 const BULLET = /^ {0,3}[-*+] +(.*)$/;
 const NUMBER = /^ {0,3}(\d{1,9})[.)] +(.*)$/;
 
-export function parse(text: string): Block[] {
+/** `### Features`. The space is what keeps a `#channel` mention from being one. */
+const HEADING = /^ {0,3}(#{1,6}) +(.*?)\s*#*\s*$/;
+
+/**
+ * The `| --- | --- |` under a table's header row.
+ *
+ * ponytail: tables are not parsed, only this line is swallowed - the rows draw
+ * as the pipes they are, which is legible for the three-row table a release
+ * note carries. A real table block if one ever gets wide enough to need it.
+ */
+const TABLE_RULE = /^ {0,3}\|[\s:|-]*-[\s:|-]*\|\s*$/;
+
+export function parse(text: string, headings = false): Block[] {
   const blocks: Block[] = [];
   const lines = text.split('\n');
   let i = 0;
@@ -106,6 +122,20 @@ export function parse(text: string): Block[] {
       if (i < lines.length) i++;
       blocks.push({ kind: 'code', text: trimNewlines(fence.join('\n')), spans: [], ordinal: 0 });
       continue;
+    }
+
+    if (headings) {
+      if (TABLE_RULE.test(line)) {
+        i++;
+        continue;
+      }
+      const heading = HEADING.exec(line);
+      if (heading) {
+        flush();
+        blocks.push(inline(heading[2] ?? '', 'heading', (heading[1] ?? '#').length));
+        i++;
+        continue;
+      }
     }
 
     // A list item is its own block, so it ends whatever paragraph was being
@@ -388,4 +418,52 @@ export function isPlain(text: string): boolean {
   return text
     .split('\n')
     .every((line) => !(line.startsWith('> ') || line === '>' || BULLET.test(line) || NUMBER.test(line)));
+}
+
+/**
+ * The same parser, reading a document rather than a chat line.
+ *
+ * Release notes are `### Features` and a list under it, which `parse` would
+ * draw as a line beginning with three hashes. This is the only caller that
+ * wants headings, and chat is the only one that must not have them.
+ */
+export function parseNotes(text: string): Block[] {
+  return parse(text, true);
+}
+
+/** A stretch of text over which exactly the same set of styles is active. */
+export interface Run {
+  text: string;
+  styles: Style[];
+}
+
+/**
+ * Cuts a block's text into runs of uniform styling.
+ *
+ * Spans nest - bold around italic is two spans over overlapping ranges - so
+ * this cannot walk them one at a time. It asks each character which styles
+ * cover it and groups the neighbours that agree, which is the one approach
+ * that handles nesting without building a tree.
+ *
+ * Here rather than in a renderer because both of them need it: the message
+ * list lays emoji and link previews over these runs, and the release notes
+ * draw them plain.
+ */
+export function styleRuns(text: string, spans: Span[]): Run[] {
+  if (spans.length === 0) return text ? [{ text, styles: [] }] : [];
+
+  const runs: Run[] = [];
+  let current: Run | null = null;
+
+  for (let at = 0; at < text.length; at++) {
+    const styles = spans.filter((span) => at >= span.start && at < span.end).map((span) => span.style);
+    const key = styles.join(',');
+    if (current && current.styles.join(',') === key) {
+      current.text += text[at];
+    } else {
+      current = { text: text[at] ?? '', styles };
+      runs.push(current);
+    }
+  }
+  return runs;
 }

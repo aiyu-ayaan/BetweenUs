@@ -48,6 +48,7 @@ import {
   XIcon,
 } from '../../components/icons';
 import { useUpdateStore } from '../../stores/updates';
+import { ReleaseNotes } from '../../components/ReleaseNotes';
 import {
   useThemeStore,
   THEMES,
@@ -1634,9 +1635,9 @@ function UpdatesSection(): JSX.Element {
                 {offer.asset.size > 0 && ` · ${Math.round(offer.asset.size / 1_000_000)} MB`}
               </p>
               {offer.notes && (
-                <p className="mt-3 max-h-48 overflow-y-auto whitespace-pre-wrap text-xs text-slate-300">
-                  {offer.notes}
-                </p>
+                <div className="mt-3 max-h-64 overflow-y-auto pr-1">
+                  <ReleaseNotes text={offer.notes} />
+                </div>
               )}
             </div>
           )}
