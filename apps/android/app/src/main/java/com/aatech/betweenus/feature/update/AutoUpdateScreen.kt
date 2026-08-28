@@ -340,11 +340,12 @@ private fun UpdateOffer(
         Text(detail, style = MaterialTheme.typography.bodySmall, color = Slate500)
         if (release.notes.isNotBlank()) {
             Spacer(Modifier.height(8.dp))
-            Text(
-                text = release.notes.trim().lines().take(12).joinToString("\n"),
-                style = MaterialTheme.typography.bodySmall,
-                color = Slate400,
-            )
+            // Not truncated at twelve lines any more: those twelve were
+            // "### Features" and the first few commits under it, which is the
+            // half of a release note nobody needed cut short. This screen
+            // already scrolls, so the notes do not carry a scroller of their
+            // own - two of them nested is a scroll that fights the finger.
+            ReleaseNotes(notes = release.notes)
         }
         Spacer(Modifier.height(12.dp))
         BetweenUsButton(text = action, onClick = onAction)

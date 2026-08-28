@@ -264,4 +264,89 @@ class MarkupTest {
         assertEquals("a :shipit: b", block.text)
         assertEquals(listOf(Span(0, 1, Style.Bold)), block.spans)
     }
+    // --- Release notes are the same parser with headings on ------------------
+    //
+    // Case for case with `markup.check.ts` on the desktop side. The two parsers
+    // are separate code and have to stay one behaviour, or the same release
+    // reads differently depending on which screen it is opened on.
+
+    @Test
+    fun `a chat line never grows a heading`() {
+        // "### not a heading" is what somebody typed, and drawing it as one is
+        // the reason parse does not have them.
+        val block = one("### Features")
+        assertEquals(Kind.Body, block.kind)
+        assertEquals("### Features", block.text)
+    }
+
+    @Test
+    fun `the same line read as a document is a heading, and carries its level`() {
+        val heading = Markup.parseNotes("### Features").single()
+        assertEquals(Kind.Heading, heading.kind)
+        assertEquals("Features", heading.text)
+        assertEquals(3, heading.ordinal)
+        assertEquals(2, Markup.parseNotes("## Install").single().ordinal)
+        assertEquals(1, Markup.parseNotes("# One").single().ordinal)
+    }
+
+    @Test
+    fun `a hash with no space after it is not a heading`() {
+        // `#general` is a channel, and `#` alone is a stray character.
+        assertEquals(Kind.Body, Markup.parseNotes("#general is quiet").single().kind)
+        assertEquals(Kind.Body, Markup.parseNotes("#").single().kind)
+    }
+
+    @Test
+    fun `closing hashes are decoration, not text`() {
+        assertEquals("Install", Markup.parseNotes("## Install ##").single().text)
+    }
+
+    @Test
+    fun `marks apply inside a heading, and the offsets are into what comes back`() {
+        val marked = Markup.parseNotes("### The **Artifacts** table").single()
+        assertEquals("The Artifacts table", marked.text)
+        assertEquals(listOf(Span(4, 13, Style.Bold)), marked.spans)
+    }
+
+    @Test
+    fun `a table rule is swallowed and the rows are left as the pipes they are`() {
+        // Legible for the three rows a release note carries, and not a table
+        // parser. The two rows are one paragraph, which draws as the two lines
+        // it was because a paragraph keeps its newlines.
+        val blocks = Markup.parseNotes(
+            "| Platform | This release |\n| --- | --- |\n| Android | Built here |",
+        )
+        assertEquals(listOf("| Platform | This release |\n| Android | Built here |"), blocks.map { it.text })
+        // A chat line of dashes and pipes is untouched.
+        assertEquals("| --- | --- |", one("| --- | --- |").text)
+    }
+
+    @Test
+    fun `the shape a real release note has, from one pass`() {
+        // The blank lines come back as empty Body blocks, which is what a blank
+        // line in a message is - and is why the notes renderer drops them
+        // rather than the parser.
+        val blocks = Markup.parseNotes(
+            listOf(
+                "### Bug fixes",
+                "",
+                "* Fixed the thing",
+                "* Fixed the other",
+                "",
+                "```bash",
+                "docker compose pull",
+                "```",
+            ).joinToString("\n"),
+        ).filter { it.kind != Kind.Body || it.text.isNotEmpty() }
+
+        assertEquals(
+            listOf(
+                Kind.Heading to "Bug fixes",
+                Kind.Bullet to "Fixed the thing",
+                Kind.Bullet to "Fixed the other",
+                Kind.Code to "docker compose pull",
+            ),
+            blocks.map { it.kind to it.text },
+        )
+    }
 }

@@ -1286,7 +1286,12 @@ private fun MessageText(readable: ReadableMessage) {
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         blocks.forEach { block ->
             when (block.kind) {
-                Markup.Kind.Body -> MarkupBody(block, readable.body.emoji)
+                // A message is parsed by `Markup.parse`, which has no headings
+                // at all - only `parseNotes` does, for the release notes. So
+                // this branch exists for the compiler rather than for a
+                // message, and drawing it as words is the honest answer if one
+                // ever arrives.
+                Markup.Kind.Body, Markup.Kind.Heading -> MarkupBody(block, readable.body.emoji)
                 Markup.Kind.Quote -> Row(modifier = Modifier.height(IntrinsicSize.Min)) {
                     Box(
                         modifier = Modifier

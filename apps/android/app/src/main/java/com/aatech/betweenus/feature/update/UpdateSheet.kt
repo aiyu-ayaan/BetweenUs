@@ -98,12 +98,10 @@ fun UpdateSheet(onDismiss: () -> Unit) {
             val notes = release?.notes?.trim().orEmpty()
             if (notes.isNotEmpty()) {
                 Spacer(Modifier.height(12.dp))
-                Text(
-                    text = notes,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Slate400,
+                ReleaseNotes(
+                    notes = notes,
                     modifier = Modifier
-                        .heightIn(max = 220.dp)
+                        .heightIn(max = 260.dp)
                         .verticalScroll(rememberScrollState()),
                 )
             }

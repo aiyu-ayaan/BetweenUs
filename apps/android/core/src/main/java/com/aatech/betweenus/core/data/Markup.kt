@@ -6,9 +6,16 @@ package com.aatech.betweenus.core.data
  * `MessageBody` decides what a message *is* - words, attachments and the quote
  * above a reply. This decides how the words read: the small set of marks every
  * chat app has trained people to type, and nothing else. There is no link
- * syntax, because a bare URL is already a link on every client; no headings,
- * because a heading in a chat line is shouting; and no images, because an
- * attachment is not a body.
+ * syntax, because a bare URL is already a link on every client, and no images,
+ * because an attachment is not a body.
+ *
+ * Headings are the one thing that depends on what is being read. A heading in a
+ * chat line is shouting, so [parse] does not have them; release notes are a
+ * document and are nothing but headings, so [parseNotes] does. It is the same
+ * parser with one rule switched on.
+ *
+ * Line for line the desktop client's `markup.ts`. Changing one changes both, or
+ * the same message reads differently on two screens.
  *
  * Pure and offset-exact, which is the whole reason it is here rather than in
  * the renderer: the marks are *removed* from the text, so every span is an
@@ -23,7 +30,7 @@ object Markup {
     /** A style over `[start, end)` of the block's own text. */
     data class Span(val start: Int, val end: Int, val style: Style)
 
-    enum class Kind { Body, Quote, Code, Bullet, Number }
+    enum class Kind { Body, Quote, Code, Bullet, Number, Heading }
 
     /**
      * One block of a message.
@@ -33,8 +40,8 @@ object Markup {
      * nesting - which is the whole of what a chat line needs and a fraction of
      * what a document parser would cost.
      *
-     * [ordinal] is the number a `Number` item is drawn with, and zero for
-     * everything else.
+     * [ordinal] is the number a `Number` item is drawn with, and the level of
+     * a `Heading` - `## Install` is 2. Zero for everything else.
      */
     data class Block(
         val kind: Kind,
@@ -67,7 +74,29 @@ object Markup {
     private val BULLET = Regex("^ {0,3}[-*+] +(.*)$")
     private val NUMBER = Regex("^ {0,3}(\\d{1,9})[.)] +(.*)$")
 
-    fun parse(text: String): List<Block> {
+    /** `### Features`. The space is what keeps a `#channel` mention from being one. */
+    private val HEADING = Regex("^ {0,3}(#{1,6}) +(.*?)\\s*#*\\s*$")
+
+    /**
+     * The `| --- | --- |` under a table's header row.
+     *
+     * ponytail: tables are not parsed, only this line is swallowed - the rows
+     * draw as the pipes they are, which is legible for the three-row table a
+     * release note carries. A real table block if one ever gets wide enough to
+     * need it.
+     */
+    private val TABLE_RULE = Regex("^ {0,3}\\|[\\s:|-]*-[\\s:|-]*\\|\\s*$")
+
+    /**
+     * The same parser, reading a document rather than a chat line.
+     *
+     * Release notes are `### Features` and a list under it, which [parse] would
+     * draw as a line beginning with three hashes. This is the only caller that
+     * wants headings, and chat is the only one that must not have them.
+     */
+    fun parseNotes(text: String): List<Block> = parse(text, headings = true)
+
+    fun parse(text: String, headings: Boolean = false): List<Block> {
         val blocks = mutableListOf<Block>()
         val lines = text.split("\n")
         var i = 0
@@ -100,6 +129,24 @@ object Markup {
                 if (i < lines.size) i++
                 blocks += Block(Kind.Code, fence.joinToString("\n").trim('\n'))
                 continue
+            }
+
+            if (headings) {
+                if (TABLE_RULE.matches(line)) {
+                    i++
+                    continue
+                }
+                val heading = HEADING.find(line)
+                if (heading != null) {
+                    flush()
+                    blocks += inline(
+                        heading.groupValues[2],
+                        Kind.Heading,
+                        heading.groupValues[1].length,
+                    )
+                    i++
+                    continue
+                }
             }
 
             // A list item is its own block, so it ends whatever paragraph was
