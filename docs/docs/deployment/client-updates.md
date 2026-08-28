@@ -67,6 +67,27 @@ for. A download that is still waiting when the app is closed is picked back up
 on the next launch — the file name carries the version — and anything that is
 no longer an upgrade on this build is deleted.
 
+### The notes are drawn as markdown
+
+A release body is `### Features` with a list under it, `**bold**`, a fenced
+block of shell. Every client used to show that text exactly as it arrived,
+hashes and asterisks included. All three now render it.
+
+It is the message parser doing it, with one rule switched on:
+
+```text
+parse(text)       chat            no headings - a heading in a chat line is shouting
+parseNotes(text)  release notes   headings, and a table's `| --- |` rule swallowed
+```
+
+The drawing is per client — `components/ReleaseNotes.tsx` on desktop and web,
+`feature/update/ReleaseNotes.kt` on Android — because the message list lays
+custom emoji and link previews over its blocks and none of that belongs in a
+changelog. Headings come out at two sizes, lists get a marker gutter, fenced
+code gets its own ground.
+
+Tables are not parsed: the rule row is swallowed, the rows stay as pipes.
+
 ### Channels
 
 Cumulative, and the same three as Android:
