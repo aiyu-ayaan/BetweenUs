@@ -949,8 +949,10 @@ was built the way it was; this is the short version.
 - Play Together has not been run with two real clients either. The referee and
   the four sets of rules have self-checks, and so does the player's-eye view;
   the boards themselves need two windows and a person in each.
-- A light theme is not designed on any client. The ramp is defined once on each,
-  which is what would make one possible; nothing else about it exists.
+- The 16-theme suite's Light Mode category (Daylight, Solarized Light, Rosé
+  Pine Dawn) is landed and shared across Desktop, Web and Android; the stale
+  "no light theme" notes still in `development/devdocs/TODO.md` and
+  `ANDROID_TODO.md` predate it and need correcting.
 
 ## Conventions
 
