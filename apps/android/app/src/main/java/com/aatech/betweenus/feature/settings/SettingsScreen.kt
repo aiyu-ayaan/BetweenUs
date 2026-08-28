@@ -93,6 +93,7 @@ fun SettingsScreen(
     onAutoUpdate: () -> Unit,
     onCallUsage: () -> Unit,
     onThemes: () -> Unit,
+    onPrivacy: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -305,6 +306,16 @@ fun SettingsScreen(
                     },
                 )
             }
+
+            // --- privacy ---
+            SectionLabel("Privacy")
+            ListRow(
+                title = "Privacy & Safety",
+                subtitle = "Blocked people, and clearing your own messages",
+                leading = { BetweenUsIcon(BetweenUsIcons.Block) },
+                trailing = { BetweenUsIcon(BetweenUsIcons.ChevronRight) },
+                onClick = onPrivacy,
+            )
 
             // --- password ---
             SectionLabel("Password")

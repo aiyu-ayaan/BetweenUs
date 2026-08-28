@@ -60,6 +60,7 @@ import com.aatech.betweenus.feature.settings.BetweenUsPermissions
 import com.aatech.betweenus.feature.settings.CallUsageScreen
 import com.aatech.betweenus.feature.settings.PermissionsScreen
 import com.aatech.betweenus.feature.settings.SettingsScreen
+import com.aatech.betweenus.feature.settings.PrivacyScreen
 import com.aatech.betweenus.feature.settings.ThemesScreen
 import com.aatech.betweenus.feature.update.AutoUpdateScreen
 import com.aatech.betweenus.feature.update.UpdateSheet
@@ -446,7 +447,25 @@ fun Shell(user: PublicUser) {
                             onAutoUpdate = { navigation.navigate(Route.AutoUpdate) },
                             onCallUsage = { navigation.navigate(Route.CallUsage) },
                             onThemes = { navigation.navigate(Route.Themes) },
+                            onPrivacy = { navigation.navigate(Route.Privacy) },
                         )
+                    }
+                    composable(
+                        Route.Privacy,
+                        enterTransition = {
+                            slideInHorizontally(travel) { it } + fadeIn(fade)
+                        },
+                        exitTransition = {
+                            slideOutHorizontally(travel) { -it / 3 } + fadeOut(fade)
+                        },
+                        popEnterTransition = {
+                            slideInHorizontally(travel) { -it / 3 } + fadeIn(fade)
+                        },
+                        popExitTransition = {
+                            slideOutHorizontally(travel) { it } + fadeOut(fade)
+                        },
+                    ) {
+                        PrivacyScreen(onBack = { navigation.popBackStack() })
                     }
                     composable(
                         Route.Themes,
@@ -558,6 +577,7 @@ object Route {
     const val Voice = "voice"
     const val Settings = "settings"
     const val Themes = "themes"
+    const val Privacy = "privacy"
     const val ServerSettings = "server-settings"
     const val Permissions = "permissions"
     const val AutoUpdate = "auto-update"

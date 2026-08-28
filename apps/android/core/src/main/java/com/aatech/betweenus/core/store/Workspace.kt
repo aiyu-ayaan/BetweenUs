@@ -3,6 +3,7 @@ package com.aatech.betweenus.core.store
 import com.aatech.betweenus.core.crypto.E2ee
 import com.aatech.betweenus.core.data.Channel
 import com.aatech.betweenus.core.data.ChannelType
+import com.aatech.betweenus.core.data.BlockedUser
 import com.aatech.betweenus.core.data.ChatSocket
 import com.aatech.betweenus.core.data.DirectChannel
 import com.aatech.betweenus.core.data.Friend
@@ -46,6 +47,17 @@ object Workspace {
     private val _friends = MutableStateFlow<List<Friend>>(emptyList())
     val friends: StateFlow<List<Friend>> = _friends.asStateFlow()
 
+    /**
+     * Everyone this account has blocked.
+     *
+     * Not cached to disk, unlike the lists above. It is read on one settings
+     * screen rather than drawn on every frame, so the one round trip it costs
+     * to open that screen is cheaper than a codec and a round-trip test for a
+     * list nobody is waiting on.
+     */
+    private val _blocked = MutableStateFlow<List<BlockedUser>>(emptyList())
+    val blocked: StateFlow<List<BlockedUser>> = _blocked.asStateFlow()
+
     private val _members = MutableStateFlow<Map<String, List<ServerMember>>>(emptyMap())
     val members: StateFlow<Map<String, List<ServerMember>>> = _members.asStateFlow()
 
@@ -70,7 +82,16 @@ object Workspace {
             wired = true
             ChatSocket.on { event ->
                 when (event.optString("type")) {
-                    "friends.changed" -> scope.launch { loadFriends() }
+                    // A request, an acceptance, a removal - and a block, which
+                    // the server announces as a removal on purpose, so the far
+                    // side is never told which of the two it was.
+                    "friends.changed" -> scope.launch {
+                        loadFriends()
+                        // The conversation list too: a block hides a DM from
+                        // both sides, and leaving a dead channel in the rail
+                        // would leave a row that answers 404 when it is tapped.
+                        loadDirectChannels()
+                    }
 
                     // A picture or a name changed. Patched in place rather
                     // than refetched: the event carries the four fields every
@@ -149,6 +170,7 @@ object Workspace {
         _channels.value = emptyMap()
         _directChannels.value = emptyList()
         _friends.value = emptyList()
+        _blocked.value = emptyList()
         _members.value = emptyMap()
         _unread.value = emptyMap()
     }
@@ -173,6 +195,7 @@ object Workspace {
             servers.forEach { loadMembers(it.id, force = true) }
             loadDirectChannels()
             loadFriends()
+            loadBlocked()
             loadUnread()
             resubscribe()
             _error.value = null
@@ -204,6 +227,44 @@ object Workspace {
             _friends.value = it
             Cache.putFriends(it)
         }
+    }
+
+    suspend fun loadBlocked() {
+        // A deployment that has not been redeployed yet answers 404 here, and a
+        // missing block list is not a reason for a settings screen to fail.
+        runCatching { BetweenUsApi.blocked() }.onSuccess { _blocked.value = it }
+    }
+
+    /**
+     * Blocks somebody, and takes them out of every list this store holds.
+     *
+     * Done here rather than left to the announcement that follows, because that
+     * announcement is deliberately indistinguishable from an ordinary removal -
+     * so the screen the block was pressed on has to be right immediately, not a
+     * round trip later.
+     */
+    suspend fun block(userId: String) {
+        val entry = BetweenUsApi.blockUser(userId)
+        _blocked.update { listOf(entry) + it.filterNot { existing -> existing.user.id == userId } }
+        _friends.update { list -> list.filterNot { it.user.id == userId } }
+        _directChannels.update { list -> list.filterNot { it.participant.id == userId } }
+        Cache.putFriends(_friends.value)
+        Cache.putDirectChannels(_directChannels.value)
+        resubscribe()
+    }
+
+    /**
+     * Lifts a block. It does not restore the friendship the block ended.
+     *
+     * The conversation comes back with its history, so the lists are re-read
+     * rather than reconstructed - this phone stopped being told about that
+     * channel while the block stood and has nothing to reconstruct from.
+     */
+    suspend fun unblock(userId: String) {
+        BetweenUsApi.unblockUser(userId)
+        _blocked.update { list -> list.filterNot { it.user.id == userId } }
+        loadDirectChannels()
+        loadFriends()
     }
 
     /**

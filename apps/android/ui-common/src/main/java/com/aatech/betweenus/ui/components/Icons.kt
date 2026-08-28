@@ -30,6 +30,7 @@ object BetweenUsIcons {
     val Activity = R.drawable.ic_activity
     val Bell = R.drawable.ic_bell
     val BellOff = R.drawable.ic_bell_off
+    val Block = R.drawable.ic_block
     val Check = R.drawable.ic_check
     val ChevronDown = R.drawable.ic_chevron_down
     val ChevronLeft = R.drawable.ic_chevron_left

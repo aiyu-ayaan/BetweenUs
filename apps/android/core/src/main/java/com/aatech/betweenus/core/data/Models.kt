@@ -383,6 +383,84 @@ data class Friend(
     }
 }
 
+// --- blocking ---
+
+/**
+ * Somebody this account has blocked.
+ *
+ * The row on the server is directional - "A blocked B" is not "B blocked A" -
+ * but only one direction is ever listed here: this is the list the owner
+ * manages, and being blocked by somebody is deliberately not something the
+ * other side is told.
+ */
+data class BlockedUser(val user: UserSummary, val blockedAt: String) {
+    companion object {
+        fun from(json: JSONObject) = BlockedUser(
+            user = UserSummary.from(json.getJSONObject("user")),
+            blockedAt = json.optString("blockedAt"),
+        )
+    }
+}
+
+// --- recovering a password ---
+
+/**
+ * What the deployment can do about a forgotten password, which is a fact about
+ * the deployment rather than about the account.
+ *
+ * [EMAILED] is also what an account that does not exist gets, and what a
+ * disabled one gets. That is not an oversight to be tidied up later: telling
+ * them apart would turn the forgot-password form into a way to find out who has
+ * an account here.
+ */
+enum class ForgotPasswordOutcome { EMAILED, RESET, UNAVAILABLE }
+
+data class ForgotPasswordAnswer(
+    val outcome: ForgotPasswordOutcome,
+    /** Only for [ForgotPasswordOutcome.RESET]: the single-use token to spend. */
+    val resetToken: String?,
+    /** Only for [ForgotPasswordOutcome.UNAVAILABLE]: what to tell the person. */
+    val message: String?,
+) {
+    companion object {
+        fun from(json: JSONObject) = ForgotPasswordAnswer(
+            outcome = when (json.optString("outcome")) {
+                "reset" -> ForgotPasswordOutcome.RESET
+                "unavailable" -> ForgotPasswordOutcome.UNAVAILABLE
+                // Anything unrecognised reads as "we said something reassuring
+                // and nothing happened", which is the safe way to be wrong: it
+                // never claims a reset is authorised when it is not.
+                else -> ForgotPasswordOutcome.EMAILED
+            },
+            resetToken = json.stringOrNull("resetToken"),
+            message = json.stringOrNull("message"),
+        )
+    }
+}
+
+/**
+ * Whether a username can be registered.
+ *
+ * The server answers this from a Bloom filter in front of the unique index, so
+ * it is cheap enough to ask while somebody is still typing. [available] false
+ * with no [reason] cannot happen from a current server; it is treated as
+ * "taken" by the one caller, which is the conservative reading.
+ */
+data class UsernameAvailability(
+    val username: String,
+    val available: Boolean,
+    /** `taken` or `invalid`, when it is not available. */
+    val reason: String?,
+) {
+    companion object {
+        fun from(json: JSONObject) = UsernameAvailability(
+            username = json.optString("username"),
+            available = json.optBoolean("available"),
+            reason = json.stringOrNull("reason"),
+        )
+    }
+}
+
 // --- messages ---
 
 data class MessageReaction(val emoji: String, val userIds: List<String>) {

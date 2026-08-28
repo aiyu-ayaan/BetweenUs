@@ -130,6 +130,21 @@ object Conversation {
             event.optJSONObject("user")?.let { patchProfile(UserSummary.from(it)) }
             return
         }
+        // This account cleared its own history, here or on another of its
+        // devices. Everything held goes: the cache is full of sealed envelopes
+        // the server will no longer hand back, and the open channel is full of
+        // the decrypted ones. Re-reading is what fills both again, with
+        // whatever arrived after the cut.
+        if (event.optString("type") == "chats.cleared") {
+            Cache.clear()
+            _messages.value = emptyMap()
+            _receipts.value = emptyMap()
+            cursors.clear()
+            exhausted.clear()
+            Workspace.loadUnread()
+            visibleChannelId?.let { open(it) }
+            return
+        }
         val message = event.optJSONObject("message")?.let { Message.from(it) } ?: return
         // Cached whether or not the channel is open. A conversation nobody has
         // looked at this session is exactly the one that should not be a spinner

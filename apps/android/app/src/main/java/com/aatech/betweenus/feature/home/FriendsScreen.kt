@@ -12,8 +12,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -33,6 +35,7 @@ import androidx.lifecycle.compose.LifecycleResumeEffect
 import com.aatech.betweenus.core.data.BetweenUsApi
 import com.aatech.betweenus.core.data.Endpoint
 import com.aatech.betweenus.core.data.UserSummary
+import com.aatech.betweenus.core.data.Session
 import com.aatech.betweenus.core.store.Presence
 import com.aatech.betweenus.core.store.Workspace
 import com.aatech.betweenus.feature.settings.BetweenUsPermissions
@@ -67,6 +70,8 @@ fun FriendsScreen(onOpenMenu: () -> Unit, onOpenChannel: (String) -> Unit) {
     var results by remember { mutableStateOf<List<UserSummary>>(emptyList()) }
     var note by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
+    /** Who a Block button was pressed for, until the sentence has been read. */
+    var blocking by remember { mutableStateOf<UserSummary?>(null) }
 
     var permissionTick by remember { mutableIntStateOf(0) }
     LifecycleResumeEffect(Unit) {
@@ -104,7 +109,7 @@ fun FriendsScreen(onOpenMenu: () -> Unit, onOpenChannel: (String) -> Unit) {
     fun act(block: suspend () -> Unit) {
         scope.launch {
             busy = true
-            note = runCatching { block() }.exceptionOrNull()?.message
+            note = runCatching { block() }.exceptionOrNull()?.let { Session.messageOf(it) }
             busy = false
         }
     }
@@ -239,10 +244,48 @@ fun FriendsScreen(onOpenMenu: () -> Unit, onOpenChannel: (String) -> Unit) {
                         IconAction(BetweenUsIcons.X, "Remove", tint = MaterialTheme.colorScheme.error, onClick = {
                             act { BetweenUsApi.removeFriend(friend.user.id); Workspace.loadFriends() }
                         })
+                        IconAction(
+                            BetweenUsIcons.Block,
+                            "Block ${friend.user.label}",
+                            tint = MaterialTheme.colorScheme.error,
+                            onClick = { blocking = friend.user },
+                        )
                     },
                 )
             }
         }
+    }
+
+    // Confirmed, because it is not the same button as Remove: it ends the
+    // friendship *and* closes the conversation, and neither side can start it
+    // again while it stands. The sentence about nothing being deleted is the
+    // part somebody actually needs to read.
+    blocking?.let { person ->
+        AlertDialog(
+            onDismissRequest = { blocking = null },
+            title = { Text("Block ${person.label}?") },
+            text = {
+                Text(
+                    "They will not be able to message you or send you a request, and your " +
+                        "conversation disappears for both of you.\n\n" +
+                        "Nothing is deleted - unblocking brings it back. You can undo this in " +
+                        "Settings.",
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        blocking = null
+                        act { Workspace.block(person.id) }
+                    },
+                ) {
+                    Text("Block", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { blocking = null }) { Text("Cancel") }
+            },
+        )
     }
 }
 

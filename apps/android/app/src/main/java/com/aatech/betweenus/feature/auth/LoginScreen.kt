@@ -45,6 +45,7 @@ import com.aatech.betweenus.ui.components.BetweenUsField
 import com.aatech.betweenus.ui.components.BetweenUsLogoTile
 import com.aatech.betweenus.ui.components.BetweenUsSecondaryButton
 import com.aatech.betweenus.ui.components.Notice
+import com.aatech.betweenus.ui.theme.StatusOnline
 
 /**
  * Sign in, or register, against whichever deployment this install is pointed
@@ -61,6 +62,14 @@ fun LoginScreen(
     val context = LocalContext.current
     var pickingServer by rememberSaveable { mutableStateOf(false) }
     val registering = form.mode == AuthMode.REGISTER
+
+    // Its own screen rather than a third state of this form: it has two steps
+    // of its own, and folding them in here would make every field on this one
+    // conditional on which of five things is being done.
+    if (form.mode == AuthMode.FORGOT) {
+        ForgotPasswordScreen(viewModel = viewModel, onBack = viewModel::backToSignIn)
+        return
+    }
 
     Box(
         modifier = Modifier
@@ -137,6 +146,28 @@ fun LoginScreen(
                     placeholder = "ayaan",
                     enabled = !form.busy,
                 )
+                // Answered while somebody types, which the server can afford:
+                // a Bloom filter settles the common case - a name nobody has -
+                // without touching the database. Nothing is drawn until it has
+                // answered, so a slow network shows no claim rather than a
+                // wrong one.
+                form.nameCheck?.let { check ->
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        text = when {
+                            check.available -> "${form.username.trim().lowercase()} is available"
+                            check.reason == "invalid" ->
+                                "Letters, numbers, dot, dash and underscore only"
+                            else -> "That username is already taken"
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (check.available) {
+                            StatusOnline
+                        } else {
+                            MaterialTheme.colorScheme.error
+                        },
+                    )
+                }
             }
 
             Spacer(Modifier.height(16.dp))
@@ -158,6 +189,18 @@ fun LoginScreen(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+            } else {
+                TextButton(
+                    onClick = viewModel::forgotPassword,
+                    enabled = !form.busy,
+                    modifier = Modifier.heightIn(min = 44.dp),
+                ) {
+                    Text(
+                        text = "Forgot your password?",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
 
             (form.error ?: signedOutReason)?.let { message ->

@@ -122,6 +122,41 @@ object BetweenUsApi {
         )
     }
 
+    /**
+     * Whether a username can be registered.
+     *
+     * Public, because the form that asks is the one filled in before there is
+     * an account. Cheap on the server - a Bloom filter answers the common case
+     * without touching the database - so the sign-up form asks while somebody
+     * is typing rather than when they press the button.
+     */
+    suspend fun usernameAvailable(username: String): UsernameAvailability = io {
+        UsernameAvailability.from(
+            public("GET", "/api/v1/auth/username-available?username=${enc(username)}", null),
+        )
+    }
+
+    /**
+     * What can be done about a forgotten password on this deployment.
+     *
+     * Three answers, and only one of them is about the account: a link was sent
+     * (which is also what an account that does not exist gets), an
+     * administrator has already authorised a reset and here is the token, or
+     * this deployment has no mail server at all.
+     */
+    suspend fun forgotPassword(identifier: String): ForgotPasswordAnswer = io {
+        ForgotPasswordAnswer.from(
+            public("POST", "/api/v1/auth/forgot-password", obj("identifier" to identifier)),
+        )
+    }
+
+    /** Spends a reset token. The one path that sets a password without the old one. */
+    suspend fun resetPassword(token: String, newPassword: String): AuthResponse =
+        authResponse(
+            "/api/v1/auth/reset-password",
+            obj("token" to token, "newPassword" to newPassword),
+        )
+
     // --- servers ---
 
     suspend fun servers(): List<ServerWithRole> = io {
@@ -482,6 +517,42 @@ object BetweenUsApi {
 
     suspend fun openDirectChannel(userId: String): DirectChannel = io {
         DirectChannel.from(authed("POST", "/api/v1/dm", obj("userId" to userId)))
+    }
+
+    // --- blocking ---
+
+    /** Everyone this account has blocked, most recent first. */
+    suspend fun blocked(): List<BlockedUser> = io {
+        authedArray("GET", "/api/v1/blocks").map { BlockedUser.from(it) }
+    }
+
+    /**
+     * Blocks somebody.
+     *
+     * It also ends the friendship, and closes the conversation for both sides -
+     * the messages stay where they are, so unblocking brings the whole thing
+     * back. The far side is not told: their friend list simply gets shorter,
+     * which is the same event an ordinary removal sends.
+     */
+    suspend fun blockUser(userId: String): BlockedUser = io {
+        BlockedUser.from(authed("POST", "/api/v1/blocks", obj("userId" to userId)))
+    }
+
+    suspend fun unblockUser(userId: String): Unit = io {
+        authed("DELETE", "/api/v1/blocks/${enc(userId)}")
+    }
+
+    /**
+     * Hides every message this account can currently see, in every channel, on
+     * every device it is signed in on.
+     *
+     * Nothing is deleted. The other side of each conversation keeps their copy,
+     * because a message has two ends and this reaches one of them. The server
+     * publishes the cut back as `chats.cleared`, which is what tells this phone
+     * and everything else signed in to drop what they are holding.
+     */
+    suspend fun clearChats(): Unit = io {
+        authed("POST", "/api/v1/messages/clear")
     }
 
     /** A server's own emoji. Public within the server, and read on every render. */
