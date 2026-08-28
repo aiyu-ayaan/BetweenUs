@@ -104,6 +104,11 @@ security boundary — every route re-checks.
   notifications and E2EE rather than duplicating any of it.
 - Only accepted friends may open a DM; the friend-search endpoint is
   otherwise a spam surface.
+- A **block** closes the DM from both ends. `UserBlock` rows are directional,
+  but `resolveChannelAccess` reads both directions and returns `null`, so the
+  refusal is indistinguishable from a channel the caller was never on. It is a
+  fourth reason a DM can be closed and it lives in the same resolver as the
+  other three — never in a controller.
 
 ## Trust boundaries: the phase-27 audit
 

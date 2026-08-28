@@ -65,6 +65,8 @@ to be framed, so no browser tab can ever show it.
 | Register, sign in, refresh-token rotation | ✅ | ✅ | ✅ |
 | Google and GitHub sign-in | ✅ | ✅ | ✅ |
 | Display name, avatar, change password | ✅ | ✅ | ✅ |
+| Username checked while you type, and unique | ✅ | ✅ | — |
+| Forgotten password: emailed link, or an admin-opened reset | ✅ | ✅ | — |
 | Encryption identity: unlock, backup secret | ✅ | ✅ | ✅ |
 | Device list and revoking a device | ✅ | ✅ | — |
 | Point the client at another deployment | ✅ | ✅ | ✅ |
@@ -82,6 +84,8 @@ to be framed, so no browser tab can ever show it.
 | **Messaging** | | | |
 | End-to-end encrypted messages, realtime, history paging | ✅ | ✅ | ✅ |
 | Direct messages and friends | ✅ | ✅ | ✅ |
+| Block somebody | ✅ | ✅ | — |
+| Clear your own history on every device | ✅ | ✅ | — |
 | Replies, edit, delete, reactions | ✅ | ✅ | ✅ |
 | Pinned messages | ✅ | ✅ | ✅ |
 | Custom emoji in messages | ✅ | ✅ | ✅ |
@@ -367,6 +371,19 @@ keeps the metadata; blobs never go in a column.
   caller cannot see answers 404 rather than 403, so ids cannot be probed for.
 - **Refresh-token rotation with reuse detection** - replaying a consumed token
   revokes the whole family.
+- **Blocking is enforced in one function.** A block row is directional, the
+  check reads both directions, and it lives in `resolveChannelAccess` - so
+  history, pins, reactions, calls and typing all close through the same place. A
+  blocked conversation answers 404, the same as a channel id a stranger
+  invented, so neither the block nor its direction can be tested for.
+- **Recovering a password leaks nothing about who has an account.** An account
+  that does not exist, one that does, and a disabled one all get the same answer
+  from `/forgot-password`. Reset tokens are stored hashed, are single use, and
+  spending one signs every device out.
+- **Clearing your own history is a filter, never a delete.** It hides everything
+  from *your* screens on every device you are signed in on; the person you were
+  talking to keeps their copy, because a conversation has two ends and this
+  button only reaches one of them.
 - **Rate limiting twice**: per address at the gateway, and again in the service
   through Redis, so every instance shares one budget.
 - **Hardened renderer**: context isolation on, node integration off, sandbox
@@ -720,6 +737,7 @@ starts the services and runs every smoke script.
 
 ```
 POST /api/v1/auth/register|login|refresh|logout    GET /api/v1/auth/me
+GET  /api/v1/auth/username-available    POST /api/v1/auth/forgot-password|reset-password
 GET|POST /api/v1/servers          POST /api/v1/servers/join
 GET|PATCH|DELETE /api/v1/servers/:id       POST /api/v1/servers/:id/leave
 GET /api/v1/servers/:id/members   PATCH|DELETE /api/v1/servers/:id/members/:userId
@@ -727,7 +745,8 @@ GET|POST /api/v1/channels         PATCH|DELETE /api/v1/channels/:id
 GET|PUT /api/v1/channels/:id/members       GET|POST /api/v1/messages
 GET /api/v1/users/search          GET|POST /api/v1/friends
 POST /api/v1/friends/:id/accept   DELETE /api/v1/friends/:id
-GET|POST /api/v1/dm
+GET|POST /api/v1/dm               GET|POST /api/v1/blocks
+DELETE /api/v1/blocks/:userId     POST /api/v1/messages/clear
 POST /api/v1/uploads              GET /api/v1/uploads/:key
 GET|POST /api/v1/e2ee/devices     GET /api/v1/e2ee/keys/:channelId
 POST /api/v1/e2ee/keys            POST /api/v1/calls/token
@@ -755,6 +774,22 @@ Errors share one shape everywhere:
 
 Newest first. Every one of these is in `development/TRACK.md` with the reason it
 was built the way it was; this is the short version.
+
+### Accounts: blocking, clearing, and a way back in
+
+Four things about an account rather than about a conversation. **Blocking**
+somebody ends the friendship and closes the conversation for both sides -
+without deleting it, so unblocking brings the whole history back. **Clear all my
+messages** hides everything you can see, on every device you are signed in on,
+and touches nobody else's copy. **Forgot your password?** sends a link when the
+operator has configured a mail server in the admin panel, and says to ask an
+administrator when they have not - who can then open a reset window on the
+account from the panel, which is how a self-hosted deployment with no SMTP
+server still has a way back in. And a **username is checked while you type**,
+against a Bloom filter in front of the unique index, and is now normalised to
+lower case so the constraint and the username login finally agree.
+
+Desktop and web have all of it; Android has none of it yet.
 
 ### Play together
 

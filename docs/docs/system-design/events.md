@@ -91,11 +91,18 @@ user.created            user.updated            user.online / user.offline
 server.created           server.updated            server.member.added / removed / updated
 channel.created           channel.deleted
 message.created             message.updated             message.deleted
+chats.cleared (own devices only)
 call.started                  call.ended                    call.participant.joined / left
 remote.machine.registered      remote.machine.offline
 remote.session.started          remote.session.ended
 remote.permission.changed
 ```
+
+`chats.cleared` is the odd one: it reaches exactly one account's own room and
+nobody else, because clearing your history is a fact about your view rather than
+about the conversation. It is *carried* - it names the cut-off instant - because
+each of that account's devices holds a cache of decrypted messages, and no
+refetch clears one.
 
 ### Where the built events differ from that list
 

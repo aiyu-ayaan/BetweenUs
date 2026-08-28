@@ -47,6 +47,13 @@ reactions all arrive as one `message.updated` shape.
 | PUT | `/:messageId/pin` | Pin (`MANAGE_MESSAGE` in a server channel, free in a DM) |
 | DELETE | `/:messageId/pin` | Unpin |
 | POST | `/:messageId/reactions` | React |
+| POST | `/clear` | Hide **this account's own** history, everywhere |
+
+`/clear` is a filter and never a delete. It stamps `User.chatsClearedAt`, which
+history, pins and the unread count all apply as a floor; the rows stay in the
+table and the other participant's view does not move. The cut is published as
+`chats.cleared` to that account's own sockets, because every device holds a
+cache of decrypted messages that no refetch would clear.
 
 ## `/api/v1/users` and `/api/v1/friends` and `/api/v1/dm`
 
@@ -59,6 +66,22 @@ reactions all arrive as one `message.updated` shape.
 | DELETE | `/friends/:userId` | Remove / decline |
 | GET | `/dm` | List DM channels |
 | POST | `/dm` | Open a DM (friends only) |
+| GET | `/blocks` | List accounts this user has blocked |
+| POST | `/blocks` | Block an account |
+| DELETE | `/blocks/:userId` | Unblock |
+
+### Blocking
+
+`UserBlock` rows are directional — "A blocked B" and "B blocked A" are separate
+facts — and the check reads **both** directions. It lives in
+`resolveChannelAccess`, so everything downstream of a channel id closes through
+one function: history, pins, reactions, calls, typing and read markers.
+
+Blocking ends the friendship in the same transaction but never deletes the
+channel: it holds two people's history, and unblocking brings the conversation
+back intact. Search, the friend-request endpoint and the DM list all answer
+`USER_NOT_FOUND` whichever way the block runs, so neither the block nor its
+direction is something the far side can test for.
 
 ## `/api/v1/e2ee`
 

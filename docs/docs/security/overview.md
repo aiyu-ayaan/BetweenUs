@@ -43,6 +43,19 @@ says who you are, not what you may do, because a role can change mid-token.
 - OAuth: the client secret never reaches a client app; the redirect allow
   list is matched as parsed origins, never a string prefix; an account is
   only found by email when the provider says it's verified.
+- **Password recovery leaks nothing about who has an account.** An account
+  that doesn't exist, one that does, and a disabled one all get the identical
+  answer from `/forgot-password`. Reset tokens are stored as SHA-256, are
+  single use, burn any previous live token when minted, and revoke every
+  session for the account when spent. The administrator-granted door is a
+  *window* that expires, not a flag, and opening or cancelling it is audited.
+- **SMTP credentials are operator data**, sealed under `SETTINGS_SECRET` in
+  the database and never readable back through the panel. A deployment with
+  no mail server is supported: clients say to ask an administrator.
+- **Usernames are lower-cased on write**, so the unique index and the
+  username login path agree. The availability endpoint's Bloom filter has no
+  false negatives, so it can save a query but never invent a refusal — the
+  unique constraint is still what decides.
 
 ## Authorization
 
@@ -57,6 +70,14 @@ says who you are, not what you may do, because a role can change mid-token.
   not just rejected.
 - **Attachments** are authorized by the row, not by merely holding a
   session — see [Database Schema](/database/schema#messages--attachments).
+- **Blocking** is enforced inside `resolveChannelAccess` and nowhere else.
+  The row is directional and the check reads both directions, so everything
+  downstream of a channel id — history, pins, reactions, calls, typing —
+  closes through one function. A blocked conversation answers 404 like any
+  unseen channel, so neither the block nor its direction can be probed for.
+- **Clearing your own history is a filter, not a delete.** `chatsClearedAt`
+  is a floor applied by history, pins and unread counts; no endpoint can
+  remove the other participant's copy of a message.
 
 ## Rate limiting
 
@@ -109,6 +130,17 @@ tokens, secrets, and FCM push tokens are never logged.
 - **A push wakes a phone a mute can't reach** — quiet hours and mentions are
   decided on-device, after the wake-up, because the server can't read the
   ciphertext or know a timezone.
+- **A block doesn't unshare a server** — it closes the direct message; both
+  people are still members of any room they both joined.
+- **`chatsClearedAt` hides rather than redacts** — the ciphertext is still
+  in the table and in every backup taken since.
+- **The username Bloom filter is per process** — a name registered against
+  another instance reads as available here until this one restarts, and the
+  unique constraint then refuses the registration.
+- **A password reset costs the identity backup** — it's sealed with the old
+  password, so a machine signing in for the first time afterwards reads what
+  arrives from then on, not what came before. Inherent to end-to-end
+  encryption; see [E2EE](/security/e2ee).
 - **Metadata isn't protected** — the server knows who wrote to which
   channel and when, and message size. See [E2EE](/security/e2ee).
 

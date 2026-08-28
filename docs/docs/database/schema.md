@@ -26,6 +26,8 @@ erDiagram
     User ||--|| IdentityBackup : "backs up identity to"
     User ||--o{ UserIdentity : "links OAuth"
     User ||--o{ Friendship : "is party to"
+    User ||--o{ UserBlock : "blocks / is blocked by"
+    User ||--o{ PasswordReset : "may recover with"
 ```
 
 ### `User`
@@ -37,6 +39,15 @@ separate from any `ServerRole` — it grants the admin panel, not membership
 rights inside any particular server. `disabledAt` keeps a disabled account's
 data but blocks login and refresh.
 
+`username` is normalised to lower case on every write, which is what makes the
+unique index agree with the username login path — signing in already lower-cased
+what was typed, so a mixed-case row was one nobody could sign in to by name.
+
+Two markers about the account's own state: `passwordResetUntil` is an
+administrator-granted recovery window (see `PasswordReset`), and `chatsClearedAt`
+is a floor under everything **this** account can see, in every channel, on every
+one of its devices.
+
 ### `RefreshToken`
 `id` **is** the JWT `jti` — revoking a token is a delete by primary key.
 `tokenHash` is stored, never the raw token. `revokedAt` marks reuse-detected
@@ -46,6 +57,21 @@ revocation.
 One row per linked OAuth login (`provider` + `providerAccountId` unique
 together) — the provider's own user id is what re-identifies the person on
 the next login, since their email can change on the provider's side.
+
+### `PasswordReset`
+A single-use permission to set a password without knowing the old one. Only
+`SHA-256(token)` is stored, for the same reason `RefreshToken` stores a hash: a
+leaked dump must not be a pile of live reset links. `source` is `email` (a link
+the SMTP server sent) or `admin` (an administrator opened a window on the
+account). Spending one marks `usedAt`, clears `User.passwordResetUntil`, and
+revokes every session the account had.
+
+### `SmtpSetting`
+One row, `id = 'smtp'`. The deployment's outgoing mail server, entered in the
+admin panel rather than in the environment, with `password` sealed under
+`SETTINGS_SECRET` exactly as an OAuth client secret is. No row — or a row with
+`enabled` false — is a deployment that cannot send mail at all, which is a fully
+supported deployment: every client then says "ask your administrator".
 
 ### `OAuthProvider`
 Operator-configured provider credentials (Google/GitHub), one row per
@@ -126,6 +152,16 @@ One row per relationship, not one per direction — `userAId < userBId`
 enforced by convention, `requesterId` says who sent it, `status` is
 `PENDING`/`ACCEPTED`. Catches two people requesting each other at once via
 the unique constraint on the ordered pair.
+
+### `UserBlock`
+One account refusing another. **Directional**, unlike `Friendship` — "A blocked
+B" and "B blocked A" are two different facts, and either alone has to close the
+conversation, so the gate reads both directions. Unique on
+`(blockerId, blockedId)`; the extra index on `blockedId` answers "who has blocked
+me", which is the question that shuts a channel for the other side.
+
+Blocking deletes the `Friendship` row but never the `Channel`: it holds two
+people's history, and unblocking brings the conversation back intact.
 
 ### `ServerEmoji`
 A server's custom emoji. The picture is served unauthenticated (an `<img>`
@@ -228,6 +264,7 @@ process died mid-call.
 
 ### `AdminAudit`
 Same append-only shape, for the admin panel: role changes, disable/enable,
-deletion, OAuth provider config changes. `targetId` goes `null` when the
+deletion, OAuth provider and SMTP config changes, and password-reset windows
+being opened or cancelled. `targetId` goes `null` when the
 target account is deleted; `targetLabel` keeps what it was called at the
 time, so the log still reads back after the account is gone.
