@@ -48,6 +48,7 @@ import com.aatech.betweenus.core.store.LastPlace
 import com.aatech.betweenus.core.store.Workspace
 import com.aatech.betweenus.feature.auth.IdentityUnlockSheet
 import com.aatech.betweenus.feature.chat.ChatScreen
+import com.aatech.betweenus.feature.home.AddFriendScreen
 import com.aatech.betweenus.feature.home.FriendsScreen
 import com.aatech.betweenus.feature.members.MembersScreen
 import com.aatech.betweenus.feature.remote.RemoteMachinesScreen
@@ -418,7 +419,11 @@ fun Shell(user: PublicUser) {
                         FriendsScreen(
                             onOpenMenu = openMenu,
                             onOpenChannel = { openChannel(it, null) },
+                            onAddFriend = { navigation.navigate(Route.AddFriend) },
                         )
+                    }
+                    composable(Route.AddFriend) {
+                        AddFriendScreen(onBack = { navigation.popBackStack() })
                     }
                     composable(Route.Chat) {
                         val id = channelId
@@ -426,6 +431,7 @@ fun Shell(user: PublicUser) {
                             FriendsScreen(
                                 onOpenMenu = openMenu,
                                 onOpenChannel = { openChannel(it, null) },
+                                onAddFriend = { navigation.navigate(Route.AddFriend) },
                             )
                         } else {
                             ChatScreen(
@@ -636,6 +642,7 @@ fun Shell(user: PublicUser) {
 
 object Route {
     const val Friends = "friends"
+    const val AddFriend = "add-friend"
     const val Chat = "chat"
     const val Members = "members"
     const val Voice = "voice"

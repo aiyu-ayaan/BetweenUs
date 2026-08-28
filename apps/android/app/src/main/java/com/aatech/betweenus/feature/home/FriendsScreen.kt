@@ -34,6 +34,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import com.aatech.betweenus.core.data.BetweenUsApi
 import com.aatech.betweenus.core.data.Endpoint
+import com.aatech.betweenus.core.data.Friend
 import com.aatech.betweenus.core.data.UserSummary
 import com.aatech.betweenus.core.data.Session
 import com.aatech.betweenus.core.store.Presence
@@ -41,8 +42,8 @@ import com.aatech.betweenus.core.store.Workspace
 import com.aatech.betweenus.feature.settings.BetweenUsPermissions
 import com.aatech.betweenus.feature.settings.NotificationPermissionBanner
 import com.aatech.betweenus.ui.components.AvatarWithStatus
+import com.aatech.betweenus.ui.components.BetweenUsButton
 import com.aatech.betweenus.ui.components.BetweenUsField
-import com.aatech.betweenus.ui.components.BetweenUsIcon
 import com.aatech.betweenus.ui.components.BetweenUsIcons
 import com.aatech.betweenus.ui.components.Chip
 import com.aatech.betweenus.ui.components.EmptyState
@@ -58,12 +59,19 @@ import kotlinx.coroutines.launch
  *
  * The port of `apps/desktop/src/features/home/FriendsView.tsx`. Opening a
  * direct message from here is the only way one gets created, on every client.
+ *
+ * The field at the top narrows *this list*; it does not go looking for
+ * strangers. Finding somebody new is [AddFriendScreen], behind the button in
+ * the header, which is the split the desktop's "Add friend" tab already makes:
+ * a box that searched the directory while sitting above the friends list left
+ * people who were already friends sitting in both halves of the same screen.
  */
 @Composable
 fun FriendsScreen(
     /** Null when the channel list is already on screen beside this one. */
     onOpenMenu: (() -> Unit)?,
     onOpenChannel: (String) -> Unit,
+    onAddFriend: () -> Unit,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -71,7 +79,6 @@ fun FriendsScreen(
     val statuses by Presence.statuses.collectAsState()
 
     var query by remember { mutableStateOf("") }
-    var results by remember { mutableStateOf<List<UserSummary>>(emptyList()) }
     var note by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
     /** Who a Block button was pressed for, until the sentence has been read. */
@@ -98,17 +105,20 @@ fun FriendsScreen(
     }
 
     LaunchedEffect(Unit) { Workspace.loadFriends() }
-    LaunchedEffect(query) {
-        results = if (query.length < 2) {
-            emptyList()
-        } else {
-            runCatching { BetweenUsApi.searchUsers(query) }.getOrDefault(emptyList())
-        }
-    }
 
-    val incoming = friends.filter { it.incoming }
-    val outgoing = friends.filter { it.outgoing }
-    val accepted = friends.filter { it.status.name == "ACCEPTED" }
+    // Local, and on both halves of a name: the list is already in memory, so
+    // filtering it is not a round trip, and somebody typing "sam" is as likely
+    // to be after the display name as the username.
+    val term = query.trim()
+    fun matches(friend: Friend): Boolean =
+        term.isEmpty() ||
+            friend.user.username.contains(term, ignoreCase = true) ||
+            friend.user.displayName.contains(term, ignoreCase = true)
+
+    val incoming = friends.filter { it.incoming && matches(it) }
+    val outgoing = friends.filter { it.outgoing && matches(it) }
+    val accepted = friends.filter { it.status.name == "ACCEPTED" && matches(it) }
+    val filtering = term.isNotEmpty()
 
     fun act(block: suspend () -> Unit) {
         scope.launch {
@@ -143,6 +153,7 @@ fun FriendsScreen(
                 color = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.weight(1f).padding(start = 8.dp),
             )
+            IconAction(BetweenUsIcons.UserPlus, "Add a friend", onAddFriend)
         }
 
         // Notification Permission Warning Banner (if user denied or turned off notifications)
@@ -161,35 +172,16 @@ fun FriendsScreen(
             item {
                 Column(Modifier.padding(horizontal = 12.dp, vertical = 12.dp)) {
                     BetweenUsField(
-                        label = "Add someone",
+                        label = "Search your friends",
                         value = query,
                         onValueChange = { query = it; note = null },
-                        placeholder = "Their username",
+                        placeholder = "A name on this list",
                         imeAction = ImeAction.Search,
                         enabled = !busy,
                     )
                     note?.let {
                         Notice(it, MaterialTheme.colorScheme.error, Modifier.padding(top = 8.dp))
                     }
-                }
-            }
-
-            if (results.isNotEmpty()) {
-                item { SectionLabel("Search results") }
-                items(results, key = { "search-${it.id}" }) { user ->
-                    PersonRow(
-                        user = user,
-                        status = statuses[user.id]?.wire ?: "offline",
-                        trailing = {
-                            IconAction(BetweenUsIcons.UserPlus, "Send a friend request", {
-                                act {
-                                    BetweenUsApi.addFriend(user.username)
-                                    Workspace.loadFriends()
-                                    query = ""
-                                }
-                            })
-                        },
-                    )
                 }
             }
 
@@ -227,8 +219,16 @@ fun FriendsScreen(
                 item {
                     EmptyState(
                         icon = BetweenUsIcons.Users,
-                        title = "No friends yet",
-                        detail = "Search for a username above to send the first request.",
+                        title = if (filtering) "Nobody on this list matches" else "No friends yet",
+                        detail = if (filtering) {
+                            "This only searches the people you are already friends with. " +
+                                "Use Add friend to look for somebody else."
+                        } else {
+                            "Add friend, at the top, finds somebody to send the first request to."
+                        },
+                        action = if (filtering) null else {
+                            { BetweenUsButton("Add friend", onAddFriend) }
+                        },
                     )
                 }
             }
@@ -306,7 +306,7 @@ private fun PersonRow(
 ) {
     ListRow(
         title = user.label,
-        subtitle = "@${user.username}",
+        subtitle = user.handle,
         leading = {
             AvatarWithStatus(
                 id = user.id,
