@@ -13,9 +13,10 @@ import { ChangePasswordScreen } from './screens/ChangePasswordScreen';
 import { UsersScreen } from './screens/UsersScreen';
 import { AuditScreen } from './screens/AuditScreen';
 import { OAuthScreen } from './screens/OAuthScreen';
+import { MailScreen } from './screens/MailScreen';
 import { AccountScreen } from './screens/AccountScreen';
 
-type Tab = 'users' | 'audit' | 'oauth' | 'account';
+type Tab = 'users' | 'audit' | 'oauth' | 'mail' | 'account';
 
 export default function App(): JSX.Element {
   const [hasAdmin, setHasAdmin] = useState<boolean | null>(null);
@@ -90,6 +91,7 @@ export default function App(): JSX.Element {
               ['users', 'Users'],
               ['audit', 'Audit log'],
               ['oauth', 'Sign-in providers'],
+              ['mail', 'Outgoing mail'],
               ['account', 'My account'],
             ] as Array<[Tab, string]>
           ).map(([key, label]) => (
@@ -125,6 +127,7 @@ export default function App(): JSX.Element {
         {tab === 'users' && <UsersScreen currentUserId={user.id} />}
         {tab === 'audit' && <AuditScreen />}
         {tab === 'oauth' && <OAuthScreen />}
+        {tab === 'mail' && <MailScreen />}
         {tab === 'account' && <AccountScreen user={user} onUpdated={setUser} />}
       </main>
     </div>

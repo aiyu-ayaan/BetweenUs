@@ -113,6 +113,7 @@ export function UsersScreen({ currentUserId }: { currentUserId: string }): JSX.E
                     {user.role === 'ADMIN' && <Badge tone="accent">admin</Badge>}
                     {user.disabledAt && <Badge tone="danger">disabled</Badge>}
                     {user.mustChangePassword && <Badge tone="muted">password pending</Badge>}
+                    {resetOpen(user) && <Badge tone="accent">reset open</Badge>}
                     {user.id === currentUserId && <Badge tone="muted">you</Badge>}
                   </div>
                 </td>
@@ -139,6 +140,30 @@ export function UsersScreen({ currentUserId }: { currentUserId: string }): JSX.E
                       }
                     >
                       {user.disabledAt ? 'Enable' : 'Disable'}
+                    </Action>
+                    <Action
+                      onClick={() => {
+                        // The strongest thing this panel can say about somebody:
+                        // for the next day they can set a password without
+                        // knowing the old one. Worth a sentence and a click.
+                        if (
+                          !resetOpen(user) &&
+                          !confirm(
+                            `Let ${user.username} set a new password without the old one?\n\n` +
+                              'They enter their username on the forgot-password screen and are ' +
+                              'taken straight to a new-password form. The permission expires ' +
+                              'on its own and is used once.',
+                          )
+                        ) {
+                          return;
+                        }
+                        void act(
+                          api.updateUser(user.id, { passwordReset: !resetOpen(user) }),
+                          user.id,
+                        );
+                      }}
+                    >
+                      {resetOpen(user) ? 'Cancel reset' : 'Reset password'}
                     </Action>
                     <Action
                       danger
@@ -178,6 +203,11 @@ export function UsersScreen({ currentUserId }: { currentUserId: string }): JSX.E
       )}
     </section>
   );
+}
+
+/** True while the administrator-granted reset window is still in the future. */
+function resetOpen(user: AdminUser): boolean {
+  return user.passwordResetUntil !== null && new Date(user.passwordResetUntil) > new Date();
 }
 
 function Badge({

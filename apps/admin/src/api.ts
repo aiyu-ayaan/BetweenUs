@@ -10,6 +10,9 @@ import type {
   AdminAuditPage,
   AdminOAuthProvider,
   AdminOAuthProviderUpdate,
+  AdminSmtpSettings,
+  AdminSmtpTestResult,
+  AdminSmtpUpdate,
   AdminStatus,
   AdminUser,
   AdminUserPage,
@@ -171,6 +174,14 @@ export const api = {
 
   deleteUser: (id: string): Promise<void> =>
     request(`/api/v1/admin/users/${id}`, { method: 'DELETE' }),
+
+  smtp: (): Promise<AdminSmtpSettings> => request('/api/v1/admin/smtp'),
+
+  updateSmtp: (update: AdminSmtpUpdate): Promise<AdminSmtpSettings> =>
+    request('/api/v1/admin/smtp', { method: 'PUT', body: JSON.stringify(update) }),
+
+  testSmtp: (to?: string): Promise<AdminSmtpTestResult> =>
+    request('/api/v1/admin/smtp/test', { method: 'POST', body: JSON.stringify(to ? { to } : {}) }),
 
   oauthProviders: (): Promise<AdminOAuthProvider[]> => request('/api/v1/admin/oauth'),
 
