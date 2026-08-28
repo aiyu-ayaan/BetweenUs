@@ -150,7 +150,7 @@ fun ShareTargetScreen(
                 items(people, key = { "dm-${it.channelId}" }) { direct ->
                     ListRow(
                         title = direct.participant.label,
-                        subtitle = "@${direct.participant.username}",
+                        subtitle = direct.participant.handle,
                         leading = {
                             AvatarWithStatus(
                                 id = direct.participant.id,

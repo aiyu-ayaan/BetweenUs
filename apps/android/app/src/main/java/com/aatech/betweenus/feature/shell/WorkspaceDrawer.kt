@@ -227,7 +227,7 @@ fun WorkspaceDrawer(
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             ListRow(
                 title = user.label,
-                subtitle = "@${user.username} · ${self.wire}",
+                subtitle = listOfNotNull(user.handle, self.wire).joinToString(" · "),
                 leading = {
                     AvatarWithStatus(
                         id = user.id,

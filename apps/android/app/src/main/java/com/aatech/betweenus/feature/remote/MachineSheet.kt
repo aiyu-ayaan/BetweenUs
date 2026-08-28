@@ -210,7 +210,7 @@ fun MachineSheet(
             found.forEach { user ->
                 ListRow(
                     title = user.label,
-                    subtitle = "@${user.username}",
+                    subtitle = user.handle,
                     // Viewing only, to start with. Control is a second decision
                     // and should be taken deliberately rather than handed over
                     // by the same tap that granted a look at the screen.

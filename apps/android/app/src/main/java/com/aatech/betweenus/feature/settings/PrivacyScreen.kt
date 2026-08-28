@@ -127,7 +127,7 @@ fun PrivacyScreen(onBack: () -> Unit) {
                 for (entry in blocked) {
                     ListRow(
                         title = entry.user.label,
-                        subtitle = "@${entry.user.username}",
+                        subtitle = entry.user.handle,
                         leading = {
                             Avatar(
                                 id = entry.user.id,

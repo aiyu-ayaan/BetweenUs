@@ -51,6 +51,17 @@ data class UserSummary(
 ) {
     val label: String get() = displayName.ifBlank { username }
 
+    /**
+     * The "@name" line drawn under [label], or null when it would only repeat
+     * it. An account that never set a display name is shown once, not twice:
+     * "test" over "@test" is a row that looks like a rendering bug.
+     */
+    val handle: String? get() = if (displayName.isBlank() || displayName.equals(username, ignoreCase = true)) {
+        null
+    } else {
+        "@$username"
+    }
+
     fun toJson(): JSONObject = JSONObject()
         .put("id", id)
         .put("username", username)
@@ -232,6 +243,17 @@ data class ServerMember(
     val roleIds: List<String>,
 ) {
     val label: String get() = displayName.ifBlank { username }
+
+    /**
+     * The "@name" line drawn under [label], or null when it would only repeat
+     * it. An account that never set a display name is shown once, not twice:
+     * "test" over "@test" is a row that looks like a rendering bug.
+     */
+    val handle: String? get() = if (displayName.isBlank() || displayName.equals(username, ignoreCase = true)) {
+        null
+    } else {
+        "@$username"
+    }
 
     fun toJson(): JSONObject = JSONObject()
         .put("userId", userId)

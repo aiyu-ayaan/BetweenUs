@@ -25,6 +25,9 @@ data class PublicUser(
     val label: String get() = displayName.ifBlank { username }
     val summary: UserSummary get() = UserSummary(id, username, displayName, avatarUrl)
 
+    /** The "@name" line, or null when it would only repeat [label]. */
+    val handle: String? get() = summary.handle
+
     companion object {
         fun from(json: JSONObject) = PublicUser(
             id = json.getString("id"),
