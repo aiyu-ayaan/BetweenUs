@@ -35,10 +35,10 @@ export function ReleaseNotes({ text }: { text: string }): JSX.Element | null {
 }
 
 /**
- * A blank line comes back as an empty `body` block, which is exactly what a
- * blank line in a *message* is. A release note is mostly blank lines - one
- * under every heading - and drawing each as an empty paragraph on top of the
- * spacing this already has makes the whole thing drift apart.
+ * `parseNotes` treats a blank line as a paragraph break, so nothing empty
+ * should come back. This is the belt to that pair of braces: a block with
+ * nothing in it draws as an empty paragraph on top of the spacing this already
+ * has, and a release note has a blank line under every heading.
  */
 function blocks(text: string): Block[] {
   return parseNotes(text).filter((block) => block.kind !== 'body' || block.text.trim() !== '');

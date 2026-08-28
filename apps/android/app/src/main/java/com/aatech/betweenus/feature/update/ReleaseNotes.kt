@@ -54,10 +54,10 @@ import com.aatech.betweenus.ui.theme.Surface950
 @Composable
 fun ReleaseNotes(notes: String, modifier: Modifier = Modifier) {
     val blocks = remember(notes) {
-        // A blank line comes back as an empty Body block, which is what a blank
-        // line in a *message* is. A release note is mostly blank lines - one
-        // under every heading - and drawing each as an empty row on top of the
-        // spacing this already has makes the whole thing drift apart.
+        // parseNotes treats a blank line as a paragraph break, so nothing
+        // empty should come back. This is the belt to that pair of braces: an
+        // empty block draws as an empty row on top of the spacing this already
+        // has, and a release note has a blank line under every heading.
         Markup.parseNotes(notes.trim())
             .filter { it.kind != Markup.Kind.Body || it.text.isNotBlank() }
     }

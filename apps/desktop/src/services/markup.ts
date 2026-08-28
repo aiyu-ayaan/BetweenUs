@@ -125,6 +125,15 @@ export function parse(text: string, headings = false): Block[] {
     }
 
     if (headings) {
+      // A blank line ends a paragraph rather than sitting inside one. In a
+      // message the gap is deliberate - somebody pressed return twice - but a
+      // document is separated by them, and keeping them would hand every
+      // paragraph a leading and trailing newline to draw.
+      if (line.trim() === '') {
+        flush();
+        i++;
+        continue;
+      }
       if (TABLE_RULE.test(line)) {
         i++;
         continue;

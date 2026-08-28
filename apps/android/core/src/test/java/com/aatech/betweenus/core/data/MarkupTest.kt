@@ -322,10 +322,21 @@ class MarkupTest {
     }
 
     @Test
+    fun `a blank line separates paragraphs in a document and joins them in a message`() {
+        // Which is what keeps a note's paragraphs from carrying a newline at
+        // each end, and keeps a deliberate gap in a message.
+        assertEquals(
+            listOf("one", "two"),
+            Markup.parseNotes("one\n\ntwo").map { it.text },
+        )
+        assertEquals("one\n\ntwo", one("one\n\ntwo").text)
+    }
+
+    @Test
     fun `the shape a real release note has, from one pass`() {
-        // The blank lines come back as empty Body blocks, which is what a blank
-        // line in a message is - and is why the notes renderer drops them
-        // rather than the parser.
+        // A blank line is a paragraph break in a document, so nothing empty
+        // comes back at all - unlike parse, where the gap is something
+        // somebody typed on purpose.
         val blocks = Markup.parseNotes(
             listOf(
                 "### Bug fixes",
@@ -337,7 +348,7 @@ class MarkupTest {
                 "docker compose pull",
                 "```",
             ).joinToString("\n"),
-        ).filter { it.kind != Kind.Body || it.text.isNotEmpty() }
+        )
 
         assertEquals(
             listOf(

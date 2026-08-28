@@ -407,19 +407,26 @@ assert.deepEqual(
   ),
   ['| Platform | This release |\n| Android | Built here |'],
 );
+// A blank line is a paragraph break in a document and part of the paragraph in
+// a message - which is what keeps a note's paragraphs from carrying a newline
+// at each end, and keeps a deliberate gap in a message.
+assert.deepEqual(
+  parseNotes('one' + '\n'.repeat(2) + 'two').map((block) => block.text),
+  ['one', 'two'],
+);
+assert.equal(parse('one' + '\n'.repeat(2) + 'two')[0]?.text, 'one\n\ntwo');
+
 // A chat line of dashes and pipes is untouched.
 assert.equal(parse('| --- | --- |')[0]?.text, '| --- | --- |');
 
 // The shape a real release note actually has: a heading, a `*` list under it,
-// and a fenced block - all three from one pass. The blank lines between them
-// come back as empty `body` blocks, which is what a blank line in a message is
-// and is why the notes renderer drops them rather than the parser.
+// and a fenced block - all three from one pass. A blank line between them is a
+// paragraph break in a document, so nothing empty comes back at all - unlike
+// `parse`, where the gap is something somebody typed on purpose.
 assert.deepEqual(
   parseNotes(
     ['### Bug fixes', '', '* Fixed the thing', '* Fixed the other', '', '```bash', 'docker compose pull', '```'].join('\n'),
-  )
-    .filter((block) => block.kind !== 'body' || block.text !== '')
-    .map((block) => [block.kind, block.text]),
+  ).map((block) => [block.kind, block.text]),
   [
     ['heading', 'Bug fixes'],
     ['bullet', 'Fixed the thing'],
