@@ -459,6 +459,7 @@ fun Shell(user: PublicUser) {
                         MembersScreen(
                             serverId = serverId,
                             channelId = channelId,
+                            selfId = user.id,
                             onBack = { navigation.popBackStack() },
                             onOpenDirect = { openChannel(it, null) },
                         )

@@ -64,6 +64,8 @@ import kotlinx.coroutines.launch
 fun MembersScreen(
     serverId: String?,
     channelId: String?,
+    /** The signed-in account's id. Your own row offers nothing to do to you. */
+    selfId: String,
     onBack: () -> Unit,
     onOpenDirect: (String) -> Unit,
 ) {
@@ -222,6 +224,7 @@ fun MembersScreen(
                 MemberRow(
                     member = member,
                     status = statuses[member.userId]?.wire ?: "online",
+                    self = member.userId == selfId,
                     onOpenDirect = { openDirect(member) },
                     onMenu = { menuFor = member },
                 )
@@ -232,6 +235,7 @@ fun MembersScreen(
                 MemberRow(
                     member = member,
                     status = "offline",
+                    self = member.userId == selfId,
                     onOpenDirect = { openDirect(member) },
                     onMenu = { menuFor = member },
                 )
@@ -269,11 +273,17 @@ fun MembersScreen(
  * role chip and four buttons on the end of it, the weighted name column was
  * measured last and got what was left, which on a phone was an ellipsis. The
  * rest is a tap away in [MemberMenuSheet].
+ *
+ * Your own row has neither. Message, mute and add-friend are all things done to
+ * somebody else - `POST /api/v1/dm` will not open a conversation with yourself
+ * and is right not to - so the row says which one you are and stops there,
+ * rather than offering buttons whose only outcome is a refusal.
  */
 @Composable
 private fun MemberRow(
     member: ServerMember,
     status: String,
+    self: Boolean,
     onOpenDirect: () -> Unit,
     onMenu: () -> Unit,
 ) {
@@ -291,9 +301,13 @@ private fun MemberRow(
         },
         trailing = {
             if (member.role != ServerRole.MEMBER) Chip(member.role.name.lowercase())
-            IconAction(BetweenUsIcons.Message, "Message ${member.label}", onOpenDirect, compact = true)
-            IconAction(BetweenUsIcons.User, "More about ${member.label}", onMenu, compact = true)
+            if (self) {
+                Chip("You")
+            } else {
+                IconAction(BetweenUsIcons.Message, "Message ${member.label}", onOpenDirect, compact = true)
+                IconAction(BetweenUsIcons.User, "More about ${member.label}", onMenu, compact = true)
+            }
         },
-        onClick = onOpenDirect,
+        onClick = if (self) null else onOpenDirect,
     )
 }
