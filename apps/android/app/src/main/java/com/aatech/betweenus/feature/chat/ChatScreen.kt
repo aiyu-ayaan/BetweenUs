@@ -84,7 +84,8 @@ import kotlinx.coroutines.launch
 fun ChatScreen(
     channelId: String,
     self: PublicUser,
-    onOpenMenu: () -> Unit,
+    /** Null when the channel list is already on screen beside this one. */
+    onOpenMenu: (() -> Unit)?,
     onOpenMembers: () -> Unit,
     onStartCall: () -> Unit,
 ) {
@@ -343,7 +344,11 @@ fun ChatScreen(
                 .padding(start = 4.dp, end = 8.dp, top = 6.dp, bottom = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            IconAction(BetweenUsIcons.LayoutSidebar, "Open the channel list", onOpenMenu)
+            // Absent on a tablet or an unfolded foldable: a button that opens a
+            // panel already open is a control that appears to do nothing.
+            onOpenMenu?.let {
+                IconAction(BetweenUsIcons.LayoutSidebar, "Open the channel list", it)
+            }
 
             Box(
                 modifier = Modifier

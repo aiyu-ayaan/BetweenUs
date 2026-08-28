@@ -60,7 +60,11 @@ import kotlinx.coroutines.launch
  * direct message from here is the only way one gets created, on every client.
  */
 @Composable
-fun FriendsScreen(onOpenMenu: () -> Unit, onOpenChannel: (String) -> Unit) {
+fun FriendsScreen(
+    /** Null when the channel list is already on screen beside this one. */
+    onOpenMenu: (() -> Unit)?,
+    onOpenChannel: (String) -> Unit,
+) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val friends by Workspace.friends.collectAsState()
@@ -128,7 +132,11 @@ fun FriendsScreen(onOpenMenu: () -> Unit, onOpenChannel: (String) -> Unit) {
                 .padding(start = 4.dp, end = 12.dp, top = 6.dp, bottom = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            IconAction(BetweenUsIcons.LayoutSidebar, "Open the channel list", onOpenMenu)
+            // Absent on a tablet or an unfolded foldable: a button that opens a
+            // panel already open is a control that appears to do nothing.
+            onOpenMenu?.let {
+                IconAction(BetweenUsIcons.LayoutSidebar, "Open the channel list", it)
+            }
             Text(
                 text = "Friends",
                 style = MaterialTheme.typography.titleLargeEmphasized,

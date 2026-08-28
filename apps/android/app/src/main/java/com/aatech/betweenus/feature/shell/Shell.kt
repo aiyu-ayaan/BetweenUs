@@ -7,6 +7,8 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -68,6 +70,8 @@ import com.aatech.betweenus.feature.update.UpdateState
 import com.aatech.betweenus.feature.update.UpdateWorker
 import com.aatech.betweenus.feature.update.Updates
 import com.aatech.betweenus.feature.voice.VoiceChannelScreen
+import com.aatech.betweenus.ui.components.ShellPanes
+import com.aatech.betweenus.ui.components.rememberShellFrame
 import com.aatech.betweenus.ui.theme.BetweenUsMotion
 import kotlinx.coroutines.launch
 
@@ -102,6 +106,27 @@ fun Shell(user: PublicUser) {
     val drawer = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     val navigation = rememberNavController()
+
+    /**
+     * How much of the app fits on screen at once.
+     *
+     * A phone reaches the channel list through a drawer; a tablet, an unfolded
+     * foldable or a phone turned sideways has room for the list *and* the
+     * conversation, and hiding one behind a hamburger on a ten-inch screen is
+     * throwing the screen away. It is read here rather than at each use so both
+     * branches below are the same shell with one part moved, not two shells.
+     */
+    val frame = rememberShellFrame()
+    val twoPane = frame.panes == ShellPanes.TWO
+
+    /**
+     * What the hamburger does, or null when there is nothing for it to do.
+     *
+     * A button that opens a panel already open is worse than no button: it is a
+     * control that appears to do nothing. Every screen that draws one takes
+     * this and omits it when it is null.
+     */
+    val openMenu: (() -> Unit)? = if (twoPane) null else ({ scope.launch { drawer.open() } })
 
     val servers by Workspace.servers.collectAsState()
     var serverId by rememberSaveable { mutableStateOf(LastPlace.serverId) }
@@ -253,66 +278,67 @@ fun Shell(user: PublicUser) {
         }
     }
 
-    ModalNavigationDrawer(
-        drawerState = drawer,
-        drawerContent = {
-            ModalDrawerSheet(
-                drawerContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-                modifier = Modifier.width(324.dp),
-            ) {
-                WorkspaceDrawer(
-                    user = user,
-                    servers = servers,
-                    selectedServerId = serverId,
-                    selectedChannelId = channelId,
-                    // Picking a server opens the conversation in it, because
-                    // that is what picking a server is for. Its first text
-                    // channel - #general on a server nobody has renamed - is
-                    // the one every client lands on.
-                    onSelectServer = { picked ->
-                        serverId = picked
-                        val landing = picked
-                            ?.let { Workspace.channelsOf(it) }
-                            ?.firstOrNull { it.type == ChannelType.TEXT }
-                        if (landing != null) openChannel(landing.id, picked)
-                    },
-                    onSelectChannel = { channel ->
-                        when (channel.type) {
-                            // A voice channel does not become "the channel".
-                            // It used to, and since the chat route reads the
-                            // same value, leaving a call landed on a voice
-                            // channel rendered as an empty conversation.
-                            ChannelType.VOICE -> {
-                                voiceChannelId = channel.id
-                                serverId = channel.serverId
-                                joinOnArrival = true
-                                scope.launch { drawer.close() }
-                                navigation.navigate(Route.Voice)
-                            }
-                            else -> openChannel(channel.id, channel.serverId)
-                        }
-                    },
-                    onHome = {
-                        serverId = null
+    /**
+     * The channel list, wherever it happens to be living.
+     *
+     * Extracted so the two layouts share it rather than each carrying a copy:
+     * a second copy is a second place to add a callback to, and the one that
+     * gets forgotten is always the one on the device nobody is holding.
+     */
+    val workspacePane: @Composable () -> Unit = {
+        WorkspaceDrawer(
+            user = user,
+            servers = servers,
+            selectedServerId = serverId,
+            selectedChannelId = channelId,
+            // Picking a server opens the conversation in it, because that is
+            // what picking a server is for. Its first text channel - #general
+            // on a server nobody has renamed - is the one every client lands on.
+            onSelectServer = { picked ->
+                serverId = picked
+                val landing = picked
+                    ?.let { Workspace.channelsOf(it) }
+                    ?.firstOrNull { it.type == ChannelType.TEXT }
+                if (landing != null) openChannel(landing.id, picked)
+            },
+            onSelectChannel = { channel ->
+                when (channel.type) {
+                    // A voice channel does not become "the channel". It used
+                    // to, and since the chat route reads the same value,
+                    // leaving a call landed on a voice channel rendered as an
+                    // empty conversation.
+                    ChannelType.VOICE -> {
+                        voiceChannelId = channel.id
+                        serverId = channel.serverId
+                        joinOnArrival = true
                         scope.launch { drawer.close() }
-                        navigation.navigate(Route.Friends) { launchSingleTop = true }
-                    },
-                    onSettings = {
-                        scope.launch { drawer.close() }
-                        navigation.navigate(Route.Settings)
-                    },
-                    onServerSettings = {
-                        scope.launch { drawer.close() }
-                        navigation.navigate(Route.ServerSettings)
-                    },
-                    onRemote = {
-                        scope.launch { drawer.close() }
-                        navigation.navigate(Route.Remote)
-                    },
-                )
-            }
-        },
-    ) {
+                        navigation.navigate(Route.Voice)
+                    }
+                    else -> openChannel(channel.id, channel.serverId)
+                }
+            },
+            onHome = {
+                serverId = null
+                scope.launch { drawer.close() }
+                navigation.navigate(Route.Friends) { launchSingleTop = true }
+            },
+            onSettings = {
+                scope.launch { drawer.close() }
+                navigation.navigate(Route.Settings)
+            },
+            onServerSettings = {
+                scope.launch { drawer.close() }
+                navigation.navigate(Route.ServerSettings)
+            },
+            onRemote = {
+                scope.launch { drawer.close() }
+                navigation.navigate(Route.Remote)
+            },
+        )
+    }
+
+    /** Everything that is not the channel list: the screen stack and its overlays. */
+    val body: @Composable () -> Unit = {
         Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
             /**
              * The left edge, asked for back from the system.
@@ -328,13 +354,15 @@ fun Shell(user: PublicUser) {
              * Nothing is drawn and nothing is consumed here: the strip exists
              * to claim the area, and the drag it lets through is the drawer's.
              */
-            Box(
-                Modifier
-                    .align(Alignment.CenterStart)
-                    .width(24.dp)
-                    .fillMaxHeight()
-                    .systemGestureExclusion(),
-            )
+            if (!twoPane) {
+                Box(
+                    Modifier
+                        .align(Alignment.CenterStart)
+                        .width(24.dp)
+                        .fillMaxHeight()
+                        .systemGestureExclusion(),
+                )
+            }
 
             val connectivityState by Connectivity.state.collectAsState()
             val bannerVisible = connectivityState != Connectivity.State.ONLINE
@@ -388,7 +416,7 @@ fun Shell(user: PublicUser) {
                 ) {
                     composable(Route.Friends) {
                         FriendsScreen(
-                            onOpenMenu = { scope.launch { drawer.open() } },
+                            onOpenMenu = openMenu,
                             onOpenChannel = { openChannel(it, null) },
                         )
                     }
@@ -396,14 +424,14 @@ fun Shell(user: PublicUser) {
                         val id = channelId
                         if (id == null) {
                             FriendsScreen(
-                                onOpenMenu = { scope.launch { drawer.open() } },
+                                onOpenMenu = openMenu,
                                 onOpenChannel = { openChannel(it, null) },
                             )
                         } else {
                             ChatScreen(
                                 channelId = id,
                                 self = user,
-                                onOpenMenu = { scope.launch { drawer.open() } },
+                                onOpenMenu = openMenu,
                                 onOpenMembers = { navigation.navigate(Route.Members) },
                                 // The call button in a text channel means the voice
                                 // channel of the server it is in - a text channel
@@ -567,6 +595,42 @@ fun Shell(user: PublicUser) {
                 )
             }
         }
+    }
+
+    // One shell, two shapes. The panes above are the same composables in both;
+    // all that changes is whether the first one is over the second or beside
+    // it - which is the whole of what "adaptive" is meant to mean here.
+    if (twoPane) {
+        Row(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+            Box(
+                Modifier
+                    .width(frame.navPaneWidth)
+                    .fillMaxHeight()
+                    .background(MaterialTheme.colorScheme.surfaceContainerLow),
+            ) {
+                workspacePane()
+            }
+            // The hinge, left empty. A folding screen is two panels with a
+            // physical seam between them, and content drawn across it is
+            // content drawn on a hinge. Zero on everything without one.
+            if (frame.hingeGap > 0.dp) {
+                Spacer(Modifier.width(frame.hingeGap).fillMaxHeight())
+            }
+            Box(Modifier.weight(1f).fillMaxHeight()) { body() }
+        }
+    } else {
+        ModalNavigationDrawer(
+            drawerState = drawer,
+            drawerContent = {
+                ModalDrawerSheet(
+                    drawerContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                    modifier = Modifier.width(324.dp),
+                ) {
+                    workspacePane()
+                }
+            },
+            content = body,
+        )
     }
 }
 

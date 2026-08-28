@@ -51,6 +51,8 @@ dependencies {
     // it is going to write @Composable functions, so it gets the toolkit too.
     api(platform(libs.androidx.compose.bom))
     api(libs.androidx.compose.material3)
+    // Window size and folding-feature posture: `currentWindowAdaptiveInfo()`.
+    api(libs.androidx.compose.material3.adaptive)
     api(libs.androidx.compose.ui)
     api(libs.androidx.compose.ui.graphics)
     api(libs.androidx.compose.ui.tooling.preview)
