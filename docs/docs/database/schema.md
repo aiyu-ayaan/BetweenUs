@@ -46,7 +46,8 @@ what was typed, so a mixed-case row was one nobody could sign in to by name.
 Two markers about the account's own state: `passwordResetUntil` is an
 administrator-granted recovery window (see `PasswordReset`), and `chatsClearedAt`
 is a floor under everything **this** account can see, in every channel, on every
-one of its devices.
+one of its devices — the per-conversation half of the same idea being
+`ChannelRead.clearedAt`.
 
 ### `RefreshToken`
 `id` **is** the JWT `jti` — revoking a token is a delete by primary key.
@@ -146,6 +147,13 @@ ignores them, so making a channel private later needs no backfill.
 One row per `(user, channel)`, `lastReadAt`. Unread counts are **derived**
 from this on every read, never stored as a counter — a counter drifts the
 first time some path forgets to decrement it; a marker can't drift.
+
+`clearedAt` is the per-conversation half of `User.chatsClearedAt`: messages
+older than it aren't returned to *this* user in *this* channel. It lives here
+rather than in a table of its own because this row is already the one thing
+keyed on exactly `(user, channel)` — a second table would be the same key, the
+same cascade and the same lookup, twice. The two markers are read together and
+the later one wins.
 
 ### `Friendship`
 One row per relationship, not one per direction — `userAId < userBId`

@@ -75,9 +75,11 @@ says who you are, not what you may do, because a role can change mid-token.
   downstream of a channel id — history, pins, reactions, calls, typing —
   closes through one function. A blocked conversation answers 404 like any
   unseen channel, so neither the block nor its direction can be probed for.
-- **Clearing your own history is a filter, not a delete.** `chatsClearedAt`
-  is a floor applied by history, pins and unread counts; no endpoint can
-  remove the other participant's copy of a message.
+- **Clearing your own history is a filter, not a delete.** Two markers —
+  `User.chatsClearedAt` for all conversations, `ChannelRead.clearedAt` for
+  one — and the later of the two is the floor applied by history, pins and
+  unread counts. No endpoint can remove the other participant's copy of a
+  message.
 
 ## Rate limiting
 

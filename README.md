@@ -85,7 +85,7 @@ to be framed, so no browser tab can ever show it.
 | End-to-end encrypted messages, realtime, history paging | ✅ | ✅ | ✅ |
 | Direct messages and friends | ✅ | ✅ | ✅ |
 | Block somebody | ✅ | ✅ | ✅ |
-| Clear your own history on every device | ✅ | ✅ | ✅ |
+| Clear one conversation, or all, on every device | ✅ | ✅ | ✅ |
 | Replies, edit, delete, reactions | ✅ | ✅ | ✅ |
 | Pinned messages | ✅ | ✅ | ✅ |
 | Custom emoji in messages | ✅ | ✅ | ✅ |
@@ -779,9 +779,10 @@ was built the way it was; this is the short version.
 
 Four things about an account rather than about a conversation. **Blocking**
 somebody ends the friendship and closes the conversation for both sides -
-without deleting it, so unblocking brings the whole history back. **Clear all my
-messages** hides everything you can see, on every device you are signed in on,
-and touches nobody else's copy. **Forgot your password?** sends a link when the
+without deleting it, so unblocking brings the whole history back. **Clearing a chat** — from the ⋮ in its header, or all of them at once from
+settings — hides those messages on every device you are signed in on and
+touches nobody else's copy; the confirmation says "Delete for me" because that
+is exactly what it is. **Forgot your password?** sends a link when the
 operator has configured a mail server in the admin panel, and says to ask an
 administrator when they have not - who can then open a reset window on the
 account from the panel, which is how a self-hosted deployment with no SMTP

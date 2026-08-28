@@ -47,13 +47,23 @@ reactions all arrive as one `message.updated` shape.
 | PUT | `/:messageId/pin` | Pin (`MANAGE_MESSAGE` in a server channel, free in a DM) |
 | DELETE | `/:messageId/pin` | Unpin |
 | POST | `/:messageId/reactions` | React |
-| POST | `/clear` | Hide **this account's own** history, everywhere |
+| POST | `/clear` | Hide **this account's own** history: one channel, or all |
 
-`/clear` is a filter and never a delete. It stamps `User.chatsClearedAt`, which
-history, pins and the unread count all apply as a floor; the rows stay in the
-table and the other participant's view does not move. The cut is published as
-`chats.cleared` to that account's own sockets, because every device holds a
-cache of decrypted messages that no refetch would clear.
+`/clear` is a filter and never a delete. With a `channelId` it stamps
+`ChannelRead.clearedAt`; without one it stamps `User.chatsClearedAt`. History,
+pins and the unread count apply whichever marker is **later** as a floor. The
+rows stay in the table and the other participant's view does not move.
+
+Two markers rather than one because they answer different questions and neither
+subsumes the other: "clear everything" is one write on the account instead of a
+fan-out over every channel, and "clear this conversation" is one write on the
+row that already exists per `(user, channel)`.
+
+The cut is published as `chats.cleared` — carrying the instant and the
+`channelId` it applies to, null for all — to that account's own sockets, because
+every device holds a cache of decrypted messages that no refetch would clear. A
+scoped clear drops only that channel's cache; dropping the lot would turn one
+clear into a spinner on the next several conversations opened.
 
 ## `/api/v1/users` and `/api/v1/friends` and `/api/v1/dm`
 

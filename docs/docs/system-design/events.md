@@ -100,9 +100,9 @@ remote.permission.changed
 
 `chats.cleared` is the odd one: it reaches exactly one account's own room and
 nobody else, because clearing your history is a fact about your view rather than
-about the conversation. It is *carried* - it names the cut-off instant - because
-each of that account's devices holds a cache of decrypted messages, and no
-refetch clears one.
+about the conversation. It is *carried* - it names the cut-off instant and the
+channel it applies to, or null for all of them - because each of that account's
+devices holds a cache of decrypted messages, and no refetch clears one.
 
 ### Where the built events differ from that list
 
