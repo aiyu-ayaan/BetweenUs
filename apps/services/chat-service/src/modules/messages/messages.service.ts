@@ -23,6 +23,17 @@ const MAX_EMOJI_LENGTH = 32;
 /** How many distinct people's reactions one message may carry. */
 const MAX_REACTIONS_PER_MESSAGE = 200;
 
+/**
+ * The later of two cut-offs, treating null as "no cut-off at all" rather than
+ * as the beginning of time - which is the difference between hiding nothing and
+ * hiding everything.
+ */
+export function laterOf(left: Date | null, right: Date | null): Date | null {
+  if (left === null) return right;
+  if (right === null) return left;
+  return left.getTime() >= right.getTime() ? left : right;
+}
+
 /** Everything a `Message` is built from, in one place so every path agrees. */
 const MESSAGE_INCLUDE = {
   author: true,
@@ -49,7 +60,7 @@ export class MessagesService {
       ? await prisma.message.findUnique({ where: { id: before }, select: { createdAt: true } })
       : null;
 
-    const clearedAt = await this.clearedAt(userId);
+    const clearedAt = await this.clearedAt(userId, channelId);
     const rows = await prisma.message.findMany({
       where: {
         channelId,
@@ -79,7 +90,7 @@ export class MessagesService {
   async pins(userId: string, channelId: string): Promise<Message[]> {
     await this.requireChannelAccess(userId, channelId, PERMISSIONS.VIEW_CHANNEL);
 
-    const clearedAt = await this.clearedAt(userId);
+    const clearedAt = await this.clearedAt(userId, channelId);
     const rows = await prisma.message.findMany({
       where: {
         channelId,
@@ -110,32 +121,57 @@ export class MessagesService {
    * is stamped at the moment of the call, so a message that arrives a second
    * later is new mail rather than something the button quietly ate.
    */
-  async clearChats(userId: string): Promise<ClearChatsResponse> {
+  async clearChats(userId: string, channelId?: string | null): Promise<ClearChatsResponse> {
     const clearedAt = new Date();
-    await prisma.user.update({ where: { id: userId }, data: { chatsClearedAt: clearedAt } });
+
+    if (channelId) {
+      // The same 404-for-both rule every other channel route follows, so a
+      // stranger cannot use this to find out which channel ids exist.
+      await this.requireChannelAccess(userId, channelId, PERMISSIONS.VIEW_CHANNEL);
+      // The marker sits on the read row, which may not exist yet - somebody can
+      // clear a conversation they have never opened on this device.
+      await prisma.channelRead.upsert({
+        where: { userId_channelId: { userId, channelId } },
+        create: { userId, channelId, clearedAt },
+        update: { clearedAt },
+      });
+    } else {
+      await prisma.user.update({ where: { id: userId }, data: { chatsClearedAt: clearedAt } });
+    }
 
     // The other devices are holding decrypted copies in their own caches, which
     // no refetch would clear - so this is carried rather than announced.
     await this.events.publish(EVENTS.CHATS_CLEARED, {
       userId,
       clearedAt: clearedAt.toISOString(),
+      channelId: channelId ?? null,
     });
-    return { clearedAt: clearedAt.toISOString() };
+    return { clearedAt: clearedAt.toISOString(), channelId: channelId ?? null };
   }
 
   /**
-   * The account's own cut-off, or null when it has never cleared anything.
+   * This account's cut-off in this conversation: whichever of the two markers
+   * is later, or null when it has never cleared anything.
    *
-   * ponytail: one lookup per history page. It is a primary-key read on a row
-   * the request has already touched through the auth guard; cache it against
-   * the access token if a profiler ever says otherwise.
+   * Two markers and not one because they answer different questions and neither
+   * subsumes the other. "Clear everything" is one write on the account rather
+   * than a fan-out over every channel; "clear this conversation" is one write
+   * on the row that already exists per (user, channel). Later wins, so clearing
+   * everything and then clearing one conversation again does the obvious thing,
+   * and so does the reverse.
+   *
+   * ponytail: two lookups per history page, both primary-key reads. Fold them
+   * into the access check's query if a profiler ever says otherwise.
    */
-  private async clearedAt(userId: string): Promise<Date | null> {
-    const row = await prisma.user.findUnique({
-      where: { id: userId },
-      select: { chatsClearedAt: true },
-    });
-    return row?.chatsClearedAt ?? null;
+  private async clearedAt(userId: string, channelId: string): Promise<Date | null> {
+    const [account, conversation] = await Promise.all([
+      prisma.user.findUnique({ where: { id: userId }, select: { chatsClearedAt: true } }),
+      prisma.channelRead.findUnique({
+        where: { userId_channelId: { userId, channelId } },
+        select: { clearedAt: true },
+      }),
+    ]);
+    return laterOf(account?.chatsClearedAt ?? null, conversation?.clearedAt ?? null);
   }
 
   async send(

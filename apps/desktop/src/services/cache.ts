@@ -114,6 +114,38 @@ export const cache = {
     await done(transaction);
   },
 
+  /**
+   * Forgets one channel's messages and nothing else.
+   *
+   * What "clear this chat" needs. `clear()` would work and is one line shorter,
+   * but it throws away every other conversation this device has cached - so
+   * clearing one chat would turn the next four things the person opens into
+   * spinners, for no reason they could connect to what they just did.
+   */
+  async forgetChannel(channelId: string): Promise<void> {
+    const db = await database();
+    if (!db) return;
+
+    const transaction = db.transaction(MESSAGES, 'readwrite');
+    const index = transaction.objectStore(MESSAGES).index('channel');
+    const range = IDBKeyRange.bound([channelId, ''], [channelId, '\uffff']);
+
+    await new Promise<void>((resolve) => {
+      const cursor = index.openCursor(range);
+      cursor.onsuccess = () => {
+        const at = cursor.result;
+        if (!at) {
+          resolve();
+          return;
+        }
+        at.delete();
+        at.continue();
+      };
+      cursor.onerror = () => resolve();
+    });
+    await done(transaction);
+  },
+
   servers: (): Promise<ServerWithRole[] | null> => readList('servers'),
   putServers: (servers: ServerWithRole[]): Promise<void> => writeList('servers', servers),
 

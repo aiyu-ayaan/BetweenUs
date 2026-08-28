@@ -129,8 +129,8 @@ export class ChatGateway implements OnModuleDestroy {
     // the only sockets that have anything to do are the ones holding this
     // account's own decrypted cache.
     await this.events.subscribe(EVENTS.CHATS_CLEARED, (envelope) => {
-      const { userId, clearedAt } = envelope.payload;
-      this.broadcast(userRoom(userId), { type: 'chats.cleared', clearedAt });
+      const { userId, clearedAt, channelId } = envelope.payload;
+      this.broadcast(userRoom(userId), { type: 'chats.cleared', clearedAt, channelId });
     });
 
     await this.events.subscribe(EVENTS.FRIEND_CHANGED, (envelope) => {

@@ -125,9 +125,13 @@ export class NotificationsService {
 
     const reads = await prisma.channelRead.findMany({
       where: { userId, channelId: { in: channels.map((channel) => channel.id) } },
-      select: { channelId: true, lastReadAt: true },
+      select: { channelId: true, lastReadAt: true, clearedAt: true },
     });
     const readAt = new Map(reads.map((read) => [read.channelId, read.lastReadAt]));
+    // Cleared per conversation, as well as the account-wide cut above.
+    const clearedAt = new Map(
+      reads.filter((read) => read.clearedAt !== null).map((read) => [read.channelId, read.clearedAt!]),
+    );
 
     // ponytail: one count query per channel, because each has its own cutoff.
     // Fine at a few dozen channels; a single grouped raw query if it is not.
@@ -139,8 +143,12 @@ export class NotificationsService {
           joinedChannel.get(channel.id) ??
           (channel.serverId ? joinedServer.get(channel.serverId) : undefined) ??
           channel.createdAt;
-        const clearedAt = cleared?.chatsClearedAt;
-        const since = clearedAt && clearedAt > from ? clearedAt : from;
+        // Whichever cut-off is latest wins: the account-wide one, this
+        // conversation's own, or where they had read to.
+        const since = [cleared?.chatsClearedAt, clearedAt.get(channel.id)].reduce<Date>(
+          (latest, cut) => (cut && cut > latest ? cut : latest),
+          from,
+        );
 
         const count = await prisma.message.count({
           where: {

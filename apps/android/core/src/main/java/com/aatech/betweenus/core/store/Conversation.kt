@@ -136,13 +136,28 @@ object Conversation {
         // the decrypted ones. Re-reading is what fills both again, with
         // whatever arrived after the cut.
         if (event.optString("type") == "chats.cleared") {
-            Cache.clear()
-            _messages.value = emptyMap()
-            _receipts.value = emptyMap()
-            cursors.clear()
-            exhausted.clear()
+            val cleared = if (event.isNull("channelId")) null else event.optString("channelId")
+            if (cleared == null) {
+                Cache.clear()
+                _messages.value = emptyMap()
+                _receipts.value = emptyMap()
+                cursors.clear()
+                exhausted.clear()
+            } else {
+                // One conversation leaves the rest of the cache alone. Throwing
+                // it all away would turn "clear this chat" into a spinner on the
+                // next four things the person opens, for a reason they could not
+                // connect to what they just did.
+                Cache.forgetChannel(cleared)
+                _messages.update { it - cleared }
+                _receipts.update { it - cleared }
+                cursors.remove(cleared)
+                exhausted.remove(cleared)
+            }
             Workspace.loadUnread()
-            visibleChannelId?.let { open(it) }
+            // Re-opened only when it is the one on screen; anything else is
+            // fetched when somebody actually goes there.
+            visibleChannelId?.let { if (cleared == null || cleared == it) open(it) }
             return
         }
         val message = event.optJSONObject("message")?.let { Message.from(it) } ?: return

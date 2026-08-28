@@ -565,11 +565,15 @@ export const api = {
     request(`/api/v1/blocks/${userId}`, { method: 'DELETE' }),
 
   /**
-   * Hides every message this account can currently see, on all of its devices.
-   * Nobody else's copy moves - see the server's `clearChats`.
+   * Hides messages from this account's own view, on all of its devices: one
+   * conversation with a `channelId`, every one of them without. Nobody else's
+   * copy moves - see the server's `clearChats`.
    */
-  clearChats: (): Promise<ClearChatsResponse> =>
-    request('/api/v1/messages/clear', { method: 'POST' }),
+  clearChats: (channelId?: string): Promise<ClearChatsResponse> =>
+    request('/api/v1/messages/clear', {
+      method: 'POST',
+      body: JSON.stringify(channelId ? { channelId } : {}),
+    }),
 
   directChannels: (): Promise<DirectChannel[]> => request('/api/v1/dm'),
 

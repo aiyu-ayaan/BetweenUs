@@ -685,11 +685,26 @@ export interface OpenDirectChannelRequest {
 }
 
 /**
+ * What to clear. One conversation, or - with no `channelId` - every one of
+ * them.
+ *
+ * The same endpoint for both, because they are the same act at two scopes and
+ * a client should not have to know which of two routes it wants. The scope is
+ * the argument, which is also what makes the answer able to say which happened.
+ */
+export interface ClearChatsRequest {
+  /** Omitted or null clears every conversation this account can see. */
+  channelId?: string | null;
+}
+
+/**
  * What `POST /api/v1/messages/clear` answers with: the instant everything at or
- * before it stopped being visible to this account.
+ * before it stopped being visible to this account, and where.
  */
 export interface ClearChatsResponse {
   clearedAt: string;
+  /** The conversation that was cleared, or null when all of them were. */
+  channelId: string | null;
 }
 
 // --- Blocking ---
@@ -1927,8 +1942,10 @@ export type ServerChatEvent =
    * Carried rather than announced because the client cannot refetch its way to
    * the answer: every device holds a local cache of decrypted messages, and
    * what they each have to do is drop everything at or before `clearedAt`.
+   *
+   * `channelId` is the conversation it applies to, or null for all of them.
    */
-  | { type: 'chats.cleared'; clearedAt: string }
+  | { type: 'chats.cleared'; clearedAt: string; channelId: string | null }
   | { type: 'pong' }
   | { type: 'error'; code: string; message: string };
 

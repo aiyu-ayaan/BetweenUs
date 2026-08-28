@@ -402,6 +402,7 @@ fun ChatScreen(
             // The one action here that starts something rather than showing
             // something, so it is the one that is filled.
             IconAction(BetweenUsIcons.Phone, "Start a call", onStartCall, prominent = true, compact = true)
+            ChannelMenu(channelId = channelId, title = title, isDirect = direct != null)
         }
 
         // Notification Permission Warning Banner (if user denied or turned off notifications)

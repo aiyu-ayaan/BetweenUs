@@ -22,6 +22,7 @@ import type {
 import { MessagesService } from './messages.service';
 import { UnfurlService } from './unfurl.service';
 import {
+  ClearChatsDto,
   CreateMessageDto,
   MessageQueryDto,
   PinQueryDto,
@@ -62,13 +63,17 @@ export class MessagesController {
   }
 
   /**
-   * Hides this account's own history everywhere. Ahead of `:messageId`, or
-   * `clear` is read as a message id.
+   * Hides this account's own history: one conversation when `channelId` is
+   * given, every one of them when it is not. Ahead of `:messageId`, or `clear`
+   * is read as a message id.
    */
   @Post('clear')
   @HttpCode(200)
-  clear(@CurrentUser() user: AuthenticatedUser): Promise<ClearChatsResponse> {
-    return this.messages.clearChats(user.id);
+  clear(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: ClearChatsDto,
+  ): Promise<ClearChatsResponse> {
+    return this.messages.clearChats(user.id, dto.channelId);
   }
 
   @Post()

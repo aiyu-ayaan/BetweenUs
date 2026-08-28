@@ -54,6 +54,7 @@ object BetweenUsIcons {
     val MicOff = R.drawable.ic_mic_off
     val Minimize = R.drawable.ic_minimize
     val Monitor = R.drawable.ic_monitor
+    val More = R.drawable.ic_more_vertical
     val Palette = R.drawable.ic_palette
     val Paperclip = R.drawable.ic_paperclip
     val Pencil = R.drawable.ic_pencil

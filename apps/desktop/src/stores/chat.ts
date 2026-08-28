@@ -968,10 +968,23 @@ chatSocket.on((event) => {
    * back is whatever arrived after the cut.
    */
   if (event.type === 'chats.cleared') {
-    void cache.clear().catch(() => undefined);
     const { activeChannelId } = useChatStore.getState();
-    useChatStore.setState({ messages: [], pins: [], divider: {}, receipts: {} });
-    if (activeChannelId) void useChatStore.getState().selectChannel(activeChannelId);
+    // One conversation leaves the rest of the cache alone: throwing away every
+    // other channel's messages would turn "clear this chat" into a spinner on
+    // the next four things the person opens.
+    void (event.channelId
+      ? cache.forgetChannel(event.channelId)
+      : cache.clear()
+    ).catch(() => undefined);
+
+    const clearedHere = !event.channelId || event.channelId === activeChannelId;
+    if (clearedHere) {
+      useChatStore.setState({ messages: [], pins: [], divider: {}, receipts: {} });
+      if (activeChannelId) void useChatStore.getState().selectChannel(activeChannelId);
+    }
+    // Whichever it was, the unread counts moved with it: a badge promising
+    // messages that can no longer be opened is worse than no badge.
+    void useChatStore.getState().loadUnread();
     return;
   }
 

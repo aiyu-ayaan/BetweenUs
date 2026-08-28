@@ -7,6 +7,7 @@ import {
   Length,
 } from 'class-validator';
 import type {
+  ClearChatsRequest,
   CreateMessageRequest,
   ReactToMessageRequest,
   UpdateMessageRequest,
@@ -67,4 +68,14 @@ export class MessageQueryDto {
 export class PinQueryDto {
   @IsUUID()
   channelId!: string;
+}
+
+/**
+ * What to clear. An absent or null `channelId` means every conversation, which
+ * is what an older client that sends no body at all also means.
+ */
+export class ClearChatsDto implements ClearChatsRequest {
+  @IsOptional()
+  @IsUUID()
+  channelId?: string | null;
 }

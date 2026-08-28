@@ -543,16 +543,21 @@ object BetweenUsApi {
     }
 
     /**
-     * Hides every message this account can currently see, in every channel, on
-     * every device it is signed in on.
+     * Hides messages from this account's own view, on every device it is signed
+     * in on: one conversation when [channelId] is given, every one of them when
+     * it is not.
      *
      * Nothing is deleted. The other side of each conversation keeps their copy,
      * because a message has two ends and this reaches one of them. The server
      * publishes the cut back as `chats.cleared`, which is what tells this phone
      * and everything else signed in to drop what they are holding.
      */
-    suspend fun clearChats(): Unit = io {
-        authed("POST", "/api/v1/messages/clear")
+    suspend fun clearChats(channelId: String? = null): Unit = io {
+        authed(
+            "POST",
+            "/api/v1/messages/clear",
+            if (channelId != null) obj("channelId" to channelId) else null,
+        )
     }
 
     /** A server's own emoji. Public within the server, and read on every render. */

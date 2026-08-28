@@ -255,7 +255,15 @@ model NotificationSetting {
 model ChannelRead {
   userId     String
   channelId  String
-  lastReadAt DateTime @default(now())
+  lastReadAt DateTime  @default(now())
+  /// Messages older than this are not returned to this user *in this channel*.
+  /// The per-conversation half of `User.chatsClearedAt`, and it lives here
+  /// rather than in a table of its own because this row is already the one
+  /// thing keyed on exactly (user, channel) - a second table would be the same
+  /// key, the same cascade and the same lookup, twice.
+  ///
+  /// The two are read together: the floor is whichever is later.
+  clearedAt  DateTime?
 
   user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
   channel Channel @relation(fields: [channelId], references: [id], onDelete: Cascade)

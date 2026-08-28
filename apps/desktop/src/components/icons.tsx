@@ -232,6 +232,15 @@ export const ShieldIcon = (props: IconProps): JSX.Element => (
   </Base>
 );
 
+/** Three dots: the overflow menu, wherever a header runs out of room. */
+export const MoreIcon = (props: IconProps): JSX.Element => (
+  <Base {...props}>
+    <circle cx="12" cy="5" r="1" />
+    <circle cx="12" cy="12" r="1" />
+    <circle cx="12" cy="19" r="1" />
+  </Base>
+);
+
 /** A circle with a bar through it: the universal "no". Used for blocking. */
 export const BlockIcon = (props: IconProps): JSX.Element => (
   <Base {...props}>

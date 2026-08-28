@@ -140,7 +140,12 @@ export interface EventPayloads {
    * checks - a subscriber with neither simply sends nothing.
    */
   [EVENTS.CHANNEL_READ]: { userId: string; channelId: string; at: string };
-  [EVENTS.CHATS_CLEARED]: { userId: string; clearedAt: string };
+  [EVENTS.CHATS_CLEARED]: {
+    userId: string;
+    clearedAt: string;
+    /** The conversation cleared, or null when every one of them was. */
+    channelId: string | null;
+  };
   [EVENTS.REMOTE_SESSION]: {
     sessionId: string;
     machineId: string;

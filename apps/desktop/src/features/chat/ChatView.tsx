@@ -23,6 +23,7 @@ import { useIsMobile } from '../../services/responsive';
 import { Avatar } from '../../components/Avatar';
 import { AttachmentList } from './Attachments';
 import { EmojiPicker } from './EmojiPicker';
+import { ChannelMenu } from './ChannelMenu';
 import { MessageMenu } from './MessageMenu';
 import { SendPreview, isPreviewable, isImage } from './SendPreview';
 import { EmojiSuggest } from './EmojiSuggest';
@@ -284,6 +285,8 @@ export function ChatView({
               <UsersIcon className="h-5 w-5" />
             </button>
           )}
+
+          <ChannelMenu channel={channel} />
         </div>
       </header>
 

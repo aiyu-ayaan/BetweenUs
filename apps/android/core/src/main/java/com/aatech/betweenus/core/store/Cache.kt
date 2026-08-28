@@ -76,6 +76,9 @@ internal interface CacheDao {
 
     @Query("DELETE FROM message")
     suspend fun clearMessages()
+
+    @Query("DELETE FROM message WHERE channelId = :channelId")
+    suspend fun clearChannel(channelId: String)
 }
 
 @Database(entities = [CacheRow::class, MessageRow::class], version = 1, exportSchema = false)
@@ -161,6 +164,21 @@ object Cache {
                 it.clearMessages()
             }
         }
+    }
+
+    /**
+     * Forgets one conversation's messages and nothing else.
+     *
+     * What "clear this chat" needs. [clear] would work and is shorter, but it
+     * throws away every other conversation this phone has cached - so clearing
+     * one chat would turn the next four things somebody opens into spinners,
+     * for a reason they could not connect to what they just did.
+     *
+     * The lists are left alone: the channel still exists and still belongs in
+     * the rail. What went is what was said in it.
+     */
+    suspend fun forgetChannel(channelId: String) {
+        runCatching { db?.cache()?.clearChannel(channelId) }
     }
 
     // --- lists ---
