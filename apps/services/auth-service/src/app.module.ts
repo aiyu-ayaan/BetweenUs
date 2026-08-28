@@ -6,6 +6,8 @@ import { createHealthController } from '@betweenus/nest-common';
 import { AuthController } from './modules/auth/auth.controller';
 import { AuthService } from './modules/auth/auth.service';
 import { authDatabaseProvider } from './modules/auth/auth.db';
+import { UsernameDirectory } from './modules/auth/username-directory';
+import { MailService } from './modules/mail/mail.service';
 import { AdminController } from './modules/admin/admin.controller';
 import { AdminService } from './modules/admin/admin.service';
 import { OAuthController } from './modules/oauth/oauth.controller';
@@ -23,6 +25,8 @@ const SERVICE_NAME = 'auth-service';
   providers: [
     AuthService,
     AdminService,
+    MailService,
+    UsernameDirectory,
     OAuthService,
     authDatabaseProvider,
     {

@@ -7,6 +7,7 @@ import {
   NotFoundException,
   Param,
   Patch,
+  Post,
   Put,
   Query,
   UseGuards,
@@ -15,13 +16,15 @@ import { CurrentUser, JwtAuthGuard, type AuthenticatedUser } from '@betweenus/au
 import type {
   AdminAuditPage,
   AdminOAuthProvider,
+  AdminSmtpSettings,
+  AdminSmtpTestResult,
   AdminStatus,
   AdminUser,
   AdminUserPage,
 } from '@betweenus/shared-types';
 import { AdminGuard } from './admin.guard';
 import { AdminService } from './admin.service';
-import { AdminOAuthProviderDto, AdminUserUpdateDto } from './dto';
+import { AdminOAuthProviderDto, AdminSmtpDto, AdminSmtpTestDto, AdminUserUpdateDto } from './dto';
 import { isProviderName } from './oauth-providers';
 
 @Controller('admin')
@@ -69,6 +72,40 @@ export class AdminController {
   @UseGuards(JwtAuthGuard, AdminGuard)
   deleteUser(@CurrentUser() actor: AuthenticatedUser, @Param('id') id: string): Promise<void> {
     return this.admin.deleteUser(actor.id, id);
+  }
+
+  /**
+   * The deployment's outgoing mail server.
+   *
+   * It is what decides whether the forgot-password screen can offer to send
+   * anything at all; with no row here every client says "ask your
+   * administrator" instead, which is the honest answer for a self-hosted
+   * deployment that has no mail server and does not want one.
+   */
+  @Get('smtp')
+  @UseGuards(JwtAuthGuard, AdminGuard)
+  smtp(): Promise<AdminSmtpSettings> {
+    return this.admin.smtpSettings();
+  }
+
+  @Put('smtp')
+  @UseGuards(JwtAuthGuard, AdminGuard)
+  updateSmtp(
+    @CurrentUser() actor: AuthenticatedUser,
+    @Body() dto: AdminSmtpDto,
+  ): Promise<AdminSmtpSettings> {
+    return this.admin.updateSmtp(actor.id, dto);
+  }
+
+  /** Sends one message, so the settings are proved before somebody needs them. */
+  @Post('smtp/test')
+  @HttpCode(200)
+  @UseGuards(JwtAuthGuard, AdminGuard)
+  testSmtp(
+    @CurrentUser() actor: AuthenticatedUser,
+    @Body() dto: AdminSmtpTestDto,
+  ): Promise<AdminSmtpTestResult> {
+    return this.admin.testSmtp(actor.id, dto.to);
   }
 
   @Get('oauth')

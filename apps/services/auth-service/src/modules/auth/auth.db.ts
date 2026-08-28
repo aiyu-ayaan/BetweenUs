@@ -9,7 +9,7 @@ import { prisma } from '@betweenus/database';
 
 export const AuthDatabase = 'AUTH_DATABASE';
 
-export type AuthDb = Pick<typeof prisma, 'user' | 'refreshToken'>;
+export type AuthDb = Pick<typeof prisma, 'user' | 'refreshToken' | 'passwordReset'>;
 
 export const authDatabaseProvider = {
   provide: AuthDatabase,

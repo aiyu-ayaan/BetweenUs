@@ -1,18 +1,22 @@
 /** Admin panel business logic: the user directory and the OAuth configuration. */
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { sealSecret } from '@betweenus/auth';
+import { envOr } from '@betweenus/config';
 import { Prisma, prisma } from '@betweenus/database';
 import type {
   AdminAuditEntry,
   AdminAuditPage,
   AdminOAuthProvider,
+  AdminSmtpSettings,
+  AdminSmtpTestResult,
   AdminStatus,
   AdminUser,
   AdminUserPage,
   GlobalRole,
 } from '@betweenus/shared-types';
+import { MailService } from '../mail/mail.service';
 import { PROVIDERS, type ProviderName, callbackUrl } from './oauth-providers';
-import type { AdminOAuthProviderDto, AdminUserUpdateDto } from './dto';
+import type { AdminOAuthProviderDto, AdminSmtpDto, AdminUserUpdateDto } from './dto';
 
 /** Page size cap, so a directory of any size cannot be pulled in one request. */
 const MAX_TAKE = 100;
@@ -68,6 +72,7 @@ function toAdminUser(user: UserWithDetail): AdminUser {
     mustChangePassword: user.mustChangePassword,
     createdAt: user.createdAt.toISOString(),
     disabledAt: user.disabledAt?.toISOString() ?? null,
+    passwordResetUntil: user.passwordResetUntil?.toISOString() ?? null,
     identities: user.identities.map((identity) => identity.provider),
     serverCount: user._count.memberships,
     lastSeenAt: user.refreshTokens[0]?.createdAt.toISOString() ?? null,
@@ -112,8 +117,22 @@ async function record(
     .catch(() => undefined);
 }
 
+/**
+ * How long an administrator's reset grant stays open.
+ *
+ * It is a window and not a flag on purpose. "This account may set a new
+ * password without knowing the old one" is the strongest thing the panel can
+ * say about somebody, and a flag left on by an administrator who got
+ * distracted is that sentence standing forever. A day is long enough to tell a
+ * colleague over a desk or a phone call, and it expires on its own if nobody
+ * does.
+ */
+const RESET_WINDOW_HOURS = Number(envOr('PASSWORD_RESET_WINDOW_HOURS', '24')) || 24;
+
 @Injectable()
 export class AdminService {
+  constructor(private readonly mail: MailService) {}
+
   /** Public: the panel uses it to explain `pnpm admin:create` when nobody exists. */
   async status(): Promise<AdminStatus> {
     const admins = await prisma.user.count({ where: { role: 'ADMIN', disabledAt: null } });
@@ -190,9 +209,22 @@ export class AdminService {
     const disabledAt =
       dto.disabled === undefined ? undefined : dto.disabled ? new Date() : null;
 
+    // A window rather than a flag - see RESET_WINDOW_HOURS. False closes one
+    // that is open; it does not reach back and revoke a token already spent.
+    const passwordResetUntil =
+      dto.passwordReset === undefined
+        ? undefined
+        : dto.passwordReset
+          ? new Date(Date.now() + RESET_WINDOW_HOURS * 60 * 60 * 1000)
+          : null;
+
     await prisma.user.update({
       where: { id: userId },
-      data: { ...(dto.role ? { role: dto.role as GlobalRole } : {}), ...(disabledAt !== undefined ? { disabledAt } : {}) },
+      data: {
+        ...(dto.role ? { role: dto.role as GlobalRole } : {}),
+        ...(disabledAt !== undefined ? { disabledAt } : {}),
+        ...(passwordResetUntil !== undefined ? { passwordResetUntil } : {}),
+      },
     });
 
     // Disabling has to end the sessions that already exist, not only block new
@@ -219,6 +251,18 @@ export class AdminService {
         disabledAt ? 'user.disabled' : 'user.enabled',
         userId,
         `@${user.username}`,
+      );
+    }
+    // Always logged, both directions. Handing somebody a way past a password is
+    // the entry an incident is reconstructed from, so it is written even when
+    // the window was already open and this only extended it.
+    if (passwordResetUntil !== undefined) {
+      await record(
+        actorId,
+        passwordResetUntil ? 'user.password_reset.opened' : 'user.password_reset.closed',
+        userId,
+        `@${user.username}`,
+        passwordResetUntil ? { until: passwordResetUntil.toISOString() } : undefined,
       );
     }
 
@@ -298,6 +342,90 @@ export class AdminService {
 
     const all = await this.oauthProviders();
     return all.find((item) => item.provider === provider) as AdminOAuthProvider;
+  }
+
+  /** The mail server as the panel shows it: everything but the password. */
+  async smtpSettings(): Promise<AdminSmtpSettings> {
+    const row = await this.mail.settings();
+    return {
+      enabled: row?.enabled ?? false,
+      host: row?.host ?? '',
+      port: row?.port ?? 587,
+      secure: row?.secure ?? false,
+      username: row?.username ?? '',
+      // The password itself never leaves the server, in either direction.
+      hasPassword: Boolean(row?.password),
+      fromAddress: row?.fromAddress ?? '',
+      fromName: row?.fromName ?? 'BetweenUs',
+    };
+  }
+
+  async updateSmtp(actorId: string, dto: AdminSmtpDto): Promise<AdminSmtpSettings> {
+    const existing = await this.mail.settings();
+    const host = dto.host.trim();
+    const fromAddress = dto.fromAddress.trim();
+    // An omitted password means "keep the stored one" - the panel cannot show
+    // it back, so it must be able to save the rest of the form without it.
+    const password = dto.password?.trim()
+      ? sealSecret(dto.password.trim())
+      : (existing?.password ?? '');
+
+    // Enabling with either of these blank is a configuration that fails at the
+    // first send, silently, hours later. Refused here instead.
+    if (dto.enabled && (!host || !fromAddress)) {
+      throw new BadRequestException({
+        code: 'INCOMPLETE_SMTP',
+        message: 'A host and a from address are required before enabling mail',
+      });
+    }
+
+    const data = {
+      enabled: dto.enabled,
+      host,
+      port: dto.port,
+      secure: dto.secure,
+      username: dto.username.trim(),
+      password,
+      fromAddress,
+      fromName: dto.fromName.trim() || 'BetweenUs',
+    };
+    await prisma.smtpSetting.upsert({
+      where: { id: 'smtp' },
+      create: { id: 'smtp', ...data },
+      update: data,
+    });
+
+    // The password is never in the log - only that one was replaced.
+    await record(actorId, 'smtp.updated', 'smtp', 'smtp', {
+      enabled: dto.enabled,
+      host,
+      passwordReplaced: Boolean(dto.password?.trim()),
+    });
+    return this.smtpSettings();
+  }
+
+  /**
+   * Sends one message to prove the settings work.
+   *
+   * The transport's own refusal is handed back verbatim rather than flattened
+   * into "failed": "535 authentication failed" and "getaddrinfo ENOTFOUND" are
+   * two different afternoons, and the panel is the only place anybody would
+   * ever read the difference.
+   */
+  async testSmtp(actorId: string, to?: string): Promise<AdminSmtpTestResult> {
+    const actor = await prisma.user.findUnique({ where: { id: actorId }, select: { email: true } });
+    const recipient = to?.trim() || actor?.email;
+    if (!recipient) {
+      throw new BadRequestException({ code: 'NO_RECIPIENT', message: 'No address to send to' });
+    }
+
+    const result = await this.mail.send({
+      to: recipient,
+      subject: 'BetweenUs test message',
+      text: 'This is a test message from the BetweenUs admin panel. Mail is configured correctly.',
+    });
+    await record(actorId, 'smtp.tested', 'smtp', 'smtp', { ok: result.ok });
+    return result.ok ? { ok: true } : { ok: false, error: result.error ?? 'Send failed' };
   }
 
   /** The platform must keep at least one enabled administrator. */

@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import {
   ConflictException,
   Inject,
@@ -20,7 +21,16 @@ import { AuthDatabase, type AuthDb } from './auth.db';
 import { EVENTS, EventBus } from '@betweenus/events';
 import { envOr } from '@betweenus/config';
 import { createLogger, type LogLevel } from '@betweenus/logger';
-import type { AuthResponse, AuthTokens, PublicUser } from '@betweenus/shared-types';
+import type {
+  AuthResponse,
+  AuthTokens,
+  ForgotPasswordResponse,
+  PublicUser,
+  UsernameAvailability,
+} from '@betweenus/shared-types';
+import { MailService, NO_MAIL_MESSAGE } from '../mail/mail.service';
+import { UsernameDirectory, normalizeUsername } from './username-directory';
+import { publicBaseUrl } from '../admin/oauth-providers';
 import type { ChangePasswordDto, LoginDto, RegisterDto, UpdateAccountDto } from './dto';
 
 const logger = createLogger('auth-service', envOr('LOG_LEVEL', 'info') as LogLevel);
@@ -59,10 +69,22 @@ function replayGraceMs(): number {
   return Number(envOr('REFRESH_REPLAY_GRACE_MS', '30000')) || 0;
 }
 
+/**
+ * How long a reset token lives.
+ *
+ * Short, because the whole of its security is that it is a bearer credential
+ * sitting in an inbox - or, for the administrator-granted door, handed to
+ * whoever typed a username. Thirty minutes is long enough to read an email and
+ * short enough that a window left open is not a way in tomorrow.
+ */
+const RESET_TTL_MINUTES = Number(envOr('PASSWORD_RESET_TTL_MINUTES', '30')) || 30;
+
 @Injectable()
 export class AuthService {
   constructor(
     private readonly events: EventBus,
+    private readonly mail: MailService,
+    private readonly usernames: UsernameDirectory,
     @Inject(AuthDatabase) private readonly db: AuthDb,
   ) {}
 
@@ -71,7 +93,9 @@ export class AuthService {
     if (policyError) throw new BadRequestException({ code: 'WEAK_PASSWORD', message: policyError });
 
     const email = dto.email.toLowerCase().trim();
-    const username = dto.username.trim();
+    // Lower-cased, not merely trimmed: signing in by name already lowercases
+    // what was typed, so a mixed-case row was a row nobody could log in to.
+    const username = normalizeUsername(dto.username);
 
     const existing = await this.db.user.findFirst({
       where: { OR: [{ email }, { username }] },
@@ -94,6 +118,7 @@ export class AuthService {
       },
     });
 
+    this.usernames.remember(user.username);
     await this.events.publish(EVENTS.USER_CREATED, {
       userId: user.id,
       username: user.username,
@@ -269,8 +294,153 @@ export class AuthService {
     return { ...tokens, user: toPublicUser(updated) };
   }
 
+  /** Whether a name can be registered. Cheap by construction - see the directory. */
+  usernameAvailable(username: string): Promise<UsernameAvailability> {
+    const normalized = normalizeUsername(username);
+    return this.usernames
+      .available(normalized)
+      .then((answer) => ({ username: normalized, ...answer }));
+  }
+
+  /**
+   * What a forgotten password can be done about, on this deployment, for this
+   * account.
+   *
+   * Three answers, and only one of them is about the account:
+   *
+   * - `reset`: an administrator has already put the account into reset mode, so
+   *   this call mints the single-use token and the client goes straight to a
+   *   new-password form. This is the door a deployment with no mail server
+   *   uses, and it is deliberately the first thing checked - an operator who
+   *   went and enabled it means it.
+   * - `emailed`: a link went out, or the account does not exist. The two are
+   *   the same answer on purpose. Anything that told them apart would turn this
+   *   form into a way to enumerate who has an account here.
+   * - `unavailable`: nothing is configured to send mail, which is a fact about
+   *   the deployment and not about the account, so saying it leaks nothing.
+   */
+  async forgotPassword(identifier: string): Promise<ForgotPasswordResponse> {
+    const trimmed = identifier.toLowerCase().trim();
+    const user = await this.db.user.findUnique({
+      where: trimmed.includes('@') ? { email: trimmed } : { username: trimmed },
+    });
+
+    // A disabled account gets the same nothing an unknown one does: it is
+    // barred from signing in, and a new password would not change that.
+    const eligible = user && user.disabledAt === null ? user : null;
+
+    if (eligible?.passwordResetUntil && eligible.passwordResetUntil.getTime() > Date.now()) {
+      const { token } = await this.mintReset(eligible.id, 'admin');
+      return { outcome: 'reset', resetToken: token };
+    }
+
+    if (!(await this.mail.configured())) {
+      return { outcome: 'unavailable', message: NO_MAIL_MESSAGE };
+    }
+
+    if (eligible) {
+      const { token } = await this.mintReset(eligible.id, 'email');
+      const link = `${publicBaseUrl()}/reset-password?token=${encodeURIComponent(token)}`;
+      // The result is not inspected and not surfaced. A bounce is between the
+      // operator and their mail server; the person at the form gets the same
+      // sentence either way, which is the same reason the unknown-account case
+      // does not differ.
+      await this.mail.send({
+        to: eligible.email,
+        subject: 'Reset your BetweenUs password',
+        text: [
+          `Hello ${eligible.displayName},`,
+          '',
+          'Somebody asked to reset the password for your BetweenUs account.',
+          'If that was not you, ignore this message - nothing has changed yet.',
+          '',
+          `Open this link to choose a new password: ${link}`,
+          '',
+          `Or paste this code into the app: ${token}`,
+          '',
+          `The link stops working in ${RESET_TTL_MINUTES} minutes and can be used once.`,
+        ].join('\n'),
+      });
+    }
+
+    return { outcome: 'emailed' };
+  }
+
+  /**
+   * Spends a reset token and sets the password.
+   *
+   * Every session goes with it, the same as an ordinary password change: the
+   * person who needed this door is very often the person whose account was
+   * taken, and leaving the other side signed in would make the reset
+   * decorative. The administrator-granted window is closed too, so one grant is
+   * one reset rather than a standing invitation.
+   */
+  async resetPassword(token: string, newPassword: string): Promise<AuthResponse> {
+    const policyError = validatePasswordStrength(newPassword);
+    if (policyError) throw new BadRequestException({ code: 'WEAK_PASSWORD', message: policyError });
+
+    const row = await this.db.passwordReset.findUnique({ where: { tokenHash: hashToken(token) } });
+    if (!row || row.usedAt !== null || row.expiresAt.getTime() < Date.now()) {
+      throw new UnauthorizedException({
+        code: 'INVALID_RESET_TOKEN',
+        message: 'This reset link has expired or has already been used',
+      });
+    }
+
+    const user = await this.db.user.findUnique({ where: { id: row.userId } });
+    if (!user) {
+      throw new UnauthorizedException({ code: 'UNKNOWN_USER', message: 'Account no longer exists' });
+    }
+    assertEnabled(user);
+
+    // Marked spent before the password moves. If the update fails afterwards
+    // the token is burnt and the person asks again, which is the cheap failure;
+    // the other order leaves a live token behind a password that already
+    // changed, which is the expensive one.
+    await this.db.passwordReset.update({ where: { id: row.id }, data: { usedAt: new Date() } });
+
+    const updated = await this.db.user.update({
+      where: { id: user.id },
+      data: {
+        passwordHash: await hashPassword(newPassword),
+        mustChangePassword: false,
+        passwordResetUntil: null,
+      },
+    });
+    await this.revokeEverySession(user.id, 'password-reset');
+    logger.warn('Password reset spent', { userId: user.id, source: row.source });
+
+    const tokens = await this.issueTokens(updated);
+    return { ...tokens, user: toPublicUser(updated) };
+  }
+
+  /**
+   * A fresh single-use token, with only its hash left behind.
+   *
+   * Any token this account already had is burnt first: two live links is two
+   * chances for the one that leaked, and the person asking again is asking
+   * because the first did not reach them.
+   */
+  private async mintReset(userId: string, source: 'admin' | 'email'): Promise<{ token: string }> {
+    await this.db.passwordReset.updateMany({
+      where: { userId, usedAt: null },
+      data: { usedAt: new Date() },
+    });
+
+    const token = randomBytes(32).toString('base64url');
+    await this.db.passwordReset.create({
+      data: {
+        userId,
+        tokenHash: hashToken(token),
+        source,
+        expiresAt: new Date(Date.now() + RESET_TTL_MINUTES * 60 * 1000),
+      },
+    });
+    return { token };
+  }
+
   async updateAccount(userId: string, dto: UpdateAccountDto): Promise<PublicUser> {
-    const username = dto.username?.trim();
+    const username = dto.username ? normalizeUsername(dto.username) : undefined;
     if (username) {
       const taken = await this.db.user.findUnique({ where: { username } });
       if (taken && taken.id !== userId) {
@@ -291,6 +461,8 @@ export class AuthService {
         ...(dto.avatarUrl !== undefined ? { avatarUrl: dto.avatarUrl } : {}),
       },
     });
+
+    if (username) this.usernames.remember(username);
 
     // Everyone who can see this account has the old picture and the old name on
     // screen right now. Published unconditionally rather than diffed: a write

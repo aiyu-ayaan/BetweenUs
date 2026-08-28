@@ -11,9 +11,11 @@ import {
 import { UPLOADED_PICTURE_URL } from '@betweenus/shared-types';
 import type {
   ChangePasswordRequest,
+  ForgotPasswordRequest,
   LoginRequest,
   RefreshRequest,
   RegisterRequest,
+  ResetPasswordRequest,
   UpdateAccountRequest,
 } from '@betweenus/shared-types';
 
@@ -59,6 +61,24 @@ export class ChangePasswordDto implements ChangePasswordRequest {
   @IsString()
   @MaxLength(200)
   currentPassword!: string;
+
+  @IsString()
+  @MinLength(8)
+  @MaxLength(200)
+  newPassword!: string;
+}
+
+export class ForgotPasswordDto implements ForgotPasswordRequest {
+  /** Email or username - the same field the login form takes. */
+  @IsString()
+  @Length(3, 254, { message: 'Enter your username or email address' })
+  identifier!: string;
+}
+
+export class ResetPasswordDto implements ResetPasswordRequest {
+  @IsString()
+  @Length(16, 200)
+  token!: string;
 
   @IsString()
   @MinLength(8)

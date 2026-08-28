@@ -21,6 +21,9 @@ import { rateLimitBuckets } from '@betweenus/nest-common';
 import { hashToken as hashOf } from '@betweenus/auth';
 import { AuthService } from './modules/auth/auth.service';
 import type { AuthDb } from './modules/auth/auth.db';
+import { BloomFilter, sizing } from './modules/auth/bloom';
+import { UsernameDirectory, normalizeUsername } from './modules/auth/username-directory';
+import type { MailService } from './modules/mail/mail.service';
 import { CREDENTIALS_RATE_LIMIT, LOGIN_RATE_LIMIT } from './modules/auth/rate-limits';
 import { pageSize, paginate } from './modules/admin/admin.service';
 import {
@@ -132,7 +135,18 @@ interface UserRow {
   role: 'USER' | 'ADMIN';
   mustChangePassword: boolean;
   disabledAt: Date | null;
+  passwordResetUntil: Date | null;
+  chatsClearedAt: Date | null;
   createdAt: Date;
+}
+
+interface ResetRow {
+  id: string;
+  userId: string;
+  tokenHash: string;
+  source: string;
+  expiresAt: Date;
+  usedAt: Date | null;
 }
 
 interface TokenRow {
@@ -145,13 +159,15 @@ interface TokenRow {
 }
 
 /** Only the calls AuthService makes are implemented; anything else should throw. */
-function fakeDb(): AuthDb & { users: UserRow[]; tokens: TokenRow[] } {
+function fakeDb(): AuthDb & { users: UserRow[]; tokens: TokenRow[]; resets: ResetRow[] } {
   const users: UserRow[] = [];
   const tokens: TokenRow[] = [];
+  const resets: ResetRow[] = [];
 
   const db = {
     users,
     tokens,
+    resets,
     user: {
       findFirst: async ({ where }: never) => {
         const clause = where as { OR: Array<{ email?: string; username?: string }> };
@@ -180,17 +196,41 @@ function fakeDb(): AuthDb & { users: UserRow[]; tokens: TokenRow[] } {
           role: 'USER',
           mustChangePassword: false,
           disabledAt: null,
+          passwordResetUntil: null,
+          chatsClearedAt: null,
           createdAt: new Date(),
           ...input,
         };
         users.push(row);
         return row;
       },
+      findMany: async () => users.map((row) => ({ ...row })),
       update: async ({ where, data }: never) => {
         const row = users.find((u) => u.id === (where as { id: string }).id);
         if (!row) throw new Error('user not found');
         Object.assign(row, data);
         return row;
+      },
+    },
+    passwordReset: {
+      findUnique: async ({ where }: never) =>
+        resets.find((r) => r.tokenHash === (where as { tokenHash: string }).tokenHash) ?? null,
+      create: async ({ data }: never) => {
+        const row: ResetRow = { id: randomUUID(), usedAt: null, ...(data as Omit<ResetRow, 'id' | 'usedAt'>) };
+        resets.push(row);
+        return row;
+      },
+      update: async ({ where, data }: never) => {
+        const row = resets.find((r) => r.id === (where as { id: string }).id);
+        if (!row) throw new Error('reset not found');
+        Object.assign(row, data);
+        return row;
+      },
+      updateMany: async ({ where, data }: never) => {
+        const clause = where as { userId: string; usedAt: null };
+        const matched = resets.filter((r) => r.userId === clause.userId && r.usedAt === null);
+        for (const row of matched) Object.assign(row, data);
+        return { count: matched.length };
       },
     },
     refreshToken: {
@@ -222,10 +262,24 @@ function fakeDb(): AuthDb & { users: UserRow[]; tokens: TokenRow[] } {
     },
   };
 
-  return db as unknown as AuthDb & { users: UserRow[]; tokens: TokenRow[] };
+  return db as unknown as AuthDb & { users: UserRow[]; tokens: TokenRow[]; resets: ResetRow[] };
 }
 
 const noEvents = { publish: async () => undefined } as never;
+
+/** A mail server that is either there or is not, and remembers what it sent. */
+function fakeMail(configured: boolean): MailService & { sent: Array<{ to: string; text: string }> } {
+  const sent: Array<{ to: string; text: string }> = [];
+  return {
+    sent,
+    settings: async () => null,
+    configured: async () => configured,
+    send: async (mail: { to: string; text: string }) => {
+      sent.push({ to: mail.to, text: mail.text });
+      return { ok: true };
+    },
+  } as unknown as MailService & { sent: Array<{ to: string; text: string }> };
+}
 
 async function rejects(promise: Promise<unknown>, code: string): Promise<void> {
   await assert.rejects(promise, (error: { response?: { code?: string } }) => {
@@ -338,9 +392,149 @@ function checkAppRedirect(): void {
   assert.equal(matchesChallenge(challenge, challenge), false);
 }
 
+/**
+ * The Bloom filter, and the one property everything downstream leans on.
+ *
+ * A false positive costs a database lookup and nothing else. A false *negative*
+ * would tell somebody a taken username is free, so it is the thing worth
+ * proving: every value added must read back as present, without exception.
+ */
+function checkBloom(): void {
+  const { bits, hashes } = sizing(1000, 0.01);
+  assert.ok(bits > 1000, 'a byte per item would not be enough for one percent');
+  assert.ok(hashes >= 1 && hashes <= 32);
+
+  const filter = new BloomFilter(2000, 0.01);
+  const added: string[] = [];
+  for (let index = 0; index < 2000; index += 1) {
+    const name = `user_${index}`;
+    filter.add(name);
+    added.push(name);
+  }
+
+  // No false negatives. This is the whole guarantee.
+  for (const name of added) {
+    assert.equal(filter.mightHave(name), true, `${name} was added and must read back`);
+  }
+  assert.equal(filter.size, 2000);
+
+  // False positives exist but stay near the rate asked for. Ten percent is a
+  // deliberately loose ceiling on a one percent target: the point is to catch a
+  // filter that says yes to everything, which is what a broken hash produces.
+  let positives = 0;
+  for (let index = 0; index < 2000; index += 1) {
+    if (filter.mightHave(`absent_${index}`)) positives += 1;
+  }
+  assert.ok(positives < 200, `false positive rate out of range: ${positives}/2000`);
+
+  // An empty filter knows nothing, which is the case the sign-up form starts in.
+  assert.equal(new BloomFilter(100).mightHave('anybody'), false);
+
+  assert.equal(normalizeUsername('  Ayaan  '), 'ayaan');
+}
+
+/** The three answers the forgot-password screen can get, and the reset itself. */
+async function checkPasswordReset(): Promise<void> {
+  const db = fakeDb();
+  const mail = fakeMail(false);
+  const usernames = new UsernameDirectory(db);
+  const auth = new AuthService(noEvents, mail, usernames, db);
+  await usernames.warm();
+
+  await auth.register({ email: 'bea@betweenus.local', username: 'bea', password: 'hunter2000' });
+
+  // No mail server, no administrator grant: the deployment says so, and says
+  // nothing at all about whether the account exists.
+  const noServer = await auth.forgotPassword('bea');
+  assert.equal(noServer.outcome, 'unavailable');
+  assert.equal(await auth.forgotPassword('nobody').then((r) => r.outcome), 'unavailable');
+
+  // An administrator opens the window: naming the account now hands back a
+  // token, which is the door a deployment with no mail server uses.
+  db.users[0]!.passwordResetUntil = new Date(Date.now() + 60_000);
+  const granted = await auth.forgotPassword('BEA');
+  assert.equal(granted.outcome, 'reset');
+  assert.ok(granted.resetToken, 'the reset mode hands the client a token');
+
+  const reset = await auth.resetPassword(granted.resetToken!, 'brand-new-pass9');
+  assert.equal(reset.user.username, 'bea');
+  assert.equal(db.users[0]!.passwordResetUntil, null, 'one grant is one reset');
+  // Spent, and not spendable twice.
+  await rejects(auth.resetPassword(granted.resetToken!, 'another-pass9'), 'INVALID_RESET_TOKEN');
+  await rejects(auth.resetPassword('not-a-real-token-at-all', 'another-pass9'), 'INVALID_RESET_TOKEN');
+  // The new password is the one that works now.
+  await auth.login({ email: 'bea', password: 'brand-new-pass9' });
+
+  // A weak password is refused before the token is spent, not after.
+  db.users[0]!.passwordResetUntil = new Date(Date.now() + 60_000);
+  const second = await auth.forgotPassword('bea');
+  await rejects(auth.resetPassword(second.resetToken!, 'short'), 'WEAK_PASSWORD');
+  assert.ok(await auth.resetPassword(second.resetToken!, 'still-good-pass9'));
+
+  // With a mail server and no grant, the answer is the same for an account that
+  // exists and one that does not - and only the real one gets a message.
+  const posted = fakeDb();
+  const withMail = fakeMail(true);
+  const directory = new UsernameDirectory(posted);
+  const mailed = new AuthService(noEvents, withMail, directory, posted);
+  await directory.warm();
+  await mailed.register({ email: 'cy@betweenus.local', username: 'cy', password: 'hunter2000' });
+
+  assert.equal(await mailed.forgotPassword('cy').then((r) => r.outcome), 'emailed');
+  assert.equal(await mailed.forgotPassword('ghost').then((r) => r.outcome), 'emailed');
+  assert.equal(withMail.sent.length, 1, 'only the account that exists is written to');
+  assert.equal(withMail.sent[0]!.to, 'cy@betweenus.local');
+  assert.ok(!withMail.sent[0]!.text.includes('hunter2000'));
+
+  // A disabled account is the same nothing an unknown one is: a new password
+  // would not let it in either way.
+  posted.users[0]!.disabledAt = new Date();
+  withMail.sent.length = 0;
+  assert.equal(await mailed.forgotPassword('cy').then((r) => r.outcome), 'emailed');
+  assert.equal(withMail.sent.length, 0);
+}
+
+/** Availability: the filter may save a lookup, never invent a refusal. */
+async function checkUsernameAvailability(): Promise<void> {
+  const db = fakeDb();
+  const usernames = new UsernameDirectory(db);
+  const auth = new AuthService(noEvents, fakeMail(false), usernames, db);
+  await usernames.warm();
+
+  assert.deepEqual(await auth.usernameAvailable('freshname'), {
+    username: 'freshname',
+    available: true,
+  });
+  assert.deepEqual(await auth.usernameAvailable('no'), {
+    username: 'no',
+    available: false,
+    reason: 'invalid',
+  });
+  assert.equal((await auth.usernameAvailable('has spaces')).reason, 'invalid');
+
+  await auth.register({ email: 'dee@betweenus.local', username: 'Dee', password: 'hunter2000' });
+  assert.equal(db.users[0]!.username, 'dee', 'usernames are stored lower case');
+  // Registered on this very instance, so the filter knows without a restart.
+  assert.deepEqual(await auth.usernameAvailable('DEE'), {
+    username: 'dee',
+    available: false,
+    reason: 'taken',
+  });
+
+  // A filter that has never seen the row still cannot refuse a free name, and
+  // the database still settles the taken one - which is the multi-instance case.
+  const cold = new UsernameDirectory(db);
+  const second = new AuthService(noEvents, fakeMail(false), cold, db);
+  await cold.warm();
+  assert.equal((await second.usernameAvailable('dee')).available, false);
+  assert.equal((await second.usernameAvailable('somebodyelse')).available, true);
+}
+
 async function main(): Promise<void> {
   const db = fakeDb();
-  const auth = new AuthService(noEvents, db);
+  const usernames = new UsernameDirectory(db);
+  const auth = new AuthService(noEvents, fakeMail(false), usernames, db);
+  await usernames.warm();
 
   // Register issues a session and stores exactly one refresh token.
   const registered = await auth.register({
@@ -457,6 +651,9 @@ async function main(): Promise<void> {
 
   checkOAuthRedirects();
   checkAppRedirect();
+  checkBloom();
+  await checkPasswordReset();
+  await checkUsernameAvailability();
 
   console.log('auth-service check ok');
 }
