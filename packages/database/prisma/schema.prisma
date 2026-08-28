@@ -53,38 +53,133 @@ model User {
   mustChangePassword Boolean    @default(false)
   /// A disabled account keeps its data but cannot log in or refresh.
   disabledAt         DateTime?
+  /// While this is in the future the account is in administrator-granted reset
+  /// mode: naming it on the forgot-password screen mints a single-use reset
+  /// token instead of sending mail. It is how a deployment with no SMTP server
+  /// still has a way back in - see `PasswordReset`.
+  passwordResetUntil DateTime?
+  /// Messages older than this are not returned to *this* account, in any
+  /// channel, on any of its devices. Nobody else's copy is touched: the row is
+  /// still there and the other side still reads it, which is the only honest
+  /// thing a "clear my chats" button can mean in a two-party conversation.
+  ///
+  /// One column on the account rather than a marker per channel, because the
+  /// feature asked for is "clear everything" and a per-channel column would be
+  /// a fan-out write over every channel the account is in to answer it.
+  chatsClearedAt     DateTime?
   createdAt          DateTime   @default(now())
   updatedAt          DateTime   @updatedAt
 
-  refreshTokens RefreshToken[]
-  ownedServers  Server[]        @relation("ServerOwner")
-  memberships   ServerMember[]
-  channelSeats  ChannelMember[]
-  friendshipsA  Friendship[]    @relation("FriendshipA")
-  friendshipsB  Friendship[]    @relation("FriendshipB")
+  refreshTokens   RefreshToken[]
+  ownedServers    Server[]             @relation("ServerOwner")
+  memberships     ServerMember[]
+  channelSeats    ChannelMember[]
+  friendshipsA    Friendship[]         @relation("FriendshipA")
+  friendshipsB    Friendship[]         @relation("FriendshipB")
   messages        Message[]
-  deletedMessages Message[]         @relation("MessageDeletedBy")
-  pinnedMessages  Message[]         @relation("MessagePinnedBy")
+  deletedMessages Message[]            @relation("MessageDeletedBy")
+  pinnedMessages  Message[]            @relation("MessagePinnedBy")
   reactions       MessageReaction[]
   /// One per machine this account has signed in on - see DeviceKey.
-  deviceKeys    DeviceKey[]
+  deviceKeys      DeviceKey[]
   /// One per installation that can be pushed to - see DeviceToken.
-  deviceTokens  DeviceToken[]
-  identityBackup IdentityBackup?
-  identities    UserIdentity[]
-  notifications NotificationSetting?
-  channelReads  ChannelRead[]
-  serverInvites  ServerInvite[]  @relation("ServerInviteCreatedBy")
-  remoteMachines RemoteMachine[] @relation("RemoteMachineOwner")
-  remoteGrants   RemoteGrant[]   @relation("RemoteGrantUser")
-  remoteGranted  RemoteGrant[]   @relation("RemoteGrantGrantedBy")
-  remoteSessions RemoteSession[] @relation("RemoteSessionUser")
-  remoteAudit    RemoteAudit[]   @relation("RemoteAuditActor")
-  adminAudit     AdminAudit[]    @relation("AdminAuditActor")
-  attachments    Attachment[]    @relation("AttachmentUploader")
-  callSessions   CallSession[]   @relation("CallSessionUser")
+  deviceTokens    DeviceToken[]
+  identityBackup  IdentityBackup?
+  identities      UserIdentity[]
+  notifications   NotificationSetting?
+  channelReads    ChannelRead[]
+  serverInvites   ServerInvite[]       @relation("ServerInviteCreatedBy")
+  remoteMachines  RemoteMachine[]      @relation("RemoteMachineOwner")
+  remoteGrants    RemoteGrant[]        @relation("RemoteGrantUser")
+  remoteGranted   RemoteGrant[]        @relation("RemoteGrantGrantedBy")
+  remoteSessions  RemoteSession[]      @relation("RemoteSessionUser")
+  remoteAudit     RemoteAudit[]        @relation("RemoteAuditActor")
+  adminAudit      AdminAudit[]         @relation("AdminAuditActor")
+  attachments     Attachment[]         @relation("AttachmentUploader")
+  callSessions    CallSession[]        @relation("CallSessionUser")
+  passwordResets  PasswordReset[]
+  /// People this account has blocked, and the blocks pointed back at it.
+  blocksMade      UserBlock[]          @relation("BlockAuthor")
+  blocksAgainst   UserBlock[]          @relation("BlockTarget")
 
   @@map("users")
+}
+
+/// One account refusing another.
+///
+/// Directional, unlike `Friendship`, which stores an ordered pair: a block is
+/// something one person does and the other is not told about, so "A blocked B"
+/// and "B blocked A" are two different facts and either one on its own has to
+/// close the conversation. The gate reads both directions - see
+/// `isBlockedBetween` in `@betweenus/database`.
+model UserBlock {
+  id        String   @id @default(uuid())
+  blockerId String
+  blockedId String
+  createdAt DateTime @default(now())
+
+  blocker User @relation("BlockAuthor", fields: [blockerId], references: [id], onDelete: Cascade)
+  blocked User @relation("BlockTarget", fields: [blockedId], references: [id], onDelete: Cascade)
+
+  @@unique([blockerId, blockedId])
+  // "Who has blocked me" is asked as often as "who have I blocked": the first is
+  // what closes a channel for the other side.
+  @@index([blockedId])
+  @@map("user_blocks")
+}
+
+/// A single-use permission to set a password without knowing the old one.
+///
+/// Only the SHA-256 of the token is stored, for the same reason `RefreshToken`
+/// stores a hash: a leaked database must not be a pile of live reset links.
+/// `source` records which of the two doors it came through - a link mailed by
+/// the SMTP server, or an administrator putting the account into reset mode -
+/// because those are worth telling apart afterwards.
+model PasswordReset {
+  id        String    @id @default(uuid())
+  userId    String
+  /// SHA-256 of the token handed to the client. Never logged.
+  tokenHash String    @unique
+  /// email | admin
+  source    String
+  expiresAt DateTime
+  /// Set the moment it is spent; a spent token is kept as the record that it was.
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("password_resets")
+}
+
+/// The deployment's outgoing mail server, configured from the admin panel.
+///
+/// One row, like `OAuthProvider` is one row per provider: this is operator
+/// configuration and not user data. No row - or a row with `enabled` false -
+/// is a deployment that cannot send mail at all, and every screen that would
+/// have offered to mail something says "ask your administrator" instead.
+model SmtpSetting {
+  id          String  @id @default("smtp")
+  enabled     Boolean @default(false)
+  host        String  @default("")
+  port        Int     @default(587)
+  /// True for implicit TLS on connect (port 465); false starts plain and
+  /// upgrades with STARTTLS, which is what 587 wants.
+  secure      Boolean @default(false)
+  username    String  @default("")
+  /// Sealed with AES-256-GCM under SETTINGS_SECRET, exactly as
+  /// `OAuthProvider.clientSecret` is. It never leaves the server in either
+  /// direction - the panel can replace it but never read it back.
+  password    String  @default("")
+  /// The envelope sender. Providers reject mail whose From they do not own.
+  fromAddress String  @default("")
+  fromName    String  @default("BetweenUs")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("smtp_settings")
 }
 
 /// Append-only record of what an administrator did in the admin panel.
@@ -94,17 +189,17 @@ model User {
 /// the target is stored as a label as well as an id. The id goes null with the
 /// account; the label is what the log still reads back afterwards.
 model AdminAudit {
-  id      String  @id @default(uuid())
+  id          String  @id @default(uuid())
   /// Null once the administrator's own account is deleted. The row outlives it.
-  actorId String?
+  actorId     String?
   /// Who or what it was done to: a user id, or a provider name for OAuth.
-  targetId String?
+  targetId    String?
   /// How the target read at the time - `@ayaan`, `google`. Never updated.
   targetLabel String?
   /// user.role.changed, user.disabled, user.enabled, user.deleted,
   /// oauth.updated.
-  action String
-  detail Json?
+  action      String
+  detail      Json?
 
   createdAt DateTime @default(now())
 
@@ -118,18 +213,18 @@ model AdminAudit {
 /// per user, written the first time anything is changed - an account with no
 /// row is an account with the defaults.
 model NotificationSetting {
-  userId String @id
+  userId                String   @id
   /// Off entirely; the client raises nothing while this is false.
-  enabled Boolean @default(true)
+  enabled               Boolean  @default(true)
   /// Quiet hours as minutes from midnight on the client's own clock, so the
   /// server never has to know a timezone. Null on either end means no quiet
   /// hours. A window is allowed to wrap midnight (start 1320, end 480).
-  quietStartMinute Int?
-  quietEndMinute   Int?
+  quietStartMinute      Int?
+  quietEndMinute        Int?
   /// Channels this account never wants raised.
   /// ponytail: an array column, not a join table - the list is small and is
   /// only ever read whole. Split it out when a mute grows its own settings.
-  mutedChannelIds String[] @default([])
+  mutedChannelIds       String[] @default([])
   /// Channels that only raise a notification when this account is mentioned -
   /// the middle setting between everything and nothing, and the one a busy
   /// server actually needs. A channel in both lists is silent: the stronger
@@ -146,8 +241,8 @@ model NotificationSetting {
   /// as the two lists above: small, read whole, and applied on the client -
   /// which is the only side that knows who wrote a sealed message, since the
   /// author is on the envelope but the decision to raise anything is not.
-  mutedUserIds String[] @default([])
-  updatedAt       DateTime @updatedAt
+  mutedUserIds          String[] @default([])
+  updatedAt             DateTime @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -184,15 +279,15 @@ model ChannelRead {
 /// account the same token, and the row it used to belong to has to go rather
 /// than keep pushing somebody else's messages at it.
 model DeviceToken {
-  id       String @id @default(uuid())
-  userId   String
+  id         String   @id @default(uuid())
+  userId     String
   /// Client-minted, stable per installation.
-  deviceId String
+  deviceId   String
   /// The FCM registration token. Never logged - see section 23 of CLAUDE.md.
-  token    String @unique
+  token      String   @unique
   /// android | ios | web. A string rather than an enum: adding a transport
   /// should not be a migration.
-  platform String
+  platform   String
   /// What to call it in a list: "Pixel 8". Client-supplied and untrusted.
   label      String?
   /// The client build, so a push a version cannot render can be skipped.
@@ -356,7 +451,7 @@ model Server {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  owner    User           @relation("ServerOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  owner    User               @relation("ServerOwner", fields: [ownerId], references: [id], onDelete: Cascade)
   members  ServerMember[]
   channels Channel[]
   invites  ServerInvite[]
@@ -377,12 +472,12 @@ model Server {
 /// member's denials still win over it, so taking a capability away from one
 /// person never depends on which roles they happen to hold.
 model ServerCustomRole {
-  id       String @id @default(uuid())
-  serverId String
-  name     String
+  id          String   @id @default(uuid())
+  serverId    String
+  name        String
   /// `#rrggbb`, or null for a role that takes the default colour. A member
   /// shows the colour of the highest-ranked role they hold that has one.
-  colour String?
+  colour      String?
   /// Higher is further up the list. Display order, and the tie-break for whose
   /// colour a member wears; it grants nothing by itself.
   rank        Int      @default(0)
@@ -459,8 +554,8 @@ model ServerMember {
   deniedPermissions  String[]   @default([])
   joinedAt           DateTime   @default(now())
 
-  server Server @relation(fields: [serverId], references: [id], onDelete: Cascade)
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  server Server             @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  user   User               @relation(fields: [userId], references: [id], onDelete: Cascade)
   roles  ServerMemberRole[]
 
   @@unique([serverId, userId])
@@ -543,15 +638,15 @@ model Friendship {
 /// which emoji a message uses is not a question this table could answer even
 /// if it wanted to - the client carries the manifest inside the envelope.
 model ServerEmoji {
-  id       String @id @default(uuid())
-  serverId String
+  id          String   @id @default(uuid())
+  serverId    String
   /// Lowercase letters, digits and underscores - what fits between two colons.
-  name     String
+  name        String
   /// Storage URL of the picture, rooted at `/api/v1/uploads/pictures/...`.
-  url      String
+  url         String
   /// True for a GIF or an animated WebP. Stored rather than sniffed so a client
   /// can decide whether to draw it still until it is hovered.
-  animated Boolean @default(false)
+  animated    Boolean  @default(false)
   /// Null once the uploader's account is gone; the emoji outlives them.
   createdById String?
   createdAt   DateTime @default(now())
@@ -564,25 +659,25 @@ model ServerEmoji {
 }
 
 model Message {
-  id        String    @id @default(uuid())
-  channelId String
-  authorId  String
+  id          String    @id @default(uuid())
+  channelId   String
+  authorId    String
   // Opaque to the server: clients store a serialised `EncryptedEnvelope` here.
-  content   String
-  createdAt DateTime  @default(now())
-  editedAt  DateTime?
-  deletedAt DateTime?
+  content     String
+  createdAt   DateTime  @default(now())
+  editedAt    DateTime?
+  deletedAt   DateTime?
   /// Who deleted it, when that was not the author - a client shows "deleted by
   /// NAME" rather than pretending the author took it back.
   deletedById String?
   pinnedAt    DateTime?
   pinnedById  String?
 
-  channel   Channel @relation(fields: [channelId], references: [id], onDelete: Cascade)
-  author    User    @relation(fields: [authorId], references: [id], onDelete: Cascade)
-  deletedBy User?   @relation("MessageDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull)
-  pinnedBy  User?   @relation("MessagePinnedBy", fields: [pinnedById], references: [id], onDelete: SetNull)
-  reactions MessageReaction[]
+  channel     Channel           @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  author      User              @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  deletedBy   User?             @relation("MessageDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull)
+  pinnedBy    User?             @relation("MessagePinnedBy", fields: [pinnedById], references: [id], onDelete: SetNull)
+  reactions   MessageReaction[]
   attachments Attachment[]
 
   // History paging reads newest-first within a channel.
@@ -633,17 +728,17 @@ model MessageReaction {
 /// the object. That makes one mechanism cover a deleted message, a deleted
 /// channel, a deleted server, a deleted account and an upload nobody ever sent.
 model Attachment {
-  id String @id @default(uuid())
+  id         String   @id @default(uuid())
   /// The storage key. Unique: one row per object, so claiming twice is caught.
-  key String @unique
+  key        String   @unique
   /// Null once the account that uploaded it is gone. See the note above.
   uploaderId String?
   /// Ciphertext length, which is not the plaintext size and is not meant to be.
-  size Int
+  size       Int
   /// Null until the message carrying it is sent, and null again if that message
   /// row is destroyed rather than tombstoned.
-  messageId String?
-  createdAt DateTime @default(now())
+  messageId  String?
+  createdAt  DateTime @default(now())
 
   uploader User?    @relation("AttachmentUploader", fields: [uploaderId], references: [id], onDelete: SetNull)
   message  Message? @relation(fields: [messageId], references: [id], onDelete: SetNull)
@@ -680,11 +775,11 @@ model RemoteMachine {
   ///
   /// Unique, and indexed by being so: an agent connecting is one lookup rather
   /// than a scan of every machine's hash.
-  agentTokenHash String @unique
+  agentTokenHash String    @unique
   /// Null until the agent has connected once.
-  lastSeenAt DateTime?
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
+  lastSeenAt     DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
   owner    User            @relation("RemoteMachineOwner", fields: [ownerId], references: [id], onDelete: Cascade)
   grants   RemoteGrant[]
@@ -698,19 +793,19 @@ model RemoteMachine {
 /// What one person may do to one machine. Absent means no access at all -
 /// remote permissions are never implied by a server role.
 model RemoteGrant {
-  id        String @id @default(uuid())
-  machineId String
-  userId    String
+  id          String    @id @default(uuid())
+  machineId   String
+  userId      String
   /// REMOTE_VIEW, REMOTE_CONTROL, REMOTE_FILE_TRANSFER, REMOTE_CLIPBOARD,
   /// REMOTE_AUDIO, REMOTE_ADMIN. Unknown strings are ignored when resolving,
   /// so a row written by a newer build cannot break an older one.
-  permissions String[] @default([])
+  permissions String[]  @default([])
   /// Temporary access: past this moment the grant resolves to nothing. Null is
   /// open-ended.
-  expiresAt DateTime?
+  expiresAt   DateTime?
   grantedById String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
   machine   RemoteMachine @relation(fields: [machineId], references: [id], onDelete: Cascade)
   user      User          @relation("RemoteGrantUser", fields: [userId], references: [id], onDelete: Cascade)
@@ -750,11 +845,11 @@ model RemoteAudit {
   machineId String
   sessionId String?
   /// Who did it. Null when it was the agent itself rather than a person.
-  actorId String?
+  actorId   String?
   /// machine.enrolled, machine.renamed, permission.changed, session.started,
   /// session.ended, session.refused.
-  action String
-  detail Json?
+  action    String
+  detail    Json?
 
   createdAt DateTime @default(now())
 
@@ -779,29 +874,29 @@ model RemoteAudit {
 /// entry somebody is trying to remember; a foreign key would take those rows
 /// away at the moment they became interesting.
 model CallSession {
-  id          String    @id @default(uuid())
-  userId      String
-  channelId   String
-  channelName String
+  id            String    @id @default(uuid())
+  userId        String
+  channelId     String
+  channelName   String
   /// Null for a direct message, which belongs to no server.
-  serverId    String?
-  serverName  String?
-  joinedAt    DateTime  @default(now())
+  serverId      String?
+  serverName    String?
+  joinedAt      DateTime  @default(now())
   /// Null while the call is still up, and for a row whose process died mid-call.
-  endedAt     DateTime?
+  endedAt       DateTime?
   /// Everybody else who was in the call at any point while this person was, by
   /// user id. Resolved to current names when the log is read, so somebody who
   /// changed their display name reads back as who they are now.
-  peerIds     String[]  @default([])
+  peerIds       String[]  @default([])
   /// Bytes sent and received across every peer connection of this call, as the
   /// client counted them - nothing else is in the media path to count. Zero
   /// when the client never got to report, which a window closed mid-call does.
-  bytes       BigInt    @default(0)
+  bytes         BigInt    @default(0)
   /// The same total split by direction. Kept beside `bytes` rather than derived
   /// from it because an older client reports only the total, and a split that
   /// guessed at halves would read as measurement rather than as the guess it is.
-  bytesSent     BigInt @default(0)
-  bytesReceived BigInt @default(0)
+  bytesSent     BigInt    @default(0)
+  bytesReceived BigInt    @default(0)
   /// One entry per person this client held a peer connection to: what that link
   /// moved, how it got there (direct or through a relay), its round trip and its
   /// loss. A `CallLinkReport[]` from shared-types, written verbatim after
@@ -810,7 +905,7 @@ model CallSession {
   /// ponytail: JSON rather than a table. It is read whole, per row, by the one
   /// person it belongs to, and nothing ever queries across it. A join table is
   /// the upgrade if a report is ever wanted for a whole deployment.
-  links       Json?
+  links         Json?
 
   user User @relation("CallSessionUser", fields: [userId], references: [id], onDelete: Cascade)
 

@@ -65,6 +65,14 @@ export const EVENTS = {
    */
   CHANNEL_READ: 'channel.read',
   /**
+   * Somebody cleared their own history, on one of their devices.
+   *
+   * Published so their *other* devices drop the copies they are holding. It
+   * reaches nobody else: the rows are untouched and every other participant's
+   * view of the conversation is exactly what it was.
+   */
+  CHATS_CLEARED: 'chats.cleared',
+  /**
    * Somebody started or ended a remote session on a machine.
    *
    * One event with a state rather than the `remote.session.started` and
@@ -132,6 +140,7 @@ export interface EventPayloads {
    * checks - a subscriber with neither simply sends nothing.
    */
   [EVENTS.CHANNEL_READ]: { userId: string; channelId: string; at: string };
+  [EVENTS.CHATS_CLEARED]: { userId: string; clearedAt: string };
   [EVENTS.REMOTE_SESSION]: {
     sessionId: string;
     machineId: string;

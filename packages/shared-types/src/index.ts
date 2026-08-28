@@ -174,6 +174,53 @@ export interface ChangePasswordRequest {
   newPassword: string;
 }
 
+// --- Forgotten passwords ---
+
+export interface ForgotPasswordRequest {
+  /** Email or username, the same field the login screen takes. */
+  identifier: string;
+}
+
+/**
+ * What the client should put on screen next, and nothing about whether the
+ * account exists.
+ *
+ * `emailed` and `unknown` are deliberately indistinguishable in everything but
+ * the word: both mean "we are not going to tell you whether that was a real
+ * account", and both render the same sentence. The two that differ are the two
+ * that have to: `reset` is an administrator having already authorised this one,
+ * and `unavailable` is a deployment with no mail server, which is a fact about
+ * the deployment rather than about the account.
+ */
+export type ForgotPasswordOutcome = 'emailed' | 'reset' | 'unavailable';
+
+export interface ForgotPasswordResponse {
+  outcome: ForgotPasswordOutcome;
+  /**
+   * Present only for `reset`: the single-use token that lets this client set a
+   * new password now. It exists because an administrator put the account into
+   * reset mode, which is the deployment's way back in when nothing can be
+   * mailed. Expires, and is spent the first time it is used.
+   */
+  resetToken?: string;
+  /** Present only for `unavailable`: what the operator wants people to be told. */
+  message?: string;
+}
+
+export interface ResetPasswordRequest {
+  token: string;
+  newPassword: string;
+}
+
+// --- Username availability ---
+
+export interface UsernameAvailability {
+  username: string;
+  available: boolean;
+  /** Why not, when it is not: `taken` or `invalid`. */
+  reason?: 'taken' | 'invalid';
+}
+
 export interface UpdateAccountRequest {
   username?: string;
   displayName?: string;
@@ -220,6 +267,8 @@ export interface AdminStatus {
 
 export interface AdminUser extends PublicUser {
   disabledAt: string | null;
+  /** While this is in the future the account is in password-reset mode. */
+  passwordResetUntil: string | null;
   /** Providers this account can also sign in with. */
   identities: string[];
   serverCount: number;
@@ -242,6 +291,13 @@ export interface AdminUserPage {
 export interface AdminUserUpdate {
   role?: GlobalRole;
   disabled?: boolean;
+  /**
+   * True puts the account into reset mode: the next time somebody names it on
+   * the forgot-password screen they are handed a single-use token and the
+   * change-password form, without a mail server being involved. False cancels
+   * a window that has not been used yet.
+   */
+  passwordReset?: boolean;
 }
 
 /** One thing an administrator did. Append-only; nothing edits or deletes it. */
@@ -279,6 +335,46 @@ export interface AdminOAuthProviderUpdate {
   clientId: string;
   /** Omitted means "keep the stored secret"; a value replaces it. */
   clientSecret?: string;
+}
+
+/**
+ * The deployment's outgoing mail server, as the panel sees it. Never carries
+ * the password - only whether one is stored, exactly like the OAuth secret.
+ */
+export interface AdminSmtpSettings {
+  enabled: boolean;
+  host: string;
+  port: number;
+  /** Implicit TLS on connect (465); false starts plain and upgrades (587). */
+  secure: boolean;
+  username: string;
+  hasPassword: boolean;
+  fromAddress: string;
+  fromName: string;
+}
+
+export interface AdminSmtpUpdate {
+  enabled: boolean;
+  host: string;
+  port: number;
+  secure: boolean;
+  username: string;
+  /** Omitted means "keep the stored password"; a value replaces it. */
+  password?: string;
+  fromAddress: string;
+  fromName: string;
+}
+
+/** What a test send did, so the panel can show the server's own refusal. */
+export interface AdminSmtpTestResult {
+  ok: boolean;
+  /** The transport's message when it failed; absent when it did not. */
+  error?: string;
+}
+
+export interface AdminSmtpTestRequest {
+  /** Where to send it. Defaults to the administrator's own address. */
+  to?: string;
 }
 
 export interface AuthResponse extends AuthTokens {
@@ -585,6 +681,26 @@ export interface DirectChannel {
 }
 
 export interface OpenDirectChannelRequest {
+  userId: string;
+}
+
+/**
+ * What `POST /api/v1/messages/clear` answers with: the instant everything at or
+ * before it stopped being visible to this account.
+ */
+export interface ClearChatsResponse {
+  clearedAt: string;
+}
+
+// --- Blocking ---
+
+/** Somebody this account has blocked, as the block list shows them. */
+export interface BlockedUser {
+  user: UserSummary;
+  blockedAt: string;
+}
+
+export interface BlockUserRequest {
   userId: string;
 }
 
@@ -1804,6 +1920,15 @@ export type ServerChatEvent =
    * per reader would be the same fact said once per person.
    */
   | { type: 'channel.read'; channelId: string; userId: string; at: string }
+  /**
+   * This account cleared its own history. Sent only to its own sockets - it is
+   * a fact about one person's view and nobody else's copy moved.
+   *
+   * Carried rather than announced because the client cannot refetch its way to
+   * the answer: every device holds a local cache of decrypted messages, and
+   * what they each have to do is drop everything at or before `clearedAt`.
+   */
+  | { type: 'chats.cleared'; clearedAt: string }
   | { type: 'pong' }
   | { type: 'error'; code: string; message: string };
 

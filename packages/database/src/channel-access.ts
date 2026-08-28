@@ -11,6 +11,7 @@
 import type { ServerRole } from '@betweenus/shared-types';
 import { PERMISSIONS, effectivePermissions, type Permission } from '@betweenus/permissions';
 import { prisma } from './client';
+import { isBlockedBetween } from './blocks';
 
 export interface ChannelAccess {
   channelId: string;
@@ -56,7 +57,21 @@ export async function resolveChannelAccess(
   // A direct message has no server to take a role from; being one of the two
   // people on it is the whole of the authorization.
   if (channel.serverId === null) {
-    if (!(await isChannelMember(channelId, userId))) return null;
+    const seats = await prisma.channelMember.findMany({
+      where: { channelId },
+      select: { userId: true },
+    });
+    if (!seats.some((seat) => seat.userId === userId)) return null;
+
+    // A block closes the conversation from both ends, so it is answered here
+    // rather than in the send path: history, calls, typing and reactions all
+    // route through this function, and a check in one controller would leave
+    // every sibling caller open. Null and not a 403 - the same answer a
+    // stranger's channel id gets, because "you have been blocked" is not
+    // something the far side asked to have announced.
+    const other = seats.find((seat) => seat.userId !== userId);
+    if (other && (await isBlockedBetween(userId, other.userId))) return null;
+
     return {
       channelId: channel.id,
       serverId: null,
