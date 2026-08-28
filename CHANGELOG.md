@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.0.1-alpha.17](https://github.com/aiyu-ayaan/BetweenUs/compare/v0.0.1-alpha.16...v0.0.1-alpha.17) (2026-08-28)
+
+### Other changes
+
+* Enhance APK and AAB build process with matrix support
+
+### Artifacts
+
+| Platform | This release |
+| --- | --- |
+| Server images | Carried forward from [v0.0.1-alpha.16](https://github.com/aiyu-ayaan/BetweenUs/releases/tag/v0.0.1-alpha.16) |
+| Desktop (Windows) | Carried forward from [v0.0.1-alpha.16](https://github.com/aiyu-ayaan/BetweenUs/releases/tag/v0.0.1-alpha.16) |
+| Android | Built here |
+
 ## [0.0.1-alpha.16](https://github.com/aiyu-ayaan/BetweenUs/compare/v0.0.1-alpha.15...v0.0.1-alpha.16) (2026-08-28)
 
 ### Features
