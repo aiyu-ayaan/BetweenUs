@@ -751,12 +751,7 @@ jobs:
 
           echo "path=$RUNNER_TEMP/release.jks" >> "$GITHUB_OUTPUT"
 
-      # assembleRelease and bundleRelease are two invocations on purpose:
-      # app/build.gradle.kts disables ABI splits whenever a `bundle` task is in
-      # the requested set, because AGP refuses splits during a bundle. Ask for
-      # both at once and the APKs come out as one universal build with the
-      # per-ABI ones missing.
-      - name: Build APKs
+      - name: Build ${{ matrix.label }}
         env:
           BETWEENUS_VERSION_NAME: ${{ needs.merged.outputs.version }}
           BETWEENUS_VERSION_CODE: ${{ github.run_number }}
@@ -764,36 +759,33 @@ jobs:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-        run: ./gradlew :app:assembleRelease --stacktrace
-
-      - name: Build AAB
-        env:
-          BETWEENUS_VERSION_NAME: ${{ needs.merged.outputs.version }}
-          BETWEENUS_VERSION_CODE: ${{ github.run_number }}
-          ANDROID_KEYSTORE_FILE: ${{ steps.keystore.outputs.path }}
-          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-        run: ./gradlew :app:bundleRelease --stacktrace
+        run: ./gradlew ${{ matrix.task }} --stacktrace
 
       # app-arm64-v8a-release.apk says nothing about which release it is once
       # it has been downloaded. Name them after the version.
       - name: Name the artifacts after the version
         env:
           VERSION: ${{ needs.merged.outputs.version }}
+          KIND: ${{ matrix.artifact }}
         run: |
           mkdir -p "$RUNNER_TEMP/android"
-          for apk in app/build/outputs/apk/release/*.apk; do
-            abi="$(basename "$apk" | sed -e 's/^app-//' -e 's/-release\.apk$//')"
-            cp "$apk" "$RUNNER_TEMP/android/BetweenUs-${VERSION}-${abi}.apk"
-          done
-          cp app/build/outputs/bundle/release/app-release.aab \
-             "$RUNNER_TEMP/android/BetweenUs-${VERSION}.aab"
+          if [ "$KIND" = apk ]; then
+            for apk in app/build/outputs/apk/release/*.apk; do
+              abi="$(basename "$apk" | sed -e 's/^app-//' -e 's/-release\.apk$//')"
+              cp "$apk" "$RUNNER_TEMP/android/BetweenUs-${VERSION}-${abi}.apk"
+            done
+          else
+            cp app/build/outputs/bundle/release/app-release.aab \
+               "$RUNNER_TEMP/android/BetweenUs-${VERSION}.aab"
+          fi
           ls -la "$RUNNER_TEMP/android"
 
+      # One name per matrix leg. Both legs uploading `android` is a 409 on the
+      # second, which is how a release ended up with the installer and no APKs;
+      # `publish` collects them back with its `android-*` pattern.
       - uses: actions/upload-artifact@v4
         with:
-          name: android
+          name: android-${{ matrix.artifact }}
           path: ${{ runner.temp }}/android/*
           if-no-files-found: error
 
