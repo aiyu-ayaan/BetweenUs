@@ -26,7 +26,9 @@ crypto (same epoch, a re-key, still readable both directions). **Media —
 calls, screen share and the remote-desktop viewer — has since been driven
 two-device**, which is what a mesh needs to prove anything, along with push
 notifications on a real phone, the local cache offline, and the APK
-self-updater. Full status, phase by phase:
+self-updater. Blocking, clearing your own history, password recovery and the
+live username check landed since and compile and unit-test green, but have not
+been on a device yet. Full status, phase by phase:
 [`development/ANDROID_TODO.md`](https://github.com/aiyu-ayaan/BetweenUs/blob/master/development/ANDROID_TODO.md).
 
 ## Modules
@@ -65,7 +67,9 @@ feature/remote          feature/update        feature/voice
   control an enrolled machine; it can't itself be enrolled as a target,
   since nothing on a phone can move a desktop's mouse. Same asymmetry as
   the web client (see [Architecture Overview](/architecture/overview)).
-- **`settings`** — account profile, local crash reporter, call data usage, and a dedicated **`ThemesScreen`** (`Route.Themes`) providing live interactive workbench previews, 16 curated themes across 5 categories, and custom accent tint swatches with spring transitions.
+- **`settings`** — account profile, local crash reporter, call data usage, a
+  **`PrivacyScreen`** (`Route.Privacy`) holding the block list and *Clear all my
+  messages*, and a dedicated **`ThemesScreen`** (`Route.Themes`) providing live interactive workbench previews, 16 curated themes across 5 categories, and custom accent tint swatches with spring transitions.
 - **`update`** — checks the app's own GitHub releases on launch (channel:
   alpha/beta/stable), downloads the APK built for the device's real ABI
   rather than the universal one, and hands it to Android's installer.
@@ -99,6 +103,38 @@ that merely intercepts the scheme (Android doesn't guarantee only one app
 can register it) holds a code it can't spend. Detail:
 [Auth & Permissions](/system-design/auth-and-permissions) and
 [`development/SECURITY.md`](https://github.com/aiyu-ayaan/BetweenUs/blob/master/development/SECURITY.md).
+
+## Blocking, clearing, and getting back in
+
+The client speaks the same four account endpoints as desktop and web, and three
+of them needed something here that the browser did not.
+
+**A block is announced as an ordinary removal** — the far side is never told
+which of the two it was. But the phone builds its conversation rail from a list
+rather than deriving it from the friend list, so `friends.changed` reloads both.
+Without that, the blocked conversation stayed in the rail and answered 404 when
+tapped, which tells the far side exactly what the design was avoiding.
+`Workspace` also removes the person from both lists at the moment of the call
+rather than waiting for that announcement to come back round, because the screen
+the button was pressed on has to be right immediately.
+
+**`chats.cleared` reaches Room, not only memory.** The cache is what makes
+opening the app not a spinner, and after a clear it holds envelopes the server
+will no longer return — so `Conversation` drops the database, the decrypted
+history and the paging cursors together, then re-opens whatever is on screen.
+Clearing only the in-memory copy would have brought the whole thing back on the
+next cold start.
+
+**The username availability check is debounced *and* cancelled.** A plain
+debounce still allows a slow answer about an earlier name to land after a faster
+one about the name now in the field, reporting a free username as taken.
+
+*Clear all my messages* sits behind a dialog rather than desktop's typed
+confirmation — on a phone keyboard, a sentence somebody has to read is the
+better speed bump. The forgot-password screen is the only client that states
+what a reset costs before it happens: the identity backup is sealed with the old
+password, so a phone signing in fresh afterwards reads what arrives from then
+on, not what came before.
 
 ## Input sensitivity, and the hook that makes it possible
 

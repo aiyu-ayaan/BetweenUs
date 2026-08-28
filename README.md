@@ -65,8 +65,8 @@ to be framed, so no browser tab can ever show it.
 | Register, sign in, refresh-token rotation | ✅ | ✅ | ✅ |
 | Google and GitHub sign-in | ✅ | ✅ | ✅ |
 | Display name, avatar, change password | ✅ | ✅ | ✅ |
-| Username checked while you type, and unique | ✅ | ✅ | — |
-| Forgotten password: emailed link, or an admin-opened reset | ✅ | ✅ | — |
+| Username checked while you type, and unique | ✅ | ✅ | ✅ |
+| Forgotten password: emailed link, or an admin-opened reset | ✅ | ✅ | ✅ |
 | Encryption identity: unlock, backup secret | ✅ | ✅ | ✅ |
 | Device list and revoking a device | ✅ | ✅ | — |
 | Point the client at another deployment | ✅ | ✅ | ✅ |
@@ -84,8 +84,8 @@ to be framed, so no browser tab can ever show it.
 | **Messaging** | | | |
 | End-to-end encrypted messages, realtime, history paging | ✅ | ✅ | ✅ |
 | Direct messages and friends | ✅ | ✅ | ✅ |
-| Block somebody | ✅ | ✅ | — |
-| Clear your own history on every device | ✅ | ✅ | — |
+| Block somebody | ✅ | ✅ | ✅ |
+| Clear your own history on every device | ✅ | ✅ | ✅ |
 | Replies, edit, delete, reactions | ✅ | ✅ | ✅ |
 | Pinned messages | ✅ | ✅ | ✅ |
 | Custom emoji in messages | ✅ | ✅ | ✅ |
@@ -789,7 +789,7 @@ server still has a way back in. And a **username is checked while you type**,
 against a Bloom filter in front of the unique index, and is now normalised to
 lower case so the constraint and the username login finally agree.
 
-Desktop and web have all of it; Android has none of it yet.
+All three clients have all of it.
 
 ### Play together
 
