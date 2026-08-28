@@ -949,8 +949,8 @@ was built the way it was; this is the short version.
 - Play Together has not been run with two real clients either. The referee and
   the four sets of rules have self-checks, and so does the player's-eye view;
   the boards themselves need two windows and a person in each.
-- On Android a GIF emoji shows its first frame: animating one needs Coil's
-  `coil-gif` artifact, which is one dependency line.
+- A light theme is not designed on any client. The ramp is defined once on each,
+  which is what would make one possible; nothing else about it exists.
 
 ## Conventions
 

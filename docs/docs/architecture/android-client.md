@@ -23,9 +23,10 @@ sign in, session restore, server switching, channels, messages, reactions
 and voice have been run by hand on an emulator against a local backend, and
 end-to-end encryption was cross-checked against the desktop client's own
 crypto (same epoch, a re-key, still readable both directions). **Media —
-calls and the remote-desktop viewer — is unverified**: a mesh needs two real
-ends, and nobody has yet put two physical devices in a call or driven a real
-agent's screen with this client. Full status, phase by phase:
+calls, screen share and the remote-desktop viewer — has since been driven
+two-device**, which is what a mesh needs to prove anything, along with push
+notifications on a real phone, the local cache offline, and the APK
+self-updater. Full status, phase by phase:
 [`development/ANDROID_TODO.md`](https://github.com/aiyu-ayaan/BetweenUs/blob/master/development/ANDROID_TODO.md).
 
 ## Modules
