@@ -1548,11 +1548,10 @@ function UpdatesSection(): JSX.Element {
             {info ? `, the ${FLAVOR_LABEL[info.flavor]}.` : '.'}
           </p>
 
-          {info?.flavor === 'portable' && (
+          {info?.flavor === 'installer' && (
             <p className="mt-2 text-sm text-slate-400">
-              Updates download the portable exe and replace the one you are running, where it
-              already sits. The installer is never offered to a portable copy - it would leave you
-              with a second BetweenUs somewhere else on the disk.
+              An update downloads the setup exe and installs itself over this copy, keeping where
+              it is installed and everything in it. BetweenUs starts again when it is done.
             </p>
           )}
 
@@ -1677,7 +1676,6 @@ function UpdatesSection(): JSX.Element {
 
 const FLAVOR_LABEL: Record<DesktopUpdateFlavor, string> = {
   installer: 'installed build',
-  portable: 'portable build',
   unpacked: 'development build',
 };
 

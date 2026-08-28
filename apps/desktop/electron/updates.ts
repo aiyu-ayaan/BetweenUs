@@ -7,8 +7,7 @@
  * workflow already publishes named assets to a GitHub Release, so a check is
  * one API call and a download is one more. electron-updater would want a
  * `latest.yml` published alongside them, a `publish` block in
- * `electron-builder.yml`, and it still could not update the portable build -
- * which is half of what ships.
+ * `electron-builder.yml`, and a second release path to keep working.
  *
  * Nothing here imports Electron, so it runs under `tsx` in `updates.check.ts`.
  * Applying the download is the one part that needs the app, and that lives in
@@ -111,26 +110,19 @@ export function channelOf(version: string | null | undefined): Channel {
 /**
  * Which Windows build this is.
  *
- * `installer` was put here by `BetweenUs-<version>-Setup.exe`; `portable` is a
- * single exe the user is running from wherever they dropped it; `unpacked` is a
- * development run, which has no release to update to and must never be offered
- * one.
+ * `installer` was put here by `BetweenUs-<version>-Setup.exe` and updates
+ * itself with the next one; `unpacked` is a development run, which has no
+ * release to update to and must never be offered one.
  *
- * The portable build is the one that has to be got right: it must be offered
- * `-Portable.exe` and never `-Setup.exe`, or the update quietly turns a
- * portable copy into an installed one somewhere else on the disk.
+ * There was a third, `portable`, for the single exe that shipped beside the
+ * installer. Windows ships one build now, so a copy of that portable exe is
+ * treated as an install and is offered the setup exe - which is the only
+ * update it can be given, and installs properly over it.
  */
-export type Flavor = 'installer' | 'portable' | 'unpacked';
+export type Flavor = 'installer' | 'unpacked';
 
-/**
- * electron-builder's portable target unpacks itself to a temp directory and
- * points `PORTABLE_EXECUTABLE_FILE` at the exe the user actually double
- * clicked. That variable existing *is* the answer - there is nothing else that
- * distinguishes the two builds at runtime.
- */
-export function flavorFrom(env: NodeJS.ProcessEnv, packaged: boolean): Flavor {
-  if (!packaged) return 'unpacked';
-  return env.PORTABLE_EXECUTABLE_FILE ? 'portable' : 'installer';
+export function flavorFrom(packaged: boolean): Flavor {
+  return packaged ? 'installer' : 'unpacked';
 }
 
 // --- Releases ---------------------------------------------------------------
@@ -206,14 +198,13 @@ export function pickRelease(
 }
 
 /**
- * The asset this install can actually apply. A portable copy is only ever
- * offered `-Portable.exe`; an installed one only ever `-Setup.exe`. There is no
- * fallback between them on purpose: no update at all beats the wrong one.
+ * The asset this install can actually apply: the setup exe, and nothing else.
+ * A release that built the other platforms only offers nothing rather than
+ * handing Windows an APK.
  */
 export function assetFor(release: Release, flavor: Flavor): ReleaseAsset | null {
   if (flavor === 'unpacked') return null;
-  const suffix = flavor === 'portable' ? '-portable.exe' : '-setup.exe';
-  return release.assets.find((asset) => asset.name.toLowerCase().endsWith(suffix)) ?? null;
+  return release.assets.find((asset) => asset.name.toLowerCase().endsWith('-setup.exe')) ?? null;
 }
 
 // --- The network side -------------------------------------------------------

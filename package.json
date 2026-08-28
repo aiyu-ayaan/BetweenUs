@@ -21,7 +21,6 @@
     "docs:build": "npm --prefix docs run build",
     "docs:install": "npm --prefix docs install",
     "desktop:package": "pnpm --filter @betweenus/desktop package",
-    "desktop:package:portable": "pnpm --filter @betweenus/desktop package:portable",
     "desktop:package:win": "pnpm --filter @betweenus/desktop package:win",
     "desktop:package:win-packaged": "pnpm --filter @betweenus/desktop package:win-packaged",
     "data:path": "node scripts/data-path.mjs",

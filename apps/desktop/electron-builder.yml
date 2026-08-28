@@ -10,15 +10,36 @@ files:
 # Release artifacts are named BetweenUs-<version>-<what it is>, the same shape
 # the Android APKs use, so a downloaded file still says which release it is and
 # a folder of them sorts by version rather than by target.
+#
+# One Windows target, and it is the installer. There was a portable exe beside
+# it until the two of them turned every update into a question of which build
+# somebody was running - and the answer was wrong often enough that neither
+# updated reliably. See development/devdocs/UPDATES.md.
 win:
   target:
-    - portable
     - nsis
   icon: public/icon.png
 nsis:
   artifactName: BetweenUs-${version}-Setup.${ext}
-portable:
-  artifactName: BetweenUs-${version}-Portable.${ext}
+  # An assisted installer, not a one-click one: somebody installing BetweenUs
+  # for the first time gets to say where it goes, and gets a licence-free
+  # wizard they can read rather than a progress bar that has already finished.
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  # Per user, so no UAC prompt and no administrator to find. An update started
+  # by the app itself runs as the user who is signed in, and a per-machine
+  # install would ask that user for a password they may not have.
+  perMachine: false
+  allowElevation: false
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: BetweenUs
+  menuCategory: false
+  runAfterFinish: true
+  # The account's messages, keys and settings live in AppData. Uninstalling to
+  # reinstall is a thing people do, and it must not be what loses their keys.
+  deleteAppDataOnUninstall: false
+  uninstallDisplayName: BetweenUs ${version}
 mac:
   target: dmg
   icon: public/icon.png

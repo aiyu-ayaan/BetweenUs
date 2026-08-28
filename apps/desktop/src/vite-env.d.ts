@@ -193,11 +193,11 @@ interface Window {
 type DesktopUpdateChannel = 'stable' | 'beta' | 'alpha';
 
 /**
- * Which Windows build this is. `portable` is a single exe the user keeps
- * wherever they put it, and is only ever offered `-Portable.exe`; `unpacked` is
- * a development run and is offered nothing.
+ * Which Windows build this is. `installer` came from the setup exe and updates
+ * itself with the next one; `unpacked` is a development run and is offered
+ * nothing.
  */
-type DesktopUpdateFlavor = 'installer' | 'portable' | 'unpacked';
+type DesktopUpdateFlavor = 'installer' | 'unpacked';
 
 interface DesktopUpdateInfo {
   version: string;

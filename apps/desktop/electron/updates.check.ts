@@ -52,10 +52,8 @@ assert.equal(channelOf(undefined), 'stable');
 
 // --- Flavours ---------------------------------------------------------------
 
-assert.equal(flavorFrom({}, false), 'unpacked', 'a development run has nothing to update to');
-assert.equal(flavorFrom({ PORTABLE_EXECUTABLE_FILE: 'D:\\BetweenUs.exe' }, false), 'unpacked');
-assert.equal(flavorFrom({}, true), 'installer');
-assert.equal(flavorFrom({ PORTABLE_EXECUTABLE_FILE: 'D:\\BetweenUs.exe' }, true), 'portable');
+assert.equal(flavorFrom(false), 'unpacked', 'a development run has nothing to update to');
+assert.equal(flavorFrom(true), 'installer');
 
 // --- Releases ---------------------------------------------------------------
 
@@ -104,28 +102,24 @@ assert.equal(pickRelease(releases, v('0.0.3'), 'alpha'), null, 'nothing newer, n
 assert.equal(pickRelease(releases, v('0.0.2'), 'stable'), null, 'the version in hand is not an upgrade');
 
 const beta = releases[0] as Release;
-assert.equal(assetFor(beta, 'portable')?.name, 'BetweenUs-0.0.3-beta.1-Portable.exe');
 assert.equal(assetFor(beta, 'installer')?.name, 'BetweenUs-0.0.3-beta.1-Setup.exe');
 assert.equal(assetFor(beta, 'unpacked'), null);
 
-// A release built for the other platforms only: a portable copy is offered
-// nothing rather than the installer.
+// A release built for the other platforms only: Windows is offered nothing
+// rather than something it cannot run.
 const androidOnly: Release = {
   ...beta,
   assets: beta.assets.filter((asset) => asset.name.endsWith('.apk')),
 };
-assert.equal(assetFor(androidOnly, 'portable'), null);
 assert.equal(assetFor(androidOnly, 'installer'), null);
 
-const setupOnly: Release = {
+// The portable exe that used to ship beside the installer is not an update for
+// anybody now, and must not be picked up as one.
+const portableOnly: Release = {
   ...beta,
-  assets: beta.assets.filter((asset) => asset.name.endsWith('-Setup.exe')),
+  assets: beta.assets.filter((asset) => asset.name.endsWith('-Portable.exe')),
 };
-assert.equal(
-  assetFor(setupOnly, 'portable'),
-  null,
-  'a portable copy is never handed the installer',
-);
+assert.equal(assetFor(portableOnly, 'installer'), null);
 
 // --- findUpdate -------------------------------------------------------------
 
@@ -136,11 +130,8 @@ const okJson = (body: unknown): typeof fetch =>
       headers: { 'content-type': 'application/json' },
     })) as unknown as typeof fetch;
 
-const portableOffer = await findUpdate('0.0.1-alpha.9', 'beta', 'portable', okJson(payload));
-assert.equal(portableOffer?.version, '0.0.3-beta.1', 'the version drops its leading v');
-assert.equal(portableOffer?.asset.name, 'BetweenUs-0.0.3-beta.1-Portable.exe');
-
 const installerOffer = await findUpdate('0.0.1-alpha.9', 'beta', 'installer', okJson(payload));
+assert.equal(installerOffer?.version, '0.0.3-beta.1', 'the version drops its leading v');
 assert.equal(installerOffer?.asset.name, 'BetweenUs-0.0.3-beta.1-Setup.exe');
 
 assert.equal(
@@ -148,13 +139,13 @@ assert.equal(
   null,
   'a development run never calls GitHub at all',
 );
-assert.equal(await findUpdate('9.9.9', 'alpha', 'portable', okJson(payload)), null);
+assert.equal(await findUpdate('9.9.9', 'alpha', 'installer', okJson(payload)), null);
 
 await assert.rejects(
   findUpdate(
     '0.0.1',
     'stable',
-    'portable',
+    'installer',
     (async () => new Response('rate limited', { status: 403 })) as unknown as typeof fetch,
   ),
   /403/,
@@ -168,7 +159,7 @@ try {
   const bytes = new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8]);
   const progress: number[] = [];
   const file = await downloadAsset(
-    { name: 'BetweenUs-0.0.3-Portable.exe', url: 'https://x/portable', size: bytes.length },
+    { name: 'BetweenUs-0.0.3-Setup.exe', url: 'https://x/setup', size: bytes.length },
     directory,
     (fraction) => progress.push(fraction),
     (async () =>
@@ -178,14 +169,14 @@ try {
       })) as unknown as typeof fetch,
   );
 
-  assert.equal(path.basename(file), 'BetweenUs-0.0.3-Portable.exe');
+  assert.equal(path.basename(file), 'BetweenUs-0.0.3-Setup.exe');
   assert.deepEqual([...fs.readFileSync(file)], [...bytes]);
   assert.equal(progress.at(-1), 1, 'progress ends at whole');
   assert.equal(fs.existsSync(`${file}.part`), false, 'the part file is gone once it is complete');
 
   await assert.rejects(
     downloadAsset(
-      { name: 'BetweenUs-0.0.4-Portable.exe', url: 'https://x/gone', size: 0 },
+      { name: 'BetweenUs-0.0.4-Setup.exe', url: 'https://x/gone', size: 0 },
       directory,
       () => {},
       (async () => new Response('nope', { status: 404 })) as unknown as typeof fetch,
@@ -193,7 +184,7 @@ try {
     /404/,
   );
   assert.equal(
-    fs.existsSync(path.join(directory, 'BetweenUs-0.0.4-Portable.exe')),
+    fs.existsSync(path.join(directory, 'BetweenUs-0.0.4-Setup.exe')),
     false,
     'a failed download leaves nothing runnable behind',
   );

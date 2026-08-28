@@ -591,7 +591,7 @@ jobs:
           echo "Images for v${VERSION} are v${CARRY}'s, re-tagged."
 
   desktop:
-    name: Windows installer and portable exe
+    name: Windows installer
     needs: merged
     if: needs.merged.outputs.release == 'true' && contains(needs.merged.outputs.targets, 'desktop')
     runs-on: windows-latest
@@ -662,11 +662,29 @@ jobs:
           path: apps/desktop/release/*.exe
           if-no-files-found: error
 
+  # The APKs and the bundle are two jobs, not two Gradle invocations in one.
+  # They were sequential and each takes about as long as the other, so a split
+  # halves the Android half of a release; and they could never have been one
+  # invocation anyway - app/build.gradle.kts disables ABI splits whenever a
+  # `bundle` task is in the requested set, because AGP refuses splits during a
+  # bundle, so asking for both at once produces one universal APK and none of
+  # the per-ABI ones.
   android:
-    name: Android APKs and AAB
+    name: Android ${{ matrix.label }}
     needs: merged
     if: needs.merged.outputs.release == 'true' && contains(needs.merged.outputs.targets, 'android')
     runs-on: ubuntu-latest
+    strategy:
+      # One failing does not hide what the other did.
+      fail-fast: false
+      matrix:
+        include:
+          - label: APKs
+            artifact: apk
+            task: ':app:assembleRelease'
+          - label: AAB
+            artifact: aab
+            task: ':app:bundleRelease'
     defaults:
       run:
         working-directory: apps/android
@@ -860,7 +878,8 @@ jobs:
       - uses: actions/download-artifact@v4
         if: needs.android.result == 'success'
         with:
-          name: android
+          pattern: android-*
+          merge-multiple: true
           path: artifacts/android
 
       # A platform this release did not build still ships: its artifacts are
@@ -940,8 +959,9 @@ jobs:
             carries an older version is that, and it is the current build for
             its platform.
 
-            **Desktop (Windows)** — `BetweenUs-${{ needs.merged.outputs.version }}-Setup.exe`
-            installs; `-Portable.exe` needs nothing.
+            **Desktop (Windows)** — `BetweenUs-${{ needs.merged.outputs.version }}-Setup.exe`.
+            It installs for you alone, so it never asks for an administrator, and
+            it updates itself from then on.
 
             **Android** — take the APK matching your device (`arm64-v8a` unless it is
             old or an emulator), or `universal` if you would rather not choose. The

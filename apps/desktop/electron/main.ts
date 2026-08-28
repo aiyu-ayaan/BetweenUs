@@ -40,13 +40,14 @@ import {
   type ViewBounds,
 } from './youtube-view';
 import { startYouTubeRelay, type Relay } from './youtube-relay';
-import { swapArguments, swapScript, type SwapOptions } from './portable-swap';
 import {
   channelOf,
+  compareVersions,
   downloadAsset,
   findUpdate,
   flavorFrom,
   isChannel,
+  parseVersion,
   type Channel,
   type Flavor,
   type UpdateOffer,
@@ -1513,11 +1514,12 @@ void app.whenReady().then(() => {
 
   watchDisplays();
 
+  // A build downloaded before the last quit is still waiting to be applied.
+  sweepDownloads();
+
   createTray();
   // Auto-start is on by default; the first run is what registers it.
   applyAutoStart(readSettings().launchOnStartup);
-  // The exe a portable update replaced, now that nothing is running it.
-  sweepRetiredPortable();
 
   // Before the window, because the renderer reads the URL out of preload as it
   // starts. A failure is not fatal: the renderer frames the embed directly,
@@ -1540,45 +1542,55 @@ void app.whenReady().then(() => {
 //
 // The renderer drives the UI; everything that touches the network, the disk or
 // the process lives here. See electron/updates.ts for why this is hand-rolled
-// rather than electron-updater, and for the rule that decides which of the two
-// Windows builds a copy is offered.
+// rather than electron-updater.
 
-const updateFlavor = (): Flavor => flavorFrom(process.env, app.isPackaged);
+const updateFlavor = (): Flavor => flavorFrom(app.isPackaged);
 
-/**
- * The exe the user double-clicked, for a portable copy. `process.execPath` is
- * no use here: the portable build unpacks itself to a temp directory and runs
- * from there, so that is the copy, not the file being kept.
- */
-const portableExe = (): string | null => process.env.PORTABLE_EXECUTABLE_FILE ?? null;
-
-/** Where a downloaded build waits. Cleared of last time's on the way past. */
+/** Where a downloaded build waits. */
 function updateDirectory(): string {
   const directory = path.join(app.getPath('userData'), 'updates');
   fs.mkdirSync(directory, { recursive: true });
   return directory;
 }
 
-/**
- * The previous portable exe, left behind by the swap below.
- *
- * Windows will rename a running executable but not delete one, which is what
- * makes the swap possible at all - and what leaves this behind until the next
- * launch, when the file is no longer anybody's process.
- */
-function sweepRetiredPortable(): void {
-  const current = portableExe();
-  if (!current) return;
-  try {
-    fs.rmSync(`${current}.old`, { force: true });
-  } catch {
-    // Still running, still locked, or not ours to delete. It is one stale file
-    // next to the app; trying again next launch is the whole recovery.
-  }
-}
-
 /** The last download, so `update:install` needs no argument from the renderer. */
 let downloadedUpdate: { version: string; file: string } | null = null;
+
+/**
+ * The download that was still waiting when the app was last closed.
+ *
+ * Downloading ninety megabytes and then quitting before pressing the button is
+ * an ordinary thing to do, and until this the next launch forgot it and asked
+ * for the whole thing again. The file name is the version - the release
+ * workflow guarantees that shape - so the directory is the record and nothing
+ * has to be written down beside it.
+ *
+ * Anything that is not an upgrade for what is running now goes: a build that
+ * has since been installed, or one from a channel the user has moved off.
+ */
+function sweepDownloads(): void {
+  const installed = parseVersion(app.getVersion());
+  const directory = updateDirectory();
+  for (const name of fs.readdirSync(directory)) {
+    const file = path.join(directory, name);
+    const label = /^BetweenUs-(.+)-Setup\.exe$/i.exec(name)?.[1];
+    const version = parseVersion(label);
+    const held = downloadedUpdate ? parseVersion(downloadedUpdate.version) : null;
+    // Worth keeping only if it is an upgrade on what is running, and only the
+    // newest of them: the rest are a half-finished download or last month's.
+    if (
+      version &&
+      installed &&
+      compareVersions(version, installed) > 0 &&
+      (!held || compareVersions(version, held) > 0)
+    ) {
+      if (downloadedUpdate) fs.rmSync(downloadedUpdate.file, { force: true });
+      downloadedUpdate = { version: label as string, file };
+    } else {
+      fs.rmSync(file, { force: true });
+    }
+  }
+}
 
 ipcMain.handle('update:info', () => ({
   version: app.getVersion(),
@@ -1609,33 +1621,19 @@ ipcMain.handle('update:download', async (_event, offer: unknown): Promise<string
 });
 
 /**
- * Starts the swap script and leaves, so the file it has to replace stops being
- * open. See electron/portable-swap.ts.
- */
-function startPortableSwap(options: SwapOptions): void {
-  const scriptPath = path.join(app.getPath('temp'), `betweenus-update-${process.pid}.ps1`);
-  fs.writeFileSync(scriptPath, swapScript(), 'utf8');
-  spawn('powershell.exe', swapArguments(scriptPath, options), {
-    detached: true,
-    stdio: 'ignore',
-    windowsHide: true,
-  }).unref();
-}
-
-/**
  * Hands the machine over to the new build and gets out of the way.
  *
- * Two different jobs behind one button:
+ * The setup exe is started the way an updater has to start it - silently, and
+ * told to launch the app when it is done - and this process quits so NSIS has
+ * nothing left to close. Started bare, as it was, it opened its wizard over a
+ * running BetweenUs and waited for somebody to click through it, which is why
+ * "Restart and install" appeared to do nothing at all.
  *
- * - **Installed.** Start the NSIS installer and quit. It closes the running app
- *   itself, replaces the installation and starts it again.
- * - **Portable.** There is no installer, so a helper script does the swap after
- *   this process is gone. Doing it here is what produced `EBUSY: resource busy
- *   or locked, rename ...-Portable.exe`: the portable launcher holds its own
- *   exe open for as long as the app it unpacked is running, so the one process
- *   that cannot replace that file is this one.
+ *   --updated    tells the installer it is replacing an install, not making one
+ *   /S           silent: no wizard, and the directory already chosen is kept
+ *   --force-run  starts BetweenUs again once the files are in place
  *
- * If any of that fails the download is still on the disk and perfectly
+ * If it cannot be started the download is still on the disk and perfectly
  * runnable, so the file is shown in the file manager rather than lost.
  */
 ipcMain.handle('update:install', (): { started: boolean; reason?: string } => {
@@ -1643,13 +1641,10 @@ ipcMain.handle('update:install', (): { started: boolean; reason?: string } => {
   if (!pending) return { started: false, reason: 'Nothing has been downloaded yet.' };
 
   try {
-    if (updateFlavor() === 'portable') {
-      const current = portableExe();
-      if (!current) throw new Error('This portable copy could not find its own exe.');
-      startPortableSwap({ current, incoming: pending.file, processId: process.pid });
-    } else {
-      spawn(pending.file, [], { detached: true, stdio: 'ignore' }).unref();
-    }
+    spawn(pending.file, ['--updated', '/S', '--force-run'], {
+      detached: true,
+      stdio: 'ignore',
+    }).unref();
 
     quitting = true;
     app.quit();

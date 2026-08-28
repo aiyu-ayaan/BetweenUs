@@ -197,13 +197,13 @@ const api = {
 
   /**
    * Updates. `updateInfo` says what this copy is - the version, whether it is
-   * the installed or the portable build, and which channel it watches - so the
+   * a real install or a development run, and which channel it watches - so the
    * UI never has to guess which download it would be offered. See
    * electron/updates.ts.
    */
   updateInfo: (): Promise<{
     version: string;
-    flavor: 'installer' | 'portable' | 'unpacked';
+    flavor: 'installer' | 'unpacked';
     channel: 'stable' | 'beta' | 'alpha';
     /** A build already downloaded and waiting to be applied, if there is one. */
     downloaded: { version: string; file: string } | null;
