@@ -7,7 +7,7 @@
  * `/ws/call` and then has nothing further to do with the call; see
  * `call.gateway.ts` for the other half.
  *
- * Four things here are worth understanding before changing any of it.
+ * Five things here are worth understanding before changing any of it.
  *
  * ## Fixed transceiver slots
  *
@@ -52,10 +52,24 @@
  * and cannot produce the signature for a fingerprint of its own. A signal that
  * does not verify is dropped, and the peer connection is never established.
  *
+ * ## Nothing is given up on quickly
+ *
+ * A link that stops carrying media is not a link that is over. It gets a grace
+ * period, then backed-off ICE restarts under the policy in `call-recovery.ts`,
+ * and if those are spent it is *still* left in the mesh - because nothing here
+ * ever re-adds a link, so removing one is permanent, and a pair that ends up
+ * unrecoverable from this side may be perfectly fine from every other. Who is
+ * in a call is the roster's answer, never a link's guess.
+ *
+ * The signalling socket gets the same treatment. It is not in the media path,
+ * so losing it stops nothing that is already connected; it reconnects quietly
+ * and resumes the seat the gateway held for it, and only a loss that outlasts
+ * `SIGNALLING_DEADLINE_MS` ends the call.
+ *
  * ## Nothing here throws into the UI
  *
- * A peer that fails is one tile, not the call. Failures are reported through
- * `onPeerFailed` and the rest of the mesh carries on.
+ * A peer in trouble is one tile, not the call. Trouble is reported through
+ * `onProblem` and the rest of the mesh carries on.
  */
 import type {
   CallLinkReport,
@@ -79,6 +93,14 @@ import {
 } from './share-quality';
 import type { MicEncoding } from './voice-quality';
 import { toStats, type LinkSample, type LinkStats } from './call-stats';
+import {
+  GRACE_MS,
+  SIGNALLING_DEADLINE_MS,
+  backoffMs,
+  restarts,
+  signallingBackoffMs,
+  spent,
+} from './call-recovery';
 
 /** The Listen Together half of the client protocol, so the store cannot send anything else. */
 export type ListenClientEvent = Extract<ClientCallEvent, { type: `listen.${string}` }>;
@@ -208,6 +230,11 @@ interface MeshOptions extends MeshEvents {
   channelKey: (refresh?: boolean) => Promise<string>;
 }
 
+/** Waits. The recovery loop is a sequence of waits and the WebRTC API is not. */
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
 /**
  * The DTLS fingerprint out of an SDP blob.
  *
@@ -326,6 +353,12 @@ class PeerLink {
   /** Offers sent for a link that never got an answer. See `chase`. */
   private connectAttempts = 0;
   private connectTimer: number | null = null;
+  /** Whether a recovery loop is running, so a flapping link starts only one. */
+  private recovering = false;
+  /** When the media stopped, so the deadline is measured from the fault. */
+  private downSince: number | null = null;
+  /** ICE restarts spent on this link since it last carried media. */
+  private recoveryAttempts = 0;
   private readonly polite: boolean;
   private micEncoding: MicEncoding | null = null;
   private sharePublish: SharePublish | null = null;
@@ -365,7 +398,6 @@ class PeerLink {
       onTrack: (slot: Slot, track: MediaStreamTrack | null) => void;
       onData: (payload: unknown) => void;
       onDataOpen: () => void;
-      onFailed: () => void;
       /** Something went wrong that the person in the call should be told about. */
       onProblem: (message: string) => void;
     },
@@ -381,6 +413,10 @@ class PeerLink {
       // going to work anyway, which is most of them.
       iceTransportPolicy: 'all',
       bundlePolicy: 'max-bundle',
+      // Start gathering before there is anything to gather for, so the first
+      // offer already carries candidates instead of trickling them behind
+      // itself. One is enough with `max-bundle`: there is a single transport.
+      iceCandidatePoolSize: 1,
     });
 
     // The four slots, in order - created by the offering side only. See
@@ -475,17 +511,34 @@ class PeerLink {
       void this.offer();
     };
 
-    this.pc.oniceconnectionstatechange = () => {
-      if (this.pc.iceConnectionState === 'failed') {
-        // One restart, then give up on this peer. A mesh with one dead link is
-        // a call with one silent tile, not a call that ends.
-        this.pc.restartIce();
-      }
-    };
-
+    // Recovery is driven from `connectionState` alone.
+    //
+    // `iceConnectionState` says nearly the same thing a beat earlier and less
+    // reliably - it reaches `failed` on one transport rather than on the
+    // connection - and two callbacks both starting restarts is a link
+    // renegotiating on top of itself. This used to be both: a bare
+    // `restartIce()` from the ICE callback that the polite side could never
+    // act on, and a drop out of the mesh from this one.
     this.pc.onconnectionstatechange = () => {
-      if (this.pc.connectionState === 'connected') this.stopChasing();
-      if (this.pc.connectionState === 'failed' && !this.closed) this.events.onFailed();
+      if (this.closed) return;
+      switch (this.pc.connectionState) {
+        case 'connected':
+          this.stopChasing();
+          this.recovered();
+          return;
+        // Both mean media has stopped. They differ only in how likely it is to
+        // come back unaided, which is what the grace period is for:
+        // `disconnected` climbs out on its own often enough to be worth
+        // waiting on, `failed` never does.
+        case 'disconnected':
+          this.startRecovery(GRACE_MS);
+          return;
+        case 'failed':
+          this.startRecovery(0);
+          return;
+        default:
+          return;
+      }
     };
 
     // An offer that is never answered fires no event at all. See `chase`.
@@ -707,6 +760,101 @@ class PeerLink {
     if (this.connectTimer !== null) window.clearTimeout(this.connectTimer);
     this.connectTimer = null;
     this.connectAttempts = 0;
+  }
+
+  // --- recovery ---
+
+  private connectedNow(): boolean {
+    return this.pc.connectionState === 'connected';
+  }
+
+  /**
+   * Media is flowing again - either it never really stopped, or a restart
+   * worked.
+   *
+   * The counters reset, so a link that drops once an hour on a train gets the
+   * full budget each time rather than spending its way to "lost" over an
+   * afternoon.
+   */
+  private recovered(): void {
+    this.downSince = null;
+    this.recoveryAttempts = 0;
+  }
+
+  /**
+   * Start trying, after `initialDelay`.
+   *
+   * Idempotent: a connection flapping between `disconnected` and `failed` calls
+   * this repeatedly, and each call must not start a second loop racing the
+   * first. `downSince` is set on the first call and not on the later ones, so
+   * the deadline is measured from when the media stopped rather than from the
+   * most recent flap - a link that flaps forever would otherwise never reach
+   * it.
+   */
+  private startRecovery(initialDelay: number): void {
+    if (this.closed || this.recovering) return;
+    this.downSince ??= Date.now();
+    this.recovering = true;
+    void this.recover(initialDelay).finally(() => {
+      this.recovering = false;
+    });
+  }
+
+  private async recover(initialDelay: number): Promise<void> {
+    await sleep(initialDelay);
+    // The grace period is exactly the case where nothing more is needed: ICE
+    // climbed out on its own while we waited.
+    if (this.closed || this.connectedNow()) return;
+
+    while (!this.closed && !this.connectedNow()) {
+      if (spent(this.recoveryAttempts, Date.now() - (this.downSince ?? Date.now()))) {
+        this.giveUp();
+        return;
+      }
+
+      this.recoveryAttempts += 1;
+      await sleep(backoffMs(this.recoveryAttempts));
+      if (this.closed || this.connectedNow()) return;
+
+      // Both halves are needed, and this is the part the old code got wrong.
+      // `restartIce()` only marks the connection as wanting fresh candidates;
+      // the offer is what actually asks for them. On its own it fires
+      // `onnegotiationneeded`, which is exactly what the polite side is
+      // written to ignore - so on that side it did nothing whatsoever.
+      if (restarts(this.polite)) {
+        try {
+          this.pc.restartIce();
+        } catch {
+          // A connection closed underneath us. The loop's own guard catches it.
+        }
+        await this.offer();
+      }
+
+      // Long enough for a restart to have landed, short enough that every
+      // attempt fits inside the deadline. See `call-recovery.check.ts`.
+      await sleep(GRACE_MS);
+    }
+  }
+
+  /**
+   * Out of attempts, or out of time.
+   *
+   * The connection is left open, and the peer stays in the mesh. Who is in a
+   * call is the roster's answer and never this side's guess: a peer whose
+   * laptop really has gone is removed by `peer.left` a moment later, and one
+   * whose link is merely unrecoverable *from here* may be perfectly present to
+   * everybody else.
+   *
+   * Dropping the link instead - which is what this used to do the first time
+   * `connectionState` reached `failed` - was permanent, because nothing in a
+   * mesh ever re-adds a link. One bad moment on one pair therefore needed a
+   * rejoin to clear, which is the whole of the "leave and come back a few
+   * times until it works" this call had become.
+   */
+  private giveUp(): void {
+    this.events.onProblem(
+      `${this.peer.username}: no media is getting through. Still trying to reach them.`,
+    );
   }
 
   private async sendDescription(): Promise<void> {
@@ -1127,6 +1275,8 @@ export class Mesh {
   private key: Promise<string> | null = null;
   /** When the outstanding clock ping went out, or null when none is. */
   private pingSentAt: number | null = null;
+  /** Whether a signalling reconnect is in flight, so a flap starts only one. */
+  private reconnecting = false;
 
   constructor(private readonly options: MeshOptions) {}
 
@@ -1158,6 +1308,21 @@ export class Mesh {
 
   /** Opens the socket and joins. Resolves once the server has answered. */
   async join(): Promise<void> {
+    await this.openSocket();
+    this.startSpeakingPoll();
+  }
+
+  /**
+   * One attempt at a socket and a join. Resolves once the server has answered.
+   *
+   * Used for the first join and for every reconnect, because they are the same
+   * thing: `call-service` issues a peer id per *device* rather than per socket,
+   * so a socket that comes back inside the gateway's grace window resumes the
+   * seat it had - see `resumeHeldSeat` in `call.gateway.ts`. Nobody else in the
+   * call is told anything happened, and every peer connection stays up, because
+   * media does not go through here.
+   */
+  private openSocket(): Promise<void> {
     const { channelId, token } = this.options;
     // The device goes with the token. `call-service` hangs this window's peer
     // id on it, so a signalling reconnect comes back as the same peer rather
@@ -1167,7 +1332,7 @@ export class Mesh {
     );
     this.socket = socket;
 
-    await new Promise<void>((resolve, reject) => {
+    return new Promise<void>((resolve, reject) => {
       const timeout = window.setTimeout(
         () => reject(new Error('The call server did not answer')),
         15_000,
@@ -1201,14 +1366,57 @@ export class Mesh {
 
       socket.onclose = () => {
         window.clearTimeout(timeout);
-        // A call whose signalling is gone cannot admit anyone or recover a
-        // failed peer, so it ends rather than pretending otherwise.
-        if (!this.closed) this.options.onFatal('The connection to the call server was lost');
         reject(new Error('The connection to the call server was lost'));
+        // A socket this mesh has already replaced is a previous attempt
+        // finishing late; its death says nothing about the live one.
+        if (this.socket !== socket) return;
+        if (this.closed) return;
+        // `superseded` sets `closed` before the socket shuts, so reaching here
+        // means the connection was lost rather than given away.
+        void this.reconnect();
       };
     });
+  }
 
-    this.startSpeakingPoll();
+  /**
+   * Gets the signalling back, or ends the call saying so.
+   *
+   * This used to be a straight `onFatal`: the socket dropped and the call was
+   * over, on a laptop that had merely changed wifi. That is the worst possible
+   * reading of a lost signalling socket, because signalling is not in the media
+   * path - every peer connection carries on regardless, and the only thing
+   * actually missing while it is gone is the ability to admit somebody new.
+   *
+   * So it reconnects, quietly, for as long as `SIGNALLING_DEADLINE_MS` allows.
+   * Past that the roster has long since dropped this device, so nobody else can
+   * see it in the call and holding the microphone open is a lie told to its
+   * owner - and then, and only then, it is fatal.
+   */
+  private async reconnect(): Promise<void> {
+    if (this.closed || this.reconnecting) return;
+    this.reconnecting = true;
+    const lostAt = Date.now();
+    let attempt = 0;
+
+    try {
+      while (!this.closed && Date.now() - lostAt < SIGNALLING_DEADLINE_MS) {
+        attempt += 1;
+        await sleep(signallingBackoffMs(attempt));
+        if (this.closed) return;
+        try {
+          await this.openSocket();
+          return;
+        } catch {
+          // Whatever it was, the answer is the same: try again until the
+          // deadline says the seat is gone.
+        }
+      }
+      if (!this.closed) {
+        this.options.onFatal('The connection to the call server was lost');
+      }
+    } finally {
+      this.reconnecting = false;
+    }
   }
 
   private async handle(event: ServerCallEvent): Promise<void> {
@@ -1217,13 +1425,22 @@ export class Mesh {
         this.selfPeerId = event.peerId;
         return;
 
-      case 'joined':
+      case 'joined': {
         // Everyone already here. We arrived last, so we connect outward to all
         // of them; each of them sees a `peer.joined` for us at the same moment
         // and perfect negotiation settles who actually offers.
         for (const peer of event.peers) this.link(peer);
+        // On a reconnect this roster is also the correction: somebody who left
+        // while the socket was down sent a `peer.left` into a socket that was
+        // not there to hear it, and would otherwise stay on screen as a tile
+        // that never comes back. Empty on a first join, so this costs nothing.
+        const present = new Set(event.peers.map((peer) => peer.peerId));
+        for (const peerId of [...this.links.keys()]) {
+          if (!present.has(peerId)) this.drop(peerId);
+        }
         this.announcePeers();
         return;
+      }
 
       case 'peer.joined':
         // Before the link, because the link starts negotiating immediately.
@@ -1340,7 +1557,6 @@ export class Mesh {
         onTrack: (slot, track) => this.options.onTrack(peer.peerId, slot, track),
         onData: (payload) => this.options.onData(peer, payload),
         onDataOpen: () => this.options.onDataOpen?.(peer),
-        onFailed: () => this.drop(peer.peerId),
         onProblem: (message) => this.options.onProblem(message),
       },
     );
