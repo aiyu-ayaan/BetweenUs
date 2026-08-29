@@ -19,6 +19,7 @@ import {
   CropIcon,
   FileIcon,
   ImageIcon,
+  OneTimeIcon,
   PaperclipIcon,
   SendIcon,
   TrashIcon,
@@ -41,6 +42,42 @@ export function isPreviewable(file: File): boolean {
   return isImage(file) || isVideo(file);
 }
 
+/**
+ * The one-time switch.
+ *
+ * A toggle rather than a menu item, and it sits next to what it applies to,
+ * because it changes what pressing send means: this message's files may be
+ * opened once by the person receiving them, and that opening destroys them
+ * everywhere. It is worth being able to see the state of that without opening
+ * anything.
+ */
+export function OneTimeToggle({
+  on,
+  onChange,
+}: {
+  on: boolean;
+  onChange: (next: boolean) => void;
+}): JSX.Element {
+  return (
+    <button
+      type="button"
+      onClick={() => onChange(!on)}
+      aria-pressed={on}
+      aria-label="Send as a one-time message"
+      title={
+        on
+          ? 'One-time: the files disappear once they have been opened'
+          : 'Send as a one-time message'
+      }
+      className={`flex h-8 w-8 min-h-[36px] min-w-[36px] sm:min-h-0 sm:min-w-0 sm:h-8 sm:w-8 shrink-0 cursor-pointer items-center justify-center rounded-md transition-colors duration-200 ${
+        on ? 'bg-accent/15 text-accent' : 'text-slate-400 hover:text-slate-100'
+      }`}
+    >
+      <OneTimeIcon className="h-4.5 w-4.5" />
+    </button>
+  );
+}
+
 export function SendPreview({
   files,
   caption,
@@ -48,6 +85,8 @@ export function SendPreview({
   sending,
   uploading,
   failure,
+  viewOnce,
+  onViewOnce,
   onCaption,
   onRemove,
   onReplace,
@@ -62,6 +101,9 @@ export function SendPreview({
   /** The file being encrypted and uploaded right now, if any. */
   uploading: { name: string; percent: number } | null;
   failure: string | null;
+  /** Whether these files are being sent as a one-time message. */
+  viewOnce: boolean;
+  onViewOnce: (next: boolean) => void;
   onCaption: (text: string) => void;
   onRemove: (index: number) => void;
   /** A picture that came back from the crop screen, in place of the original. */
@@ -196,6 +238,12 @@ export function SendPreview({
           >
             <TrashIcon className="h-5 w-5" />
           </button>
+
+          {/* Here as well as on the composer, and driving the same state. This
+              is the screen where somebody actually looks at the photo they are
+              about to send, so it is the screen where they decide it is one
+              they would rather did not stay anywhere. */}
+          <OneTimeToggle on={viewOnce} onChange={onViewOnce} />
 
           <label htmlFor="send-caption" className="sr-only">
             {placeholder}

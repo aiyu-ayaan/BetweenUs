@@ -311,6 +311,26 @@ export const DownloadIcon = (props: IconProps): JSX.Element => (
   </Base>
 );
 
+/**
+ * A one-time message: the numeral one inside a circle.
+ *
+ * The same mark every other messenger uses for this, which is worth copying
+ * rather than inventing around - it is the only symbol people already read as
+ * "you get one look at this", and a clever alternative would have to be
+ * explained the first time somebody met it.
+ *
+ * The numeral is drawn as strokes rather than set as text, because everything
+ * else here is stroke geometry on a 24-unit grid: a `<text>` node would pick
+ * up the page font and shift with it.
+ */
+export const OneTimeIcon = (props: IconProps): JSX.Element => (
+  <Base {...props}>
+    <circle cx="12" cy="12" r="9" />
+    <path d="M10.5 9.5 12.5 8v8" />
+    <line x1="10.5" y1="16" x2="14.5" y2="16" />
+  </Base>
+);
+
 export const EyeIcon = (props: IconProps): JSX.Element => (
   <Base {...props}>
     <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z" />

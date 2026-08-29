@@ -25,7 +25,7 @@ import { AttachmentList } from './Attachments';
 import { EmojiPicker } from './EmojiPicker';
 import { ChannelMenu } from './ChannelMenu';
 import { MessageMenu } from './MessageMenu';
-import { SendPreview, isPreviewable, isImage } from './SendPreview';
+import { OneTimeToggle, SendPreview, isPreviewable, isImage } from './SendPreview';
 import { EmojiSuggest } from './EmojiSuggest';
 import {
   emojiFor,
@@ -51,6 +51,12 @@ import { nextFollow } from './follow';
 import { anchorReceipts, seenBy } from './receipts';
 import { SeenByDialog, SeenByRow } from './SeenBy';
 import { formatBytes, uploadAttachment } from '../../services/attachments';
+import {
+  canRecordVoice,
+  formatDuration,
+  startVoiceRecording,
+  type VoiceRecording,
+} from '../../services/voice-note';
 import { OVERFLOW_CHARS, overflowFile, replyPreview } from '../../services/message-body';
 import { reactorNames } from '../../services/reactions';
 import {
@@ -68,6 +74,7 @@ import {
   LockIcon,
   MenuIcon,
   MessageIcon,
+  MicIcon,
   PaperclipIcon,
   PinIcon,
   ReplyIcon,
@@ -1506,6 +1513,25 @@ function MessageComposer({
   const [content, setContent] = useState('');
   const [files, setFiles] = useState<File[]>([]);
   const [sending, setSending] = useState(false);
+  /**
+   * The recording in progress, and its counter.
+   *
+   * The recorder is held in a ref rather than in state: it is an object with a
+   * microphone attached, and putting it in state would mean a stale copy in
+   * every closure that has to stop it. The state beside it is only what the
+   * screen draws - whether a recording is happening, and for how long.
+   */
+  const recorder = useRef<VoiceRecording | null>(null);
+  const [recording, setRecording] = useState(false);
+  const [recordedFor, setRecordedFor] = useState(0);
+  /**
+   * Whether what is about to be sent is one-time.
+   *
+   * Kept on the composer rather than per file, because it is a property of the
+   * message: a one-time message with one ordinary photo in it would be a
+   * message whose files disagree about whether they still exist.
+   */
+  const [viewOnce, setViewOnce] = useState(false);
   const [uploading, setUploading] = useState<{ name: string; percent: number } | null>(null);
   const [previewing, setPreviewing] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
@@ -1542,6 +1568,12 @@ function MessageComposer({
    * character in it and no marks to draw, and the message would vanish.
    */
   const marks = highlight(content);
+
+  /**
+   * Whether the send button has anything to do - which is also what decides
+   * whether it is a send button at all. See where it is drawn.
+   */
+  const hasSomethingToSend = content.trim().length > 0 || files.length > 0;
 
   const placeholder =
     channel.type === 'DM'
@@ -1594,15 +1626,28 @@ function MessageComposer({
   // The drop target is the whole conversation panel, which is a component up.
   takeFiles.current = addFiles;
 
-  const submit = async (event?: FormEvent): Promise<void> => {
+  /**
+   * Sends what is in the box - or, when given a recording, sends that instead.
+   *
+   * The recording is passed in rather than pushed into `files` first, because
+   * a voice message is sent by the same gesture that finishes it: there is no
+   * moment in between where somebody could look at the list and change their
+   * mind, and routing it through state would mean sending on the render after
+   * the one that stopped the microphone.
+   */
+  const submit = async (event?: FormEvent, recorded?: File): Promise<void> => {
     event?.preventDefault();
-    const trimmed = content.trim();
-    if ((!trimmed && files.length === 0) || sending) return;
+    const trimmed = recorded ? '' : content.trim();
+    if ((!trimmed && files.length === 0 && !recorded) || sending) return;
 
     // Past the limit the text becomes a file of its own, the way Discord does
     // it: nothing is truncated, and it arrives with a preview.
     const overflowing = trimmed.length > OVERFLOW_CHARS;
-    const outgoing = overflowing ? [...files, overflowFile(trimmed)] : files;
+    const outgoing = recorded
+      ? [recorded]
+      : overflowing
+        ? [...files, overflowFile(trimmed)]
+        : files;
 
     setSending(true);
     setFailure(null);
@@ -1620,11 +1665,22 @@ function MessageComposer({
         );
       }
 
-      await sendMessage(overflowing ? '' : trimmed, attachments, replyTo ?? undefined);
-      setContent('');
+      await sendMessage(
+        overflowing ? '' : trimmed,
+        attachments,
+        replyTo ?? undefined,
+        // A message with no files cannot be one-time: there would be nothing
+        // to open once, and the text is in everybody's history either way.
+        viewOnce && attachments.length > 0,
+      );
+      if (!recorded) setContent('');
       setFiles([]);
       setReplyTo(null);
       setPreviewing(false);
+      // Off again after each message, the way every other messenger does it.
+      // A toggle that stays on is one somebody set for a photo an hour ago and
+      // has long since forgotten about.
+      setViewOnce(false);
     } catch (error) {
       // Keep the text and the files in the box; nothing the user chose is lost.
       setFailure(error instanceof Error ? error.message : 'Message failed to send');
@@ -1633,6 +1689,65 @@ function MessageComposer({
       setSending(false);
     }
   };
+
+  /**
+   * Starts recording, and starts the counter beside it.
+   *
+   * The counter is a timer rather than a value the recorder pushes, because
+   * the recorder has nothing to say between starting and stopping - it is the
+   * screen that wants a number every second, and asking for one is cheaper
+   * than a stream of events nobody else reads.
+   */
+  const beginRecording = async (): Promise<void> => {
+    if (recorder.current || sending) return;
+    setFailure(null);
+    try {
+      const started = await startVoiceRecording();
+      recorder.current = started;
+      setRecording(true);
+      setRecordedFor(0);
+    } catch {
+      // The one failure here somebody can act on, so it is said plainly rather
+      // than swallowed: every other reason a recording fails is the runtime's.
+      setFailure('BetweenUs could not use the microphone. Check its permission and try again.');
+    }
+  };
+
+  /** Finishes the recording and sends it. Too short, and it is quietly dropped. */
+  const finishRecording = async (): Promise<void> => {
+    const current = recorder.current;
+    if (!current) return;
+    recorder.current = null;
+    setRecording(false);
+
+    const file = await current.stop();
+    // Under a second is a tap that was meant to be a hold. Nothing is said
+    // about it: an error over a gesture nobody meant to make is noise.
+    if (!file) return;
+    await submit(undefined, file);
+  };
+
+  /** Throws the recording away and releases the microphone. */
+  const cancelRecording = (): void => {
+    recorder.current?.cancel();
+    recorder.current = null;
+    setRecording(false);
+    setViewOnce(false);
+  };
+
+  // The counter, and nothing else: one interval for as long as a recording is
+  // happening, and none at all the rest of the time.
+  useEffect(() => {
+    if (!recording) return;
+    const ticker = window.setInterval(() => {
+      setRecordedFor(recorder.current?.elapsed() ?? 0);
+    }, 250);
+    return () => window.clearInterval(ticker);
+  }, [recording]);
+
+  // A microphone must not outlive the screen that opened it. Leaving a channel
+  // mid-recording is exactly how the recording light gets left on.
+  useEffect(() => () => recorder.current?.cancel(), []);
 
   const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>): void => {
     if (event.key === 'Enter') {
@@ -1711,6 +1826,17 @@ function MessageComposer({
         )}
 
         {files.length > 0 && (
+          <div className="flex items-center gap-2 border-b border-edge px-3 sm:px-4 pt-2.5">
+            <OneTimeToggle on={viewOnce} onChange={setViewOnce} />
+            <span className="text-xs text-slate-500">
+              {viewOnce
+                ? 'One-time: it disappears once it has been opened'
+                : 'Send as a one-time message'}
+            </span>
+          </div>
+        )}
+
+        {files.length > 0 && (
           <ul className="flex flex-wrap gap-2 border-b border-edge px-3 sm:px-4 py-2.5">
             {files.map((file, index) => (
               <li
@@ -1749,6 +1875,46 @@ function MessageComposer({
           </ul>
         )}
 
+        {/* Recording. The whole row is replaced rather than dressed up: while a
+            microphone is open there is nothing else this bar can usefully do,
+            and a text box beside a running recorder invites typing into a
+            message that is about to be sent as audio. */}
+        {recording ? (
+          <div className="flex items-center gap-2 sm:gap-3 px-2.5 sm:px-4 py-2 sm:py-2.5">
+            <button
+              type="button"
+              onClick={cancelRecording}
+              aria-label="Discard this recording"
+              title="Discard"
+              className="flex h-9 w-9 min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 sm:h-auto sm:w-auto cursor-pointer items-center justify-center rounded-md p-1.5 text-slate-300 transition-colors duration-200 hover:text-danger"
+            >
+              <TrashIcon className="h-5 w-5" />
+            </button>
+
+            <span
+              aria-hidden="true"
+              className="h-2.5 w-2.5 shrink-0 animate-pulse rounded-full bg-danger"
+            />
+            <span className="text-sm tabular-nums text-slate-200" aria-live="off">
+              {formatDuration(recordedFor)}
+            </span>
+            <span className="min-w-0 flex-1 truncate text-xs text-slate-500">
+              Recording — release to send, or discard
+            </span>
+
+            <OneTimeToggle on={viewOnce} onChange={setViewOnce} />
+
+            <button
+              type="button"
+              onClick={() => void finishRecording()}
+              aria-label="Send this recording"
+              title="Send"
+              className="flex h-9 w-9 min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 sm:h-auto sm:w-auto cursor-pointer items-center justify-center rounded-md p-1.5 text-accent transition-colors duration-200 hover:text-accent"
+            >
+              <SendIcon className="h-5 w-5" />
+            </button>
+          </div>
+        ) : (
         <div className="flex items-end gap-1 sm:gap-2 px-2.5 sm:px-4 py-2 sm:py-2.5">
           <input
             ref={picker}
@@ -1835,15 +2001,35 @@ function MessageComposer({
               }`}
             />
           </div>
-          <button
-            type="submit"
-            disabled={sending || (content.trim().length === 0 && files.length === 0)}
-            aria-label="Send message"
-            className="flex h-9 w-9 min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 sm:h-auto sm:w-auto cursor-pointer items-center justify-center rounded-md p-1.5 text-slate-300 transition-colors duration-200 hover:text-accent disabled:cursor-not-allowed disabled:text-slate-600"
-          >
-            <SendIcon className="h-5 w-5" />
-          </button>
+          {/* One button, two jobs, chosen by whether there is anything to send.
+              An empty box has nothing to send and every messenger puts a
+              microphone there instead; the moment a character lands it becomes
+              send, because that is now the obvious thing to press. Two buttons
+              side by side would mean a permanently disabled one next to the
+              one that is always wanted. */}
+          {hasSomethingToSend || !canRecordVoice() ? (
+            <button
+              type="submit"
+              disabled={sending || !hasSomethingToSend}
+              aria-label="Send message"
+              className="flex h-9 w-9 min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 sm:h-auto sm:w-auto cursor-pointer items-center justify-center rounded-md p-1.5 text-slate-300 transition-colors duration-200 hover:text-accent disabled:cursor-not-allowed disabled:text-slate-600"
+            >
+              <SendIcon className="h-5 w-5" />
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => void beginRecording()}
+              disabled={sending}
+              aria-label="Record a voice message"
+              title="Record a voice message"
+              className="flex h-9 w-9 min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 sm:h-auto sm:w-auto cursor-pointer items-center justify-center rounded-md p-1.5 text-slate-300 transition-colors duration-200 hover:text-accent disabled:cursor-not-allowed disabled:text-slate-600"
+            >
+              <MicIcon className="h-5 w-5" />
+            </button>
+          )}
         </div>
+        )}
       </div>
 
       {content.trim().length > OVERFLOW_CHARS && (
@@ -1882,6 +2068,8 @@ function MessageComposer({
           sending={sending}
           uploading={uploading}
           failure={failure}
+          viewOnce={viewOnce}
+          onViewOnce={setViewOnce}
           onCaption={setContent}
           onAdd={() => picker.current?.click()}
           onRemove={(index) => {
