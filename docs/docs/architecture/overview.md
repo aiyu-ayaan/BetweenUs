@@ -14,60 +14,60 @@ The runtime architecture below highlights the **core system components (8–12)*
 
 ```mermaid
 flowchart TD
-    %% TIER 1: CLIENTS
-    subgraph TB_CLIENTS ["Trust Boundary 1: Client Tier (Untrusted Origin)"]
-        Client["<b>Multi-Platform Client</b><br/>Desktop (Electron) · Web (Vite) · Android (Compose)<br/><i>Local AES-256-GCM / ECDH P-256 Keys & P2P Media</i>"]
+    %% TIER 1: CLIENT SENDER
+    subgraph T1 ["Trust Boundary 1: Client Origin (Untrusted)"]
+        direction TB
+        ClientSender["<b>Sender Client (Desktop / Web / Android)</b><br/><i>Encrypts Payload locally with AES-256-GCM · Direct P2P Media</i>"]
     end
 
-    %% TIER 2: EDGE INGRESS
-    subgraph TB_EDGE ["Trust Boundary 2: Ingress DMZ"]
-        direction LR
-        CFTunnel["<b>Cloudflare Tunnel</b><br/><i>Outbound TLS / Zero Open Ports</i>"]
-        Gateway["<b>Nginx API Gateway (:8080)</b><br/><i>Rate Limiting · WS Upgrade · Reverse Proxy</i>"]
+    %% TIER 2: INGRESS DMZ
+    subgraph T2 ["Trust Boundary 2: Ingress & Edge DMZ"]
+        direction TB
+        CFTunnel["<b>Cloudflare Tunnel</b> (cloudflared)<br/><i>Zero Inbound Open Ports · Outbound TLS</i>"]
+        Gateway["<b>Nginx API Gateway (:8080)</b><br/><i>Rate Limiting · Route Dispatch · WebSocket Upgrade</i>"]
         CFTunnel -->|"Forward HTTP/WS"| Gateway
     end
 
     %% TIER 3: SERVICES
-    subgraph TB_SERVICES ["Trust Boundary 3: Internal Microservices Mesh (Private Docker Network)"]
+    subgraph T3 ["Trust Boundary 3: Internal Application Microservices Mesh"]
         direction TB
-        subgraph CoreGroup ["Messaging & Identity"]
-            direction LR
-            ChatSvc["<b>Chat Service (:3004)</b><br/><i>E2EE Routing · Key Dir · Uploads</i>"]
-            AuthSvc["<b>Auth Service (:3001)</b><br/><i>Argon2id · JWT · OAuth</i>"]
-            ServerSvc["<b>Server Service (:3003)</b><br/><i>Guilds · RBAC Resolver</i>"]
-        end
-        subgraph RealtimeGroup ["Realtime Signaling & Coordination"]
-            direction LR
-            PresenceSvc["<b>Presence (:3005)</b><br/><i>Online / Idle / Typing</i>"]
-            CallSvc["<b>Call Service (:3007)</b><br/><i>WebRTC Signaling · Rosters</i>"]
-            RemoteGW["<b>Remote Gateway (:3008)</b><br/><i>RDP Signaling · Audit Log</i>"]
-            NotifSvc["<b>Notification (:3006)</b><br/><i>Mutes · FCM Dispatch</i>"]
-        end
+        ChatSvc["<b>Chat Service (:3004)</b><br/><i>E2EE Routing · Key Directory · Attachments</i>"]
+        AuthSvc["<b>Auth Service (:3001)</b><br/><i>Argon2id Hashing · JWT Rotation · OAuth</i>"]
+        ServerSvc["<b>Server Service (:3003)</b><br/><i>Server Guilds · Channel Hierarchy · RBAC Resolver</i>"]
+        PresenceSvc["<b>Presence Service (:3005)</b><br/><i>Online / Idle / Typing State</i>"]
+        CallSvc["<b>Call Service (:3007)</b><br/><i>WebRTC Signaling & Live Room Rosters</i>"]
+        RemoteGW["<b>Remote Gateway (:3008)</b><br/><i>Remote Desktop Signaling & Input Relay</i>"]
+        NotifSvc["<b>Notification Service (:3006)</b><br/><i>User Preferences · FCM Push Dispatch</i>"]
     end
 
-    %% TIER 4: PERSISTENCE & CACHE
-    subgraph TB_DATA ["Trust Boundary 4: Data & Persistence Tier"]
+    %% TIER 4: PERSISTENCE & DATA
+    subgraph T4 ["Trust Boundary 4: Data & Persistence Tier"]
         direction LR
-        PG[("<b>PostgreSQL (:5432)</b><br/><i>Relational Schema · Opaque Envelopes</i>")]
-        Redis[("<b>Redis (:6379)</b><br/><i>Pub/Sub Bus · Ephemeral Presence</i>")]
-        ObjStore[("<b>Object Storage</b><br/><i>Encrypted Attachments</i>")]
+        PG[("<b>PostgreSQL (:5432)</b><br/><i>Prisma ORM · Opaque Envelopes · Relational Data</i>")]
+        Redis[("<b>Redis (:6379)</b><br/><i>Pub/Sub Realtime Bus · Ephemeral Presence</i>")]
+        ObjStore[("<b>Object Storage</b><br/><i>AES-256 Encrypted Attachments</i>")]
     end
 
-    %% TIER 5: EXTERNAL SERVICES
-    subgraph TB_EXT ["Trust Boundary 5: External Dependencies"]
+    %% TIER 5: CLIENT RECIPIENT
+    subgraph T5 ["Trust Boundary 5: Recipient Delivery & Client Decryption"]
+        direction TB
+        ClientRecipient["<b>Recipient Client (Desktop / Web / Android)</b><br/><i>Decrypts Envelope in Local Device Memory · Displays Notification</i>"]
+    end
+
+    %% TIER 6: EXTERNAL SERVICES
+    subgraph T6 ["Trust Boundary 6: External Third-Party Dependencies"]
         direction LR
         ExtOAuth["<b>OAuth Providers</b><br/><i>(Google / GitHub)</i>"]
         ExtFCM["<b>Firebase (FCM)</b><br/><i>(Data-Only Push)</i>"]
-        ExtTURN["<b>STUN / TURN</b><br/><i>(NAT Traversal)</i>"]
+        ExtTURN["<b>STUN / TURN Relays</b><br/><i>(NAT Traversal / ICE)</i>"]
     end
 
     %% PRIMARY RUNTIME PATH: E2EE MESSAGE INGESTION & REALTIME FANOUT
-    Client ==>|"1. Sealed Envelope (HTTPS/WSS)"| CFTunnel
-    Gateway ==>|"2. Route Request"| ChatSvc
-    ChatSvc ==>|"3. Store Ciphertext"| PG
-    ChatSvc ==>|"4. Publish Event"| Redis
-    Redis ==>|"5. Pub/Sub Fanout"| Gateway
-    Gateway ==>|"6. Push to Recipient"| Client
+    ClientSender ==>|"1. Sealed Envelope (HTTPS/WSS)"| CFTunnel
+    Gateway ==>|"2. Route /api/v1/chat & /ws/chat"| ChatSvc
+    ChatSvc ==>|"3. Store Ciphertext Envelope"| PG
+    ChatSvc ==>|"4. Publish message.created"| Redis
+    Redis ==>|"5. Realtime Fanout (/ws/chat)"| ClientRecipient
 
     %% SECONDARY & ASYNC INTEGRATIONS
     ChatSvc -.-> ObjStore
@@ -77,13 +77,15 @@ flowchart TD
     Gateway -.-> CallSvc
     Gateway -.-> RemoteGW
 
-    Redis -.->|"message.created"| NotifSvc
-    NotifSvc -.->|"Data Push"| ExtFCM
+    Redis -.->|"Event Stream"| NotifSvc
+    NotifSvc -.->|"Dispatch Push"| ExtFCM
+    ExtFCM -.->|"Background Wakeup"| ClientRecipient
+
     AuthSvc -.-> ExtOAuth
     CallSvc -.-> ExtTURN
 
     %% DIRECT P2P MEDIA (BYPASSES BACKEND)
-    Client <-.->|"Direct WebRTC DTLS-SRTP Mesh (Zero Backend Media)"| Client
+    ClientSender <-.->|"Direct WebRTC DTLS-SRTP Mesh (Zero Backend Media)"| ClientRecipient
 
     %% Styling
     classDef primary fill:#1e40af,stroke:#60a5fa,stroke-width:2px,color:#ffffff;
@@ -91,7 +93,7 @@ flowchart TD
     classDef data fill:#1e293b,stroke:#64748b,stroke-width:1px,color:#f1f5f9;
     classDef external fill:#27272a,stroke:#71717a,stroke-width:1px,color:#f4f4f5;
 
-    class Client,CFTunnel,Gateway,ChatSvc,PG,Redis primary;
+    class ClientSender,CFTunnel,Gateway,ChatSvc,PG,Redis,ClientRecipient primary;
     class AuthSvc,ServerSvc,PresenceSvc,CallSvc,RemoteGW,NotifSvc service;
     class ObjStore data;
     class ExtOAuth,ExtFCM,ExtTURN external;
