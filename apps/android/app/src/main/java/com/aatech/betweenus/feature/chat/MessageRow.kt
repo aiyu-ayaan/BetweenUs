@@ -183,7 +183,10 @@ fun MessageRow(
         previous.message.author.id == message.author.id &&
         !previous.message.deleted &&
         !message.deleted &&
-        withinFiveMinutes(previous.message.createdAt, message.createdAt)
+        withinFiveMinutes(previous.message.createdAt, message.createdAt) &&
+        // A day boundary always breaks the run: a divider sits between the two
+        // bubbles, and a run reading across it visibly is not one.
+        sameDay(previous.message.createdAt, message.createdAt)
 
     /**
      * Swipe-to-reply.

@@ -467,6 +467,13 @@ fun ChatScreen(
                 items(messages, key = { it.id }) { readable ->
                     val index = messages.indexOf(readable)
                     val previous = messages.getOrNull(index - 1)
+                    // The bubbles only carry a clock time, so the first message
+                    // of each day carries the date for all of them.
+                    if (previous == null ||
+                        !sameDay(previous.message.createdAt, readable.message.createdAt)
+                    ) {
+                        DayDivider(readable.message.createdAt)
+                    }
                     MessageRow(
                         readable = readable,
                         previous = previous,
