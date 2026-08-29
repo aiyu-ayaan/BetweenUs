@@ -109,6 +109,36 @@ downgrading to anonymous, and caps its frame size — 64 KB for chat/presence,
 256 KB for call/remote (`ws`'s 100 MB default would buffer a full frame in
 the service's heap before any gateway code ran).
 
+## Clocks
+
+**No expiry is ever decided on a device clock.** A device clock belongs to
+whoever holds the device — it can be wound forward or back in Settings — so
+anything with a deadline is compared against a clock that person does not own:
+refresh tokens and password resets against the auth service's, remote-access
+grants against the database's (`resolveRemoteAccess`), invite links against the
+server service's (`inviteUsable`), upload tickets against the chat service's.
+Any expiry added later — a one-time message, a disappearing conversation —
+belongs in that same place. Winding a phone forward must not change what the
+server hands over, and re-reading a message the server has already destroyed is
+not something a client-side countdown can prevent.
+
+Clients still need to *show* the time, and for that they carry the server's
+clock rather than their own. Every HTTP response already includes a `Date`
+header, so each reply is one free NTP-style sample — the server stamped it
+somewhere inside the round trip, so the midpoint is the estimate and the
+least-delayed sample wins — and the offset that falls out drives every label
+that says when something happened: day dividers, read receipts, an invite's
+"Expired". `services/server-clock.ts` on desktop and web, `ServerClock.kt` on
+Android, the same cases and a test on both sides. Past five minutes of skew a
+strip at the top of the app says the device's clock is wrong and roughly how
+far, because a chat that files yesterday under "Today" reads as broken software
+rather than as a wrong clock.
+
+No timezone is sent anywhere, and none is needed: timestamps are UTC on the
+wire (`toISOString()`), no client mints one, and each client renders in its own
+zone. A reader's timezone is not something the server has to know, so it is not
+something it collects.
+
 ## Errors and logs
 
 One error shape everywhere: `{ error: { code, message, requestId } }`. No

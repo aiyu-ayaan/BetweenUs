@@ -107,6 +107,12 @@ format** switch, and a chat showing `14:32` to somebody whose phone says
 the locale's own short-time pattern, so the separator and the order stay the
 locale's. The desktop and web get the same answer from `Intl` for free.
 
+"Today" is the *server's* today, not the phone's. `ServerClock` learns the
+offset from the `Date` header every HTTP reply already carries, and a phone more
+than five minutes out gets a banner saying so. It is a display rule, not a
+security one: every expiry in the product is decided on the server, and a phone
+clock cannot move any of them — see [Security](/security/overview#clocks).
+
 Timezones need no handling beyond that, and that is deliberate: every timestamp
 on the wire is UTC (`toISOString()` on the services' side, `createdAt` never
 minted by a client), and every client reads it in the reader's own zone. A
