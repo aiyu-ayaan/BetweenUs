@@ -180,11 +180,42 @@ export function onIceProblem(reporter: Reporter): void {
   report = reporter;
 }
 
+/**
+ * Whether the "there is no relay here" warning has been said.
+ *
+ * Once per process, not once per call: it is a fact about the deployment, and
+ * repeating it on every join would bury the log it is trying to be found in.
+ */
+let warnedAboutNoRelay = false;
+
 /** Relays for one call, or an empty list when this deployment configures none. */
 async function turnServers(): Promise<IceServerConfig[]> {
   const keyId = env('CLOUDFLARE_TURN_KEY_ID');
   const apiToken = env('CLOUDFLARE_TURN_KEY_API_TOKEN');
-  if (!keyId || !apiToken) return [];
+  if (!keyId || !apiToken) {
+    // Said out loud, because the failure it causes does not name itself. With
+    // no relay, a pair of peers who cannot form a direct path - two symmetric
+    // NATs, two mobile carriers, one office firewall that drops UDP - get a
+    // call that rings, joins, shows both people, and then never carries a
+    // packet. That is indistinguishable from a bug in the client, and it is
+    // where every "it works if we rejoin a few times" report comes from: a
+    // rejoin re-rolls the ports, and occasionally the roll wins.
+    //
+    // The deployment being behind a Cloudflare Tunnel is not a reason to go
+    // without one. A relay is not this server: both peers reach it *outbound*,
+    // exactly as they reach STUN, so it opens no port here and never touches
+    // the tunnel. See DEPLOYMENT.md.
+    if (!warnedAboutNoRelay) {
+      warnedAboutNoRelay = true;
+      report(
+        'No TURN relay is configured (CLOUDFLARE_TURN_KEY_ID / CLOUDFLARE_TURN_KEY_API_TOKEN), ' +
+          'so calls between two networks that cannot form a direct path will connect and then ' +
+          'carry no media. See DEPLOYMENT.md.',
+        null,
+      );
+    }
+    return [];
+  }
 
   const now = Date.now();
   if (cached && cached.expiresAt > now) return cached.servers;
@@ -224,4 +255,5 @@ export async function iceServers(): Promise<IceServerConfig[]> {
 export function resetTurnCache(): void {
   cached = null;
   inFlight = null;
+  warnedAboutNoRelay = false;
 }

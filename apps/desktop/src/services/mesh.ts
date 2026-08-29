@@ -230,6 +230,32 @@ interface MeshOptions extends MeshEvents {
   channelKey: (refresh?: boolean) => Promise<string>;
 }
 
+/**
+ * Whether this deployment gave the client a relay to fall back on.
+ *
+ * Worth asking because the failure it explains does not name itself. Without a
+ * relay, a pair of peers whose networks cannot form a direct path - two
+ * symmetric NATs, two mobile carriers, an office firewall that drops UDP - join
+ * the call, see each other, and then carry nothing, which looks from the inside
+ * exactly like a bug in this file. It is the reason a rejoin sometimes helps:
+ * new ports, and occasionally the roll wins.
+ */
+export function hasRelay(iceServers: IceServer[]): boolean {
+  return iceServers.some((server) =>
+    server.urls.some((url) => url.startsWith('turn:') || url.startsWith('turns:')),
+  );
+}
+
+/**
+ * What a spent link says. Matched on, so the mesh can tell this failure - the
+ * one a missing relay causes - from every other thing `onProblem` carries.
+ */
+const NO_RELAY_TRIGGER = 'no media is getting through. Still trying to reach them.';
+
+/** What to add to "this link is not working" when the deployment explains it. */
+const NO_RELAY_HINT =
+  ' This deployment has no TURN relay configured, which is what connects two networks that cannot reach each other directly.';
+
 /** Waits. The recovery loop is a sequence of waits and the WebRTC API is not. */
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
@@ -852,9 +878,7 @@ class PeerLink {
    * times until it works" this call had become.
    */
   private giveUp(): void {
-    this.events.onProblem(
-      `${this.peer.username}: no media is getting through. Still trying to reach them.`,
-    );
+    this.events.onProblem(`${this.peer.username}: ${NO_RELAY_TRIGGER}`);
   }
 
   private async sendDescription(): Promise<void> {
@@ -1557,7 +1581,15 @@ export class Mesh {
         onTrack: (slot, track) => this.options.onTrack(peer.peerId, slot, track),
         onData: (payload) => this.options.onData(peer, payload),
         onDataOpen: () => this.options.onDataOpen?.(peer),
-        onProblem: (message) => this.options.onProblem(message),
+        // The hint is added here rather than at the point of failure: it is a
+        // property of the deployment, the same for every link, and a link has
+        // no reason to know about the list it was configured from.
+        onProblem: (message) =>
+          this.options.onProblem(
+            message.endsWith(NO_RELAY_TRIGGER) && !hasRelay(this.options.iceServers)
+              ? message + NO_RELAY_HINT
+              : message,
+          ),
       },
     );
 

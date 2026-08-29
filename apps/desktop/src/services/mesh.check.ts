@@ -25,6 +25,7 @@ import assert from 'node:assert/strict';
 import { webcrypto } from 'node:crypto';
 import {
   fingerprintOf,
+  hasRelay,
   patchOpus,
   signFingerprint,
   verifyFingerprint,
@@ -158,6 +159,39 @@ async function aRotatedChannelKeyIsPickedUpOnce(): Promise<void> {
   assert.equal(reads, 2, 'and it never re-reads more than once');
 }
 
+/**
+ * A missing relay has to be recognisable from the ICE list alone.
+ *
+ * This is what turns "their tile never loaded" into an answer. With no relay a
+ * call joins, shows everybody and then carries nothing, which is
+ * indistinguishable from a client bug - so the client says which it is, and it
+ * can only do that if this predicate is right about what a relay looks like.
+ */
+function aRelayIsRecognisedWhereverItCameFrom(): void {
+  assert.equal(hasRelay([]), false, 'no servers at all is no relay');
+  assert.equal(
+    hasRelay([{ urls: ['stun:stun.l.google.com:19302', 'stun:stun.cloudflare.com:3478'] }]),
+    false,
+    'STUN is address discovery, not a relay - this is the misconfiguration being caught',
+  );
+  assert.equal(
+    hasRelay([{ urls: ['turn:turn.cloudflare.com:3478'], username: 'u', credential: 'c' }]),
+    true,
+  );
+  // The TLS form is the one that gets through a network which allows nothing
+  // but HTTPS, so failing to count it would report "no relay" on the very
+  // deployment that needs one most.
+  assert.equal(hasRelay([{ urls: ['turns:turn.cloudflare.com:5349?transport=tcp'] }]), true);
+  // Cloudflare answers with one entry carrying several URLs, STUN included.
+  assert.equal(
+    hasRelay([{ urls: ['stun:stun.cloudflare.com:3478', 'turns:turn.cloudflare.com:5349'] }]),
+    true,
+    'a relay listed beside STUN in one entry is still a relay',
+  );
+  // Not a substring match: a hostname that merely contains "turn" is not one.
+  assert.equal(hasRelay([{ urls: ['stun:saturn.example.com:3478'] }]), false);
+}
+
 async function main(): Promise<void> {
   await theFingerprintIsFoundAndSigned();
   await aSubstitutedFingerprintIsRefused();
@@ -167,6 +201,7 @@ async function main(): Promise<void> {
   anSdpWithNoOpusIsLeftAlone();
   politenessIsAntisymmetric();
   await aRotatedChannelKeyIsPickedUpOnce();
+  aRelayIsRecognisedWhereverItCameFrom();
   console.log('mesh self-check passed');
 }
 

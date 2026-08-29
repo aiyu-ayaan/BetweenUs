@@ -14,7 +14,7 @@
  * Run with: pnpm --filter @betweenus/config check
  */
 import assert from 'node:assert/strict';
-import { iceServers, parseIceServers, resetTurnCache, stunServers } from './ice';
+import { iceServers, onIceProblem, parseIceServers, resetTurnCache, stunServers } from './ice';
 
 function stunIsAlwaysThere(): void {
   delete process.env.STUN_URLS;
@@ -111,6 +111,41 @@ async function unconfiguredAsksNobodyAndStillWorks(): Promise<void> {
   }
 }
 
+/**
+ * An unconfigured relay says so, once.
+ *
+ * The whole reason this warning exists: with no relay, a call between two
+ * networks that cannot reach each other directly joins, shows both people and
+ * then carries nothing. From the outside that is indistinguishable from a
+ * broken client, and an operator with no line in their log has nothing to go
+ * on. Once per process rather than once per join, so it is findable rather
+ * than buried under a thousand copies of itself.
+ */
+async function aMissingRelayIsSaidOutLoudExactlyOnce(): Promise<void> {
+  resetTurnCache();
+  delete process.env.CLOUDFLARE_TURN_KEY_ID;
+  delete process.env.CLOUDFLARE_TURN_KEY_API_TOKEN;
+
+  const said: string[] = [];
+  onIceProblem((message) => said.push(message));
+
+  try {
+    await iceServers();
+    assert.equal(said.length, 1, 'a deployment with no relay is told so');
+    assert.match(
+      said[0] ?? '',
+      /CLOUDFLARE_TURN_KEY_ID/,
+      'and told which setting would fix it, not merely that something is wrong',
+    );
+
+    await iceServers();
+    await iceServers();
+    assert.equal(said.length, 1, 'and not once per call, which would bury it');
+  } finally {
+    onIceProblem(() => undefined);
+  }
+}
+
 /** A relay that cannot be minted must not take the calls that did work without it. */
 async function aFailedMintIsNotAFailedCall(): Promise<void> {
   resetTurnCache();
@@ -143,6 +178,7 @@ async function main(): Promise<void> {
   theOlderSingleObjectShape();
   nothingUsableIsAnEmptyList();
   await unconfiguredAsksNobodyAndStillWorks();
+  await aMissingRelayIsSaidOutLoudExactlyOnce();
   await aFailedMintIsNotAFailedCall();
   console.log('ice self-check passed');
 }
