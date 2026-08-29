@@ -112,14 +112,14 @@ async function unconfiguredAsksNobodyAndStillWorks(): Promise<void> {
 }
 
 /**
- * An unconfigured relay says so, once.
+ * Running without a relay is recorded, once.
  *
- * The whole reason this warning exists: with no relay, a call between two
- * networks that cannot reach each other directly joins, shows both people and
- * then carries nothing. From the outside that is indistinguishable from a
- * broken client, and an operator with no line in their log has nothing to go
- * on. Once per process rather than once per join, so it is findable rather
- * than buried under a thousand copies of itself.
+ * The whole reason this line exists: with no relay, a call between two networks
+ * that cannot reach each other directly joins, shows both people and then
+ * carries nothing. From the outside that is indistinguishable from a broken
+ * client, and an operator with no line in their log has nothing to go on. Once
+ * per process rather than once per join, so it is findable rather than buried
+ * under a thousand copies of itself.
  */
 async function aMissingRelayIsSaidOutLoudExactlyOnce(): Promise<void> {
   resetTurnCache();
@@ -134,8 +134,8 @@ async function aMissingRelayIsSaidOutLoudExactlyOnce(): Promise<void> {
     assert.equal(said.length, 1, 'a deployment with no relay is told so');
     assert.match(
       said[0] ?? '',
-      /CLOUDFLARE_TURN_KEY_ID/,
-      'and told which setting would fix it, not merely that something is wrong',
+      /not an error/,
+      'and told it is the default, not a misconfiguration to panic about',
     );
 
     await iceServers();

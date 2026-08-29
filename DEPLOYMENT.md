@@ -281,27 +281,18 @@ on the same network and fails between two particular networks, that is this,
 and it is one environment variable and a `docker compose up -d call-service`
 away.
 
-You will also be told. With no key set, call-service logs this once at the
-first call of its life:
+**Staying STUN-only is a supported choice.** call-service records it once at
+the first call of its life - `Running STUN-only: ...`, logged as a fact, not
+an error. Clients do not simply fail those calls either: a link that will not
+come up is retried with backed-off ICE restarts and then rebuilt from scratch
+with fresh ports up to three times, because most failures that look like "no
+path" are a lost candidate race rather than a real absence of one. That
+retrying is what used to be done by hand, by everybody leaving the call and
+rejoining until it worked.
 
-```
-No TURN relay is configured (CLOUDFLARE_TURN_KEY_ID / CLOUDFLARE_TURN_KEY_API_TOKEN), ...
-```
-
-and a client whose link gives up says the same thing on screen. Both exist
-because the failure is otherwise unreadable: the call rings, joins, shows
-everybody, and then carries no media, which looks exactly like a broken
-client. It is also why such a call *sometimes* works if everyone leaves and
-rejoins - a rejoin re-rolls the ports and occasionally the roll wins. If that
-is the shape of what you are seeing, this section is the fix, not the client.
-
-**Being behind a Cloudflare Tunnel is not a reason to skip it.** A relay is
-not a media server and it is not this deployment - both peers reach it
-*outbound*, exactly as they reach STUN, so it needs no port forwarded, no
-public IP, and never crosses the tunnel. Cloudflare's TURN also answers on
-`turns:` over TLS, which is what gets through a network that allows nothing
-but HTTPS. None of the "no media server, no media through the tunnel" rules
-are bent by configuring one.
+What no amount of retrying fixes is a pair with genuinely no direct path -
+two symmetric NATs, or two mobile carriers. Those are the accepted ceiling of
+a relay-less deployment, and a TURN relay is the only thing that changes it.
 
 > [!TIP]
 > **Zero Media Server / No LiveKit Infrastructure:**

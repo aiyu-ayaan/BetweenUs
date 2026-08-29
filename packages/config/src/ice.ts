@@ -193,24 +193,21 @@ async function turnServers(): Promise<IceServerConfig[]> {
   const keyId = env('CLOUDFLARE_TURN_KEY_ID');
   const apiToken = env('CLOUDFLARE_TURN_KEY_API_TOKEN');
   if (!keyId || !apiToken) {
-    // Said out loud, because the failure it causes does not name itself. With
-    // no relay, a pair of peers who cannot form a direct path - two symmetric
-    // NATs, two mobile carriers, one office firewall that drops UDP - get a
-    // call that rings, joins, shows both people, and then never carries a
-    // packet. That is indistinguishable from a bug in the client, and it is
-    // where every "it works if we rejoin a few times" report comes from: a
-    // rejoin re-rolls the ports, and occasionally the roll wins.
-    //
-    // The deployment being behind a Cloudflare Tunnel is not a reason to go
-    // without one. A relay is not this server: both peers reach it *outbound*,
-    // exactly as they reach STUN, so it opens no port here and never touches
-    // the tunnel. See DEPLOYMENT.md.
+    // Recorded once, because the limit it describes is invisible from
+    // everywhere else. Running without a relay is a legitimate choice and the
+    // default one - but it means a pair of peers who cannot form a direct path
+    // (two symmetric NATs, two mobile carriers, an office firewall that drops
+    // UDP) get a call that rings, joins, shows both people and then never
+    // carries a packet, which reads as a broken client rather than as a
+    // deployment that has no relay. Clients retry such a link from scratch
+    // several times before giving up, which is why one occasionally comes good
+    // on its own; the ones that do not are this.
     if (!warnedAboutNoRelay) {
       warnedAboutNoRelay = true;
       report(
-        'No TURN relay is configured (CLOUDFLARE_TURN_KEY_ID / CLOUDFLARE_TURN_KEY_API_TOKEN), ' +
-          'so calls between two networks that cannot form a direct path will connect and then ' +
-          'carry no media. See DEPLOYMENT.md.',
+        'Running STUN-only: no TURN relay is configured, so calls between two networks ' +
+          'that cannot form a direct path will connect and then carry no media. This is ' +
+          'the default and is not an error. See DEPLOYMENT.md.',
         null,
       );
     }

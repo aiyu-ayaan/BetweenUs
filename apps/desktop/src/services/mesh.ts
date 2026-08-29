@@ -135,6 +135,43 @@ const CONNECT_DEADLINE_MS = 8_000;
 const CONNECT_ATTEMPTS = 4;
 
 /**
+ * How many times one link is torn down and built again from nothing.
+ *
+ * This is the thing people were doing by hand. Without a relay there are pairs
+ * of networks that cannot form a direct path at all, and there are pairs that
+ * merely *did not* - a candidate that lost a race, a NAT binding that landed on
+ * a port the far end had already given up on. The two are indistinguishable
+ * from in here, and the only move that separates them is trying again with
+ * fresh ports, which is exactly what leaving the call and rejoining did.
+ *
+ * An ICE restart is not that move. It reuses the connection, and a connection
+ * whose ports are the problem restarts onto the same problem. Only a new
+ * `RTCPeerConnection` gathers genuinely new candidates.
+ *
+ * Three, because each one is only reached after a whole recovery budget has
+ * been spent - four ICE restarts and thirty seconds - so three rebuilds is
+ * three complete, independent failures. A pair that cannot manage it in three
+ * is a pair with no path, and going round again would be a spinner pretending
+ * otherwise.
+ *
+ * ponytail: a flat cap for the life of the call rather than one that resets on
+ * a good stretch. A four-hour call on a train could spend it and then have
+ * nothing left; reset it from a `connected` transition if that ever happens to
+ * somebody.
+ */
+const REBUILD_ATTEMPTS = 3;
+
+/**
+ * How long after a spent link before it is rebuilt.
+ *
+ * Long enough that a far end doing the same arithmetic has finished its own
+ * teardown - two peers rebuilding into each other's closing connections is a
+ * pair that never settles - and short enough to be over before anybody has
+ * decided to leave and do it themselves.
+ */
+const REBUILD_DELAY_MS = 2_000;
+
+/**
  * The shortest gap between two re-reads of the channel key for one peer.
  *
  * The re-read exists for an epoch that changed under a live call. The cooldown
@@ -229,32 +266,6 @@ interface MeshOptions extends MeshEvents {
    */
   channelKey: (refresh?: boolean) => Promise<string>;
 }
-
-/**
- * Whether this deployment gave the client a relay to fall back on.
- *
- * Worth asking because the failure it explains does not name itself. Without a
- * relay, a pair of peers whose networks cannot form a direct path - two
- * symmetric NATs, two mobile carriers, an office firewall that drops UDP - join
- * the call, see each other, and then carry nothing, which looks from the inside
- * exactly like a bug in this file. It is the reason a rejoin sometimes helps:
- * new ports, and occasionally the roll wins.
- */
-export function hasRelay(iceServers: IceServer[]): boolean {
-  return iceServers.some((server) =>
-    server.urls.some((url) => url.startsWith('turn:') || url.startsWith('turns:')),
-  );
-}
-
-/**
- * What a spent link says. Matched on, so the mesh can tell this failure - the
- * one a missing relay causes - from every other thing `onProblem` carries.
- */
-const NO_RELAY_TRIGGER = 'no media is getting through. Still trying to reach them.';
-
-/** What to add to "this link is not working" when the deployment explains it. */
-const NO_RELAY_HINT =
-  ' This deployment has no TURN relay configured, which is what connects two networks that cannot reach each other directly.';
 
 /** Waits. The recovery loop is a sequence of waits and the WebRTC API is not. */
 function sleep(ms: number): Promise<void> {
@@ -424,6 +435,12 @@ class PeerLink {
       onTrack: (slot: Slot, track: MediaStreamTrack | null) => void;
       onData: (payload: unknown) => void;
       onDataOpen: () => void;
+      /**
+       * Everything this link can do by itself has been done and none of it
+       * worked. Only the mesh can act on it: what is left to try is a new
+       * connection, and a link cannot replace itself.
+       */
+      onExhausted: () => void;
       /** Something went wrong that the person in the call should be told about. */
       onProblem: (message: string) => void;
     },
@@ -768,9 +785,11 @@ class PeerLink {
       if (this.pc.connectionState !== 'new') return;
 
       if (++this.connectAttempts > CONNECT_ATTEMPTS) {
-        this.events.onProblem(
-          `${this.peer.username}: could not be connected to. They may need to rejoin.`,
-        );
+        // Not the end. An offer that was never answered leaves this connection
+        // in `new`, where no state change ever fires again - so without this
+        // the link sat silent for the rest of the call and the only cure was a
+        // human leaving and rejoining. That is what `onExhausted` automates.
+        this.events.onExhausted();
         return;
       }
 
@@ -878,7 +897,7 @@ class PeerLink {
    * times until it works" this call had become.
    */
   private giveUp(): void {
-    this.events.onProblem(`${this.peer.username}: ${NO_RELAY_TRIGGER}`);
+    this.events.onExhausted();
   }
 
   private async sendDescription(): Promise<void> {
@@ -1301,6 +1320,16 @@ export class Mesh {
   private pingSentAt: number | null = null;
   /** Whether a signalling reconnect is in flight, so a flap starts only one. */
   private reconnecting = false;
+  /** Rebuilds spent per peer. See `rebuild` and `REBUILD_ATTEMPTS`. */
+  private readonly rebuilds = new Map<string, number>();
+  /**
+   * Who the gateway last said is in this call.
+   *
+   * Kept apart from `links` because during a rebuild there is deliberately no
+   * link for somebody who is still very much present, and that gap is exactly
+   * when a `peer.left` is most likely to arrive.
+   */
+  private readonly peerIsExpected = new Set<string>();
 
   constructor(private readonly options: MeshOptions) {}
 
@@ -1568,6 +1597,7 @@ export class Mesh {
   }
 
   private link(peer: CallPeer): PeerLink {
+    this.peerIsExpected.add(peer.peerId);
     const existing = this.links.get(peer.peerId);
     if (existing) return existing;
 
@@ -1581,15 +1611,8 @@ export class Mesh {
         onTrack: (slot, track) => this.options.onTrack(peer.peerId, slot, track),
         onData: (payload) => this.options.onData(peer, payload),
         onDataOpen: () => this.options.onDataOpen?.(peer),
-        // The hint is added here rather than at the point of failure: it is a
-        // property of the deployment, the same for every link, and a link has
-        // no reason to know about the list it was configured from.
-        onProblem: (message) =>
-          this.options.onProblem(
-            message.endsWith(NO_RELAY_TRIGGER) && !hasRelay(this.options.iceServers)
-              ? message + NO_RELAY_HINT
-              : message,
-          ),
+        onExhausted: () => this.rebuild(peer),
+        onProblem: (message) => this.options.onProblem(message),
       },
     );
 
@@ -1609,6 +1632,65 @@ export class Mesh {
     void this.applyTuning(link);
 
     return link;
+  }
+
+  /**
+   * Throws one link away and builds it again from nothing.
+   *
+   * The automated version of what everybody was doing by hand: leaving the call
+   * and rejoining until it worked. That worked because a new connection gathers
+   * new candidates - new local ports, a new NAT binding, a new race to lose or
+   * win - and it is the only move left once ICE restarts are spent, because a
+   * restart reuses the connection whose ports were the problem.
+   *
+   * Only the impolite side does it, for the same reason only it offers. The
+   * polite side needs no rebuild of its own: the fresh offer arrives carrying a
+   * new ICE ufrag and a new DTLS fingerprint, which its existing connection
+   * takes as a restart and answers. Both sides tearing down at once would be
+   * two peers rebuilding into each other's closing connections.
+   *
+   * The peer stays in the roster throughout. Who is in a call is the gateway's
+   * answer, and a link this client cannot make work says nothing about whether
+   * the person is there.
+   */
+  private rebuild(peer: CallPeer): void {
+    if (this.closed) return;
+
+    const old = this.links.get(peer.peerId);
+    // Politeness is the same comparison the link made, and it is stable for as
+    // long as both peer ids are.
+    if (!old || (this.selfPeerId ?? '') > peer.peerId) {
+      this.options.onProblem(
+        `${peer.username}: could not be reached. Your networks may not be able to connect directly.`,
+      );
+      return;
+    }
+
+    const spentSoFar = this.rebuilds.get(peer.peerId) ?? 0;
+    if (spentSoFar >= REBUILD_ATTEMPTS) {
+      this.options.onProblem(
+        `${peer.username}: could not be reached after ${REBUILD_ATTEMPTS} attempts. Your networks may not be able to connect directly.`,
+      );
+      return;
+    }
+    this.rebuilds.set(peer.peerId, spentSoFar + 1);
+
+    this.links.delete(peer.peerId);
+    old.close();
+    // Whatever was last received on the dead connection is gone with it, and a
+    // frozen final frame left on screen is worse than an empty tile: it is the
+    // call looking like it works.
+    for (const slot of SLOTS) this.options.onTrack(peer.peerId, slot, null);
+
+    window.setTimeout(() => {
+      // The roster may have settled the question while this was waiting - the
+      // person really did leave - and re-adding them then would put a tile back
+      // for somebody who is gone.
+      if (this.closed || this.links.has(peer.peerId)) return;
+      if (!this.peerIsExpected.has(peer.peerId)) return;
+      this.link(peer);
+      this.announcePeers();
+    }, REBUILD_DELAY_MS);
   }
 
   private announcePeers(): void {
@@ -1752,6 +1834,10 @@ export class Mesh {
   private drop(peerId: string): void {
     const link = this.links.get(peerId);
     this.links.delete(peerId);
+    // Before the early return below: a peer who leaves mid-rebuild has no link
+    // to find here, and must still not have one built for them afterwards.
+    this.peerIsExpected.delete(peerId);
+    this.rebuilds.delete(peerId);
     for (const slot of SLOTS) this.options.onTrack(peerId, slot, null);
     this.announcePeers();
     if (!link) return;
