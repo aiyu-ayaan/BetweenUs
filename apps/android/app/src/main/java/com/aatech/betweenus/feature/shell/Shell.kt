@@ -46,7 +46,6 @@ import com.aatech.betweenus.core.data.Connectivity
 import com.aatech.betweenus.core.data.PublicUser
 import com.aatech.betweenus.core.store.LastPlace
 import com.aatech.betweenus.core.store.Workspace
-import com.aatech.betweenus.feature.auth.IdentityUnlockSheet
 import com.aatech.betweenus.feature.chat.ChatScreen
 import com.aatech.betweenus.feature.home.AddFriendScreen
 import com.aatech.betweenus.feature.home.FriendsScreen
@@ -171,14 +170,6 @@ fun Shell(user: PublicUser) {
         // Whatever the daily check left in the shade is about to be said on
         // screen, and saying it twice is one time too many.
         if (offeringUpdate) UpdateWorker.clearNotification(context)
-    }
-
-    val identity by E2ee.status.collectAsState()
-    var unlocking by remember { mutableStateOf(false) }
-    LaunchedEffect(identity) {
-        // A locked identity is not an error to shrug at: without it every
-        // message on the account reads as a padlock.
-        unlocking = identity is IdentityStatus.Locked
     }
 
     fun openChannel(id: String, server: String?) {
@@ -559,13 +550,6 @@ fun Shell(user: PublicUser) {
             // the top of it would be the same answer twice.
             if (offeringUpdate) {
                 UpdateSheet(onDismiss = { offeringUpdate = false; Updates.dismiss() })
-            }
-
-            if (unlocking) {
-                IdentityUnlockSheet(
-                    kind = (identity as? IdentityStatus.Locked)?.kind ?: "password",
-                    onDismiss = { unlocking = false },
-                )
             }
 
             // An invite the app was opened by. The link left a code behind; the

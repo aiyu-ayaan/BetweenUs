@@ -256,15 +256,13 @@ fun SettingsScreen(
                 Text(
                     text = when (val state = identity) {
                         is IdentityStatus.Ready -> if (state.backedUp) {
-                            "This device holds your identity key, and the account has a sealed " +
-                                "backup of it. Signing in elsewhere will restore your history."
+                            "This device holds the account key, and it is backed up. Signing in " +
+                                "elsewhere will restore your history."
                         } else {
-                            "This device holds your identity key, but the account has no backup. " +
-                                "Lose this device and the messages sealed for it go with it."
+                            "This device has a key of its own, and no backup of it. Your other " +
+                                "devices fill in older conversations as they open them. Set a " +
+                                "recovery passphrase to make this device recoverable too."
                         }
-
-                        is IdentityStatus.Locked ->
-                            "Your messages are locked until this device can open the account backup."
 
                         IdentityStatus.Revoked ->
                             "This device was revoked from another one. It can still read what it " +

@@ -23,15 +23,17 @@ data class BackupSecret(val value: String, val kind: String) {
     }
 }
 
-/** The account has a backup and nothing here can open it without being asked. */
-class IdentityLockedError(val kind: String) :
-    Exception("This device needs your ${if (kind == "password") "password" else "recovery passphrase"} to unlock your messages")
-
 class MissingChannelKeyError : Exception("No channel key on this device yet")
 
+/**
+ * There is no `Locked`. A device that cannot open the account backup mints a
+ * key of its own and signs in anyway - see [E2ee.initIdentity] - so there is no
+ * state in which the app is signed in and waiting to be told a secret.
+ */
 sealed interface IdentityStatus {
     data object Absent : IdentityStatus
-    data class Locked(val kind: String) : IdentityStatus
+
+    /** `backedUp` is whether *this device's* key is the one in the backup. */
     data class Ready(val backedUp: Boolean) : IdentityStatus
 
     /**
@@ -101,10 +103,7 @@ object E2ee {
      * Loads this device's identity key and publishes the public half. Called
      * once per sign-in, with the password when there is one to hand.
      *
-     * Three ways it can go: the key is already on this device; it is not, but
-     * the account has a backup and [secret] opens it; or the account has no
-     * backup yet and one is minted. The fourth case - backup present, no secret
-     * - is a question for the user, and comes back as [IdentityLockedError].
+     * It never fails for want of a secret, and it never asks for one.
      */
     suspend fun initIdentity(userId: String, secret: BackupSecret? = null): Crypto.KeyPairJwk =
         identityLock.withLock {
@@ -124,36 +123,43 @@ object E2ee {
                 }
             }
 
-            // A failed fetch must not fall through to "mint a new identity":
-            // that would replace the account's published key and every channel
-            // key sealed for the old one would stop opening for good. Only a
-            // definite "no backup exists" may start a new identity.
+            // A failed fetch must not be read as "there is no backup": that
+            // would seal a fresh key over one that exists. It throws, and the
+            // sign-in retries.
             val backup = BetweenUsApi.identityBackup()
 
-            if (backup != null) {
-                if (secret == null || secret.kind != backup.kind) {
-                    _status.value = IdentityStatus.Locked(backup.kind)
-                    throw IdentityLockedError(backup.kind)
-                }
+            // The account's own key, when the secret that opens it is at hand.
+            // The good path and the only instant one: every epoch already
+            // sealed for that identity opens the moment it lands.
+            if (backup != null && secret != null && secret.kind == backup.kind) {
                 val pair = openBackup(backup, secret)
-                store.put(storageKey, writePair(pair))
-                adopt(pair, backedUp = true)
-                return@withLock pair
+                if (pair != null) {
+                    store.put(storageKey, writePair(pair))
+                    adopt(pair, backedUp = true)
+                    return@withLock pair
+                }
             }
 
+            // Otherwise this device gets a key of its own and the sign-in
+            // carries on. It used to stop and ask - and asking is not something
+            // every sign-in can answer: a provider sign-in has no account
+            // password to offer, and an account that has only ever used one has
+            // no password at all.
+            //
+            // Minting is safe because a channel key is wrapped per *device*:
+            // this device publishes its own public key under its own device id
+            // and takes nothing from the devices already in the directory.
+            // History arrives from them - `fillGaps` hands every epoch a device
+            // holds to the owner's devices missing it - so the account
+            // converges without anyone typing anything. What it costs is that
+            // history is not instant; it appears as the other devices open
+            // those channels. See apps/desktop/src/services/e2ee.ts.
             val pair = Crypto.generateIdentity()
             store.put(storageKey, writePair(pair))
             adopt(pair)
             ensureBackup(pair, secret)
             pair
         }
-
-    /** Restores from the account backup with a secret the user has just typed. */
-    suspend fun unlock(secret: BackupSecret) {
-        val id = userId ?: throw IllegalStateException("Nobody is signed in")
-        identity = null
-        initIdentity(id, secret)
-    }
 
     /** Seals the current identity under a secret the user chose. */
     suspend fun backupIdentity(secret: BackupSecret) {
@@ -211,8 +217,13 @@ object E2ee {
     private suspend fun ensureBackup(pair: Crypto.KeyPairJwk, secret: BackupSecret?) {
         runCatching {
             val backup = BetweenUsApi.identityBackup()
-            if (backup?.publicKey == pair.publicKey) {
-                _status.value = IdentityStatus.Ready(backedUp = true)
+            // A backup that already stands is not this device's to replace
+            // unless it is this device's key in it. Since a device that could
+            // not open one mints its own, sealing over it here would take the
+            // account's recoverable identity away from every device still
+            // restoring from it. Deliberate re-sealing is [backupIdentity]'s.
+            if (backup != null) {
+                _status.value = IdentityStatus.Ready(backedUp = backup.publicKey == pair.publicKey)
                 return
             }
             if (secret == null) {
@@ -238,14 +249,11 @@ object E2ee {
         )
     }
 
-    /** Wrong secret is the expected failure, and deserves to say so. */
-    private fun openBackup(backup: IdentityBackup, secret: BackupSecret): Crypto.KeyPairJwk =
+    /** The wrong secret is an ordinary outcome here, not an error: null, and on. */
+    private fun openBackup(backup: IdentityBackup, secret: BackupSecret): Crypto.KeyPairJwk? =
         runCatching {
             Crypto.openIdentity(backup.salt, backup.iv, backup.ct, secret.value, backup.iterations)
-        }.getOrElse {
-            _status.value = IdentityStatus.Locked(backup.kind)
-            throw IdentityLockedError(backup.kind)
-        }
+        }.getOrNull()
 
     private fun writePair(pair: Crypto.KeyPairJwk) = JSONObject()
         .put("publicKey", pair.publicKey)
