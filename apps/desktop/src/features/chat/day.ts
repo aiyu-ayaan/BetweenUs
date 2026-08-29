@@ -18,6 +18,8 @@
  * does the other.
  */
 
+import { serverNow } from '../../services/server-clock';
+
 /** Local midnight of the day `iso` falls in, as epoch milliseconds. */
 function startOfDay(iso: string | Date): number {
   const at = new Date(iso);
@@ -29,8 +31,15 @@ export function sameDay(a: string, b: string): boolean {
   return startOfDay(a) === startOfDay(b);
 }
 
-/** The divider's words for the day `iso` falls in. */
-export function dayLabel(iso: string, now: Date = new Date()): string {
+/**
+ * The divider's words for the day `iso` falls in.
+ *
+ * "Now" is the *server's* clock, not this machine's: a laptop whose clock is a
+ * day out would otherwise file yesterday's conversation under "Today" and
+ * today's under "Tomorrow", which reads as broken software rather than as a
+ * wrong clock. See `services/server-clock.ts`.
+ */
+export function dayLabel(iso: string, now: Date = new Date(serverNow())): string {
   const days = Math.round((startOfDay(now) - startOfDay(iso)) / 86_400_000);
   if (days === 0) return 'Today';
   if (days === 1) return 'Yesterday';

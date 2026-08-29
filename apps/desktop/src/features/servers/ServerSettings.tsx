@@ -1,3 +1,4 @@
+import { serverNow } from '../../services/server-clock';
 import { useEffect, useRef, useState } from 'react';
 import type {
   Channel,
@@ -1470,7 +1471,10 @@ function Invites(): JSX.Element {
 /** One line saying what is left of an invite, or what happened to it. */
 function describeInvite(invite: ServerInvite): string {
   if (invite.revokedAt) return 'Revoked';
-  if (invite.expiresAt && new Date(invite.expiresAt).getTime() <= Date.now()) return 'Expired';
+  // The server's clock, not this machine's: the deployment is what refuses an
+  // expired invite, so the label must agree with it rather than with a laptop
+  // whose clock is out. See services/server-clock.ts.
+  if (invite.expiresAt && new Date(invite.expiresAt).getTime() <= serverNow()) return 'Expired';
   if (invite.maxUses !== null && invite.uses >= invite.maxUses) return 'All uses spent';
 
   const used =

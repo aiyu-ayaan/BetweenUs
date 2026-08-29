@@ -42,6 +42,7 @@ import { TopBar } from './features/shell/TopBar';
 import { MobileDrawer } from './features/shell/MobileDrawer';
 import { useIsMobile } from './services/responsive';
 import { VersionNotice } from './components/VersionNotice';
+import { ClockNotice } from './components/ClockNotice';
 import { UpdateNotice } from './components/UpdateNotice';
 import { ConnectionNotice } from './components/ConnectionNotice';
 import { QuickSwitcher } from './features/shell/QuickSwitcher';
@@ -454,6 +455,7 @@ function Workbench(): JSX.Element {
         onToggleSidebar={() => setSidebarOpen((open) => !open)}
       />
       <ConnectionNotice />
+      <ClockNotice />
       <VersionNotice />
       <UpdateNotice />
 

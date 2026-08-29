@@ -204,6 +204,13 @@ export const XIcon = (props: IconProps): JSX.Element => (
   </Base>
 );
 
+export const ClockIcon = (props: IconProps): JSX.Element => (
+  <Base {...props}>
+    <circle cx="12" cy="12" r="9" />
+    <polyline points="12 7 12 12 15 14" />
+  </Base>
+);
+
 export const TrashIcon = (props: IconProps): JSX.Element => (
   <Base {...props}>
     <polyline points="3 6 5 6 21 6" />

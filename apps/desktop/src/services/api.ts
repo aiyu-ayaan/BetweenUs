@@ -1,3 +1,4 @@
+import { sampleServerClock } from './server-clock';
 import type {
   CreateServerInviteRequest,
   ApiErrorBody,
@@ -154,6 +155,7 @@ function requirePayload(path: string, response: Response, body: { value: unknown
 }
 
 async function send<T>(path: string, init: RequestInit, token: string | null): Promise<T> {
+  const sentAt = Date.now();
   const response = await fetch(`${serverUrl()}${path}`, {
     ...init,
     headers: {
@@ -162,6 +164,10 @@ async function send<T>(path: string, init: RequestInit, token: string | null): P
       ...init.headers,
     },
   });
+  // Every reply carries the server's own clock in its `Date` header, so the
+  // offset costs nothing to learn and is learned from whatever the app was
+  // doing anyway - including the replies that failed. See services/server-clock.ts.
+  sampleServerClock(sentAt, Date.now(), response.headers.get('date'));
 
   if (response.status === 204) return undefined as T;
 
