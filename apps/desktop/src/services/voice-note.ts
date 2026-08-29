@@ -1,3 +1,5 @@
+import { VOICE_WAVEFORM_BARS } from '@betweenus/shared-types';
+
 /**
  * Recording a voice message.
  *
@@ -53,20 +55,34 @@ export function extensionFor(type: string): string {
   return 'webm';
 }
 
+/** A finished recording: the file, and what it looked like being made. */
+export interface RecordedVoice {
+  file: File;
+  /** Seconds, rounded to a tenth - the label, not a seek position. */
+  duration: number;
+  /** Bar heights 0..1, `VOICE_WAVEFORM_BARS` of them. */
+  waveform: number[];
+}
+
 /**
  * A recording in progress.
  *
- * Two ways out, and they are not the same. `stop` returns the file; `cancel`
- * throws it away. Both release the microphone, because the only thing worse
- * than a lost recording is a recording light that stays on after it.
+ * Two ways out, and they are not the same. `stop` returns the recording;
+ * `cancel` throws it away. Both release the microphone, because the only thing
+ * worse than a lost recording is a recording light that stays on after it.
  */
 export interface VoiceRecording {
-  /** Finishes and returns the file, or null when nothing worth sending was captured. */
-  stop(): Promise<File | null>;
+  /** Finishes and returns it, or null when nothing worth sending was captured. */
+  stop(): Promise<RecordedVoice | null>;
   /** Abandons it. Nothing is returned and nothing is kept. */
   cancel(): void;
   /** Seconds recorded so far, for the counter on screen. */
   elapsed(): number;
+  /**
+   * The bars measured so far, so the composer can draw the recording as it
+   * happens. The same samples that end up in the manifest.
+   */
+  levels(): number[];
 }
 
 /**
@@ -109,11 +125,19 @@ export async function startVoiceRecording(): Promise<VoiceRecording> {
     if (event.data.size > 0) chunks.push(event.data);
   };
 
+  // The shape of the message, measured while it is being spoken.
+  //
+  // Taken off the live stream rather than computed from the finished file,
+  // because the finished file is compressed Opus - getting samples back out of
+  // it means decoding it, and this is a signal already passing through here.
+  const meter = openMeter(stream);
+
   const startedAt = Date.now();
   let released = false;
   const release = (): void => {
     if (released) return;
     released = true;
+    meter.close();
     for (const track of stream.getTracks()) track.stop();
   };
 
@@ -128,6 +152,7 @@ export async function startVoiceRecording(): Promise<VoiceRecording> {
 
   return {
     elapsed,
+    levels: () => meter.levels(),
 
     cancel(): void {
       window.clearTimeout(ceiling);
@@ -136,9 +161,11 @@ export async function startVoiceRecording(): Promise<VoiceRecording> {
       release();
     },
 
-    async stop(): Promise<File | null> {
+    async stop(): Promise<RecordedVoice | null> {
       window.clearTimeout(ceiling);
       const seconds = elapsed();
+      // Read before `release`, which closes the meter.
+      const measured = meter.levels();
 
       // The last chunk arrives with `stop`, not before it, so the file cannot
       // be assembled until the recorder says it is done.
@@ -156,10 +183,102 @@ export async function startVoiceRecording(): Promise<VoiceRecording> {
 
       const recorded = recorder.mimeType || type || 'audio/webm';
       const blob = new Blob(chunks, { type: recorded });
-      return new File([blob], voiceFileName(recorded), { type: recorded });
+      return {
+        file: new File([blob], voiceFileName(recorded), { type: recorded }),
+        duration: Math.round(seconds * 10) / 10,
+        waveform: toWaveform(measured),
+      };
     },
   };
 }
+
+/**
+ * How often the level is sampled while recording.
+ *
+ * Ten times a second: fast enough that a syllable registers as its own bar in
+ * a short message, slow enough that a five-minute recording is a few thousand
+ * numbers rather than a few hundred thousand, all of which are then thrown
+ * away by the downsample anyway.
+ */
+const SAMPLE_MS = 100;
+
+/**
+ * A meter on the live microphone.
+ *
+ * `AnalyserNode` over `ScriptProcessorNode` because the former is a read
+ * whenever you want one and the latter is a deprecated callback on the audio
+ * thread. Nothing here is in the recording path - the meter is a branch off
+ * the same stream, so a failure to open it costs the waveform and never the
+ * message.
+ */
+function openMeter(stream: MediaStream): { levels: () => number[]; close: () => void } {
+  const samples: number[] = [];
+  let context: AudioContext | null = null;
+  let ticker = 0;
+
+  try {
+    context = new AudioContext();
+    const analyser = context.createAnalyser();
+    // Small: this is a loudness reading, not a spectrum. A short window also
+    // means the value tracks the syllable rather than averaging over it.
+    analyser.fftSize = 512;
+    context.createMediaStreamSource(stream).connect(analyser);
+
+    const buffer = new Float32Array(analyser.fftSize);
+    ticker = window.setInterval(() => {
+      analyser.getFloatTimeDomainData(buffer);
+      // Root mean square, which is loudness as an ear hears it. A peak reading
+      // makes every bar full height the moment anybody says a hard consonant.
+      let sum = 0;
+      for (const value of buffer) sum += value * value;
+      samples.push(Math.sqrt(sum / buffer.length));
+    }, SAMPLE_MS);
+  } catch {
+    // No meter on this runtime. The recording is unaffected; the message
+    // arrives with no waveform and the player draws a flat one.
+  }
+
+  return {
+    levels: () => [...samples],
+    close: () => {
+      if (ticker) window.clearInterval(ticker);
+      void context?.close().catch(() => undefined);
+    },
+  };
+}
+
+/**
+ * Raw amplitude samples, as the bars a player draws.
+ *
+ * Two steps, and the second is the one that matters. Downsampling to a fixed
+ * count makes every message the same width. Normalising against the loudest
+ * bar makes a quiet recording look like a recording rather than like silence -
+ * absolute levels vary by an order of magnitude between microphones, and a
+ * waveform is read as a shape, never as a measurement.
+ *
+ * A floor under every bar so silence is still a line. A waveform with gaps in
+ * it reads as a broken file rather than as a pause for breath.
+ */
+export function toWaveform(samples: number[], bars = VOICE_WAVEFORM_BARS): number[] {
+  if (samples.length === 0) return [];
+
+  const buckets: number[] = [];
+  for (let index = 0; index < bars; index += 1) {
+    const from = Math.floor((index * samples.length) / bars);
+    const to = Math.max(from + 1, Math.floor(((index + 1) * samples.length) / bars));
+    let sum = 0;
+    for (let at = from; at < to; at += 1) sum += samples[at] ?? 0;
+    buckets.push(sum / (to - from));
+  }
+
+  const loudest = Math.max(...buckets);
+  // Everything was silence: a flat line is honest, and dividing by zero is not.
+  if (loudest <= 0) return buckets.map(() => MIN_BAR);
+  return buckets.map((value) => Math.max(MIN_BAR, Math.min(1, value / loudest)));
+}
+
+/** No bar is ever shorter than this, so a pause is a line and not a hole. */
+const MIN_BAR = 0.08;
 
 /**
  * What a recording is called.

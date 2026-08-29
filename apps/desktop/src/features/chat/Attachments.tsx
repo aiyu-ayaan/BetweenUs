@@ -8,7 +8,7 @@
  * picture twice should not decrypt it twice.
  */
 import { useEffect, useRef, useState } from 'react';
-import type { MessageAttachment } from '@betweenus/shared-types';
+import { isVoiceNote, type MessageAttachment } from '@betweenus/shared-types';
 import {
   formatBytes,
   openAttachment,
@@ -24,6 +24,7 @@ import {
   XIcon,
 } from '../../components/icons';
 import { useChatStore } from '../../stores/chat';
+import { VoiceMessage } from './VoiceMessage';
 
 /** Text small enough to read in the message list without opening anything. */
 const INLINE_TEXT_CHARS = 800;
@@ -31,10 +32,16 @@ const INLINE_TEXT_CHARS = 800;
 export function AttachmentList({
   channelId,
   attachments,
+  author,
+  mine,
   oneTime,
 }: {
   channelId: string;
   attachments: MessageAttachment[];
+  /** Drawn on a voice message, the way every phone messenger draws one. */
+  author?: { displayName: string; avatarUrl: string | null };
+  /** Whether this account sent the message, which decides a voice note's accent. */
+  mine?: boolean;
   /**
    * Present when this message is one-time, which changes everything below:
    * nothing is drawn inline, nothing is cached to disk, and opening it is what
@@ -75,6 +82,16 @@ export function AttachmentList({
                 channelId={channelId}
                 attachment={attachment}
                 onOpen={() => setPreview(attachment)}
+              />
+            ) : isVoiceNote(attachment) ? (
+              // Somebody talking, not a file that happens to be audio. A
+              // picked music track still gets the ordinary player and its
+              // name, because that is what somebody sharing a track wants.
+              <VoiceMessage
+                channelId={channelId}
+                attachment={attachment}
+                author={author}
+                mine={mine}
               />
             ) : isPlayable(attachment) ? (
               <MediaAttachment channelId={channelId} attachment={attachment} />

@@ -39,7 +39,15 @@ export async function uploadAttachment(
   channelId: string,
   file: File,
   onProgress?: UploadProgress,
-  options: { overflow?: boolean } = {},
+  options: {
+    overflow?: boolean;
+    /**
+     * Measured while this was being recorded. Rides inside the encrypted
+     * manifest with everything else about the file, so the server learns
+     * nothing from it - and every client draws the same shape.
+     */
+    voice?: { duration: number; waveform: number[] };
+  } = {},
 ): Promise<MessageAttachment> {
   if (file.size > MAX_ATTACHMENT_BYTES) {
     throw new Error(`${file.name} is larger than ${formatBytes(MAX_ATTACHMENT_BYTES)}`);
@@ -70,6 +78,9 @@ export async function uploadAttachment(
     ...(gzip ? { gzip: true } : {}),
     ...(shrunk ? { width: shrunk.width, height: shrunk.height } : {}),
     ...(options.overflow ? { overflow: true } : {}),
+    ...(options.voice
+      ? { duration: options.voice.duration, waveform: options.voice.waveform }
+      : {}),
   };
 }
 

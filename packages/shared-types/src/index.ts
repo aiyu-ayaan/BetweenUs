@@ -937,6 +937,65 @@ export interface MessageAttachment {
   height?: number;
   /** Set when the client turned an over-long message into this text file. */
   overflow?: boolean;
+  /**
+   * How long an audio or video attachment runs, in seconds.
+   *
+   * Carried so a voice message can say "0:07" before a byte of it has been
+   * fetched. Without it the player has to download and decode the whole file
+   * to fill in a label, which is the one number somebody wants *before*
+   * deciding to listen.
+   */
+  duration?: number;
+  /**
+   * The shape of a voice message, as bar heights from 0 to 1.
+   *
+   * Measured on the sender while it was being recorded - an amplitude sample
+   * every hundred milliseconds, downsampled to `VOICE_WAVEFORM_BARS` - rather
+   * than derived on each receiver. Three reasons, in order of how much they
+   * matter:
+   *
+   * 1. A receiver cannot compute it without decoding the whole file, which
+   *    means downloading it first. The waveform is meant to be visible *before*
+   *    that, which is the entire point of drawing one.
+   * 2. Decoding audio to PCM is cheap in a browser and genuinely awkward on
+   *    Android. Measuring once, on the one device that already has the raw
+   *    signal in its hands, is less total code than two decoders.
+   * 3. Every client then draws the same shape for the same message. A waveform
+   *    that differs between a phone and a laptop is a waveform nobody trusts as
+   *    a position indicator.
+   *
+   * Absent for audio that was picked from disk rather than recorded, and for
+   * anything sent before this existed - the player falls back to a flat bar in
+   * both cases, and still plays.
+   */
+  waveform?: number[];
+}
+
+/**
+ * How many bars a voice message is drawn with.
+ *
+ * A fixed count rather than one bar per sample, so a three-second message and a
+ * three-minute one are the same width and the same shape of thing. Forty-eight
+ * is enough to read as a voice and few enough to stay legible in a bubble on a
+ * phone; past about sixty the bars are thinner than the gaps between them.
+ */
+export const VOICE_WAVEFORM_BARS = 48;
+
+/**
+ * Whether an attachment should be drawn as a voice message rather than as a
+ * file with a player stapled to it.
+ *
+ * Two signals, and either is enough. A recorded note carries a waveform, which
+ * nothing else does. One sent before waveforms existed is recognised by the
+ * name this client gives them - which is also how a *picked* audio file avoids
+ * being mistaken for one: somebody sharing an album track wants its name and a
+ * download, not a voice bubble.
+ */
+export function isVoiceNote(attachment: MessageAttachment): boolean {
+  return (
+    attachment.contentType.startsWith('audio/') &&
+    ((attachment.waveform?.length ?? 0) > 0 || /^voice_\d{8}_\d{6}\./.test(attachment.name))
+  );
 }
 
 /**

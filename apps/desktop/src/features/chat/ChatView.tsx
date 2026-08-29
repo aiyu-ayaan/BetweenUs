@@ -55,6 +55,7 @@ import {
   canRecordVoice,
   formatDuration,
   startVoiceRecording,
+  type RecordedVoice,
   type VoiceRecording,
 } from '../../services/voice-note';
 import { OVERFLOW_CHARS, overflowFile, replyPreview } from '../../services/message-body';
@@ -734,6 +735,8 @@ function MessageList({
                         <AttachmentList
                           channelId={channel.id}
                           attachments={message.attachments}
+                          author={message.author}
+                          mine={message.author.id === me?.id}
                           // Present only when it is one, so an ordinary
                           // message renders through exactly the path it always
                           // did rather than through a branch that has to
@@ -1514,6 +1517,9 @@ function highlightRuns(
   return runs;
 }
 
+/** How much of the live level the recording bar shows. Roughly four seconds. */
+const LIVE_BARS = 40;
+
 function MessageComposer({
   channel,
   takeFiles,
@@ -1540,6 +1546,8 @@ function MessageComposer({
   const recorder = useRef<VoiceRecording | null>(null);
   const [recording, setRecording] = useState(false);
   const [recordedFor, setRecordedFor] = useState(0);
+  /** The last second or so of level, so the bar shows the microphone is live. */
+  const [levels, setLevels] = useState<number[]>([]);
   /**
    * Whether what is about to be sent is one-time.
    *
@@ -1651,7 +1659,7 @@ function MessageComposer({
    * mind, and routing it through state would mean sending on the render after
    * the one that stopped the microphone.
    */
-  const submit = async (event?: FormEvent, recorded?: File): Promise<void> => {
+  const submit = async (event?: FormEvent, recorded?: RecordedVoice): Promise<void> => {
     event?.preventDefault();
     const trimmed = recorded ? '' : content.trim();
     if ((!trimmed && files.length === 0 && !recorded) || sending) return;
@@ -1660,7 +1668,7 @@ function MessageComposer({
     // it: nothing is truncated, and it arrives with a preview.
     const overflowing = trimmed.length > OVERFLOW_CHARS;
     const outgoing = recorded
-      ? [recorded]
+      ? [recorded.file]
       : overflowing
         ? [...files, overflowFile(trimmed)]
         : files;
@@ -1676,7 +1684,14 @@ function MessageComposer({
             channel.id,
             file,
             (fraction) => setUploading({ name: file.name, percent: Math.round(fraction * 100) }),
-            { overflow: overflowing && index === outgoing.length - 1 },
+            {
+              overflow: overflowing && index === outgoing.length - 1,
+              // The shape and the length, measured while it was spoken. Every
+              // client draws it from here rather than decoding the file.
+              ...(recorded
+                ? { voice: { duration: recorded.duration, waveform: recorded.waveform } }
+                : {}),
+            },
           ),
         );
       }
@@ -1722,6 +1737,7 @@ function MessageComposer({
       recorder.current = started;
       setRecording(true);
       setRecordedFor(0);
+      setLevels([]);
     } catch {
       // The one failure here somebody can act on, so it is said plainly rather
       // than swallowed: every other reason a recording fails is the runtime's.
@@ -1736,11 +1752,11 @@ function MessageComposer({
     recorder.current = null;
     setRecording(false);
 
-    const file = await current.stop();
+    const recorded = await current.stop();
     // Under a second is a tap that was meant to be a hold. Nothing is said
     // about it: an error over a gesture nobody meant to make is noise.
-    if (!file) return;
-    await submit(undefined, file);
+    if (!recorded) return;
+    await submit(undefined, recorded);
   };
 
   /** Throws the recording away and releases the microphone. */
@@ -1757,7 +1773,10 @@ function MessageComposer({
     if (!recording) return;
     const ticker = window.setInterval(() => {
       setRecordedFor(recorder.current?.elapsed() ?? 0);
-    }, 250);
+      // The tail of what has been measured, not the whole recording: this is
+      // "the microphone is hearing you", which is a question about now.
+      setLevels((recorder.current?.levels() ?? []).slice(-LIVE_BARS));
+    }, 100);
     return () => window.clearInterval(ticker);
   }, [recording]);
 
@@ -1914,9 +1933,23 @@ function MessageComposer({
             <span className="text-sm tabular-nums text-slate-200" aria-live="off">
               {formatDuration(recordedFor)}
             </span>
-            <span className="min-w-0 flex-1 truncate text-xs text-slate-500">
-              Recording — release to send, or discard
-            </span>
+            {/* Live level, so the bar answers "is this hearing me" without
+                anybody having to send a message to find out. Normalised
+                against a fixed ceiling rather than against its own loudest
+                sample: a self-normalising meter shows a full bar in a silent
+                room, which is the opposite of what it is for. */}
+            <div className="flex h-6 min-w-0 flex-1 items-center gap-[2px]" aria-hidden="true">
+              {Array.from({ length: LIVE_BARS }, (_, index) => {
+                const level = levels[index - (LIVE_BARS - levels.length)] ?? 0;
+                return (
+                  <span
+                    key={index}
+                    className="w-full rounded-full bg-slate-500"
+                    style={{ height: `${Math.max(2, Math.min(1, level / 0.25) * 22)}px` }}
+                  />
+                );
+              })}
+            </div>
 
             <OneTimeToggle on={viewOnce} onChange={setViewOnce} />
 
