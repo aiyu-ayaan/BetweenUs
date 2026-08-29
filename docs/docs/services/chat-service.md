@@ -123,10 +123,27 @@ tens of kilobytes; the click-to-load rule that still governs video exists to
 avoid spending a large download on a message somebody scrolled past, which is
 not this.
 
-`isVoiceNote` decides what gets the treatment: an attachment with a waveform,
-or one named `voice_<date>_<time>.<ext>` (recordings from before waveforms
-existed). A shared music track matches neither and keeps its filename and
-download button, because that is what sharing a track means.
+Every audio attachment gets the player. `isVoiceNote` — an attachment with a
+waveform, or one named `voice_<date>_<time>.<ext>` — only decides whether the
+filename is drawn above it: a recording's name is a timestamp nobody wants to
+read, where a shared track's name is most of what was being shared.
+
+### Naming what was picked
+
+The manifest's `name` and `contentType` are resolved once on the sending
+client, in the order the sources are worth trusting:
+
+1. the provider's `DISPLAY_NAME`;
+2. the URI's last path segment, when it looks like a filename — it is one for a
+   `file://` URI, which has no provider to query, and is an opaque id like
+   `msf:42` for the document browser, which is why it is second;
+3. a generated `attachment.<ext>`, with the extension derived from the type.
+
+The content type follows the same shape: what the provider says, then a guess
+from the name's extension, then `application/octet-stream`. That last step
+matters — `octet-stream` is a provider saying "I do not know", and recording it
+as a fact is how an audio file arrives as an anonymous document with no way to
+play it.
 
 ### One-time messages
 
