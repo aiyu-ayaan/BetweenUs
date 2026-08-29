@@ -64,6 +64,20 @@ Held in process beside the roster, and it dies with the call. Full design:
 | GET | `/history` | This account's own call log, newest first (last 50). Takes no user id |
 | GET | `/analytics?days=30` | The same rows added up: a point per day, busiest channels, most time with, direct/relay split |
 
+## Losing the socket is not losing the call
+
+Media never passes through `/ws/call`, so a client whose signalling socket
+drops keeps every peer connection it had. `call-service` holds that peer's
+seat for a grace window — a peer id is issued per *device*, not per socket, so
+a client that reconnects inside the window resumes the seat it had and nobody
+else in the call is told anything happened: no `peer.left`, no `peer.joined`,
+no renegotiation.
+
+Clients reconnect with backoff for up to 45 seconds and only then treat the
+call as over. On a rejoin, the roster in `joined` is also the correction —
+anyone whose `peer.left` arrived while the socket was down is dropped then,
+so a departed peer cannot linger as a tile that never comes back.
+
 ## One call per account
 
 `call-service` evicts an account's other connections when it joins a call in

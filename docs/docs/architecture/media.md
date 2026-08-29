@@ -120,12 +120,54 @@ to be the fix, not another workaround.
 - **STUN is required.** A peer learns its own public address before it can
   offer one. It is not a relay — nothing but address discovery goes through
   it, and no port has to be opened for it.
-- **TURN is optional, off by default.** Symmetric NAT and carrier-grade NAT
+- **TURN is optional, off by default — but a deployment without one has a
+  category of call that cannot work.** Symmetric NAT and carrier-grade NAT
   pairs cannot form a direct path at all; TURN is the relay that fixes those.
   Configuring one is the operator's choice — Cloudflare's own TURN service is
   a natural fit since it's outbound-only and `call-service` mints short-lived
   credentials per call.
+- **A relay is not a media server, and the tunnel is not a reason to skip
+  one.** Both peers reach TURN *outbound*, exactly as they reach STUN, so it
+  opens no port on the deployment and never touches the Cloudflare Tunnel.
+  Cloudflare's service also answers on `turns:` over TLS, which is the path
+  that works on a network allowing nothing but HTTPS. It relays DTLS-SRTP it
+  holds no key for, so a relayed call is exactly as unreadable to the relay
+  as a direct one is to everybody else.
 - **No port forwarding, ever.** Both peers dial out.
+
+With no relay configured, `call-service` logs the fact once per process and
+the client says so on a link that gives up, because the failure it causes
+does not name itself: the call joins, shows everybody, and then carries no
+media, which is indistinguishable from a client bug. That is also why such a
+call *sometimes* works on a retry — a rejoin re-rolls the ports.
+
+## When a link breaks
+
+A peer connection that stops carrying media is not a peer connection that is
+over, and the policy for what to do about it is shared by every client —
+`call-recovery.ts` on web and Electron, `CallRecovery.kt` on Android. Two
+clients that disagree about how long to wait restart on top of each other, so
+the numbers are deliberately identical.
+
+| Stage | Behaviour |
+| --- | --- |
+| `disconnected` | 4s grace. ICE climbs out unaided often enough that restarting immediately throws away links that were about to be fine. |
+| Restart | Up to 4 ICE restarts, backed off (0s, 2s, 4s, 8s), each followed by a real offer. |
+| Deadline | 30s without media, whatever the attempt count says. |
+| Spent | The link is **kept**. Nothing re-adds a link, so removing one is permanent; a pair unrecoverable from one side may be fine from every other. Who is in a call is the roster's answer. |
+
+Only the impolite peer restarts. `restartIce()` merely marks a connection as
+wanting fresh candidates — the offer is what asks for them — and the polite
+side's offer is discarded as glare, so a polite restart is a no-op that reads
+like a recovery attempt in a log.
+
+**Losing the signalling socket does not end a call.** Signalling is not in
+the media path: every peer connection carries on, and the only thing missing
+is the ability to admit somebody new. The client reconnects quietly and
+resumes the seat `call.gateway.ts` holds for its device id, so nobody else in
+the call is told anything happened. Only a loss outlasting 45s is fatal — by
+then the roster has dropped the device and holding the microphone open would
+be a lie.
 
 ## End-to-end encryption, for free
 

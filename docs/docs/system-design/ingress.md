@@ -88,13 +88,23 @@ Media:       Client <========================================> Client
 | --- | --- |
 | Same LAN | Direct, host candidates |
 | Different networks, ordinary NAT | Direct, STUN-discovered addresses |
-| Symmetric / carrier-grade NAT | TURN relay, only if one is configured |
+| Symmetric / carrier-grade NAT | TURN relay, only if one is configured — **otherwise the call does not work at all** |
 
 STUN needs no tunnel and no port — the client dials a public STUN server
 itself. TURN is optional and off by default; when an operator wants that
 last category of network to work, Cloudflare's own TURN service fits
 naturally since it's outbound-only too, and `call-service` mints short-lived
-credentials for it per call.
+credentials for it per call. It also answers on `turns:` over TLS, which is
+the only path that works on a network allowing nothing but HTTPS.
+
+The last row is worth reading twice on a tunnel-only deployment. A relay is
+not a media server and is not this deployment: both peers reach it outbound,
+exactly as they reach STUN, so it opens no port here and never crosses the
+tunnel — none of the rules in [Media](/architecture/media) are bent by
+configuring one. Skipping it does not make those calls fall back to something
+slower; it makes them join, show both people, and carry nothing. `call-service`
+logs that once per process and the client says so on screen, because otherwise
+it is indistinguishable from a broken client.
 
 ## Two layers, two jobs
 

@@ -281,6 +281,28 @@ on the same network and fails between two particular networks, that is this,
 and it is one environment variable and a `docker compose up -d call-service`
 away.
 
+You will also be told. With no key set, call-service logs this once at the
+first call of its life:
+
+```
+No TURN relay is configured (CLOUDFLARE_TURN_KEY_ID / CLOUDFLARE_TURN_KEY_API_TOKEN), ...
+```
+
+and a client whose link gives up says the same thing on screen. Both exist
+because the failure is otherwise unreadable: the call rings, joins, shows
+everybody, and then carries no media, which looks exactly like a broken
+client. It is also why such a call *sometimes* works if everyone leaves and
+rejoins - a rejoin re-rolls the ports and occasionally the roll wins. If that
+is the shape of what you are seeing, this section is the fix, not the client.
+
+**Being behind a Cloudflare Tunnel is not a reason to skip it.** A relay is
+not a media server and it is not this deployment - both peers reach it
+*outbound*, exactly as they reach STUN, so it needs no port forwarded, no
+public IP, and never crosses the tunnel. Cloudflare's TURN also answers on
+`turns:` over TLS, which is what gets through a network that allows nothing
+but HTTPS. None of the "no media server, no media through the tunnel" rules
+are bent by configuring one.
+
 > [!TIP]
 > **Zero Media Server / No LiveKit Infrastructure:**
 > BetweenUs uses a direct peer-to-peer (P2P) WebRTC mesh for voice, video, and screen sharing. There is no SFU (such as LiveKit), no extra media port ranges to open on your firewall (`7881/tcp` or UDP ranges), and no external IP binding required on the host. If upgrading from an older deployment that had media ports open, you can safely close them.
