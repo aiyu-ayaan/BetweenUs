@@ -1,0 +1,177 @@
+.wrapper {
+  position: relative;
+  margin: 1.5rem 0;
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.65);
+  border: 1px solid rgba(51, 65, 85, 0.6);
+  backdrop-filter: blur(8px);
+  overflow: hidden;
+  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.4);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.wrapper:hover {
+  border-color: rgba(99, 102, 241, 0.4);
+  box-shadow: 0 8px 30px -4px rgba(0, 0, 0, 0.5), 0 0 15px rgba(99, 102, 241, 0.1);
+}
+
+.viewport {
+  position: relative;
+  width: 100%;
+  min-height: 280px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  user-select: none;
+}
+
+.viewport.isGrab {
+  cursor: grab;
+}
+
+.viewport.isGrabbing {
+  cursor: grabbing;
+}
+
+.canvas {
+  transform-origin: center center;
+  transition: transform 0.05s ease-out;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  width: 100%;
+}
+
+.canvas svg {
+  max-width: none !important;
+  height: auto;
+  display: block;
+}
+
+/* Floating Toolbar */
+.toolbar {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 6px;
+  background: rgba(15, 23, 42, 0.85);
+  border: 1px solid rgba(71, 85, 105, 0.7);
+  border-radius: 8px;
+  backdrop-filter: blur(12px);
+  z-index: 10;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.toolButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  background: transparent;
+  border: none;
+  color: #cbd5e1;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.toolButton:hover {
+  background: rgba(99, 102, 241, 0.25);
+  color: #ffffff;
+  transform: translateY(-1px);
+}
+
+.toolButton:active {
+  transform: translateY(0);
+  background: rgba(99, 102, 241, 0.4);
+}
+
+.zoomLabel {
+  font-size: 11px;
+  font-weight: 600;
+  font-family: var(--ifm-font-family-monospace, monospace);
+  color: #94a3b8;
+  padding: 0 6px;
+  min-width: 42px;
+  text-align: center;
+}
+
+.hint {
+  position: absolute;
+  bottom: 8px;
+  left: 12px;
+  font-size: 11px;
+  color: #64748b;
+  pointer-events: none;
+  opacity: 0.8;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Fullscreen Modal */
+.fullscreenOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: rgba(3, 7, 18, 0.94);
+  backdrop-filter: blur(16px);
+  display: flex;
+  flex-direction: column;
+}
+
+.fullscreenHeader {
+  height: 56px;
+  padding: 0 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid rgba(51, 65, 85, 0.6);
+  background: rgba(15, 23, 42, 0.9);
+}
+
+.fullscreenTitle {
+  font-size: 14px;
+  font-weight: 600;
+  color: #f1f5f9;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.fullscreenBody {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.closeButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  background: rgba(51, 65, 85, 0.5);
+  border: 1px solid rgba(71, 85, 105, 0.7);
+  color: #f1f5f9;
+  font-size: 16px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.closeButton:hover {
+  background: rgba(239, 68, 68, 0.3);
+  border-color: rgba(239, 68, 68, 0.6);
+  color: #ffffff;
+}
