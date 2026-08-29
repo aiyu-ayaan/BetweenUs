@@ -120,10 +120,7 @@ import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.roundToInt
 import java.time.Instant
-import java.time.ZoneId
-import java.time.format.DateTimeFormatter
 
-private val timeFormat = DateTimeFormatter.ofPattern("HH:mm")
 
 /**
  * One message, drawn the way every phone messenger draws one.
@@ -545,7 +542,7 @@ fun MessageRow(
                                 )
                             }
                             Text(
-                                text = shortTime(message.createdAt),
+                                text = clockTime(LocalContext.current, message.createdAt),
                                 style = MaterialTheme.typography.labelSmall,
                                 color = footnote,
                             )
@@ -1083,10 +1080,6 @@ private fun readableSize(bytes: Long): String = when {
     bytes >= 1024 -> "${bytes / 1024} KB"
     else -> "$bytes B"
 }
-
-private fun shortTime(iso: String): String = runCatching {
-    Instant.parse(iso).atZone(ZoneId.systemDefault()).format(timeFormat)
-}.getOrDefault("")
 
 private fun withinFiveMinutes(earlier: String, later: String): Boolean = runCatching {
     Instant.parse(later).toEpochMilli() - Instant.parse(earlier).toEpochMilli() < 5 * 60 * 1000

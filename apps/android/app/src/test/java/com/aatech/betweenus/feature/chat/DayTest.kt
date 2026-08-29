@@ -7,6 +7,7 @@ import org.junit.Test
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.ZoneId
+import java.util.Locale
 
 /**
  * The message list's date dividers.
@@ -50,6 +51,25 @@ class DayTest {
         // Two minutes apart either side of midnight: one run of messages to the
         // grouping rule, two days to the reader, and the divider says so.
         assertFalse(sameDay(at(2026, 8, 28, 23, 59), at(2026, 8, 29, 0, 1)))
+    }
+
+    @Test
+    fun `the clock follows the device, not the locale`() {
+        // The device's *Use 24-hour format* switch decides, whatever the locale
+        // would have picked on its own: a reader whose phone says 14:32
+        // everywhere else must not be shown 2:32 PM here, or the other way
+        // round. The pattern is the locale's way of writing the one it is told.
+        val us = Locale.US
+        assertTrue(clockPattern(is24Hour = true, locale = us).contains("H"))
+        assertFalse(clockPattern(is24Hour = true, locale = us).contains("a"))
+        assertTrue(clockPattern(is24Hour = false, locale = us).contains("h"))
+        assertTrue(clockPattern(is24Hour = false, locale = us).contains("a"))
+        // A locale that is 24-hour by habit still answers the switch.
+        val de = Locale.GERMANY
+        assertTrue(clockPattern(is24Hour = false, locale = de).contains("h"))
+        assertTrue(clockPattern(is24Hour = true, locale = de).contains("H"))
+        // Minutes, always.
+        assertTrue(clockPattern(is24Hour = true, locale = us).contains("mm"))
     }
 
     @Test

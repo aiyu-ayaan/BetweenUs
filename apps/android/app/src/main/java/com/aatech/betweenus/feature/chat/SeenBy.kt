@@ -1,5 +1,6 @@
 package com.aatech.betweenus.feature.chat
 
+import android.content.Context
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -24,6 +25,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.aatech.betweenus.core.data.ChannelReadReceipt
@@ -33,13 +35,7 @@ import com.aatech.betweenus.ui.components.Avatar
 import com.aatech.betweenus.ui.theme.Slate100
 import com.aatech.betweenus.ui.theme.Slate400
 import com.aatech.betweenus.ui.theme.Slate500
-import java.time.Instant
-import java.time.LocalDate
-import java.time.ZoneId
-import java.time.format.DateTimeFormatter
 
-private val clockFormat = DateTimeFormatter.ofPattern("HH:mm")
-private val dayFormat = DateTimeFormatter.ofPattern("d MMM")
 
 /**
  * The "seen by" row under your own messages, and the sheet behind it.
@@ -108,6 +104,7 @@ fun SeenBySheet(
     onDismiss: () -> Unit,
 ) {
     val sheet = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val context = LocalContext.current
 
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheet) {
         Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(bottom = 12.dp)) {
@@ -118,7 +115,7 @@ fun SeenBySheet(
                     color = Slate100,
                 )
                 Text(
-                    text = "Sent " + stamp(sentAt),
+                    text = "Sent " + stamp(context, sentAt),
                     style = MaterialTheme.typography.bodySmall,
                     color = Slate400,
                     modifier = Modifier.padding(top = 2.dp),
@@ -160,7 +157,7 @@ fun SeenBySheet(
                                 // the channel open, which is not quite when
                                 // their eyes were on this message.
                                 Text(
-                                    text = "Read " + stamp(receipt.readAt),
+                                    text = "Read " + stamp(context, receipt.readAt),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = Slate500,
                                 )
@@ -173,10 +170,15 @@ fun SeenBySheet(
     }
 }
 
-/** "today at 14:32" for today, "12 Mar at 14:32" for anything older. */
-private fun stamp(iso: String): String = runCatching {
-    val moment = Instant.parse(iso).atZone(ZoneId.systemDefault())
-    val time = moment.format(clockFormat)
-    if (moment.toLocalDate() == LocalDate.now()) "today at " + time
-    else moment.format(dayFormat) + " at " + time
-}.getOrDefault("")
+/**
+ * When somebody read it: "Today at 14:32", "Yesterday at 2:32 PM".
+ *
+ * The same words and the same clock the message list's dividers use - the day
+ * from `dayLabel`, the time in the reader's own zone and the device's own
+ * 12/24-hour setting - because a receipt sitting under a conversation must not
+ * name the day, or tell the time, differently from the conversation.
+ */
+private fun stamp(context: Context, iso: String): String {
+    val day = dayLabel(iso)
+    return if (day.isEmpty()) "" else day + " at " + clockTime(context, iso)
+}

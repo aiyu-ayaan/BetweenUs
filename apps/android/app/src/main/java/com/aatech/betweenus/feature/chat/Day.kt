@@ -1,5 +1,7 @@
 package com.aatech.betweenus.feature.chat
 
+import android.content.Context
+import android.text.format.DateFormat
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
@@ -15,7 +17,10 @@ import androidx.compose.ui.unit.dp
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
+import java.time.chrono.IsoChronology
 import java.time.format.DateTimeFormatter
+import java.time.format.DateTimeFormatterBuilder
+import java.time.format.FormatStyle
 import java.time.format.TextStyle
 import java.util.Locale
 
@@ -29,12 +34,19 @@ import java.util.Locale
  * the week just gone, and the full date once a week has passed and the weekday
  * has stopped being unambiguous.
  *
- * Days are the reader's local days, not UTC ones: a message sent at 00:30 here
- * belongs under today's divider even where the server called it yesterday. The
- * desktop's `day.ts` is the same rule; if one changes, so does the other.
+ * Every timestamp on the wire is UTC (`toISOString()` on the services' side),
+ * and everything here reads it in the reader's own zone: a message sent at 20:00
+ * in Berlin is 23:30 to somebody in Kolkata, under that reader's day, and both
+ * of them see their own clock. Nothing is ever drawn in the sender's zone or in
+ * UTC - which is also why days are local days, so a message sent at 00:30 here
+ * belongs under today's divider even where the server called it yesterday.
+ *
+ * The desktop's `day.ts` is the same rule; if one changes, so does the other.
  */
 
-private val dateFormat = DateTimeFormatter.ofPattern("d MMMM yyyy")
+/** Spelled out, in the reader's own order: "22 August 2026", "August 22, 2026". */
+private val dateFormat: DateTimeFormatter =
+    DateTimeFormatter.ofLocalizedDate(FormatStyle.LONG)
 
 /** The local day `iso` falls in, or null if it is not a timestamp. */
 private fun dayOf(iso: String): LocalDate? = runCatching {
@@ -88,3 +100,43 @@ fun DayDivider(iso: String, modifier: Modifier = Modifier) {
         )
     }
 }
+
+/**
+ * The clock time on a bubble, in the device's own setting for it.
+ *
+ * Android has a *Use 24-hour format* switch, and it is not the locale's
+ * business: somebody on `en_IN` may have turned it on, somebody on `de_DE` may
+ * have turned it off, and a chat showing 14:32 to a reader whose phone says
+ * 2:32 PM everywhere else is the one thing on screen out of step with the
+ * device. `DateFormat.is24HourFormat` is that switch.
+ *
+ * The pattern is still the locale's, though - the separator and the order are
+ * not ours to pick - so this takes the locale's own short time pattern and
+ * moves only the hour field onto the clock the reader asked for. The desktop
+ * gets the same answer from `Intl` for free; this is that, by hand, because
+ * `is24HourFormat` is a device setting `Intl` has no equivalent of.
+ */
+fun clockPattern(is24Hour: Boolean, locale: Locale = Locale.getDefault()): String {
+    val short = DateTimeFormatterBuilder.getLocalizedDateTimePattern(
+        null,
+        FormatStyle.SHORT,
+        IsoChronology.INSTANCE,
+        locale,
+    )
+    val has12 = short.contains('h')
+    if (is24Hour == !has12) return short
+    return if (is24Hour) {
+        // Drop the AM/PM field and whatever space was holding it on.
+        short.replace('h', 'H').replace(Regex("""\s*a\s*"""), "").trim()
+    } else {
+        short.replace('H', 'h').trim() + " a"
+    }
+}
+
+/** The clock time of `iso`, in the reader's zone and the device's format. */
+fun clockTime(context: Context, iso: String): String = runCatching {
+    val pattern = clockPattern(DateFormat.is24HourFormat(context))
+    Instant.parse(iso)
+        .atZone(ZoneId.systemDefault())
+        .format(DateTimeFormatter.ofPattern(pattern, Locale.getDefault()))
+}.getOrDefault("")
