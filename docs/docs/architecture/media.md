@@ -154,6 +154,61 @@ the numbers are deliberately identical.
 | Spent | The connection is **rebuilt from nothing** — see below — up to 3 times. |
 | Spent again | The link is **kept**. Nothing else re-adds a link, so removing one is permanent; a pair unrecoverable from one side may be fine from every other. Who is in a call is the roster's answer. |
 
+```mermaid
+flowchart TD
+    %% TIER 1: HEALTHY LINK
+    subgraph T_HEALTHY ["State 1: Active Connection"]
+        Connected["<b>Connected & Flowing</b><br/><i>DTLS-SRTP Audio / Video Packets</i>"]
+    end
+
+    %% TIER 2: DISCONNECTION GRACE
+    subgraph T_GRACE ["State 2: Disconnection Detected"]
+        Disconn["<b>Disconnected State</b><br/><i>4s Grace Period (Wait for Autonomous ICE Recovery)</i>"]
+    end
+
+    %% TIER 3: ICE RESTARTS
+    subgraph T_RESTART ["State 3: ICE Restart Loop (Same RTCPeerConnection)"]
+        direction TB
+        ICELoop["<b>ICE Restart & New Offer</b><br/><i>Backed off: 0s, 2s, 4s, 8s (Max 4 attempts / 30s deadline)</i>"]
+        RestartSuccess{"<b>ICE Re-established?</b>"}
+        ICELoop --> RestartSuccess
+    end
+
+    %% TIER 4: HARD REBUILD
+    subgraph T_REBUILD ["State 4: Complete RTCPeerConnection Rebuild"]
+        direction TB
+        Teardown["<b>Tear Down Peer Connection</b><br/><i>Clear Frozen Tracks · Gather Fresh Port Candidates</i>"]
+        RebuildLimit{"<b>Rebuilds &lt; 3?</b>"}
+        Teardown --> RebuildLimit
+    end
+
+    %% TIER 5: TERMINAL DEGRADED
+    subgraph T_DEGRADED ["State 5: Preserved Roster State"]
+        Kept["<b>Link Kept (Silent Degraded)</b><br/><i>Roster unperturbed · Ready to accept remote offer</i>"]
+    end
+
+    %% TRANSITIONS
+    Connected ==>|"Media Stops / Packet Loss"| Disconn
+    Disconn ==>|"Grace Expired"| ICELoop
+    Disconn -.->|"Autonomous Recovery"| Connected
+    RestartSuccess ==>|"Yes"| Connected
+    RestartSuccess ==>|"Budget Spent (4 attempts / 30s)"| Teardown
+    RebuildLimit ==>|"Yes (Attempt 1-3)"| ICELoop
+    RebuildLimit ==>|"No (3 Rebuilds Failed)"| Kept
+    Kept -.->|"Fresh Incoming Offer"| Connected
+
+    %% Styling
+    classDef primary fill:#1e40af,stroke:#60a5fa,stroke-width:2px,color:#ffffff;
+    classDef warn fill:#854d0e,stroke:#facc15,stroke-width:1px,color:#fef08a;
+    classDef danger fill:#991b1b,stroke:#f87171,stroke-width:1px,color:#fef2f2;
+    classDef decision fill:#0f172a,stroke:#38bdf8,stroke-width:2px,color:#f8fafc;
+
+    class Connected primary;
+    class Disconn,ICELoop warn;
+    class Teardown,Kept danger;
+    class RestartSuccess,RebuildLimit decision;
+```
+
 Only the impolite peer restarts. `restartIce()` merely marks a connection as
 wanting fresh candidates — the offer is what asks for them — and the polite
 side's offer is discarded as glare, so a polite restart is a no-op that reads

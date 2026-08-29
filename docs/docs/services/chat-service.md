@@ -94,10 +94,50 @@ as the backstop for what the immediate purge could not reach — it used to be
 the only path, and "I deleted that photo" meaning "some time today" is why it
 is not any more.
 
-An expiry and a burn leave nothing to draw, so they reach clients as
-`message.gone` (a `messageId` and a `channelId`) rather than as a tombstone to
-render. A permanent "something was here" marker would tell exactly the story
-those two features exist to avoid telling.
+```mermaid
+flowchart TD
+    %% TIER 1: TRIGGER MECHANISM
+    subgraph T_TRIGGER ["Phase 1: Destruction Event Trigger"]
+        direction TB
+        EvtDelete["<b>Author / Mod Delete</b><br/><i>DELETE /api/v1/messages/:id</i>"]
+        EvtBurn["<b>View Once Open</b><br/><i>POST /api/v1/messages/:id/burn</i>"]
+        EvtTTL["<b>Server / Personal TTL</b><br/><i>Message.expiresAt &lt; now()</i>"]
+    end
+
+    %% TIER 2: CHAT SERVICE ACTION
+    subgraph T_SERVICE ["Phase 2: chat-service Immediate Purge"]
+        direction TB
+        LookupAttach["<b>Identify Linked Attachment Keys</b>"]
+        PurgeStorage["<b>Immediate Blob Purge</b><br/><i>LocalStorageDriver.delete / S3.deleteObject</i>"]
+        MutateDB["<b>Database Mutation</b>"]
+        LookupAttach --> PurgeStorage --> MutateDB
+    end
+
+    %% TIER 3: DATABASE EFFECT
+    subgraph T_DB ["Phase 3: Database & Event Fanout"]
+        direction TB
+        DBTombstone[("<b>Soft Delete Tombstone</b><br/><i>content = '', deletedAt = now()</i>")]
+        DBDestroy[("<b>Row Permanently Destroyed</b><br/><i>DELETE FROM Message</i>")]
+        EmitUpdated["<b>Emit message.updated</b><br/><i>(Tombstone rendered)</i>"]
+        EmitGone["<b>Emit message.gone</b><br/><i>(Completely erased from UI)</i>"]
+    end
+
+    EvtDelete ==> LookupAttach
+    EvtBurn ==> LookupAttach
+    EvtTTL ==> LookupAttach
+
+    MutateDB -->|"For Deletions"| DBTombstone --> EmitUpdated
+    MutateDB -->|"For Burn / Expiry"| DBDestroy --> EmitGone
+
+    %% Styling
+    classDef primary fill:#1e40af,stroke:#60a5fa,stroke-width:2px,color:#ffffff;
+    classDef danger fill:#991b1b,stroke:#f87171,stroke-width:1px,color:#fef2f2;
+    classDef data fill:#1e293b,stroke:#64748b,stroke-width:1px,color:#f1f5f9;
+
+    class EvtDelete,EvtBurn,EvtTTL,LookupAttach,PurgeStorage,MutateDB primary;
+    class DBDestroy,EmitGone danger;
+    class DBTombstone,EmitUpdated data;
+```
 
 ### Voice messages
 

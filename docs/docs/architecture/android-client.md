@@ -34,11 +34,52 @@ unfolded foldables — which has not been on one of those either. Full status, p
 
 ## Modules
 
-```text
-apps/android/
-  app/          Feature screens, DI wiring, the installable app
-  core/          Networking, crypto, local persistence — no UI
-  ui-common/      Compose design system shared by every feature
+```mermaid
+flowchart TD
+    %% TIER 1: FEATURE SCREENS & UI
+    subgraph T_APP ["Module 1: :apps:android:app (Feature UI & Navigation)"]
+        direction TB
+        UI_Shell["<b>Shell & Navigation</b><br/><i>Adaptive Dual-Pane · Responsive Layouts</i>"]
+        UI_Features["<b>Feature Screens (Compose + M3)</b><br/><i>auth · chat · voice · remote · settings · home</i>"]
+        UI_Shell --> UI_Features
+    end
+
+    %% TIER 2: UI DESIGN SYSTEM
+    subgraph T_UICOMMON ["Module 2: :apps:android:ui-common"]
+        UI_Kit["<b>Design System & Components</b><br/><i>Theme Engine · Glassmorphism · Spring Motion · Media Viewer</i>"]
+    end
+
+    %% TIER 3: CORE LOGIC & CRYPTO
+    subgraph T_CORE ["Module 3: :apps:android:core (Domain & Infrastructure)"]
+        direction TB
+        CryptoEngine["<b>Crypto Subsystem</b><br/><i>Android KeyStore · ECDH P-256 · AES-256-GCM Envelope Codec</i>"]
+        NetManager["<b>Network Engine (OkHttp / Ktor)</b><br/><i>REST Client · WSS Gateways (/ws/chat, /ws/presence)</i>"]
+        MediaWebRTC["<b>WebRTC Pipeline</b><br/><i>libwebrtc bindings · DTLS-SRTP Audio/Video Mesh</i>"]
+    end
+
+    %% TIER 4: OFFLINE-FIRST RECONCILER
+    subgraph T_STORE ["Local Offline-First Persistence"]
+        RoomDB[("<b>Room Database (SQLite)</b><br/><i>Encrypted Message Cache · Servers · Channels · Unread</i>")]
+    end
+
+    %% DATA FLOW
+    UI_Features ==>|"Compose State & Events"| UI_Kit
+    UI_Features ==>|"Repositories & Use Cases"| NetManager
+    UI_Features ==>|"Query Cached Data"| RoomDB
+    NetManager ==>|"Reconcile Remote Events"| RoomDB
+    NetManager ==>|"Decrypt/Encrypt Envelopes"| CryptoEngine
+    UI_Features -.->|"Direct P2P Call Mesh"| MediaWebRTC
+
+    %% Styling
+    classDef primary fill:#1e40af,stroke:#60a5fa,stroke-width:2px,color:#ffffff;
+    classDef ui fill:#0f172a,stroke:#475569,stroke-width:1px,color:#f8fafc;
+    classDef core fill:#1e293b,stroke:#64748b,stroke-width:1px,color:#f1f5f9;
+    classDef data fill:#14532d,stroke:#22c55e,stroke-width:1px,color:#f0fdf4;
+
+    class UI_Shell,UI_Features primary;
+    class UI_Kit ui;
+    class CryptoEngine,NetManager,MediaWebRTC core;
+    class RoomDB data;
 ```
 
 ### `core`

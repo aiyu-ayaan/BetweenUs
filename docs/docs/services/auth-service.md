@@ -22,6 +22,44 @@ panel's own auth. Details: [Auth & Permissions](/system-design/auth-and-permissi
 | POST | `/forgot-password` | Start recovery → `emailed` \| `reset` \| `unavailable` |
 | POST | `/reset-password` | Spend a single-use reset token |
 
+### Refresh Token Lifecycle & Theft Detection
+
+```mermaid
+flowchart TD
+    %% TIER 1: CLIENT PRESENTATION
+    subgraph T_CLIENT ["Trust Boundary 1: Client Endpoint"]
+        ClientPresent["<b>Client Presents Refresh Token</b><br/><i>POST /api/v1/auth/refresh</i>"]
+    end
+
+    %% TIER 2: AUTH SERVICE ROTATION ENGINE
+    subgraph T_AUTH ["Trust Boundary 2: Auth Service Token Engine"]
+        direction TB
+        LookupToken["<b>Lookup Token by jti in PostgreSQL</b>"]
+        TokenState{"<b>Token Status?</b>"}
+        MintPair["<b>Rotate Token Family</b><br/><i>1. Mark old token revokedAt = now()<br/>2. Issue fresh 15-min JWT + new Refresh Token</i>"]
+        TheftDetected["<b>SECURITY ALARM: Token Reuse Detected</b><br/><i>Revoke ALL active refresh tokens for this user</i>"]
+        ReturnFresh["<b>Return New Token Pair to Client</b>"]
+        Return401["<b>Return 401 Unauthorized (Force Logout)</b>"]
+
+        LookupToken --> TokenState
+        TokenState -->|"Active & Unused"| MintPair --> ReturnFresh
+        TokenState -->|"Already Revoked (Replayed!)"| TheftDetected --> Return401
+        TokenState -->|"NotFound / Expired"| Return401
+    end
+
+    ClientPresent ==> LookupToken
+    ReturnFresh ==> ClientPresent
+
+    %% Styling
+    classDef primary fill:#1e40af,stroke:#60a5fa,stroke-width:2px,color:#ffffff;
+    classDef danger fill:#991b1b,stroke:#f87171,stroke-width:1px,color:#fef2f2;
+    classDef decision fill:#0f172a,stroke:#38bdf8,stroke-width:2px,color:#f8fafc;
+
+    class ClientPresent,LookupToken,MintPair,ReturnFresh primary;
+    class TheftDetected,Return401 danger;
+    class TokenState decision;
+```
+
 ### Forgotten passwords
 
 `/forgot-password` has three answers, and which one you get is a fact about the

@@ -259,6 +259,12 @@ why it is not any more.
 
 ## Notifications & devices
 
+```mermaid
+erDiagram
+    User ||--o| NotificationSetting : configures
+    User ||--o{ DeviceToken : "registers (FCM/WebPush)"
+```
+
 ### `NotificationSetting`
 One row per user, written on first change. `mutedChannelIds` /
 `mentionOnlyChannelIds` / `mutedUserIds` are plain string arrays — small,

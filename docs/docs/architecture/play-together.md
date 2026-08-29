@@ -20,17 +20,48 @@ it to everybody in the call. That is a few hundred bytes when somebody clicks,
 and nothing at all in between — signalling, so it goes down `/ws/call` beside
 the SDP and through a Cloudflare Tunnel like everything else.
 
-```text
-   Client A                                            Client B
-      │                                                    │
-      │  /ws/call: "column 4"                              │
-      └──────────────►  call-service  ◄────────────────────┘
-                    (the rules, the ordering, the board)
-                              │
-                    "here is the board now"
-      │                                                    │
-      ▼                                                    ▼
-   draws it                                           draws it
+```mermaid
+flowchart TD
+    %% TIER 1: ACTIVE PLAYERS
+    subgraph T_PLAYERS ["Trust Boundary 1: Player Endpoints (Untrusted Origin)"]
+        direction LR
+        PlayerA["<b>Player A (Seat 0)</b><br/><i>Renders Local Board Canvas</i>"]
+        PlayerB["<b>Player B (Seat 1)</b><br/><i>Renders Local Board Canvas</i>"]
+    end
+
+    %% TIER 2: SIGNALING & REFEREE GATEWAY
+    subgraph T_GATEWAY ["Trust Boundary 2: Ingress & Call Service Switchboard (:3007)"]
+        direction TB
+        CFTunnel["<b>Cloudflare Tunnel</b><br/><i>WSS Outbound Proxy</i>"]
+        CallSvc["<b>call-service (/ws/call)</b><br/><i>Stateful Referee Engine · Move Serializer</i>"]
+        RulesContract["<b>GameRules Engine (@betweenus/shared-types)</b><br/><i>moves() · apply(state, seat, move) · score()</i>"]
+        RedisSession[("<b>Redis (Active Board State)</b><br/><i>Turn Index · Board Matrix · Move History</i>")]
+
+        CFTunnel --> CallSvc
+        CallSvc --> RulesContract
+        CallSvc ==>|"Atomic Update"| RedisSession
+    end
+
+    %% TIER 3: SPECTATORS
+    subgraph T_SPECTATORS ["Trust Boundary 3: Room Spectators"]
+        Spectators["<b>Spectator Clients (Desktop / Web / Android)</b><br/><i>Deterministic Local Canvas Rendering</i>"]
+    end
+
+    %% MOVE & REALTIME BROADCAST FLOW
+    PlayerA ==>|"1. WS: { move: 4 } (Column 4)"| CFTunnel
+    CallSvc ==>|"2. Validate Move with GameRules"| RulesContract
+    CallSvc ==>|"3. Broadcast Next Board State"| PlayerA
+    CallSvc ==>|"3. Broadcast Next Board State"| PlayerB
+    CallSvc -.->|"3. Spectator Fanout"| Spectators
+
+    %% Styling
+    classDef primary fill:#1e40af,stroke:#60a5fa,stroke-width:2px,color:#ffffff;
+    classDef service fill:#0f172a,stroke:#475569,stroke-width:1px,color:#f8fafc;
+    classDef data fill:#1e293b,stroke:#64748b,stroke-width:1px,color:#f1f5f9;
+
+    class PlayerA,PlayerB,CFTunnel,CallSvc,RulesContract primary;
+    class Spectators service;
+    class RedisSession data;
 ```
 
 ## Why not share a screen with a game on it

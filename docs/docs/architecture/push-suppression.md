@@ -67,27 +67,47 @@ wrong "they are reading it" is a message nobody is ever told about, and a wrong
 
 ## How it travels
 
-```
- desktop / web / android              presence-service                notification-service
- ─────────────────────────            ────────────────                ────────────────────
- channel opened + window focused
-        │  { type: "channel.focus",
-        │    channelId }
-        ├──────────── /ws/presence ────────►  ZADD presence:focus:<ch> <now> <user>
-        │                                     PEXPIRE 90s
-        │  every 60s, the same frame                │
-        ├──────────── heartbeat ───────────►  score refreshed
-        │
- window blurred / channel closed
-        ├──── { type: "channel.blur" } ────►  ZREM
- socket dies                                  ZREM on disconnect
-                                                   │
-                                              GET internal/presence/focus
-                                              ?channelId=X&userIds=a,b,c
-                                                   ▲
-                                                   │  { focused: ["b"] }
-                                                   │
-                                       message.created ──┴── audience − focused → FCM
+```mermaid
+sequenceDiagram
+    autonumber
+    box rgba(30, 64, 175, 0.15) Client Origin (Untrusted)
+    participant Client as Client (Desktop / Web / Android)
+    end
+    box rgba(15, 23, 42, 0.2) Presence Domain (:3005)
+    participant Presence as presence-service (/ws/presence)
+    participant Redis as Redis (presence:focus:ch)
+    end
+    box rgba(30, 41, 59, 0.2) Notification Domain (:3006)
+    participant Notif as notification-service
+    end
+    box rgba(39, 39, 42, 0.2) External Push
+    participant FCM as Firebase (FCM)
+    end
+
+    Note over Client,Presence: 1. Channel Opened + Window Focused
+    Client->>Presence: WS { type: "channel.focus", channelId }
+    Presence->>Redis: ZADD presence:focus:ch &lt;now&gt; &lt;user&gt; (PEXPIRE 90s)
+
+    Note over Client,Presence: 2. Active Focus Heartbeat (every 60s)
+    Client->>Presence: WS { type: "channel.focus", channelId }
+    Presence->>Redis: Refresh Sorted Set Score
+
+    Note over Notif,Presence: 3. Message Ingestion & Focus Verification
+    Notif->>Presence: GET /api/v1/internal/presence/focus?channelId=X&userIds=a,b,c
+    Presence->>Redis: ZRANGEBYSCORE presence:focus:ch &lt;threshold&gt; +inf
+    Presence-->>Notif: Return { focused: ["userA"] }
+
+    Note over Notif,FCM: 4. Target Calculation & Selective Push
+    Notif->>Notif: Calculate Push Target = (Audience - Focused)
+    alt User is Focused on Active Channel
+        Notif->>Notif: Suppress Push (Phone stays quiet)
+    else User is NOT Focused
+        Notif->>FCM: Dispatch Data-Only Wakeup Push
+    end
+
+    Note over Client,Presence: 5. Window Blur / Channel Closed
+    Client->>Presence: WS { type: "channel.blur", channelId }
+    Presence->>Redis: ZREM presence:focus:ch &lt;user&gt;
 ```
 
 ### The wire

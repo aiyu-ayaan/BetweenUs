@@ -126,6 +126,41 @@ session is for — two different actions, both needed).
 | Voice/video media | DTLS-SRTP, direct between peers | The two people on that connection |
 | Avatars / server icons | Object storage | **Anyone with the URL** — deliberately public |
 
+### E2EE Encrypted Attachment & Blob Lifecycle
+
+```mermaid
+sequenceDiagram
+    autonumber
+    box rgba(30, 64, 175, 0.15) Sender Device (Untrusted)
+    participant Sender as Sender Client
+    end
+    box rgba(15, 23, 42, 0.2) Chat Service (:3004)
+    participant ChatSvc as chat-service (/api/v1/uploads)
+    participant Store as Object Storage (S3 / Local)
+    end
+    box rgba(30, 41, 59, 0.2) Recipient Device (Untrusted)
+    participant Recipient as Recipient Client
+    end
+
+    Note over Sender: 1. Generate Ephemeral AES-256 Key & IV
+    Sender->>Sender: Encrypt Attachment File Locally (AES-256-GCM)
+    Sender->>ChatSvc: POST /api/v1/uploads (Multipart Encrypted Ciphertext Blob)
+    ChatSvc->>Store: Persist Opaque Encrypted Blob
+    ChatSvc-->>Sender: Return { storageKey, sizeBytes }
+
+    Note over Sender: 2. Embed File Key & Hash inside Message Envelope
+    Sender->>Sender: Seal Manifest { storageKey, fileKey, iv, mimeType } in Envelope
+    Sender->>ChatSvc: POST /api/v1/messages (Sealed Ciphertext Envelope)
+    ChatSvc->>Recipient: WS message.created (Sealed Ciphertext)
+
+    Note over Recipient: 3. Recipient Decryption & Fetch
+    Recipient->>Recipient: Decrypt Message Envelope with Channel Key
+    Recipient->>ChatSvc: GET /api/v1/uploads/:key (Fetch Ciphertext Blob)
+    ChatSvc->>Store: Stream Encrypted Blob
+    Store-->>Recipient: Return Ciphertext Bytes
+    Recipient->>Recipient: Decrypt Attachment Blob Locally with Manifest Key
+```
+
 ## Deliberate leaks
 
 - **Reactions are plaintext** (`MessageReaction.emoji`) — the server has to

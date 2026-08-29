@@ -35,11 +35,54 @@ db-backup / db-backup-once                pg_dump on a schedule / on demand
 
 Private Docker networks, so only what needs to talk to a thing can reach it:
 
-```text
-cloudflare-network   cloudflared <-> nginx
-api-network             nginx <-> every service
-data-network              services <-> postgres, redis
-remote-network              remote-gateway's own network
+```mermaid
+flowchart TD
+    %% NETWORK 1: CLOUDFLARE NETWORK
+    subgraph NET_CF ["Network 1: cloudflare-network"]
+        direction LR
+        Cloudflared["<b>cloudflared</b><br/><i>Outbound Cloudflare Tunnel</i>"]
+        Nginx["<b>nginx</b><br/><i>Internal API Gateway (:8080)</i>"]
+        Cloudflared <--> Nginx
+    end
+
+    %% NETWORK 2: API NETWORK
+    subgraph NET_API ["Network 2: api-network"]
+        direction TB
+        Services["<b>Microservices Cluster</b><br/><i>auth · server · chat · presence · notif · call</i>"]
+        StaticWeb["<b>Web & Admin Frontends</b><br/><i>web (:80) · admin-web (:80)</i>"]
+        Nginx <--> Services
+        Nginx <--> StaticWeb
+    end
+
+    %% NETWORK 3: DATA NETWORK
+    subgraph NET_DATA ["Network 3: data-network"]
+        direction LR
+        Postgres[("<b>PostgreSQL (:5432)</b><br/><i>Opaque Ciphertext & Relational Data</i>")]
+        Redis[("<b>Redis (:6379)</b><br/><i>Pub/Sub & Ephemeral Presence</i>")]
+        Backup["<b>db-backup</b><br/><i>pg_dump scheduler</i>"]
+        Services <--> Postgres
+        Services <--> Redis
+        Backup -.-> Postgres
+    end
+
+    %% NETWORK 4: REMOTE NETWORK
+    subgraph NET_REMOTE ["Network 4: remote-network"]
+        direction LR
+        RemoteGW["<b>remote-gateway (:3008)</b><br/><i>Isolated Remote Desktop Subsystem</i>"]
+        Nginx <--> RemoteGW
+        RemoteGW <--> Postgres
+    end
+
+    %% Styling
+    classDef cf fill:#0f172a,stroke:#475569,stroke-width:1px,color:#f8fafc;
+    classDef api fill:#1e40af,stroke:#60a5fa,stroke-width:2px,color:#ffffff;
+    classDef data fill:#1e293b,stroke:#64748b,stroke-width:1px,color:#f1f5f9;
+    classDef remote fill:#312e81,stroke:#818cf8,stroke-width:1px,color:#e0e7ff;
+
+    class Cloudflared,Nginx cf;
+    class Services,StaticWeb api;
+    class Postgres,Redis,Backup data;
+    class RemoteGW remote;
 ```
 
 Postgres and Redis are never on `cloudflare-network` and are never
