@@ -4,27 +4,22 @@
   justify-content: center;
   align-items: center;
   width: 100%;
-  max-width: 640px;
-  margin: 2.5rem auto 1.5rem;
-  padding: 1.5rem;
-  perspective: 1200px;
+  max-width: 680px;
+  margin: 2rem auto 1.5rem;
+  padding: 1rem;
+  perspective: 1400px;
 }
 
 .ambientGlow {
   position: absolute;
-  width: 320px;
-  height: 320px;
+  width: 360px;
+  height: 360px;
   border-radius: 50%;
-  background: radial-gradient(
-    circle,
-    rgba(124, 92, 255, 0.4) 0%,
-    rgba(99, 102, 241, 0.2) 45%,
-    transparent 70%
-  );
-  filter: blur(60px);
+  filter: blur(70px);
   pointer-events: none;
   z-index: 0;
-  animation: pulseGlow 6s ease-in-out infinite alternate;
+  transition: background 0.4s ease;
+  animation: pulseGlow 5s ease-in-out infinite alternate;
 }
 
 @keyframes pulseGlow {
@@ -41,37 +36,42 @@
 .card3d {
   position: relative;
   width: 100%;
-  height: 340px;
+  height: 360px;
   background: linear-gradient(
     145deg,
-    rgba(255, 255, 255, 0.07) 0%,
-    rgba(15, 23, 42, 0.4) 50%,
-    rgba(6, 7, 10, 0.7) 100%
+    rgba(255, 255, 255, 0.08) 0%,
+    rgba(15, 23, 42, 0.5) 45%,
+    rgba(6, 7, 10, 0.85) 100%
   );
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 24px;
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  box-shadow: 0 30px 60px -12px rgba(0, 0, 0, 0.7),
-    0 18px 36px -18px rgba(124, 92, 255, 0.25),
-    inset 0 1px 1px 0 rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 26px;
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  box-shadow: 0 35px 70px -15px rgba(0, 0, 0, 0.75),
+    0 20px 40px -20px rgba(124, 92, 255, 0.3),
+    inset 0 1px 1px 0 rgba(255, 255, 255, 0.25);
   transform-style: preserve-3d;
-  transition: transform 0.15s cubic-bezier(0.2, 0.8, 0.2, 1),
-    box-shadow 0.2s ease;
+  transition: transform 0.16s cubic-bezier(0.2, 0.8, 0.2, 1),
+    box-shadow 0.25s ease, border-color 0.3s ease;
   cursor: pointer;
   z-index: 1;
+  user-select: none;
 }
 
 .card3d:hover {
-  box-shadow: 0 40px 80px -15px rgba(0, 0, 0, 0.85),
-    0 24px 48px -20px rgba(124, 92, 255, 0.45),
-    inset 0 1px 2px 0 rgba(255, 255, 255, 0.35);
+  box-shadow: 0 45px 90px -15px rgba(0, 0, 0, 0.9),
+    0 25px 50px -20px rgba(124, 92, 255, 0.5),
+    inset 0 1px 2px 0 rgba(255, 255, 255, 0.4);
+}
+
+.cardInspectActive {
+  border-color: rgba(124, 92, 255, 0.4);
 }
 
 .glareLayer {
   position: absolute;
   inset: 0;
-  border-radius: 24px;
+  border-radius: 26px;
   pointer-events: none;
   z-index: 10;
   mix-blend-mode: screen;
@@ -81,7 +81,7 @@
 .backplane {
   position: absolute;
   inset: 0;
-  border-radius: 24px;
+  border-radius: 26px;
   overflow: hidden;
   pointer-events: none;
   transform: translateZ(0);
@@ -96,7 +96,52 @@
     ),
     linear-gradient(90deg, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
   background-size: 24px 24px;
-  mask-image: radial-gradient(circle at 50% 50%, black 30%, transparent 80%);
+  mask-image: radial-gradient(circle at 50% 50%, black 25%, transparent 75%);
+}
+
+.telemetryBar {
+  position: absolute;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%) translateZ(30px);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.25rem 0.75rem;
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  backdrop-filter: blur(8px);
+  z-index: 5;
+  white-space: nowrap;
+}
+
+.telemetryDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #22c55e;
+  box-shadow: 0 0 8px #22c55e;
+  animation: pulseDot 2s infinite ease-in-out;
+}
+
+@keyframes pulseDot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.85); }
+}
+
+.telemetryText {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: #e2e8f0;
+  letter-spacing: 0.01em;
+}
+
+.telemetryHint {
+  font-size: 0.65rem;
+  color: #94a3b8;
+  padding-left: 0.4rem;
+  border-left: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .logoStage {
@@ -110,6 +155,7 @@
   justify-content: center;
   align-items: center;
   transform-style: preserve-3d;
+  transition: opacity 0.3s ease, transform 0.3s ease;
 }
 
 .logoRingOuter {
@@ -117,38 +163,30 @@
   width: 170px;
   height: 170px;
   border-radius: 50%;
-  border: 1px dashed rgba(124, 92, 255, 0.35);
-  animation: rotateClockwise 24s linear infinite;
+  border: 1px dashed rgba(124, 92, 255, 0.4);
+  animation: rotateClockwise 22s linear infinite;
   pointer-events: none;
 }
 
 .logoRingInner {
   position: absolute;
-  width: 150px;
-  height: 150px;
+  width: 146px;
+  height: 146px;
   border-radius: 50%;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  box-shadow: 0 0 20px rgba(124, 92, 255, 0.2);
-  animation: rotateCounterClockwise 18s linear infinite;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 0 24px rgba(124, 92, 255, 0.25);
+  animation: rotateCounterClockwise 16s linear infinite;
   pointer-events: none;
 }
 
 @keyframes rotateClockwise {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 
 @keyframes rotateCounterClockwise {
-  from {
-    transform: rotate(360deg);
-  }
-  to {
-    transform: rotate(0deg);
-  }
+  from { transform: rotate(360deg); }
+  to { transform: rotate(0deg); }
 }
 
 .logoEmboss {
@@ -161,8 +199,8 @@
   display: flex;
   justify-content: center;
   align-items: center;
-  box-shadow: 0 16px 32px rgba(0, 0, 0, 0.6),
-    0 0 0 1px rgba(255, 255, 255, 0.15),
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.7),
+    0 0 0 1px rgba(255, 255, 255, 0.2),
     inset 0 2px 4px rgba(255, 255, 255, 0.3),
     inset 0 -2px 4px rgba(0, 0, 0, 0.6);
   transform: translateZ(25px);
@@ -170,19 +208,15 @@
 }
 
 @keyframes floatEmblem {
-  0% {
-    transform: translateZ(20px) translateY(-3px);
-  }
-  100% {
-    transform: translateZ(30px) translateY(3px);
-  }
+  0% { transform: translateZ(20px) translateY(-4px); }
+  100% { transform: translateZ(32px) translateY(4px); }
 }
 
 .logoImage {
   width: 100%;
   height: 100%;
   object-fit: contain;
-  filter: drop-shadow(0 8px 16px rgba(124, 92, 255, 0.5));
+  filter: drop-shadow(0 8px 18px rgba(124, 92, 255, 0.55));
 }
 
 .logoGlow {
@@ -190,49 +224,129 @@
   width: 100px;
   height: 100px;
   border-radius: 50%;
-  background: radial-gradient(
-    circle,
-    rgba(124, 92, 255, 0.6) 0%,
-    transparent 70%
-  );
+  background: radial-gradient(circle, rgba(124, 92, 255, 0.65) 0%, transparent 70%);
   filter: blur(25px);
   pointer-events: none;
   z-index: -1;
+}
+
+.inspectorHud {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) translateZ(45px);
+  width: 80%;
+  max-width: 380px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 1.25rem;
+  background: rgba(15, 23, 42, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 20px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.7),
+    inset 0 1px 1px rgba(255, 255, 255, 0.2);
+  animation: fadeInHud 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
+  z-index: 8;
+}
+
+@keyframes fadeInHud {
+  from { opacity: 0; transform: translate(-50%, -46%) translateZ(30px); }
+  to { opacity: 1; transform: translate(-50%, -50%) translateZ(45px); }
+}
+
+.inspectorBadge {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+  border: 1px solid;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.inspectorTitle {
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: #ffffff;
+  margin: 0;
+  letter-spacing: -0.01em;
+}
+
+.inspectorDesc {
+  font-size: 0.8rem;
+  line-height: 1.45;
+  color: #cbd5e1;
+  margin: 0;
+}
+
+.inspectorLink {
+  margin-top: 0.35rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #a78bfa;
+  text-decoration: none;
+  padding: 0.35rem 0.8rem;
+  background: rgba(124, 92, 255, 0.15);
+  border: 1px solid rgba(124, 92, 255, 0.3);
+  border-radius: 8px;
+  transition: background 0.15s ease, color 0.15s ease;
+  cursor: pointer;
+}
+
+.inspectorLink:hover {
+  background: rgba(124, 92, 255, 0.35);
+  color: #ffffff;
+  text-decoration: none;
 }
 
 .satelliteChip {
   position: absolute;
   display: flex;
   align-items: center;
-  gap: 0.6rem;
-  padding: 0.5rem 0.85rem;
-  background: rgba(15, 23, 42, 0.75);
+  gap: 0.65rem;
+  padding: 0.55rem 0.9rem;
+  background: rgba(15, 23, 42, 0.8);
   border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 14px;
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
-  box-shadow: 0 12px 24px -4px rgba(0, 0, 0, 0.5),
+  border-radius: 16px;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  box-shadow: 0 12px 26px -4px rgba(0, 0, 0, 0.55),
     inset 0 1px 1px rgba(255, 255, 255, 0.15);
   transform-style: preserve-3d;
-  transition: transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1),
-    border-color 0.2s ease, background-color 0.2s ease;
-  pointer-events: auto;
+  transition: transform 0.22s cubic-bezier(0.2, 0.8, 0.2, 1),
+    border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
+  cursor: pointer;
+  z-index: 6;
+  text-align: left;
 }
 
 .satelliteChip:hover {
-  background: rgba(30, 41, 59, 0.9);
-  border-color: rgba(124, 92, 255, 0.5);
-  box-shadow: 0 16px 30px -4px rgba(0, 0, 0, 0.65),
-    0 0 12px rgba(124, 92, 255, 0.35);
+  background: rgba(30, 41, 59, 0.95);
+  box-shadow: 0 18px 34px -4px rgba(0, 0, 0, 0.7),
+    0 0 16px rgba(124, 92, 255, 0.4);
+}
+
+.chipSelected {
+  background: rgba(30, 41, 59, 0.95);
+  box-shadow: 0 20px 38px -4px rgba(0, 0, 0, 0.75),
+    0 0 20px rgba(124, 92, 255, 0.5),
+    inset 0 1px 2px rgba(255, 255, 255, 0.3);
 }
 
 .chipTopLeft {
-  top: 24px;
+  top: 48px;
   left: 20px;
 }
 
 .chipTopRight {
-  top: 24px;
+  top: 48px;
   right: 20px;
 }
 
@@ -247,21 +361,19 @@
 }
 
 .chipIcon {
-  font-size: 1.25rem;
-  line-height: 1;
   display: flex;
   align-items: center;
   justify-content: center;
+  transition: color 0.2s ease;
 }
 
 .chipText {
   display: flex;
   flex-direction: column;
-  text-align: left;
 }
 
 .chipLabel {
-  font-size: 0.78rem;
+  font-size: 0.8rem;
   font-weight: 700;
   color: #f8fafc;
   letter-spacing: -0.01em;
@@ -275,35 +387,44 @@
 
 @media (max-width: 640px) {
   .sceneContainer {
-    padding: 0.5rem;
+    padding: 0.25rem;
+    margin: 1.5rem auto 1rem;
   }
 
   .card3d {
-    height: 380px;
+    height: 400px;
+  }
+
+  .telemetryBar {
+    top: 10px;
+  }
+
+  .telemetryHint {
+    display: none;
   }
 
   .satelliteChip {
-    padding: 0.4rem 0.65rem;
+    padding: 0.45rem 0.65rem;
   }
 
   .chipTopLeft {
-    top: 14px;
-    left: 12px;
+    top: 40px;
+    left: 10px;
   }
 
   .chipTopRight {
-    top: 14px;
-    right: 12px;
+    top: 40px;
+    right: 10px;
   }
 
   .chipBottomLeft {
     bottom: 14px;
-    left: 12px;
+    left: 10px;
   }
 
   .chipBottomRight {
     bottom: 14px;
-    right: 12px;
+    right: 10px;
   }
 
   .chipSublabel {
@@ -315,11 +436,13 @@
   .ambientGlow,
   .logoRingOuter,
   .logoRingInner,
-  .logoEmboss {
+  .logoEmboss,
+  .telemetryDot {
     animation: none;
   }
 
-  .card3d {
+  .card3d,
+  .satelliteChip {
     transition: none;
   }
 }
