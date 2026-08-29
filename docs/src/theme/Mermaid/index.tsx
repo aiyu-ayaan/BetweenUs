@@ -13,9 +13,8 @@ interface PanZoomState {
   y: number;
 }
 
-const MIN_SCALE = 0.3;
-const MAX_SCALE = 5.0;
-const SCALE_STEP = 0.25;
+const MIN_SCALE = 0.1;
+const MAX_SCALE = 30.0; // 3000% zoom capability
 
 function MermaidRenderResult({ renderResult }: { renderResult: { svg: string; bindFunctions?: (div: HTMLElement) => void } }) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -32,20 +31,22 @@ function MermaidRenderResult({ renderResult }: { renderResult: { svg: string; bi
     }
   }, [renderResult]);
 
-  // Handle Zoom In
+  // Handle Zoom In with adaptive stepping
   const handleZoomIn = useCallback(() => {
-    setTransform((prev) => ({
-      ...prev,
-      scale: Math.min(MAX_SCALE, Math.round((prev.scale + SCALE_STEP) * 100) / 100),
-    }));
+    setTransform((prev) => {
+      const step = prev.scale < 2 ? 0.25 : prev.scale < 5 ? 0.5 : prev.scale < 10 ? 1.0 : 2.5;
+      const nextScale = Math.min(MAX_SCALE, Math.round((prev.scale + step) * 100) / 100);
+      return { ...prev, scale: nextScale };
+    });
   }, []);
 
-  // Handle Zoom Out
+  // Handle Zoom Out with adaptive stepping
   const handleZoomOut = useCallback(() => {
-    setTransform((prev) => ({
-      ...prev,
-      scale: Math.max(MIN_SCALE, Math.round((prev.scale - SCALE_STEP) * 100) / 100),
-    }));
+    setTransform((prev) => {
+      const step = prev.scale <= 2 ? 0.25 : prev.scale <= 5 ? 0.5 : prev.scale <= 10 ? 1.0 : 2.5;
+      const nextScale = Math.max(MIN_SCALE, Math.round((prev.scale - step) * 100) / 100);
+      return { ...prev, scale: nextScale };
+    });
   }, []);
 
   // Handle Reset
@@ -56,7 +57,7 @@ function MermaidRenderResult({ renderResult }: { renderResult: { svg: string; bi
   // Handle Mouse Wheel Zoom
   const handleWheel = useCallback((e: React.WheelEvent<HTMLDivElement>) => {
     e.preventDefault();
-    const zoomFactor = e.deltaY < 0 ? 1.12 : 0.88;
+    const zoomFactor = e.deltaY < 0 ? 1.15 : 0.85;
     setTransform((prev) => {
       const newScale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, prev.scale * zoomFactor));
       return {
