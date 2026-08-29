@@ -28,6 +28,7 @@ import { decodeBody, encodeBody } from '../services/message-body';
 import { notifyMessage, publishUnreadCount, windowIsFocused } from '../services/notifications';
 import { mentionsMe } from '../services/mentions';
 import { cache } from '../services/cache';
+import { forgetAttachments } from '../services/attachments';
 import { emojiFor, forgetEmoji, loadEmoji, usedEmoji } from '../services/server-emoji';
 import { useAuthStore } from './auth';
 
@@ -140,7 +141,14 @@ interface ChatState {
     content: string,
     attachments?: MessageAttachment[],
     replyTo?: MessageReply,
+    /** One-time: its media may be opened once, and opening it destroys it. */
+    viewOnce?: boolean,
   ) => Promise<void>;
+  /**
+   * Reports that this account has opened a one-time message, which is what
+   * destroys it. Idempotent, and does nothing for the author's own message.
+   */
+  burnMessage: (messageId: string) => Promise<void>;
   /**
    * The message the composer is answering, per channel, so switching away and
    * back does not silently drop what was being replied to.
@@ -515,7 +523,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
   },
 
-  sendMessage: async (content, attachments = [], replyTo) => {
+  sendMessage: async (content, attachments = [], replyTo, viewOnce = false) => {
     const channelId = get().activeChannelId;
     if (!channelId) return;
     // The server stores and forwards ciphertext only - and the attachment
@@ -543,7 +551,21 @@ export const useChatStore = create<ChatState>((set, get) => ({
       channelId,
       envelope,
       attachments.map((attachment) => attachment.key),
+      viewOnce,
     );
+  },
+
+  /**
+   * Spends a one-time message. Outside the envelope, because the server is the
+   * one that has to act on it and it cannot read the envelope.
+   *
+   * Deliberately quiet on failure. The person has already seen the picture -
+   * that is what triggered this - and an error banner over a viewer they are
+   * about to close changes nothing they can act on. The message stays
+   * unburned and the next opening tries again.
+   */
+  burnMessage: async (messageId) => {
+    await api.burnMessage(messageId).catch(() => undefined);
   },
 
   /**
@@ -852,6 +874,81 @@ function subscribable(channels: Channel[], directs: Channel[]): string[] {
  * cached history of its channel, and the pinned panel. An edit, a deletion, a
  * pin and a reaction all arrive as the same replacement.
  */
+/**
+ * Drops the decrypted bytes of these messages' files.
+ *
+ * The keys come from the copies this store is holding, which is the only place
+ * left that knows them: the manifest lives inside the encrypted body, and a
+ * message that has been tombstoned or destroyed no longer has one. So this has
+ * to run before the store's copy is replaced or removed.
+ */
+function forgetMessageAttachments(messageIds: string[]): void {
+  const state = useChatStore.getState();
+  const wanted = new Set(messageIds);
+  const keys: string[] = [];
+  for (const list of [state.messages, ...Object.values(state.history), state.pins]) {
+    for (const message of list) {
+      if (wanted.has(message.id)) keys.push(...message.attachments.map((file) => file.key));
+    }
+  }
+  forgetAttachments(keys);
+}
+
+/** Takes messages out of every list this store keeps one in. */
+function forgetMessages(messageIds: Set<string>): void {
+  if (messageIds.size === 0) return;
+  const state = useChatStore.getState();
+  const keep = (items: DecryptedMessage[]): DecryptedMessage[] =>
+    items.filter((item) => !messageIds.has(item.id));
+
+  useChatStore.setState({
+    messages: keep(state.messages),
+    pins: keep(state.pins),
+    history: Object.fromEntries(
+      Object.entries(state.history).map(([channelId, items]) => [channelId, keep(items)]),
+    ),
+  });
+}
+
+/**
+ * Drops whatever has outlived a disappearing window - either of them.
+ *
+ * Two windows, and the client has to enforce both for the same reason: it is
+ * holding decrypted copies that no server can reach.
+ *
+ * The server's window is stamped on each message, and the server destroys
+ * those itself and says so - so on a client that has been connected the whole
+ * time this half finds nothing. It is for the one that has not: a laptop
+ * asleep since yesterday wakes holding messages the server destroyed hours
+ * ago, and would keep drawing them until something refetched the channel.
+ *
+ * This account's own window is never enforced by deletion anywhere, because it
+ * is one-sided - the rows are somebody else's history too. The server leaves
+ * them out of a history page, and this leaves them out of what is already on
+ * screen and on disk. Without this half, switching the setting on hid nothing
+ * that had already been fetched.
+ */
+export function pruneExpired(now = Date.now()): void {
+  const state = useChatStore.getState();
+  const personal = useAuthStore.getState().user?.messageTtlSeconds ?? null;
+  const floor = personal ? now - personal * 1000 : null;
+
+  const expired = new Set<string>();
+  for (const list of [state.messages, ...Object.values(state.history), state.pins]) {
+    for (const message of list) {
+      const gone =
+        (message.expiresAt && Date.parse(message.expiresAt) <= now) ||
+        (floor !== null && Date.parse(message.createdAt) <= floor);
+      if (gone) expired.add(message.id);
+    }
+  }
+  if (expired.size === 0) return;
+
+  forgetMessageAttachments([...expired]);
+  void cache.forgetMessages([...expired]).catch(() => undefined);
+  forgetMessages(expired);
+}
+
 function replaceMessage(message: DecryptedMessage): void {
   const state = useChatStore.getState();
   const swap = (items: DecryptedMessage[]): DecryptedMessage[] =>
@@ -963,10 +1060,31 @@ chatSocket.on((event) => {
   }
 
   if (event.type === 'message.updated') {
+    // A deletion arrives here as a tombstone, and a tombstone carries no
+    // manifest - the body is empty. So the keys are read off the copy this
+    // client is still holding, *before* it is replaced, or the decrypted
+    // pictures stay in the attachment cache for the rest of the session with
+    // nothing left that names them.
+    if (event.message.deletedAt) forgetMessageAttachments([event.message.id]);
     // An edit, a deletion, a pin and a reaction all replace the stored row, so
     // the cache does not hand back a message that was taken down an hour ago.
     void cache.putMessages([event.message]).catch(() => undefined);
     void decrypt(event.message).then(replaceMessage);
+    return;
+  }
+
+  /**
+   * A message that left no tombstone: a one-time message somebody opened, or
+   * one whose disappearing window closed.
+   *
+   * Nothing is drawn in its place, so it is removed rather than replaced -
+   * from the view, from the pinned panel, from the on-disk cache, and from the
+   * attachment cache holding its decrypted pictures.
+   */
+  if (event.type === 'message.gone') {
+    forgetMessageAttachments([event.messageId]);
+    void cache.forgetMessages([event.messageId]).catch(() => undefined);
+    forgetMessages(new Set([event.messageId]));
     return;
   }
 

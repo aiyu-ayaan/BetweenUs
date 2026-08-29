@@ -446,15 +446,29 @@ export const api = {
    * read the manifest, so this is the only way it can tie an upload to a
    * message - and the only way a deleted message can take its files with it.
    */
-  sendMessage: (channelId: string, content: string, attachmentKeys?: string[]): Promise<Message> =>
+  sendMessage: (
+    channelId: string,
+    content: string,
+    attachmentKeys?: string[],
+    viewOnce?: boolean,
+  ): Promise<Message> =>
     request('/api/v1/messages', {
       method: 'POST',
-      body: JSON.stringify({ channelId, content, attachmentKeys }),
+      body: JSON.stringify({ channelId, content, attachmentKeys, viewOnce }),
     }),
 
   /** Author or moderator; the row survives as a tombstone, the body does not. */
   deleteMessage: (messageId: string): Promise<void> =>
     request(`/api/v1/messages/${messageId}`, { method: 'DELETE' }),
+
+  /**
+   * Reports that a one-time message has been opened, which is what destroys
+   * it. A POST rather than a DELETE: the caller is usually not allowed to
+   * delete this message and is not claiming to be - they are saying they
+   * looked at it, and the destruction is the server's consequence.
+   */
+  burnMessage: (messageId: string): Promise<void> =>
+    request(`/api/v1/messages/${messageId}/burn`, { method: 'POST' }),
 
   /** The author only. `content` is the replacement envelope, already sealed. */
   editMessage: (messageId: string, content: string): Promise<Message> =>

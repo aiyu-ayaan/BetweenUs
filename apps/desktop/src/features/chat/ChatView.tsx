@@ -14,7 +14,7 @@ import type {
   MessageCustomEmoji,
   MessageReply,
 } from '@betweenus/shared-types';
-import { useChatStore, type DecryptedMessage } from '../../stores/chat';
+import { pruneExpired, useChatStore, type DecryptedMessage } from '../../stores/chat';
 import { UNDECRYPTABLE } from '../../services/e2ee';
 import { api } from '../../services/api';
 import { useAuthStore } from '../../stores/auth';
@@ -167,6 +167,22 @@ export function ChatView({
   const { messages, loadingMessages, error } = useChatStore();
   const channel = useChatStore((state) => state.activeChannel());
   const isMobile = useIsMobile();
+
+  /**
+   * Messages do not disappear on their own while a window is open.
+   *
+   * The server destroys what has expired and says so, but only to a client
+   * that is connected to hear it - and this client is holding decrypted copies
+   * that no event can reach if it was asleep. Half a minute rather than a
+   * second: the shortest window on offer is an hour, and a ticker that walks
+   * the open channel sixty times a minute to find nothing is a battery cost
+   * with no reader.
+   */
+  useEffect(() => {
+    pruneExpired();
+    const ticker = window.setInterval(() => pruneExpired(), 30_000);
+    return () => window.clearInterval(ticker);
+  }, []);
   /**
    * How a file dropped anywhere in the conversation reaches the composer that
    * owns the pending list. A ref rather than lifted state on purpose: the drop

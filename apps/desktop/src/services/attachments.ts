@@ -166,6 +166,24 @@ export async function openAttachment(
   return blob;
 }
 
+/**
+ * Drops the decrypted copies of these attachments.
+ *
+ * The cache above is the whole reason this has to exist. It holds plaintext -
+ * the actual picture, decoded and ready to draw - and it is keyed on the
+ * storage key rather than on the message, so nothing about a message being
+ * deleted reaches it on its own. Without this, deleting a photo removed it
+ * from the channel, from the database and from the object store, and left the
+ * decrypted bytes sitting in this map for the rest of the session, drawable by
+ * any screen that still had the manifest.
+ *
+ * Called whenever a message goes: a delete, a one-time message that was
+ * opened, a disappearing window that closed.
+ */
+export function forgetAttachments(keys: string[]): void {
+  for (const key of keys) cache.delete(key);
+}
+
 /** For the preview: an attachment's text, capped so a huge file cannot lock the UI. */
 export async function readAttachmentText(
   channelId: string,

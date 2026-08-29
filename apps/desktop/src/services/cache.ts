@@ -202,6 +202,26 @@ export const cache = {
    * worth worrying about - but a channel read back to its first message is,
    * so the oldest are dropped rather than kept forever.
    */
+  /**
+   * Forgets specific messages, by id.
+   *
+   * For the two deletions that leave no tombstone - a one-time message that
+   * was opened, and one whose disappearing window closed. An ordinary delete
+   * does not come through here: its tombstone is written over the old row by
+   * `putMessages`, which is what makes the channel say "this was here and is
+   * gone" after a restart.
+   */
+  async forgetMessages(messageIds: string[]): Promise<void> {
+    if (messageIds.length === 0) return;
+    const db = await database();
+    if (!db) return;
+
+    const transaction = db.transaction(MESSAGES, 'readwrite');
+    const store = transaction.objectStore(MESSAGES);
+    for (const id of messageIds) store.delete(id);
+    await done(transaction);
+  },
+
   async putMessages(messages: Message[]): Promise<void> {
     if (messages.length === 0) return;
     const db = await database();
