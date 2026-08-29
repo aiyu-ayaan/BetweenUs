@@ -46,7 +46,7 @@ import {
   type Run as MarkupRun,
 } from '../../services/markup';
 import { emojiQueryAt } from './emoji-names';
-import { dayLabel, sameDay } from './day';
+import { clockTime, dayLabel, sameDay } from './day';
 import { nextFollow } from './follow';
 import { anchorReceipts, seenBy } from './receipts';
 import { SeenByDialog, SeenByRow } from './SeenBy';
@@ -718,7 +718,7 @@ function MessageList({
                         <div className="mt-0.5 flex items-center justify-end gap-1 text-[10px] text-slate-400/70">
                           {message.pinnedAt && <PinIcon className="h-2.5 w-2.5" aria-label="Pinned" />}
                           {message.editedAt && <span>edited</span>}
-                          <time dateTime={message.createdAt}>{formatTime(message.createdAt)}</time>
+                          <time dateTime={message.createdAt}>{clockTime(message.createdAt)}</time>
                         </div>
                       </>
                     )}
@@ -1904,6 +1904,3 @@ function MessageComposer({
   );
 }
 
-function formatTime(iso: string): string {
-  return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-}

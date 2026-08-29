@@ -10,6 +10,7 @@
  * at" rather than "looked at this message at". That is the honest reading of
  * what the server stores, and the dialog says so rather than implying more.
  */
+import { clockTime, dayLabel } from './day';
 import { useEffect, useRef } from 'react';
 import type { ChannelReadReceipt } from '@betweenus/shared-types';
 import { absoluteUrl } from '../../services/endpoint';
@@ -158,15 +159,14 @@ export function SeenByDialog({
   );
 }
 
-/** "14:32" for today, "12 Mar, 14:32" for anything older. */
+/**
+ * When somebody read it: "Today at 14:32", "Yesterday at 9:14 AM".
+ *
+ * The same words and the same clock the message list's dividers use - the day
+ * from `dayLabel`, the time in the reader's own locale and 12/24-hour setting -
+ * because a receipt sitting under a conversation must not name the day, or tell
+ * the time, differently from the conversation.
+ */
 function formatStamp(iso: string): string {
-  const when = new Date(iso);
-  const time = when.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  const today = new Date();
-  const sameDay =
-    when.getDate() === today.getDate() &&
-    when.getMonth() === today.getMonth() &&
-    when.getFullYear() === today.getFullYear();
-  if (sameDay) return `today at ${time}`;
-  return `${when.toLocaleDateString([], { day: 'numeric', month: 'short' })} at ${time}`;
+  return `${dayLabel(iso)} at ${clockTime(iso)}`;
 }
