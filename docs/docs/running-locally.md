@@ -96,12 +96,20 @@ pnpm db:studio          # Prisma Studio, browse the data
 ## Android
 
 ```bash
-cd apps/android
-./gradlew assembleDebug
+pnpm android:build    # debug APK
+pnpm android:test     # unit tests
+pnpm android:run      # install it on a connected device and start it
 ```
 
-Needs JDK 21. `local.properties` sets `betweenus.serverUrl`, which is only
-a default — the login screen's server picker overrides it at runtime.
+Needs a JDK on `PATH` to launch the wrapper, but no particular version of
+one: Gradle provisions the daemon JVM itself, pinned to 17 by
+`apps/android/gradle/gradle-daemon-jvm.properties`. `android:run` also wants
+an Android SDK and `adb` on `PATH`.
+
+`local.properties` sets `betweenus.serverUrl`, which is only a default — the
+login screen's server picker overrides it at runtime. The emulator reaches
+this machine at `10.0.2.2`, so `http://10.0.2.2:8090` is `pnpm dev:gateway`
+seen from inside it.
 
 ## Docs site
 

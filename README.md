@@ -642,11 +642,20 @@ A native Android mobile application built with **Kotlin 2.2**, **Jetpack Compose
   `development/ANDROID_TODO.md` (phase 15).
 
 ```bash
-# Build and verify the Android client:
-cd apps/android
-./gradlew assembleDebug      # compiles debug APK
-./gradlew test               # runs unit test suite
+# Build and verify the Android client, from the repo root:
+pnpm android:build           # compiles debug APK
+pnpm android:test            # runs unit test suite
+pnpm android:run             # installs it on a connected device and starts it
+
+# Or from the module itself - the same wrapper, and what CI runs:
+cd apps/android && ./gradlew assembleDebug
 ```
+
+No particular JDK version to chase: any recent one on `PATH` launches the
+wrapper, which then provisions the daemon JVM itself - pinned to 17 by
+`apps/android/gradle/gradle-daemon-jvm.properties`, which is why CI's
+Java 21 and a developer's newer one both build the same thing. An Android
+SDK and `adb` on `PATH` are needed for `android:run`.
 
 ## Remote desktop
 
@@ -769,8 +778,10 @@ DEPLOYMENT.md             putting it on a server, end to end
 | `pnpm --filter @betweenus/presence-service smoke` | Presence, typing and voice rosters |
 | `pnpm --filter @betweenus/notification-service smoke` | Preferences, unread counting, read markers |
 | `pnpm --filter @betweenus/remote-gateway smoke` | Enrolment, grants, and what the remote relay refuses |
-| `cd apps/android && ./gradlew test` | Run Android core & UI unit test suite |
-| `cd apps/android && ./gradlew assembleDebug` | Build debug APK for Android |
+| `pnpm android:test` | Run Android core & UI unit test suite |
+| `pnpm android:build` | Build debug APK for Android |
+| `pnpm android:run` | Install the debug APK on a connected device and launch it |
+| `pnpm android <task...>` | Any other Gradle task, passed through to `apps/android/gradlew` |
 
 ## Testing and CI
 

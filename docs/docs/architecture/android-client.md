@@ -258,13 +258,26 @@ notification with a full-screen intent.
 
 ## Building it
 
+From the repo root, so the Android client is reachable by the same `pnpm`
+vocabulary as everything else in the workspace:
+
 ```bash
-cd apps/android
-./gradlew assembleDebug          # debug APK
-./gradlew testDebugUnitTest        # unit tests
+pnpm android:build               # debug APK
+pnpm android:test                # unit tests
+pnpm android:run                 # install on a connected device and start it
+pnpm android <task...>           # any other Gradle task, straight through
 ```
 
-JDK 21. `local.properties` (git-ignored) sets `betweenus.serverUrl`, a
-default only — the login screen's server picker can point the app anywhere
-at runtime. See [Running Locally](/running-locally#android) and
+`apps/android` has no `package.json` and so is not a pnpm workspace package;
+`scripts/android.mjs` bridges the gap by running the module's own
+`apps/android/gradlew`. `cd apps/android && ./gradlew assembleDebug` is
+exactly equivalent, and is what CI runs.
+
+No particular JDK version to chase — any recent one on `PATH` launches the
+wrapper, which provisions the daemon JVM itself, pinned to 17 by
+`gradle/gradle-daemon-jvm.properties`. That is why CI's Java 21 and a newer
+local one build identically. `android:run` additionally needs an Android SDK
+and `adb` on `PATH`. `local.properties` (git-ignored) sets
+`betweenus.serverUrl`, a default only — the login screen's server picker can
+point the app anywhere at runtime. See [Running Locally](/running-locally#android) and
 [CI](/deployment/ci#android) for what runs on every pull request.
