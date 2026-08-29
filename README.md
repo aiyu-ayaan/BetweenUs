@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/aiyu-ayaan/BetweenUs"><img src="https://sloc.xyz/github/aiyu-ayaan/BetweenUs" alt="Total Lines of Code" /></a>
+  <a href="https://github.com/aiyu-ayaan/BetweenUs"><img src="https://sloc.xyz/github/aiyu-ayaan/BetweenUs?v=1" alt="Total Lines of Code" /></a>
   <a href="https://github.com/aiyu-ayaan/BetweenUs"><img src="https://img.shields.io/github/repo-size/aiyu-ayaan/BetweenUs?style=flat-square&logo=github&logoColor=white" alt="Repo Size" /></a>
   <a href="https://github.com/aiyu-ayaan/BetweenUs/commits/master"><img src="https://img.shields.io/github/last-commit/aiyu-ayaan/BetweenUs?style=flat-square&logo=git&logoColor=white" alt="Last Commit" /></a>
   <img src="https://img.shields.io/badge/monorepo-pnpm%20%2B%20Turborepo-F69220?style=flat-square&logo=pnpm&logoColor=white" alt="Monorepo" />
