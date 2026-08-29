@@ -83,15 +83,18 @@ export function AttachmentList({
                 attachment={attachment}
                 onOpen={() => setPreview(attachment)}
               />
-            ) : isVoiceNote(attachment) ? (
-              // Somebody talking, not a file that happens to be audio. A
-              // picked music track still gets the ordinary player and its
-              // name, because that is what somebody sharing a track wants.
+            ) : attachment.contentType.startsWith('audio/') ? (
+              // All audio gets the same player. A recording is somebody
+              // talking and its name is a timestamp, so it has none drawn; a
+              // track somebody shared is mostly its name, so it keeps it.
+              // Both beat the browser's own `<audio controls>`, which is a
+              // different width and colour in every engine.
               <VoiceMessage
                 channelId={channelId}
                 attachment={attachment}
                 author={author}
                 mine={mine}
+                fileName={isVoiceNote(attachment) ? undefined : attachment.name}
               />
             ) : isPlayable(attachment) ? (
               <MediaAttachment channelId={channelId} attachment={attachment} />

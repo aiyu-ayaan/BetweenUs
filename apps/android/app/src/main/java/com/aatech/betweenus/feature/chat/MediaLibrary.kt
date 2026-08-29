@@ -5,6 +5,7 @@ import android.content.Context
 import android.net.Uri
 import android.provider.MediaStore
 import android.provider.OpenableColumns
+import android.webkit.MimeTypeMap
 import androidx.core.content.FileProvider
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -82,21 +83,61 @@ suspend fun recentMedia(context: Context, limit: Int = 90): List<MediaItem> =
  * that knows it.
  */
 suspend fun readPicked(context: Context, uri: Uri): PickedFile = withContext(Dispatchers.IO) {
-    val resolver = context.contentResolver
-    val type = resolver.getType(uri) ?: "application/octet-stream"
+    val described = describe(context, uri)
+    val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+        ?: error("That file could not be read")
 
-    val name = runCatching {
+    PickedFile(described.name, described.contentType, bytes)
+}
+
+/**
+ * Everything knowable about a picked URI without opening it.
+ *
+ * One resolver for both callers, because they used to have one each and the
+ * two did not agree: `describePicked` answered at pick time and `readPicked`
+ * answered again at send time, and whichever was worse is the one that reached
+ * the wire. Now there is a single answer and a single place to fix it.
+ *
+ * The order of what is asked matters, and it is the order in `PickedNames.kt`:
+ * the provider first, then the URI, then a generated name carrying the right
+ * extension. Every step exists because a real provider skipped the one above
+ * it - the document browser gives an opaque id for a name, and a `file://` URI
+ * has no provider to ask at all.
+ */
+private fun describe(context: Context, uri: Uri): PickedPreview {
+    val resolver = context.contentResolver
+
+    val displayName = runCatching {
         resolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
             val column = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
             if (column >= 0 && cursor.moveToFirst()) cursor.getString(column) else null
         }
-    }.getOrNull()?.takeIf { it.isNotBlank() }
-        ?: "attachment${extensionFor(type)}"
+    }.getOrNull()
 
-    val bytes = resolver.openInputStream(uri)?.use { it.readBytes() }
-        ?: error("That file could not be read")
+    // A `file://` URI has nothing to query, and `getType` on one answers from
+    // the extension - so the name has to be worked out before the type, or the
+    // type has nothing to be guessed from.
+    val provided = runCatching { resolver.getType(uri) }.getOrNull()
+    val fromSystem = if (typeIsUseful(provided)) provided else guessType(uri, displayName)
 
-    PickedFile(name, type, bytes)
+    val name = pickedName(displayName, uri.lastPathSegment, fromSystem ?: OPAQUE_TYPE)
+    return PickedPreview(uri = uri, name = name, contentType = pickedType(fromSystem, name))
+}
+
+/**
+ * The platform's own extension-to-type table, for anything not in ours.
+ *
+ * Wrapped because `MimeTypeMap` is an Android class: in a JVM unit test it is
+ * an unmocked stub that throws, and this path is a fallback rather than
+ * something worth failing a send over.
+ */
+private fun guessType(uri: Uri, displayName: String?): String? {
+    val name = displayName?.takeIf { it.isNotBlank() } ?: nameFromSegment(uri.lastPathSegment) ?: return null
+    val extension = name.substringAfterLast('.', "").lowercase()
+    if (extension.isEmpty()) return null
+    return runCatching {
+        MimeTypeMap.getSingleton().getMimeTypeFromExtension(extension)
+    }.getOrNull()
 }
 
 /**
@@ -106,30 +147,14 @@ suspend fun readPicked(context: Context, uri: Uri): PickedFile = withContext(Dis
  * player or a picture; reading a 200 MB video into memory to answer that would
  * be absurd, and the content resolver answers both from the index.
  */
-suspend fun describePicked(context: Context, uri: Uri): PickedPreview = withContext(Dispatchers.IO) {
-    val resolver = context.contentResolver
-    val type = resolver.getType(uri) ?: "application/octet-stream"
-    val name = runCatching {
-        resolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
-            val column = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-            if (column >= 0 && cursor.moveToFirst()) cursor.getString(column) else null
-        }
-    }.getOrNull()?.takeIf { it.isNotBlank() } ?: "attachment${extensionFor(type)}"
-
-    PickedPreview(uri = uri, name = name, contentType = type)
-}
+suspend fun describePicked(context: Context, uri: Uri): PickedPreview =
+    withContext(Dispatchers.IO) { describe(context, uri) }
 
 /** Somewhere for the camera app to put a photo, and a URI it may write to. */
 fun cameraTarget(context: Context): Uri {
     val directory = File(context.cacheDir, "camera").apply { mkdirs() }
     val file = File(directory, "photo-${System.currentTimeMillis()}.jpg")
     return FileProvider.getUriForFile(context, "${context.packageName}.files", file)
-}
-
-private fun extensionFor(contentType: String): String = when {
-    contentType.startsWith("image/") -> "." + contentType.substringAfter('/').substringBefore('+')
-    contentType.startsWith("video/") -> "." + contentType.substringAfter('/')
-    else -> ""
 }
 
 /**
@@ -150,7 +175,23 @@ suspend fun prepareForSending(
     contentType: String,
     onCompress: (Float) -> Unit = {},
 ): PickedFile {
-    if (!contentType.startsWith("video/")) return readPicked(context, uri)
+    if (!contentType.startsWith("video/")) {
+        // The bytes are read fresh; the name and the type are not re-derived.
+        //
+        // This used to `return readPicked(...)` and throw away both arguments,
+        // which meant the send used a second lookup made minutes later in a
+        // different coroutine rather than the one the picker itself produced.
+        // Whichever of the two was worse won, and for an audio file that was
+        // reliably the second: it arrived called `attachment`, typed as bytes,
+        // and drew as an anonymous document instead of something playable.
+        val read = readPicked(context, uri)
+        return PickedFile(
+            name = name.ifBlank { read.name },
+            // The caller's type unless it never had one either.
+            contentType = if (typeIsUseful(contentType)) contentType else read.contentType,
+            bytes = read.bytes,
+        )
+    }
 
     val prepared = compressVideo(context, uri, sizeOf(context, uri), onCompress)
     val read = readPicked(context, prepared.uri)

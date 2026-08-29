@@ -69,6 +69,14 @@ fun VoiceMessage(
     attachment: MessageAttachment,
     author: UserSummary?,
     mine: Boolean,
+    /**
+     * Shown above the player for audio that is not a recording.
+     *
+     * A voice note needs no label - it is somebody talking, and its name is a
+     * timestamp. A track somebody chose to share is the opposite: the name is
+     * most of what they were sharing.
+     */
+    fileName: String? = null,
 ) {
     val context = LocalContext.current
     val scheme = MaterialTheme.colorScheme
@@ -215,6 +223,16 @@ fun VoiceMessage(
         }
 
         Column(Modifier.weight(1f)) {
+            if (fileName != null) {
+                Text(
+                    text = fileName,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = scheme.onSurface,
+                    maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                )
+            }
+
             // The waveform *is* the seek bar. A slider underneath would be the
             // same axis drawn twice.
             Box(

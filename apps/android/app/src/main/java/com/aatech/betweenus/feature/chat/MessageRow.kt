@@ -531,12 +531,21 @@ fun MessageRow(
                                     // to be audio. A shared music track still
                                     // gets the ordinary card and its name,
                                     // because that is what sharing one means.
-                                    if (attachment.isVoiceNote) {
+                                    if (attachment.isAudio) {
                                         VoiceMessage(
                                             channelId = channelId,
                                             attachment = attachment,
                                             author = message.author,
                                             mine = isSelf,
+                                            // A recording is somebody talking
+                                            // and its name is a timestamp; a
+                                            // track somebody shared is mostly
+                                            // its name. Both get a player -
+                                            // audio used to get a download
+                                            // button and no way to hear it.
+                                            fileName = attachment.name.takeUnless {
+                                                attachment.isVoiceNote
+                                            },
                                         )
                                     } else {
                                         AttachmentCard(channelId, attachment, onViewImage, onPlayVideo)

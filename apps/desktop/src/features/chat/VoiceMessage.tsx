@@ -43,9 +43,18 @@ export function VoiceMessage({
   attachment,
   author,
   mine,
+  fileName,
 }: {
   channelId: string;
   attachment: MessageAttachment;
+  /**
+   * Shown above the player for audio that is not a recording.
+   *
+   * A voice note needs no label - it is somebody talking, and its name is a
+   * timestamp. A track somebody chose to share is the opposite: the name is
+   * most of what they were sharing.
+   */
+  fileName?: string;
   /** Drawn on the bubble the way every phone messenger draws a voice note. */
   author?: { displayName: string; avatarUrl: string | null };
   /** Whether this account sent it, which decides the accent. */
@@ -146,6 +155,11 @@ export function VoiceMessage({
       </button>
 
       <div className="min-w-0 flex-1">
+        {fileName && (
+          <p className="truncate text-xs text-slate-200" title={fileName}>
+            {fileName}
+          </p>
+        )}
         {/* The waveform *is* the seek bar. A slider underneath would be the
             same axis drawn twice. */}
         <div
