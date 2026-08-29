@@ -364,6 +364,7 @@ fun Shell(user: PublicUser) {
             // reaching for it would want.
             Column(Modifier.fillMaxSize()) {
                 ConnectionBanner()
+                ClockBanner()
                 /**
                  * Screens arrive rather than appear.
                  *

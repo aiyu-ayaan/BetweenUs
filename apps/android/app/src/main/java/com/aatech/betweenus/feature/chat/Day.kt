@@ -14,6 +14,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.aatech.betweenus.core.data.ServerClock
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -59,8 +60,15 @@ fun sameDay(a: String, b: String): Boolean {
     return one == dayOf(b)
 }
 
-/** The divider's words for the day `iso` falls in. */
-fun dayLabel(iso: String, today: LocalDate = LocalDate.now()): String {
+/**
+ * The divider's words for the day `iso` falls in.
+ *
+ * "Today" is the *server's* today, not this phone's: a device whose clock is a
+ * day out would otherwise file yesterday's conversation under "Today" and
+ * today's under a weekday, which reads as broken software rather than as a
+ * wrong clock. See `ServerClock`.
+ */
+fun dayLabel(iso: String, today: LocalDate = ServerClock.today()): String {
     val day = dayOf(iso) ?: return ""
     return when (today.toEpochDay() - day.toEpochDay()) {
         0L -> "Today"

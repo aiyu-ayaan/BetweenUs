@@ -83,6 +83,15 @@ object Http {
 
         return try {
             using.newCall(configure(builder).build()).execute().use { response ->
+                // Every reply carries the server's own clock in its `Date`
+                // header, so the offset costs nothing to learn and is learned
+                // from whatever the app was doing anyway - failed replies
+                // included. See ServerClock.
+                ServerClock.sample(
+                    sentAtMs = response.sentRequestAtMillis,
+                    receivedAtMs = response.receivedResponseAtMillis,
+                    serverMs = response.headers.getDate("Date")?.time,
+                )
                 val bytes = response.body?.bytes() ?: ByteArray(0)
                 Result(
                     status = response.code,
