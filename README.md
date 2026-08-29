@@ -88,7 +88,7 @@ to be framed, so no browser tab can ever show it.
 | Block somebody | ✅ | ✅ | ✅ |
 | Clear one conversation, or all, on every device | ✅ | ✅ | ✅ |
 | Disappearing messages — a server's window, and your own | ✅ | ✅ | ✅ |
-| One-time photos, video and voice, destroyed once opened | ✅ | ✅ | ✅ + `FLAG_SECURE` |
+| One-time photos, video and voice, destroyed once seen | ✅ capture blocked | ⚠️ no capture block | ✅ `FLAG_SECURE` |
 | Voice messages, with a waveform, played in place | ✅ | ✅ | ✅ |
 | Replies, edit, delete, reactions | ✅ | ✅ | ✅ |
 | Pinned messages | ✅ | ✅ | ✅ |
@@ -1014,12 +1014,16 @@ All three clients have all of it.
   six-hourly sweeper is the backstop rather than the only path. It used to mean
   "the ciphertext leaves the object store some time today", and on the clients
   the plaintext simply outlived the message.
-- **One-time media is protected as far as software honestly can be.** No
-  thumbnail, no download, no context menu, nothing selectable, and `FLAG_SECURE`
-  on Android so the platform itself fails the screenshot. A second camera
-  pointed at the screen defeats all of it and always will — so what the feature
-  actually guarantees is that the file stops existing everywhere the moment it
-  has been seen once, and both viewers say that rather than implying more.
+- **One-time media is protected as far as software honestly can be, and the
+  three clients differ.** No thumbnail, no download, no context menu, nothing
+  selectable, anywhere. On Android the viewer sets `FLAG_SECURE` and on the
+  desktop it sets `setContentProtection`, so on both the operating system
+  itself refuses the screenshot and records black. **A browser cannot do this**
+  — a page has no say over the screen it is drawn on — and the web viewer says
+  so rather than repeating a promise it cannot keep. A second camera pointed at
+  the screen defeats all of it and always will, so what the feature actually
+  guarantees is that the file stops existing everywhere once its recipients
+  have seen it.
 - **A key per machine, not per account.** The device directory is a list now,
   a channel key is wrapped once per device, and revoking one deletes its wraps
   and re-keys every channel it could read.

@@ -176,14 +176,28 @@ happens as the viewer opens, so the row is destroyed while the picture is still
 being looked at; without the hold, removing the message unmounted the row and
 the viewer drawn inside it, and whoever spent their look never saw anything.
 
+**A viewer fetches before it reports.** The burn deletes the blobs, so
+reporting a look before the download finished raced the destruction of the
+bytes being opened — and on a phone the download lost every time. The viewer
+now decrypts every file in the message first and reports afterwards; video and
+voice notes are written to the plaintext cache during that prefetch so no
+player goes back for a blob that no longer exists.
+
 Clients display it with every copy path they control removed — no download, no
 context menu, nothing draggable or selectable, and no thumbnail in the message
-list. Android additionally sets `FLAG_SECURE` on the viewer, so the platform
-fails the screenshot gesture, records black, and keeps the window out of the
-recents thumbnail. **None of that stops a second camera pointed at the screen,
-and no software on a device somebody holds can.** The guarantee is that the
-file stops existing everywhere the moment it has been seen once, and both
-viewers say so rather than implying more.
+list. Beyond that the platforms genuinely differ, and each viewer's copy says
+which one it is on:
+
+| Client | Screen capture | How |
+| --- | --- | --- |
+| Android | Blocked | `FLAG_SECURE` on the viewer window |
+| Desktop | Blocked | `setContentProtection(true)` while the viewer is open |
+| Web | **Cannot be blocked** | A page has no say over the screen it is drawn on |
+
+**None of it stops a second camera pointed at the screen, and no software on a
+device somebody holds can.** The guarantee is that the file stops existing
+everywhere once its recipients have seen it, and the viewers say so rather than
+implying more.
 
 ## `/api/v1/users` and `/api/v1/friends` and `/api/v1/dm`
 
