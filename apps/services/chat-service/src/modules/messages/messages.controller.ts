@@ -78,7 +78,13 @@ export class MessagesController {
 
   @Post()
   send(@CurrentUser() user: AuthenticatedUser, @Body() dto: CreateMessageDto): Promise<Message> {
-    return this.messages.send(user.id, dto.channelId, dto.content, dto.attachmentKeys);
+    return this.messages.send(
+      user.id,
+      dto.channelId,
+      dto.content,
+      dto.attachmentKeys,
+      dto.viewOnce,
+    );
   }
 
   @Patch(':messageId')
@@ -97,6 +103,24 @@ export class MessagesController {
     @Param('messageId', ParseUUIDPipe) messageId: string,
   ): Promise<void> {
     return this.messages.remove(user.id, messageId);
+  }
+
+  /**
+   * Spends a one-time message: the caller has opened its media, so it goes.
+   *
+   * A POST rather than the DELETE it resembles, because the caller is usually
+   * not allowed to delete this message and is not claiming to be - they are
+   * reporting that they looked at it, and the destruction is the server's
+   * consequence rather than their request. 204 either way: a message already
+   * burned by somebody else is not an error to whoever arrived second.
+   */
+  @Post(':messageId/burn')
+  @HttpCode(204)
+  burn(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('messageId', ParseUUIDPipe) messageId: string,
+  ): Promise<void> {
+    return this.messages.burn(user.id, messageId);
   }
 
   @Put(':messageId/pin')

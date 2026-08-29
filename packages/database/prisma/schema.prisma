@@ -67,6 +67,12 @@ model User {
   /// feature asked for is "clear everything" and a per-channel column would be
   /// a fan-out write over every channel the account is in to answer it.
   chatsClearedAt     DateTime?
+  /// This account's own disappearing-message window, in seconds, or null for
+  /// "keep everything". Personal and one-sided: it hides messages older than
+  /// the window from *this* account on every one of its devices, and touches
+  /// nobody else's copy. A server's own window (`Server.messageTtlSeconds`)
+  /// outranks it - that one actually deletes rows, for everyone.
+  messageTtlSeconds  Int?
   createdAt          DateTime   @default(now())
   updatedAt          DateTime   @updatedAt
 
@@ -456,6 +462,15 @@ model Server {
   slug      String   @unique
   iconUrl   String?
   ownerId   String
+  /// How long a message sent in this server's channels lives, in seconds, or
+  /// null for "for ever". Set by whoever holds MANAGE_SERVER, and it binds
+  /// every member: the sweeper destroys the row and its blobs when the window
+  /// closes, so this is a deletion and not a filter.
+  ///
+  /// Stamped onto each message as it is sent rather than evaluated at read
+  /// time, so changing the window governs what is sent next and never
+  /// retroactively resurrects or condemns what is already there.
+  messageTtlSeconds Int?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -680,6 +695,23 @@ model Message {
   deletedById String?
   pinnedAt    DateTime?
   pinnedById  String?
+  /// When this message stops existing, stamped from the server's disappearing
+  /// window at send time. Null means it stays until somebody deletes it. The
+  /// disappearing sweeper destroys the row outright rather than tombstoning
+  /// it: a tombstone that says "a message was here" for ever is not what a
+  /// disappearing message was asked to be.
+  expiresAt   DateTime?
+  /// A one-time message: the recipient may open its media once, and opening it
+  /// destroys it everywhere.
+  ///
+  /// The flag is outside the encrypted body because the server has to act on
+  /// it - burning is a row update and a blob delete, and a server that cannot
+  /// read the body cannot be told by the body. What leaks is that some message
+  /// was one-time, which is a fact both clients already draw on screen.
+  viewOnce    Boolean           @default(false)
+  /// When a one-time message was opened, so a second opener is told it is gone
+  /// rather than shown a decryption failure.
+  viewedAt    DateTime?
 
   channel     Channel           @relation(fields: [channelId], references: [id], onDelete: Cascade)
   author      User              @relation(fields: [authorId], references: [id], onDelete: Cascade)
@@ -692,6 +724,8 @@ model Message {
   @@index([channelId, createdAt])
   // The pinned panel lists one channel's pins, newest pin first.
   @@index([channelId, pinnedAt])
+  // The disappearing sweeper reads whatever is past its window, oldest first.
+  @@index([expiresAt])
   @@map("messages")
 }
 

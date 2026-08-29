@@ -75,6 +75,47 @@ export function sweepWhere(now: Date = new Date(), grace: number = graceMs()): S
   };
 }
 
+/**
+ * Removes the blobs of specific messages now, rather than at the next sweep.
+ *
+ * The sweeper on its own is correct but slow: up to six hours pass between
+ * somebody deleting a photo and the ciphertext leaving the object store, and
+ * "I deleted it" meaning "in a few hours" is not what anybody who presses that
+ * button is asking for. So a delete, a burn and an expiry all call this, and
+ * the sweeper stays behind them as the backstop that catches whatever this
+ * could not reach - storage that was down, a process that died mid-delete, a
+ * row orphaned by somebody else's cascade.
+ *
+ * Deliberately quiet about failure. The caller is a user pressing delete, and
+ * the message is deleted whether or not the object store answered; what is
+ * left behind is exactly what the sweeper exists to collect.
+ */
+export async function purgeMessageAttachments(messageIds: string[]): Promise<number> {
+  if (messageIds.length === 0) return 0;
+
+  const rows = await prisma.attachment.findMany({
+    where: { messageId: { in: messageIds } },
+    select: { id: true, key: true },
+  });
+  if (rows.length === 0) return 0;
+
+  const storage = getStorage();
+  const gone: string[] = [];
+  for (const row of rows) {
+    // Object first, then row - the same order and for the same reason as the
+    // sweep below: a row removed first is a blob nothing can ever name again.
+    try {
+      await storage.delete(row.key);
+      gone.push(row.id);
+    } catch {
+      // Left for the sweeper, which will find it unclaimed and try again.
+    }
+  }
+
+  if (gone.length > 0) await prisma.attachment.deleteMany({ where: { id: { in: gone } } });
+  return gone.length;
+}
+
 /** Deletes the objects and their rows. Returns how many objects went. */
 export async function sweepAttachments(now: Date = new Date()): Promise<number> {
   const doomed = await prisma.attachment.findMany({

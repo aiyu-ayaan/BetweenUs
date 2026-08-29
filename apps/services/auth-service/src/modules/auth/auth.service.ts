@@ -459,6 +459,11 @@ export class AuthService {
         // null is a real value here - it clears the picture back to the
         // initial - so only an absent key means "leave it alone".
         ...(dto.avatarUrl !== undefined ? { avatarUrl: dto.avatarUrl } : {}),
+        // Same rule: null is "switch the personal disappearing window off",
+        // which is a value, and an absent key is "do not touch it".
+        ...(dto.messageTtlSeconds !== undefined
+          ? { messageTtlSeconds: dto.messageTtlSeconds }
+          : {}),
       },
     });
 
@@ -560,6 +565,7 @@ export function toPublicUser(user: User): PublicUser {
     avatarUrl: user.avatarUrl,
     role: user.role,
     mustChangePassword: user.mustChangePassword,
+    messageTtlSeconds: user.messageTtlSeconds,
     createdAt: user.createdAt.toISOString(),
   };
 }

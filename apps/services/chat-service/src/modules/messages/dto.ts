@@ -1,6 +1,7 @@
 import {
   ArrayMaxSize,
   IsArray,
+  IsBoolean,
   IsOptional,
   IsString,
   IsUUID,
@@ -36,6 +37,19 @@ export class CreateMessageDto implements CreateMessageRequest {
   @ArrayMaxSize(50)
   @IsString({ each: true })
   attachmentKeys?: string[];
+
+  /**
+   * Send this as a one-time message: its media may be opened once by somebody
+   * other than the author, and that opening destroys the row and its blobs.
+   *
+   * The one thing about a message the server is told in the clear besides who
+   * sent it and when, and it has to be: burning is a row update and a blob
+   * delete, neither of which a server that cannot read the body can be asked
+   * to do by the body.
+   */
+  @IsOptional()
+  @IsBoolean()
+  viewOnce?: boolean;
 }
 
 export class UpdateMessageDto implements UpdateMessageRequest {

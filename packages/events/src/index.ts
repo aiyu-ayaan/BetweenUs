@@ -129,7 +129,23 @@ export interface EventPayloads {
   [EVENTS.MESSAGE_CREATED]: { message: Message };
   [EVENTS.MESSAGE_UPDATED]: { message: Message };
   /** Carries the tombstone, because a deleted message still renders as one. */
-  [EVENTS.MESSAGE_DELETED]: { messageId: string; channelId: string; message: Message };
+  /**
+   * A message is gone. `message` is the tombstone every client renders in its
+   * place - or null when there is no tombstone to render, because the row was
+   * destroyed rather than emptied.
+   *
+   * Two shapes because there are two kinds of gone. An ordinary delete leaves
+   * "this message was deleted" in the conversation, which is honest and is
+   * what everybody expects. A one-time message that was opened, and a message
+   * whose disappearing window closed, leave nothing: a permanent marker
+   * reading "something was here" tells exactly the story those two features
+   * were chosen to avoid telling.
+   */
+  [EVENTS.MESSAGE_DELETED]: {
+    messageId: string;
+    channelId: string;
+    message: Message | null;
+  };
   /**
    * Both sides of the friendship, because either of them may be connected to a
    * different instance and both screens have to change.

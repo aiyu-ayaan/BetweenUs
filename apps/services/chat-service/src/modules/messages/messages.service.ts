@@ -2,12 +2,14 @@ import { BadRequestException, ForbiddenException, Injectable, NotFoundException 
 import { prisma, resolveChannelAccess, type ChannelAccess } from '@betweenus/database';
 import { EVENTS, EventBus } from '@betweenus/events';
 import { PERMISSIONS, type Permission } from '@betweenus/permissions';
-import type {
-  ClearChatsResponse,
-  Message,
-  MessageReactionSummary,
-  Paginated,
+import {
+  isDisappearingWindow,
+  type ClearChatsResponse,
+  type Message,
+  type MessageReactionSummary,
+  type Paginated,
 } from '@betweenus/shared-types';
+import { purgeMessageAttachments } from '../uploads/attachment-sweeper';
 
 const PAGE_SIZE = 50;
 // Content is an encrypted envelope, so the limit covers base64 expansion of a
@@ -60,7 +62,7 @@ export class MessagesService {
       ? await prisma.message.findUnique({ where: { id: before }, select: { createdAt: true } })
       : null;
 
-    const clearedAt = await this.clearedAt(userId, channelId);
+    const clearedAt = await this.historyFloor(userId, channelId);
     const rows = await prisma.message.findMany({
       where: {
         channelId,
@@ -90,7 +92,7 @@ export class MessagesService {
   async pins(userId: string, channelId: string): Promise<Message[]> {
     await this.requireChannelAccess(userId, channelId, PERMISSIONS.VIEW_CHANNEL);
 
-    const clearedAt = await this.clearedAt(userId, channelId);
+    const clearedAt = await this.historyFloor(userId, channelId);
     const rows = await prisma.message.findMany({
       where: {
         channelId,
@@ -160,18 +162,63 @@ export class MessagesService {
    * everything and then clearing one conversation again does the obvious thing,
    * and so does the reverse.
    *
+   * The third marker is this account's personal disappearing window, which is
+   * the same kind of thing in a different shape: not a moment somebody chose,
+   * but one that slides forward with the clock. It belongs here rather than in
+   * a filter of its own precisely because it is one-sided - a personal window
+   * hides history from its owner and from nobody else, which is exactly what
+   * these two markers already do. The server's own window is not here at all:
+   * that one deletes the rows, so there is nothing left to filter.
+   *
    * ponytail: two lookups per history page, both primary-key reads. Fold them
    * into the access check's query if a profiler ever says otherwise.
    */
-  private async clearedAt(userId: string, channelId: string): Promise<Date | null> {
+  private async historyFloor(userId: string, channelId: string): Promise<Date | null> {
     const [account, conversation] = await Promise.all([
-      prisma.user.findUnique({ where: { id: userId }, select: { chatsClearedAt: true } }),
+      prisma.user.findUnique({
+        where: { id: userId },
+        select: { chatsClearedAt: true, messageTtlSeconds: true },
+      }),
       prisma.channelRead.findUnique({
         where: { userId_channelId: { userId, channelId } },
         select: { clearedAt: true },
       }),
     ]);
-    return laterOf(account?.chatsClearedAt ?? null, conversation?.clearedAt ?? null);
+
+    const personal = account?.messageTtlSeconds
+      ? new Date(Date.now() - account.messageTtlSeconds * 1000)
+      : null;
+    return laterOf(
+      laterOf(account?.chatsClearedAt ?? null, conversation?.clearedAt ?? null),
+      personal,
+    );
+  }
+
+  /**
+   * When a message sent into this channel now should stop existing, or null
+   * when nothing says it should.
+   *
+   * Only the server's window is read. An account's own window is a filter over
+   * what it is shown and has no business setting an expiry on somebody else's
+   * copy - that asymmetry is the whole difference between the two settings,
+   * and it is why the server's outranks the account's rather than the two
+   * being combined.
+   *
+   * A direct message has no server, so it has no window: there is nobody to
+   * set one and nobody it would bind.
+   */
+  private async expiryFor(serverId: string | null): Promise<Date | null> {
+    if (!serverId) return null;
+    const server = await prisma.server.findUnique({
+      where: { id: serverId },
+      select: { messageTtlSeconds: true },
+    });
+    const seconds = server?.messageTtlSeconds ?? null;
+    // A window that is not on the list is a window somebody wrote into the
+    // database by hand. Ignored rather than obeyed: the alternative is
+    // honouring a three-second retention nobody's client can offer to undo.
+    if (!seconds || !isDisappearingWindow(seconds)) return null;
+    return new Date(Date.now() + seconds * 1000);
   }
 
   async send(
@@ -179,8 +226,9 @@ export class MessagesService {
     channelId: string,
     content: string,
     attachmentKeys: string[] = [],
+    viewOnce = false,
   ): Promise<Message> {
-    await this.requireChannelAccess(userId, channelId, PERMISSIONS.SEND_MESSAGE);
+    const access = await this.requireChannelAccess(userId, channelId, PERMISSIONS.SEND_MESSAGE);
 
     const trimmed = content.trim();
     if (trimmed.length === 0 || trimmed.length > MAX_CONTENT_LENGTH) {
@@ -190,8 +238,12 @@ export class MessagesService {
       });
     }
 
+    // Stamped now rather than evaluated on read, so changing a server's window
+    // governs what is sent next and never reaches back through the channel.
+    const expiresAt = await this.expiryFor(access.serverId);
+
     const row = await prisma.message.create({
-      data: { channelId, authorId: userId, content: trimmed },
+      data: { channelId, authorId: userId, content: trimmed, expiresAt, viewOnce },
       include: MESSAGE_INCLUDE,
     });
 
@@ -258,9 +310,14 @@ export class MessagesService {
    * It is a soft delete: `deletedAt` and, when somebody else did it,
    * `deletedById` are set and the body is emptied. The row stays so the
    * conversation can show a tombstone and so a page cursor handed out a moment
-   * ago still points somewhere; the ciphertext does not. The blobs it carried
-   * go too, but not here: the attachment sweeper collects what a deleted
-   * message no longer justifies, so a delete stays one row update.
+   * ago still points somewhere; the ciphertext does not.
+   *
+   * The blobs go with it, here and now. They used to be left to the attachment
+   * sweeper, which is correct but runs every six hours - so "I deleted that
+   * photo" meant "the ciphertext leaves the object store some time today",
+   * which is not what anybody pressing delete is asking for. The sweeper is
+   * still behind this as the backstop for whatever the immediate delete could
+   * not reach.
    */
   async remove(userId: string, messageId: string): Promise<void> {
     const existing = await this.require(messageId);
@@ -294,10 +351,61 @@ export class MessagesService {
       include: MESSAGE_INCLUDE,
     });
 
+    // After the row update, never before: a blob deleted for a message that
+    // then failed to delete is a message rendering broken pictures for ever.
+    await purgeMessageAttachments([row.id]);
+
     await this.events.publish(EVENTS.MESSAGE_DELETED, {
       messageId: row.id,
       channelId: row.channelId,
       message: toMessage(row),
+    });
+  }
+
+  /**
+   * Spends a one-time message: its media is opened, and opening it is what
+   * destroys it.
+   *
+   * The author is not a viewer. Somebody re-reading what they themselves sent
+   * has not consumed anybody's one look, and a sender who could burn their own
+   * message by scrolling past it would find the feature unusable.
+   *
+   * First caller wins, and every caller after is told it is gone rather than
+   * being handed a key to nothing. That race is settled by a conditional
+   * update - `viewedAt: null` in the where clause - so two devices opening the
+   * same message at the same instant produce one burn, not two.
+   *
+   * The row is destroyed rather than tombstoned. A one-time message that
+   * leaves "this message was deleted" sitting in the channel for ever is
+   * telling the story it was chosen to avoid telling.
+   */
+  async burn(userId: string, messageId: string): Promise<void> {
+    const row = await prisma.message.findFirst({
+      where: { id: messageId, deletedAt: null },
+      select: { id: true, channelId: true, authorId: true, viewOnce: true, viewedAt: true },
+    });
+    if (!row || !row.viewOnce) {
+      throw new NotFoundException({ code: 'MESSAGE_NOT_FOUND', message: 'Message not found' });
+    }
+    await this.requireChannelAccess(userId, row.channelId, PERMISSIONS.VIEW_CHANNEL);
+
+    // The author looking at their own does not spend it.
+    if (row.authorId === userId) return;
+
+    const claimed = await prisma.message.updateMany({
+      where: { id: row.id, viewedAt: null },
+      data: { viewedAt: new Date() },
+    });
+    // Somebody else got there first; theirs did the deleting.
+    if (claimed.count === 0) return;
+
+    await purgeMessageAttachments([row.id]);
+    await prisma.message.delete({ where: { id: row.id } });
+
+    await this.events.publish(EVENTS.MESSAGE_DELETED, {
+      messageId: row.id,
+      channelId: row.channelId,
+      message: null,
     });
   }
 
@@ -437,6 +545,9 @@ interface MessageRow {
   editedAt: Date | null;
   deletedAt: Date | null;
   pinnedAt: Date | null;
+  expiresAt?: Date | null;
+  viewOnce?: boolean;
+  viewedAt?: Date | null;
   author: {
     id: string;
     username: string;
@@ -476,6 +587,9 @@ export function toMessage(row: MessageRow): Message {
       : null,
     pinnedAt: row.pinnedAt ? row.pinnedAt.toISOString() : null,
     reactions: summarise(row.reactions ?? []),
+    expiresAt: row.expiresAt ? row.expiresAt.toISOString() : null,
+    viewOnce: row.viewOnce ?? false,
+    viewedAt: row.viewedAt ? row.viewedAt.toISOString() : null,
   };
 }
 

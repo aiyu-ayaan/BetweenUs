@@ -109,12 +109,23 @@ export class ChatGateway implements OnModuleDestroy {
     // An edit, a pin, a reaction and a deletion all reach the client as the
     // same event carrying the whole message - a deleted one is a tombstone with
     // `deletedAt` set, which is what the client has to draw.
-    for (const event of [EVENTS.MESSAGE_UPDATED, EVENTS.MESSAGE_DELETED] as const) {
-      await this.events.subscribe(event, (envelope) => {
-        const { message } = envelope.payload;
-        this.broadcast(channelRoom(message.channelId), { type: 'message.updated', message });
-      });
-    }
+    await this.events.subscribe(EVENTS.MESSAGE_UPDATED, (envelope) => {
+      const { message } = envelope.payload;
+      this.broadcast(channelRoom(message.channelId), { type: 'message.updated', message });
+    });
+
+    // Except when there is no tombstone. A one-time message that was opened,
+    // and one whose disappearing window closed, are destroyed rather than
+    // emptied - so what goes out is "forget this", not a message to redraw.
+    await this.events.subscribe(EVENTS.MESSAGE_DELETED, (envelope) => {
+      const { message, messageId, channelId } = envelope.payload;
+      this.broadcast(
+        channelRoom(channelId),
+        message
+          ? { type: 'message.updated', message }
+          : { type: 'message.gone', messageId, channelId },
+      );
+    });
 
     // A read marker moved. Everyone subscribed to the channel is told, because
     // a read receipt is only useful to the person whose message was read - and

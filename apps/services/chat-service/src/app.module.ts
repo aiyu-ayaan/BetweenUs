@@ -7,6 +7,7 @@ import { createHealthController } from '@betweenus/nest-common';
 import { MessagesController } from './modules/messages/messages.controller';
 import { MessagesService } from './modules/messages/messages.service';
 import { UnfurlService } from './modules/messages/unfurl.service';
+import { DisappearingSweeper } from './modules/messages/disappearing-sweeper';
 import { UploadsController } from './modules/uploads/uploads.controller';
 import { ScratchSweeper } from './modules/uploads/scratch-sweeper';
 import { AttachmentSweeper } from './modules/uploads/attachment-sweeper';
@@ -42,6 +43,7 @@ const SERVICE_NAME = 'chat-service';
     ChatGateway,
     ScratchSweeper,
     AttachmentSweeper,
+    DisappearingSweeper,
     {
       provide: EventBus,
       useFactory: () => new EventBus(envOr('REDIS_URL', 'redis://localhost:6379'), SERVICE_NAME),

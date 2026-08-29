@@ -15,7 +15,7 @@ import {
   ValidateIf,
 } from 'class-validator';
 import { SERVER_ROLES } from '@betweenus/permissions';
-import { UPLOADED_PICTURE_URL } from '@betweenus/shared-types';
+import { DISAPPEARING_WINDOWS, UPLOADED_PICTURE_URL } from '@betweenus/shared-types';
 import type {
   AddServerMemberRequest,
   ChannelType,
@@ -147,6 +147,21 @@ export class UpdateServerDto implements UpdateServerRequest {
   @MaxLength(512)
   @Matches(UPLOADED_PICTURE_URL, { message: 'iconUrl must be an uploaded picture' })
   iconUrl?: string | null;
+
+  /**
+   * How long a message sent here lives, in seconds, or null to keep everything.
+   *
+   * Checked against the published list rather than accepted as any number: a
+   * free integer here is a server-wide retention policy nobody's client can
+   * offer to undo, in both directions - three seconds is a conversation that
+   * cannot be read, and ten years is a retention policy wearing a privacy
+   * feature's clothes.
+   */
+  @IsOptional()
+  @IsIn([null, ...DISAPPEARING_WINDOWS], {
+    message: 'messageTtlSeconds must be null or one of the published windows',
+  })
+  messageTtlSeconds?: number | null;
 }
 
 /**

@@ -1,5 +1,6 @@
 import {
   IsEmail,
+  IsIn,
   IsOptional,
   IsString,
   Length,
@@ -8,7 +9,7 @@ import {
   MinLength,
   ValidateIf,
 } from 'class-validator';
-import { UPLOADED_PICTURE_URL } from '@betweenus/shared-types';
+import { DISAPPEARING_WINDOWS, UPLOADED_PICTURE_URL } from '@betweenus/shared-types';
 import type {
   ChangePasswordRequest,
   ForgotPasswordRequest,
@@ -110,4 +111,18 @@ export class UpdateAccountDto implements UpdateAccountRequest {
   @MaxLength(512)
   @Matches(UPLOADED_PICTURE_URL, { message: 'avatarUrl must be an uploaded picture' })
   avatarUrl?: string | null;
+
+  /**
+   * This account's own disappearing window in seconds, or null to switch it
+   * off. One of the published list, for the same reason a server's is.
+   *
+   * It hides history from this account on every device it signs in on and
+   * changes nothing for anybody else - so it is a preference and not a
+   * retention policy, and a server's own window still outranks it.
+   */
+  @IsOptional()
+  @IsIn([null, ...DISAPPEARING_WINDOWS], {
+    message: 'messageTtlSeconds must be null or one of the published windows',
+  })
+  messageTtlSeconds?: number | null;
 }

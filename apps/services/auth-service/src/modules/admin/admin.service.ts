@@ -70,6 +70,7 @@ function toAdminUser(user: UserWithDetail): AdminUser {
     avatarUrl: user.avatarUrl,
     role: user.role,
     mustChangePassword: user.mustChangePassword,
+    messageTtlSeconds: user.messageTtlSeconds,
     createdAt: user.createdAt.toISOString(),
     disabledAt: user.disabledAt?.toISOString() ?? null,
     passwordResetUntil: user.passwordResetUntil?.toISOString() ?? null,

@@ -473,6 +473,9 @@ export class ServersService {
       data: {
         ...(dto.name !== undefined ? { name: dto.name.trim() } : {}),
         ...(dto.iconUrl !== undefined ? { iconUrl: dto.iconUrl } : {}),
+        ...(dto.messageTtlSeconds !== undefined
+          ? { messageTtlSeconds: dto.messageTtlSeconds }
+          : {}),
       },
     });
 
@@ -1166,6 +1169,7 @@ function toServer(row: {
   slug: string;
   iconUrl: string | null;
   ownerId: string;
+  messageTtlSeconds?: number | null;
   createdAt: Date;
 }): Server {
   return {
@@ -1174,6 +1178,7 @@ function toServer(row: {
     slug: row.slug,
     iconUrl: row.iconUrl,
     ownerId: row.ownerId,
+    messageTtlSeconds: row.messageTtlSeconds ?? null,
     createdAt: row.createdAt.toISOString(),
   };
 }

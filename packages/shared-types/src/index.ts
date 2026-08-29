@@ -166,6 +166,16 @@ export interface PublicUser {
   role: GlobalRole;
   /** True for an account issued a generated password; it can do nothing else. */
   mustChangePassword: boolean;
+  /**
+   * This account's own disappearing-message window, in seconds, or null for
+   * "keep everything".
+   *
+   * One-sided and personal: history older than the window is not returned to
+   * this account on any of its devices, and every other participant's copy is
+   * untouched. A server's own window outranks it, because that one deletes the
+   * row rather than hiding it. See `DISAPPEARING_WINDOWS`.
+   */
+  messageTtlSeconds: number | null;
   createdAt: string;
 }
 
@@ -226,6 +236,11 @@ export interface UpdateAccountRequest {
   displayName?: string;
   /** Storage URL of an uploaded picture; null clears it back to the initial. */
   avatarUrl?: string | null;
+  /**
+   * This account's personal disappearing window in seconds; null switches it
+   * off. Must be one of `DISAPPEARING_WINDOWS`.
+   */
+  messageTtlSeconds?: number | null;
 }
 
 // --- OAuth login ---
@@ -409,6 +424,15 @@ export interface Server {
   slug: string;
   iconUrl: string | null;
   ownerId: string;
+  /**
+   * How long a message sent in this server's channels lives, in seconds, or
+   * null for "for ever".
+   *
+   * Binding on every member and enforced by deleting the row, which is what
+   * makes it outrank anybody's personal window: a member may choose to see
+   * less than the server keeps, never more. See `DISAPPEARING_WINDOWS`.
+   */
+  messageTtlSeconds: number | null;
   createdAt: string;
 }
 
@@ -425,6 +449,11 @@ export interface CreateServerRequest {
 export interface UpdateServerRequest {
   name?: string;
   iconUrl?: string | null;
+  /**
+   * The server's disappearing window in seconds; null switches it off. Needs
+   * MANAGE_SERVER, and must be one of `DISAPPEARING_WINDOWS`.
+   */
+  messageTtlSeconds?: number | null;
 }
 
 /** An invite as whoever manages the server sees it. */
@@ -746,6 +775,19 @@ export interface Message {
   pinnedAt: string | null;
   /** One entry per distinct emoji. */
   reactions: MessageReactionSummary[];
+  /**
+   * When this message stops existing, stamped from the server's disappearing
+   * window as it was sent. Null means it stays until somebody deletes it.
+   *
+   * Clients draw a countdown from it and drop their own cached copy when it
+   * passes, so a device that has been offline since before the window closed
+   * does not show what the server has already destroyed.
+   */
+  expiresAt: string | null;
+  /** A one-time message: its media may be opened once, and opening burns it. */
+  viewOnce: boolean;
+  /** When the one-time media was opened, for everyone who arrives after. */
+  viewedAt: string | null;
 }
 
 /**
@@ -772,6 +814,14 @@ export interface CreateMessageRequest {
    * upload route did not already know.
    */
   attachmentKeys?: string[];
+  /**
+   * Send this as a one-time message. Its media may be opened once by somebody
+   * other than the author, and that opening destroys the row and its blobs.
+   *
+   * Outside `content` because the server has to act on it, and a server that
+   * cannot read the body cannot be told by the body.
+   */
+  viewOnce?: boolean;
 }
 
 /** Replaces the body; the author only, and it stamps `editedAt`. */
@@ -782,6 +832,47 @@ export interface UpdateMessageRequest {
 /** Emoji as a literal character (or a short sequence), never a shortcode. */
 export interface ReactToMessageRequest {
   emoji: string;
+}
+
+/**
+ * The disappearing windows anything may be set to, in seconds.
+ *
+ * A fixed list rather than a free number, and both ends check against it. A
+ * free number is a footgun in both directions: a window of three seconds is a
+ * conversation nobody can read, and a window of ten years is a retention
+ * policy pretending to be a privacy feature. These are the durations every
+ * other messenger settled on, and a short list keeps the picker a picker
+ * instead of a form.
+ */
+export const DISAPPEARING_WINDOWS = [3600, 28800, 86400, 604800] as const;
+
+export type DisappearingWindow = (typeof DISAPPEARING_WINDOWS)[number];
+
+/** Whether a window came off the list. Null - "off" - is always allowed. */
+export function isDisappearingWindow(seconds: number | null | undefined): boolean {
+  return (
+    seconds === null ||
+    seconds === undefined ||
+    (DISAPPEARING_WINDOWS as readonly number[]).includes(seconds)
+  );
+}
+
+/** What a window is called on screen. One spelling, so every client agrees. */
+export function disappearingWindowLabel(seconds: number | null): string {
+  switch (seconds) {
+    case null:
+      return 'Off';
+    case 3600:
+      return '1 hour';
+    case 28800:
+      return '8 hours';
+    case 86400:
+      return '24 hours';
+    case 604800:
+      return '7 days';
+    default:
+      return `${seconds}s`;
+  }
 }
 
 /**
@@ -1906,6 +1997,15 @@ export type ServerChatEvent =
    * `deletedAt` set, which is exactly what the client has to render.
    */
   | { type: 'message.updated'; message: Message }
+  /**
+   * A message that left no tombstone: a one-time message somebody opened, or
+   * one whose disappearing window closed.
+   *
+   * Separate from `message.updated` because there is nothing to carry. The row
+   * is destroyed, and the client's instruction is "forget this, and forget
+   * whatever you cached of its files" rather than "draw this differently".
+   */
+  | { type: 'message.gone'; messageId: string; channelId: string }
   /** Sent to both sides of a request, an acceptance or a removal. */
   | { type: 'friends.changed' }
   /** Sent to everyone watching the server, and to whoever joined or left it. */
