@@ -32,8 +32,10 @@ flowchart TD
     B -->|yes| D[Use it]
     B -->|no| C["GET /api/v1/e2ee/backup"]
     C --> E{Backup exists?}
-    E -->|"yes, secret available"| D
+    E -->|"yes, and the secret opens it"| D
+    E -->|"yes, but no secret to hand"| M["Generate a key of this<br/>machine's own; leave the<br/>backup untouched"]
     E -->|no| F["Generate, PUT /api/v1/e2ee/backup"]
+    M --> G
     D --> G["POST /api/v1/e2ee/devices (publish public half)"]
     G --> H[Open a channel]
     H --> I["GET /api/v1/e2ee/keys/:channelId"]
@@ -100,6 +102,29 @@ ciphertext), but a **compromised running server** could capture a password
 in use and open that user's backup afterward. Anyone whose threat model
 includes the running deployment should set a recovery passphrase instead —
 it is never sent anywhere in any form.
+
+### Signing in without the secret
+
+A sign-in that cannot open the backup is not stopped and is never asked for a
+secret. A launch from a stored token has no password to hand, and an account
+that has only ever signed in with GitHub or Google has no password *at all* —
+so the machine generates a key pair of its own and carries on.
+
+Two properties make that safe rather than lossy:
+
+- The machine leaves the backup exactly as it found it. Promoting a
+  self-minted key to the account's backup would lock out every machine still
+  restoring from the real one, so only a deliberate "set a recovery
+  passphrase" (or a password change) ever replaces it.
+- `channel_keys` is addressed per `recipientDeviceId`, so the new machine
+  publishes its own public half under its own device id and takes nothing away
+  from the rows already sealed for the others.
+
+The cost is that history is not instant there. It reads what arrives from now
+on, and older conversations fill in as the account's other machines open them —
+the same "repairing a second device" path above. Supplying the secret (signing
+in with the account password, or setting a recovery passphrase) restores the
+account key outright and is the only instant path.
 
 ## Safety numbers
 
