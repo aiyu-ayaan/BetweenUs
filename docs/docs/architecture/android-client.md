@@ -91,6 +91,22 @@ feature/remote          feature/update        feature/voice
   [Peer-to-Peer Media](/architecture/media), Android's own
   `RTCPeerConnection` bindings instead of the browser's.
 
+## Which day a message was sent
+
+A bubble carries a clock time and nothing else, so a conversation read a month
+later says 09:14 without saying which morning. The list puts a day divider above
+the first message of each day - **Today**, **Yesterday**, the weekday for the
+week just gone, and the full date once a week has passed and a weekday would
+name two different days. The days are the reader's local days, so a message sent
+at 00:30 sits under today's divider even where the server called it yesterday.
+
+The rule is `dayLabel`/`sameDay`, written twice and tested on both sides:
+`Day.kt` here, `day.ts` on desktop and web, the same cases in each. A day
+boundary also breaks the author grouping - two messages a minute apart either
+side of midnight have a divider between them, and a run of bubbles reading
+across it visibly is not one run. The desktop's message search labels its
+results the same way rather than printing a bare date.
+
 ## One name, drawn once
 
 Every list of people draws a display name over an `@handle`. An account that
