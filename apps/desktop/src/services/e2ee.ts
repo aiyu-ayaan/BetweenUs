@@ -45,22 +45,6 @@ export class MissingChannelKeyError extends Error {
   }
 }
 
-/**
- * This machine holds no identity and the account's backup needs a secret it was
- * not given. Thrown rather than papered over with a fresh identity: a new
- * identity cannot open a single channel key already sealed for the old one, so
- * generating one here is how history gets lost.
- */
-export class IdentityLockedError extends Error {
-  constructor(readonly kind: BackupSecretKind) {
-    super(
-      kind === 'password'
-        ? 'Enter your account password to restore this account encryption key'
-        : 'Enter your recovery passphrase to restore this account encryption key',
-    );
-    this.name = 'IdentityLockedError';
-  }
-}
 
 /** What opens the backup. Held only for the moment a sign-in needs it. */
 export interface BackupSecret {
@@ -92,10 +76,9 @@ const rekeyed = new Set<string>();
  * Loads this device's identity key and publishes the public half. Called once
  * per sign-in, with the password when there is one to hand.
  *
- * Three ways it can go: the key is already on this machine; it is not, but the
- * account has a backup and `secret` opens it; or the account has no backup yet
- * and one is minted. The fourth case - backup present, no secret - is a
- * question for the user, and comes back as `IdentityLockedError`.
+ * It never fails for want of a secret, and it never asks for one. See
+ * `loadIdentity` for why a machine that cannot open the account backup mints
+ * its own key rather than stopping to ask.
  */
 export function initIdentity(userId: string, secret?: BackupSecret): Promise<IdentityKeyPair> {
   if (identityReady && identityUserId === userId) return identityReady;
@@ -126,23 +109,40 @@ async function loadIdentity(userId: string, secret?: BackupSecret): Promise<Iden
     return pair;
   }
 
-  // A failed fetch must not fall through to "mint a new identity": that would
-  // replace the account's published key, and every channel key sealed for the
-  // old one would stop opening for good. Only a definite "no backup exists" is
-  // allowed to start a new identity.
+  // A failed fetch must not be read as "there is no backup": that would seal a
+  // fresh key over one that exists. It throws, and the sign-in retries.
   const { backup } = await api.identityBackup();
 
-  if (backup) {
-    if (!secret || secret.kind !== backup.kind) {
-      setIdentityStatus({ status: 'locked', kind: backup.kind });
-      throw new IdentityLockedError(backup.kind);
-    }
+  // The account's own key, when the secret that opens it is at hand. This is
+  // the good path and the only instant one: every epoch already sealed for
+  // that identity opens the moment it lands, with nothing to wait for.
+  if (backup && secret && secret.kind === backup.kind) {
     const pair = await openBackup(backup, secret);
-    await secureSet(storageKey, JSON.stringify(pair));
-    await adopt(pair, true);
-    return pair;
+    if (pair) {
+      await secureSet(storageKey, JSON.stringify(pair));
+      await adopt(pair, true);
+      return pair;
+    }
   }
 
+  // Otherwise this machine gets a key of its own, and the sign-in carries on.
+  //
+  // It used to stop here and ask - and asking is not something every sign-in
+  // can answer. A GitHub sign-in has no account password to offer, and an
+  // account that has only ever signed in that way has no password at all, so
+  // the question had no answer and the app sat behind a box nobody could fill.
+  //
+  // Minting is safe because a channel key is wrapped per *device*, not per
+  // account: this machine publishes its own public key under its own device id
+  // and takes nothing away from the machines already in the directory. History
+  // arrives from them - `fillGaps` hands every epoch a machine holds to the
+  // owner's machines that are missing it - so the account converges without
+  // anyone typing anything.
+  //
+  // What it costs: history is not instant. It appears as the other machines
+  // open those channels. An account whose only other machine is offline, or
+  // which has none, reads what arrives from now on until one of them is back.
+  // Settings -> Encryption is where somebody who wants it sooner can say so.
   const pair = await generateIdentity();
   await secureSet(storageKey, JSON.stringify(pair));
   await adopt(pair);
@@ -150,13 +150,15 @@ async function loadIdentity(userId: string, secret?: BackupSecret): Promise<Iden
   return pair;
 }
 
-/** Wrong secret is the expected failure, and deserves to say so. */
-async function openBackup(backup: IdentityBackup, secret: BackupSecret): Promise<IdentityKeyPair> {
+/** The wrong secret is an ordinary outcome here, not an error: null, and on. */
+async function openBackup(
+  backup: IdentityBackup,
+  secret: BackupSecret,
+): Promise<IdentityKeyPair | null> {
   try {
     return await openIdentity(backup, secret.value);
   } catch {
-    setIdentityStatus({ status: 'locked', kind: backup.kind });
-    throw new IdentityLockedError(backup.kind);
+    return null;
   }
 }
 
@@ -238,8 +240,13 @@ function deviceLabel(): string {
 async function ensureBackup(pair: IdentityKeyPair, secret?: BackupSecret): Promise<void> {
   try {
     const { backup } = await api.identityBackup();
-    if (backup?.publicKey === pair.publicKey) {
-      setIdentityStatus({ status: 'ready', backedUp: true });
+    // A backup that already stands is not this machine's to replace unless it
+    // is this machine's key in it. Since a machine that could not open one
+    // mints its own, sealing over it here would take the account's recoverable
+    // identity away from every machine still restoring from it - quietly, and
+    // for good. Deliberately re-sealing is `backupIdentity`'s job, not this.
+    if (backup) {
+      setIdentityStatus({ status: 'ready', backedUp: backup.publicKey === pair.publicKey });
       return;
     }
     if (!secret) {
@@ -252,17 +259,6 @@ async function ensureBackup(pair: IdentityKeyPair, secret?: BackupSecret): Promi
     // Offline, or the server is older than this client. Nothing is lost that
     // was not already missing.
   }
-}
-
-/**
- * Restores the identity from the account backup with a secret the user has just
- * typed. The sign-in that hit `IdentityLockedError` continues from here.
- */
-export async function restoreIdentity(secret: BackupSecret): Promise<void> {
-  const userId = identityUserId;
-  if (!userId) throw new Error('Nobody is signed in');
-  identityReady = null;
-  await initIdentity(userId, secret);
 }
 
 /**

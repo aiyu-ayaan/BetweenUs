@@ -14,11 +14,13 @@ import type { ChannelKeyEntry, DeviceKey, PublishChannelKeysRequest } from '@bet
 import { configureApi } from './api';
 import {
   UNDECRYPTABLE,
+  backupIdentity,
   decryptForChannel,
   encryptForChannel,
   initIdentity,
   resetE2ee,
   syncChannelKeys,
+  type BackupSecret,
 } from './e2ee';
 
 const CHANNEL = 'channel-general';
@@ -49,6 +51,8 @@ const devices = new Map<string, { userId: string; deviceId: string; publicKey: s
  * millisecond apart would make that a flaky assertion rather than a clear one.
  */
 const revoked = new Map<string, number>();
+/** The one sealed identity an account may have, by user id. */
+const backups = new Map<string, Record<string, unknown>>();
 let tick = 0;
 let stored: StoredKey[] = [];
 let caller = 'alice';
@@ -186,9 +190,12 @@ function stubDirectory(): void {
     }
     if (url.pathname === '/api/v1/e2ee/devices') return Promise.resolve(json(knownDevices()));
 
-    // No backup in play here: the identities live in the stubbed secure store.
+    // One sealed identity per account, so a machine that cannot open the one
+    // that is there can be told apart from an account that has none.
     if (url.pathname === '/api/v1/e2ee/backup') {
-      return Promise.resolve(json(method === 'GET' ? { backup: null } : { ok: true }));
+      if (method === 'GET') return Promise.resolve(json({ backup: backups.get(caller) ?? null }));
+      backups.set(caller, body as Record<string, unknown>);
+      return Promise.resolve(json({ ok: true }));
     }
 
     if (url.pathname.startsWith('/api/v1/e2ee/keys/')) {
@@ -268,11 +275,30 @@ function stubBrowserGlobals(): void {
  * one with a new name: a machine that kept the private half would open every
  * wrap addressed to the other one and prove nothing.
  */
-async function signIn(userId: string, device = 'device-1'): Promise<void> {
+/**
+ * Lets the work a sign-in started but did not wait for finish.
+ *
+ * Generous, because the slowest of it is a 600k-round PBKDF2 seal. A shorter
+ * wait does not make the check faster, it makes it pass for the wrong reason.
+ */
+function settle(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 2000));
+}
+
+/** Wipes the key a machine holds, so the next sign-in is a machine without one. */
+function forgetIdentity(userId: string): void {
+  localStorage.removeItem(`betweenus.secure.identity:${userId}`);
+}
+
+async function signIn(
+  userId: string,
+  device = 'device-1',
+  secret?: BackupSecret,
+): Promise<void> {
   resetE2ee();
   caller = userId;
   localStorage.setItem('betweenus.deviceId', `${userId}-${device}`);
-  await initIdentity(userId);
+  await initIdentity(userId, secret);
 }
 
 async function main(): Promise<void> {
@@ -507,6 +533,65 @@ async function main(): Promise<void> {
     'hi from dave',
     'alice must read what dave sent once his self-heal succeeded on retry',
   );
+
+  // A sign-in that cannot open the account backup must still sign in.
+  //
+  // This is the GitHub case: the account has a backup sealed under a password,
+  // the provider sign-in has no password to offer, and there is nothing on
+  // screen to ask with. It mints a key of its own and carries on - and it must
+  // not seal that key over the backup the other machines restore from.
+  MEMBERS = [...MEMBERS, 'erin'];
+  await signIn('erin');
+  await backupIdentity({ value: 'erin-account-password', kind: 'password' });
+  const erinsBackup = backups.get('erin');
+  assert.notEqual(erinsBackup, undefined, 'erin has an account backup to be locked out of');
+
+  // A machine with nothing of its own on it, which is what a new one is. The
+  // identity is stored per account rather than per device id, so it has to go
+  // for this to be a second laptop rather than the first one renamed.
+  forgetIdentity('erin');
+  await signIn('erin', 'device-2');
+  assert.deepEqual(
+    backups.get('erin'),
+    erinsBackup,
+    'a machine that could not open the backup must never replace it',
+  );
+  const fromErin = await encryptForChannel(CHANNEL_2, 'sent from the new laptop');
+  assert.notEqual(
+    fromErin,
+    undefined,
+    'a provider sign-in with no secret must reach a usable key rather than stop and ask',
+  );
+
+  // The same laptop, signed in later with the account password. It is holding a
+  // key of its own by now, and the password must not quietly promote that key
+  // to the account's backup: every machine still restoring from the real one
+  // would be locked out of everything, and nothing would say so.
+  await signIn('erin', 'device-2', { value: 'erin-account-password', kind: 'password' });
+
+  // And the secret, when there is one, still puts the account key on the
+  // machine that asks with it.
+  forgetIdentity('erin');
+  await signIn('erin', 'device-3', { value: 'erin-account-password', kind: 'password' });
+  const fromErinsThird = await encryptForChannel(CHANNEL_2, 'sent from the third');
+  assert.equal(
+    await decryptForChannel(CHANNEL_2, fromErin),
+    'sent from the new laptop',
+    'a machine restored from the backup reads what the account key already opened',
+  );
+
+  // The backup is still the one erin sealed, byte for byte. `ensureBackup` runs
+  // on every sign-in and is not awaited by any of them, so this is checked last,
+  // once all of them have had their chance to overwrite it: the laptop holding a
+  // key of its own must not promote that key to the account's, or every machine
+  // restoring from the real one is locked out of everything and nothing says so.
+  await settle();
+  assert.deepEqual(
+    backups.get('erin'),
+    erinsBackup,
+    'no sign-in may replace the account backup with a key of its own',
+  );
+  assert.notEqual(fromErinsThird, undefined, 'the restored machine can seal too');
 
   console.log('e2ee.check.ts: ok');
 }

@@ -21,7 +21,6 @@ import {
 import { useRemoteStore } from './stores/remote';
 import { useRingStore } from './stores/ring';
 import { LoginScreen } from './features/auth/LoginScreen';
-import { IdentityUnlock } from './features/auth/IdentityUnlock';
 import { ServerRail } from './features/servers/ServerRail';
 import { ServerSettings } from './features/servers/ServerSettings';
 import { ChannelSidebar } from './features/channels/ChannelSidebar';
@@ -573,7 +572,6 @@ function Workbench(): JSX.Element {
           or a screen change must never be able to unmount them. */}
       <CallAudio />
 
-      <IdentityUnlock />
       <RemoteConsent />
       <ShareControlConsent />
       {/* Above every other overlay, because it is the only one somebody is

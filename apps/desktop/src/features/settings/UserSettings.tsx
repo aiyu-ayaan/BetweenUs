@@ -592,9 +592,9 @@ function EncryptionSection(): JSX.Element {
       </p>
       <p className="mt-2 text-sm text-slate-300">
         {identity.status === 'ready' && identity.backedUp
-          ? 'This account key is backed up. Signing in elsewhere restores it.'
+          ? 'This machine holds the account key, and it is backed up. Signing in elsewhere restores it.'
           : identity.status === 'ready'
-            ? 'No backup yet. Set a recovery passphrase, or sign in with your password once, or this machine is the only place your history can be read.'
+            ? 'This machine has a key of its own, and no backup of it. Your other machines fill in older conversations as they open them. Set a recovery passphrase - or sign in once with your account password - to make this machine hold the account key instead.'
             : 'Waiting for the account key.'}
       </p>
       <div className="mt-3 space-y-4">
