@@ -1,0 +1,325 @@
+.sceneContainer {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  max-width: 640px;
+  margin: 2.5rem auto 1.5rem;
+  padding: 1.5rem;
+  perspective: 1200px;
+}
+
+.ambientGlow {
+  position: absolute;
+  width: 320px;
+  height: 320px;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle,
+    rgba(124, 92, 255, 0.4) 0%,
+    rgba(99, 102, 241, 0.2) 45%,
+    transparent 70%
+  );
+  filter: blur(60px);
+  pointer-events: none;
+  z-index: 0;
+  animation: pulseGlow 6s ease-in-out infinite alternate;
+}
+
+@keyframes pulseGlow {
+  0% {
+    transform: scale(0.85);
+    opacity: 0.6;
+  }
+  100% {
+    transform: scale(1.15);
+    opacity: 0.95;
+  }
+}
+
+.card3d {
+  position: relative;
+  width: 100%;
+  height: 340px;
+  background: linear-gradient(
+    145deg,
+    rgba(255, 255, 255, 0.07) 0%,
+    rgba(15, 23, 42, 0.4) 50%,
+    rgba(6, 7, 10, 0.7) 100%
+  );
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 24px;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  box-shadow: 0 30px 60px -12px rgba(0, 0, 0, 0.7),
+    0 18px 36px -18px rgba(124, 92, 255, 0.25),
+    inset 0 1px 1px 0 rgba(255, 255, 255, 0.2);
+  transform-style: preserve-3d;
+  transition: transform 0.15s cubic-bezier(0.2, 0.8, 0.2, 1),
+    box-shadow 0.2s ease;
+  cursor: pointer;
+  z-index: 1;
+}
+
+.card3d:hover {
+  box-shadow: 0 40px 80px -15px rgba(0, 0, 0, 0.85),
+    0 24px 48px -20px rgba(124, 92, 255, 0.45),
+    inset 0 1px 2px 0 rgba(255, 255, 255, 0.35);
+}
+
+.glareLayer {
+  position: absolute;
+  inset: 0;
+  border-radius: 24px;
+  pointer-events: none;
+  z-index: 10;
+  mix-blend-mode: screen;
+  transition: opacity 0.3s ease;
+}
+
+.backplane {
+  position: absolute;
+  inset: 0;
+  border-radius: 24px;
+  overflow: hidden;
+  pointer-events: none;
+  transform: translateZ(0);
+}
+
+.cardGrid {
+  position: absolute;
+  inset: 0;
+  background-image: linear-gradient(
+      rgba(255, 255, 255, 0.04) 1px,
+      transparent 1px
+    ),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
+  background-size: 24px 24px;
+  mask-image: radial-gradient(circle at 50% 50%, black 30%, transparent 80%);
+}
+
+.logoStage {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) translateZ(40px);
+  width: 140px;
+  height: 140px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  transform-style: preserve-3d;
+}
+
+.logoRingOuter {
+  position: absolute;
+  width: 170px;
+  height: 170px;
+  border-radius: 50%;
+  border: 1px dashed rgba(124, 92, 255, 0.35);
+  animation: rotateClockwise 24s linear infinite;
+  pointer-events: none;
+}
+
+.logoRingInner {
+  position: absolute;
+  width: 150px;
+  height: 150px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 0 20px rgba(124, 92, 255, 0.2);
+  animation: rotateCounterClockwise 18s linear infinite;
+  pointer-events: none;
+}
+
+@keyframes rotateClockwise {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes rotateCounterClockwise {
+  from {
+    transform: rotate(360deg);
+  }
+  to {
+    transform: rotate(0deg);
+  }
+}
+
+.logoEmboss {
+  position: relative;
+  width: 110px;
+  height: 110px;
+  border-radius: 28px;
+  background: linear-gradient(135deg, #2e1065 0%, #1e1b4b 60%, #090a10 100%);
+  padding: 12px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  box-shadow: 0 16px 32px rgba(0, 0, 0, 0.6),
+    0 0 0 1px rgba(255, 255, 255, 0.15),
+    inset 0 2px 4px rgba(255, 255, 255, 0.3),
+    inset 0 -2px 4px rgba(0, 0, 0, 0.6);
+  transform: translateZ(25px);
+  animation: floatEmblem 4s ease-in-out infinite alternate;
+}
+
+@keyframes floatEmblem {
+  0% {
+    transform: translateZ(20px) translateY(-3px);
+  }
+  100% {
+    transform: translateZ(30px) translateY(3px);
+  }
+}
+
+.logoImage {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  filter: drop-shadow(0 8px 16px rgba(124, 92, 255, 0.5));
+}
+
+.logoGlow {
+  position: absolute;
+  width: 100px;
+  height: 100px;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle,
+    rgba(124, 92, 255, 0.6) 0%,
+    transparent 70%
+  );
+  filter: blur(25px);
+  pointer-events: none;
+  z-index: -1;
+}
+
+.satelliteChip {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.5rem 0.85rem;
+  background: rgba(15, 23, 42, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 14px;
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  box-shadow: 0 12px 24px -4px rgba(0, 0, 0, 0.5),
+    inset 0 1px 1px rgba(255, 255, 255, 0.15);
+  transform-style: preserve-3d;
+  transition: transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1),
+    border-color 0.2s ease, background-color 0.2s ease;
+  pointer-events: auto;
+}
+
+.satelliteChip:hover {
+  background: rgba(30, 41, 59, 0.9);
+  border-color: rgba(124, 92, 255, 0.5);
+  box-shadow: 0 16px 30px -4px rgba(0, 0, 0, 0.65),
+    0 0 12px rgba(124, 92, 255, 0.35);
+}
+
+.chipTopLeft {
+  top: 24px;
+  left: 20px;
+}
+
+.chipTopRight {
+  top: 24px;
+  right: 20px;
+}
+
+.chipBottomLeft {
+  bottom: 24px;
+  left: 20px;
+}
+
+.chipBottomRight {
+  bottom: 24px;
+  right: 20px;
+}
+
+.chipIcon {
+  font-size: 1.25rem;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.chipText {
+  display: flex;
+  flex-direction: column;
+  text-align: left;
+}
+
+.chipLabel {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #f8fafc;
+  letter-spacing: -0.01em;
+}
+
+.chipSublabel {
+  font-size: 0.65rem;
+  color: #94a3b8;
+  font-weight: 500;
+}
+
+@media (max-width: 640px) {
+  .sceneContainer {
+    padding: 0.5rem;
+  }
+
+  .card3d {
+    height: 380px;
+  }
+
+  .satelliteChip {
+    padding: 0.4rem 0.65rem;
+  }
+
+  .chipTopLeft {
+    top: 14px;
+    left: 12px;
+  }
+
+  .chipTopRight {
+    top: 14px;
+    right: 12px;
+  }
+
+  .chipBottomLeft {
+    bottom: 14px;
+    left: 12px;
+  }
+
+  .chipBottomRight {
+    bottom: 14px;
+    right: 12px;
+  }
+
+  .chipSublabel {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ambientGlow,
+  .logoRingOuter,
+  .logoRingInner,
+  .logoEmboss {
+    animation: none;
+  }
+
+  .card3d {
+    transition: none;
+  }
+}
