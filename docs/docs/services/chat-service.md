@@ -153,6 +153,18 @@ and a server that cannot read the body cannot be told by the body. What leaks
 is that *some* message was one-time — a fact both clients already draw on
 screen. It is a documented E2EE exception alongside reaction emoji.
 
+**The rule is enforced at the download, not in the client.** `GET
+/uploads/:key` refuses a one-time attachment to anybody who already has a
+`MessageView` row for its message, and refuses it to the author outright. The
+locks in the clients are software choosing to behave; this is the door the
+bytes come through. The view is recorded *after* the fetch, so the fetch that
+spends the look still succeeds and only the ones after it do not.
+
+**The author never opens their own.** They sent it. A sender who can re-open it
+on another device has a message that is one-time for exactly one of the two
+people in the conversation — and it is the one case a client cannot enforce for
+itself, since the author is the account that held the plaintext.
+
 **One look each, not one look in total.** A `MessageView` row records one
 person's look, unique per `(messageId, userId)`, and the message is destroyed
 once those rows cover the channel's audience minus the author. Opening twice
@@ -175,6 +187,12 @@ Clients **hold** a one-time message on screen while its viewer is open. Burning
 happens as the viewer opens, so the row is destroyed while the picture is still
 being looked at; without the hold, removing the message unmounted the row and
 the viewer drawn inside it, and whoever spent their look never saw anything.
+
+**Fetch, record, draw.** The burn deletes the blobs, so it cannot come first —
+that races the download of the bytes being opened, and on a phone the download
+loses. Drawing first is no better: it spends the look only when the write
+happens to succeed. Viewers fetch every file, wait for the look to be recorded,
+then draw; a failure draws nothing, spends nothing and says so.
 
 **A viewer fetches before it reports.** The burn deletes the blobs, so
 reporting a look before the download finished raced the destruction of the
