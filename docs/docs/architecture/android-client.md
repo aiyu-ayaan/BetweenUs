@@ -100,8 +100,24 @@ week just gone, and the full date once a week has passed and a weekday would
 name two different days. The days are the reader's local days, so a message sent
 at 00:30 sits under today's divider even where the server called it yesterday.
 
-The rule is `dayLabel`/`sameDay`, written twice and tested on both sides:
-`Day.kt` here, `day.ts` on desktop and web, the same cases in each. A day
+Clock times follow the *device*, not the locale: Android has a **Use 24-hour
+format** switch, and a chat showing `14:32` to somebody whose phone says
+`2:32 PM` everywhere else is the one thing on screen out of step with it.
+`clockTime` reads `DateFormat.is24HourFormat` and moves only the hour field of
+the locale's own short-time pattern, so the separator and the order stay the
+locale's. The desktop and web get the same answer from `Intl` for free.
+
+Timezones need no handling beyond that, and that is deliberate: every timestamp
+on the wire is UTC (`toISOString()` on the services' side, `createdAt` never
+minted by a client), and every client reads it in the reader's own zone. A
+message sent at 20:00 in Berlin reads 23:30 to somebody in Kolkata, under *that*
+reader's day divider. Nothing is ever drawn in the sender's zone or in UTC.
+
+The rule is `dayLabel`/`sameDay`/`clockTime`, written twice and tested on both
+sides:
+`Day.kt` here, `day.ts` on desktop and web, the same cases in each. The
+"message info" sheet's read receipts use the same words and the same clock, so a
+receipt never names the day differently from the conversation above it. A day
 boundary also breaks the author grouping - two messages a minute apart either
 side of midnight have a divider between them, and a run of bubbles reading
 across it visibly is not one run. The desktop's message search labels its
