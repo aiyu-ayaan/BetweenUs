@@ -153,9 +153,28 @@ and a server that cannot read the body cannot be told by the body. What leaks
 is that *some* message was one-time — a fact both clients already draw on
 screen. It is a documented E2EE exception alongside reaction emoji.
 
-The first non-author viewer wins, settled by a conditional update on
-`viewedAt`, so two devices opening at the same instant produce one burn. The
-author is not a viewer: re-reading your own message spends nobody's one look.
+**One look each, not one look in total.** A `MessageView` row records one
+person's look, unique per `(messageId, userId)`, and the message is destroyed
+once those rows cover the channel's audience minus the author. Opening twice
+from two devices records one look, so a second device is not charged to
+somebody else.
+
+The author is not a viewer: re-reading your own message spends nothing.
+
+Clients decide their own state from `Message.viewedBy` — a list of user ids
+rather than a per-caller boolean, because the same message object is broadcast
+to every subscriber and a flag computed for one of them would be wrong for all
+the rest. It is the same reasoning as reaction summaries.
+
+A one-time message also gets a **backstop expiry** of a week, because "everyone
+has looked" may never arrive — one member of a channel who never opens theirs
+would otherwise keep the ciphertext for ever. It is never longer than a window
+the server itself set.
+
+Clients **hold** a one-time message on screen while its viewer is open. Burning
+happens as the viewer opens, so the row is destroyed while the picture is still
+being looked at; without the hold, removing the message unmounted the row and
+the viewer drawn inside it, and whoever spent their look never saw anything.
 
 Clients display it with every copy path they control removed — no download, no
 context menu, nothing draggable or selectable, and no thumbnail in the message

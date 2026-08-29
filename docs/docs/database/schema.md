@@ -216,7 +216,9 @@ than tombstoning them: a conversation that fills with "this message was
 deleted" for everything that aged out is not a disappearing conversation, it is
 a very detailed index of one.
 
-`viewOnce` marks a one-time message and `viewedAt` records when it was spent.
+`viewOnce` marks a one-time message; `viewedAt` records when the **first**
+recipient opened it, which is what the backstop expiry is measured from. Who
+has looked lives in `MessageView`, one row per person — see below.
 The flag lives here, outside the encrypted body, because burning is a row
 update and a blob delete — the server's work — and a server that cannot read
 the body cannot be told by the body. What it learns is that some message was
@@ -227,6 +229,18 @@ one-time, which both clients already draw on screen.
 the whole schema, documented in [`E2EE.md`](/security/e2ee), because the
 server has to group and count reactions for recipients who don't currently
 hold the channel key.
+
+### `MessageView`
+One person's one look at a one-time message, unique per `(messageId, userId)`.
+
+A table rather than a single `viewedAt` on the message, because a one-time
+message holds as many looks as there are people who can see it. The single
+stamp meant the first person to open one in a channel destroyed it for
+everybody else, who were then shown "Opened" for something they had never been
+given — one look between them, and a race to it.
+
+The message is destroyed once these rows cover the channel's audience minus the
+author, who is not a viewer: re-reading what you sent spends nobody's look.
 
 ### `Attachment`
 Links a stored blob (`key`, the storage key) to the message that claims it.
