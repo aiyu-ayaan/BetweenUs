@@ -130,6 +130,25 @@ fun ChatScreen(
      */
     var previewing by remember { mutableStateOf<List<PickedPreview>>(emptyList()) }
     var previewCaption by remember { mutableStateOf("") }
+    /** Whether what is in the preview is being sent as a one-time message. */
+    var previewOnce by remember { mutableStateOf(false) }
+
+    /**
+     * Messages do not disappear on their own while a conversation is open.
+     *
+     * The server destroys what has expired and says so, but only to a client
+     * connected to hear it - and this one is holding decrypted copies that no
+     * event can reach if the phone was asleep. Half a minute rather than a
+     * second: the shortest window on offer is an hour, and a loop that walks
+     * the open channel sixty times a minute to find nothing is battery spent
+     * for no reader.
+     */
+    LaunchedEffect(Unit) {
+        while (true) {
+            Conversation.pruneExpired()
+            kotlinx.coroutines.delay(30_000)
+        }
+    }
 
     // Media Viewer dialog states
     var viewingImage by remember { mutableStateOf<Pair<Bitmap, String>?>(null) }
@@ -277,10 +296,15 @@ fun ChatScreen(
             caption = previewCaption.trim(),
             items = chosen,
             replyTo = replyingTo,
+            viewOnce = previewOnce,
         )
         replyingTo = null
         previewing = emptyList()
         previewCaption = ""
+        // Off again after each message, the way every other messenger does it.
+        // A toggle that stays on is one somebody set for a photo an hour ago
+        // and has long since forgotten about.
+        previewOnce = false
     }
 
     /**
@@ -632,6 +656,20 @@ fun ChatScreen(
             onPasteMedia = { uri ->
                 scope.launch { previewing = previewing + describePicked(context, uri) }
             },
+            // Straight to the outbox, not to the preview: a voice message is
+            // sent by the same gesture that finishes it, and there is no
+            // moment in between where anybody would look at it again.
+            onSendVoice = { recording, viewOnce ->
+                Outbox.enqueue(
+                    context = context,
+                    channelId = channelId,
+                    caption = "",
+                    items = listOf(recording),
+                    replyTo = replyingTo,
+                    viewOnce = viewOnce,
+                )
+                replyingTo = null
+            },
             onSend = { text ->
                 scope.launch {
                     val target = editing
@@ -677,9 +715,12 @@ fun ChatScreen(
             previewing = previewing.map { if (it == original) edited else it }
         },
         onAdd = { showAttachmentSheet = true },
+        viewOnce = previewOnce,
+        onViewOnce = { previewOnce = it },
         onCancel = {
             previewing = emptyList()
             previewCaption = ""
+            previewOnce = false
         },
         onSend = { sendPreviewed() },
     )

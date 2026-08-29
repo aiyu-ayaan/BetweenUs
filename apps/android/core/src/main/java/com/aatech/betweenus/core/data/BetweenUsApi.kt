@@ -21,6 +21,15 @@ data class PublicUser(
     val displayName: String,
     val avatarUrl: String?,
     val role: String,
+    /**
+     * This account's own disappearing window in seconds, or null for "keep
+     * everything".
+     *
+     * One-sided and personal: history older than the window is not returned to
+     * this account on any of its devices, and every other participant's copy is
+     * untouched. A server's own window outranks it - that one deletes the row.
+     */
+    val messageTtlSeconds: Int? = null,
 ) {
     val label: String get() = displayName.ifBlank { username }
     val summary: UserSummary get() = UserSummary(id, username, displayName, avatarUrl)
@@ -36,6 +45,8 @@ data class PublicUser(
             displayName = json.optString("displayName"),
             avatarUrl = json.stringOrNull("avatarUrl"),
             role = json.optString("role", "USER"),
+            messageTtlSeconds = if (json.isNull("messageTtlSeconds")) null
+            else json.optInt("messageTtlSeconds").takeIf { it > 0 },
         )
     }
 }
@@ -103,6 +114,18 @@ object BetweenUsApi {
             avatarUrl?.let { body.put("avatarUrl", it) }
             PublicUser.from(authed("PATCH", "/api/v1/auth/account", body))
         }
+
+    /**
+     * Sets this account's own disappearing window, or clears it with null.
+     *
+     * Its own call for the same reason [setAvatar] is: null means "switch it
+     * off" here and "leave it alone" in [updateAccount], and one function
+     * cannot mean both.
+     */
+    suspend fun setMessageWindow(seconds: Int?): PublicUser = io {
+        val body = JSONObject().put("messageTtlSeconds", seconds ?: JSONObject.NULL)
+        PublicUser.from(authed("PATCH", "/api/v1/auth/account", body))
+    }
 
     /**
      * Sets or clears this account's picture.
@@ -204,6 +227,12 @@ object BetweenUsApi {
         val body = JSONObject()
         name?.let { body.put("name", it) }
         iconUrl?.let { body.put("iconUrl", it) }
+        ServerWithRole.from(authed("PATCH", "/api/v1/servers/$serverId", body))
+    }
+
+    /** Sets a server's disappearing window, or clears it with null. MANAGE_SERVER. */
+    suspend fun setServerMessageWindow(serverId: String, seconds: Int?): ServerWithRole = io {
+        val body = JSONObject().put("messageTtlSeconds", seconds ?: JSONObject.NULL)
         ServerWithRole.from(authed("PATCH", "/api/v1/servers/$serverId", body))
     }
 
@@ -360,6 +389,7 @@ object BetweenUsApi {
         channelId: String,
         content: String,
         attachmentKeys: List<String> = emptyList(),
+        viewOnce: Boolean = false,
     ): Message = io {
         Message.from(
             authed(
@@ -369,6 +399,7 @@ object BetweenUsApi {
                     "channelId" to channelId,
                     "content" to content,
                     "attachmentKeys" to JSONArray(attachmentKeys),
+                    "viewOnce" to viewOnce,
                 ),
             ),
         )
@@ -380,6 +411,16 @@ object BetweenUsApi {
 
     suspend fun deleteMessage(messageId: String): Unit = io {
         authed("DELETE", "/api/v1/messages/$messageId")
+    }
+
+    /**
+     * Reports that a one-time message has been opened, which is what destroys
+     * it. A POST rather than a DELETE: the caller is usually not allowed to
+     * delete this message and is not claiming to be - they are saying they
+     * looked at it, and the destruction is the server's consequence.
+     */
+    suspend fun burnMessage(messageId: String): Unit = io {
+        authed("POST", "/api/v1/messages/$messageId/burn")
     }
 
     suspend fun pins(channelId: String): List<Message> = io {

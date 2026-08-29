@@ -63,6 +63,8 @@ object Outbox {
         val replyTo: MessageReply?,
         /** Set for a text-only message that is on disk until it is sent. */
         val pendingId: Long? = null,
+        /** One-time: the files may be opened once, and opening destroys them. */
+        val viewOnce: Boolean = false,
     )
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -160,6 +162,7 @@ object Outbox {
         caption: String,
         items: List<PickedPreview>,
         replyTo: MessageReply? = null,
+        viewOnce: Boolean = false,
     ) {
         init(context)
         _failures.update { it - channelId }
@@ -171,6 +174,7 @@ object Outbox {
                 caption = caption,
                 items = items.map { Item(it.uri, it.name, it.contentType) },
                 replyTo = replyTo,
+                viewOnce = viewOnce,
             ),
         )
     }
@@ -223,7 +227,13 @@ object Outbox {
                     },
                 )
             }
-            Conversation.send(send.channelId, send.caption.trim(), uploaded, send.replyTo)
+            Conversation.send(
+                send.channelId,
+                send.caption.trim(),
+                uploaded,
+                send.replyTo,
+                send.viewOnce,
+            )
         } catch (error: Throwable) {
             _failures.update {
                 it + (send.channelId to (error.message ?: "That message could not be sent"))

@@ -497,6 +497,23 @@ fun MessageRow(
                                     }
                                 }
 
+                                // A one-time message is not an ordinary
+                                // message with a flag on it. Its pictures are
+                                // never drawn in the list - a thumbnail is a
+                                // look, and it would be a look nobody chose to
+                                // spend - so the whole block becomes one card
+                                // that has to be opened deliberately.
+                                if (message.viewOnce && readable.attachments.isNotEmpty()) {
+                                    if (readable.text.isNotBlank()) Spacer(Modifier.height(8.dp))
+                                    OneTimeCard(
+                                        channelId = channelId,
+                                        messageId = message.id,
+                                        attachments = readable.attachments,
+                                        viewedAt = message.viewedAt,
+                                        mine = isSelf,
+                                    )
+                                } else {
+
                                 // Two or more photos are an album rather than
                                 // two attachments that happen to be pictures.
                                 val photos = readable.attachments.filter { it.isImage }
@@ -511,6 +528,7 @@ fun MessageRow(
                                         Spacer(Modifier.height(8.dp))
                                     }
                                     AttachmentCard(channelId, attachment, onViewImage, onPlayVideo)
+                                }
                                 }
                             }
                         }
@@ -738,7 +756,7 @@ private fun PhotoTile(
  * Modern Attachment Card handling Image, Video, and File attachments with E2EE decryption.
  */
 @Composable
-private fun AttachmentCard(
+internal fun AttachmentCard(
     channelId: String,
     attachment: MessageAttachment,
     onViewImage: (Bitmap, String) -> Unit,
@@ -1426,7 +1444,7 @@ private fun MarkupBody(
  * shows. The full-size original is still what the viewer opens, decoded once
  * when it is asked for rather than once per row on the way past.
  */
-private const val MAX_DECODE_EDGE_PX = 1080
+internal const val MAX_DECODE_EDGE_PX = 1080
 
 /**
  * The strip down the left of a message row that belongs to the navigation
@@ -1458,7 +1476,7 @@ internal fun sampleSizeFor(width: Int, height: Int, targetPx: Int): Int {
 }
 
 /** Decodes off the UI thread, at the size it will actually be drawn. */
-private suspend fun decodeDownsampled(bytes: ByteArray, targetPx: Int): Bitmap? =
+internal suspend fun decodeDownsampled(bytes: ByteArray, targetPx: Int): Bitmap? =
     withContext(Dispatchers.Default) {
         runCatching {
             // Bounds first: the size has to be known before the sample size

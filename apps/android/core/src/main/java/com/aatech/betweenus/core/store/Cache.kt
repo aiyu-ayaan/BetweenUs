@@ -79,6 +79,9 @@ internal interface CacheDao {
 
     @Query("DELETE FROM message WHERE channelId = :channelId")
     suspend fun clearChannel(channelId: String)
+
+    @Query("DELETE FROM message WHERE id IN (:ids)")
+    suspend fun forgetMessages(ids: List<String>)
 }
 
 @Database(entities = [CacheRow::class, MessageRow::class], version = 1, exportSchema = false)
@@ -179,6 +182,20 @@ object Cache {
      */
     suspend fun forgetChannel(channelId: String) {
         runCatching { db?.cache()?.clearChannel(channelId) }
+    }
+
+    /**
+     * Forgets specific messages, by id.
+     *
+     * For the two deletions that leave no tombstone - a one-time message that
+     * was opened, and one whose disappearing window closed. An ordinary delete
+     * does not come through here: its tombstone is written over the old row by
+     * [putMessages], which is what makes a conversation still say "this was
+     * here and is gone" after the app is restarted.
+     */
+    suspend fun forgetMessages(ids: List<String>) {
+        if (ids.isEmpty()) return
+        runCatching { db?.cache()?.forgetMessages(ids) }
     }
 
     // --- lists ---

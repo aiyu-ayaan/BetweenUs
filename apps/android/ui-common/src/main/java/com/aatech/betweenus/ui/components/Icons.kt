@@ -32,6 +32,7 @@ object BetweenUsIcons {
     val BellOff = R.drawable.ic_bell_off
     val Block = R.drawable.ic_block
     val Check = R.drawable.ic_check
+    val Clock = R.drawable.ic_clock
     val ChevronDown = R.drawable.ic_chevron_down
     val ChevronLeft = R.drawable.ic_chevron_left
     val ChevronRight = R.drawable.ic_chevron_right
@@ -55,6 +56,7 @@ object BetweenUsIcons {
     val Minimize = R.drawable.ic_minimize
     val Monitor = R.drawable.ic_monitor
     val More = R.drawable.ic_more_vertical
+    val OneTime = R.drawable.ic_one_time
     val Palette = R.drawable.ic_palette
     val Paperclip = R.drawable.ic_paperclip
     val Pencil = R.drawable.ic_pencil

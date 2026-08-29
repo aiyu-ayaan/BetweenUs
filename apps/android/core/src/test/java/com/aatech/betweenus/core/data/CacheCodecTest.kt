@@ -2,6 +2,8 @@ package com.aatech.betweenus.core.data
 
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
@@ -39,10 +41,15 @@ class CacheCodecTest {
             slug = "betweenus",
             iconUrl = null,
             ownerId = "u1",
+            messageTtlSeconds = 86_400,
             role = ServerRole.ADMIN,
             permissions = listOf("SEND_MESSAGE", "MANAGE_ROLE"),
         )
         roundTrip(server, ServerWithRole::toJson, ServerWithRole::from)
+        // Off is a value here, not an absence, and it has to survive the cache
+        // as one: a window that came back as "an hour" after a restart because
+        // null did not round-trip would delete history nobody asked to lose.
+        roundTrip(server.copy(messageTtlSeconds = null), ServerWithRole::toJson, ServerWithRole::from)
     }
 
     @Test
@@ -117,6 +124,48 @@ class CacheCodecTest {
             reactions = emptyList(),
         )
         roundTrip(tombstone, Message::toJson, Message::from)
+
+        // A one-time message with a window on it. Both fields decide whether
+        // something is drawn or destroyed, so both have to survive the cache:
+        // a `viewOnce` that came back false would draw a picture the sender
+        // was promised nobody would get twice.
+        val fleeting = message.copy(
+            expiresAt = "2026-08-16T10:00:00.000Z",
+            viewOnce = true,
+            viewedAt = "2026-08-15T10:04:00.000Z",
+        )
+        roundTrip(fleeting, Message::toJson, Message::from)
+    }
+
+    @Test
+    fun `a window that has closed is one the screen stops drawing`() {
+        val at = java.time.Instant.parse("2026-08-15T12:00:00.000Z").toEpochMilli()
+        val message = Message(
+            id = "m2",
+            channelId = "c1",
+            content = "",
+            author = user,
+            createdAt = "2026-08-15T10:00:00.000Z",
+            editedAt = null,
+            deletedAt = null,
+            deletedBy = null,
+            pinnedAt = null,
+            reactions = emptyList(),
+        )
+
+        // No window at all is the common case, and it never expires.
+        assertFalse(message.expired(at))
+
+        // A stamp in the past has closed; one in the future has not.
+        assertTrue(message.copy(expiresAt = "2026-08-15T11:59:59.000Z").expired(at))
+        assertFalse(message.copy(expiresAt = "2026-08-15T12:00:01.000Z").expired(at))
+        // The boundary itself counts as closed, matching the server's `lte`.
+        assertTrue(message.copy(expiresAt = "2026-08-15T12:00:00.000Z").expired(at))
+
+        // A stamp that cannot be read counts as not expired. One malformed
+        // field must not make a conversation disappear - far worse than one
+        // message outstaying its welcome until the next refetch drops it.
+        assertFalse(message.copy(expiresAt = "not a date").expired(at))
     }
 
     @Test

@@ -89,6 +89,9 @@ fun SendPreviewDialog(
     /** A picture that came back from the crop screen, in place of the original. */
     onReplace: (PickedPreview, PickedPreview) -> Unit,
     onAdd: () -> Unit,
+    /** Whether these files are being sent as a one-time message. */
+    viewOnce: Boolean,
+    onViewOnce: (Boolean) -> Unit,
     onCancel: () -> Unit,
     onSend: () -> Unit,
 ) {
@@ -288,6 +291,29 @@ fun SendPreviewDialog(
                         textStyle = TextStyle(color = Slate100, fontSize = 16.sp),
                         cursorBrush = SolidColor(Accent),
                         modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+
+                // This is the screen where somebody actually looks at the
+                // photo they are about to send, so it is the screen where they
+                // decide it is one they would rather did not stay anywhere.
+                Box(
+                    modifier = Modifier
+                        .size(48.dp)
+                        .clip(CircleShape)
+                        .background(if (viewOnce) Accent.copy(alpha = 0.18f) else Surface800)
+                        .clickable { onViewOnce(!viewOnce) },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    BetweenUsIcon(
+                        BetweenUsIcons.OneTime,
+                        contentDescription = if (viewOnce) {
+                            "One-time is on"
+                        } else {
+                            "Send as a one-time message"
+                        },
+                        tint = if (viewOnce) Accent else Slate400,
+                        size = 20.dp,
                     )
                 }
 

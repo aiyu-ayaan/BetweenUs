@@ -3,6 +3,7 @@ package com.aatech.betweenus.feature.chat
 import android.graphics.Bitmap
 import android.net.Uri
 import android.util.LruCache
+import java.io.File
 import java.util.concurrent.ConcurrentHashMap
 
 /**
@@ -64,11 +65,35 @@ object MediaCache {
     }
 
     /**
+     * Forgets specific attachments: a deleted message's, a burned one's, or
+     * one whose disappearing window closed.
+     *
+     * The video half matters more than the bitmap half. A bitmap is memory and
+     * goes when the process does; a decrypted video is a real file in the
+     * app's cache directory, and without this it outlived the message by
+     * however long Android took to decide the directory was worth clearing.
+     * Deleting a photo is supposed to mean deleting the photo.
+     */
+    fun forget(keys: Collection<String>) {
+        for (key in keys) {
+            bitmaps.remove(key)
+            bitmaps.remove(posterKey(key))
+            // The `Uri` is one this app wrote, so the file behind it is one
+            // this app may remove. A path it cannot resolve is one it never
+            // wrote, and is left alone.
+            videos.remove(key)?.path?.let { path -> runCatching { File(path).delete() } }
+        }
+    }
+
+    /**
      * Emptied on sign-out: the plaintext of another account's conversation has
      * no business surviving into the next one.
      */
     fun clear() {
         bitmaps.evictAll()
+        // The files too, not only the map that named them: the decrypted
+        // videos are on disk, and signing out should not leave them there.
+        for (uri in videos.values) uri.path?.let { path -> runCatching { File(path).delete() } }
         videos.clear()
     }
 

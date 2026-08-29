@@ -350,6 +350,21 @@ object Workspace {
     fun server(serverId: String?): ServerWithRole? =
         serverId?.let { id -> _servers.value.firstOrNull { it.id == id } }
 
+    /**
+     * Sets a server's disappearing window, and puts the answer back in the
+     * list every screen reads from.
+     *
+     * Patched here rather than waiting for a refetch, because `server.updated`
+     * carries a name and a picture and not this - and adding it there would
+     * broadcast one server's retention policy to every member on every change,
+     * to update a control almost none of them are looking at.
+     */
+    suspend fun setServerMessageWindow(serverId: String, seconds: Int?) {
+        val updated = BetweenUsApi.setServerMessageWindow(serverId, seconds)
+        _servers.update { list -> list.map { if (it.id == updated.id) updated else it } }
+        Cache.putServers(_servers.value)
+    }
+
     fun directChannel(channelId: String): DirectChannel? =
         _directChannels.value.firstOrNull { it.channelId == channelId }
 

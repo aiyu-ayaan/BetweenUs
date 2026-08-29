@@ -14,9 +14,11 @@ import com.aatech.betweenus.core.data.OAuthFlow
 import com.aatech.betweenus.core.data.Session
 import com.aatech.betweenus.core.store.Cache
 import com.aatech.betweenus.core.store.ChannelFocus
+import com.aatech.betweenus.core.store.Conversation
 import com.aatech.betweenus.core.store.AppForeground
 import com.aatech.betweenus.core.store.LastPlace
 import com.aatech.betweenus.core.store.ThemePreferences
+import com.aatech.betweenus.feature.chat.MediaCache
 import com.aatech.betweenus.feature.chat.Outbox
 import com.aatech.betweenus.feature.notifications.Push
 import com.aatech.betweenus.feature.settings.CrashReports
@@ -61,6 +63,12 @@ class BetweenUsApp : Application(), ImageLoaderFactory {
         // wake this account's other devices for it. After AppForeground,
         // because it reads what that tracks.
         ChannelFocus.init()
+        // Decrypted pictures and videos live in the app module; the store that
+        // learns a message has gone lives in core. This is the one wire
+        // between them, and without it deleting a photo left its plaintext -
+        // a bitmap in memory, and a real file on disk for a video - sitting
+        // there with nothing left that named it.
+        Conversation.onAttachmentsGone = { keys -> MediaCache.forget(keys) }
         Push.init(this)
     }
 

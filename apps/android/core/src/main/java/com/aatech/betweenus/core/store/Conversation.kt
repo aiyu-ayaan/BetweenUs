@@ -5,6 +5,7 @@ import android.graphics.BitmapFactory
 import android.graphics.Matrix
 import android.media.ExifInterface
 import com.aatech.betweenus.core.crypto.E2ee
+import com.aatech.betweenus.core.data.AuthPhase
 import com.aatech.betweenus.core.data.ChannelReadReceipt
 import com.aatech.betweenus.core.data.ChatSocket
 import com.aatech.betweenus.core.data.Message
@@ -31,6 +32,7 @@ import kotlinx.coroutines.launch
 import org.json.JSONObject
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
+import java.time.Instant
 import java.util.concurrent.ConcurrentHashMap
 
 /**
@@ -160,6 +162,15 @@ object Conversation {
             visibleChannelId?.let { if (cleared == null || cleared == it) open(it) }
             return
         }
+        // A message that left no tombstone: a one-time message somebody opened,
+        // or one whose disappearing window closed. Handled before the message
+        // is read out of the frame, because this frame carries none - there is
+        // nothing to draw in its place, only something to forget.
+        if (event.optString("type") == "message.gone") {
+            val goneId = event.optString("messageId")
+            if (goneId.isNotEmpty()) forget(setOf(goneId))
+            return
+        }
         val message = event.optJSONObject("message")?.let { Message.from(it) } ?: return
         // Cached whether or not the channel is open. A conversation nobody has
         // looked at this session is exactly the one that should not be a spinner
@@ -193,6 +204,19 @@ object Conversation {
             // not what you last saw", so they share one event carrying the whole
             // message.
             "message.updated" -> if (_messages.value.containsKey(message.channelId)) {
+                // A tombstone carries no manifest - the body is empty - so the
+                // keys are read off the copy still held here, before it is
+                // replaced. After the swap nothing names the files, and the
+                // decrypted photo would sit in the media cache with nothing
+                // left that could ever remove it.
+                if (message.deleted) {
+                    val keys = _messages.value[message.channelId]
+                        ?.firstOrNull { it.id == message.id }
+                        ?.attachments
+                        ?.map { it.key }
+                        .orEmpty()
+                    if (keys.isNotEmpty()) onAttachmentsGone?.invoke(keys)
+                }
                 replace(read(message))
             }
         }
@@ -401,6 +425,14 @@ object Conversation {
         text: String,
         attachments: List<MessageAttachment>,
         replyTo: MessageReply? = null,
+        /**
+         * One-time: the files may be opened once by somebody other than the
+         * author, and that opening destroys the message and its blobs.
+         *
+         * Travels outside the envelope because the server has to act on it,
+         * and a server that cannot read the body cannot be told by the body.
+         */
+        viewOnce: Boolean = false,
     ) {
         // The pictures for whatever custom emoji the text uses, taken from the
         // server this channel belongs to. They travel inside the envelope, so a
@@ -410,7 +442,15 @@ object Conversation {
         // The keys go outside the envelope as well as inside it: the server
         // cannot read the manifest, and without them nothing could ever sweep
         // these blobs when the message is deleted.
-        val message = BetweenUsApi.sendMessage(channelId, sealed, attachments.map { it.key })
+        val message = BetweenUsApi.sendMessage(
+            channelId,
+            sealed,
+            attachments.map { it.key },
+            // A message with no files cannot be one-time: there would be
+            // nothing to open once, and the text is in everybody's history
+            // either way.
+            viewOnce = viewOnce && attachments.isNotEmpty(),
+        )
         insert(read(message))
     }
 
@@ -744,6 +784,81 @@ object Conversation {
         return (existing.orEmpty().filterNot { it.id in fresh } + arrivals)
             .sortedBy { it.message.createdAt }
     }
+
+    /**
+     * Told the storage keys of every message that has just gone, so whoever is
+     * holding decrypted copies of its files can drop them.
+     *
+     * A hook rather than a direct call because the decrypted media lives in
+     * the app module and this store is in core - and because "who is holding
+     * plaintext" is a question this store should not have to know the answer
+     * to. The app wires `MediaCache` to it once, at startup.
+     */
+    var onAttachmentsGone: ((List<String>) -> Unit)? = null
+
+    /**
+     * Removes messages from every list this store keeps one in, and tells
+     * whoever is holding their decrypted files to let go.
+     *
+     * The keys have to be read before the rows are dropped: the manifest lives
+     * inside the encrypted body, so once the copy here is gone nothing is left
+     * that names the files.
+     */
+    private fun forget(ids: Set<String>) {
+        if (ids.isEmpty()) return
+
+        val keys = _messages.value.values
+            .flatten()
+            .filter { it.id in ids }
+            .flatMap { readable -> readable.attachments.map { it.key } }
+        if (keys.isNotEmpty()) onAttachmentsGone?.invoke(keys)
+
+        _messages.update { all -> all.mapValues { (_, list) -> list.filterNot { it.id in ids } } }
+        scope.launch { Cache.forgetMessages(ids.toList()) }
+    }
+
+    /**
+     * Drops whatever has outlived a disappearing window - either of them.
+     *
+     * The server destroys what is past its own stamp and says so, but only to
+     * a client connected to hear it, and this one is holding decrypted copies
+     * no event can reach if it was asleep. A phone that has been in a pocket
+     * since yesterday is exactly the case this exists for.
+     *
+     * The account's own window is never enforced by deletion anywhere, because
+     * it is one-sided - the rows are somebody else's history too. The server
+     * leaves them out of a history page; this leaves them out of what has
+     * already been fetched, without which switching the setting on appeared to
+     * do nothing.
+     */
+    fun pruneExpired(now: Long = System.currentTimeMillis()) {
+        val personal = (Session.state.value as? AuthPhase.SignedIn)?.user?.messageTtlSeconds
+        val floor = personal?.let { now - it * 1000L }
+
+        val gone = _messages.value.values.flatten().filter { readable ->
+            readable.message.expired(now) ||
+                (floor != null && olderThan(readable.message.createdAt, floor))
+        }.map { it.id }.toSet()
+
+        forget(gone)
+    }
+
+    /**
+     * Spends a one-time message: this account has opened it, which is what
+     * destroys it.
+     *
+     * Quiet on failure. The picture has already been looked at - that is what
+     * triggered this - and an error over a viewer somebody is about to close
+     * changes nothing they can act on. The message stays unburned and the next
+     * opening tries again.
+     */
+    fun burn(messageId: String) {
+        scope.launch { runCatching { BetweenUsApi.burnMessage(messageId) } }
+    }
+
+    /** Whether an ISO stamp is at or before [floor]. Unparseable counts as not. */
+    private fun olderThan(iso: String, floor: Long): Boolean =
+        runCatching { Instant.parse(iso).toEpochMilli() }.getOrNull()?.let { it <= floor } ?: false
 
     private fun insert(readable: ReadableMessage) {
         Cache.putMessages(listOf(readable.message))

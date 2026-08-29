@@ -2,6 +2,7 @@ package com.aatech.betweenus.core.data
 
 import org.json.JSONArray
 import org.json.JSONObject
+import java.time.Instant
 
 /**
  * The wire contract, as far as this client uses it.
@@ -94,6 +95,15 @@ data class ServerWithRole(
     val slug: String,
     val iconUrl: String?,
     val ownerId: String,
+    /**
+     * How long a message sent in this server's channels lives, in seconds, or
+     * null for "for ever".
+     *
+     * Binding on every member and enforced by deleting the row, which is what
+     * makes it outrank anybody's personal window: a member may choose to see
+     * less than the server keeps, never more.
+     */
+    val messageTtlSeconds: Int?,
     val role: ServerRole,
     /** What the caller may do here, role defaults and overrides already applied. */
     val permissions: List<String>,
@@ -107,6 +117,7 @@ data class ServerWithRole(
         .put("slug", slug)
         .put("iconUrl", iconUrl)
         .put("ownerId", ownerId)
+        .put("messageTtlSeconds", messageTtlSeconds)
         .put("role", role.name)
         .put("permissions", jsonArrayOf(permissions))
 
@@ -117,6 +128,8 @@ data class ServerWithRole(
             slug = json.optString("slug"),
             iconUrl = json.stringOrNull("iconUrl"),
             ownerId = json.optString("ownerId"),
+            messageTtlSeconds = if (json.isNull("messageTtlSeconds")) null
+            else json.optInt("messageTtlSeconds").takeIf { it > 0 },
             role = ServerRole.of(json.optString("role")),
             permissions = json.strings("permissions"),
         )
@@ -515,9 +528,36 @@ data class Message(
     val deletedBy: UserSummary?,
     val pinnedAt: String?,
     val reactions: List<MessageReaction>,
+    /**
+     * When this message stops existing, stamped from the server's disappearing
+     * window as it was sent. Null means it stays until somebody deletes it.
+     *
+     * The server destroys these itself, so this is not what makes them go. It
+     * is what lets a client that has been offline stop drawing what the server
+     * already destroyed, without a round trip to find out.
+     */
+    val expiresAt: String? = null,
+    /** A one-time message: its media may be opened once, and opening burns it. */
+    val viewOnce: Boolean = false,
+    /** When the one-time media was opened, for everyone who arrives after. */
+    val viewedAt: String? = null,
 ) {
     val deleted: Boolean get() = deletedAt != null
     val pinned: Boolean get() = pinnedAt != null
+
+    /**
+     * Whether the window closed while this copy was sitting on a screen.
+     *
+     * A stamp that cannot be parsed counts as not expired. The alternative is
+     * that one malformed field makes a conversation disappear, which is a far
+     * worse failure than one message outstaying its welcome until the next
+     * refetch drops it.
+     */
+    fun expired(now: Long = System.currentTimeMillis()): Boolean {
+        val at = expiresAt ?: return false
+        return runCatching { Instant.parse(at).toEpochMilli() }.getOrNull()?.let { it <= now }
+            ?: false
+    }
 
     /**
      * What the cache stores: the envelope, untouched. The plaintext is never
@@ -536,6 +576,9 @@ data class Message(
         .put("deletedBy", deletedBy?.toJson())
         .put("pinnedAt", pinnedAt)
         .put("reactions", jsonArrayOfObjects(reactions) { it.toJson() })
+        .put("expiresAt", expiresAt)
+        .put("viewOnce", viewOnce)
+        .put("viewedAt", viewedAt)
 
     companion object {
         fun from(json: JSONObject) = Message(
@@ -549,6 +592,9 @@ data class Message(
             deletedBy = json.optJSONObject("deletedBy")?.let { UserSummary.from(it) },
             pinnedAt = json.stringOrNull("pinnedAt"),
             reactions = json.optJSONArray("reactions")?.map { MessageReaction.from(it) }.orEmpty(),
+            expiresAt = json.stringOrNull("expiresAt"),
+            viewOnce = json.optBoolean("viewOnce", false),
+            viewedAt = json.stringOrNull("viewedAt"),
         )
     }
 }

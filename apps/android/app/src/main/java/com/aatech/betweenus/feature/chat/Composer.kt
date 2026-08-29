@@ -10,6 +10,15 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.layout.RowScope
+import androidx.compose.runtime.mutableFloatStateOf
+import com.aatech.betweenus.feature.settings.BetweenUsPermissions
+import com.aatech.betweenus.feature.settings.rememberPermission
 import androidx.compose.foundation.background
 import androidx.compose.foundation.content.MediaType
 import androidx.compose.foundation.content.consume
@@ -107,6 +116,15 @@ fun Composer(
      * is where everything about to be sent is looked at first.
      */
     onPasteMedia: (Uri) -> Unit,
+    /**
+     * A finished recording, on its way to the outbox.
+     *
+     * It does not go through the send preview like everything else the
+     * paperclip picks: a voice message is sent by the same gesture that
+     * finishes it, and there is no moment in between where anybody would look
+     * at it and change their mind.
+     */
+    onSendVoice: (PickedPreview, Boolean) -> Unit,
     onSend: (String) -> Unit,
 ) {
     // A caret position, not just a string: the `:` menu has to know what is
@@ -115,6 +133,26 @@ fun Composer(
     var field by remember(channelId) { mutableStateOf(TextFieldValue("")) }
     var showEmojiPicker by remember { mutableStateOf(false) }
     val text = field.text
+
+    /**
+     * The recording in progress, and its counter.
+     *
+     * The recorder holds a microphone, so it is kept in a plain `remember` box
+     * rather than in state that a recomposition could hand a stale copy of -
+     * and the state beside it is only what the screen draws.
+     */
+    val recorder = remember { mutableStateOf<VoiceNote.Recording?>(null) }
+    var recording by remember { mutableStateOf(false) }
+    var recordedFor by remember { mutableFloatStateOf(0f) }
+    var recordingFailed by remember { mutableStateOf(false) }
+    /**
+     * Whether the recording about to be sent is one-time.
+     *
+     * On the composer rather than per file, because it is a property of the
+     * message: a one-time message with one ordinary file in it would be a
+     * message whose parts disagree about whether they still exist.
+     */
+    var voiceOnce by remember { mutableStateOf(false) }
 
     /**
      * A picture sitting on the clipboard, offered as a button rather than
@@ -192,7 +230,55 @@ fun Composer(
 
     val isImeVisible = WindowInsets.isImeVisible
     val canSend = text.isNotBlank()
-    val showCamera = !isImeVisible && text.isEmpty()
+    val showCamera = !isImeVisible && text.isEmpty() && !recording
+
+    /**
+     * Starts recording once the microphone has been granted.
+     *
+     * Asked here rather than at launch, like every other permission in this
+     * app: a microphone prompt somebody has not asked for is a prompt whose
+     * honest answer is no.
+     */
+    val microphone = rememberPermission(BetweenUsPermissions.MICROPHONE) {
+        val started = VoiceNote.start(context)
+        recorder.value = started
+        recording = started != null
+        recordedFor = 0f
+        recordingFailed = started == null
+    }
+
+    fun finishRecording() {
+        val current = recorder.value ?: return
+        recorder.value = null
+        recording = false
+        // Under a second is a tap that was meant to be a hold, and `stop`
+        // answers null for it. Nothing is said: an error over a gesture nobody
+        // meant to make is noise.
+        current.stop()?.let { onSendVoice(it, voiceOnce) }
+        voiceOnce = false
+    }
+
+    fun cancelRecording() {
+        recorder.value?.cancel()
+        recorder.value = null
+        recording = false
+        voiceOnce = false
+    }
+
+    // The counter, and nothing else: one loop for as long as a recording is
+    // happening, and none at all the rest of the time.
+    LaunchedEffect(recording) {
+        while (recording) {
+            recordedFor = recorder.value?.elapsed() ?: 0f
+            kotlinx.coroutines.delay(200)
+        }
+    }
+
+    // A microphone must not outlive the screen that opened it. Leaving the
+    // conversation mid-recording is exactly how the indicator gets left on.
+    DisposableEffect(Unit) {
+        onDispose { recorder.value?.cancel() }
+    }
 
     val scheme = MaterialTheme.colorScheme
     Column(
@@ -270,6 +356,26 @@ fun Composer(
             )
         }
 
+        // The microphone was refused, or another app is holding it. Said once,
+        // where the button is, rather than as a dialog over the conversation.
+        AnimatedVisibility(
+            visible = recordingFailed,
+            enter = fadeIn(BetweenUsMotion.effect()) + expandVertically(BetweenUsMotion.spatial()),
+            exit = fadeOut(BetweenUsMotion.effect()) + shrinkVertically(BetweenUsMotion.spatial()),
+        ) {
+            ComposerBanner(
+                icon = BetweenUsIcons.Mic,
+                title = "The microphone is not available",
+                detail = if (microphone.refused) {
+                    "Allow it in settings to record a voice message"
+                } else {
+                    "Something else may be using it"
+                },
+                dismissDescription = "Dismiss",
+                onDismiss = { recordingFailed = false },
+            )
+        }
+
         // Main input bar
         Row(
             modifier = Modifier
@@ -298,6 +404,19 @@ fun Composer(
                     .padding(horizontal = 4.dp, vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
+                // While a microphone is open the well has nothing else to
+                // usefully do, and a text field beside a running recorder
+                // invites typing into a message about to be sent as audio.
+                if (recording) {
+                    RecordingStrip(
+                        seconds = recordedFor,
+                        oneTime = voiceOnce,
+                        onOneTime = { voiceOnce = it },
+                        onDiscard = { cancelRecording() },
+                    )
+                    return@Row
+                }
+
                 IconAction(
                     icon = BetweenUsIcons.Smile,
                     contentDescription = "Emoji",
@@ -402,23 +521,40 @@ fun Composer(
             // lights up as the first character lands rather than blinking. The
             // shape set is the toolkit's: it squares off under a finger and
             // springs back round.
+            val lit = canSend || recording
             val sendContainer by animateColorAsState(
-                targetValue = if (canSend) scheme.primary else scheme.surfaceContainerHighest,
+                targetValue = if (lit) scheme.primary else scheme.surfaceContainerHighest,
                 animationSpec = BetweenUsMotion.effect(),
                 label = "send-container",
             )
             val sendContent by animateColorAsState(
-                targetValue = if (canSend) scheme.onPrimary else scheme.onSurfaceVariant,
+                targetValue = if (lit) scheme.onPrimary else scheme.onSurfaceVariant,
                 animationSpec = BetweenUsMotion.effect(),
                 label = "send-content",
             )
             FilledIconButton(
                 onClick = {
-                    val payload = text.trim()
-                    field = TextFieldValue("")
-                    onSend(payload)
+                    when {
+                        // Finishing a recording is the gesture that sends it.
+                        recording -> finishRecording()
+                        // Nothing typed, so this is the microphone: the moment
+                        // a character lands it becomes send again. One button
+                        // rather than two, because two would mean a
+                        // permanently disabled one next to the one always
+                        // wanted.
+                        !canSend -> {
+                            recordingFailed = false
+                            microphone.request()
+                        }
+
+                        else -> {
+                            val payload = text.trim()
+                            field = TextFieldValue("")
+                            onSend(payload)
+                        }
+                    }
                 },
-                enabled = canSend,
+                enabled = true,
                 shapes = IconButtonDefaults.shapes(),
                 colors = IconButtonDefaults.filledIconButtonColors(
                     containerColor = sendContainer,
@@ -432,7 +568,10 @@ fun Composer(
                 // beside it.
                 modifier = Modifier.size(IconButtonDefaults.mediumContainerSize()),
             ) {
-                BetweenUsIcon(BetweenUsIcons.Send, size = IconButtonDefaults.mediumIconSize)
+                BetweenUsIcon(
+                    if (canSend || recording) BetweenUsIcons.Send else BetweenUsIcons.Mic,
+                    size = IconButtonDefaults.mediumIconSize,
+                )
             }
         }
     }
@@ -444,6 +583,89 @@ fun Composer(
             custom = customEmoji,
         )
     }
+}
+
+/**
+ * What the composer's well becomes while a recording is running.
+ *
+ * A pulsing dot, a counter, the one-time switch, and a way to throw it away.
+ * Sending is the button outside this - the same one that sends everything
+ * else, which is what makes finishing a recording feel like sending a message
+ * rather than operating a tape deck.
+ */
+@Composable
+private fun RowScope.RecordingStrip(
+    seconds: Float,
+    oneTime: Boolean,
+    onOneTime: (Boolean) -> Unit,
+    onDiscard: () -> Unit,
+) {
+    val scheme = MaterialTheme.colorScheme
+
+    // The dot, breathing rather than blinking: a hard on/off at one hertz
+    // reads as a fault indicator, which is not what a recording is.
+    val pulse = rememberInfiniteTransition(label = "recording-pulse")
+    val alpha by pulse.animateFloat(
+        initialValue = 0.35f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(700),
+            repeatMode = RepeatMode.Reverse,
+        ),
+        label = "recording-dot",
+    )
+
+    IconAction(
+        icon = BetweenUsIcons.Trash,
+        contentDescription = "Discard this recording",
+        onClick = onDiscard,
+        compact = true,
+    )
+
+    Spacer(Modifier.width(4.dp))
+
+    Box(
+        Modifier
+            .size(10.dp)
+            .clip(CircleShape)
+            .background(scheme.error.copy(alpha = alpha)),
+    )
+
+    Spacer(Modifier.width(10.dp))
+
+    Text(
+        text = VoiceNote.formatDuration(seconds),
+        style = MaterialTheme.typography.bodyLarge,
+        color = scheme.onSurface,
+    )
+
+    Spacer(Modifier.weight(1f))
+
+    OneTimeAction(on = oneTime, onChange = onOneTime)
+}
+
+/**
+ * The one-time switch.
+ *
+ * Next to what it applies to, because it changes what sending means: this
+ * message's files may be opened once by whoever receives them, and that
+ * opening destroys them everywhere.
+ */
+@Composable
+fun OneTimeAction(on: Boolean, onChange: (Boolean) -> Unit) {
+    val scheme = MaterialTheme.colorScheme
+    val tint by animateColorAsState(
+        targetValue = if (on) scheme.primary else scheme.onSurfaceVariant,
+        animationSpec = BetweenUsMotion.effect(),
+        label = "one-time-tint",
+    )
+    IconAction(
+        icon = BetweenUsIcons.OneTime,
+        contentDescription = if (on) "One-time is on" else "Send as a one-time message",
+        onClick = { onChange(!on) },
+        tint = tint,
+        compact = true,
+    )
 }
 
 /**
