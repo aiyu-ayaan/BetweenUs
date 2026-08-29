@@ -19,11 +19,14 @@ import {
   DownloadIcon,
   EyeIcon,
   FileIcon,
+  InfoIcon,
   OneTimeIcon,
   PlayIcon,
   XIcon,
 } from '../../components/icons';
 import { holdMessage, releaseMessage, useChatStore } from '../../stores/chat';
+import { isDesktopRuntime } from '../../services/platform';
+import { DOWNLOAD_URL } from '../../services/downloads';
 import { VoiceMessage } from './VoiceMessage';
 
 /** Text small enough to read in the message list without opening anything. */
@@ -500,48 +503,35 @@ function OneTimeAttachments({
 }): JSX.Element {
   const burnMessage = useChatStore((state) => state.burnMessage);
   const [open, setOpen] = useState(false);
+  const [why, setWhy] = useState(false);
 
-  // This account has already looked. Somebody else's look does not close it -
-  // a one-time message holds one for each person who can see it, and being
-  // told "Opened" for something never shown is what that used to mean here.
-  if (viewedByMe && !mine) {
-    return (
-      <p className="mt-1 flex items-center gap-2 text-sm italic text-slate-500">
-        <OneTimeIcon className="h-4 w-4 shrink-0" />
-        Opened
-      </p>
-    );
-  }
+  /**
+   * A browser cannot open one of these, and says so instead of trying.
+   *
+   * Every other client hides its window from screen capture while a one-time
+   * message is on screen - `FLAG_SECURE` on Android, `setContentProtection` on
+   * the desktop - and the operating system enforces both. A page has no such
+   * thing and there is no API that would give it one: a browser tab has no say
+   * over the screen it is drawn on.
+   *
+   * So the web build refuses rather than showing a picture it cannot make the
+   * promise about. The alternative is worse than useless - it is a sender
+   * choosing "one-time" and being quietly given none of it, on a client that
+   * looked identical to the ones where it works.
+   *
+   * The author is exempt. Their own message is theirs to look at, it spends
+   * nobody's look, and nothing is destroyed by it.
+   */
+  const canOpen = isDesktopRuntime() || mine;
 
   return (
     <>
-      <button
-        type="button"
-        onClick={() => {
-          // Held first, and burned later - by the viewer, once it actually
-          // has the bytes.
-          //
-          // Burning from here was the bug: the burn deletes the blob from the
-          // object store, and the viewer was still downloading that blob. The
-          // two raced, and on a phone the download always lost, so the picture
-          // never arrived at all. "You have had your look" has to mean the
-          // bytes reached you, not that you pressed something.
-          holdMessage(messageId);
-          setOpen(true);
-        }}
-        className="mt-1 flex w-full max-w-sm cursor-pointer items-center gap-3 rounded-lg border border-accent/40 bg-accent/[0.06] px-3 py-2.5 text-left transition-colors duration-200 hover:bg-accent/[0.12]"
-      >
-        <OneTimeIcon className="h-7 w-7 shrink-0 text-accent" />
-        <span className="min-w-0 flex-1">
-          <span className="block truncate text-sm font-medium text-slate-100">
-            {describeOneTime(attachments)}
-          </span>
-          <span className="block truncate text-xs text-slate-400">
-            {mine ? 'One-time — they get one look' : 'One-time — opening it uses your one look'}
-          </span>
-        </span>
-      </button>
-
+      {/* Drawn first, and outside everything below, because the viewer has to
+          outlive the state changes its own opening causes. Reporting the look
+          comes back as an updated message with this account in `viewedBy`,
+          which flips `viewedByMe` - and returning early on that dropped the
+          viewer a second or two after it opened. Whether this account has
+          looked decides what the *card* says, and nothing more. */}
       {open && (
         <OneTimeViewer
           channelId={channelId}
@@ -556,7 +546,140 @@ function OneTimeAttachments({
           }}
         />
       )}
+
+      {viewedByMe && !mine ? (
+        <p className="mt-1 flex items-center gap-2 text-sm italic text-slate-500">
+          <OneTimeIcon className="h-4 w-4 shrink-0" />
+          Opened
+        </p>
+      ) : (
+        <div className="mt-1 flex w-full max-w-sm items-center gap-2">
+          <button
+            type="button"
+            disabled={!canOpen}
+            onClick={() => {
+              // Held first, and burned later - by the viewer, once it actually
+              // has the bytes. Burning from here raced the download of the
+              // very blob being opened, and on a phone the download lost.
+              holdMessage(messageId);
+              setOpen(true);
+            }}
+            className={`flex min-w-0 flex-1 items-center gap-3 rounded-lg border px-3 py-2.5 text-left transition-colors duration-200 ${
+              canOpen
+                ? 'cursor-pointer border-accent/40 bg-accent/[0.06] hover:bg-accent/[0.12]'
+                : 'cursor-not-allowed border-edge bg-surface-850'
+            }`}
+          >
+            <OneTimeIcon
+              className={`h-7 w-7 shrink-0 ${canOpen ? 'text-accent' : 'text-slate-500'}`}
+            />
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-sm font-medium text-slate-100">
+                {describeOneTime(attachments)}
+              </span>
+              <span className="block truncate text-xs text-slate-400">
+                {!canOpen
+                  ? 'Open in the desktop app'
+                  : mine
+                    ? 'One-time — they get one look'
+                    : 'One-time — opening it uses your one look'}
+              </span>
+            </span>
+          </button>
+
+          {!canOpen && (
+            <button
+              type="button"
+              onClick={() => setWhy(true)}
+              aria-label="Why can I not open this here?"
+              title="Why can I not open this here?"
+              className="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-full border border-edge text-slate-400 transition-colors duration-200 hover:border-accent hover:text-slate-100"
+            >
+              <InfoIcon className="h-4 w-4" />
+            </button>
+          )}
+        </div>
+      )}
+
+      {why && <WebOneTimeNotice onClose={() => setWhy(false)} />}
     </>
+  );
+}
+
+/**
+ * Why a browser will not open a one-time message.
+ *
+ * Worth a dialog rather than a tooltip because it is a security explanation
+ * and a recommendation, and because somebody meeting it is being told they
+ * cannot do something - which deserves a reason rather than a shrug.
+ *
+ * The reason is stated as a limitation of the browser rather than of
+ * BetweenUs, because that is what it is: there is no API that would let a page
+ * refuse a screenshot, and there is not going to be one.
+ */
+function WebOneTimeNotice({ onClose }: { onClose: () => void }): JSX.Element {
+  useEffect(() => {
+    const escape = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', escape);
+    return () => document.removeEventListener('keydown', escape);
+  }, [onClose]);
+
+  return (
+    <div
+      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 px-4"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="one-time-web-title"
+        className="w-full max-w-md animate-pop rounded-2xl border border-edge bg-surface-900 p-6 shadow-pop"
+      >
+        <h2
+          id="one-time-web-title"
+          className="flex items-center gap-2 text-lg font-semibold text-slate-50"
+        >
+          <OneTimeIcon className="h-5 w-5 text-accent" />
+          One-time messages need the app
+        </h2>
+
+        <p className="mt-3 text-sm text-slate-300">
+          The desktop and Android apps hide their window from screen capture while a one-time
+          message is open — the operating system itself refuses the screenshot and records black.
+        </p>
+        <p className="mt-2 text-sm text-slate-400">
+          A browser tab cannot do that. A page has no say over the screen it is drawn on, and
+          there is no setting or permission that would change it. Rather than show you the picture
+          and quietly break the promise the sender chose, this build does not open it.
+        </p>
+        <p className="mt-2 text-sm text-slate-500">
+          Nothing has been used up. Your one look is still there, and it will be waiting when you
+          open this conversation in the app.
+        </p>
+
+        <div className="mt-6 flex justify-end gap-2">
+          <a
+            href={DOWNLOAD_URL}
+            target="_blank"
+            rel="noreferrer noopener"
+            className="cursor-pointer rounded-md bg-accent px-4 py-2 text-sm font-medium text-white transition-colors duration-200 hover:bg-accent-hover"
+          >
+            Get the app
+          </a>
+          <button
+            type="button"
+            onClick={onClose}
+            className="cursor-pointer rounded-md border border-edge px-4 py-2 text-sm text-slate-300 transition-colors duration-200 hover:border-slate-500 hover:text-slate-100"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 

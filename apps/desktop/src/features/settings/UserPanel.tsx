@@ -4,7 +4,9 @@ import { useAuthStore } from '../../stores/auth';
 import { usePresenceStore } from '../../stores/presence';
 import { useVoiceStore } from '../../stores/voice';
 import { Avatar } from '../../components/Avatar';
-import { MicIcon, MicOffIcon, SettingsIcon } from '../../components/icons';
+import { AppDownloadIcon, MicIcon, MicOffIcon, SettingsIcon } from '../../components/icons';
+import { isDesktopRuntime } from '../../services/platform';
+import { DOWNLOAD_URL, downloadLabel } from '../../services/downloads';
 
 const STATUS_CHOICES: Array<{ value: ActiveStatus; label: string; hint?: string }> = [
   { value: 'online', label: 'Online' },
@@ -47,6 +49,31 @@ export function UserPanel({ onOpenSettings }: { onOpenSettings: () => void }): J
   }, [open]);
 
   return (
+    <>
+      {/* Only in a browser, and above the account row rather than inside it:
+          it is an offer, not one of this account's controls, and the two
+          should not be reached for by accident. It disappears the moment
+          somebody is running the app it points at. */}
+      {!isDesktopRuntime() && (
+        <a
+          href={DOWNLOAD_URL}
+          target="_blank"
+          rel="noreferrer noopener"
+          title="Voice calls, screen sharing and one-time messages all work in the app"
+          className="flex shrink-0 cursor-pointer items-center gap-2 border-t border-edge bg-accent/[0.06] px-3 py-2 text-left transition-colors duration-200 hover:bg-accent/[0.12]"
+        >
+          <AppDownloadIcon className="h-4 w-4 shrink-0 text-accent" />
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-xs font-medium text-slate-100">
+              {downloadLabel()}
+            </span>
+            <span className="block truncate text-[11px] text-slate-400">
+              One-time messages need it
+            </span>
+          </span>
+        </a>
+      )}
+
     <div ref={panel} className="relative flex shrink-0 items-center gap-2 border-t border-edge bg-black/20 px-2 py-1.5">
       {open && (
         <div
@@ -129,5 +156,6 @@ export function UserPanel({ onOpenSettings }: { onOpenSettings: () => void }): J
         <SettingsIcon className="h-5 w-5" />
       </button>
     </div>
+    </>
   );
 }

@@ -85,6 +85,30 @@ fun OneTimeCard(
     val scheme = MaterialTheme.colorScheme
     var open by remember(messageId) { mutableStateOf(false) }
 
+    // The viewer is drawn first, and outside everything below, because it must
+    // outlive the state changes its own opening causes.
+    //
+    // Reporting the look comes back as an updated message with this account in
+    // `viewedBy`, which flips `viewedByMe` true - and the card used to return
+    // early on that, so the dialog was dropped a second or two after it opened.
+    // That is what "it closes itself" was. Whether this account has looked
+    // decides what the *card* says; it has nothing to do with whether a viewer
+    // that is already open stays open.
+    if (open) {
+        OneTimeViewer(
+            channelId = channelId,
+            attachments = attachments,
+            // The author looking at their own spends nobody's look, so there
+            // is nothing for their viewer to report.
+            onSeen = if (mine) null else ({ Conversation.burn(messageId) }),
+            onDismiss = {
+                open = false
+                // Now it may go, if the server said so while it was open.
+                Conversation.releaseMessage(messageId)
+            },
+        )
+    }
+
     // This account has already looked. Somebody else's look does not close it -
     // a one-time message holds one for each person who can see it, and being
     // told "Opened" for something never shown is what that used to mean here.
@@ -145,20 +169,6 @@ fun OneTimeCard(
         }
     }
 
-    if (open) {
-        OneTimeViewer(
-            channelId = channelId,
-            attachments = attachments,
-            // The author looking at their own spends nobody's look, so there
-            // is nothing for their viewer to report.
-            onSeen = if (mine) null else ({ Conversation.burn(messageId) }),
-            onDismiss = {
-                open = false
-                // Now it may go, if the server said so while it was open.
-                Conversation.releaseMessage(messageId)
-            },
-        )
-    }
 }
 
 /** What is inside, said in the words a person would use for it. */

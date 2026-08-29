@@ -323,6 +323,24 @@ export const DownloadIcon = (props: IconProps): JSX.Element => (
  * else here is stroke geometry on a 24-unit grid: a `<text>` node would pick
  * up the page font and shift with it.
  */
+/** A lowercase i in a circle: "there is a reason, and here it is". */
+export const InfoIcon = (props: IconProps): JSX.Element => (
+  <Base {...props}>
+    <circle cx="12" cy="12" r="9" />
+    <line x1="12" y1="11" x2="12" y2="16" />
+    <line x1="12" y1="8" x2="12.01" y2="8" />
+  </Base>
+);
+
+/** An arrow into a tray: the mark every platform uses for "download". */
+export const AppDownloadIcon = (props: IconProps): JSX.Element => (
+  <Base {...props}>
+    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+    <polyline points="7 10 12 15 17 10" />
+    <line x1="12" y1="15" x2="12" y2="3" />
+  </Base>
+);
+
 export const OneTimeIcon = (props: IconProps): JSX.Element => (
   <Base {...props}>
     <circle cx="12" cy="12" r="9" />
