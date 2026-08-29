@@ -406,10 +406,81 @@ function callerId(request: Request): string | null {
 async function mayRead(userId: string, key: string): Promise<boolean> {
   const row = await prisma.attachment.findUnique({
     where: { key },
-    select: { uploaderId: true, message: { select: { channelId: true } } },
+    select: {
+      uploaderId: true,
+      message: {
+        select: {
+          id: true,
+          channelId: true,
+          authorId: true,
+          viewOnce: true,
+          views: { where: { userId }, select: { id: true } },
+        },
+      },
+    },
   });
   if (!row) return false;
+
+  // A one-time message is the one case where holding the upload is not a
+  // licence to read it, so the ownership shortcut below has to be gated
+  // before it fires rather than after.
+  if (row.message?.viewOnce) return mayOpenOneTime(userId, row.message);
+
   if (row.uploaderId === userId) return true;
   if (!row.message) return false;
   return (await resolveChannelAccess(userId, row.message.channelId)) !== null;
+}
+
+/**
+ * Whether this account may fetch the bytes of a one-time message, which is a
+ * narrower question than whether it may see the channel.
+ *
+ * This is where "one look" is actually enforced. Everything the clients do -
+ * a card that locks, a viewer that will not open twice - is a client being
+ * well behaved, and a one-time message whose only guarantee is that the
+ * recipient's software chose to keep it is not a guarantee at all. The rule
+ * lives here because this is the one door the bytes come through.
+ *
+ * Two refusals, and the first is the one people ask about:
+ *
+ * **The author may not read it back.** They sent it; it was never theirs to
+ * re-open, and a sender who can look at it again on another device has a
+ * message that is one-time for exactly one of the two people in the
+ * conversation. It is also the case the clients cannot enforce on their own,
+ * because the author is the account holding the plaintext to begin with.
+ *
+ * **Nobody may read it twice.** A view row exists from the moment somebody
+ * spends their look, so the second fetch is refused however the request was
+ * made - a rebuilt client, a replayed URL, a second device.
+ *
+ * The order matters: the look is recorded *after* the fetch, so the fetch that
+ * spends it still succeeds and only the ones after it do not.
+ */
+function mayOpenOneTime(
+  userId: string,
+  message: { authorId: string; channelId: string; views: Array<{ id: string }> },
+): Promise<boolean> {
+  if (!oneTimeLookLeft(userId, message.authorId, message.views.length)) {
+    return Promise.resolve(false);
+  }
+  return resolveChannelAccess(userId, message.channelId).then((access) => access !== null);
+}
+
+/**
+ * Whether this account has a look left in a one-time message, before channel
+ * access is even considered.
+ *
+ * Split out from the query so the rule can be asserted on without a database.
+ * It is two comparisons and it is the whole of the guarantee, which is exactly
+ * the kind of thing that gets "simplified" by somebody who reads the author
+ * check as a redundant special case of the view check.
+ */
+export function oneTimeLookLeft(userId: string, authorId: string, viewsByCaller: number): boolean {
+  // The author sent it. It was never theirs to re-open, and a sender who can
+  // look again on another device has a message that is one-time for exactly
+  // one of the two people in the conversation.
+  if (userId === authorId) return false;
+  // Spent. The row is written the moment somebody looks, so every fetch after
+  // the first is refused however it was made.
+  return viewsByCaller === 0;
 }

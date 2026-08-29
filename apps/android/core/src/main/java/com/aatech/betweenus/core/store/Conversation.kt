@@ -889,16 +889,16 @@ object Conversation {
     }
 
     /**
-     * Spends a one-time message: this account has opened it, which is what
-     * destroys it.
+     * Records this account's look at a one-time message, which is what spends
+     * it.
      *
-     * Quiet on failure. The picture has already been looked at - that is what
-     * triggered this - and an error over a viewer somebody is about to close
-     * changes nothing they can act on. The message stays unburned and the next
-     * opening tries again.
+     * Suspending and not caught, because the viewer waits on it before it
+     * draws anything: a picture shown when the look was never written down is
+     * a look spent only when the network happened to be working, which is not
+     * one look. A failure therefore has to reach the caller.
      */
-    fun burn(messageId: String) {
-        scope.launch { runCatching { BetweenUsApi.burnMessage(messageId) } }
+    suspend fun spendLook(messageId: String) {
+        BetweenUsApi.burnMessage(messageId)
     }
 
     /** Whether an ISO stamp is at or before [floor]. Unparseable counts as not. */

@@ -85,6 +85,20 @@ fun OneTimeCard(
     val scheme = MaterialTheme.colorScheme
     var open by remember(messageId) { mutableStateOf(false) }
 
+    /**
+     * The author does not get to open their own one-time message.
+     *
+     * They sent it. It was never theirs to look at again, and a sender who can
+     * re-open it on another device has a message that is one-time for exactly
+     * one of the two people in the conversation - which is not what the sender
+     * chose when they turned the switch on.
+     *
+     * The server refuses them the bytes too; this only stops the app offering
+     * something that would fail. See `mayOpenOneTime` in the uploads
+     * controller, which is where the guarantee actually lives.
+     */
+    val spent = mine || viewedByMe
+
     // The viewer is drawn first, and outside everything below, because it must
     // outlive the state changes its own opening causes.
     //
@@ -98,9 +112,7 @@ fun OneTimeCard(
         OneTimeViewer(
             channelId = channelId,
             attachments = attachments,
-            // The author looking at their own spends nobody's look, so there
-            // is nothing for their viewer to report.
-            onSeen = if (mine) null else ({ Conversation.burn(messageId) }),
+            onSpend = { Conversation.spendLook(messageId) },
             onDismiss = {
                 open = false
                 // Now it may go, if the server said so while it was open.
@@ -109,17 +121,17 @@ fun OneTimeCard(
         )
     }
 
-    // This account has already looked. Somebody else's look does not close it -
-    // a one-time message holds one for each person who can see it, and being
-    // told "Opened" for something never shown is what that used to mean here.
-    if (viewedByMe && !mine) {
+    // Nothing left to open: this account has looked, or it is the author's own
+    // and never was theirs to open. Somebody *else's* look does not close it -
+    // a one-time message holds one for each person who can see it.
+    if (spent) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             BetweenUsIcon(BetweenUsIcons.OneTime, tint = scheme.onSurfaceVariant, size = 16.dp)
             Text(
-                text = "Opened",
+                text = if (mine) "One-time — only they can open it" else "Opened",
                 style = MaterialTheme.typography.bodyMedium,
                 color = scheme.onSurfaceVariant,
             )
@@ -158,11 +170,7 @@ fun OneTimeCard(
                 color = scheme.onSurface,
             )
             Text(
-                text = if (mine) {
-                    "One-time — they get one look"
-                } else {
-                    "One-time — opening it uses your one look"
-                },
+                text = "One-time — you get one look",
                 style = MaterialTheme.typography.bodySmall,
                 color = scheme.onSurfaceVariant,
             )
@@ -197,8 +205,12 @@ fun describeOneTime(attachments: List<MessageAttachment>): String {
 private fun OneTimeViewer(
     channelId: String,
     attachments: List<MessageAttachment>,
-    /** Called once every file is decrypted and on screen. This is what burns it. */
-    onSeen: (() -> Unit)?,
+    /**
+     * Records this account's look. Awaited, and nothing is drawn until it
+     * returns - a picture shown before the server has written the look down is
+     * a look that was never spent.
+     */
+    onSpend: suspend () -> Unit,
     onDismiss: () -> Unit,
 ) {
     Dialog(
@@ -232,7 +244,8 @@ private fun OneTimeViewer(
          * feature exists to destroy.
          */
         var loaded by remember { mutableStateOf<List<android.graphics.Bitmap?>?>(null) }
-        var failed by remember { mutableStateOf(false) }
+        var spentLook by remember { mutableStateOf(false) }
+        var failure by remember { mutableStateOf<String?>(null) }
 
         val context = LocalContext.current
         LaunchedEffect(attachments) {
@@ -260,10 +273,24 @@ private fun OneTimeViewer(
                 }
             }.onSuccess { decoded ->
                 loaded = decoded
-                // Reported only now, with the bytes on this device. This is
-                // the ordering the whole fix turns on.
-                onSeen?.invoke()
-            }.onFailure { failed = true }
+                // Two orderings meet here and both matter. The burn deletes
+                // the blobs, so it cannot come first - that raced the download
+                // and lost. And the picture cannot come first either: drawing
+                // it and then recording is a look spent only if the write
+                // happened to succeed, which is one look on a good network
+                // rather than one look.
+                //
+                // So: fetch, record, draw. A failure draws nothing and spends
+                // nothing, and the person may try again - the server has no
+                // row for it, so nothing has been taken from them.
+                runCatching { onSpend() }
+                    .onSuccess { spentLook = true }
+                    .onFailure {
+                        failure = "That could not be opened. Nothing has been used up — try again."
+                    }
+            }.onFailure {
+                failure = "That could not be opened"
+            }
         }
 
         Box(
@@ -281,13 +308,14 @@ private fun OneTimeViewer(
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
                 when {
-                    failed -> Text(
-                        text = "That could not be opened",
+                    failure != null -> Text(
+                        text = failure.orEmpty(),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.error,
+                        textAlign = TextAlign.Center,
                     )
 
-                    loaded == null -> Text(
+                    loaded == null || !spentLook -> Text(
                         text = "Decrypting…",
                         style = MaterialTheme.typography.bodyMedium,
                         color = Color.White.copy(alpha = 0.7f),

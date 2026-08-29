@@ -556,16 +556,20 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   /**
-   * Spends a one-time message. Outside the envelope, because the server is the
-   * one that has to act on it and it cannot read the envelope.
+   * Records this account's look at a one-time message, which is what spends
+   * it. Outside the encrypted envelope, because the server is the one that has
+   * to act on it and it cannot read the envelope.
    *
-   * Deliberately quiet on failure. The person has already seen the picture -
-   * that is what triggered this - and an error banner over a viewer they are
-   * about to close changes nothing they can act on. The message stays
-   * unburned and the next opening tries again.
+   * Throws on failure, and the viewer waits on it: nothing is drawn until the
+   * look is written down. The alternative - draw first, record after - is a
+   * message that is one-time only when the request happened to succeed.
    */
   burnMessage: async (messageId) => {
-    await api.burnMessage(messageId).catch(() => undefined);
+    // Deliberately not swallowed. The viewer waits on this before it draws
+    // anything, so a failure has to reach it: a picture shown when the look
+    // was never written down is a look spent only when the network happened
+    // to be working, which is not one look.
+    await api.burnMessage(messageId);
   },
 
   /**

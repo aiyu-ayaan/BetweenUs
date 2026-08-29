@@ -499,6 +499,7 @@ function OneTimeAttachments({
   messageId: string;
   /** Whether *this account* has already spent its look. One look each. */
   viewedByMe: boolean;
+  /** Whether this account sent it. The author never gets to open one. */
   mine: boolean;
 }): JSX.Element {
   const burnMessage = useChatStore((state) => state.burnMessage);
@@ -506,23 +507,34 @@ function OneTimeAttachments({
   const [why, setWhy] = useState(false);
 
   /**
+   * The author does not get to open their own one-time message.
+   *
+   * They sent it. It was never theirs to look at again, and a sender who can
+   * re-open it on another device has a message that is one-time for exactly
+   * one of the two people in the conversation - which is not what the sender
+   * chose when they turned the switch on.
+   *
+   * The server refuses them the bytes as well; this only stops the app
+   * offering something that would fail. See `mayOpenOneTime` in the uploads
+   * controller, which is where the guarantee actually lives.
+   */
+  const spent = mine || viewedByMe;
+
+  /**
    * A browser cannot open one of these, and says so instead of trying.
    *
    * Every other client hides its window from screen capture while a one-time
    * message is on screen - `FLAG_SECURE` on Android, `setContentProtection` on
    * the desktop - and the operating system enforces both. A page has no such
-   * thing and there is no API that would give it one: a browser tab has no say
-   * over the screen it is drawn on.
+   * thing and there is no API that would give it one.
    *
    * So the web build refuses rather than showing a picture it cannot make the
-   * promise about. The alternative is worse than useless - it is a sender
-   * choosing "one-time" and being quietly given none of it, on a client that
-   * looked identical to the ones where it works.
-   *
-   * The author is exempt. Their own message is theirs to look at, it spends
-   * nobody's look, and nothing is destroyed by it.
+   * promise about. The alternative is worse than useless: a sender choosing
+   * "one-time" and quietly being given none of it, on a client that looked
+   * identical to the ones where it works.
    */
-  const canOpen = isDesktopRuntime() || mine;
+  const webRefuses = !isDesktopRuntime();
+  const canOpen = !spent && !webRefuses;
 
   return (
     <>
@@ -536,9 +548,7 @@ function OneTimeAttachments({
         <OneTimeViewer
           channelId={channelId}
           attachments={attachments}
-          // The author looking at their own spends nobody's look, so there is
-          // nothing for their viewer to report.
-          onSeen={mine ? undefined : () => void burnMessage(messageId)}
+          onSpend={() => burnMessage(messageId)}
           onClose={() => {
             setOpen(false);
             // Now it may go, if the server said so while it was open.
@@ -547,10 +557,10 @@ function OneTimeAttachments({
         />
       )}
 
-      {viewedByMe && !mine ? (
+      {spent ? (
         <p className="mt-1 flex items-center gap-2 text-sm italic text-slate-500">
           <OneTimeIcon className="h-4 w-4 shrink-0" />
-          Opened
+          {mine ? 'One-time — only they can open it' : 'Opened'}
         </p>
       ) : (
         <div className="mt-1 flex w-full max-w-sm items-center gap-2">
@@ -578,16 +588,12 @@ function OneTimeAttachments({
                 {describeOneTime(attachments)}
               </span>
               <span className="block truncate text-xs text-slate-400">
-                {!canOpen
-                  ? 'Open in the desktop app'
-                  : mine
-                    ? 'One-time — they get one look'
-                    : 'One-time — opening it uses your one look'}
+                {webRefuses ? 'Open in the desktop app' : 'One-time — you get one look'}
               </span>
             </span>
           </button>
 
-          {!canOpen && (
+          {webRefuses && (
             <button
               type="button"
               onClick={() => setWhy(true)}
@@ -716,13 +722,17 @@ export function describeOneTime(attachments: MessageAttachment[]): string {
 function OneTimeViewer({
   channelId,
   attachments,
-  onSeen,
+  onSpend,
   onClose,
 }: {
   channelId: string;
   attachments: MessageAttachment[];
-  /** Called once every file is decrypted and on screen. This is what burns it. */
-  onSeen?: () => void;
+  /**
+   * Records this account's look. Awaited, and nothing is drawn until it
+   * resolves - a picture shown before the server has written the look down is
+   * a look that was never spent.
+   */
+  onSpend: () => Promise<void>;
   onClose: () => void;
 }): JSX.Element {
   const [at, setAt] = useState(0);
@@ -761,17 +771,27 @@ function OneTimeViewer({
   }, [channelId, attachments]);
 
   /**
-   * Reported once, and only once the bytes are in hand.
+   * The look, recorded once the bytes are in hand and *before* they are drawn.
    *
-   * This is the whole ordering fix. The burn deletes the blobs, so reporting
-   * before the download finished raced the download - and lost.
+   * Two orderings meet here and both matter. The burn deletes the blobs, so it
+   * cannot come first - that raced the download and lost. And the picture
+   * cannot come first either: showing it and then recording is a look that was
+   * spent only if the write happened to succeed, which is not one look, it is
+   * one look on a good network.
+   *
+   * So: fetch, record, draw. A failure draws nothing and spends nothing, and
+   * the person can try again - the server has no row for it, so nothing has
+   * been taken from them.
    */
-  const reported = useRef(false);
+  const [spent, setSpent] = useState(false);
+  const spending = useRef(false);
   useEffect(() => {
-    if (!urls || reported.current) return;
-    reported.current = true;
-    onSeen?.();
-  }, [urls, onSeen]);
+    if (!urls || spending.current) return;
+    spending.current = true;
+    void onSpend()
+      .then(() => setSpent(true))
+      .catch(() => setFailure('That could not be opened. Nothing has been used up — try again.'));
+  }, [urls, onSpend]);
 
   /**
    * Hidden from screen capture for exactly as long as this is open.
@@ -815,8 +835,8 @@ function OneTimeViewer({
         className="flex max-h-full w-full max-w-3xl flex-col items-center gap-3"
       >
         {failure ? (
-          <p className="text-sm text-danger">{failure}</p>
-        ) : !urls ? (
+          <p className="max-w-sm text-center text-sm text-danger">{failure}</p>
+        ) : !urls || !spent ? (
           <p className="text-sm text-slate-400">Decrypting…</p>
         ) : (
           current && <OneTimeMedia attachment={current} url={urls[index] ?? ''} />
