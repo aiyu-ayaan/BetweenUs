@@ -21,8 +21,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { VOICE_WAVEFORM_BARS, type MessageAttachment } from '@betweenus/shared-types';
 import { openAttachment } from '../../services/attachments';
+
 import { Avatar } from '../../components/Avatar';
-import { MicIcon, PauseIcon, PlayIcon } from '../../components/icons';
+import { PauseIcon, PlayIcon } from '../../components/icons';
 
 /**
  * What to draw when the sender's client never measured one - audio picked off
@@ -65,6 +66,12 @@ export function VoiceMessage({
    */
   const [measured, setMeasured] = useState<number | null>(null);
 
+  /**
+   * Every bar the sender measured. That they all fit - on a phone bubble as
+   * well as a desktop one - is arithmetic rather than a hope: see
+   * `waveform.ts` and the check beside it, which is what this feature was
+   * missing the first time round.
+   */
   const bars = attachment.waveform?.length ? attachment.waveform : PLACEHOLDER;
   const total = measured ?? attachment.duration ?? 0;
   const fraction = total > 0 ? Math.min(1, at / total) : 0;
@@ -119,20 +126,13 @@ export function VoiceMessage({
   const spent = Math.round(fraction * bars.length);
 
   return (
-    <div className="mt-1 flex max-w-sm items-center gap-3 rounded-2xl border border-edge bg-surface-850 px-3 py-2.5">
+    /* No card of its own. This is already inside a message bubble, and drawing
+       a bordered box inside a bordered bubble is the same edge twice - which
+       is exactly what it looked like: a black rectangle sitting in a purple
+       one. The player is laid straight into the bubble instead. */
+    <div className="mt-0.5 flex w-full items-center gap-2.5 sm:min-w-[17rem] sm:max-w-[22rem]">
       {author && (
-        <div className="relative shrink-0">
-          <Avatar
-            name={author.displayName}
-            avatarUrl={author.avatarUrl}
-            ringColour="border-surface-850"
-          />
-          {/* The mark that says what kind of message this is, on the one part
-              of the bubble that is otherwise just a face. */}
-          <span className="absolute -bottom-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-surface-850">
-            <MicIcon className={`h-3 w-3 ${mine ? 'text-accent' : 'text-slate-400'}`} />
-          </span>
-        </div>
+        <Avatar name={author.displayName} avatarUrl={author.avatarUrl} size="sm" />
       )}
 
       <button
@@ -166,13 +166,25 @@ export function VoiceMessage({
               toggle();
             }
           }}
-          className="flex h-8 cursor-pointer items-center gap-[2px]"
+          // A one-pixel gap, not two. Forty-seven gaps at 2px eat ninety-odd
+          // pixels of a bubble that is a few hundred wide, which left each bar
+          // about a pixel across - drawn, and invisible.
+          className="flex h-8 cursor-pointer items-center gap-px"
         >
           {bars.map((height, index) => (
             <span
               key={index}
-              className={`w-full rounded-full transition-colors duration-100 ${
-                index < spent ? accent : 'bg-slate-600'
+              // `flex-1`, not `w-full`. Forty-eight siblings each asking for
+              // the container's whole width shrink to sub-pixel slivers that
+              // round away to nothing, which is what "the bars are missing"
+              // was. An equal share of the free space is what was meant, and
+              // it is the same thing Android says with `weight(1f)`.
+              className={`min-w-0 flex-1 rounded-full transition-colors duration-100 ${
+                // The unplayed bars have to read on two different grounds -
+                // an accent-tinted bubble and a plain surface one - so they
+                // are a translucent light rather than a fixed grey. A dark
+                // grey vanished on both.
+                index < spent ? accent : 'bg-slate-100/25'
               }`}
               // A floor in pixels as well as in the data: a bar rounded to
               // less than two pixels disappears at some zoom levels, and a
