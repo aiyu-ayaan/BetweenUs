@@ -31,11 +31,14 @@ import { startWebPush } from '../../services/web-push';
 import { ServerPicker } from '../auth/ServerPicker';
 import { Avatar } from '../../components/Avatar';
 import { PicturePicker } from '../../components/PicturePicker';
+import { DisappearingPicker } from '../../components/DisappearingPicker';
+import { pruneExpired } from '../../stores/chat';
 import {
   BellIcon,
   BetweenUsLogoIcon,
   BlockIcon,
   CheckIcon,
+  ClockIcon,
   ChevronLeftIcon,
   DownloadIcon,
   LogOutIcon,
@@ -258,6 +261,35 @@ function PrivacySection(): JSX.Element {
   const [note, setNote] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const user = useAuthStore((state) => state.user);
+  const refreshUser = useAuthStore((state) => state.refreshUser);
+  const [savingWindow, setSavingWindow] = useState(false);
+  const [windowError, setWindowError] = useState<string | null>(null);
+
+  /**
+   * Changes this account's own window.
+   *
+   * Applied here as well as saved, and both halves matter. The server leaves
+   * what is now too old out of the next history page; this window is already
+   * holding decrypted messages that no fetch will re-ask for, so without the
+   * prune the setting appears to do nothing until something reloads.
+   */
+  const saveWindow = async (seconds: number | null): Promise<void> => {
+    setSavingWindow(true);
+    setWindowError(null);
+    try {
+      await api.updateAccount({ messageTtlSeconds: seconds });
+      await refreshUser();
+      pruneExpired();
+    } catch (caught) {
+      setWindowError(
+        caught instanceof Error ? caught.message : 'Could not change your disappearing window.',
+      );
+    } finally {
+      setSavingWindow(false);
+    }
+  };
+
   // The friends screen loads this too, but settings can be opened without ever
   // having been there.
   useEffect(() => {
@@ -340,6 +372,34 @@ function PrivacySection(): JSX.Element {
               </li>
             ))}
           </ul>
+        )}
+      </section>
+
+      <section className="mt-8 border-t border-edge pt-6">
+        <h2 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-slate-300">
+          <ClockIcon className="h-4 w-4" />
+          Disappearing messages
+        </h2>
+        <p className="mt-1.5 text-sm text-slate-400">
+          Stop showing you messages older than this, in every conversation, on every device you
+          are signed in on. It is the same shape as clearing your messages below - one-sided, and
+          about your own screens - except that the line keeps moving instead of being drawn once.
+        </p>
+        <p className="mt-1.5 text-sm text-slate-500">
+          Nobody else loses anything. A server can also set a window of its own, and that one does
+          delete for everybody - where the two disagree, whichever is shorter is what you see.
+        </p>
+
+        <DisappearingPicker
+          value={user?.messageTtlSeconds ?? null}
+          disabled={savingWindow}
+          onChange={(seconds) => void saveWindow(seconds)}
+        />
+
+        {windowError && (
+          <p role="alert" className="mt-3 text-sm text-danger">
+            {windowError}
+          </p>
         )}
       </section>
 

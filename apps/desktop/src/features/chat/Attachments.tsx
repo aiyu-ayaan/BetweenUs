@@ -15,7 +15,15 @@ import {
   readAttachmentText,
   saveAttachment,
 } from '../../services/attachments';
-import { DownloadIcon, EyeIcon, FileIcon, PlayIcon, XIcon } from '../../components/icons';
+import {
+  DownloadIcon,
+  EyeIcon,
+  FileIcon,
+  OneTimeIcon,
+  PlayIcon,
+  XIcon,
+} from '../../components/icons';
+import { useChatStore } from '../../stores/chat';
 
 /** Text small enough to read in the message list without opening anything. */
 const INLINE_TEXT_CHARS = 800;
@@ -23,12 +31,27 @@ const INLINE_TEXT_CHARS = 800;
 export function AttachmentList({
   channelId,
   attachments,
+  oneTime,
 }: {
   channelId: string;
   attachments: MessageAttachment[];
+  /**
+   * Present when this message is one-time, which changes everything below:
+   * nothing is drawn inline, nothing is cached to disk, and opening it is what
+   * destroys it.
+   */
+  oneTime?: { messageId: string; viewedAt: string | null; mine: boolean };
 }): JSX.Element | null {
   const [preview, setPreview] = useState<MessageAttachment | null>(null);
   if (attachments.length === 0) return null;
+
+  // A one-time message is not an ordinary message with a flag on it. Its
+  // pictures are never drawn in the list - a thumbnail is a look, and it would
+  // be a look nobody chose to spend - so the whole block becomes one card that
+  // has to be opened deliberately.
+  if (oneTime) {
+    return <OneTimeAttachments channelId={channelId} attachments={attachments} {...oneTime} />;
+  }
 
   // Two or more photos are an album, not two attachments that happen to be
   // pictures: they get one tiled block, the way every phone messenger draws
@@ -409,7 +432,250 @@ function TextAttachment({
   );
 }
 
+// --- One-time messages ------------------------------------------------------
+
+/**
+ * A one-time message, before and after it is opened.
+ *
+ * Three states, and the middle one is the feature. Before: a card naming what
+ * is inside it, deliberately not a thumbnail - a thumbnail is a look, and it
+ * would be a look nobody chose to spend. During: a full-screen viewer with the
+ * ordinary affordances removed. After: a line saying it is gone, which is all
+ * that is left, because the server destroyed the row and the blobs the moment
+ * the viewer opened.
+ *
+ * The author is not a viewer. Somebody re-reading what they themselves sent
+ * has not spent anybody's one look, so their own copy opens as often as they
+ * like and burns nothing - and the server agrees, which is what makes that
+ * safe rather than a client-side courtesy.
+ *
+ * ## What "protected" can and cannot mean here
+ *
+ * The viewer refuses the download, the context menu, the drag and the text
+ * selection, and the message list never draws the picture at all. That closes
+ * every path this application offers for keeping a copy.
+ *
+ * It does not stop a screenshot, and no application on a general-purpose
+ * computer can. The pixels have to reach a screen for the picture to be looked
+ * at, and at that point the operating system, another window, or a phone
+ * pointed at the monitor can all have them. What this feature honestly
+ * provides is that the file stops existing - on the server, in the object
+ * store, and in every client's cache - the moment it has been seen once. The
+ * copy on screen says exactly that, because a viewer implying more would be
+ * lying to the person deciding what to send.
+ */
+function OneTimeAttachments({
+  channelId,
+  attachments,
+  messageId,
+  viewedAt,
+  mine,
+}: {
+  channelId: string;
+  attachments: MessageAttachment[];
+  messageId: string;
+  viewedAt: string | null;
+  mine: boolean;
+}): JSX.Element {
+  const burnMessage = useChatStore((state) => state.burnMessage);
+  const [open, setOpen] = useState(false);
+
+  // Opened by somebody, and this client is not the author looking at their
+  // own. There is nothing left to fetch: the blobs are gone.
+  if (viewedAt && !mine) {
+    return (
+      <p className="mt-1 flex items-center gap-2 text-sm italic text-slate-500">
+        <OneTimeIcon className="h-4 w-4 shrink-0" />
+        Opened
+      </p>
+    );
+  }
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => {
+          setOpen(true);
+          // Burning is what opening *means*, so it happens on the way in
+          // rather than on the way out. Closing the viewer is not a promise
+          // anybody made - a window can be shut, a machine can lose power -
+          // and a message that survives being looked at because the tab
+          // crashed is a one-time message that was not one.
+          if (!mine) void burnMessage(messageId);
+        }}
+        className="mt-1 flex w-full max-w-sm cursor-pointer items-center gap-3 rounded-lg border border-accent/40 bg-accent/[0.06] px-3 py-2.5 text-left transition-colors duration-200 hover:bg-accent/[0.12]"
+      >
+        <OneTimeIcon className="h-7 w-7 shrink-0 text-accent" />
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-sm font-medium text-slate-100">
+            {describeOneTime(attachments)}
+          </span>
+          <span className="block truncate text-xs text-slate-400">
+            {mine ? 'One-time — they get one look' : 'One-time — opening it uses your one look'}
+          </span>
+        </span>
+      </button>
+
+      {open && (
+        <OneTimeViewer
+          channelId={channelId}
+          attachments={attachments}
+          onClose={() => setOpen(false)}
+        />
+      )}
+    </>
+  );
+}
+
+/** What is inside, said in the words a person would use for it. */
+export function describeOneTime(attachments: MessageAttachment[]): string {
+  const kinds = new Set(
+    attachments.map((attachment) =>
+      attachment.contentType.startsWith('image/')
+        ? 'Photo'
+        : attachment.contentType.startsWith('video/')
+          ? 'Video'
+          : attachment.contentType.startsWith('audio/')
+            ? 'Voice message'
+            : 'File',
+    ),
+  );
+  const only = kinds.size === 1 ? ([...kinds][0] ?? 'File') : 'File';
+  return attachments.length > 1
+    ? `${attachments.length} ${only.toLowerCase()}s`
+    : only;
+}
+
+/**
+ * The viewer for a one-time message.
+ *
+ * Everything that would leave a copy behind is taken away: no download button,
+ * no context menu, nothing draggable, nothing selectable, and `controlsList`
+ * telling a media element not to offer its own download item. Those are the
+ * paths this application controls, and they are all closed.
+ *
+ * See the note above for what this cannot do, and why the sentence under the
+ * picture says so out loud.
+ */
+function OneTimeViewer({
+  channelId,
+  attachments,
+  onClose,
+}: {
+  channelId: string;
+  attachments: MessageAttachment[];
+  onClose: () => void;
+}): JSX.Element {
+  const [at, setAt] = useState(0);
+  const index = Math.min(at, attachments.length - 1);
+  const current = attachments[index];
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape') onClose();
+      if (event.key === 'ArrowLeft') setAt((was) => Math.max(0, was - 1));
+      if (event.key === 'ArrowRight') setAt((was) => Math.min(attachments.length - 1, was + 1));
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose, attachments.length]);
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="One-time message"
+      onClick={onClose}
+      onContextMenu={(event) => event.preventDefault()}
+      className="fixed inset-0 z-50 flex select-none flex-col items-center justify-center gap-3 bg-black/90 p-8"
+    >
+      <div
+        onClick={(event) => event.stopPropagation()}
+        className="flex max-h-full w-full max-w-3xl flex-col items-center gap-3"
+      >
+        {current && <OneTimeMedia channelId={channelId} attachment={current} />}
+
+        {attachments.length > 1 && (
+          <p className="text-xs text-slate-400">
+            {index + 1} of {attachments.length} — use the arrow keys
+          </p>
+        )}
+
+        {/* Said plainly, because the alternative is implying a guarantee no
+            application on a general-purpose computer can keep. */}
+        <p className="max-w-md text-center text-xs text-slate-500">
+          This is gone once you close it. Saving and sharing are switched off here, but no app can
+          stop a screenshot — only send what you would trust them with.
+        </p>
+
+        <button
+          type="button"
+          onClick={onClose}
+          className="cursor-pointer rounded-md bg-surface-800 px-4 py-2 text-sm text-slate-200 transition-colors duration-200 hover:bg-white/[0.07]"
+        >
+          Close
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/** One file inside the viewer, drawn with everything that copies it removed. */
+function OneTimeMedia({
+  channelId,
+  attachment,
+}: {
+  channelId: string;
+  attachment: MessageAttachment;
+}): JSX.Element {
+  const { url, error } = useDecrypted(channelId, attachment);
+
+  if (error) return <p className="text-sm text-danger">{error}</p>;
+  if (!url) return <p className="text-sm text-slate-400">Decrypting…</p>;
+
+  if (attachment.contentType.startsWith('image/')) {
+    return (
+      <img
+        src={url}
+        alt=""
+        draggable={false}
+        onContextMenu={(event) => event.preventDefault()}
+        className="max-h-[70vh] max-w-full select-none object-contain"
+      />
+    );
+  }
+
+  if (attachment.contentType.startsWith('video/')) {
+    return (
+      <video
+        src={url}
+        controls
+        autoPlay
+        // The browser's own download item, refused. It is the one copy path a
+        // media element offers that markup around it cannot take away.
+        controlsList="nodownload noplaybackrate"
+        disablePictureInPicture
+        onContextMenu={(event) => event.preventDefault()}
+        className="max-h-[70vh] max-w-full select-none"
+      />
+    );
+  }
+
+  return (
+    <audio
+      src={url}
+      controls
+      autoPlay
+      controlsList="nodownload"
+      onContextMenu={(event) => event.preventDefault()}
+      className="w-full max-w-md"
+    />
+  );
+}
+
 // --- Everything else --------------------------------------------------------
+
 
 function FileCard({
   channelId,

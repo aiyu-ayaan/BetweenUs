@@ -731,7 +731,23 @@ function MessageList({
                             <MessageLinkPreviews content={message.content} />
                           </>
                         )}
-                        <AttachmentList channelId={channel.id} attachments={message.attachments} />
+                        <AttachmentList
+                          channelId={channel.id}
+                          attachments={message.attachments}
+                          // Present only when it is one, so an ordinary
+                          // message renders through exactly the path it always
+                          // did rather than through a branch that has to
+                          // remember to behave normally.
+                          oneTime={
+                            message.viewOnce
+                              ? {
+                                  messageId: message.id,
+                                  viewedAt: message.viewedAt,
+                                  mine: message.author.id === me?.id,
+                                }
+                              : undefined
+                          }
+                        />
 
                         {/* The footer, in the corner of the bubble: when it
                             was said, whether it has changed since, and

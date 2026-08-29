@@ -29,6 +29,7 @@ import { serverUrl } from '../../services/endpoint';
 import { syncChannelKeys } from '../../services/e2ee';
 import { useAuthStore } from '../../stores/auth';
 import { PicturePicker } from '../../components/PicturePicker';
+import { DisappearingPicker } from '../../components/DisappearingPicker';
 import { ServerIcon } from '../../components/ServerIcon';
 import { useChatStore } from '../../stores/chat';
 import { Avatar } from '../../components/Avatar';
@@ -300,8 +301,30 @@ function Overview(): JSX.Element {
 
   const [name, setName] = useState(server?.name ?? '');
   const [note, setNote] = useState<string | null>(null);
+  const [savingWindow, setSavingWindow] = useState(false);
+  const [windowNote, setWindowNote] = useState<string | null>(null);
 
   const canManage = server?.permissions.includes(PERMISSIONS.MANAGE_SERVER) ?? false;
+
+  /**
+   * Changes the server's window.
+   *
+   * Nothing is pruned locally afterwards, unlike the personal one: this window
+   * only governs messages sent from now on, so there is nothing already on
+   * screen that this call has made too old.
+   */
+  const saveWindow = async (seconds: number | null): Promise<void> => {
+    setSavingWindow(true);
+    setWindowNote(null);
+    try {
+      await saveServer({ messageTtlSeconds: seconds });
+      setWindowNote('Saved.');
+    } catch (error) {
+      setWindowNote(error instanceof Error ? error.message : 'That could not be saved');
+    } finally {
+      setSavingWindow(false);
+    }
+  };
 
   const save = async (): Promise<void> => {
     setNote(null);
@@ -352,6 +375,35 @@ function Overview(): JSX.Element {
         </button>
       )}
       {note && <p className="mt-2 text-sm text-slate-300">{note}</p>}
+
+      <section className="mt-8 border-t border-edge pt-6">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-300">
+          Disappearing messages
+        </h2>
+        <p className="mt-1.5 text-sm text-slate-400">
+          Messages sent in this server's channels are deleted once they reach this age - for
+          everybody, along with any files they carried. This is a deletion and not a filter, which
+          is why it outranks whatever window a member has set for themselves: they may choose to
+          see less than the server keeps, never more.
+        </p>
+        <p className="mt-1.5 text-sm text-slate-500">
+          Changing this governs what is sent from now on. Messages already in the channels keep
+          the window they were sent under.
+        </p>
+
+        <DisappearingPicker
+          value={server?.messageTtlSeconds ?? null}
+          disabled={!canManage || savingWindow}
+          onChange={(seconds) => void saveWindow(seconds)}
+        />
+
+        {!canManage && (
+          <p className="mt-3 text-sm text-slate-500">
+            Only someone who can manage this server may change it.
+          </p>
+        )}
+        {windowNote && <p className="mt-3 text-sm text-slate-300">{windowNote}</p>}
+      </section>
 
       <dl className="mt-8 space-y-4 rounded-lg bg-surface-800 p-4">
         <div>
