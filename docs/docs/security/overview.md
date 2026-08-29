@@ -117,10 +117,17 @@ anything with a deadline is compared against a clock that person does not own:
 refresh tokens and password resets against the auth service's, remote-access
 grants against the database's (`resolveRemoteAccess`), invite links against the
 server service's (`inviteUsable`), upload tickets against the chat service's.
-Any expiry added later — a one-time message, a disappearing conversation —
-belongs in that same place. Winding a phone forward must not change what the
-server hands over, and re-reading a message the server has already destroyed is
-not something a client-side countdown can prevent.
+Both of those arrived, and both obey it. `Message.expiresAt` is stamped by the
+chat service from its own clock and the sweeper deletes against the same one; a
+one-time message is destroyed by `POST /messages/:id/burn`, a server endpoint,
+before the client that called it has closed the viewer.
+
+The clients do prune on a 30-second ticker, and that is not the mechanism.
+It exists so a device that was asleep when a window closed stops drawing
+decrypted copies the server has already destroyed. Winding a phone forward
+makes messages vanish sooner **on that phone only**; winding it back does
+nothing at all, because the rows are already gone and no history page will
+return them.
 
 Clients still need to *show* the time, and for that they carry the server's
 clock rather than their own. Every HTTP response already includes a `Date`

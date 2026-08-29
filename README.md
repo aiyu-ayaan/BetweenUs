@@ -87,6 +87,9 @@ to be framed, so no browser tab can ever show it.
 | Direct messages and friends | ✅ | ✅ | ✅ |
 | Block somebody | ✅ | ✅ | ✅ |
 | Clear one conversation, or all, on every device | ✅ | ✅ | ✅ |
+| Disappearing messages — a server's window, and your own | ✅ | ✅ | ✅ |
+| One-time photos, video and voice, destroyed once opened | ✅ | ✅ | ✅ + `FLAG_SECURE` |
+| Voice messages, recorded from the composer | ✅ | ✅ | ✅ |
 | Replies, edit, delete, reactions | ✅ | ✅ | ✅ |
 | Pinned messages | ✅ | ✅ | ✅ |
 | Custom emoji in messages | ✅ | ✅ | ✅ |
@@ -1006,6 +1009,17 @@ All three clients have all of it.
 - **Attachments need a session to download.** They are ciphertext either way,
   but the bytes and their size went to anybody who ever saw the URL. Avatars
   stay public, because an `<img>` tag cannot carry a header.
+- **Deleting a photo deletes the photo.** The blobs are purged in the same
+  request now, on the server *and* out of every client's decrypted cache; the
+  six-hourly sweeper is the backstop rather than the only path. It used to mean
+  "the ciphertext leaves the object store some time today", and on the clients
+  the plaintext simply outlived the message.
+- **One-time media is protected as far as software honestly can be.** No
+  thumbnail, no download, no context menu, nothing selectable, and `FLAG_SECURE`
+  on Android so the platform itself fails the screenshot. A second camera
+  pointed at the screen defeats all of it and always will — so what the feature
+  actually guarantees is that the file stops existing everywhere the moment it
+  has been seen once, and both viewers say that rather than implying more.
 - **A key per machine, not per account.** The device directory is a list now,
   a channel key is wrapped once per device, and revoking one deletes its wraps
   and re-keys every channel it could read.

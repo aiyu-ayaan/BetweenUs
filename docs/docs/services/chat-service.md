@@ -44,6 +44,7 @@ reactions all arrive as one `message.updated` shape.
 | POST | `/` | Send a message |
 | PATCH | `/:messageId` | Edit (author only) |
 | DELETE | `/:messageId` | Delete (author, or `DELETE_MESSAGE`) |
+| POST | `/:messageId/burn` | Report a one-time message opened — destroys it |
 | PUT | `/:messageId/pin` | Pin (`MANAGE_MESSAGE` in a server channel, free in a DM) |
 | DELETE | `/:messageId/pin` | Unpin |
 | POST | `/:messageId/reactions` | React |
@@ -64,6 +65,60 @@ The cut is published as `chats.cleared` — carrying the instant and the
 every device holds a cache of decrypted messages that no refetch would clear. A
 scoped clear drops only that channel's cache; dropping the lot would turn one
 clear into a spinner on the next several conversations opened.
+
+### How a message stops existing
+
+Four mechanisms, and the difference that matters is **who loses it**. A
+*deletion* removes the row for everybody; a *filter* hides it from one account
+and leaves every other participant's copy exactly as it was.
+
+| Mechanism | Scope | Tombstone? | Set by |
+| --- | --- | --- | --- |
+| `DELETE /:messageId` | Everybody | Yes | Author, or `DELETE_MESSAGE` |
+| `POST /:messageId/burn` | Everybody | No — row destroyed | Sender, per message |
+| `Server.messageTtlSeconds` | Everybody | No — row destroyed | `MANAGE_SERVER` |
+| `User.messageTtlSeconds` | One account | Nothing is deleted | The account itself |
+
+A server's window outranks an account's, and that is not a rule anyone
+enforces — it falls out of what they are. A deleted row cannot be un-hidden, so
+a member may choose to see *less* than the server keeps and never more. What a
+client shows is `min(server, personal)`, with "off" meaning no limit.
+
+`Message.expiresAt` is stamped when the message is created, from the server's
+window as it stood at that moment. Changing the window governs what is sent
+next and never reaches back through a channel.
+
+Deleting, burning and expiring all purge the attachment blobs immediately,
+before publishing their event. `AttachmentSweeper` still runs every six hours
+as the backstop for what the immediate purge could not reach — it used to be
+the only path, and "I deleted that photo" meaning "some time today" is why it
+is not any more.
+
+An expiry and a burn leave nothing to draw, so they reach clients as
+`message.gone` (a `messageId` and a `channelId`) rather than as a tombstone to
+render. A permanent "something was here" marker would tell exactly the story
+those two features exist to avoid telling.
+
+### One-time messages
+
+`viewOnce` travels **outside** the encrypted envelope, on the send request.
+Burning is a row update and a blob delete, both of which are the server's work,
+and a server that cannot read the body cannot be told by the body. What leaks
+is that *some* message was one-time — a fact both clients already draw on
+screen. It is a documented E2EE exception alongside reaction emoji.
+
+The first non-author viewer wins, settled by a conditional update on
+`viewedAt`, so two devices opening at the same instant produce one burn. The
+author is not a viewer: re-reading your own message spends nobody's one look.
+
+Clients display it with every copy path they control removed — no download, no
+context menu, nothing draggable or selectable, and no thumbnail in the message
+list. Android additionally sets `FLAG_SECURE` on the viewer, so the platform
+fails the screenshot gesture, records black, and keeps the window out of the
+recents thumbnail. **None of that stops a second camera pointed at the screen,
+and no software on a device somebody holds can.** The guarantee is that the
+file stops existing everywhere the moment it has been seen once, and both
+viewers say so rather than implying more.
 
 ## `/api/v1/users` and `/api/v1/friends` and `/api/v1/dm`
 

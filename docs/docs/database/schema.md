@@ -49,6 +49,12 @@ is a floor under everything **this** account can see, in every channel, on every
 one of its devices — the per-conversation half of the same idea being
 `ChannelRead.clearedAt`.
 
+`messageTtlSeconds` is the same family again: this account's own disappearing
+window, one-sided and enforced as a **filter**. History older than the window
+is not returned to this account on any of its devices, and every other
+participant's copy is untouched. `Server.messageTtlSeconds` outranks it,
+because that one deletes the row rather than hiding it.
+
 ### `RefreshToken`
 `id` **is** the JWT `jti` — revoking a token is a delete by primary key.
 `tokenHash` is stored, never the raw token. `revokedAt` marks reuse-detected
@@ -117,6 +123,13 @@ erDiagram
 ### `Server`
 A community — `slug` is the public, permanent join handle (superseded by
 `ServerInvite` for anything revocable).
+
+`messageTtlSeconds` is the server's disappearing window: how long a message
+sent in its channels lives, or null for for ever. Unlike the account-level
+window it is a real **deletion** — the sweeper destroys the row and its blobs
+when it closes, for everybody — and that is precisely why it outranks a
+member's own setting. A member may choose to see less than the server keeps,
+never more. Set with `MANAGE_SERVER`, and only to one of the published windows.
 
 ### `ServerMember`
 One row per `(server, user)`. `role` is the fixed 5-rung hierarchy
@@ -195,6 +208,20 @@ ciphertext, or plain text before E2EE existed. `deletedAt` + emptied
 point at it don't break); `deletedById` distinguishes "author took it back"
 from "moderator removed it." `pinnedAt`/`pinnedById` are set independently.
 
+`expiresAt` is when the message stops existing, stamped from the server's
+disappearing window **as the message is sent** rather than evaluated on read —
+so changing that window governs what is sent next and never reaches back
+through a channel. The disappearing sweeper deletes these rows outright rather
+than tombstoning them: a conversation that fills with "this message was
+deleted" for everything that aged out is not a disappearing conversation, it is
+a very detailed index of one.
+
+`viewOnce` marks a one-time message and `viewedAt` records when it was spent.
+The flag lives here, outside the encrypted body, because burning is a row
+update and a blob delete — the server's work — and a server that cannot read
+the body cannot be told by the body. What it learns is that some message was
+one-time, which both clients already draw on screen.
+
 ### `MessageReaction`
 `emoji` is stored **in the clear** — the one deliberate plaintext leak in
 the whole schema, documented in [`E2EE.md`](/security/e2ee), because the
@@ -208,6 +235,13 @@ background sweeper collects blobs no message claims any more. This is the
 one piece of metadata the server does learn about an attachment: how many
 blobs, what size, belong to which message. The file's name, real type and
 contents stay sealed inside the encrypted manifest.
+
+Deleting, burning or expiring a message purges its blobs **immediately**, in
+the same request. The sweeper stays behind that as the backstop for what the
+immediate purge could not reach — storage that was down, a process that died
+mid-delete, a row orphaned by somebody else's cascade. It used to be the only
+path, and "I deleted that photo" meaning "some time in the next six hours" is
+why it is not any more.
 
 ## Notifications & devices
 

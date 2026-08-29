@@ -134,6 +134,15 @@ session is for — two different actions, both needed).
 - **Attachment size and count are known** to the server via the
   `Attachment` row, even though the file's name, type and contents stay
   sealed inside the message envelope.
+- **A one-time message announces that it is one** (`Message.viewOnce`), and
+  when it was opened. The flag has to be outside the envelope: burning is a row
+  update and a blob delete, both the server's work, and a server that cannot
+  read the body cannot be told by the body. Keeping it inside would make
+  "one-time" a promise kept only by software the sender does not control, which
+  is not a promise. Nothing about the content leaks — not its name, type or
+  size beyond what the `Attachment` row already says.
+- **A message's expiry is plaintext** (`Message.expiresAt`). The server has to
+  know when to delete the row, which is the whole feature.
 - **Avatars and server icons are unencrypted** by necessity — an `<img>`
   tag can't carry an authorization header, and a member list renders them
   for people who hold no channel key at all.

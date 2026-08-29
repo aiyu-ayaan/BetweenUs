@@ -242,6 +242,59 @@ what a reset costs before it happens: the identity backup is sealed with the old
 password, so a phone signing in fresh afterwards reads what arrives from then
 on, not what came before.
 
+## Messages that stop existing
+
+Three of the four mechanisms are the server's and the phone only reflects them;
+the fourth is the phone's own and is the interesting one.
+
+**Voice messages** replace the send button when nothing is typed, which is the
+one moment that button has no job. `VoiceNote` records Opus in an Ogg container
+from API 29 and AAC in an MP4 before that — both play on every client — into
+the app's own cache directory, then hands the file to `Outbox` exactly as the
+paperclip would. Everything downstream already existed. What the recorder owns
+is the microphone: a five-minute ceiling enforced by `setMaxDuration` rather
+than by a timer nobody is watching, a one-second floor so a tap meant as a hold
+is not sent as room tone, and `release()` on every path out — including
+`onDispose`, because leaving the conversation mid-recording is exactly how an
+indicator gets left on.
+
+**One-time media** is never drawn as a thumbnail; the whole block is one card
+that has to be tapped. Tapping calls `POST /messages/:id/burn` **on the way
+in**, not on the way out: a process can be killed, and a message that survives
+being looked at is not a one-time message. The viewer is a `Dialog` whose
+window carries `FLAG_SECURE` for exactly as long as it is open — the platform
+then fails the screenshot gesture, records black, and keeps the window out of
+the recents thumbnail. The decrypted bitmap is deliberately **not** put in
+`MediaCache`: that cache is keyed on the storage key and would outlive the
+message the feature exists to destroy.
+
+That flag is real and the platform enforces it, which is more than a desktop
+can offer. It still does not stop a second phone pointed at this one, so the
+line under the picture says so. The promise the feature actually makes is that
+the file stops existing everywhere once it has been seen.
+
+**Disappearing windows** live under the conversation's three-dot menu, both of
+them on one sheet: the server's, which deletes for everybody, and the account's
+own, which filters. They are shown together because the question is "how long
+do messages last here" and its two answers interact — split across two settings
+screens, somebody could set an hour for themselves inside a server that keeps a
+week and have no way to find out which was winning. The sheet states the
+effective window underneath.
+
+`Conversation.pruneExpired()` runs on a 30-second ticker while a chat is open.
+It is not the mechanism — the server deletes the rows and says so. It exists
+for the phone that was asleep when the window closed and would otherwise keep
+drawing decrypted messages the server destroyed hours ago.
+
+**And deleting a photo deletes the photo.** `MediaCache` holds plaintext — a
+bitmap in memory, and for video a real decrypted file in the cache directory —
+keyed on the storage key, so nothing about a deletion reached it. `Conversation`
+now reads the manifest off the copy it still holds *before* replacing it (a
+tombstone has an empty body and names nothing) and calls `MediaCache.forget`,
+which drops the bitmaps and deletes the video file. The wire between the two
+lives in `BetweenUsApp`, because the cache is in the app module and the store is
+in core.
+
 ## Input sensitivity, and the hook that makes it possible
 
 Noise suppression cleans up a signal; it does not decide that nobody is
