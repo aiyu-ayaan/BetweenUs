@@ -16,6 +16,11 @@ today, with web and Android planned in the same backend.
   <img src={useBaseUrl('img/home.png')} alt="BetweenUs desktop client" style={{maxWidth: '100%', borderRadius: '8px'}} />
 </p>
 
+:::tip Download BetweenUs
+Production binaries for Windows (Electron NSIS installer) and Android (Native APK) are published on GitHub Releases:
+- 🚀 **[Download Latest Release (Windows & Android)](https://github.com/aiyu-ayaan/BetweenUs/releases)**
+:::
+
 ## What's in these docs
 
 - **[Architecture](/architecture/overview)** — the microservices, the

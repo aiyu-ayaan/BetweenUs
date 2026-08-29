@@ -99,6 +99,11 @@ const config: Config = {
           label: 'Docs',
         },
         {
+          href: 'https://github.com/aiyu-ayaan/BetweenUs/releases',
+          label: 'Download',
+          position: 'left',
+        },
+        {
           href: 'https://github.com/aiyu-ayaan/BetweenUs',
           label: 'GitHub',
           position: 'right',
@@ -119,6 +124,7 @@ const config: Config = {
         {
           title: 'Project',
           items: [
+            {label: 'Download App', href: 'https://github.com/aiyu-ayaan/BetweenUs/releases'},
             {label: 'GitHub', href: 'https://github.com/aiyu-ayaan/BetweenUs'},
             {label: 'Changelog', to: '/changelog'},
           ],

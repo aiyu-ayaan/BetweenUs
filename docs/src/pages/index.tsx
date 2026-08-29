@@ -34,6 +34,11 @@ function HomepageHeader() {
               'button button--lg',
               styles.primaryButton,
             )}
+            href="https://github.com/aiyu-ayaan/BetweenUs/releases">
+            Download App
+          </Link>
+          <Link
+            className="button button--secondary button--lg"
             to="/intro">
             Read the docs
           </Link>
