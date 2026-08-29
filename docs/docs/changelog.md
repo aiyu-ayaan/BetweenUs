@@ -10,6 +10,76 @@ description: Complete release notes and historical changelog for BetweenUs.
 All production release binaries (Windows Desktop installer and Android APK), asset checksums, and version tag comparisons are published on [GitHub Releases](https://github.com/aiyu-ayaan/BetweenUs/releases).
 :::
 
+## [0.0.1-alpha.18](https://github.com/aiyu-ayaan/BetweenUs/compare/v0.0.1-alpha.17...v0.0.1-alpha.18) (2026-08-29)
+
+### Features
+
+* Draw a voice message as a voice message
+* A microphone, one look, and two windows
+* One look, and a window that keeps moving
+* Hold the microphone where send used to be
+* Give a message an expiry and one look
+* Read the time off the server's clock
+* Divide the message list by day
+* Rebuild a dead call link instead of asking the user to rejoin
+* Expand max zoom level to 3000% with dynamic stepping
+* Register zoom controls in MDXComponents and linearize architecture diagram
+* Add interactive zoom pan and fullscreen controls for Mermaid diagrams
+
+### Bug fixes
+
+* Make a one-time message actually one-time
+* Stop a one-time viewer closing itself, and refuse it on the web
+* Fetch a one-time message before burning it
+* One look each, and let people see what they opened
+* Send an audio file with its own name and type
+* Make the voice waveform visible, and lose the inner card
+* Forget a deleted picture's plaintext
+* Follow the device's 24-hour setting
+* Tell the time the way the reader's system does
+* Stop call tiles stretching to the shape of the stage
+* Mark subproject as dirty to indicate uncommitted changes
+* Say when no relay is configured instead of failing silently
+* Recover broken call links instead of dropping them
+* Sign in without asking to unlock the key
+
+### Other changes
+
+* Changes done for alpha release
+* Add cache buster query parameter to LOC badge
+* Remove legacy FCM directory and DEPLOYMENT.md in favor of docs/
+* Say what stops a one-time message being opened twice
+* The web opens one-time messages in the app instead
+* Say what each client can actually stop
+* Describe one look each and the MessageView table
+* Describe how an attachment is named and typed
+* Describe voice messages and their waveforms
+* Describe messages that stop existing
+* Point at the server-clock notes
+* Write down the rule for clocks and expiry
+* Point at the clock and timezone notes
+* Record the clock and timezone rules
+* Point at the day divider notes
+* Describe the message list's day dividers
+* Migrate push suppression doc to docs/ and update references
+* Document pnpm android:* across the public docs
+* Run the Gradle build from pnpm
+* Document link recovery, signalling reconnect, and the relay's role
+* Update system architecture section with Archify Mermaid diagram
+* Standardize all flowcharts to vertical Archify format with zoom & pan support
+* Streamline architecture flowchart layout and contrast
+* Update high-level runtime architecture diagram and devdocs protocol
+* Sign-in no longer asks to unlock the key
+* !docs : Updating docs
+
+### Artifacts
+
+| Platform | This release |
+| --- | --- |
+| Server images | Built here |
+| Desktop (Windows) | Built here |
+| Android | Built here |
+
 ## [0.0.1-alpha.17](https://github.com/aiyu-ayaan/BetweenUs/compare/v0.0.1-alpha.16...v0.0.1-alpha.17) (2026-08-28)
 
 ### Other changes
