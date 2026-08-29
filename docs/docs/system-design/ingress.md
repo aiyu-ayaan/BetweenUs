@@ -13,13 +13,53 @@ Peer-to-peer media never has this problem, because media never goes near the
 tunnel at all. See [Peer-to-Peer Media](/architecture/media).
 
 ```mermaid
-flowchart LR
-    Internet((Internet)) --> CF[Cloudflare]
-    CF --> CT["Cloudflare Tunnel<br/>(HTTP + WebSocket only)"]
-    CT --> Nginx["Nginx / Traefik"]
-    Nginx --> API["API Services"]
-    Nginx --> WS["/ws/chat /ws/presence /ws/call /ws/remote"]
-    Nginx --> RGW[Remote Gateway]
+flowchart TD
+    %% TIER 1: PUBLIC INTERNET
+    subgraph T_PUBLIC ["Trust Boundary 1: Public Internet (Untrusted Origin)"]
+        direction LR
+        UserClient["<b>Multi-Platform Clients</b><br/><i>Desktop · Web · Mobile</i>"]
+        RemoteHost["<b>Enrolled Target Machines</b><br/><i>Outbound Remote Agents</i>"]
+    end
+
+    %% TIER 2: CLOUDFLARE EDGE
+    subgraph T_EDGE ["Trust Boundary 2: Cloudflare Edge Network"]
+        CF["<b>Cloudflare Edge (DDoS / WAF / SSL)</b><br/><i>Terminates Public HTTPS / WSS</i>"]
+    end
+
+    %% TIER 3: INGRESS TUNNEL & GATEWAY DMZ
+    subgraph T_INGRESS ["Trust Boundary 3: Ingress DMZ (Zero Inbound Open Ports)"]
+        direction TB
+        CFTunnel["<b>Cloudflare Tunnel Daemon</b> (cloudflared)<br/><i>Encapsulated Outbound QUIC/TLS Tunnel</i>"]
+        Gateway["<b>API Gateway (Nginx :8080)</b><br/><i>Rate Limiting · WebSocket Upgrades · Header Sanitization</i>"]
+        CFTunnel ==>|"Local HTTP Proxy"| Gateway
+    end
+
+    %% TIER 4: INTERNAL BACKEND SERVICES
+    subgraph T_SERVICES ["Trust Boundary 4: Internal Docker Network"]
+        direction LR
+        APIServices["<b>REST APIs</b><br/><i>auth · server · chat · notif</i>"]
+        WSSignaling["<b>WebSocket Gateways</b><br/><i>/ws/chat · /ws/presence · /ws/call</i>"]
+        RemoteRelay["<b>Remote Gateway</b><br/><i>/ws/remote</i>"]
+    end
+
+    %% PRIMARY INGRESS FLOW
+    UserClient ==>|"1. Public HTTPS/WSS (Port 443)"| CF
+    RemoteHost ==>|"1. Outbound /ws/remote (Port 443)"| CF
+    CF ==>|"2. Route via Tunnel"| CFTunnel
+    Gateway ==>|"3. Dispatch REST"| APIServices
+    Gateway ==>|"3. Route WebSockets"| WSSignaling
+    Gateway ==>|"3. Route Remote Sessions"| RemoteRelay
+
+    %% DIRECT P2P MEDIA MESH
+    UserClient <-.->|"Direct P2P WebRTC UDP (Never Touches Tunnel or Gateway)"| UserClient
+
+    %% Styling
+    classDef primary fill:#1e40af,stroke:#60a5fa,stroke-width:2px,color:#ffffff;
+    classDef edge fill:#0f172a,stroke:#475569,stroke-width:1px,color:#f8fafc;
+    classDef service fill:#1e293b,stroke:#64748b,stroke-width:1px,color:#f1f5f9;
+
+    class UserClient,RemoteHost,CF,CFTunnel,Gateway primary;
+    class APIServices,WSSignaling,RemoteRelay service;
 ```
 
 ```text

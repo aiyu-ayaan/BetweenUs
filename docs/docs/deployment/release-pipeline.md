@@ -14,12 +14,57 @@ skips is carried forward from the previous release rather than left behind.
 ## Two steps, not one
 
 ```mermaid
-flowchart LR
-    A["Commit on master with a marker<br/>(!alpha, !fix, !feat, !major, !beta, !stable)"] --> B[release-pr job:<br/>bump versions, write CHANGELOG,<br/>open/update the release PR]
-    B --> C{Merge the PR?}
-    C -->|yes| D["images → manifest → desktop/android<br/>→ publish (tag + GitHub Release)<br/>→ promote (move channel tags)"]
-    C -->|"close, no merge"| E[Nothing built, nothing released]
-    D -->|any job fails| F["rollback: delete version image tags,<br/>delete the tag/Release if either exists,<br/>channel tags left untouched"]
+flowchart TD
+    %% TIER 1: TRIGGER & PROMOTION MARKER
+    subgraph T_TRIGGER ["Phase 1: Commit Marker Trigger"]
+        direction TB
+        Commit["<b>Commit on master with marker</b><br/><i>(!major · !feat · !fix · !alpha · !beta · !stable)</i>"]
+        ReleasePR["<b>release-pr Job</b><br/><i>Bump package versions · Generate CHANGELOG.md · Open PR</i>"]
+        Commit ==>|"1. Automated Workflow Dispatch"| ReleasePR
+    end
+
+    %% TIER 2: HUMAN REVIEW GATE
+    subgraph T_GATE ["Phase 2: Review & Authorization Gate"]
+        direction TB
+        MergePR{"<b>Merge Release PR?</b>"}
+        Closed["<b>PR Closed without Merge</b><br/><i>Zero Artifacts Built · No Release</i>"]
+        ReleasePR --> MergePR
+        MergePR -->|"No"| Closed
+    end
+
+    %% TIER 3: PARALLEL ARTIFACT BUILD MATRIX
+    subgraph T_BUILD ["Phase 3: Parallel Matrix Build & Packaging"]
+        direction TB
+        subgraph Matrix ["Build Targets"]
+            direction LR
+            DockerBuild["<b>Docker Images</b><br/><i>9 Microservice Containers</i>"]
+            DesktopBuild["<b>Desktop Packaging</b><br/><i>NSIS Windows Installer</i>"]
+            AndroidBuild["<b>Android Build</b><br/><i>APK & AAB Bundles</i>"]
+        end
+        MergePR ==>|"Yes"| Matrix
+    end
+
+    %% TIER 4: PUBLICATION & TAG PROMOTION
+    subgraph T_PUBLISH ["Phase 4: Publication & Channel Tag Promotion"]
+        direction TB
+        GHRelease["<b>GitHub Release & Version Tag</b><br/><i>Attach Compiled Binaries & Release Notes</i>"]
+        PromoteTags["<b>Promote Channel Tags</b><br/><i>Move :latest, :alpha, :beta to new release</i>"]
+        Rollback["<b>Automated Rollback</b><br/><i>Purge failed image tags & remove draft release</i>"]
+
+        Matrix ==>|"All Jobs Succeed"| GHRelease ==> PromoteTags
+        Matrix -.->|"Any Target Fails"| Rollback
+    end
+
+    %% Styling
+    classDef primary fill:#1e40af,stroke:#60a5fa,stroke-width:2px,color:#ffffff;
+    classDef decision fill:#0f172a,stroke:#38bdf8,stroke-width:2px,color:#f8fafc;
+    classDef success fill:#14532d,stroke:#22c55e,stroke-width:2px,color:#ffffff;
+    classDef fail fill:#7f1d1d,stroke:#ef4444,stroke-width:2px,color:#ffffff;
+
+    class Commit,ReleasePR,DockerBuild,DesktopBuild,AndroidBuild primary;
+    class MergePR decision;
+    class GHRelease,PromoteTags success;
+    class Closed,Rollback fail;
 ```
 
 1. **The marker commit opens a release PR.** It bumps `package.json` and

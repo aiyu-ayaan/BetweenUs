@@ -25,6 +25,56 @@ WebSocket:
   /ws/remote      remote-desktop signalling: session, input, offer/answer/ICE
 ```
 
+## High-Level Realtime Event Topology
+
+```mermaid
+flowchart TD
+    %% TIER 1: CLIENT SENDER
+    subgraph T_PRODUCER ["Trust Boundary 1: Event Producer (Client Endpoint)"]
+        ClientProducer["<b>Client Endpoint A (Desktop / Web / Mobile)</b><br/><i>Emits Action (REST Mutation or WS Event)</i>"]
+    end
+
+    %% TIER 2: GATEWAY & INGESTION
+    subgraph T_GATEWAY ["Trust Boundary 2: Ingress DMZ"]
+        Gateway["<b>API Gateway (Nginx :8080)</b><br/><i>Proxies REST & Upgrades WebSockets</i>"]
+    end
+
+    %% TIER 3: DOMAIN MICROSERVICES
+    subgraph T_SERVICES ["Trust Boundary 3: Domain Service Cluster"]
+        direction TB
+        DomainService["<b>Domain Service (chat / server / presence)</b><br/><i>Applies RBAC Guard & Publishes Typed Event</i>"]
+        PrismaDB[("<b>PostgreSQL</b><br/><i>Persists Durable Data</i>")]
+        DomainService ==>|"Store Mutation"| PrismaDB
+    end
+
+    %% TIER 4: REDIS PUB/SUB BUS
+    subgraph T_BUS ["Trust Boundary 4: Distributed Event Broker"]
+        RedisBus[("<b>Redis Pub/Sub Bus (@betweenus/events)</b><br/><i>Channel Topics: events:message, events:presence, events:roster</i>")]
+    end
+
+    %% TIER 5: REALTIME FANOUT & RECIPIENTS
+    subgraph T_CONSUMERS ["Trust Boundary 5: Socket Gateways & Recipient Endpoints"]
+        direction TB
+        WSGateways["<b>WebSocket Gateways (/ws/chat, /ws/presence, /ws/call)</b><br/><i>Routes to Socket.IO Rooms (channel:id, user:id)</i>"]
+        ClientConsumer["<b>Recipient Client Endpoints (B, C, D)</b><br/><i>Patches Local UI State / Decrypts Envelope</i>"]
+        WSGateways ==>|"Realtime Push"| ClientConsumer
+    end
+
+    %% PRIMARY REALTIME PIPELINE
+    ClientProducer ==>|"1. REST POST or WS Emit"| Gateway
+    Gateway ==>|"2. Route Request"| DomainService
+    DomainService ==>|"3. Publish Event Payload"| RedisBus
+    RedisBus ==>|"4. Fanout to Subscribed Nodes"| WSGateways
+
+    %% Styling
+    classDef primary fill:#1e40af,stroke:#60a5fa,stroke-width:2px,color:#ffffff;
+    classDef service fill:#0f172a,stroke:#475569,stroke-width:1px,color:#f8fafc;
+    classDef data fill:#1e293b,stroke:#64748b,stroke-width:1px,color:#f1f5f9;
+
+    class ClientProducer,Gateway,DomainService,RedisBus,WSGateways,ClientConsumer primary;
+    class PrismaDB data;
+```
+
 `/ws/call` and `/ws/remote` carry **signalling only** — offers, answers, ICE
 candidates, and roster/session state. Media never rides a WebSocket; it
 negotiates its own WebRTC path directly between peers (see

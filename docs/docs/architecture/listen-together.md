@@ -18,16 +18,49 @@ position — a few hundred bytes when somebody presses a button, and nothing at
 all in between. The result is signalling, so it goes down `/ws/call` beside the
 SDP and through a Cloudflare Tunnel like everything else.
 
-```text
-   Client A                                            Client B
-      │                                                    │
-      │  /ws/call: "play track 3 from 1:04, as of now"      │
-      └──────────────►  call-service  ◄────────────────────┘
-                        (queue, position, ordering)
-      │                                                    │
-      ▼                                                    ▼
-   youtube.com                                        youtube.com
-   (A's own connection)                               (B's own connection)
+```mermaid
+flowchart TD
+    %% TIER 1: CLIENT CONTROLLER
+    subgraph T_CLIENT_A ["Trust Boundary 1: Client A (Controller / Listener)"]
+        ClientA["<b>Client A (Desktop / Web / Mobile)</b><br/><i>Dispatches Play/Pause/Seek Commands</i>"]
+        LocalYT_A["<b>Local YouTube Player A</b><br/><i>Direct Audio Stream from youtube.com</i>"]
+        ClientA -->|"Local Sync"| LocalYT_A
+    end
+
+    %% TIER 2: SIGNALING & QUEUE COORDINATION
+    subgraph T_COORDINATOR ["Trust Boundary 2: Listen Together Switchboard (:3007)"]
+        direction TB
+        CallSvc["<b>call-service (:ws/call)</b><br/><i>Ordered Queue Revision State · Clock Offset Math</i>"]
+        RedisSession[("<b>Redis (Live Session State)</b><br/><i>Track Index · Position · epochMs Timestamp</i>")]
+        CallSvc ==>|"Update Session Rev"| RedisSession
+    end
+
+    %% TIER 3: CLIENT LISTENER B
+    subgraph T_CLIENT_B ["Trust Boundary 3: Client B (Participant Listener)"]
+        ClientB["<b>Client B (Desktop / Web / Mobile)</b><br/><i>Calculates Local Offset Delta</i>"]
+        LocalYT_B["<b>Local YouTube Player B</b><br/><i>Direct Audio Stream from youtube.com</i>"]
+        ClientB -->|"Local Sync"| LocalYT_B
+    end
+
+    %% TIER 4: EXTERNAL YOUTUBE CDN
+    subgraph T_EXTERNAL ["Trust Boundary 4: External Media Content Provider"]
+        YT["<b>YouTube Audio Stream / CDN</b><br/><i>Direct Local Playback (Zero Backend Media)</i>"]
+    end
+
+    %% RUNTIME SIGNALING FLOW
+    ClientA ==>|"1. Command: Play Track at Offset"| CallSvc
+    CallSvc ==>|"2. Broadcast Session Rev State"| ClientB
+    LocalYT_A <-.->|"Direct Audio CDN Fetch"| YT
+    LocalYT_B <-.->|"Direct Audio CDN Fetch"| YT
+
+    %% Styling
+    classDef primary fill:#1e40af,stroke:#60a5fa,stroke-width:2px,color:#ffffff;
+    classDef service fill:#0f172a,stroke:#475569,stroke-width:1px,color:#f8fafc;
+    classDef ext fill:#27272a,stroke:#71717a,stroke-width:1px,color:#f4f4f5;
+
+    class ClientA,ClientB primary;
+    class CallSvc service;
+    class LocalYT_A,LocalYT_B,YT ext;
 ```
 
 ## Why not just share a tab with the sound on

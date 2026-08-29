@@ -27,11 +27,61 @@ updating the first. One build, one asset, no question.
 
 ```mermaid
 flowchart TD
-    A[Launch] --> B{app.isPackaged?}
-    B -->|no| C["unpacked — a dev run,<br/>no update is ever offered"]
-    B -->|yes| D["installer — only ever<br/>-Setup.exe"]
-    D --> E["download it in the background"]
-    E --> F["on Restart and install:<br/>run it silently, quit"]
+    %% TIER 1: APP STARTUP & RUNTIME DETECTION
+    subgraph T_BOOT ["Phase 1: Environment Detection"]
+        direction TB
+        Launch["<b>Client Launches</b>"]
+        IsPackaged{"<b>Is Packaged Production Build?<br/>(app.isPackaged)</b>"}
+        DevRun["<b>Development / Unpacked Run</b><br/><i>Auto-updates disabled</i>"]
+        CheckRelease["<b>Fetch Latest GitHub Release Metadata</b>"]
+
+        Launch --> IsPackaged
+        IsPackaged -->|"No"| DevRun
+        IsPackaged -->|"Yes"| CheckRelease
+    end
+
+    %% TIER 2: VERSION COMPARISON
+    subgraph T_DIFF ["Phase 2: Version Comparison"]
+        direction TB
+        HasNewer{"<b>Newer Version Available?<br/>(semver.gt)</b>"}
+        UpToDate["<b>Client Up-To-Date</b><br/><i>No action needed</i>"]
+        Prompt["<b>Display In-App Update Banner</b>"]
+
+        CheckRelease --> HasNewer
+        HasNewer -->|"No"| UpToDate
+        HasNewer -->|"Yes"| Prompt
+    end
+
+    %% TIER 3: BACKGROUND DOWNLOAD & VALIDATION
+    subgraph T_DOWNLOAD ["Phase 3: Background Staging"]
+        direction TB
+        Download["<b>Download Installer Asset in Background</b><br/><i>Staged in &lt;userData&gt;/updates/</i>"]
+        VerifyHash["<b>Verify SHA-256 Digest & Authenticode Signature</b>"]
+        ReadyToInstall["<b>Ready to Install</b><br/><i>Show 'Restart and Install' button</i>"]
+
+        Prompt ==> Download ==> VerifyHash ==> ReadyToInstall
+    end
+
+    %% TIER 4: SILENT EXECUTION
+    subgraph T_EXEC ["Phase 4: Silent NSIS Update & Relaunch"]
+        direction TB
+        SpawnNSIS["<b>Spawn BetweenUs-Setup.exe --updated /S --force-run</b>"]
+        Quit["<b>Gracefully Quit Running Client</b><br/><i>Release locks for NSIS overwrite</i>"]
+        Relaunched["<b>Relaunch New Version Automatically</b>"]
+
+        ReadyToInstall ==> SpawnNSIS ==> Quit ==> Relaunched
+    end
+
+    %% Styling
+    classDef primary fill:#1e40af,stroke:#60a5fa,stroke-width:2px,color:#ffffff;
+    classDef decision fill:#0f172a,stroke:#38bdf8,stroke-width:2px,color:#f8fafc;
+    classDef success fill:#14532d,stroke:#22c55e,stroke-width:2px,color:#ffffff;
+    classDef neutral fill:#334155,stroke:#64748b,stroke-width:1px,color:#f8fafc;
+
+    class Launch,CheckRelease,Prompt,Download,VerifyHash,ReadyToInstall,SpawnNSIS,Quit primary;
+    class IsPackaged,HasNewer decision;
+    class Relaunched,UpToDate success;
+    class DevRun neutral;
 ```
 
 A release that built the other platforms only offers Windows nothing, rather

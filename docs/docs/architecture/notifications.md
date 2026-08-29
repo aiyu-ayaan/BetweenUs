@@ -21,17 +21,47 @@ Postgres and comes down the socket the instant the app runs again. The push
 is a knock on the door.
 
 ```mermaid
-sequenceDiagram
-    participant Chat as chat-service
-    participant Notif as notification-service
-    participant FCM as Firebase (FCM)
-    participant Phone as Android (PushService)
+flowchart TD
+    %% TIER 1: CHAT EVENT ORIGIN
+    subgraph T_ORIGIN ["Trust Boundary 1: Event Producer (Internal Mesh)"]
+        direction LR
+        ChatSvc["<b>Chat Service (:3004)</b><br/><i>Publishes message.created</i>"]
+        RedisBus[("<b>Redis Pub/Sub Bus</b><br/><i>Event Topic: events:message</i>")]
+        ChatSvc ==>|"1. Publish Event"| RedisBus
+    end
 
-    Chat->>Notif: message.created (Redis Pub/Sub)
-    Notif->>Notif: who may read this channel,<br/>minus author, minus muted,<br/>minus notifications-off
-    Notif->>FCM: data-only push, high priority
-    FCM->>Phone: wake the app
-    Phone->>Phone: is it mine? channel on screen?<br/>quiet hours? mentions-only?<br/>then decrypt and write the shade
+    %% TIER 2: NOTIFICATION FILTERING ENGINE
+    subgraph T_ENGINE ["Trust Boundary 2: Notification Service (:3006)"]
+        direction TB
+        NotifSvc["<b>notification-service</b><br/><i>Evaluates Mutes · Quiet Hours · Unread Badges</i>"]
+        DeviceDB[("<b>PostgreSQL (Device Tokens)</b><br/><i>DeviceToken Registry</i>")]
+        RedisBus ==>|"2. Consume Event"| NotifSvc
+        NotifSvc -.->|"Query Active Tokens"| DeviceDB
+    end
+
+    %% TIER 3: EXTERNAL PUSH GATEWAY
+    subgraph T_EXT ["Trust Boundary 3: External Push Infrastructure"]
+        FCM["<b>Firebase Cloud Messaging (FCM)</b><br/><i>High-Priority Data-Only Message Dispatch</i>"]
+        NotifSvc ==>|"3. Dispatch Data Payload"| FCM
+    end
+
+    %% TIER 4: CLIENT WAKEUP & DECRYPTION
+    subgraph T_CLIENT ["Trust Boundary 4: Client Wakeup (Untrusted Endpoint)"]
+        direction TB
+        PushReceiver["<b>Android / Desktop Push Service</b><br/><i>Receives Data-Only Wakeup</i>"]
+        LocalDecrypt["<b>Client Decryption & System Tray / Notification Shade</b><br/><i>Decrypts Envelope in Memory · Renders Notification</i>"]
+        FCM ==>|"4. Background Wakeup"| PushReceiver
+        PushReceiver ==>|"5. Local Decrypt"| LocalDecrypt
+    end
+
+    %% Styling
+    classDef primary fill:#1e40af,stroke:#60a5fa,stroke-width:2px,color:#ffffff;
+    classDef service fill:#0f172a,stroke:#475569,stroke-width:1px,color:#f8fafc;
+    classDef data fill:#1e293b,stroke:#64748b,stroke-width:1px,color:#f1f5f9;
+    classDef ext fill:#27272a,stroke:#71717a,stroke-width:1px,color:#f4f4f5;
+
+    class ChatSvc,RedisBus,NotifSvc,FCM,PushReceiver,LocalDecrypt primary;
+    class DeviceDB data;
 ```
 
 ## The one push that is not about a conversation

@@ -8,24 +8,79 @@ There is no media server. Every participant in a call holds one
 `RTCPeerConnection` per other participant — a full mesh — and voice, video
 and screen share travel directly between machines over DTLS-SRTP.
 
-```mermaid
-sequenceDiagram
-    participant A as Desktop A
-    participant CS as call-service (/ws/call)
-    participant B as Desktop B
+## High-Level WebRTC Runtime Topology
 
-    A->>CS: join channel call
-    CS->>B: A joined (roster update)
-    A->>CS: SDP offer
-    CS->>B: relay offer
-    B->>CS: SDP answer
-    CS->>A: relay answer
-    A->>CS: ICE candidates
-    CS->>B: relay ICE candidates
-    B->>CS: ICE candidates
-    CS->>A: relay ICE candidates
-    Note over A,B: DTLS-SRTP media flows directly - never through call-service
+```mermaid
+flowchart TD
+    %% TIER 1: CLIENT A
+    subgraph TA ["Trust Boundary 1: Peer Endpoint A"]
+        ClientA["<b>Client Endpoint A (Desktop / Mobile)</b><br/><i>RTCPeerConnection · DTLS-SRTP Encryption</i>"]
+    end
+
+    %% TIER 2: SIGNALING GATEWAY
+    subgraph TS ["Trust Boundary 2: Ingress & Signaling Switchboard"]
+        direction TB
+        CFTunnel["<b>Cloudflare Tunnel</b> (cloudflared)<br/><i>HTTP / WSS Outbound Proxy</i>"]
+        Gateway["<b>API Gateway (Nginx :8080)</b><br/><i>WS Upgrade /ws/call</i>"]
+        CallSvc["<b>Call Service (:3007)</b><br/><i>SDP / ICE Relay · Live Rosters (Redis)</i>"]
+        CFTunnel --> Gateway --> CallSvc
+    end
+
+    %% TIER 3: EXTERNAL NAT TRAVERSAL
+    subgraph TN ["Trust Boundary 3: NAT Traversal"]
+        direction LR
+        STUN["<b>Public STUN Server</b><br/><i>Public IP/Port Discovery</i>"]
+        TURN["<b>Optional TURN Relay</b><br/><i>Symmetric NAT Fallback (Cloudflare Calls)</i>"]
+    end
+
+    %% TIER 4: CLIENT B
+    subgraph TB ["Trust Boundary 4: Peer Endpoint B"]
+        ClientB["<b>Client Endpoint B (Desktop / Mobile)</b><br/><i>RTCPeerConnection · DTLS-SRTP Encryption</i>"]
+    end
+
+    %% SIGNALING PATH (OVER WSS)
+    ClientA ==>|"1. SDP Offer & ICE (/ws/call)"| CFTunnel
+    CallSvc ==>|"2. Relay SDP Offer & ICE"| ClientB
+    ClientB ==>|"3. SDP Answer & ICE (/ws/call)"| CFTunnel
+    CallSvc ==>|"4. Relay SDP Answer & ICE"| ClientA
+
+    %% NAT DISCOVERY
+    ClientA -.->|"Candidate Discovery"| STUN
+    ClientB -.->|"Candidate Discovery"| STUN
+
+    %% DIRECT MEDIA PATH (BYPASSES BACKEND ENTIRELY)
+    ClientA <===>|"5. Direct DTLS-SRTP Voice/Video/Screen Mesh (Zero Server Media)"| ClientB
+    ClientA <-.->|"Fallback if Symmetric NAT"| TURN
+    TURN <-.->|"Fallback Relay"| ClientB
+
+    %% Styling
+    classDef primary fill:#1e40af,stroke:#60a5fa,stroke-width:2px,color:#ffffff;
+    classDef service fill:#0f172a,stroke:#475569,stroke-width:1px,color:#f8fafc;
+    classDef ext fill:#27272a,stroke:#71717a,stroke-width:1px,color:#f4f4f5;
+
+    class ClientA,ClientB primary;
+    class CFTunnel,Gateway,CallSvc service;
+    class STUN,TURN ext;
 ```
+
+---
+
+### Archify WebRTC Component Cards
+
+#### 1. Peer Endpoints (`apps/desktop`, `apps/android`, `apps/web`)
+- **Role**: Capture, encode (Opus for audio, VP8/H.264 for video), and encrypt raw media using DTLS-SRTP.
+- **Trust Boundary**: `TB-1 / TB-4 (Client Origin)`.
+- **Security Invariant**: Each peer signs its DTLS fingerprint with the channel symmetric key. Unsigned or mismatched fingerprints are dropped immediately to prevent server MITM attacks.
+
+#### 2. Call Signaling Switchboard (`apps/services/call-service`)
+- **Role**: Pure signaling switchboard over WebSocket (`/ws/call`). Dispatches SDP offer/answers, exchanges ICE candidates, and maintains live voice channel participant rosters in Redis.
+- **Trust Boundary**: `TB-2 (Internal Application Mesh)`.
+- **Security Invariant**: **Zero Media Proxying**. Never inspects, processes, or proxies media RTP packets.
+
+#### 3. NAT Traversal Infrastructure (STUN & TURN)
+- **Role**: Discovers public-facing reflexive ICE candidates (STUN) and provides symmetric NAT fallback relays (TURN).
+- **Trust Boundary**: `TB-3 (External Services)`.
+- **Security Invariant**: Outbound-only connectivity. `call-service` issues short-lived HMAC-SHA256 authenticated credentials on demand.
 
 Music is the exception that proves the rule: **Listen Together does not use any
 of this.** Rather than streaming audio to everybody, the call agrees on a queue

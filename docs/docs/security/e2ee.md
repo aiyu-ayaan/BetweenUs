@@ -28,20 +28,65 @@ lets "who can open this channel" be answered by the wrap table directly.
 
 ```mermaid
 flowchart TD
-    A[Sign in] --> B{Identity key<br/>in this machine's keychain?}
-    B -->|yes| D[Use it]
-    B -->|no| C["GET /api/v1/e2ee/backup"]
-    C --> E{Backup exists?}
-    E -->|"yes, and the secret opens it"| D
-    E -->|"yes, but no secret to hand"| M["Generate a key of this<br/>machine's own; leave the<br/>backup untouched"]
-    E -->|no| F["Generate, PUT /api/v1/e2ee/backup"]
-    M --> G
-    D --> G["POST /api/v1/e2ee/devices (publish public half)"]
-    G --> H[Open a channel]
-    H --> I["GET /api/v1/e2ee/keys/:channelId"]
-    I --> J{Have the current epoch?}
-    J -->|no, channel is new| K["Generate AES-256 key,<br/>seal per member device,<br/>POST /api/v1/e2ee/keys"]
-    J -->|"missing on this device only"| L["Any device that already<br/>holds the epoch reseals it<br/>for this one"]
+    %% TIER 1: SIGN IN & DEVICE IDENTITY CHECK
+    subgraph T_IDENTITY ["Trust Boundary 1: Local Device Keystore (safeStorage)"]
+        direction TB
+        SignIn["<b>User Signs In</b>"]
+        HasKey{"<b>Identity Key Found<br/>in OS Keychain?</b>"}
+        UseKey["<b>Use Local Identity Key</b><br/><i>(ECDH P-256 Keypair)</i>"]
+        SignIn --> HasKey
+        HasKey -->|"Yes"| UseKey
+    end
+
+    %% TIER 2: BACKUP & RECOVERY CLUSTER
+    subgraph T_BACKUP ["Trust Boundary 2: Remote Encrypted Key Backup"]
+        direction TB
+        GetBackup["<b>GET /api/v1/e2ee/backup</b>"]
+        BackupExists{"<b>Encrypted Backup Exists?</b>"}
+        OpenBackup["<b>Decrypt Backup with Password</b><br/><i>(PBKDF2 + AES-256-GCM)</i>"]
+        GenOwnKey["<b>Generate New Device Keypair</b><br/><i>(Preserve Remote Backup)</i>"]
+        GenBackup["<b>Generate Key & PUT /api/v1/e2ee/backup</b>"]
+
+        HasKey -->|"No"| GetBackup
+        GetBackup --> BackupExists
+        BackupExists -->|"Yes (Secret Matches)"| OpenBackup --> UseKey
+        BackupExists -->|"Yes (No Secret)"| GenOwnKey
+        BackupExists -->|"No Backup"| GenBackup --> UseKey
+    end
+
+    %% TIER 3: DEVICE REGISTRY & DIRECTORY
+    subgraph T_DIR ["Trust Boundary 3: E2EE Key Directory (Server-Side)"]
+        direction TB
+        PublishDevice["<b>POST /api/v1/e2ee/devices</b><br/><i>Publish Public Key Bundle (P-256)</i>"]
+        OpenChannel["<b>Client Opens Encrypted Channel</b>"]
+        GetChannelKeys["<b>GET /api/v1/e2ee/keys/:channelId</b>"]
+        HasEpoch{"<b>Active Channel Epoch Key Present?</b>"}
+
+        UseKey ==> PublishDevice
+        GenOwnKey ==> PublishDevice
+        PublishDevice --> OpenChannel --> GetChannelKeys --> HasEpoch
+    end
+
+    %% TIER 4: CHANNEL KEY DISTRIBUTION
+    subgraph T_WRAP ["Trust Boundary 4: Channel Key Wrapping & Resealing"]
+        direction TB
+        NewEpoch["<b>Generate Channel AES-256 Key</b><br/><i>Seal per member device public key & POST /keys</i>"]
+        ResealEpoch["<b>Request Resealing from Peer Device</b><br/><i>Existing device re-encrypts epoch for new device</i>"]
+        Ready["<b>Channel E2EE Session Ready</b><br/><i>Zero Plaintext on Server</i>"]
+
+        HasEpoch -->|"No (New Channel)"| NewEpoch --> Ready
+        HasEpoch -->|"Missing on this device"| ResealEpoch --> Ready
+        HasEpoch -->|"Yes (Epoch cached)"| Ready
+    end
+
+    %% Styling
+    classDef primary fill:#1e40af,stroke:#60a5fa,stroke-width:2px,color:#ffffff;
+    classDef decision fill:#0f172a,stroke:#38bdf8,stroke-width:2px,color:#f8fafc;
+    classDef ready fill:#14532d,stroke:#22c55e,stroke-width:2px,color:#ffffff;
+
+    class SignIn,UseKey,PublishDevice,OpenChannel,GetChannelKeys,NewEpoch,ResealEpoch primary;
+    class HasKey,BackupExists,HasEpoch decision;
+    class Ready ready;
 ```
 
 ## Repairing a second device — without over-sharing

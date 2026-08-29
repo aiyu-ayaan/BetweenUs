@@ -13,12 +13,34 @@ bump and no PR step — a `!docs` push ships directly, because there's no
 compiled artifact whose diff is worth reviewing before it goes out.
 
 ```mermaid
-flowchart LR
-    A["Push to master,<br/>subject starts with !docs<br/>(or workflow_dispatch)"] --> B[Checkout, setup Node]
-    B --> C["npm ci in docs/"]
-    C --> D["npm run build"]
-    D --> E["Deploy build/ to the gh-pages branch<br/>(peaceiris/actions-gh-pages)"]
-    E --> F[GitHub Pages serves gh-pages]
+flowchart TD
+    %% TIER 1: TRIGGER
+    subgraph T_TRIGGER ["Phase 1: Commit Trigger & Dispatch"]
+        Trigger["<b>Push to master with !docs marker</b><br/><i>(or manual workflow_dispatch)</i>"]
+    end
+
+    %% TIER 2: RUNNER & BUILD
+    subgraph T_BUILD ["Phase 2: CI Environment & Docusaurus Compilation"]
+        direction TB
+        Setup["<b>Setup Node.js & Dependencies</b><br/><i>npm ci in docs/</i>"]
+        BuildSite["<b>Compile Docusaurus Production Build</b><br/><i>npm run build (HTML / CSS / JS / Search Index)</i>"]
+        Trigger ==> Setup ==> BuildSite
+    end
+
+    %% TIER 3: GH-PAGES PUBLISH
+    subgraph T_PUBLISH ["Phase 3: GitHub Pages Deployment"]
+        direction TB
+        Deploy["<b>Deploy build/ to gh-pages branch</b><br/><i>(peaceiris/actions-gh-pages force-push)</i>"]
+        PagesHost["<b>GitHub Pages CDN</b><br/><i>Serves live docs from /BetweenUs/</i>"]
+        BuildSite ==> Deploy ==> PagesHost
+    end
+
+    %% Styling
+    classDef primary fill:#1e40af,stroke:#60a5fa,stroke-width:2px,color:#ffffff;
+    classDef success fill:#14532d,stroke:#22c55e,stroke-width:2px,color:#ffffff;
+
+    class Trigger,Setup,BuildSite,Deploy primary;
+    class PagesHost success;
 ```
 
 ## The `gh-pages` branch

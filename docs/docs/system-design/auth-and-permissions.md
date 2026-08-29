@@ -7,19 +7,53 @@ sidebar_position: 1
 ## Authentication flow
 
 ```mermaid
-sequenceDiagram
-    participant Client
-    participant Gateway as API Gateway
-    participant Auth as auth-service
-    participant DB as PostgreSQL
+flowchart TD
+    %% TIER 1: CLIENT SIGN-IN
+    subgraph T_CLIENT ["Trust Boundary 1: Client Endpoint (Untrusted Origin)"]
+        direction LR
+        Client["<b>Client App</b><br/><i>Stores JWT in Memory · Hashed Refresh in safeStorage</i>"]
+    end
 
-    Client->>Gateway: POST /api/v1/auth/login
-    Gateway->>Auth: forward
-    Auth->>DB: verify passwordHash
-    Auth->>DB: store hashed refresh token (jti)
-    Auth-->>Client: access token (15m) + refresh token
-    Client->>Gateway: subsequent requests, Bearer access token
-    Note over Auth: every service verifies the JWT locally,<br/>no auth round-trip per request
+    %% TIER 2: GATEWAY
+    subgraph T_GATEWAY ["Trust Boundary 2: Ingress DMZ"]
+        Gateway["<b>API Gateway (Nginx :8080)</b><br/><i>Rate Limiting · Proxies /api/v1/auth</i>"]
+    end
+
+    %% TIER 3: AUTH SERVICE
+    subgraph T_AUTH ["Trust Boundary 3: Authentication Cluster (:3001)"]
+        direction TB
+        AuthSvc["<b>auth-service</b><br/><i>Argon2id Verification · HS256 Token Minting · Theft Detection</i>"]
+        UserDB[("<b>PostgreSQL (User & RefreshToken)</b><br/><i>Stores SHA-256 Hashed Tokens</i>")]
+        AuthSvc ==>|"Verify & Store jti"| UserDB
+    end
+
+    %% TIER 4: DECENTRALIZED AUTH VERIFICATION
+    subgraph T_SERVICES ["Trust Boundary 4: Domain Microservices Mesh"]
+        direction LR
+        ChatSvc["<b>chat-service</b><br/><i>Local JWT Verification</i>"]
+        ServerSvc["<b>server-service</b><br/><i>RBAC Resolver</i>"]
+        CallSvc["<b>call-service</b><br/><i>Local JWT Verification</i>"]
+    end
+
+    %% AUTHENTICATION FLOW
+    Client ==>|"1. POST /api/v1/auth/login"| Gateway
+    Gateway ==>|"2. Proxy Login Request"| AuthSvc
+    AuthSvc ==>|"3. Mint 15-Min JWT & Refresh Token"| Gateway
+    Gateway ==>|"4. Return Access + Refresh Token"| Client
+
+    %% DECENTRALIZED CONSUMPTION
+    Client -.->|"5. Bearer JWT (Zero Auth Roundtrips)"| ChatSvc
+    Client -.->|"5. Bearer JWT"| ServerSvc
+    Client -.->|"5. Bearer JWT"| CallSvc
+
+    %% Styling
+    classDef primary fill:#1e40af,stroke:#60a5fa,stroke-width:2px,color:#ffffff;
+    classDef service fill:#0f172a,stroke:#475569,stroke-width:1px,color:#f8fafc;
+    classDef data fill:#1e293b,stroke:#64748b,stroke-width:1px,color:#f1f5f9;
+
+    class Client,Gateway,AuthSvc primary;
+    class ChatSvc,ServerSvc,CallSvc service;
+    class UserDB data;
 ```
 
 - **Access tokens** are short-lived JWTs (15 minutes), HS256, verified

@@ -10,18 +10,47 @@ server role grants, its own Docker network, and an audit trail nothing in
 the application ever updates or deletes.
 
 ```mermaid
-flowchart LR
-    subgraph Controller[Desktop App - watcher]
-        C1[UI]
-    end
-    subgraph Agent[Remote Agent - the desktop app on the target machine]
-        A1[desktopCapturer]
-        A2[Input backend]
+flowchart TD
+    %% TIER 1: CONTROLLER
+    subgraph T_CTRL ["Trust Boundary 1: Remote Controller (Viewer)"]
+        Ctrl["<b>Desktop Client (Controller)</b><br/><i>UI Viewer · Input Event Capture · File Drag-Drop</i>"]
     end
 
-    C1 <-->|"1. session, input, file offers (TLS/WebSocket)"| RGW[remote-gateway]
-    RGW <-->|"1. session, input, file offers"| A1
-    C1 <-.->|"2. screen, sound, file bytes (WebRTC, direct)"| A1
+    %% TIER 2: REMOTE GATEWAY (CONTROL & AUDIT)
+    subgraph T_GW ["Trust Boundary 2: Remote Control Gateway (:3008)"]
+        direction TB
+        CFTunnel["<b>Cloudflare Tunnel</b> (cloudflared)<br/><i>WSS Outbound Proxy</i>"]
+        Gateway["<b>API Gateway (Nginx :8080)</b><br/><i>Rate Limiting · WS Upgrade</i>"]
+        RemoteGW["<b>remote-gateway (:3008)</b><br/><i>Permission Check · Input Validation · Session Handshake</i>"]
+        AuditDB[("<b>PostgreSQL (Audit Log)</b><br/><i>Strictly Immutable & Append-Only</i>")]
+        CFTunnel --> Gateway --> RemoteGW
+        RemoteGW ==>|"Log Session & Input"| AuditDB
+    end
+
+    %% TIER 3: HOST MACHINE (AGENT)
+    subgraph T_HOST ["Trust Boundary 3: Remote Target Machine (Host Agent)"]
+        Agent["<b>Remote Host Agent (Desktop Core)</b><br/><i>desktopCapturer · Native Input Injection · OS safeStorage</i>"]
+    end
+
+    %% CONTROL & SIGNALING PLANE
+    Ctrl ==>|"1. Session Handshake & SDP Offer"| CFTunnel
+    RemoteGW ==>|"2. Authorize & Forward Offer"| Agent
+    Agent ==>|"3. SDP Answer & ICE (/ws/remote)"| RemoteGW
+    RemoteGW ==>|"4. Relay Answer & Start Session"| Ctrl
+    Ctrl -.->|"5. Mouse / Keyboard Input Events"| RemoteGW
+    RemoteGW -.->|"6. Relayed Input Injection"| Agent
+
+    %% DIRECT DATA & SCREEN PLANE (BYPASSES GATEWAY)
+    Ctrl <===>|"7. Direct WebRTC Screen / Audio / File Channel (DTLS-SRTP)"| Agent
+
+    %% Styling
+    classDef primary fill:#1e40af,stroke:#60a5fa,stroke-width:2px,color:#ffffff;
+    classDef service fill:#0f172a,stroke:#475569,stroke-width:1px,color:#f8fafc;
+    classDef data fill:#1e293b,stroke:#64748b,stroke-width:1px,color:#f1f5f9;
+
+    class Ctrl,Agent primary;
+    class CFTunnel,Gateway,RemoteGW service;
+    class AuditDB data;
 ```
 
 The split is the whole design: **what asks goes through the gateway, what is
