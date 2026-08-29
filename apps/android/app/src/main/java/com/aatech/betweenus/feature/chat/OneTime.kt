@@ -77,15 +77,17 @@ fun OneTimeCard(
     channelId: String,
     messageId: String,
     attachments: List<MessageAttachment>,
-    viewedAt: String?,
+    /** Whether *this account* has already spent its look. One look each. */
+    viewedByMe: Boolean,
     mine: Boolean,
 ) {
     val scheme = MaterialTheme.colorScheme
     var open by remember(messageId) { mutableStateOf(false) }
 
-    // Opened by somebody, and this is not the author looking at their own.
-    // There is nothing left to fetch: the blobs are gone.
-    if (viewedAt != null && !mine) {
+    // This account has already looked. Somebody else's look does not close it -
+    // a one-time message holds one for each person who can see it, and being
+    // told "Opened" for something never shown is what that used to mean here.
+    if (viewedByMe && !mine) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -108,11 +110,14 @@ fun OneTimeCard(
             .border(1.dp, scheme.primary.copy(alpha = 0.4f), RoundedCornerShape(12.dp))
             .clickable {
                 open = true
-                // Burning is what opening *means*, so it happens on the way in
-                // rather than on the way out. Closing the viewer is not a
-                // promise anybody made - a phone can be killed, a battery can
-                // go - and a message that survives being looked at because the
-                // process died is a one-time message that was not one.
+                // Held before the burn, not after. Burning is what opening
+                // *means* - closing the viewer is not a promise anybody can
+                // keep, a phone can be killed and a battery can go - so the
+                // server destroys the row while the viewer is still open, and
+                // without the hold the row's removal took the viewer down with
+                // it. That was the picture vanishing the instant it was
+                // opened.
+                Conversation.holdMessage(messageId)
                 if (!mine) Conversation.burn(messageId)
             }
             .padding(horizontal = 12.dp, vertical = 10.dp),
@@ -142,7 +147,11 @@ fun OneTimeCard(
         OneTimeViewer(
             channelId = channelId,
             attachments = attachments,
-            onDismiss = { open = false },
+            onDismiss = {
+                open = false
+                // Now it may go, if the server said so while it was open.
+                Conversation.releaseMessage(messageId)
+            },
         )
     }
 }

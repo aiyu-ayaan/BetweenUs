@@ -23,7 +23,7 @@ import {
   PlayIcon,
   XIcon,
 } from '../../components/icons';
-import { useChatStore } from '../../stores/chat';
+import { holdMessage, releaseMessage, useChatStore } from '../../stores/chat';
 import { VoiceMessage } from './VoiceMessage';
 
 /** Text small enough to read in the message list without opening anything. */
@@ -47,7 +47,7 @@ export function AttachmentList({
    * nothing is drawn inline, nothing is cached to disk, and opening it is what
    * destroys it.
    */
-  oneTime?: { messageId: string; viewedAt: string | null; mine: boolean };
+  oneTime?: { messageId: string; viewedByMe: boolean; mine: boolean };
 }): JSX.Element | null {
   const [preview, setPreview] = useState<MessageAttachment | null>(null);
   if (attachments.length === 0) return null;
@@ -488,21 +488,23 @@ function OneTimeAttachments({
   channelId,
   attachments,
   messageId,
-  viewedAt,
+  viewedByMe,
   mine,
 }: {
   channelId: string;
   attachments: MessageAttachment[];
   messageId: string;
-  viewedAt: string | null;
+  /** Whether *this account* has already spent its look. One look each. */
+  viewedByMe: boolean;
   mine: boolean;
 }): JSX.Element {
   const burnMessage = useChatStore((state) => state.burnMessage);
   const [open, setOpen] = useState(false);
 
-  // Opened by somebody, and this client is not the author looking at their
-  // own. There is nothing left to fetch: the blobs are gone.
-  if (viewedAt && !mine) {
+  // This account has already looked. Somebody else's look does not close it -
+  // a one-time message holds one for each person who can see it, and being
+  // told "Opened" for something never shown is what that used to mean here.
+  if (viewedByMe && !mine) {
     return (
       <p className="mt-1 flex items-center gap-2 text-sm italic text-slate-500">
         <OneTimeIcon className="h-4 w-4 shrink-0" />
@@ -517,11 +519,13 @@ function OneTimeAttachments({
         type="button"
         onClick={() => {
           setOpen(true);
-          // Burning is what opening *means*, so it happens on the way in
-          // rather than on the way out. Closing the viewer is not a promise
-          // anybody made - a window can be shut, a machine can lose power -
-          // and a message that survives being looked at because the tab
-          // crashed is a one-time message that was not one.
+          // Held before the burn, not after. Burning is what opening *means*
+          // - closing the viewer is not a promise anybody can keep, a window
+          // can be shut and a machine can lose power - so the server destroys
+          // the row while the viewer is still open, and without the hold the
+          // row's removal took the viewer down with it. That was the picture
+          // vanishing the instant it was opened.
+          holdMessage(messageId);
           if (!mine) void burnMessage(messageId);
         }}
         className="mt-1 flex w-full max-w-sm cursor-pointer items-center gap-3 rounded-lg border border-accent/40 bg-accent/[0.06] px-3 py-2.5 text-left transition-colors duration-200 hover:bg-accent/[0.12]"
@@ -541,7 +545,11 @@ function OneTimeAttachments({
         <OneTimeViewer
           channelId={channelId}
           attachments={attachments}
-          onClose={() => setOpen(false)}
+          onClose={() => {
+            setOpen(false);
+            // Now it may go, if the server said so while it was open.
+            releaseMessage(messageId);
+          }}
         />
       )}
     </>

@@ -784,10 +784,26 @@ export interface Message {
    * does not show what the server has already destroyed.
    */
   expiresAt: string | null;
-  /** A one-time message: its media may be opened once, and opening burns it. */
+  /** A one-time message: each recipient may open its media once. */
   viewOnce: boolean;
-  /** When the one-time media was opened, for everyone who arrives after. */
-  viewedAt: string | null;
+  /**
+   * Who has already spent their look, by user id.
+   *
+   * A list rather than a single "has it been opened" stamp, because a one-time
+   * message holds one look per person who can see it. The single stamp meant
+   * the first person to open one in a channel destroyed it for everybody else,
+   * who were then shown "Opened" for something they had never seen.
+   *
+   * Every client works out its own state from this - `viewedBy.includes(me)` -
+   * which is why it is a list of ids and not a per-caller boolean: the same
+   * message object is broadcast to every subscriber, so a flag computed for
+   * whoever caused the change would be wrong for all the others. It is the
+   * same reasoning as `MessageReactionSummary.userIds`.
+   *
+   * The message is destroyed, and this stops mattering, once it covers
+   * everyone who could see it apart from the author.
+   */
+  viewedBy: string[];
 }
 
 /**

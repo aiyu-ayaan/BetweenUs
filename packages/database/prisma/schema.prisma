@@ -102,6 +102,7 @@ model User {
   remoteAudit     RemoteAudit[]        @relation("RemoteAuditActor")
   adminAudit      AdminAudit[]         @relation("AdminAuditActor")
   attachments     Attachment[]         @relation("AttachmentUploader")
+  messageViews    MessageView[]
   callSessions    CallSession[]        @relation("CallSessionUser")
   passwordResets  PasswordReset[]
   /// People this account has blocked, and the blocks pointed back at it.
@@ -701,16 +702,17 @@ model Message {
   /// it: a tombstone that says "a message was here" for ever is not what a
   /// disappearing message was asked to be.
   expiresAt   DateTime?
-  /// A one-time message: the recipient may open its media once, and opening it
-  /// destroys it everywhere.
+  /// A one-time message: each recipient may open its media once, and it is
+  /// destroyed once every one of them has.
   ///
   /// The flag is outside the encrypted body because the server has to act on
   /// it - burning is a row update and a blob delete, and a server that cannot
   /// read the body cannot be told by the body. What leaks is that some message
   /// was one-time, which is a fact both clients already draw on screen.
   viewOnce    Boolean           @default(false)
-  /// When a one-time message was opened, so a second opener is told it is gone
-  /// rather than shown a decryption failure.
+  /// When the *first* recipient opened it. Not the gate - `views` is - but the
+  /// stamp a backstop expiry is measured from, so a one-time message nobody
+  /// finishes opening still leaves eventually.
   viewedAt    DateTime?
 
   channel     Channel           @relation(fields: [channelId], references: [id], onDelete: Cascade)
@@ -719,6 +721,7 @@ model Message {
   pinnedBy    User?             @relation("MessagePinnedBy", fields: [pinnedById], references: [id], onDelete: SetNull)
   reactions   MessageReaction[]
   attachments Attachment[]
+  views       MessageView[]
 
   // History paging reads newest-first within a channel.
   @@index([channelId, createdAt])
@@ -727,6 +730,32 @@ model Message {
   // The disappearing sweeper reads whatever is past its window, oldest first.
   @@index([expiresAt])
   @@map("messages")
+}
+
+/// One person's one look at a one-time message.
+///
+/// A row per viewer rather than a single `viewedAt` on the message, because a
+/// one-time message has as many looks in it as there are people who can see
+/// it. The single stamp meant the first person to open one in a channel
+/// destroyed it for everybody else, who then saw "Opened" for something they
+/// had never been shown - which is not one look each, it is one look in total
+/// and a race to it.
+///
+/// The message is destroyed when this table covers everyone who could see it,
+/// minus the author - who is not a viewer, because re-reading what you sent
+/// spends nobody's look.
+model MessageView {
+  id        String   @id @default(uuid())
+  messageId String
+  userId    String
+  viewedAt  DateTime @default(now())
+
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, userId])
+  @@index([messageId])
+  @@map("message_views")
 }
 
 /// One person's one emoji on one message.

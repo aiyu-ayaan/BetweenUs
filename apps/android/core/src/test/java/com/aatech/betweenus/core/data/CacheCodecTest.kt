@@ -165,9 +165,17 @@ class CacheCodecTest {
         val fleeting = message.copy(
             expiresAt = "2026-08-16T10:00:00.000Z",
             viewOnce = true,
-            viewedAt = "2026-08-15T10:04:00.000Z",
+            viewedBy = listOf("u2", "u3"),
         )
         roundTrip(fleeting, Message::toJson, Message::from)
+
+        // Whose look has been spent decides whether this device draws the card
+        // or the word "Opened", so an empty list has to survive as an empty
+        // list. Coming back as a single blank id would tell one account it had
+        // already looked at something it had never been shown.
+        val untouched = fleeting.copy(viewedBy = emptyList())
+        roundTrip(untouched, Message::toJson, Message::from)
+        assertTrue(Message.from(untouched.toJson()).viewedBy.isEmpty())
     }
 
     @Test

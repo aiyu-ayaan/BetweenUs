@@ -8,7 +8,7 @@
     "dev": "nest start --watch",
     "start": "node dist/main.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "check": "tsx src/modules/uploads/attachment-sweeper.check.ts && tsx src/modules/messages/cleared.check.ts && tsx src/modules/messages/disappearing.check.ts",
+    "check": "tsx src/modules/uploads/attachment-sweeper.check.ts && tsx src/modules/messages/cleared.check.ts && tsx src/modules/messages/disappearing.check.ts && tsx src/modules/messages/one-time.check.ts",
     "smoke": "node smoke.mjs"
   },
   "dependencies": {

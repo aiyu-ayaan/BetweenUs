@@ -537,10 +537,23 @@ data class Message(
      * already destroyed, without a round trip to find out.
      */
     val expiresAt: String? = null,
-    /** A one-time message: its media may be opened once, and opening burns it. */
+    /** A one-time message: each recipient may open its media once. */
     val viewOnce: Boolean = false,
-    /** When the one-time media was opened, for everyone who arrives after. */
-    val viewedAt: String? = null,
+    /**
+     * Who has already spent their look, by user id.
+     *
+     * A list rather than a single "has it been opened" stamp, because a
+     * one-time message holds one look per person who can see it. The single
+     * stamp meant the first person to open one in a channel destroyed it for
+     * everybody else, who were then shown "Opened" for something they had
+     * never seen.
+     *
+     * A list of ids rather than a per-caller flag because the same message
+     * object is broadcast to every subscriber: a flag computed for whoever
+     * caused the change would be wrong for all the others. Each client asks
+     * whether its own id is in here.
+     */
+    val viewedBy: List<String> = emptyList(),
 ) {
     val deleted: Boolean get() = deletedAt != null
     val pinned: Boolean get() = pinnedAt != null
@@ -578,7 +591,7 @@ data class Message(
         .put("reactions", jsonArrayOfObjects(reactions) { it.toJson() })
         .put("expiresAt", expiresAt)
         .put("viewOnce", viewOnce)
-        .put("viewedAt", viewedAt)
+        .put("viewedBy", jsonArrayOf(viewedBy))
 
     companion object {
         fun from(json: JSONObject) = Message(
@@ -594,7 +607,7 @@ data class Message(
             reactions = json.optJSONArray("reactions")?.map { MessageReaction.from(it) }.orEmpty(),
             expiresAt = json.stringOrNull("expiresAt"),
             viewOnce = json.optBoolean("viewOnce", false),
-            viewedAt = json.stringOrNull("viewedAt"),
+            viewedBy = json.strings("viewedBy"),
         )
     }
 }

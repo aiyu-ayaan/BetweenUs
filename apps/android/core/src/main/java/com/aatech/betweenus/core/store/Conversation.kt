@@ -168,7 +168,17 @@ object Conversation {
         // nothing to draw in its place, only something to forget.
         if (event.optString("type") == "message.gone") {
             val goneId = event.optString("messageId")
-            if (goneId.isNotEmpty()) forget(setOf(goneId))
+            if (goneId.isEmpty()) return
+            // Not while somebody is looking at it. A one-time message is
+            // burned as its viewer opens, and the viewer is drawn inside the
+            // message row - so removing the message here took the row down,
+            // and the row took the viewer with it. That was a one-time picture
+            // vanishing the instant it was opened.
+            if (heldOpen.contains(goneId)) {
+                goneWhileOpen.add(goneId)
+                return
+            }
+            forget(setOf(goneId))
             return
         }
         val message = event.optJSONObject("message")?.let { Message.from(it) } ?: return
@@ -801,6 +811,35 @@ object Conversation {
      * to. The app wires `MediaCache` to it once, at startup.
      */
     var onAttachmentsGone: ((List<String>) -> Unit)? = null
+
+    /**
+     * Messages a viewer is currently open over, and the ones the server
+     * destroyed while that was true.
+     *
+     * The problem these solve is a lifecycle one. A one-time message is burned
+     * as its viewer opens - deliberately, because closing the viewer is not a
+     * promise anybody can keep - and the server answers by destroying the row
+     * and saying so. The viewer is drawn inside the message row, so acting on
+     * that at once unmounted the very thing somebody had just spent their one
+     * look on.
+     *
+     * Plain sets rather than state: nothing draws from them, and a screen that
+     * recomposed every row when a picture was opened would be worse than the
+     * bug.
+     */
+    private val heldOpen = java.util.Collections.synchronizedSet(mutableSetOf<String>())
+    private val goneWhileOpen = java.util.Collections.synchronizedSet(mutableSetOf<String>())
+
+    /** Keeps a message on screen while its viewer is open, whatever the server says. */
+    fun holdMessage(messageId: String) {
+        heldOpen.add(messageId)
+    }
+
+    /** Lets it go again, and applies the removal if one arrived in the meantime. */
+    fun releaseMessage(messageId: String) {
+        heldOpen.remove(messageId)
+        if (goneWhileOpen.remove(messageId)) forget(setOf(messageId))
+    }
 
     /**
      * Removes messages from every list this store keeps one in, and tells

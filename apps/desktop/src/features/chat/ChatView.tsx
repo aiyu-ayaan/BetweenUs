@@ -745,7 +745,10 @@ function MessageList({
                             message.viewOnce
                               ? {
                                   messageId: message.id,
-                                  viewedAt: message.viewedAt,
+                                  // This account's own look, not anybody
+                                  // else's: a one-time message holds one for
+                                  // each person who can see it.
+                                  viewedByMe: message.viewedBy.includes(me?.id ?? ''),
                                   mine: message.author.id === me?.id,
                                 }
                               : undefined

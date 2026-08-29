@@ -509,7 +509,11 @@ fun MessageRow(
                                         channelId = channelId,
                                         messageId = message.id,
                                         attachments = readable.attachments,
-                                        viewedAt = message.viewedAt,
+                                        // This account's own look, not
+                                        // anybody else's: a one-time message
+                                        // holds one for each person who can
+                                        // see it.
+                                        viewedByMe = self.id in message.viewedBy,
                                         mine = isSelf,
                                     )
                                 } else {

@@ -1,5 +1,10 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import { prisma, resolveChannelAccess, type ChannelAccess } from '@betweenus/database';
+import {
+  channelAudience,
+  prisma,
+  resolveChannelAccess,
+  type ChannelAccess,
+} from '@betweenus/database';
 import { EVENTS, EventBus } from '@betweenus/events';
 import { PERMISSIONS, type Permission } from '@betweenus/permissions';
 import {
@@ -26,6 +31,20 @@ const MAX_EMOJI_LENGTH = 32;
 const MAX_REACTIONS_PER_MESSAGE = 200;
 
 /**
+ * How long a one-time message lives when nobody finishes opening it.
+ *
+ * It is normally destroyed the moment its last recipient has looked, but that
+ * is a condition that may never arrive - one member of a channel who never
+ * opens theirs would keep the ciphertext for ever. A week is long enough that
+ * nobody loses a message they meant to open and short enough that an
+ * unopened one is not indefinite storage.
+ *
+ * Never longer than a window the server itself set: a backstop that extended
+ * a retention policy would be the opposite of one.
+ */
+const ONE_TIME_BACKSTOP_SECONDS = 7 * 24 * 60 * 60;
+
+/**
  * The later of two cut-offs, treating null as "no cut-off at all" rather than
  * as the beginning of time - which is the difference between hiding nothing and
  * hiding everything.
@@ -36,11 +55,34 @@ export function laterOf(left: Date | null, right: Date | null): Date | null {
   return left.getTime() >= right.getTime() ? left : right;
 }
 
+/**
+ * Who still has a look coming, given a channel's audience and who has used
+ * theirs.
+ *
+ * Split out from the database call so the policy can be asserted on without
+ * one - it is the whole of the fix for "the first person to open it destroyed
+ * it for everybody", and it is arithmetic over two lists.
+ *
+ * The author is never owed a look: re-reading what you sent spends nothing.
+ * An audience of nobody but the author owes nothing either, which matters for
+ * a channel emptied since the message was sent - holding ciphertext for a
+ * recipient who no longer exists helps nobody.
+ */
+export function looksOwed(
+  audience: string[],
+  viewedBy: string[],
+  authorId: string,
+): string[] {
+  const looked = new Set(viewedBy);
+  return audience.filter((member) => member !== authorId && !looked.has(member));
+}
+
 /** Everything a `Message` is built from, in one place so every path agrees. */
 const MESSAGE_INCLUDE = {
   author: true,
   deletedBy: true,
   reactions: { select: { userId: true, emoji: true } },
+  views: { select: { userId: true } },
 } as const;
 
 @Injectable()
@@ -207,18 +249,28 @@ export class MessagesService {
    * A direct message has no server, so it has no window: there is nobody to
    * set one and nobody it would bind.
    */
-  private async expiryFor(serverId: string | null): Promise<Date | null> {
-    if (!serverId) return null;
-    const server = await prisma.server.findUnique({
-      where: { id: serverId },
-      select: { messageTtlSeconds: true },
-    });
+  private async expiryFor(serverId: string | null, viewOnce = false): Promise<Date | null> {
+    const server = serverId
+      ? await prisma.server.findUnique({
+          where: { id: serverId },
+          select: { messageTtlSeconds: true },
+        })
+      : null;
+
     const seconds = server?.messageTtlSeconds ?? null;
     // A window that is not on the list is a window somebody wrote into the
     // database by hand. Ignored rather than obeyed: the alternative is
     // honouring a three-second retention nobody's client can offer to undo.
-    if (!seconds || !isDisappearingWindow(seconds)) return null;
-    return new Date(Date.now() + seconds * 1000);
+    const configured = seconds && isDisappearingWindow(seconds) ? seconds : null;
+
+    // A one-time message is destroyed when everyone has looked, which is a
+    // condition that may never arrive: one member of a channel who never opens
+    // theirs keeps the blob for ever. So it also gets a backstop, and the
+    // shorter of the two wins - the backstop must never *extend* a window a
+    // server actually set.
+    const window = viewOnce ? Math.min(configured ?? ONE_TIME_BACKSTOP_SECONDS, ONE_TIME_BACKSTOP_SECONDS) : configured;
+    if (!window) return null;
+    return new Date(Date.now() + window * 1000);
   }
 
   async send(
@@ -240,7 +292,7 @@ export class MessagesService {
 
     // Stamped now rather than evaluated on read, so changing a server's window
     // governs what is sent next and never reaches back through the channel.
-    const expiresAt = await this.expiryFor(access.serverId);
+    const expiresAt = await this.expiryFor(access.serverId, viewOnce);
 
     const row = await prisma.message.create({
       data: { channelId, authorId: userId, content: trimmed, expiresAt, viewOnce },
@@ -363,21 +415,25 @@ export class MessagesService {
   }
 
   /**
-   * Spends a one-time message: its media is opened, and opening it is what
-   * destroys it.
+   * Spends one person's look at a one-time message.
    *
-   * The author is not a viewer. Somebody re-reading what they themselves sent
-   * has not consumed anybody's one look, and a sender who could burn their own
-   * message by scrolling past it would find the feature unusable.
+   * One look *each*, not one look in total. This used to settle a race with a
+   * conditional update on a single `viewedAt`, so the first person to open one
+   * in a channel destroyed it and everybody else was shown "Opened" for
+   * something they had never seen. That is not a one-time message; it is a
+   * race to a message.
    *
-   * First caller wins, and every caller after is told it is gone rather than
-   * being handed a key to nothing. That race is settled by a conditional
-   * update - `viewedAt: null` in the where clause - so two devices opening the
-   * same message at the same instant produce one burn, not two.
+   * So a look is a row, and the message survives until the rows cover everyone
+   * who could see it. In a direct message that is one person and the behaviour
+   * is unchanged; in a channel each member gets the look they were sent.
    *
-   * The row is destroyed rather than tombstoned. A one-time message that
-   * leaves "this message was deleted" sitting in the channel for ever is
-   * telling the story it was chosen to avoid telling.
+   * The author is not a viewer. Re-reading what you sent spends nobody's look,
+   * and a sender who burned their own message by scrolling past it would find
+   * the feature unusable.
+   *
+   * Idempotent by the unique index on (message, user): opening twice from two
+   * devices records one look, so the second one is not silently charged to
+   * somebody else.
    */
   async burn(userId: string, messageId: string): Promise<void> {
     const row = await prisma.message.findFirst({
@@ -389,24 +445,67 @@ export class MessagesService {
     }
     await this.requireChannelAccess(userId, row.channelId, PERMISSIONS.VIEW_CHANNEL);
 
-    // The author looking at their own does not spend it.
+    // The author looking at their own does not spend anything.
     if (row.authorId === userId) return;
 
-    const claimed = await prisma.message.updateMany({
-      where: { id: row.id, viewedAt: null },
-      data: { viewedAt: new Date() },
+    await prisma.messageView.upsert({
+      where: { messageId_userId: { messageId: row.id, userId } },
+      create: { messageId: row.id, userId },
+      update: {},
     });
-    // Somebody else got there first; theirs did the deleting.
-    if (claimed.count === 0) return;
+    // The stamp the backstop expiry is measured from - the first look, not
+    // this one. Written only once, so a slow second viewer cannot extend it.
+    if (row.viewedAt === null) {
+      await prisma.message.updateMany({
+        where: { id: row.id, viewedAt: null },
+        data: { viewedAt: new Date() },
+      });
+    }
 
-    await purgeMessageAttachments([row.id]);
-    await prisma.message.delete({ where: { id: row.id } });
+    if (await this.everyoneHasLooked(row.id, row.channelId, row.authorId)) {
+      await purgeMessageAttachments([row.id]);
+      await prisma.message.delete({ where: { id: row.id } });
+      await this.events.publish(EVENTS.MESSAGE_DELETED, {
+        messageId: row.id,
+        channelId: row.channelId,
+        message: null,
+      });
+      return;
+    }
 
-    await this.events.publish(EVENTS.MESSAGE_DELETED, {
-      messageId: row.id,
-      channelId: row.channelId,
-      message: null,
+    // Still somebody's look left in it. Everyone is told who has spent theirs,
+    // so this account's other devices stop offering it and the author can see
+    // that it has been opened.
+    const updated = await prisma.message.findUniqueOrThrow({
+      where: { id: row.id },
+      include: MESSAGE_INCLUDE,
     });
+    await this.events.publish(EVENTS.MESSAGE_UPDATED, { message: toMessage(updated) });
+  }
+
+  /**
+   * Whether a one-time message has no looks left in it.
+   *
+   * "Everyone who could see it" is the channel's audience as it stands now,
+   * minus the author. A member who joined after it was sent is deliberately
+   * included: they can see the channel, so they can see the card, and a
+   * message destroyed before they opened it would be another "Opened" for
+   * something never shown.
+   *
+   * The corollary is that a channel where somebody never opens theirs keeps
+   * the blob until the backstop expiry collects it - see `expiryFor`.
+   */
+  private async everyoneHasLooked(
+    messageId: string,
+    channelId: string,
+    authorId: string,
+  ): Promise<boolean> {
+    const [audience, looks] = await Promise.all([
+      channelAudience(channelId),
+      prisma.messageView.findMany({ where: { messageId }, select: { userId: true } }),
+    ]);
+
+    return looksOwed(audience, looks.map((look) => look.userId), authorId).length === 0;
   }
 
   /**
@@ -547,7 +646,7 @@ interface MessageRow {
   pinnedAt: Date | null;
   expiresAt?: Date | null;
   viewOnce?: boolean;
-  viewedAt?: Date | null;
+  views?: Array<{ userId: string }>;
   author: {
     id: string;
     username: string;
@@ -589,7 +688,7 @@ export function toMessage(row: MessageRow): Message {
     reactions: summarise(row.reactions ?? []),
     expiresAt: row.expiresAt ? row.expiresAt.toISOString() : null,
     viewOnce: row.viewOnce ?? false,
-    viewedAt: row.viewedAt ? row.viewedAt.toISOString() : null,
+    viewedBy: (row.views ?? []).map((view) => view.userId),
   };
 }
 

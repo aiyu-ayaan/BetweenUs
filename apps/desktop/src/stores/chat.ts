@@ -894,6 +894,39 @@ function forgetMessageAttachments(messageIds: string[]): void {
   forgetAttachments(keys);
 }
 
+/**
+ * Messages a viewer is currently open over, and the ones the server destroyed
+ * while that was true.
+ *
+ * Ephemeral screen state rather than store state: nothing renders from it, it
+ * does not survive a reload, and putting it in the store would re-render every
+ * message list whenever a picture was opened.
+ *
+ * The problem it solves is a lifecycle one. A one-time message is burned as
+ * its viewer opens - deliberately, because closing the viewer is not a promise
+ * anybody can keep - and the server answers by destroying the row and saying
+ * so. The viewer is drawn inside the message row, so acting on that
+ * immediately unmounted the thing the person had just opened. They never saw
+ * the picture they had spent their one look on.
+ */
+const heldOpen = new Set<string>();
+const goneWhileOpen = new Set<string>();
+
+/** Keeps a message on screen while its viewer is open, whatever the server says. */
+export function holdMessage(messageId: string): void {
+  heldOpen.add(messageId);
+}
+
+/** Lets it go again, and applies the removal if one arrived in the meantime. */
+export function releaseMessage(messageId: string): void {
+  heldOpen.delete(messageId);
+  if (!goneWhileOpen.delete(messageId)) return;
+
+  forgetMessageAttachments([messageId]);
+  void cache.forgetMessages([messageId]).catch(() => undefined);
+  forgetMessages(new Set([messageId]));
+}
+
 /** Takes messages out of every list this store keeps one in. */
 function forgetMessages(messageIds: Set<string>): void {
   if (messageIds.size === 0) return;
@@ -1082,6 +1115,15 @@ chatSocket.on((event) => {
    * attachment cache holding its decrypted pictures.
    */
   if (event.type === 'message.gone') {
+    // Not while somebody is looking at it. Burning happens as the viewer
+    // opens, and the viewer is drawn inside the message row - so removing the
+    // message here unmounted the row, which unmounted the viewer, which is why
+    // a one-time picture vanished the instant it was opened. The removal is
+    // held until the viewer closes; see `holdMessage`.
+    if (heldOpen.has(event.messageId)) {
+      goneWhileOpen.add(event.messageId);
+      return;
+    }
     forgetMessageAttachments([event.messageId]);
     void cache.forgetMessages([event.messageId]).catch(() => undefined);
     forgetMessages(new Set([event.messageId]));
