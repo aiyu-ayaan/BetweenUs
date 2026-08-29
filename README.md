@@ -88,7 +88,7 @@ to be framed, so no browser tab can ever show it.
 | Block somebody | ✅ | ✅ | ✅ |
 | Clear one conversation, or all, on every device | ✅ | ✅ | ✅ |
 | Disappearing messages — a server's window, and your own | ✅ | ✅ | ✅ |
-| One-time photos, video and voice, destroyed once seen | ✅ capture blocked | ⚠️ no capture block | ✅ `FLAG_SECURE` |
+| One-time photos, video and voice, destroyed once seen | ✅ capture blocked | — opens in the app | ✅ `FLAG_SECURE` |
 | Voice messages, with a waveform, played in place | ✅ | ✅ | ✅ |
 | Replies, edit, delete, reactions | ✅ | ✅ | ✅ |
 | Pinned messages | ✅ | ✅ | ✅ |
@@ -1019,8 +1019,9 @@ All three clients have all of it.
   selectable, anywhere. On Android the viewer sets `FLAG_SECURE` and on the
   desktop it sets `setContentProtection`, so on both the operating system
   itself refuses the screenshot and records black. **A browser cannot do this**
-  — a page has no say over the screen it is drawn on — and the web viewer says
-  so rather than repeating a promise it cannot keep. A second camera pointed at
+  — a page has no say over the screen it is drawn on — so the web build does not
+  open one at all, and offers the app instead of quietly breaking the sender's
+  promise. A second camera pointed at
   the screen defeats all of it and always will, so what the feature actually
   guarantees is that the file stops existing everywhere once its recipients
   have seen it.

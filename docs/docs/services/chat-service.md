@@ -192,7 +192,14 @@ which one it is on:
 | --- | --- | --- |
 | Android | Blocked | `FLAG_SECURE` on the viewer window |
 | Desktop | Blocked | `setContentProtection(true)` while the viewer is open |
-| Web | **Cannot be blocked** | A page has no say over the screen it is drawn on |
+| Web | **Cannot be blocked — so it will not open one** | A page has no say over the screen it is drawn on |
+
+The web build does not open one at all. Showing the picture there would be a
+sender choosing "one-time" and quietly getting none of it, on a client that
+looks identical to the ones where it works — so the browser draws a locked card
+with an info button explaining that the limitation is the browser's, and says
+that nothing has been used up. The author is exempt: their own message spends
+nobody's look.
 
 **None of it stops a second camera pointed at the screen, and no software on a
 device somebody holds can.** The guarantee is that the file stops existing
