@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { dayLabel } from './day';
 import { useChatStore, type DecryptedMessage } from '../../stores/chat';
 import { useAuthStore } from '../../stores/auth';
 import { Avatar } from '../../components/Avatar';
@@ -104,7 +105,7 @@ export function SearchPanel({
                     {message.author.id === me?.id ? 'You' : message.author.displayName}
                   </span>
                   <time dateTime={message.createdAt} className="shrink-0 text-xs text-slate-500">
-                    {new Date(message.createdAt).toLocaleDateString()}
+                    {dayLabel(message.createdAt)}
                   </time>
                 </span>
                 <span className="mt-1.5 block line-clamp-3 break-words text-sm text-slate-300">

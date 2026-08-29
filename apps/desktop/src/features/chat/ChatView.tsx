@@ -46,6 +46,7 @@ import {
   type Run as MarkupRun,
 } from '../../services/markup';
 import { emojiQueryAt } from './emoji-names';
+import { dayLabel, sameDay } from './day';
 import { nextFollow } from './follow';
 import { anchorReceipts, seenBy } from './receipts';
 import { SeenByDialog, SeenByRow } from './SeenBy';
@@ -593,8 +594,13 @@ function MessageList({
           const previous = messages[index - 1];
           const grouped =
             previous?.author.id === message.author.id &&
+            sameDay(previous.createdAt, message.createdAt) &&
             new Date(message.createdAt).getTime() - new Date(previous.createdAt).getTime() <
               5 * 60 * 1000;
+          // A day boundary always breaks the run: a divider sits between the
+          // two bubbles, and a run reading across it is a run of one person
+          // talking that visibly is not.
+          const newDay = !previous || !sameDay(previous.createdAt, message.createdAt);
 
           const deleted = message.deletedAt !== null;
           const isSelf = message.author.id === me?.id;
@@ -614,6 +620,7 @@ function MessageList({
 
           return (
             <Fragment key={message.id}>
+              {newDay && <DayDivider iso={message.createdAt} />}
               {dividerId === message.id && <NewMessagesDivider />}
               <li
                 id={`message-${message.id}`}
@@ -796,6 +803,29 @@ function MessageList({
         />
       )}
     </div>
+  );
+}
+
+/**
+ * Which day the messages under it were sent.
+ *
+ * The times on the bubbles are only clock times, so a conversation read later
+ * says 09:14 without saying which morning. This is the only thing in the list
+ * that carries the date, which is why it sits above the first message of every
+ * day rather than only where a gap looks long enough to need one.
+ */
+function DayDivider({ iso }: { iso: string }): JSX.Element {
+  return (
+    <li className="my-3 flex items-center gap-2 px-2">
+      <span aria-hidden="true" className="h-px flex-1 bg-surface-700/60" />
+      <time
+        dateTime={iso}
+        className="rounded-full bg-surface-800/80 px-2.5 py-0.5 text-[11px] font-medium text-slate-400"
+      >
+        {dayLabel(iso)}
+      </time>
+      <span aria-hidden="true" className="h-px flex-1 bg-surface-700/60" />
+    </li>
   );
 }
 
