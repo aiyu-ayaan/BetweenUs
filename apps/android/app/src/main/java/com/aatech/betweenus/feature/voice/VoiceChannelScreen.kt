@@ -23,11 +23,11 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -554,160 +554,55 @@ fun VoiceChannelScreen(
                             )
                         }
 
-                        // 2 Remote Participants (3 total): Top half split in 2 vertical tiles, bottom half local PiP
-                        participants.size == 2 -> {
-                            Column(
+                        // 2-4 Remote Participants: a grid that keeps each
+                        // tile close to the shape of a person.
+                        //
+                        // The old layout gave every tile an equal share of the
+                        // stage and let it stretch: two people side by side on
+                        // a portrait phone came out as a pair of bookmarks,
+                        // mostly empty, with a face stranded in the middle of
+                        // each. `CallGrid` picks the column count from the
+                        // stage shape and caps how tall a tile may go.
+                        participants.size in 2..4 -> {
+                            // Three remotes leave an odd cell in a 2x2, and
+                            // your own camera is the obvious thing to put in
+                            // it. Every other count floats the self view.
+                            val selfInGrid = participants.size == 3
+                            CallGrid(
+                                count = participants.size + if (selfInGrid) 1 else 0,
                                 modifier = Modifier
                                     .fillMaxSize()
                                     .padding(top = 64.dp, bottom = 96.dp, start = 8.dp, end = 8.dp),
-                                verticalArrangement = Arrangement.spacedBy(8.dp),
-                            ) {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .weight(1f),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                ) {
+                            ) { index, tileModifier ->
+                                val participant = participants.getOrNull(index)
+                                if (participant != null) {
                                     CallTile(
-                                        label = participants[0].peer.username,
-                                        id = participants[0].peer.userId,
-                                        track = participants[0].video,
+                                        label = participant.peer.username,
+                                        id = participant.peer.userId,
+                                        track = participant.video,
                                         eglContext = engine.eglBase.eglBaseContext,
-                                        muted = !participants[0].micEnabled,
-                                        speaking = participants[0].speaking,
-                                        connected = participants[0].connected,
-                                        status = statusOf(participants[0]),
-                                        modifier = Modifier
-                                            .weight(1f)
-                                            .fillMaxHeight(),
+                                        muted = !participant.micEnabled,
+                                        speaking = participant.speaking,
+                                        connected = participant.connected,
+                                        status = statusOf(participant),
+                                        modifier = tileModifier,
                                     )
+                                } else {
                                     CallTile(
-                                        label = participants[1].peer.username,
-                                        id = participants[1].peer.userId,
-                                        track = participants[1].video,
+                                        label = "${self.label} (you)",
+                                        id = self.id,
+                                        track = localVideo,
+                                        speaking = selfSpeaking,
                                         eglContext = engine.eglBase.eglBaseContext,
-                                        muted = !participants[1].micEnabled,
-                                        speaking = participants[1].speaking,
-                                        connected = participants[1].connected,
-                                        status = statusOf(participants[1]),
-                                        modifier = Modifier
-                                            .weight(1f)
-                                            .fillMaxHeight(),
+                                        muted = muted,
+                                        isLocal = true,
+                                        fit = RendererCommon.ScalingType.SCALE_ASPECT_FILL,
+                                        modifier = tileModifier,
                                     )
                                 }
                             }
 
-                            // Self in Floating PiP
-                            FloatingPipTile(
-                                label = "${self.label} (you)",
-                                id = self.id,
-                                track = localVideo,
-                                speaking = selfSpeaking,
-                                eglContext = engine.eglBase.eglBaseContext,
-                                muted = muted,
-                                onFlipCamera = {
-                                    if (cameraOn) engine.switchCamera()
-                                },
-                                modifier = Modifier
-                                    .align(Alignment.BottomEnd)
-                                    .padding(bottom = 110.dp, end = 14.dp),
-                            )
-                        }
-
-                        // 3 or 4 Remote Participants (4-5 total): 2x2 Balanced Grid (no scroll)
-                        participants.size in 3..4 -> {
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .padding(top = 64.dp, bottom = 96.dp, start = 8.dp, end = 8.dp),
-                                verticalArrangement = Arrangement.spacedBy(8.dp),
-                            ) {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .weight(1f),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                ) {
-                                    CallTile(
-                                        label = participants[0].peer.username,
-                                        id = participants[0].peer.userId,
-                                        track = participants[0].video,
-                                        eglContext = engine.eglBase.eglBaseContext,
-                                        muted = !participants[0].micEnabled,
-                                        speaking = participants[0].speaking,
-                                        connected = participants[0].connected,
-                                        status = statusOf(participants[0]),
-                                        modifier = Modifier
-                                            .weight(1f)
-                                            .fillMaxHeight(),
-                                    )
-                                    CallTile(
-                                        label = participants[1].peer.username,
-                                        id = participants[1].peer.userId,
-                                        track = participants[1].video,
-                                        eglContext = engine.eglBase.eglBaseContext,
-                                        muted = !participants[1].micEnabled,
-                                        speaking = participants[1].speaking,
-                                        connected = participants[1].connected,
-                                        status = statusOf(participants[1]),
-                                        modifier = Modifier
-                                            .weight(1f)
-                                            .fillMaxHeight(),
-                                    )
-                                }
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .weight(1f),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                ) {
-                                    CallTile(
-                                        label = participants[2].peer.username,
-                                        id = participants[2].peer.userId,
-                                        track = participants[2].video,
-                                        eglContext = engine.eglBase.eglBaseContext,
-                                        muted = !participants[2].micEnabled,
-                                        speaking = participants[2].speaking,
-                                        connected = participants[2].connected,
-                                        status = statusOf(participants[2]),
-                                        modifier = Modifier
-                                            .weight(1f)
-                                            .fillMaxHeight(),
-                                    )
-                                    if (participants.size == 4) {
-                                        CallTile(
-                                            label = participants[3].peer.username,
-                                            id = participants[3].peer.userId,
-                                            track = participants[3].video,
-                                            eglContext = engine.eglBase.eglBaseContext,
-                                            muted = !participants[3].micEnabled,
-                                            speaking = participants[3].speaking,
-                                            connected = participants[3].connected,
-                                            status = statusOf(participants[3]),
-                                            modifier = Modifier
-                                                .weight(1f)
-                                                .fillMaxHeight(),
-                                        )
-                                    } else {
-                                        // 4th spot is self preview
-                                        CallTile(
-                                            label = "${self.label} (you)",
-                                            id = self.id,
-                                            track = localVideo,
-                                            speaking = selfSpeaking,
-                                            eglContext = engine.eglBase.eglBaseContext,
-                                            muted = muted,
-                                            isLocal = true,
-                                            fit = RendererCommon.ScalingType.SCALE_ASPECT_FILL,
-                                            modifier = Modifier
-                                                .weight(1f)
-                                                .fillMaxHeight(),
-                                        )
-                                    }
-                                }
-                            }
-
-                            if (participants.size == 4) {
+                            if (!selfInGrid) {
                                 FloatingPipTile(
                                     label = "${self.label} (you)",
                                     id = self.id,
@@ -1325,6 +1220,47 @@ private fun statusOf(participant: VoiceEngine.Participant): String? = when {
     // Not "muted": they were pulled into a phone call and are coming back.
     participant.held -> "On hold"
     else -> null
+}
+
+/**
+ * The tiles of a small call, laid out so nobody is drawn as a sliver.
+ *
+ * Two rules, and they are the whole thing:
+ *
+ * - Columns come from the shape of the stage, not from the head count. Two
+ *   people side by side on a portrait phone is two narrow strips; stacked, it
+ *   is two wide ones. Turn the phone and the same two go back to side by side.
+ * - A tile may be as wide as its share of the stage, but never more than a
+ *   third again as tall as it is wide. A stage taller than the grid wants is
+ *   margin around a centred grid, which is the thing that stretching was
+ *   avoiding and should not have been.
+ */
+@Composable
+private fun CallGrid(
+    count: Int,
+    modifier: Modifier = Modifier,
+    tile: @Composable (index: Int, modifier: Modifier) -> Unit,
+) {
+    BoxWithConstraints(modifier, contentAlignment = Alignment.Center) {
+        val gap = 8.dp
+        val columns = if (count <= 2 && maxHeight > maxWidth) 1 else 2
+        val rows = (count + columns - 1) / columns
+        val cellWidth = (maxWidth - gap * (columns - 1)) / columns
+        val cellHeight = (maxHeight - gap * (rows - 1)) / rows
+        val tileHeight = minOf(cellHeight, cellWidth * 4f / 3f)
+        Column(verticalArrangement = Arrangement.spacedBy(gap)) {
+            for (row in 0 until rows) {
+                Row(horizontalArrangement = Arrangement.spacedBy(gap)) {
+                    for (column in 0 until columns) {
+                        val index = row * columns + column
+                        if (index < count) {
+                            tile(index, Modifier.width(cellWidth).height(tileHeight))
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 
 /**
