@@ -343,7 +343,7 @@ Firebase Cloud Messaging, data-only payloads — the server can't read a
 message body to put words in a push, so the notification is written on the
 device after it wakes. See
 [notification-service](/services/notification-service) and
-[`FCM/README.md`](https://github.com/aiyu-ayaan/BetweenUs/blob/master/FCM/README.md).
+[Notifications Architecture](/architecture/notifications).
 A direct call rings even with the app fully killed, via a `CallStyle`
 notification with a full-screen intent.
 

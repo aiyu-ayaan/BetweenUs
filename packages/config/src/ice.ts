@@ -207,7 +207,7 @@ async function turnServers(): Promise<IceServerConfig[]> {
       report(
         'Running STUN-only: no TURN relay is configured, so calls between two networks ' +
           'that cannot form a direct path will connect and then carry no media. This is ' +
-          'the default and is not an error. See DEPLOYMENT.md.',
+          'the default and is not an error. See docs/ for details.',
         null,
       );
     }

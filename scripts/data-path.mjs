@@ -151,5 +151,5 @@ console.log(`  ${''.padEnd(19)} ${MEDIA_SUBDIRS.map((name) => `${name}/`).join('
 console.log(
   '\nWritten to .env. Bring the stack up with `pnpm prod:up`.\n' +
     'Moving an existing deployment onto this path is a copy out of the old\n' +
-    'volumes while it is down - see "One data path" in DEPLOYMENT.md.',
+    'volumes while it is down - see the deployment documentation.',
 );

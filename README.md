@@ -27,7 +27,7 @@ A modern, secure communication platform with end-to-end encrypted messaging, pee
 
 Messages, attachments, and call media are end-to-end encrypted: the server stores and routes ciphertext, never holding any key that can decrypt it. Voice, video, and screen sharing stream directly between participants via a peer-to-peer WebRTC mesh with DTLS-SRTP encryption — requiring zero media server infrastructure.
 
-`CLAUDE.md` is the target architecture. `development/` tracks what is built, why each decision was taken, and what is deliberately left open. `DEPLOYMENT.md` is the step-by-step guide for deploying on a server with Docker Compose, Cloudflare Tunnels, and STUN/TURN relays.
+`CLAUDE.md` is the target architecture. `development/` tracks what is built, why each decision was taken, and what is deliberately left open. `docs/` is the complete documentation suite covering architecture, services, system design, security, and step-by-step deployment with Docker Compose and Cloudflare Tunnels.
 
 ---
 
@@ -462,7 +462,7 @@ keeps the metadata; blobs never go in a column.
 - Node.js 20+
 - pnpm 9
 - Docker - Postgres and Redis in development; the whole stack in a
-  deployment (see `DEPLOYMENT.md`)
+  deployment (see `docs/docs/deployment/docker-compose.md`)
 
 ## Quick start
 
@@ -521,7 +521,7 @@ fetched files are refreshed, `.env` is left exactly as it was, and the same two
 compose commands apply it.
 
 Cloning still works and is what you want to build the images yourself or to
-develop against them. `DEPLOYMENT.md` covers both paths, and everything after
+develop against them. The documentation under `docs/` covers both paths, and everything after
 the first step is identical.
 
 ## Production app builds & packaging
@@ -707,7 +707,7 @@ is; media is UDP, which no tunnel carries, and does not need to - it goes
 straight between the clients. Nothing else has to reach the host, so no port is
 opened for media anywhere in this repo.
 
-`DEPLOYMENT.md` walks the whole thing end to end - what to generate, how to
+The documentation under [`docs/docs/deployment/`](docs/docs/deployment/) walks the whole thing end to end - what to generate, how to
 create the first administrator, and what each endpoint behind the tunnel is for.
 
 ## File storage
@@ -738,20 +738,18 @@ a sealed ticket rather than held as state in a service.
 
 ## Repository layout
 
-```
+```text
 apps/
-  desktop/                Electron + React + Tailwind + Zustand client
-  web/                    The same UI in a browser, served at / (no remote desktop)
-  admin/                  Admin panel (React, served under /admin)
-  android/                Native Android client (Kotlin 2.2 + Jetpack Compose + Material 3)
+  admin/               Admin web panel (Vite + React + Tailwind)
+  android/             Native Android client (Jetpack Compose + Material 3)
+  desktop/             Desktop client (Electron + Vite + React + Tailwind)
+  web/                 Web client (Vite + React + Tailwind)
   services/
-    api-gateway/          Nginx configuration
-    auth-service/         Accounts, tokens, OAuth, admin API
-    server-service/       Servers, roles, channels
-    chat-service/         Messages, /ws/chat, uploads, E2EE directory
-    presence-service/     /ws/presence, status, typing, voice rosters
-    notification-service/ Preferences, mutes, quiet hours, read markers
-    call-service/         call permissions and /ws/call signalling
+    auth-service/      JWT sessions, tokens, user authentication
+    call-service/      Mesh call signalling, room state, WebRTC offer/answer relay
+    chat-service/      E2EE messages, direct messages, attachments, friend relationships
+    notification-service/ Push notifications, unread tracking, mute settings
+    presence-service/  Online / idle / dnd / offline status, typing indicators
     remote-gateway/       Remote machines, permissions, session relay, audit
     remote-agent/         Scaffold - for a headless machine with no app on it
     user-service/         Scaffold
@@ -760,7 +758,7 @@ packages/                 shared-types, database, auth, permissions, events,
 infrastructure/           docker compose, nginx, cloudflare
 scripts/install.sh        one-command deployment, no clone required
 development/              planning, MVP, E2EE design, API security, testing guide, TODO, Android roadmap
-DEPLOYMENT.md             putting it on a server, end to end
+docs/                     full Docusaurus documentation suite (architecture, services, security, deployment)
 ```
 
 ## Common commands
@@ -1123,7 +1121,7 @@ Third-party dependencies keep their own licences.
 | `development/TODO.md` | Ordered backlog, including what each phase left open |
 | `development/ANDROID_TODO.md` | Native Android client architecture, roadmap, and completed phases |
 | `development/TRACK.md` | The current track: what has landed this pass, and why it was built the way it was |
-| `FCM/README.md` | Push notification design: why it is data-only, what the server can decide and what only the client can |
+| [`docs/docs/architecture/notifications.md`](docs/docs/architecture/notifications.md) | Push notification design: data-only push, background client wakeups, and cross-device push suppression |
 | `docs/docs/architecture/listen-together.md` | Listen Together: the shared clock, why it is not a screen share, and what it deliberately does not do |
 | `docs/docs/architecture/play-together.md` | Play Together: why the gateway referees, why the rules live in the contract, and why every game in the library is perfect information |
 | `docs/docs/architecture/push-suppression.md` | Why a phone is not woken for a chat open on another of your devices, and why a notification goes away when you read it elsewhere |

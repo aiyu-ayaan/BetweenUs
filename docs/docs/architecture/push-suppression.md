@@ -194,8 +194,6 @@ The reader's own device gets the push too and does nothing with it — it cleare
 its notification when the channel opened. Excluding it would mean the server
 knowing which device sent the marker, which it does not and has no reason to.
 
-[`FCM/PAYLOADS.md`](https://github.com/aiyu-ayaan/BetweenUs/blob/master/FCM/PAYLOADS.md) has the wire format.
-
 ---
 
 ## What is still decided on the client

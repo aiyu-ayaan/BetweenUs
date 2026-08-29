@@ -10,7 +10,7 @@
  * S3 is deliberately not swept from here. A bucket has a lifecycle rule for
  * exactly this (`AbortIncompleteMultipartUpload`), it is one line of bucket
  * configuration, and walking a bucket from the application to do the same thing
- * would be slower, more expensive and a worse answer. `DEPLOYMENT.md` is where
+ * would be slower, more expensive and a worse answer. The deployment documentation is where
  * that belongs; this covers the driver that has nobody else to do it.
  *
  * ponytail: a timer in the process. Two replicas will both sweep and race each

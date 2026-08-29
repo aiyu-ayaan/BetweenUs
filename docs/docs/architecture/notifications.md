@@ -279,9 +279,7 @@ notifications.
 the **environment only** — never a file, since a JSON private key checked
 into the repo once is a private key in the history forever.
 `pnpm firebase:env ./serviceAccountKey.json --write` turns a downloaded key
-into the three env vars and the file can be deleted. Full setup and the
-wire format of a push: [`FCM/README.md`](https://github.com/aiyu-ayaan/BetweenUs/blob/master/FCM/README.md)
-and [`FCM/PAYLOADS.md`](https://github.com/aiyu-ayaan/BetweenUs/blob/master/FCM/PAYLOADS.md).
+into the three env vars and the file can be deleted.
 
 Web Push needs a VAPID key pair instead, and nothing else — mint one with
 `npx web-push generate-vapid-keys` and set `VAPID_PUBLIC_KEY`,

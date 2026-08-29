@@ -10,7 +10,7 @@
 # at minimum PUBLIC_API_URL - and start the stack yourself. It never starts
 # anything, so it cannot bring a half-configured deployment up.
 #
-# The layout it writes is the repository's, so every command in DEPLOYMENT.md
+# The layout it writes is the repository's, so every compose command
 # works unchanged in the directory it creates.
 #
 # Re-running is the upgrade path: the three tracked files are refreshed and
@@ -130,7 +130,7 @@ Next, in that order. Every command below is run from $HERE:
   1. Edit .env. The secrets are generated; what only you can decide is
      PUBLIC_API_URL - the public URL this deployment answers on, which the
      OAuth callback is built from - and, if you are publishing it,
-     CLOUDFLARE_TUNNEL_TOKEN. DEPLOYMENT.md section 3 is the whole table.
+     CLOUDFLARE_TUNNEL_TOKEN. See the deployment documentation in docs/ for details.
 
        \${EDITOR:-nano} .env
 

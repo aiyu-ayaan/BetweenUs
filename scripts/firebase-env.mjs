@@ -50,7 +50,7 @@ const lines = single
     ];
 
 if (write) {
-  appendFileSync(resolve(process.cwd(), '.env'), `\n# Firebase Cloud Messaging - see FCM/README.md\n${lines.join('\n')}\n`);
+  appendFileSync(resolve(process.cwd(), '.env'), `\n# Firebase Cloud Messaging - see docs/docs/architecture/notifications.md\n${lines.join('\n')}\n`);
   console.log(`Appended ${lines.length} line(s) to .env. Delete ${path} now - it is not needed again.`);
 } else {
   console.log(lines.join('\n'));
