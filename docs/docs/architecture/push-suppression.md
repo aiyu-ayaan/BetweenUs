@@ -1,4 +1,8 @@
-# Not waking a phone for a message somebody is already reading
+---
+sidebar_position: 7
+---
+
+# Push Suppression
 
 A push exists to reach a person who is not looking. If the same account has the
 conversation open in a focused window on a laptop, the message is on a screen in
@@ -190,7 +194,7 @@ The reader's own device gets the push too and does nothing with it — it cleare
 its notification when the channel opened. Excluding it would mean the server
 knowing which device sent the marker, which it does not and has no reason to.
 
-`FCM/PAYLOADS.md` has the wire format.
+[`FCM/PAYLOADS.md`](https://github.com/aiyu-ayaan/BetweenUs/blob/master/FCM/PAYLOADS.md) has the wire format.
 
 ---
 
@@ -218,8 +222,7 @@ nothing.
 | `apps/desktop/src/services/channel-focus.ts` | desktop and web (one app, one module) |
 | `apps/android/core/src/main/java/.../store/ChannelFocus.kt` | Android |
 
-`focus.check.ts` covers the lookup's failure direction; `pnpm --filter
-@betweenus/notification-service check` runs it.
+`focus.check.ts` covers the lookup's failure direction; `pnpm --filter @betweenus/notification-service check` runs it.
 
 ---
 

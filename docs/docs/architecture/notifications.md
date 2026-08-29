@@ -176,7 +176,7 @@ channel id on desktop/web, and `AppForeground.visible` plus
 `Conversation.visibleChannelId` on Android. A phone locked mid-conversation
 still counts as reading it — its chat screen is composed behind the lock
 screen, which is exactly the case that would otherwise go silent forever.
-Full design: [`push-suppression.md`](https://github.com/aiyu-ayaan/BetweenUs/blob/master/push-suppression.md).
+Full design: [Push Suppression](/architecture/push-suppression).
 
 ## Unread counts are derived, not stored
 

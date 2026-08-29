@@ -153,7 +153,7 @@ whichever client you arrived from.
 windows has a channel open and focused, none of your devices is woken for a
 message in it, and a notification already showing on a phone goes away when you
 read that conversation on a laptop. A different channel still buzzes normally,
-even in the same server. See `push-suppression.md`.
+even in the same server. See `docs/docs/architecture/push-suppression.md`.
 
 ---
 
@@ -632,7 +632,7 @@ A native Android mobile application built with **Kotlin 2.2**, **Jetpack Compose
   notification, only the phone can. Messages, mentions, calls (a `CallStyle`
   full-screen intent that rings with the app dead), friend requests and being
   added to a server. Suppressed for a channel any of your other devices already
-  has open and focused - see `push-suppression.md`.
+  has open and focused - see `docs/docs/architecture/push-suppression.md`.
 - **Attachments send under a foreground service**: leaving the channel, taking
   a call or locking the phone no longer kills an upload halfway.
 - **Self-updating**: checks its own GitHub releases on launch and once a day in
@@ -958,7 +958,7 @@ All three clients have all of it.
   desktop, web or a second phone. Per account, per exact channel: a different
   server still notifies normally everywhere. Clients report focus over
   `/ws/presence`; `notification-service` asks `presence-service` before every
-  fan-out and drops the readers. `push-suppression.md`.
+  fan-out and drops the readers. `docs/docs/architecture/push-suppression.md`.
 - **A notification that has been read elsewhere takes itself down.** The other
   half of the same problem: focus stops a push being sent, and does nothing
   about one already sitting in a pocket. Marking a channel read - which every
@@ -1107,4 +1107,4 @@ Third-party dependencies keep their own licences.
 | `FCM/README.md` | Push notification design: why it is data-only, what the server can decide and what only the client can |
 | `docs/docs/architecture/listen-together.md` | Listen Together: the shared clock, why it is not a screen share, and what it deliberately does not do |
 | `docs/docs/architecture/play-together.md` | Play Together: why the gateway referees, why the rules live in the contract, and why every game in the library is perfect information |
-| `push-suppression.md` | Why a phone is not woken for a chat open on another of your devices, and why a notification goes away when you read it elsewhere |
+| `docs/docs/architecture/push-suppression.md` | Why a phone is not woken for a chat open on another of your devices, and why a notification goes away when you read it elsewhere |

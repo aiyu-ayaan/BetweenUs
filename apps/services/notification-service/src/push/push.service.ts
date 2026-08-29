@@ -33,7 +33,7 @@
  * *already reading the channel on another device*. A client can only ever see
  * its own screen, so only a server can answer that one - it asks
  * presence-service, and drops those recipients from the fan-out. See
- * `push-suppression.md`.
+ * `docs/docs/architecture/push-suppression.md`.
  *
  * Five things are worth waking a phone for, and only the first carries words:
  *

@@ -14,7 +14,7 @@ import kotlinx.coroutines.launch
  * server can apply: a message in a channel somebody is reading on their laptop
  * should not wake the phone in their pocket. `notification-service` asks
  * presence-service who has a channel focused before it fans a push out - see
- * `push-suppression.md`.
+ * `docs/docs/architecture/push-suppression.md`.
  *
  * Two facts make a focus, and both already exist here: which conversation is
  * open ([Conversation.visibleChannelId]) and whether the app is in front of

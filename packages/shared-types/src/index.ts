@@ -1524,7 +1524,7 @@ export type ClientPresenceEvent =
    * while it stays that way; `channel.blur` is sent when the window loses
    * focus or the channel is left. It is what stops a push waking a phone for a
    * conversation its owner is already reading somewhere else - see
-   * `push-suppression.md`.
+   * `docs/docs/architecture/push-suppression.md`.
    */
   | { type: 'channel.focus'; channelId: string }
   | { type: 'channel.blur'; channelId: string }
