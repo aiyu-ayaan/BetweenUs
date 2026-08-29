@@ -99,9 +99,34 @@ const config: Config = {
           label: 'Docs',
         },
         {
+          to: '/architecture/overview',
+          label: 'Architecture',
+          position: 'left',
+        },
+        {
+          to: '/services/overview',
+          label: 'Services',
+          position: 'left',
+        },
+        {
+          to: '/security/overview',
+          label: 'Security',
+          position: 'left',
+        },
+        {
+          to: '/deployment/docker-compose',
+          label: 'Deploy',
+          position: 'left',
+        },
+        {
           href: 'https://github.com/aiyu-ayaan/BetweenUs/releases',
           label: 'Download',
           position: 'left',
+        },
+        {
+          to: '/changelog',
+          label: 'Changelog',
+          position: 'right',
         },
         {
           href: 'https://github.com/aiyu-ayaan/BetweenUs',
