@@ -99,6 +99,35 @@ An expiry and a burn leave nothing to draw, so they reach clients as
 render. A permanent "something was here" marker would tell exactly the story
 those two features exist to avoid telling.
 
+### Voice messages
+
+A voice message is an ordinary audio attachment. Nothing on the server knows
+about it — it is sealed, uploaded and swept exactly like a file picked with the
+paperclip. What makes it a voice message is two fields inside the encrypted
+manifest, both measured by the sender:
+
+- `duration` — seconds, so a player can say "0:07" before a byte is fetched.
+- `waveform` — 48 bar heights from 0 to 1, measured while it was recorded.
+
+The sender measures them because a receiver cannot: computing a waveform means
+decoding the whole file, which means downloading it first, and the waveform is
+meant to be on screen *before* that. It also means every client draws the same
+shape for the same message, which a waveform has to do to be trusted as a
+position indicator. Desktop taps an `AnalyserNode` on the live stream; Android
+reads `MediaRecorder.getMaxAmplitude()`. Both normalise against the loudest bar
+— microphone gain varies by an order of magnitude between devices — and floor
+every bar so a pause is a line rather than a hole.
+
+Voice messages fetch and decrypt themselves on sight. They are seconds long and
+tens of kilobytes; the click-to-load rule that still governs video exists to
+avoid spending a large download on a message somebody scrolled past, which is
+not this.
+
+`isVoiceNote` decides what gets the treatment: an attachment with a waveform,
+or one named `voice_<date>_<time>.<ext>` (recordings from before waveforms
+existed). A shared music track matches neither and keeps its filename and
+download button, because that is what sharing a track means.
+
 ### One-time messages
 
 `viewOnce` travels **outside** the encrypted envelope, on the send request.

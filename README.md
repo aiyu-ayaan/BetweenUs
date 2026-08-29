@@ -89,7 +89,7 @@ to be framed, so no browser tab can ever show it.
 | Clear one conversation, or all, on every device | ✅ | ✅ | ✅ |
 | Disappearing messages — a server's window, and your own | ✅ | ✅ | ✅ |
 | One-time photos, video and voice, destroyed once opened | ✅ | ✅ | ✅ + `FLAG_SECURE` |
-| Voice messages, recorded from the composer | ✅ | ✅ | ✅ |
+| Voice messages, with a waveform, played in place | ✅ | ✅ | ✅ |
 | Replies, edit, delete, reactions | ✅ | ✅ | ✅ |
 | Pinned messages | ✅ | ✅ | ✅ |
 | Custom emoji in messages | ✅ | ✅ | ✅ |
