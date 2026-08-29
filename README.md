@@ -167,40 +167,97 @@ purpose.
 
 ## Architecture
 
-Five concerns are kept apart, and the separation is the design: public ingress,
-internal routing, application logic, realtime media, and remote access.
+Five concerns are kept strictly apart: public ingress, internal routing, application microservices, realtime P2P media, and remote desktop access.
 
-```
-                              Internet
-                                 │
-                          Cloudflare Tunnel          (no inbound ports opened)
-                                 │
-                        ┌────────▼────────┐
-                        │  Nginx :8080    │          routing, rate limits,
-                        │  API gateway    │          body caps, WS upgrade
-                        └────────┬────────┘
-                                 │
-   ┌──────────────┬──────────────┼───────────────┬──────────────┐
-   │              │              │               │              │
-┌──▼───┐   ┌──────▼─────┐  ┌─────▼─────┐  ┌──────▼──────┐ ┌─────▼──────┐
-│ auth │   │  server    │  │   chat    │  │  presence   │ │notification│
-│ 3001 │   │   3003     │  │   3004    │  │    3005     │ │    3006    │
-└──┬───┘   └──────┬─────┘  └─────┬─────┘  └──────┬──────┘ └─────┬──────┘
-   │              │              │               │              │
-   └──────────────┴──────┬───────┴───────────────┴──────────────┘
-                         │
-            ┌────────────┴────────────┐
-            │                         │
-      ┌─────▼──────┐            ┌─────▼─────┐
-      │ PostgreSQL │            │   Redis   │  pub/sub, presence,
-      │   :5432    │            │   :6379   │  rate limits, sessions
-      └────────────┘            └───────────┘
+```mermaid
+flowchart TD
+    %% TIER 1: CLIENT SENDER
+    subgraph T1 ["Trust Boundary 1: Client Origin (Untrusted)"]
+        direction TB
+        ClientSender["<b>Sender Client (Desktop / Web / Android)</b><br/><i>Encrypts Payload locally with AES-256-GCM · Direct P2P Media</i>"]
+    end
 
-  Client A (Desktop/Web/Android) ── /ws/call ──▶ call-service :3007 ◀── /ws/call ── Client B (Desktop/Web/Android)
-                                                 (roster, SDP, ICE relay)
-      │                                                                                        │
-      └───────────────────── WebRTC, direct: voice / video / screen ───────────────────────────┘
+    %% TIER 2: INGRESS DMZ
+    subgraph T2 ["Trust Boundary 2: Ingress & Edge DMZ"]
+        direction TB
+        CFTunnel["<b>Cloudflare Tunnel</b> (cloudflared)<br/><i>Zero Inbound Open Ports · Outbound TLS</i>"]
+        Gateway["<b>Nginx API Gateway (:8080)</b><br/><i>Rate Limiting · Route Dispatch · WebSocket Upgrade</i>"]
+        CFTunnel -->|"Forward HTTP/WS"| Gateway
+    end
+
+    %% TIER 3: SERVICES
+    subgraph T3 ["Trust Boundary 3: Internal Application Microservices Mesh"]
+        direction TB
+        ChatSvc["<b>Chat Service (:3004)</b><br/><i>E2EE Routing · Key Directory · Attachments</i>"]
+        AuthSvc["<b>Auth Service (:3001)</b><br/><i>Argon2id Hashing · JWT Rotation · OAuth</i>"]
+        ServerSvc["<b>Server Service (:3003)</b><br/><i>Server Guilds · Channel Hierarchy · RBAC Resolver</i>"]
+        PresenceSvc["<b>Presence Service (:3005)</b><br/><i>Online / Idle / Typing State</i>"]
+        CallSvc["<b>Call Service (:3007)</b><br/><i>WebRTC Signaling & Live Room Rosters</i>"]
+        RemoteGW["<b>Remote Gateway (:3008)</b><br/><i>Remote Desktop Signaling & Input Relay</i>"]
+        NotifSvc["<b>Notification Service (:3006)</b><br/><i>User Preferences · FCM Push Dispatch</i>"]
+    end
+
+    %% TIER 4: PERSISTENCE & DATA
+    subgraph T4 ["Trust Boundary 4: Data & Persistence Tier"]
+        direction LR
+        PG[("<b>PostgreSQL (:5432)</b><br/><i>Prisma ORM · Opaque Envelopes · Relational Data</i>")]
+        Redis[("<b>Redis (:6379)</b><br/><i>Pub/Sub Realtime Bus · Ephemeral Presence</i>")]
+        ObjStore[("<b>Object Storage</b><br/><i>AES-256 Encrypted Attachments</i>")]
+    end
+
+    %% TIER 5: CLIENT RECIPIENT
+    subgraph T5 ["Trust Boundary 5: Recipient Delivery & Client Decryption"]
+        direction TB
+        ClientRecipient["<b>Recipient Client (Desktop / Web / Android)</b><br/><i>Decrypts Envelope in Local Device Memory · Displays Notification</i>"]
+    end
+
+    %% TIER 6: EXTERNAL SERVICES
+    subgraph T6 ["Trust Boundary 6: External Third-Party Dependencies"]
+        direction LR
+        ExtOAuth["<b>OAuth Providers</b><br/><i>(Google / GitHub)</i>"]
+        ExtFCM["<b>Firebase (FCM)</b><br/><i>(Data-Only Push)</i>"]
+        ExtTURN["<b>STUN / TURN Relays</b><br/><i>(NAT Traversal / ICE)</i>"]
+    end
+
+    %% PRIMARY RUNTIME PATH: E2EE MESSAGE INGESTION & REALTIME FANOUT
+    ClientSender ==>|"1. Sealed Envelope (HTTPS/WSS)"| CFTunnel
+    Gateway ==>|"2. Route /api/v1/chat & /ws/chat"| ChatSvc
+    ChatSvc ==>|"3. Store Ciphertext Envelope"| PG
+    ChatSvc ==>|"4. Publish message.created"| Redis
+    Redis ==>|"5. Realtime Fanout (/ws/chat)"| ClientRecipient
+
+    %% SECONDARY & ASYNC INTEGRATIONS
+    ChatSvc -.-> ObjStore
+    Gateway -.-> AuthSvc
+    Gateway -.-> ServerSvc
+    Gateway -.-> PresenceSvc
+    Gateway -.-> CallSvc
+    Gateway -.-> RemoteGW
+
+    Redis -.->|"Event Stream"| NotifSvc
+    NotifSvc -.->|"Dispatch Push"| ExtFCM
+    ExtFCM -.->|"Background Wakeup"| ClientRecipient
+
+    AuthSvc -.-> ExtOAuth
+    CallSvc -.-> ExtTURN
+
+    %% DIRECT P2P MEDIA (BYPASSES BACKEND)
+    ClientSender <-.->|"Direct WebRTC DTLS-SRTP Mesh (Zero Backend Media)"| ClientRecipient
+
+    %% Styling
+    classDef primary fill:#1e40af,stroke:#60a5fa,stroke-width:2px,color:#ffffff;
+    classDef service fill:#0f172a,stroke:#475569,stroke-width:1px,color:#f8fafc;
+    classDef data fill:#1e293b,stroke:#64748b,stroke-width:1px,color:#f1f5f9;
+    classDef external fill:#27272a,stroke:#71717a,stroke-width:1px,color:#f4f4f5;
+
+    class ClientSender,CFTunnel,Gateway,ChatSvc,PG,Redis,ClientRecipient primary;
+    class AuthSvc,ServerSvc,PresenceSvc,CallSvc,RemoteGW,NotifSvc service;
+    class ObjStore data;
+    class ExtOAuth,ExtFCM,ExtTURN external;
 ```
+
+> **Full Documentation & Interactive Architecture**:
+> See the [Architecture Overview](https://aiyu-ayaan.github.io/BetweenUs/architecture/overview) on the documentation website for zoomable and pan-enabled diagrams, trust boundary audits, and component cards. Internal development specifications are maintained in [`development/devdocs/ARCHITECTURE.md`](development/devdocs/ARCHITECTURE.md).
 
 There is no media server. `call-service` decides who may join a call and
 introduces the participants to each other; everyone then holds one
