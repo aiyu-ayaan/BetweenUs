@@ -59,6 +59,7 @@ object BetweenUsIcons {
     val OneTime = R.drawable.ic_one_time
     val Palette = R.drawable.ic_palette
     val Paperclip = R.drawable.ic_paperclip
+    val Pause = R.drawable.ic_pause
     val Pencil = R.drawable.ic_pencil
     val Phone = R.drawable.ic_phone
     val Pin = R.drawable.ic_pin

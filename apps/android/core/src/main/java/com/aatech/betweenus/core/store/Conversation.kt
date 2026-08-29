@@ -499,6 +499,10 @@ object Conversation {
         contentType: String,
         bytes: ByteArray,
         onProgress: ((Float) -> Unit)? = null,
+        /** Seconds, for a recording. See [MessageAttachment.duration]. */
+        duration: Float? = null,
+        /** Bar heights, for a recording. See [MessageAttachment.waveform]. */
+        waveform: List<Float> = emptyList(),
     ): MessageAttachment {
         val photo = asJpeg(bytes, contentType)
         val payload = photo?.bytes ?: bytes
@@ -517,6 +521,8 @@ object Conversation {
             epoch = epoch,
             width = pixels?.first,
             height = pixels?.second,
+            duration = duration,
+            waveform = waveform,
         )
     }
 

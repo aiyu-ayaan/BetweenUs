@@ -54,7 +54,18 @@ object Outbox {
         val queued: Int,
     )
 
-    private data class Item(val uri: Uri, val name: String, val contentType: String)
+    private data class Item(
+        val uri: Uri,
+        val name: String,
+        val contentType: String,
+        /**
+         * Measured while this was recorded, when it was. Rides inside the
+         * encrypted manifest with everything else about the file, so the
+         * server learns nothing from it - and every client draws the same
+         * shape for the same message.
+         */
+        val voice: VoiceNote.Recorded? = null,
+    )
 
     private data class Send(
         val channelId: String,
@@ -163,6 +174,8 @@ object Outbox {
         items: List<PickedPreview>,
         replyTo: MessageReply? = null,
         viewOnce: Boolean = false,
+        /** Set when the single item is a recording this app just made. */
+        voice: VoiceNote.Recorded? = null,
     ) {
         init(context)
         _failures.update { it - channelId }
@@ -172,7 +185,7 @@ object Outbox {
             Send(
                 channelId = channelId,
                 caption = caption,
-                items = items.map { Item(it.uri, it.name, it.contentType) },
+                items = items.map { Item(it.uri, it.name, it.contentType, voice) },
                 replyTo = replyTo,
                 viewOnce = viewOnce,
             ),
@@ -218,6 +231,8 @@ object Outbox {
                     name = prepared.name,
                     contentType = prepared.contentType,
                     bytes = prepared.bytes,
+                    duration = item.voice?.duration,
+                    waveform = item.voice?.waveform.orEmpty(),
                     // Across the whole batch rather than per file: three files
                     // is one wait, and a bar that restarts twice reads as a
                     // send that has gone wrong.

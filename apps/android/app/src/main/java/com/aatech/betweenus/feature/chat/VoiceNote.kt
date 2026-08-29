@@ -43,10 +43,30 @@ object VoiceNote {
     const val MIN_SECONDS: Int = 1
 
     /**
+     * How many bars a voice message is drawn with. Mirrors
+     * `VOICE_WAVEFORM_BARS` in `packages/shared-types`, and the two have to
+     * agree or a message drawn on a phone is a different width to the same one
+     * on a laptop.
+     */
+    const val WAVEFORM_BARS: Int = 48
+
+    /** No bar is ever shorter than this, so a pause is a line and not a hole. */
+    private const val MIN_BAR = 0.08f
+
+    /** A finished recording: the file, and what it looked like being made. */
+    data class Recorded(
+        val file: PickedPreview,
+        /** Seconds, rounded to a tenth - the label, not a seek position. */
+        val duration: Float,
+        /** Bar heights 0..1, [WAVEFORM_BARS] of them. */
+        val waveform: List<Float>,
+    )
+
+    /**
      * A recording in progress.
      *
-     * Two ways out, and they are not the same. [stop] returns the file; [cancel]
-     * throws it away. Both release the microphone.
+     * Two ways out, and they are not the same. [stop] returns the recording;
+     * [cancel] throws it away. Both release the microphone.
      */
     class Recording internal constructor(
         private val recorder: MediaRecorder,
@@ -56,8 +76,38 @@ object VoiceNote {
     ) {
         private var finished = false
 
+        /**
+         * The level, sampled while recording.
+         *
+         * `getMaxAmplitude` is the peak since the previous call, which makes it
+         * a meter and a consumable in one - so it has to be read on a steady
+         * beat by exactly one caller, and [sample] is that caller. Reading it
+         * anywhere else would silently steal from the waveform.
+         */
+        private val samples = ArrayList<Float>()
+
         /** Seconds recorded so far, for the counter on screen. */
         fun elapsed(): Float = (System.currentTimeMillis() - startedAt) / 1000f
+
+        /**
+         * Takes one level reading. Called from the screen's ticker, because
+         * that loop already exists and this has to run on a steady beat.
+         *
+         * Returns the reading so the composer can draw a live meter from the
+         * same numbers that end up in the manifest - two meters that disagree
+         * would be two chances to be wrong.
+         */
+        fun sample(): Float {
+            if (finished) return 0f
+            // 32767 is the top of a 16-bit sample, which is what the recorder
+            // reports against whatever the input gain happens to be.
+            val level = runCatching { recorder.maxAmplitude / 32_767f }.getOrDefault(0f)
+            samples.add(level)
+            return level
+        }
+
+        /** The tail of what has been measured, for the live meter. */
+        fun levels(): List<Float> = samples.toList()
 
         /**
          * Finishes and returns what was recorded, or null when it was too
@@ -67,8 +117,9 @@ object VoiceNote {
          * captured anything, which is exactly the too-short case, so the two
          * failures answer the same way rather than one of them crashing.
          */
-        fun stop(): PickedPreview? {
+        fun stop(): Recorded? {
             if (finished) return null
+            val measured = samples.toList()
             finished = true
 
             val seconds = elapsed()
@@ -81,7 +132,11 @@ object VoiceNote {
                 file.delete()
                 return null
             }
-            return PickedPreview(file.toUri(), file.name, contentType)
+            return Recorded(
+                file = PickedPreview(file.toUri(), file.name, contentType),
+                duration = Math.round(seconds * 10) / 10f,
+                waveform = toWaveform(measured),
+            )
         }
 
         /** Abandons it: the microphone goes back, and so does the disk. */
@@ -172,6 +227,35 @@ object VoiceNote {
         val stamp = java.text.SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US)
             .format(java.util.Date(at))
         return "voice_$stamp"
+    }
+
+    /**
+     * Raw amplitude samples, as the bars a player draws.
+     *
+     * Two steps, and the second is the one that matters. Downsampling to a
+     * fixed count makes every message the same width, so a three-second
+     * message and a three-minute one are the same shape of thing. Normalising
+     * against the loudest bar makes a quiet recording look like a recording
+     * rather than like silence - input gain varies by an order of magnitude
+     * between phones, and a waveform is read as a shape, never a measurement.
+     *
+     * A floor under every bar, because a waveform with gaps in it reads as a
+     * damaged file rather than as a pause for breath.
+     */
+    fun toWaveform(samples: List<Float>, bars: Int = WAVEFORM_BARS): List<Float> {
+        if (samples.isEmpty()) return emptyList()
+
+        val buckets = List(bars) { index ->
+            val from = index * samples.size / bars
+            val to = maxOf(from + 1, (index + 1) * samples.size / bars)
+            (from until minOf(to, samples.size)).map { samples[it] }.average().toFloat()
+        }
+
+        val loudest = buckets.max()
+        // Everything was silence: a flat line is honest, and dividing by zero
+        // is not.
+        if (loudest <= 0f) return buckets.map { MIN_BAR }
+        return buckets.map { (it / loudest).coerceIn(MIN_BAR, 1f) }
     }
 
     /** `m:ss`, which is how long a voice message is ever worth spelling out. */

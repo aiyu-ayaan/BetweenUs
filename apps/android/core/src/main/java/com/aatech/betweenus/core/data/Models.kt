@@ -620,10 +620,44 @@ data class MessageAttachment(
     val epoch: Int,
     val width: Int? = null,
     val height: Int? = null,
+    /**
+     * How long an audio or video attachment runs, in seconds.
+     *
+     * Carried so a voice message can say "0:07" before a byte of it has been
+     * fetched - the one number somebody wants *before* deciding to listen.
+     */
+    val duration: Float? = null,
+    /**
+     * The shape of a voice message, as bar heights from 0 to 1.
+     *
+     * Measured on the sender while it was recorded, not derived here. A
+     * receiver cannot compute it without decoding the whole file, which means
+     * downloading it first - and the waveform is meant to be visible before
+     * that. It also means every client draws the same shape for the same
+     * message, which it has to for the bars to be trusted as a position.
+     *
+     * Empty for audio picked off the phone rather than recorded, and for
+     * anything sent before waveforms existed. The player falls back to a
+     * placeholder shape in both cases and still plays.
+     */
+    val waveform: List<Float> = emptyList(),
 ) {
     val isImage: Boolean get() = contentType.startsWith("image/")
     val isVideo: Boolean get() = contentType.startsWith("video/")
     val isAudio: Boolean get() = contentType.startsWith("audio/")
+
+    /**
+     * Whether this should be drawn as somebody talking rather than as a file
+     * with a player stapled to it.
+     *
+     * Two signals, and either is enough. A recorded note carries a waveform,
+     * which nothing else does; one sent before waveforms existed is recognised
+     * by the name this client gives them. That name check is also what keeps a
+     * shared music track out - somebody sharing an album track wants its name
+     * and a download, not a voice bubble.
+     */
+    val isVoiceNote: Boolean
+        get() = isAudio && (waveform.isNotEmpty() || VOICE_NAME.matches(name))
 
     fun toJson(): JSONObject = JSONObject()
         .put("key", key)
@@ -636,9 +670,16 @@ data class MessageAttachment(
         .apply {
             width?.let { put("width", it) }
             height?.let { put("height", it) }
+            duration?.let { put("duration", it.toDouble()) }
+            if (waveform.isNotEmpty()) {
+                put("waveform", JSONArray().apply { waveform.forEach { put(it.toDouble()) } })
+            }
         }
 
     companion object {
+        /** The name this client gives a recording. See [isVoiceNote]. */
+        private val VOICE_NAME = Regex("^voice_\\d{8}_\\d{6}\\..+$")
+
         fun from(json: JSONObject) = MessageAttachment(
             key = json.optString("key"),
             url = json.optString("url"),
@@ -649,6 +690,10 @@ data class MessageAttachment(
             epoch = json.optInt("epoch"),
             width = json.optInt("width").takeIf { it > 0 },
             height = json.optInt("height").takeIf { it > 0 },
+            duration = json.optDouble("duration").takeIf { !it.isNaN() && it > 0 }?.toFloat(),
+            waveform = json.optJSONArray("waveform")?.let { array ->
+                List(array.length()) { at -> array.optDouble(at).toFloat() }
+            }.orEmpty(),
         )
     }
 }

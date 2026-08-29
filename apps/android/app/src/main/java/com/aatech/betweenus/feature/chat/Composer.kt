@@ -34,6 +34,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.padding
@@ -124,7 +125,7 @@ fun Composer(
      * finishes it, and there is no moment in between where anybody would look
      * at it and change their mind.
      */
-    onSendVoice: (PickedPreview, Boolean) -> Unit,
+    onSendVoice: (VoiceNote.Recorded, Boolean) -> Unit,
     onSend: (String) -> Unit,
 ) {
     // A caret position, not just a string: the `:` menu has to know what is
@@ -144,6 +145,8 @@ fun Composer(
     val recorder = remember { mutableStateOf<VoiceNote.Recording?>(null) }
     var recording by remember { mutableStateOf(false) }
     var recordedFor by remember { mutableFloatStateOf(0f) }
+    /** The tail of the level, so the bar shows the microphone is live. */
+    var levels by remember { mutableStateOf<List<Float>>(emptyList()) }
     var recordingFailed by remember { mutableStateOf(false) }
     /**
      * Whether the recording about to be sent is one-time.
@@ -244,6 +247,7 @@ fun Composer(
         recorder.value = started
         recording = started != null
         recordedFor = 0f
+        levels = emptyList()
         recordingFailed = started == null
     }
 
@@ -265,12 +269,20 @@ fun Composer(
         voiceOnce = false
     }
 
-    // The counter, and nothing else: one loop for as long as a recording is
-    // happening, and none at all the rest of the time.
+    // The counter and the meter, on one loop for as long as a recording is
+    // happening and none at all the rest of the time.
+    //
+    // A hundred milliseconds rather than two hundred, because this loop is now
+    // also what samples the waveform: `getMaxAmplitude` reports the peak since
+    // it was last read, so the beat it is read on *is* the resolution of the
+    // recorded shape. Ten a second is a syllable or so per bar.
     LaunchedEffect(recording) {
         while (recording) {
-            recordedFor = recorder.value?.elapsed() ?: 0f
-            kotlinx.coroutines.delay(200)
+            val current = recorder.value
+            recordedFor = current?.elapsed() ?: 0f
+            current?.sample()
+            levels = current?.levels()?.takeLast(LIVE_BARS).orEmpty()
+            kotlinx.coroutines.delay(100)
         }
     }
 
@@ -410,6 +422,7 @@ fun Composer(
                 if (recording) {
                     RecordingStrip(
                         seconds = recordedFor,
+                        levels = levels,
                         oneTime = voiceOnce,
                         onOneTime = { voiceOnce = it },
                         onDiscard = { cancelRecording() },
@@ -596,6 +609,7 @@ fun Composer(
 @Composable
 private fun RowScope.RecordingStrip(
     seconds: Float,
+    levels: List<Float>,
     oneTime: Boolean,
     onOneTime: (Boolean) -> Unit,
     onDiscard: () -> Unit,
@@ -639,10 +653,39 @@ private fun RowScope.RecordingStrip(
         color = scheme.onSurface,
     )
 
-    Spacer(Modifier.weight(1f))
+    Spacer(Modifier.width(10.dp))
+
+    // Live level, so the bar answers "is this hearing me" without anybody
+    // having to send a message to find out. Scaled against a fixed ceiling
+    // rather than against its own loudest sample: a self-normalising meter
+    // shows full bars in a silent room, which is the opposite of the point.
+    Row(
+        modifier = Modifier
+            .weight(1f)
+            .height(24.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        val leading = LIVE_BARS - levels.size
+        repeat(LIVE_BARS) { index ->
+            val level = levels.getOrElse(index - leading) { 0f }
+            Box(
+                Modifier
+                    .weight(1f)
+                    .height((2f + (level / 0.25f).coerceAtMost(1f) * 20f).dp)
+                    .clip(RoundedCornerShape(1.dp))
+                    .background(scheme.onSurfaceVariant),
+            )
+        }
+    }
+
+    Spacer(Modifier.width(6.dp))
 
     OneTimeAction(on = oneTime, onChange = onOneTime)
 }
+
+/** How much of the live level the recording bar shows. Roughly three seconds. */
+private const val LIVE_BARS = 32
 
 /**
  * The one-time switch.

@@ -100,6 +100,39 @@ class CacheCodecTest {
     }
 
     @Test
+    fun `a voice note survives a round trip, waveform and all`() {
+        val voice = MessageAttachment(
+            key = "k1",
+            url = "/api/v1/uploads/k1",
+            name = "voice_20260830_011311.ogg",
+            contentType = "audio/ogg",
+            size = 97_280,
+            iv = "aXY",
+            epoch = 2,
+            duration = 5.4f,
+            waveform = listOf(0.08f, 0.5f, 1f, 0.25f),
+        )
+        roundTrip(voice, MessageAttachment::toJson, MessageAttachment::from)
+
+        // The two signals that make something a voice note rather than a file
+        // with a player stapled to it. Either is enough, and neither may catch
+        // a music track somebody chose to share.
+        assertTrue(voice.isVoiceNote)
+        assertTrue(voice.copy(waveform = emptyList()).isVoiceNote)
+        assertFalse(voice.copy(name = "interview.mp3", waveform = emptyList()).isVoiceNote)
+        assertFalse(voice.copy(contentType = "video/mp4", waveform = emptyList()).isVoiceNote)
+        // The name check must not match something merely starting with the word.
+        assertFalse(voice.copy(name = "voice_memo.ogg", waveform = emptyList()).isVoiceNote)
+
+        // Audio picked off the phone has no waveform and must survive as none -
+        // an empty list that came back as a single zero bar would draw a
+        // waveform claiming the recording was silent.
+        val picked = voice.copy(name = "song.mp3", contentType = "audio/mpeg", waveform = emptyList(), duration = null)
+        roundTrip(picked, MessageAttachment::toJson, MessageAttachment::from)
+        assertTrue(MessageAttachment.from(picked.toJson()).waveform.isEmpty())
+    }
+
+    @Test
     fun `message survives a round trip, envelope and all`() {
         val message = Message(
             id = "m1",

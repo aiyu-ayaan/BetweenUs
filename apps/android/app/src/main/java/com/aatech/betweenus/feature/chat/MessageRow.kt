@@ -527,7 +527,20 @@ fun MessageRow(
                                     if (readable.text.isNotBlank() || album.isNotEmpty()) {
                                         Spacer(Modifier.height(8.dp))
                                     }
-                                    AttachmentCard(channelId, attachment, onViewImage, onPlayVideo)
+                                    // Somebody talking, not a file that happens
+                                    // to be audio. A shared music track still
+                                    // gets the ordinary card and its name,
+                                    // because that is what sharing one means.
+                                    if (attachment.isVoiceNote) {
+                                        VoiceMessage(
+                                            channelId = channelId,
+                                            attachment = attachment,
+                                            author = message.author,
+                                            mine = isSelf,
+                                        )
+                                    } else {
+                                        AttachmentCard(channelId, attachment, onViewImage, onPlayVideo)
+                                    }
                                 }
                                 }
                             }

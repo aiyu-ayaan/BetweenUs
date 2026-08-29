@@ -664,9 +664,10 @@ fun ChatScreen(
                     context = context,
                     channelId = channelId,
                     caption = "",
-                    items = listOf(recording),
+                    items = listOf(recording.file),
                     replyTo = replyingTo,
                     viewOnce = viewOnce,
+                    voice = recording,
                 )
                 replyingTo = null
             },
