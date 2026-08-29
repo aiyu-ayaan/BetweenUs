@@ -63,6 +63,15 @@ interface Window {
     setUnreadCount: (count: number) => void;
     /** Dynamically adjust window titlebar controls overlay color to match theme. */
     setTitleBarOverlay?: (overlay: { color: string; symbolColor: string }) => void;
+    /**
+     * Hides this window from screen capture while a one-time message is open.
+     *
+     * The desktop counterpart of Android's `FLAG_SECURE`, applied by the
+     * operating system. Optional because the browser build has no bridge at
+     * all, which is the honest answer there: a page has no say over the screen
+     * it is drawn on.
+     */
+    protectContent?: (on: boolean) => Promise<boolean>;
     /** Machine-local switches; account preferences live in notification-service. */
     getAppSettings: () => Promise<{
       launchOnStartup: boolean;

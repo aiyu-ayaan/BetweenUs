@@ -67,6 +67,18 @@ const api = {
     }>
   > => ipcRenderer.invoke('screen:sources'),
   /** Every display in real pixels, with the capture source that shows it. */
+  /**
+   * Hides this window from screen capture while a one-time message is open.
+   *
+   * The desktop counterpart of Android's `FLAG_SECURE`, enforced by the
+   * operating system: print-screen, the Snipping Tool and screen recorders all
+   * capture nothing where the window is. Returns false when the main process
+   * could not apply it, which is what the browser build always gets - a page
+   * has no say over the screen it is drawn on.
+   */
+  protectContent: (on: boolean): Promise<boolean> =>
+    ipcRenderer.invoke('screen:protect', on),
+
   screenDisplays: (): Promise<
     Array<{
       id: string;

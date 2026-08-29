@@ -30,6 +30,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -109,16 +110,17 @@ fun OneTimeCard(
             .background(scheme.primary.copy(alpha = 0.08f))
             .border(1.dp, scheme.primary.copy(alpha = 0.4f), RoundedCornerShape(12.dp))
             .clickable {
-                open = true
-                // Held before the burn, not after. Burning is what opening
-                // *means* - closing the viewer is not a promise anybody can
-                // keep, a phone can be killed and a battery can go - so the
-                // server destroys the row while the viewer is still open, and
-                // without the hold the row's removal took the viewer down with
-                // it. That was the picture vanishing the instant it was
-                // opened.
+                // Held first, and burned later - by the viewer, once it
+                // actually has the bytes.
+                //
+                // Burning from here was the bug: the burn deletes the blob
+                // from the object store, and the viewer was still downloading
+                // that blob. The two raced, and on a phone the download always
+                // lost, so the picture never arrived at all. "You have had
+                // your look" has to mean the bytes reached you, not that you
+                // tapped something.
                 Conversation.holdMessage(messageId)
-                if (!mine) Conversation.burn(messageId)
+                open = true
             }
             .padding(horizontal = 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -147,6 +149,9 @@ fun OneTimeCard(
         OneTimeViewer(
             channelId = channelId,
             attachments = attachments,
+            // The author looking at their own spends nobody's look, so there
+            // is nothing for their viewer to report.
+            onSeen = if (mine) null else ({ Conversation.burn(messageId) }),
             onDismiss = {
                 open = false
                 // Now it may go, if the server said so while it was open.
@@ -182,6 +187,8 @@ fun describeOneTime(attachments: List<MessageAttachment>): String {
 private fun OneTimeViewer(
     channelId: String,
     attachments: List<MessageAttachment>,
+    /** Called once every file is decrypted and on screen. This is what burns it. */
+    onSeen: (() -> Unit)?,
     onDismiss: () -> Unit,
 ) {
     Dialog(
@@ -201,6 +208,54 @@ private fun OneTimeViewer(
         val index = at.coerceIn(0, attachments.lastIndex)
         val current = attachments[index]
 
+        /**
+         * Every file, fetched and decrypted before anything is reported as
+         * seen.
+         *
+         * All of them, not the one on screen: burning destroys the blobs of
+         * the whole message, so a second picture still to fetch when the first
+         * is reported would be a picture whose bytes are already gone. One
+         * message, one look, and everything in it has to arrive first.
+         *
+         * Held here and nowhere else - deliberately not in `MediaCache`, which
+         * is keyed on the storage key and would outlive the message this whole
+         * feature exists to destroy.
+         */
+        var loaded by remember { mutableStateOf<List<android.graphics.Bitmap?>?>(null) }
+        var failed by remember { mutableStateOf(false) }
+
+        val context = LocalContext.current
+        LaunchedEffect(attachments) {
+            runCatching {
+                attachments.map { attachment ->
+                    val bytes = Conversation.openAttachment(channelId, attachment)
+                    if (attachment.contentType.startsWith("image/")) {
+                        decodeDownsampled(bytes, MAX_DECODE_EDGE_PX)
+                    } else {
+                        // A video or a voice note cannot be played from a byte
+                        // array, so it goes to disk under the key the ordinary
+                        // players already look in - otherwise they would fetch
+                        // it themselves, from a blob this look is about to
+                        // destroy.
+                        //
+                        // It does not linger: the plaintext is removed with
+                        // the message, and the removal is what `releaseMessage`
+                        // applies when this viewer closes.
+                        MediaCache.putVideo(
+                            attachment.key,
+                            cacheDecryptedMedia(context, bytes, attachment.name),
+                        )
+                        null
+                    }
+                }
+            }.onSuccess { decoded ->
+                loaded = decoded
+                // Reported only now, with the bytes on this device. This is
+                // the ordering the whole fix turns on.
+                onSeen?.invoke()
+            }.onFailure { failed = true }
+        }
+
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -215,7 +270,21 @@ private fun OneTimeViewer(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
-                OneTimeMedia(channelId, current)
+                when {
+                    failed -> Text(
+                        text = "That could not be opened",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+
+                    loaded == null -> Text(
+                        text = "Decrypting…",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color.White.copy(alpha = 0.7f),
+                    )
+
+                    else -> OneTimeMedia(channelId, current, loaded?.getOrNull(index))
+                }
 
                 if (attachments.size > 1) {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -250,49 +319,51 @@ private fun OneTimeViewer(
     }
 }
 
-/** One file inside the viewer: decrypted here, never written anywhere. */
+/**
+ * One file inside the viewer.
+ *
+ * Handed its bitmap rather than fetching one: the viewer above has already
+ * downloaded and decrypted every file, because reporting the look is what
+ * destroys the blobs and nothing may still be waiting on them when it does.
+ */
 @Composable
-private fun OneTimeMedia(channelId: String, attachment: MessageAttachment) {
-    val scheme = MaterialTheme.colorScheme
-    var bitmap by remember(attachment.key) { mutableStateOf<android.graphics.Bitmap?>(null) }
-    var failed by remember(attachment.key) { mutableStateOf(false) }
-
+private fun OneTimeMedia(
+    channelId: String,
+    attachment: MessageAttachment,
+    bitmap: android.graphics.Bitmap?,
+) {
     val isImage = attachment.contentType.startsWith("image/")
-
-    // Decrypted here and held nowhere. Deliberately not put in `MediaCache`,
-    // unlike every other picture: this one is about to stop existing, and a
-    // copy in a cache keyed on the storage key would outlive the message that
-    // the whole feature exists to destroy.
-    LaunchedEffect(attachment.key) {
-        if (!isImage) return@LaunchedEffect
-        runCatching { Conversation.openAttachment(channelId, attachment) }
-            .onSuccess { bytes -> bitmap = decodeDownsampled(bytes, MAX_DECODE_EDGE_PX) }
-            .onFailure { failed = true }
-    }
+    // A local binding rather than the parameter: a nullable parameter cannot
+    // be smart-cast across the branches below.
+    val drawable = bitmap
 
     when {
-        failed -> Text(
-            text = "That could not be opened",
+        isImage && drawable == null -> Text(
+            text = "That could not be drawn",
             style = MaterialTheme.typography.bodyMedium,
-            color = scheme.error,
+            color = MaterialTheme.colorScheme.error,
         )
 
-        isImage && bitmap == null -> Text(
-            text = "Decrypting…",
-            style = MaterialTheme.typography.bodyMedium,
-            color = Color.White.copy(alpha = 0.7f),
-        )
-
-        isImage -> Image(
-            bitmap = bitmap!!.asImageBitmap(),
+        isImage && drawable != null -> Image(
+            bitmap = drawable.asImageBitmap(),
             contentDescription = null,
             contentScale = ContentScale.Fit,
             modifier = Modifier.fillMaxWidth(),
         )
 
-        // Video and audio: the ordinary player, inside a secure window. It has
-        // no download affordance of its own, and the file it is playing is
-        // already gone from the server by the time this is on screen.
+        // A voice note, played in place. It reads the decrypted file the
+        // prefetch above already put in `MediaCache`, so nothing here goes
+        // back to a blob this look has destroyed.
+        attachment.isAudio -> VoiceMessage(
+            channelId = channelId,
+            attachment = attachment,
+            author = null,
+            mine = false,
+            fileName = attachment.name.takeUnless { attachment.isVoiceNote },
+        )
+
+        // Video: the ordinary card, inside a secure window, playing the file
+        // the prefetch wrote rather than fetching one of its own.
         else -> {
             Spacer(Modifier.height(8.dp))
             AttachmentCard(channelId, attachment, { _, _ -> }, { _, _ -> })

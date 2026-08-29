@@ -518,15 +518,16 @@ function OneTimeAttachments({
       <button
         type="button"
         onClick={() => {
-          setOpen(true);
-          // Held before the burn, not after. Burning is what opening *means*
-          // - closing the viewer is not a promise anybody can keep, a window
-          // can be shut and a machine can lose power - so the server destroys
-          // the row while the viewer is still open, and without the hold the
-          // row's removal took the viewer down with it. That was the picture
-          // vanishing the instant it was opened.
+          // Held first, and burned later - by the viewer, once it actually
+          // has the bytes.
+          //
+          // Burning from here was the bug: the burn deletes the blob from the
+          // object store, and the viewer was still downloading that blob. The
+          // two raced, and on a phone the download always lost, so the picture
+          // never arrived at all. "You have had your look" has to mean the
+          // bytes reached you, not that you pressed something.
           holdMessage(messageId);
-          if (!mine) void burnMessage(messageId);
+          setOpen(true);
         }}
         className="mt-1 flex w-full max-w-sm cursor-pointer items-center gap-3 rounded-lg border border-accent/40 bg-accent/[0.06] px-3 py-2.5 text-left transition-colors duration-200 hover:bg-accent/[0.12]"
       >
@@ -545,6 +546,9 @@ function OneTimeAttachments({
         <OneTimeViewer
           channelId={channelId}
           attachments={attachments}
+          // The author looking at their own spends nobody's look, so there is
+          // nothing for their viewer to report.
+          onSeen={mine ? undefined : () => void burnMessage(messageId)}
           onClose={() => {
             setOpen(false);
             // Now it may go, if the server said so while it was open.
@@ -589,15 +593,80 @@ export function describeOneTime(attachments: MessageAttachment[]): string {
 function OneTimeViewer({
   channelId,
   attachments,
+  onSeen,
   onClose,
 }: {
   channelId: string;
   attachments: MessageAttachment[];
+  /** Called once every file is decrypted and on screen. This is what burns it. */
+  onSeen?: () => void;
   onClose: () => void;
 }): JSX.Element {
   const [at, setAt] = useState(0);
   const index = Math.min(at, attachments.length - 1);
   const current = attachments[index];
+
+  /**
+   * Every file, fetched and decrypted before anything is reported as seen.
+   *
+   * All of them, not the one on screen: burning destroys the blobs of the
+   * whole message, so a second picture left to fetch when the first is
+   * reported would be a picture whose bytes are already gone. One message,
+   * one look, and everything in it has to arrive before the look is spent.
+   */
+  const [urls, setUrls] = useState<string[] | null>(null);
+  const [failure, setFailure] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const made: string[] = [];
+
+    void Promise.all(attachments.map((file) => openAttachment(channelId, file)))
+      .then((blobs) => {
+        if (cancelled) return;
+        for (const blob of blobs) made.push(URL.createObjectURL(blob));
+        setUrls(made);
+      })
+      .catch(() => {
+        if (!cancelled) setFailure('This message could not be opened');
+      });
+
+    return () => {
+      cancelled = true;
+      for (const url of made) URL.revokeObjectURL(url);
+    };
+  }, [channelId, attachments]);
+
+  /**
+   * Reported once, and only once the bytes are in hand.
+   *
+   * This is the whole ordering fix. The burn deletes the blobs, so reporting
+   * before the download finished raced the download - and lost.
+   */
+  const reported = useRef(false);
+  useEffect(() => {
+    if (!urls || reported.current) return;
+    reported.current = true;
+    onSeen?.();
+  }, [urls, onSeen]);
+
+  /**
+   * Hidden from screen capture for exactly as long as this is open.
+   *
+   * The desktop counterpart of Android's `FLAG_SECURE`, and enforced by the
+   * operating system rather than by this app. It answers false in a browser,
+   * where a page has no say over the screen it is drawn on - which is why the
+   * sentence below changes with it rather than claiming the same thing twice.
+   */
+  const [protectedWindow, setProtectedWindow] = useState(false);
+  useEffect(() => {
+    const protect = window.betweenus?.protectContent;
+    if (!protect) return;
+    void protect(true).then(setProtectedWindow).catch(() => undefined);
+    return () => {
+      void protect(false).catch(() => undefined);
+    };
+  }, []);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent): void => {
@@ -622,7 +691,13 @@ function OneTimeViewer({
         onClick={(event) => event.stopPropagation()}
         className="flex max-h-full w-full max-w-3xl flex-col items-center gap-3"
       >
-        {current && <OneTimeMedia channelId={channelId} attachment={current} />}
+        {failure ? (
+          <p className="text-sm text-danger">{failure}</p>
+        ) : !urls ? (
+          <p className="text-sm text-slate-400">Decrypting…</p>
+        ) : (
+          current && <OneTimeMedia attachment={current} url={urls[index] ?? ''} />
+        )}
 
         {attachments.length > 1 && (
           <p className="text-xs text-slate-400">
@@ -630,11 +705,14 @@ function OneTimeViewer({
           </p>
         )}
 
-        {/* Said plainly, because the alternative is implying a guarantee no
-            application on a general-purpose computer can keep. */}
+        {/* What this actually protects, which is not the same on both builds.
+            The Electron window can be excluded from screen capture by the
+            operating system; a browser tab cannot be, and saying otherwise
+            would be lying to the person deciding what to send. */}
         <p className="max-w-md text-center text-xs text-slate-500">
-          This is gone once you close it. Saving and sharing are switched off here, but no app can
-          stop a screenshot — only send what you would trust them with.
+          {protectedWindow
+            ? 'This is gone once you close it. Screenshots and screen recording are blocked here, but another camera is not — only send what you would trust them with.'
+            : 'This is gone once you close it. Saving and sharing are switched off, but a browser cannot stop a screenshot — only send what you would trust them with.'}
         </p>
 
         <button
@@ -649,19 +727,20 @@ function OneTimeViewer({
   );
 }
 
-/** One file inside the viewer, drawn with everything that copies it removed. */
+/**
+ * One file inside the viewer, drawn with everything that copies it removed.
+ *
+ * Handed a URL rather than fetching one: the viewer above has already
+ * downloaded and decrypted every file, because reporting the look is what
+ * destroys the blobs and nothing may still be waiting on them when it does.
+ */
 function OneTimeMedia({
-  channelId,
   attachment,
+  url,
 }: {
-  channelId: string;
   attachment: MessageAttachment;
+  url: string;
 }): JSX.Element {
-  const { url, error } = useDecrypted(channelId, attachment);
-
-  if (error) return <p className="text-sm text-danger">{error}</p>;
-  if (!url) return <p className="text-sm text-slate-400">Decrypting…</p>;
-
   if (attachment.contentType.startsWith('image/')) {
     return (
       <img

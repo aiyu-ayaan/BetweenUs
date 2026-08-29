@@ -1050,6 +1050,31 @@ function releaseDesktopComposition(all = false): void {
 
 ipcMain.handle('screen:release', (): void => releaseDesktopComposition());
 
+/**
+ * Excludes this window from screen capture, for as long as a one-time message
+ * is open in it.
+ *
+ * `setContentProtection` is the desktop counterpart of Android's `FLAG_SECURE`
+ * and it is enforced by the platform rather than by this app: on Windows the
+ * window is set to `WDA_EXCLUDEFROMCAPTURE`, so the print-screen key, the
+ * Snipping Tool and a screen recorder all come away with nothing where the
+ * window was. macOS does the same through its sharing type.
+ *
+ * It is per-window and lasts exactly as long as the viewer, because a browser
+ * window that could never be screenshotted would be a worse app for the sake
+ * of one feature.
+ *
+ * This is the one thing the browser build cannot have. A page has no say in
+ * whether the operating system captures the screen it is drawn on, so the web
+ * client says so instead of pretending - see the viewer's own copy.
+ */
+ipcMain.handle('screen:protect', (event, on: unknown): boolean => {
+  const window = BrowserWindow.fromWebContents(event.sender);
+  if (!window || window.isDestroyed()) return false;
+  window.setContentProtection(on === true);
+  return true;
+});
+
 // --- Remote desktop, agent side ---------------------------------------------
 //
 // The renderer holds the socket to remote-gateway and decides nothing about
