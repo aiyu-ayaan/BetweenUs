@@ -109,6 +109,31 @@ downgrading to anonymous, and caps its frame size — 64 KB for chat/presence,
 256 KB for call/remote (`ws`'s 100 MB default would buffer a full frame in
 the service's heap before any gateway code ran).
 
+## What one account may learn about another
+
+Presence is scoped, never broadcast to everybody connected: `audience.ts` answers
+"who may hear about this user" as the people who share a server or an accepted
+friendship, and the same set scopes the events, the initial sync and the
+last-seen query. The symmetry is what makes it cheap — the set of people allowed
+to hear about a user is the set that user is allowed to hear about — so an event
+is scoped once rather than once per recipient.
+
+**Last seen has its own setting on top of that** — `everyone` / `friends` /
+`nobody`, where `everyone` means the audience above and not the world. `nobody`
+is reciprocal: an account that hides its own does not get to read anybody else's,
+which is what keeps the setting from being a one-way mirror. It is enforced in
+`PresenceStore.lastSeenOf`, the only way to reach the value, and never by a
+client hiding something it was sent.
+
+An excluded timestamp is **absent rather than refused**, and absent is exactly
+what a brand-new account looks like — so a missing line cannot be used to test
+for the setting, or for its tier. The status still arrives; a query that went
+silent would itself be an answer.
+
+`invisible` is a different switch and does a different thing: it hides that you
+are here *now*, and freezes the last-seen value at the last moment you were
+genuinely visible rather than letting it tick along behind the disguise.
+
 ## Clocks
 
 **No expiry is ever decided on a device clock.** A device clock belongs to
@@ -173,6 +198,12 @@ tokens, secrets, and FCM push tokens are never logged.
   people are still members of any room they both joined.
 - **`chatsClearedAt` hides rather than redacts** — the ciphertext is still
   in the table and in every backup taken since.
+- **Last-seen privacy does not bind an administrator.** The admin panel reads
+  `users.lastSeenAt` directly whatever the account chose, because an operator
+  can read their own Postgres with or without this code — the panel shows the
+  setting beside the value rather than pretending to honour it.
+- **Hiding last seen does not hide being online.** The two are separate
+  switches: `nobody` stops the timestamp, and only `invisible` stops the dot.
 - **The username Bloom filter is per process** — a name registered against
   another instance reads as available here until this one restarts, and the
   unique constraint then refuses the registration.

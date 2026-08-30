@@ -66,7 +66,14 @@ than the column reads as one that never changed it. The DTO caps it at
 `lastSeenAt` is nullable and is a **flush target, not the live value**: while
 somebody is connected the answer is in `presence:lastseen` in Redis, and
 presence-service writes here when their last window closes. Reads take the
-later of the two. It is never written while the account is invisible — see
+later of the two. It is never written while the account is invisible.
+
+`lastSeenVisibility` (`LastSeenVisibility`: `EVERYONE` / `FRIENDS` / `NOBODY`)
+decides who may read it. `EVERYONE` is a ceiling rather than the whole world —
+presence is already scoped to people who share a server or a friendship — and
+`NOBODY` is **reciprocal**: an account that hides its own does not get to read
+anybody else's. That rule lives in presence-service and not here, because it is
+a decision about a request and there is no request in a column. See
 [presence-service](../services/presence-service.md).
 
 ### `RefreshToken`

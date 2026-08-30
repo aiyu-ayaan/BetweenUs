@@ -43,7 +43,7 @@ Messages, attachments, and call media are end-to-end encrypted: the server store
 | Listen together | A shared YouTube queue inside a voice call: everyone hears the same track in step, from their own connection, at full quality, with the video on screen. Browse the real youtube.com inside the app, signed in as yourself, and queue what you are looking at. Anybody can add, skip or pause; music ducks under whoever is talking. No audio is streamed between anybody |
 | Play together | Six board games inside a voice call - Tic-tac-toe, Connect Four, Reversi, Dots and Boxes, Ludo, and Carrom with a real physics simulation. One board everybody sees, two chairs anybody can take, and a rematch button. `call-service` referees the moves, so a move is a number on the wire rather than somebody's screen being streamed |
 | Android Client | Native Jetpack Compose + Material 3 app with E2EE messaging, WhatsApp-style media picker and composer, media viewers, and public gallery saving (`Pictures/BetweenUs`, `Movies/BetweenUs`) |
-| Presence | Online / idle / do not disturb / invisible, last seen, typing indicators, voice rosters |
+| Presence | Online / idle / do not disturb / invisible, last seen with a three-tier privacy setting, typing indicators, voice rosters |
 | Profiles | An about line on every account, and a card - hovered on desktop and web, double-tapped on Android - carrying the picture, whether they are here, when they were last here, and what their line says |
 | Notifications | Desktop notifications, system tray, start with the system, per-channel and per-person mute, quiet hours, persisted unread with a line that survives a restart |
 | Remote desktop | A machine offers itself from Settings, dials out to the gateway, and is viewed and driven from another client; per-machine permissions with expiry, and an audit trail |
@@ -137,6 +137,7 @@ to be framed, so no browser tab can ever show it.
 | **Presence and profiles** | | | |
 | Online, idle, do not disturb, invisible | ✅ | ✅ | ✅ |
 | Last seen, in the conversation header | ✅ | ✅ | ✅ |
+| Who may see your last seen: everyone / friends / nobody | ✅ | ✅ | ✅ |
 | An about line on your account, and everyone else's | ✅ | ✅ | ✅ |
 | The profile card: picture, presence, last seen, about | ✅ hover | ✅ hover | ✅ double tap |
 | Typing indicators, voice rosters | ✅ | ✅ | ✅ |
@@ -437,6 +438,12 @@ keeps the metadata; blobs never go in a column.
   caller cannot see answers 404 rather than 403, so ids cannot be probed for.
 - **Refresh-token rotation with reuse detection** - replaying a consumed token
   revokes the whole family.
+- **Last seen is answered per asker, in one function.** Who may read a
+  timestamp depends on the subject's setting, the friendship it may turn on, and
+  whether the asker has hidden their own - so `lastSeenOf` is the only way to
+  reach the value and applies all three before returning anything. The offline
+  broadcast carries no timestamp at all, because a broadcast has one payload for
+  every recipient and this answer does not.
 - **Blocking is enforced in one function.** A block row is directional, the
   check reads both directions, and it lives in `resolveChannelAccess` - so
   history, pins, reactions, calls and typing all close through the same place. A
@@ -881,6 +888,17 @@ was built the way it was; this is the short version.
   same audience every other presence event goes through - people you share a
   server or a friendship with - so it cannot become a "who is online" oracle
   over the whole deployment.
+- **You decide who sees yours: everyone, your friends, or nobody.** "Everyone"
+  is a ceiling rather than the whole world - it means everybody who could
+  already see your name. **"Nobody" is reciprocal**: an account that hides when
+  it was last here does not get to read anybody else's, which is what stops the
+  setting being a one-way mirror everybody switches on the moment it costs them
+  nothing. Narrowing to friends costs nothing, because that limits who reads you
+  rather than what you may read.
+- **A hidden timestamp is absent, not refused**, and absent is what a brand-new
+  account looks like too - so a missing line cannot be used to test for the
+  setting or its tier. The status still arrives; it is the timestamp that is
+  private, not the account.
 - **A clock that runs fast does not report the future.** A laptop a few minutes
   ahead of the server would otherwise be told somebody was last seen at 3:34
   beside a wall clock reading 3:30, which reads as broken software rather than

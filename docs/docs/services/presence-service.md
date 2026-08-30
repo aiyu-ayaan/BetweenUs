@@ -45,6 +45,43 @@ but went on publishing when you were last here would not be hiding you, so the
 value freezes at the last moment the account was genuinely visible and thaws
 when they choose a visible status again.
 
+### Who may read it
+
+`User.lastSeenVisibility` is one of three:
+
+| Setting | Who reads your last-seen time |
+| --- | --- |
+| `everyone` (default) | Anybody already in your presence audience — people who share a server or an accepted friendship with you |
+| `friends` | Accepted friendships only. A server in common is not a friendship |
+| `nobody` | No one |
+
+`everyone` is a ceiling, not the whole world: presence is already scoped by
+`audience.ts`, so the widest this setting can ever be is "everybody who could
+already see your name".
+
+**`nobody` is reciprocal.** An account that hides when it was last here does not
+get to read anybody else's — WhatsApp's rule, and the only thing that keeps the
+setting from being a one-way mirror everybody switches on the moment it costs
+them nothing. Narrowing to `friends` costs nothing: it limits who reads you, not
+what you may read.
+
+The decision lives in `last-seen-visibility.ts` as a pure function, checked by
+`last-seen-visibility.check.ts`, and is applied inside `PresenceStore.lastSeenOf`
+— which is the only way to reach the value, so there is no path around it.
+
+An excluded timestamp is **absent, not refused**. Every client already draws a
+missing timestamp as no line at all, so an account that has never been seen, one
+whose setting excludes you, and one you have disqualified yourself from reading
+are indistinguishable on the wire. The status still arrives; it is the timestamp
+that is private, not the account.
+
+:::note The admin panel does not apply it
+`AdminUser.lastSeenAt` shows the real column regardless of the setting. That is
+an operator reading their own deployment's user table, which they can do with
+`psql` whatever this code does — filtering it would be theatre. The panel
+carries `lastSeenVisibility` in the same row, so it is not a hidden setting.
+:::
+
 ### `presence.query`
 
 The client event that asks. Answered with one ordinary `presence.changed` per
@@ -71,6 +108,11 @@ It is a pull rather than part of `presence.sync` because a sync carries who is
 online, and the people a last-seen time is interesting for are exactly the ones
 who are not - sending every offline account's timestamp on connect would be the
 whole user table.
+
+**It is also the only road a timestamp travels.** A `presence.changed` broadcast
+carries none, deliberately: who may read one depends on the reader, and a
+broadcast has one payload for every recipient. Clients re-ask when they watch
+somebody go offline — one round trip, at the only moment the answer changes.
 
 ## Status resolution
 
