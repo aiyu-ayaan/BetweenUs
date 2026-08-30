@@ -20,3 +20,8 @@ local.properties
 keystore.properties
 *.jks
 *.keystore
+
+# The Kotlin compiler's own scratch directory. `.kotlin/errors/` collects a log
+# per failed incremental compile, which is a build artefact of one machine on
+# one afternoon and belongs in the repository no more than `build/` does.
+.kotlin/
