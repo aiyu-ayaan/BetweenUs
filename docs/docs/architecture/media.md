@@ -145,6 +145,39 @@ measured only over connected links: a call where none are connected shows
 "could not be reached" alone, rather than that plus an input-device dropdown
 that cannot fix it. See `notBeingHeard` in `call-stats.ts` and `CallStats.kt`.
 
+## What decides a share's picture
+
+Two mechanisms, and only one of them is negotiated.
+
+| | |
+| --- | --- |
+| **Per-sender parameters** | `PeerLink.tune` sets `maxBitrate`, `maxFramerate` and `degradationPreference` through `RTCRtpSender.setParameters`. No renegotiation, so it is applied the instant a share starts and is the only place that sees the share's own profile — the ceiling computed by `bitrateFor` from the pixels actually being captured. |
+| **SDP hints** | `patchVideoBandwidth` writes `b=AS`, `b=TIAS` and `x-google-max-bitrate` / `x-google-start-bitrate` into every video m-line at negotiation time — which is call-join time, long before anybody shares. It exists only so congestion control does not begin at WebRTC's ~300 kbps default and crawl. |
+
+**Every number in the SDP is a ceiling or a starting point. None of them is a
+floor.** `x-google-min-bitrate` used to be one, set to a quarter of the ceiling
+— 12.5 Mbps against the default this is called with when no share is running.
+An encoder told to meet a bitrate floor its link cannot afford pays for it in
+pixels, because 640×480 at 12.5 Mbps is reachable and 1920×1080 is not. Paired
+with a start bitrate of 60% of that same ceiling — 30 Mbps thrown at a path in
+its first second, answered with loss, collapsing the estimate below where it
+would have climbed unaided — that is a share which knocks over its own
+bandwidth estimate and then sits at 480p on a connection with room for 1080p.
+The start is now a fixed, survivable probe.
+
+The hints are appended only to payload types that have an encoder behind them.
+`rtx`, `red` and `ulpfec` share the video clock rate but do not; `rtx`'s format
+line is `apt=` and nothing else, and appending to it is how an entire patched
+description gets refused — losing the hints on the codecs that did want them.
+
+**Why a share went soft.** `qualityLimitationReason` on the outbound stream is
+the one reading that separates *the link cannot carry it* from *this machine
+cannot encode it* from *nothing is holding it back and it still looks like
+that*. It is sampled alongside the outbound frame size and shown in the
+connection panel as `Held by`, next to the inbound size that was already there —
+because a soft picture shrunk before it left and one damaged on the way are
+identical from the far end, and `bandwidth` and `cpu` want opposite fixes.
+
 ## One signal at a time
 
 Negotiation is the WebRTC spec's perfect-negotiation shape: politeness is
