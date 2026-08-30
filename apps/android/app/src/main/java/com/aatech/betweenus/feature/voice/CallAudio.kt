@@ -295,6 +295,24 @@ object CallAudio {
         }
     }
 
+    /**
+     * Whether the call is (or would be) coming out of the phone's own speaker.
+     *
+     * Asked before a call starts as well as during one, which is why it goes
+     * through the same [wantedRoute] and [resolve] a live call does rather than
+     * reading the stored preference: `AUTO` is the setting almost everybody is
+     * on, and `AUTO` with no headset present *is* the loudspeaker. Reading the
+     * preference alone would answer "not the speaker" for the exact
+     * configuration that echoes worst.
+     *
+     * Used by [AudioPrefs.hardwareProcessing] to decide whether WebRTC's own
+     * echo canceller should be preferred over the OEM's.
+     */
+    fun onLoudspeaker(context: Context): Boolean {
+        val manager = context.getSystemService(AudioManager::class.java) ?: return true
+        return resolve(manager, wantedRoute()) == AudioPrefs.Route.SPEAKER
+    }
+
     private fun applyTo(manager: AudioManager) {
         val target = resolve(manager, wantedRoute())
 

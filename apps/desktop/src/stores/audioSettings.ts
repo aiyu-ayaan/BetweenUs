@@ -9,16 +9,23 @@
  * and lets settings be changed before ever joining a call.
  */
 import { create } from 'zustand';
-import { DEFAULT_VOICE_SETTINGS, type VoiceSettings } from '../services/voice-quality';
+import {
+  DEFAULT_VOICE_SETTINGS,
+  migrateVoiceSettings,
+  type VoiceSettings,
+} from '../services/voice-quality';
 
 const STORAGE_KEY = 'betweenus.voice-settings';
 
 function load(): VoiceSettings {
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
+    if (!stored) return DEFAULT_VOICE_SETTINGS;
     // Spread over the defaults, so a setting added later has a value in a
-    // profile that was written before it existed.
-    return stored ? { ...DEFAULT_VOICE_SETTINGS, ...JSON.parse(stored) } : DEFAULT_VOICE_SETTINGS;
+    // profile that was written before it existed - and migrated first, because
+    // a setting whose *type* changed is not fixed by having a default behind
+    // it. See `migrateVoiceSettings`.
+    return { ...DEFAULT_VOICE_SETTINGS, ...migrateVoiceSettings(JSON.parse(stored)) };
   } catch {
     return DEFAULT_VOICE_SETTINGS;
   }

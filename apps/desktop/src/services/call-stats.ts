@@ -62,6 +62,17 @@ export interface LinkSample {
    * which from anywhere else - the server is not in the path to look.
    */
   transport: CallTransport | null;
+  /**
+   * How many dB of echo the canceller is actually removing, from the local
+   * audio source. Null when the browser does not report it.
+   *
+   * This is the only number that answers "is echo cancellation working", and
+   * without it echo is diagnosed by asking somebody on the call whether they
+   * can hear themselves - which is why it went unfixed for so long. It is a
+   * property of this machine rather than of a link, but it is read here because
+   * this is where `getStats` is already being called.
+   */
+  echoReturnLossEnhancementDb: number | null;
 }
 
 /** What a person is shown about one other person in the call. */
@@ -113,6 +124,55 @@ export function lossPercent(lost: number, received: number): number | null {
   const total = lost + received;
   if (total <= 0) return null;
   return Math.round((lost / total) * 1000) / 10;
+}
+
+/**
+ * Below this many dB of enhancement, the canceller is not doing its job.
+ *
+ * A converged AEC3 removes 20-40 dB. Single digits mean it is running but
+ * cancelling against the wrong reference, which is the signature of audio being
+ * played to a device other than the one the canceller is listening to. Zero or
+ * near it means it is not running at all.
+ *
+ * Six is deliberately generous: the number swings while the canceller converges
+ * at the top of a call, and a warning that fires on every call start is a
+ * warning people learn to ignore.
+ */
+export const MIN_HEALTHY_ERLE_DB = 6;
+
+/**
+ * Whether the far end is hearing themselves come back.
+ *
+ * Two conditions, and both matter. Echo cancellation being *off* is not a
+ * fault - hi-fi mode turns it off deliberately, because it chews holes in
+ * anything that correlates with what the speakers are playing - so it is only
+ * worth reporting when the setting says it should be working. And a null
+ * reading is not a failure: plenty of builds do not report the statistic, and
+ * warning on its absence would put a permanent notice on machines with no echo.
+ */
+export function echoCancellerFailing(
+  echoCancellationEnabled: boolean,
+  erleDb: number | null,
+): boolean {
+  if (!echoCancellationEnabled) return false;
+  if (erleDb === null) return false;
+  return erleDb < MIN_HEALTHY_ERLE_DB;
+}
+
+/**
+ * Why the canceller is failing, when it is, in a sentence somebody can act on.
+ *
+ * The output device is the whole reason this exists. Chromium builds its echo
+ * reference from the *default* render device, so playing a call to a device
+ * chosen in this app's own settings hands the canceller the wrong signal to
+ * subtract - and the symptom is a call that echoes only for people who changed
+ * their speakers, which is indistinguishable from bad luck until this is
+ * measured.
+ */
+export function echoAdvice(usingNonDefaultOutput: boolean): string {
+  return usingNonDefaultOutput
+    ? 'Echo cancellation is not working on this output device. Switch the call output back to System default, or change your default device in Windows sound settings.'
+    : 'Echo cancellation is not working - other people may hear themselves. Headphones will stop it.';
 }
 
 /**

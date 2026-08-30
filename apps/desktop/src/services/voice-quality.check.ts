@@ -16,6 +16,7 @@ import {
   micCapture,
   micEncoding,
   micProcessing,
+  migrateVoiceSettings,
   stepGate,
   type VoiceSettings,
 } from './voice-quality';
@@ -23,18 +24,27 @@ import {
 const clear: VoiceSettings = { ...DEFAULT_VOICE_SETTINGS };
 const hifi: VoiceSettings = { ...DEFAULT_VOICE_SETTINGS, mode: 'hifi' };
 
-// A voice gets the speech processing, and asks for the model-based suppressor
-// as well - where Chromium has it, it takes over from the ordinary one; where
-// it does not, an unknown constraint is ignored.
+// The default is the ordinary suppressor and *not* the model-based one: it is
+// the cheap one that suits a quiet room, and paying for the expensive one on
+// every call anybody ever makes is what the three levels exist to stop.
 assert.deepEqual(micProcessing(clear), {
   echoCancellation: true,
   noiseSuppression: true,
   autoGainControl: true,
-  voiceIsolation: true,
+  voiceIsolation: false,
 });
 
-// Turning suppression off turns both suppressors off, not just the weak one.
-assert.equal(micProcessing({ ...clear, noiseSuppression: false }).voiceIsolation, false);
+// High is the only level that asks for the model.
+assert.equal(micProcessing({ ...clear, noiseSuppression: 'high' }).voiceIsolation, true);
+assert.equal(micProcessing({ ...clear, noiseSuppression: 'high' }).noiseSuppression, true);
+
+// Off turns both suppressors off, not just the weak one.
+assert.deepEqual(micProcessing({ ...clear, noiseSuppression: 'off' }), {
+  echoCancellation: true,
+  noiseSuppression: false,
+  autoGainControl: true,
+  voiceIsolation: false,
+});
 
 // Music gets none of it, whatever the switches say - every one of them is
 // destructive to anything that is not speech.
@@ -125,3 +135,36 @@ assert.ok(workletSource.includes('const stepGate ='));
 assert.ok(workletSource.includes('const amplitudeToDb ='));
 
 console.log('voice-quality self-check passed');
+
+
+// --- Upgrading from the boolean suppression switch -------------------------
+
+// The whole reason `migrateVoiceSettings` exists: local storage written by an
+// older build carries a boolean where a level belongs, and spreading it over
+// the defaults would leave `true` sitting in a field typed as three strings.
+// Nothing throws - it just behaves as `standard` while the settings screen has
+// nothing selected, which is the kind of bug that survives a release.
+assert.equal(migrateVoiceSettings({ noiseSuppression: true }).noiseSuppression, 'standard');
+assert.equal(migrateVoiceSettings({ noiseSuppression: false }).noiseSuppression, 'off');
+
+// A value already migrated is left exactly as it is.
+assert.equal(migrateVoiceSettings({ noiseSuppression: 'high' }).noiseSuppression, 'high');
+
+// A hand-edited or corrupted profile drops the field rather than poisoning it,
+// so the default behind it takes over.
+assert.equal('noiseSuppression' in migrateVoiceSettings({ noiseSuppression: 'loud' }), false);
+assert.equal('noiseSuppression' in migrateVoiceSettings({ noiseSuppression: 3 }), false);
+
+// Everything else on a stored profile survives the migration untouched.
+assert.equal(migrateVoiceSettings({ gateThresholdDb: -42 }).gateThresholdDb, -42);
+
+// Garbage in the slot where an object belongs is not a crash on startup.
+assert.deepEqual(migrateVoiceSettings(null), {});
+assert.deepEqual(migrateVoiceSettings('nonsense'), {});
+
+// A migrated profile produces a constraint object, which is the thing that
+// actually had to keep working across the upgrade.
+assert.equal(
+  micProcessing({ ...clear, ...migrateVoiceSettings({ noiseSuppression: true }) }).voiceIsolation,
+  false,
+);

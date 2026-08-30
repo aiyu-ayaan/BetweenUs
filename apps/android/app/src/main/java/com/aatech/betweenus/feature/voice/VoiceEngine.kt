@@ -189,10 +189,37 @@ class VoiceEngine(private val context: Context) {
      * Held, because muting has to reach the microphone itself and not only the
      * track carrying it. See [toggleMute].
      */
-    private val audioDevice: JavaAudioDeviceModule by lazy {
-        JavaAudioDeviceModule.builder(context)
-            .setUseHardwareAcousticEchoCanceler(true)
-            .setUseHardwareNoiseSuppressor(true)
+    private var audioDevice: JavaAudioDeviceModule? = null
+
+    private var peerFactory: PeerConnectionFactory? = null
+
+    /**
+     * What the live device module was built to do, so [refreshAudioStack] can
+     * tell a changed setting from an unchanged one.
+     */
+    private var audioSetup: AudioPrefs.HardwareProcessing? = null
+
+    /**
+     * The factory, building the audio stack underneath it if nothing has yet.
+     *
+     * This used to be a `by lazy`, and that was the echo bug rather than a
+     * detail of it. Which canceller runs is chosen when the device module is
+     * *constructed*, so a module built once per process is a pair of switches
+     * in the settings screen that could only ever have described the state of
+     * the app at its very first call.
+     */
+    private fun factory(): PeerConnectionFactory =
+        peerFactory ?: buildAudioStack(AudioPrefs.hardwareProcessing(context))
+
+    private fun buildAudioStack(setup: AudioPrefs.HardwareProcessing): PeerConnectionFactory {
+        val module = JavaAudioDeviceModule.builder(context)
+            // The two flags the settings screen is actually about. `true` means
+            // "let the phone do it", which stands WebRTC's own AEC3 and NS down
+            // in favour of the OEM's - see [AudioPrefs.hardwareProcessingFor]
+            // for when that is the wrong trade, which on a loudspeaker it
+            // usually is.
+            .setUseHardwareAcousticEchoCanceler(setup.echoCanceller)
+            .setUseHardwareNoiseSuppressor(setup.noiseSuppressor)
             // Where the green ring around your own tile comes from. Read off
             // the microphone itself rather than off a peer connection's
             // statistics, for one reason: the statistics only exist once
@@ -206,18 +233,59 @@ class VoiceEngine(private val context: Context) {
             // cannot do it.
             .setAudioBufferCallback(::onCaptureBuffer)
             .createAudioDeviceModule()
-    }
 
-    private val factory: PeerConnectionFactory by lazy {
         PeerConnectionFactory.initialize(
             PeerConnectionFactory.InitializationOptions.builder(context)
                 .createInitializationOptions(),
         )
-        PeerConnectionFactory.builder()
+        val built = PeerConnectionFactory.builder()
             .setVideoEncoderFactory(DefaultVideoEncoderFactory(eglBase.eglBaseContext, true, true))
             .setVideoDecoderFactory(DefaultVideoDecoderFactory(eglBase.eglBaseContext))
-            .setAudioDeviceModule(audioDevice)
+            .setAudioDeviceModule(module)
             .createPeerConnectionFactory()
+
+        audioDevice = module
+        peerFactory = built
+        audioSetup = setup
+        return built
+    }
+
+    /**
+     * Rebuilds the audio stack when the processing settings no longer match it.
+     *
+     * **Between calls, and never during one.** A device module cannot be
+     * swapped underneath a `PeerConnectionFactory` - the factory takes it at
+     * construction - so honouring a changed setting means disposing the
+     * factory, and the factory owns every live peer connection, the microphone
+     * track and the video source. Doing that mid-call would drop every peer to
+     * rebuild them a moment later, which is a worse thing to do to somebody's
+     * call than letting the setting wait for the next one.
+     *
+     * So the point it happens is the start of [join], before anything has been
+     * created from the factory and after the previous call's teardown has
+     * disposed what it made. A setting changed during a call therefore applies
+     * to the next call, and the settings screen says so rather than appearing
+     * to do something it is not doing.
+     *
+     * Nothing happens at all when the settings are unchanged, which is the
+     * ordinary case: the stack is built once and kept, exactly as before.
+     */
+    private fun refreshAudioStack() {
+        val wanted = AudioPrefs.hardwareProcessing(context)
+        if (peerFactory != null && audioSetup == wanted) return
+        releaseAudioStack()
+        buildAudioStack(wanted)
+    }
+
+    private fun releaseAudioStack() {
+        // The factory first: it holds native objects that reference the module,
+        // and releasing the module out from under it is a crash rather than a
+        // leak.
+        runCatching { peerFactory?.dispose() }
+        runCatching { audioDevice?.release() }
+        peerFactory = null
+        audioDevice = null
+        audioSetup = null
     }
 
     private val connections = ConcurrentHashMap<String, PeerLink>()
@@ -413,6 +481,12 @@ class VoiceEngine(private val context: Context) {
 
         scope.launch {
             try {
+                // Between calls is the only safe moment to honour a changed
+                // echo or noise setting, and this is it - see
+                // [refreshAudioStack]. It has to come before the first thing
+                // built from the factory, which is the microphone below.
+                refreshAudioStack()
+
                 // The channel key is what signs our DTLS fingerprint. Without
                 // it there is nothing to prove the far side is talking to us and
                 // not to the relay, so the call does not start.
@@ -644,6 +718,7 @@ class VoiceEngine(private val context: Context) {
      */
     fun dispose() {
         leave()
+        releaseAudioStack()
         eglBase.release()
         synchronized(VoiceEngine) { if (instance === this) instance = null }
     }
@@ -660,8 +735,8 @@ class VoiceEngine(private val context: Context) {
                 mandatory.add(MediaConstraints.KeyValuePair(key, on.toString()))
             }
         }
-        val source = factory.createAudioSource(constraints)
-        audioTrack = factory.createAudioTrack("betweenus-audio", source)
+        val source = factory().createAudioSource(constraints)
+        audioTrack = factory().createAudioTrack("betweenus-audio", source)
         applyMute()
     }
 
@@ -768,7 +843,7 @@ class VoiceEngine(private val context: Context) {
         // was muted before it rang.
         val muted = _muted.value || _interruption.value == Interruption.HOLD
         audioTrack?.setEnabled(!muted)
-        runCatching { audioDevice.setMicrophoneMute(muted) }
+        runCatching { audioDevice?.setMicrophoneMute(muted) }
     }
 
     /**
@@ -921,7 +996,7 @@ class VoiceEngine(private val context: Context) {
 
     private fun beginCapture(capturer: VideoCapturer, width: Int, height: Int, fps: Int): VideoTrack? {
         val helper = SurfaceTextureHelper.create("betweenus-capture", eglBase.eglBaseContext)
-        val source = factory.createVideoSource(capturer.isScreencast)
+        val source = factory().createVideoSource(capturer.isScreencast)
         capturer.initialize(helper, context, source.capturerObserver)
 
         // A capturer that will not start is a tile that stays empty, not a
@@ -938,7 +1013,7 @@ class VoiceEngine(private val context: Context) {
 
         surfaceHelper = helper
         videoCapturer = capturer
-        val track = factory.createVideoTrack("betweenus-video", source)
+        val track = factory().createVideoTrack("betweenus-video", source)
         _localVideo.value = track
         return track
     }
@@ -1274,7 +1349,7 @@ class VoiceEngine(private val context: Context) {
         /** When the channel key was last re-read for this peer. See [verifyFingerprint]. */
         private var keyReadAt = 0L
 
-        private val pc: PeerConnection = factory.createPeerConnection(
+        private val pc: PeerConnection = factory().createPeerConnection(
             PeerConnection.RTCConfiguration(iceServers).apply {
                 sdpSemantics = PeerConnection.SdpSemantics.UNIFIED_PLAN
                 // Both match the desktop. A different bundle policy is a
@@ -1510,7 +1585,7 @@ class VoiceEngine(private val context: Context) {
         private fun preferScreenCodec() {
             val transceiver = transceivers[Slot.SCREEN] ?: return
             runCatching {
-                val codecs = factory.getRtpSenderCapabilities(
+                val codecs = factory().getRtpSenderCapabilities(
                     MediaStreamTrack.MediaType.MEDIA_TYPE_VIDEO,
                 ).codecs
                 val sorted = codecs.sortedByDescending { it.name.equals("H264", ignoreCase = true) }

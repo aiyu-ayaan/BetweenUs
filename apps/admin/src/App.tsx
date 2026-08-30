@@ -14,15 +14,21 @@ import { UsersScreen } from './screens/UsersScreen';
 import { AuditScreen } from './screens/AuditScreen';
 import { OAuthScreen } from './screens/OAuthScreen';
 import { MailScreen } from './screens/MailScreen';
+import { HealthScreen } from './screens/HealthScreen';
 import { AccountScreen } from './screens/AccountScreen';
 
-type Tab = 'users' | 'audit' | 'oauth' | 'mail' | 'account';
+/**
+ * `health` leads the nav because it is the question an operator opens this
+ * panel with when something is wrong, and the only tab whose answer is time
+ * sensitive - the other four are administration, which waits.
+ */
+type Tab = 'health' | 'users' | 'audit' | 'oauth' | 'mail' | 'account';
 
 export default function App(): JSX.Element {
   const [hasAdmin, setHasAdmin] = useState<boolean | null>(null);
   const [user, setUser] = useState<PublicUser | null>(null);
   const [booting, setBooting] = useState(true);
-  const [tab, setTab] = useState<Tab>('users');
+  const [tab, setTab] = useState<Tab>('health');
   const [signInError, setSignInError] = useState<string | null>(null);
 
   const load = useCallback(async (): Promise<void> => {
@@ -88,6 +94,7 @@ export default function App(): JSX.Element {
         <nav className="ml-6 flex gap-1" aria-label="Sections">
           {(
             [
+              ['health', 'Health'],
               ['users', 'Users'],
               ['audit', 'Audit log'],
               ['oauth', 'Sign-in providers'],
@@ -124,6 +131,7 @@ export default function App(): JSX.Element {
       </header>
 
       <main className="min-h-0 flex-1 overflow-y-auto">
+        {tab === 'health' && <HealthScreen />}
         {tab === 'users' && <UsersScreen currentUserId={user.id} />}
         {tab === 'audit' && <AuditScreen />}
         {tab === 'oauth' && <OAuthScreen />}

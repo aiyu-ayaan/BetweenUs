@@ -18,6 +18,9 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
@@ -54,7 +57,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
  * Dedicated Voice & Calls Settings Sub-Page.
  *
  * Provides device routing (headset/speaker/earpiece), input selection, high-fidelity
- * microphone mode, noise suppression, echo cancellation, automatic gain control,
+ * microphone mode, three-level noise suppression, echo cancellation, automatic gain control,
  * live dBFS pre-gate input sensitivity meter with threshold slider, and join/leave call tones.
  */
 @Composable
@@ -161,25 +164,57 @@ fun VoiceSettingsScreen(
             )
 
             if (mode == AudioPrefs.Mode.CLEAR) {
+                // Three levels rather than a switch, because the middle one and
+                // the loud one are genuinely different jobs and the desktop
+                // draws the same three. The row carries the explanation and the
+                // buttons sit under it: a segmented control is too wide to be a
+                // trailing element on a 56dp row, and squeezing it there is how
+                // the labels turn into "Sta...".
                 ListRow(
                     title = "Noise suppression",
-                    subtitle = "Filters out background fans, keyboard clatter, and ambient noise",
-                    leading = { BetweenUsIcon(BetweenUsIcons.Settings) },
-                    trailing = {
-                        Switch(
-                            checked = noiseSuppression,
-                            onCheckedChange = {
-                                noiseSuppression = it
-                                AudioPrefs.noiseSuppression = it
-                            },
-                            colors = SwitchDefaults.colors(),
-                        )
+                    subtitle = when (noiseSuppression) {
+                        AudioPrefs.NoiseSuppression.OFF ->
+                            "Your microphone is sent as the room sounds"
+                        AudioPrefs.NoiseSuppression.STANDARD ->
+                            "Filters fans, keyboard clatter, and ambient noise"
+                        AudioPrefs.NoiseSuppression.HIGH ->
+                            "Uses more battery. Best in a noisy room or on speakerphone"
                     },
+                    leading = { BetweenUsIcon(BetweenUsIcons.Settings) },
                 )
+
+                SingleChoiceSegmentedButtonRow(
+                    // 22dp is the ListRow's own inset (10 outside, 12 in), so
+                    // the buttons line up under the text they belong to.
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 22.dp, vertical = 4.dp),
+                ) {
+                    val levels = AudioPrefs.NoiseSuppression.entries
+                    levels.forEachIndexed { index, level ->
+                        SegmentedButton(
+                            selected = noiseSuppression == level,
+                            onClick = {
+                                noiseSuppression = level
+                                AudioPrefs.noiseSuppression = level
+                            },
+                            shape = SegmentedButtonDefaults.itemShape(index, levels.size),
+                        ) {
+                            Text(
+                                when (level) {
+                                    AudioPrefs.NoiseSuppression.OFF -> "Off"
+                                    AudioPrefs.NoiseSuppression.STANDARD -> "Standard"
+                                    AudioPrefs.NoiseSuppression.HIGH -> "High"
+                                },
+                            )
+                        }
+                    }
+                }
 
                 ListRow(
                     title = "Echo cancellation",
-                    subtitle = "Prevents speaker output from feeding back into the call",
+                    subtitle = "Stops what the call plays being picked up and sent back. " +
+                        "On speakerphone the app cancels it itself rather than trusting the phone",
                     leading = { BetweenUsIcon(BetweenUsIcons.Settings) },
                     trailing = {
                         Switch(
@@ -207,6 +242,18 @@ fun VoiceSettingsScreen(
                             colors = SwitchDefaults.colors(),
                         )
                     },
+                )
+
+                // Said rather than quietly not done. Whether the phone's own
+                // canceller runs is fixed when the audio engine is built, and
+                // rebuilding it mid-call would drop every peer - so a change
+                // made while a call is up waits for the next one. See
+                // VoiceEngine.refreshAudioStack.
+                Text(
+                    text = "Echo and noise settings apply from your next call.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(start = 22.dp, end = 22.dp, top = 4.dp, bottom = 8.dp),
                 )
             }
 

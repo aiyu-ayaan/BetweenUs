@@ -83,6 +83,14 @@ export interface MicEncoding {
  */
 export type VoiceMode = 'clear' | 'hifi';
 
+/**
+ * How much suppression to ask the platform for. See `VoiceSettings.noiseSuppression`.
+ *
+ * Deliberately the same three names the Android client uses, so a support
+ * conversation about "set it to High" means one thing on both.
+ */
+export type NoiseSuppression = 'off' | 'standard' | 'high';
+
 export interface VoiceSettings {
   mode: VoiceMode;
   /** `null` means the system default device, which is what most people want. */
@@ -105,7 +113,21 @@ export interface VoiceSettings {
    */
   followSystemDevices: boolean;
   echoCancellation: boolean;
-  noiseSuppression: boolean;
+  /**
+   * How hard to work at removing everything that is not a voice.
+   *
+   * Three levels rather than a switch, because the honest answer to "should
+   * noise suppression be on" depends on hardware nobody can see from here.
+   * `standard` is the ordinary WebRTC suppressor, which is tuned for
+   * *stationary* noise - a fan, a hiss, an air conditioner. `high` additionally
+   * asks for `voiceIsolation`, Chromium's model-based suppressor, which is the
+   * one that removes a keyboard, a dog and a flatmate; it costs measurably more
+   * CPU and it is the wrong default for a laptop on battery in a quiet room.
+   *
+   * Where `voiceIsolation` is not supported the constraint is ignored and
+   * `high` degrades to `standard`, which is why asking for it costs nothing.
+   */
+  noiseSuppression: NoiseSuppression;
   autoGainControl: boolean;
   /**
    * dBFS below which the microphone is closed, or `null` for an open mic.
@@ -145,7 +167,7 @@ export const DEFAULT_VOICE_SETTINGS: VoiceSettings = {
   outputDeviceId: null,
   followSystemDevices: true,
   echoCancellation: true,
-  noiseSuppression: true,
+  noiseSuppression: 'standard',
   autoGainControl: true,
   // Quiet enough that a normal voice is nowhere near it, loud enough to sit
   // above room tone on a cheap microphone.
@@ -200,10 +222,48 @@ export function micProcessing(
 
   return {
     echoCancellation: settings.echoCancellation,
-    noiseSuppression: settings.noiseSuppression,
+    noiseSuppression: settings.noiseSuppression !== 'off',
     autoGainControl: settings.autoGainControl,
-    voiceIsolation: settings.noiseSuppression,
+    // Only `high` asks for the model. This used to be tied to the same boolean
+    // as `noiseSuppression`, which meant every call anybody ever made ran the
+    // expensive suppressor whether or not their room needed it, and there was
+    // no way to ask for the cheap one on its own.
+    voiceIsolation: settings.noiseSuppression === 'high',
   };
+}
+
+/**
+ * Reads a stored settings object written by an older build.
+ *
+ * `noiseSuppression` was a boolean until the three levels existed, and the
+ * settings store spreads whatever is in local storage over the defaults - so
+ * without this a profile written last week arrives with `true` where a
+ * `NoiseSuppression` belongs. That is not a type error at runtime, it is worse:
+ * `true !== 'off'` and `true !== 'high'`, so the setting silently behaves as
+ * `standard` while the settings screen has no option matching it and draws
+ * nothing as selected.
+ *
+ * Pure, and exported, because a migration that is only exercised by upgrading
+ * users is a migration nobody ever runs before shipping it.
+ */
+export function migrateVoiceSettings(stored: unknown): Partial<VoiceSettings> {
+  if (typeof stored !== 'object' || stored === null) return {};
+  const settings = { ...(stored as Record<string, unknown>) };
+
+  // The old switch: on meant the ordinary suppressor, which is `standard`.
+  // Anyone who wants the model-based one can now say so explicitly.
+  if (typeof settings.noiseSuppression === 'boolean') {
+    settings.noiseSuppression = settings.noiseSuppression ? 'standard' : 'off';
+  } else if (!isNoiseSuppression(settings.noiseSuppression)) {
+    delete settings.noiseSuppression;
+  }
+
+  return settings as Partial<VoiceSettings>;
+}
+
+/** Narrows an unknown to a level, so a hand-edited profile cannot poison it. */
+export function isNoiseSuppression(value: unknown): value is NoiseSuppression {
+  return value === 'off' || value === 'standard' || value === 'high';
 }
 
 /**

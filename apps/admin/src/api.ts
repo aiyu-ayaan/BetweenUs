@@ -12,6 +12,7 @@ import type {
   AdminOAuthProviderUpdate,
   AdminSmtpSettings,
   AdminSmtpTestResult,
+  AdminServerHealth,
   AdminSmtpUpdate,
   AdminStatus,
   AdminUser,
@@ -182,6 +183,14 @@ export const api = {
 
   testSmtp: (to?: string): Promise<AdminSmtpTestResult> =>
     request('/api/v1/admin/smtp/test', { method: 'POST', body: JSON.stringify(to ? { to } : {}) }),
+
+  /**
+   * One snapshot of the deployment: dependencies, runtime, storage, traffic and
+   * live sockets. `days` sizes the bandwidth window only; everything else is
+   * measured at the moment of the call, so this is polled rather than cached.
+   */
+  health: (days?: number): Promise<AdminServerHealth> =>
+    request(`/api/v1/admin/health${days === undefined ? '' : `?days=${days}`}`),
 
   oauthProviders: (): Promise<AdminOAuthProvider[]> => request('/api/v1/admin/oauth'),
 

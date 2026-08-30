@@ -8,6 +8,11 @@
  */
 import assert from 'node:assert/strict';
 import {
+  MIN_HEALTHY_ERLE_DB,
+  echoAdvice,
+  echoCancellerFailing,
+} from './call-stats';
+import {
   formatCallDuration,
   healthWarning,
   kbpsBetween,
@@ -173,3 +178,30 @@ assert.equal(formatCallDuration(-5), '00:00');
 assert.equal(formatCallDuration(Number.NaN), '00:00');
 
 console.log('call-stats check ok');
+
+
+// --- Is echo cancellation actually working? --------------------------------
+//
+// The one reading that separates "there is echo" from "the canceller is
+// subtracting the wrong signal". Before this existed the only way to tell was
+// to ask somebody on the call whether they could hear themselves.
+
+// A converged canceller removes 20-40 dB; single digits mean it is running and
+// subtracting the wrong signal, which is what a non-default output device does.
+assert.equal(echoCancellerFailing(true, 30), false);
+assert.equal(echoCancellerFailing(true, 0), true);
+assert.equal(echoCancellerFailing(true, MIN_HEALTHY_ERLE_DB - 0.1), true);
+assert.equal(echoCancellerFailing(true, MIN_HEALTHY_ERLE_DB), false);
+
+// Echo cancellation switched off is a choice, not a fault - hi-fi mode turns it
+// off deliberately - so it must never raise the warning.
+assert.equal(echoCancellerFailing(false, 0), false);
+
+// A browser that does not report the statistic must not produce a permanent
+// warning on a machine that has no echo at all.
+assert.equal(echoCancellerFailing(true, null), false);
+
+// The advice names the output device when that is the likely cause, because
+// "switch your speakers back" is the only version of this a person can act on.
+assert.match(echoAdvice(true), /output device/i);
+assert.match(echoAdvice(false), /[Hh]eadphones/);

@@ -84,9 +84,55 @@ object AudioPrefs {
         get() = prefs.getBoolean("aec", true)
         set(value) = prefs.edit().putBoolean("aec", value).apply()
 
-    var noiseSuppression: Boolean
-        get() = prefs.getBoolean("ns", true)
-        set(value) = prefs.edit().putBoolean("ns", value).apply()
+    /**
+     * How hard the phone works to remove the room, in three steps rather than
+     * two. The desktop's `NoiseSuppression`, and the two platforms have to mean
+     * the same thing by each name or the setting is per-device folklore.
+     *
+     * `STANDARD` is the behaviour a switch turned on used to give: the OEM's
+     * own noise suppressor where the phone has one, WebRTC's otherwise. `HIGH`
+     * refuses the hardware path outright and runs WebRTC's software chain,
+     * which is more aggressive, costs battery, and - the reason it exists -
+     * behaves the same on every phone. `OFF` is no suppression at all.
+     */
+    enum class NoiseSuppression { OFF, STANDARD, HIGH }
+
+    /**
+     * The level, migrating anybody who set the old switch.
+     *
+     * The boolean lived under `"ns"` and the level lives under `"ns.level"`,
+     * because the two cannot share a key: reading a string out of a slot
+     * holding a boolean throws, and writing a string into it would leave an
+     * older build of the app unable to read its own setting back. The old key
+     * is therefore read and never written - see [suppressionOf] for the
+     * decision itself, which is pure so it can be tested without a phone.
+     */
+    var noiseSuppression: NoiseSuppression
+        get() = suppressionOf(
+            prefs.getString("ns.level", null),
+            if (prefs.contains("ns")) prefs.getBoolean("ns", true) else null,
+        )
+        set(value) = prefs.edit().putString("ns.level", value.name).apply()
+
+    /**
+     * Which level a stored pair of keys means.
+     *
+     * Order matters: the new key wins whenever it is there, so a person who
+     * has since chosen a level is not dragged back to whatever the old switch
+     * happened to say. Only when it is absent does the old switch speak, and
+     * an unreadable new value falls through to the same migration rather than
+     * to the default - somebody who had turned suppression off should not have
+     * it turned on again by a value this build did not recognise.
+     */
+    internal fun suppressionOf(level: String?, legacy: Boolean?): NoiseSuppression {
+        if (level != null) {
+            runCatching { return NoiseSuppression.valueOf(level) }
+        }
+        return when (legacy) {
+            false -> NoiseSuppression.OFF
+            else -> NoiseSuppression.STANDARD
+        }
+    }
 
     var autoGainControl: Boolean
         get() = prefs.getBoolean("agc", true)
@@ -108,11 +154,66 @@ object AudioPrefs {
         val hifi = mode == Mode.HIFI
         return listOf(
             "googEchoCancellation" to (!hifi && echoCancellation),
-            "googNoiseSuppression" to (!hifi && noiseSuppression),
+            "googNoiseSuppression" to (!hifi && noiseSuppression != NoiseSuppression.OFF),
             "googAutoGainControl" to (!hifi && autoGainControl),
             // A high-pass filter removes rumble and removes the bottom of a
             // recording; it goes with the other three.
             "googHighpassFilter" to !hifi,
+        )
+    }
+
+    /**
+     * Which of the two cancellers the phone's own silicon is asked to run.
+     *
+     * These are not the same switches as [captureConstraints], and that
+     * distinction is the whole of the echo bug. A constraint says *whether*
+     * the microphone is processed; these say *who does it*. Handing the job to
+     * the OEM canceller (`setUseHardwareAcousticEchoCanceler(true)`) makes
+     * WebRTC stand its own AEC3 down and trust the phone - which is free, and
+     * on most handsets is fine against the earpiece and poor against the
+     * loudspeaker, because a loudspeaker couples into the microphone far
+     * harder than an earpiece ever does. That is the echo people report, and
+     * it is not a bug in a canceller so much as a bad choice of one.
+     *
+     * So the software path is preferred in exactly the two cases where it
+     * earns its battery: the call is coming out of the loudspeaker, or the
+     * person has asked for [NoiseSuppression.HIGH], which is what that setting
+     * means.
+     */
+    data class HardwareProcessing(
+        /** Let the OEM cancel echo, instead of WebRTC's AEC3. */
+        val echoCanceller: Boolean,
+        /** Let the OEM suppress noise, instead of WebRTC's NS. */
+        val noiseSuppressor: Boolean,
+    )
+
+    /** [HardwareProcessing] for this phone as it is set up right now. */
+    fun hardwareProcessing(context: Context): HardwareProcessing = hardwareProcessingFor(
+        mode = mode,
+        echo = echoCancellation,
+        suppression = noiseSuppression,
+        loudspeaker = CallAudio.onLoudspeaker(context),
+    )
+
+    /**
+     * The decision on its own, with nothing to read it from - pure, so the two
+     * cases nobody can reproduce on a desk (a phone with no hardware canceller,
+     * a call on the loudspeaker) are unit-tested rather than guessed at.
+     *
+     * High-fidelity mode turns both off for the same reason it turns the
+     * constraints off: it has already answered the question.
+     */
+    internal fun hardwareProcessingFor(
+        mode: Mode,
+        echo: Boolean,
+        suppression: NoiseSuppression,
+        loudspeaker: Boolean,
+    ): HardwareProcessing {
+        if (mode == Mode.HIFI) return HardwareProcessing(echoCanceller = false, noiseSuppressor = false)
+        val preferSoftware = loudspeaker || suppression == NoiseSuppression.HIGH
+        return HardwareProcessing(
+            echoCanceller = echo && !preferSoftware,
+            noiseSuppressor = suppression == NoiseSuppression.STANDARD,
         )
     }
 

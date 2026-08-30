@@ -1170,6 +1170,7 @@ class PeerLink {
       // same still counters, and only one of them is a microphone fault.
       connected: this.connectedNow(),
       transport: null,
+      echoReturnLossEnhancementDb: null,
     };
     if (this.closed) return now;
 
@@ -1245,6 +1246,16 @@ class PeerLink {
       // guaranteed to have been walked yet - `getStats` has no order.
       if (entry.type === 'local-candidate' || entry.type === 'remote-candidate') {
         candidates.set(String(entry.id), String(entry.candidateType ?? ''));
+        return;
+      }
+
+      // How much echo the canceller is removing, reported against the local
+      // microphone. It is the same source on every peer connection, so whoever
+      // reads this last wins and they all agree; it is read per link only
+      // because this is the loop that already has the report open.
+      if (entry.type === 'media-source' && entry.kind === 'audio') {
+        const erle = Number(entry.echoReturnLossEnhancement ?? Number.NaN);
+        if (Number.isFinite(erle)) now.echoReturnLossEnhancementDb = erle;
       }
     });
 

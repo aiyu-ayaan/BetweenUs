@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "tsc -p tsconfig.json --noEmit && vite build",
     "preview": "vite preview",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "check": "tsx src/format.check.ts && tsx src/screens/HealthScreen.check.tsx"
   },
   "dependencies": {
     "@betweenus/shared-types": "workspace:*",
@@ -22,6 +23,7 @@
     "autoprefixer": "^10.4.19",
     "postcss": "^8.4.40",
     "tailwindcss": "^3.4.7",
+    "tsx": "^4.16.5",
     "typescript": "^5.5.4",
     "vite": "^5.3.5"
   }
