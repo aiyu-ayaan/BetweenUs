@@ -73,7 +73,7 @@ fun SettingsScreen(
     onAutoUpdate: () -> Unit,
     onCallUsage: () -> Unit,
     onThemes: () -> Unit,
-    onPrivacy: () -> Unit,
+    onPrivacy: (() -> Unit)? = null,
 ) {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -155,17 +155,10 @@ fun SettingsScreen(
             SectionLabel("Account")
             ListRow(
                 title = "Account & Security",
-                subtitle = "Profile name, avatar, password, encryption passphrase",
+                subtitle = "Profile name, avatar, password, encryption, privacy",
                 leading = { BetweenUsIcon(BetweenUsIcons.User) },
                 trailing = { BetweenUsIcon(BetweenUsIcons.ChevronRight, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
                 onClick = onAccountSettings,
-            )
-            ListRow(
-                title = "Privacy & Safety",
-                subtitle = "Blocked people, and clearing your own messages",
-                leading = { BetweenUsIcon(BetweenUsIcons.Block) },
-                trailing = { BetweenUsIcon(BetweenUsIcons.ChevronRight, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
-                onClick = onPrivacy,
             )
 
             // --- Preferences Subsection ---

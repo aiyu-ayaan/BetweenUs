@@ -510,7 +510,6 @@ fun Shell(user: PublicUser) {
                             onAutoUpdate = { navigation.navigate(Route.AutoUpdate) },
                             onCallUsage = { navigation.navigate(Route.CallUsage) },
                             onThemes = { navigation.navigate(Route.Themes) },
-                            onPrivacy = { navigation.navigate(Route.Privacy) },
                         )
                     }
                     composable(
