@@ -34,9 +34,11 @@ Every word of that is load-bearing:
   A desktop open on the channel is why the phone stays quiet.
 - **`message.created` only.** `message.deleted` exists to *remove* a
   notification that has become a lie, so suppressing it would leave the lie
-  standing. `call.roster`, `call.ring`, `friend.*` and `server.member.added`
-  are not channel-scoped news — and a ring least of all: somebody aimed it at a
-  person, so having their channel open is not a reason to swallow it.
+  standing, and `call.answered` removes a ringer, so suppressing it would leave
+  a phone ringing at somebody who is already talking. `call.roster`,
+  `call.ring`, `friend.*` and `server.member.added` are not channel-scoped news
+  — and a ring least of all: somebody aimed it at a person, so having their
+  channel open is not a reason to swallow it.
 - **Mentions are not an exception.** You are looking at the message as it
   arrives. There is also no way to make them one: bodies are sealed with the
   channel key, so no service has ever seen the word `@you` — the server would

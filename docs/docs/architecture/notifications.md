@@ -97,6 +97,17 @@ and is not in the call, and it says who is in there. It is quiet on purpose for
 a server's voice channel — a phone that rings whenever anybody joins anything
 is a phone somebody turns notifications off on.
 
+It is sent at the **two ends of a call only**: when it starts, and when it
+ends. It used to go out on every join and every departure, and that turns out
+to be incoherent with who the announcement is addressed to — everybody who can
+hear the channel *minus whoever is in the call*. Hanging up moved somebody out
+of the roster, into the audience, and straight into a notification telling them
+who was still on the call they had just left. The middle of a call is not news
+either way: somebody who wants to know who is in it can look, and somebody who
+does not was being buzzed once per arrival. The end still has to be said,
+because an empty roster is the only thing that cancels the notification the
+start put up.
+
 `call.ring` is aimed. Somebody pressed a button with one account's name under
 it, and that is what earns the full-screen answer screen over a locked phone,
 the ringtone on the desktop and the modal in front of whatever was on screen.
@@ -121,6 +132,39 @@ It rings for forty-five seconds and then stops, on every client. What normally
 takes a call notification away is the roster going empty, and somebody who
 rings and then does not join produces no roster at all — which would otherwise
 leave an ongoing incoming-call notification for a call that never existed.
+
+### Answering on one device stops the rest
+
+A ring is aimed at an **account**, and an account is not a device. It lands on
+the phone, the laptop and the browser tab alike, which is the point — but it
+means answering somewhere has to be able to take the ringer down everywhere
+else, and nothing could. The roster announcement is addressed to the channel's
+audience *minus the call's participants*, so the moment somebody answers they
+become the one account the announcement skips. The other devices rang on until
+they timed out, or until the whole call ended.
+
+So whoever newly appears in a roster has answered that call somewhere, and gets
+a `call.answered` push. It is the third push here whose only job is to take
+something off a screen, beside `message.deleted` and `channel.read`, and it
+carries no names because there is nothing to draw. Two differences from those
+two:
+
+- **It is urgent.** A late badge correction is cosmetic; a late one of these is
+  a phone ringing in a pocket while its owner is already talking.
+- **It ignores every preference.** An account that has switched notifications
+  off can still have a ringer standing from before it did, and taking one down
+  is not a notification.
+
+Clients that are running do not wait for it: the presence socket already
+carries every roster they can hear, so seeing themselves arrive in one is the
+same fact by a faster road. The push is for the devices that are not running,
+and for the window whose socket happens to be reconnecting at that moment.
+
+On Android there are two things to close, not one. The shade entry is a
+notification and the full-screen ringer is an **activity**, and an activity is
+not cancelled by cancelling a notification — so `IncomingCallActivity` watches
+the ringing set and finishes with it. Without that, answering on a laptop
+cleared the shade and left the ringer sitting over the lock screen.
 
 ## The push carries no words
 

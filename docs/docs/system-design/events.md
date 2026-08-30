@@ -164,7 +164,12 @@ notification they are talking about.
 
 - `call.roster` carries the whole roster of a call rather than a join or a
   leave. A roster of nobody is the call ending, and it is the only thing that
-  can cancel the notification.
+  can cancel the notification. The fan-out draws two different conclusions from
+  one event, which is the payoff for carrying the whole list: *who has just
+  arrived* — they have answered the call somewhere, so the ringer comes down on
+  their other devices — and *whether the room should be told*, which is only
+  true at the two ends of a call. A join event alone could say the first and
+  never the second.
 - `call.ring` sits beside `call.roster` rather than inside it. A roster is a
   fact about a channel and is broadcast to everybody who can hear it; a ring is
   aimed at one account by somebody who chose to aim it, and that difference is
