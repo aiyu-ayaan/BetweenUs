@@ -79,6 +79,10 @@ fun SeenByRow(receipts: List<ChannelReadReceipt>, onOpen: () -> Unit) {
                         label = receipt.user.label,
                         url = receipt.user.avatarUrl?.let { Endpoint.absolute(it) },
                         size = 16.dp,
+                        // The row is the button, and what it opens is who read
+                        // the message. A 16dp face is a texture here, not a
+                        // target - the dialog behind it is where a face is one.
+                        viewable = false,
                     )
                 }
             }
