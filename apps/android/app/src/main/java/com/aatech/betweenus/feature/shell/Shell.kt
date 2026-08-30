@@ -38,6 +38,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.aatech.betweenus.core.crypto.E2ee
 import com.aatech.betweenus.core.crypto.IdentityStatus
@@ -111,6 +112,32 @@ fun Shell(user: PublicUser) {
     val drawer = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     val navigation = rememberNavController()
+
+    val navBackStackEntry by navigation.currentBackStackEntryAsState()
+    val currentRoute = navBackStackEntry?.destination?.route
+
+    val isSettingsRoute = when (currentRoute) {
+        Route.Settings,
+        Route.AccountSettings,
+        Route.VoiceSettings,
+        Route.NotificationSettings,
+        Route.DeviceSettings,
+        Route.Permissions,
+        Route.Themes,
+        Route.Privacy,
+        Route.CallUsage,
+        Route.AutoUpdate,
+        Route.ServerSettings -> true
+        else -> currentRoute?.startsWith(Route.PermissionDetail) == true
+    }
+
+    val drawerGesturesEnabled = !isSettingsRoute && (currentRoute == Route.Chat || currentRoute == Route.Friends)
+
+    LaunchedEffect(isSettingsRoute) {
+        if (isSettingsRoute && drawer.isOpen) {
+            drawer.close()
+        }
+    }
 
     /**
      * How much of the app fits on screen at once.
@@ -351,7 +378,7 @@ fun Shell(user: PublicUser) {
              * Nothing is drawn and nothing is consumed here: the strip exists
              * to claim the area, and the drag it lets through is the drawer's.
              */
-            if (!twoPane) {
+            if (!twoPane && drawerGesturesEnabled) {
                 Box(
                     Modifier
                         .align(Alignment.CenterStart)
@@ -694,6 +721,7 @@ fun Shell(user: PublicUser) {
     } else {
         ModalNavigationDrawer(
             drawerState = drawer,
+            gesturesEnabled = !twoPane && drawerGesturesEnabled,
             drawerContent = {
                 ModalDrawerSheet(
                     drawerContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
