@@ -175,6 +175,66 @@ through constraints: `CallAudio.kt` routes the whole call to one communication
 device through `AudioManager`, which is why choosing a headset's microphone
 there also puts the call in that headset.
 
+## Cleaning up a microphone, and why echo is not part of it
+
+Three separate mechanisms are easy to confuse, and only one of them removes
+echo.
+
+**Noise suppression** takes a single channel and removes what does not sound
+like a voice. It has three levels, spelled the same on every client so that
+"set it to High" means one thing in a support conversation:
+
+| Level | Desktop / Web | Android |
+| :--- | :--- | :--- |
+| `off` | no constraint | `googNoiseSuppression` off |
+| `standard` | `noiseSuppression` — the ordinary WebRTC suppressor, tuned for *stationary* noise: a fan, a hum, an air conditioner | the OEM hardware suppressor where the device has one |
+| `high` | additionally `voiceIsolation` — Chromium's model-based suppressor, which removes a keyboard, a dog or a flatmate | forces WebRTC's own software suppressor, which is device-independent |
+
+`high` costs measurably more CPU, which is why it is not the default. Where
+`voiceIsolation` is unsupported the constraint is ignored and `high` degrades to
+`standard`, so asking for it never fails a capture.
+
+This was a boolean until it was three levels, and the boolean drove *both*
+constraints — so every call anybody ever made ran the expensive suppressor.
+`migrateVoiceSettings` in `voice-quality.ts` rewrites a stored `true` to
+`standard`. That migration exists because the field's *type* changed, and a
+default behind a field does not rescue a value of the wrong type: `true` is
+neither `'off'` nor `'high'`, so it would have behaved as `standard` while the
+settings screen showed nothing selected.
+
+**Echo cancellation** is a different problem and a denoiser cannot do it. A
+denoiser sees one channel; cancelling echo means subtracting the signal you are
+*playing* from the signal you are capturing, so it needs the far-end reference.
+To a denoiser, echo is speech — it is a human voice — so it is preserved
+carefully.
+
+**Why a call echoes even with echo cancellation on.** Chromium builds its echo
+reference from the **default render device**. `AudioSink` in `MediaSink.tsx`
+calls `setSinkId` so a call can be played to a chosen output, and whenever that
+is not the default the canceller is subtracting audio that is not what the
+speakers are producing. The result is uncancelled echo that reproduces only for
+people who changed their output device, which is indistinguishable from bad luck
+until it is measured. Hi-fi mode is the second cause and is deliberate: it turns
+echo cancellation off, because the canceller chews holes in anything correlated
+with what the speakers are already playing.
+
+**How it is measured.** `getStats` reports `echoReturnLossEnhancement` on the
+local `media-source`: how many dB the canceller is actually removing. A
+converged canceller removes 20–40 dB; single digits mean it is running against
+the wrong reference. `mesh.ts` reads it once per sample — it is one canceller
+per machine, not one per link — and `echoCancellerFailing` in `call-stats.ts`
+turns it into the warning shown in the connection panel and in voice settings.
+Two things it deliberately does *not* warn about: echo cancellation switched off
+(a choice, not a fault) and a null reading (plenty of builds do not report the
+statistic, and warning on its absence would put a permanent notice on machines
+with no echo at all).
+
+On Android none of this applies in the same way. `JavaAudioDeviceModule` chooses
+between the OEM canceller and WebRTC's own AEC3 at build time, and `CallAudio.kt`
+puts the whole call in `MODE_IN_COMMUNICATION` with
+`USAGE_VOICE_COMMUNICATION`, which is what gives the platform canceller a
+reference at all.
+
 ## What decides a share's picture
 
 Two mechanisms, and only one of them is negotiated.
