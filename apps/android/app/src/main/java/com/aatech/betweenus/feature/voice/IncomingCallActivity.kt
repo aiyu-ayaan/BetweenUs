@@ -8,6 +8,9 @@ import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -41,6 +44,7 @@ import com.aatech.betweenus.ui.theme.Danger
 import com.aatech.betweenus.ui.theme.Ground
 import com.aatech.betweenus.ui.theme.Slate400
 import com.aatech.betweenus.ui.theme.Slate50
+import kotlinx.coroutines.launch
 
 /**
  * The screen a ringing call puts in front of somebody.
@@ -71,6 +75,24 @@ class IncomingCallActivity : ComponentActivity() {
         if (channelId.isEmpty()) {
             finish()
             return
+        }
+
+        // Answered on another device, declined from the shade, or rung out.
+        // Cancelling the notification does not close this: a full-screen ringer
+        // is an activity, and without this it sat over the lock screen ringing
+        // at somebody who was already talking on their laptop.
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                // Only once it has been *seen* ringing. The flow lives in this
+                // process, and a process started fresh by the full-screen
+                // intent can reach here a moment before the notification that
+                // opened it is recorded - finishing on that empty first value
+                // would close the ringer instead of showing it.
+                var seen = false
+                SocialNotifications.ringing.collect { channels ->
+                    if (channelId in channels) seen = true else if (seen) finish()
+                }
+            }
         }
 
         setContent {

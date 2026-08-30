@@ -212,6 +212,15 @@ presenceSocket.on((event) => {
       voice.set(event.voice.channelId, event.voice.userIds);
       usePresenceStore.setState({ voice });
       announceVoiceJoins(event.voice.channelId, before, event.voice.userIds);
+
+      // This account is in that call now, and this window is not the one that
+      // put it there - so it is still ringing at somebody who is already
+      // talking. The `call.answered` push says the same thing to the devices
+      // that are not running; this is the road for the ones that are.
+      const self = useAuthStore.getState().user?.id;
+      if (self && event.voice.userIds.includes(self)) {
+        useRingStore.getState().answeredElsewhere(event.voice.channelId);
+      }
       return;
     }
 

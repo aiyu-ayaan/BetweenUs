@@ -45,7 +45,10 @@ const tagFor = (data) => {
       return `call:${data.channelId}`;
     // Its own tag, not the roster's: a ring must not be replaced by the quiet
     // announcement that arrives a second later when the caller joins.
+    // `call.answered` shares it because its only job is to close it - this
+    // account picked the call up on another device.
     case 'call.ring':
+    case 'call.answered':
       return `ring:${data.channelId}`;
     case 'remote.session':
       return `remote:${data.sessionId}`;
@@ -109,9 +112,10 @@ function present(data) {
             icon: '/icon.png',
             requireInteraction: true,
           };
-    // Both of these exist only to close something.
+    // These exist only to close something.
     case 'message.deleted':
     case 'channel.read':
+    case 'call.answered':
       return null;
     default:
       return null;
@@ -198,6 +202,7 @@ function routeFor(data) {
       return { kind: 'channel', channelId: data.channelId, url: `/?channel=${encodeURIComponent(data.channelId)}` };
     case 'call.roster':
     case 'call.ring':
+    case 'call.answered':
       return { kind: 'call', channelId: data.channelId, url: `/?call=${encodeURIComponent(data.channelId)}` };
     case 'remote.session':
       return { kind: 'remote', machineId: data.machineId, url: `/?remote=${encodeURIComponent(data.machineId)}` };

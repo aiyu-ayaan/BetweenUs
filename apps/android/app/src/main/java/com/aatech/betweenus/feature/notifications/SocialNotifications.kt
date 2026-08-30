@@ -17,6 +17,10 @@ import androidx.core.graphics.drawable.IconCompat
 import com.aatech.betweenus.MainActivity
 import com.aatech.betweenus.R
 import com.aatech.betweenus.feature.voice.IncomingCallActivity
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import java.util.concurrent.ConcurrentHashMap
 
 /**
@@ -176,13 +180,26 @@ object SocialNotifications {
             .build()
 
         posted.add(id)
+        _ringing.update { it + channelId }
         NotificationManagerCompat.from(context).notify(id, notification)
     }
 
-    /** Answered, declined, or the caller gave up. */
+    /**
+     * Which channels are ringing right now.
+     *
+     * Cancelling the notification is not enough on its own: the full-screen
+     * ringer is an activity, and an activity is not a notification. Without
+     * this, answering on a laptop took the entry out of the shade and left
+     * [IncomingCallActivity] sitting over the lock screen, ringing at nobody.
+     */
+    private val _ringing = MutableStateFlow<Set<String>>(emptySet())
+    val ringing: StateFlow<Set<String>> = _ringing.asStateFlow()
+
+    /** Answered here, answered elsewhere, declined, or the caller gave up. */
     fun clearRinging(context: Context, channelId: String) {
         val id = idOf(RING_BASE, channelId)
         posted.remove(id)
+        _ringing.update { it - channelId }
         NotificationManagerCompat.from(context).cancel(id)
     }
 

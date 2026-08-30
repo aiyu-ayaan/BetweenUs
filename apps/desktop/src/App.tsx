@@ -171,6 +171,13 @@ function Session(): JSX.Element {
           callerName: ring.callerName,
           ...(ring.callerAvatarUrl ? { callerAvatarUrl: ring.callerAvatarUrl } : {}),
         });
+        return;
+      }
+      // Picked up on another device. The presence socket says the same thing
+      // through the roster (see `stores/ring.ts`), and for the same reason as
+      // above it is not the only road worth listening on.
+      if (message.betweenus === 'push' && message.data.type === 'call.answered') {
+        useRingStore.getState().answeredElsewhere(message.data.channelId);
       }
     });
   }, []);

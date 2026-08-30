@@ -54,6 +54,9 @@
  *   version of the one above, and the difference is what earns it a ringtone
  *   and a full-screen ringer: a person pressed a button with this account's
  *   name under it, where a roster is a fact about a room.
+ * - `call.answered` - this account picked that call up somewhere. The third of
+ *   the pushes that exist to take something away, and the only thing that can
+ *   stop the ringer on the devices where nobody answered.
  * - `remote.session` - somebody is on one of this account's machines. The one
  *   notification here that exists because of what it means when it is
  *   unexpected, and the only one that ignores every preference: see below.
@@ -64,6 +67,7 @@ import { EVENTS, EventBus } from '@betweenus/events';
 import type { EventName, EventPayloads } from '@betweenus/events';
 import { Logger } from '@betweenus/logger';
 import type {
+  CallAnsweredPushData,
   CallPushData,
   CallRingPushData,
   ChannelReadPushData,
@@ -78,7 +82,7 @@ import type {
 import { DevicesService } from '../modules/devices/devices.service';
 import { messaging } from './firebase';
 import { focusedAmong } from './focus';
-import { namesOf, rosterChanged } from './roster';
+import { joined, namesOf, rosterChanged, worthAnnouncing } from './roster';
 import { sendWebPush, webPushReady } from './webpush';
 
 /** FCM's own ceiling for one `sendEach` call. */
@@ -314,15 +318,45 @@ export class PushService implements OnModuleInit {
    * arrival. One notification per channel, rewritten as people come and go,
    * and an empty roster is what cancels it - which is the only way a phone
    * that was told about a call ever finds out it is over.
+   *
+   * Announced at the two ends of a call only. It used to go out on every join
+   * and every departure, and the audience is everybody who can hear the channel
+   * *minus whoever is in it* - so hanging up moved somebody out of the roster,
+   * into the audience, and straight into a notification telling them who was
+   * still on the call they had just left.
    */
   private async onCallRoster(voice: { channelId: string; userIds: string[] }): Promise<void> {
     const { channelId, userIds } = voice;
-    if (!rosterChanged(this.rosters.get(channelId), userIds)) return;
-    const first = !this.rosters.has(channelId);
+    const previous = this.rosters.get(channelId);
+    if (!rosterChanged(previous, userIds)) return;
+    const first = previous === undefined;
     this.rosters.set(channelId, [...userIds]);
+
+    // Whoever just arrived answered this call somewhere, so the ringer comes
+    // down on the devices where they did not. Before the announcement and
+    // never gated on preferences: an account that has turned notifications off
+    // still has a ringer up if it was ringing before it turned them off, and a
+    // cancel is not a notification.
+    const answered = joined(previous, userIds);
+    if (answered.length > 0) {
+      const cancel: CallAnsweredPushData = { type: 'call.answered', channelId };
+      // Urgent, unlike the other two cancels. A late badge correction is a
+      // cosmetic delay; a late one of these is a phone that goes on ringing in
+      // somebody's pocket while they are already talking on another device,
+      // which is the whole complaint this exists to answer.
+      await this.deliver(
+        answered.map((userId) => ({ userId, data: cancel })),
+        { urgent: true },
+      );
+    }
+
     // A channel nobody has been told about, whose call has already ended:
     // nothing to cancel, so nothing to send.
     if (first && userIds.length === 0) return;
+
+    // Only the two ends of a call. See `worthAnnouncing` for what the middle
+    // used to cost the person who left it.
+    if (!worthAnnouncing(previous, userIds)) return;
 
     const channel = await prisma.channel.findUnique({
       where: { id: channelId },

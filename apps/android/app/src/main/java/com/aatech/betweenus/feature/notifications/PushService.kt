@@ -66,6 +66,7 @@ class PushService : FirebaseMessagingService() {
                     "server.member.added" -> handleServerAdded(data)
                     "call.roster" -> handleCallRoster(data)
                     "call.ring" -> handleCallRing(data)
+                    "call.answered" -> handleCallAnswered(data)
                     "remote.session" -> handleRemoteSession(data)
                     else -> Unit
                 }
@@ -233,6 +234,26 @@ class PushService : FirebaseMessagingService() {
      * you do not want to hear about the room, not that a colleague may never
      * call you from it.
      */
+    /**
+     * This account picked the call up somewhere else.
+     *
+     * A ring is aimed at an account and lands on every device it owns, so
+     * answering on one of them left the rest ringing at somebody who was
+     * already talking - until they timed out, or until the whole call ended.
+     * Nothing told them: the roster announcement goes to everyone who can hear
+     * the channel *minus whoever is in the call*, which is exactly the account
+     * that needs to know.
+     *
+     * No session, no preferences and no gates. There is nothing to draw and
+     * nothing to decide: an account that has switched notifications off can
+     * still have a ringer up from before it did, and taking one down is not a
+     * notification.
+     */
+    private fun handleCallAnswered(data: Map<String, String>) {
+        val channelId = data["channelId"] ?: return
+        SocialNotifications.clearRinging(applicationContext, channelId)
+    }
+
     private suspend fun handleCallRing(data: Map<String, String>) {
         val channelId = data["channelId"] ?: return
         if (CallService.inCall) return

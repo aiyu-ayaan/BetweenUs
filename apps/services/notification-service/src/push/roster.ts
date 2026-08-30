@@ -40,3 +40,40 @@ export function namesOf(names: string[]): string {
       return `${first}, ${second} and ${names.length - 2} others`;
   }
 }
+
+/**
+ * Who has just arrived in a call.
+ *
+ * They have answered it *somewhere*, which is the only thing that can take a
+ * ringer down on the devices where they did not. Nothing else knows: the ring
+ * push is aimed at an account and lands on every device it owns, and the
+ * account that answers is filtered straight out of the roster announcement
+ * below - so before this, the other devices were told nothing at all and rang
+ * on until they timed out or the whole call ended.
+ */
+export function joined(previous: string[] | undefined, now: string[]): string[] {
+  const held = new Set(previous ?? []);
+  return now.filter((userId) => !held.has(userId));
+}
+
+/**
+ * Whether this roster change is worth announcing to the room.
+ *
+ * Only the two ends of a call: it starting, and it ending. `call.roster` used
+ * to go out on *every* join and departure, and the audience is "everyone who
+ * can hear the channel, minus whoever is in the call" - so the moment somebody
+ * hung up they stopped being a participant, became audience, and were sent a
+ * notification saying who was still on the call they had just left. Leaving a
+ * call and being told about it is the clearest possible way to say the rule
+ * was wrong.
+ *
+ * The middle of a call is not news either way. Somebody who wants to know who
+ * is in it can look; somebody who does not is being buzzed once per arrival.
+ * The end still has to be said, because an empty roster is the only thing that
+ * cancels the notification the start put up.
+ */
+export function worthAnnouncing(previous: string[] | undefined, now: string[]): boolean {
+  const started = (previous ?? []).length === 0 && now.length > 0;
+  const ended = now.length === 0;
+  return started || ended;
+}

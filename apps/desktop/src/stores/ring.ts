@@ -45,6 +45,17 @@ interface RingState {
   answer: () => void;
   /** Said no, or it rang out. Nothing is sent back - a ring is not a handshake. */
   dismiss: () => void;
+  /**
+   * Picked up somewhere else, on another device of this same account.
+   *
+   * A ring is aimed at an *account*, so it lands on every device that account
+   * owns - and answering on one of them used to leave the rest ringing at
+   * somebody who was already talking, until they timed out or the whole call
+   * ended. Nothing told them: the roster announcement is addressed to everyone
+   * who can hear the channel minus whoever is in the call, which is precisely
+   * the account that needs to know.
+   */
+  answeredElsewhere: (channelId: string) => void;
 }
 
 let timeout: number | null = null;
@@ -95,7 +106,13 @@ export const useRingStore = create<RingState>((set, get) => ({
     stopRinging();
     set({ incoming: null });
   },
+
+  answeredElsewhere: (channelId) => {
+    if (get().incoming?.channelId !== channelId) return;
+    get().dismiss();
+  },
 }));
+
 
 /**
  * Answering a call that arrived some other way silences the ringer.

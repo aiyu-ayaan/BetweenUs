@@ -2048,6 +2048,27 @@ export interface RemoteSessionPushData {
 }
 
 /** Everything that can arrive as a data-only push. */
+/**
+ * This account is now in a call, on one of its devices.
+ *
+ * The third push here whose only job is to take something *off* a screen, and
+ * for the same reason as `channel.read`: a ring is aimed at an account and
+ * lands on every device it owns, so answering on one of them leaves the rest
+ * ringing at somebody who is already talking.
+ *
+ * Nothing could tell them before. The roster announcement is addressed to
+ * everyone who can hear the channel *minus whoever is in the call*, so the one
+ * account that needs to hear "you answered" is the exact account it skips - and
+ * the other devices rang on until they timed out, or until the whole call
+ * ended.
+ *
+ * Carries no names: there is nothing to draw. It is a cancel.
+ */
+export interface CallAnsweredPushData {
+  type: 'call.answered';
+  channelId: string;
+}
+
 export type PushData =
   | MessagePushData
   | MessageDeletedPushData
@@ -2056,6 +2077,7 @@ export type PushData =
   | ServerMemberPushData
   | CallPushData
   | CallRingPushData
+  | CallAnsweredPushData
   | RemoteSessionPushData;
 
 // --- Chat WebSocket protocol (/ws/chat) ---
