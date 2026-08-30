@@ -70,9 +70,9 @@ fun SettingsScreen(
     onDeviceSettings: () -> Unit,
     onServerSettings: () -> Unit,
     onPermissions: () -> Unit,
-    onAutoUpdate: () -> Unit,
-    onCallUsage: () -> Unit,
     onThemes: () -> Unit,
+    onAutoUpdate: (() -> Unit)? = null,
+    onCallUsage: (() -> Unit)? = null,
     onPrivacy: (() -> Unit)? = null,
 ) {
     val scope = rememberCoroutineScope()
@@ -197,26 +197,10 @@ fun SettingsScreen(
             SectionLabel("This Device")
             ListRow(
                 title = "This Device",
-                subtitle = "Crash reports, diagnostics, hardware specifications",
+                subtitle = "Crash reports, data usage, auto update, specifications",
                 leading = { BetweenUsIcon(BetweenUsIcons.Monitor) },
                 trailing = { BetweenUsIcon(BetweenUsIcons.ChevronRight, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
                 onClick = onDeviceSettings,
-            )
-
-            ListRow(
-                title = "Calls & data usage",
-                subtitle = "Every call this account has been in, and what each one moved",
-                leading = { BetweenUsIcon(BetweenUsIcons.Phone) },
-                trailing = { BetweenUsIcon(BetweenUsIcons.ChevronRight, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
-                onClick = onCallUsage,
-            )
-
-            ListRow(
-                title = "Auto update",
-                subtitle = "Channel, and whether this app updates itself from GitHub",
-                leading = { BetweenUsIcon(BetweenUsIcons.Download) },
-                trailing = { BetweenUsIcon(BetweenUsIcons.ChevronRight, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
-                onClick = onAutoUpdate,
             )
 
             // --- Deployment Subsection ---

@@ -507,8 +507,6 @@ fun Shell(user: PublicUser) {
                             onDeviceSettings = { navigation.navigate(Route.DeviceSettings) },
                             onServerSettings = { navigation.navigate(Route.ServerSettings) },
                             onPermissions = { navigation.navigate(Route.Permissions) },
-                            onAutoUpdate = { navigation.navigate(Route.AutoUpdate) },
-                            onCallUsage = { navigation.navigate(Route.CallUsage) },
                             onThemes = { navigation.navigate(Route.Themes) },
                         )
                     }
