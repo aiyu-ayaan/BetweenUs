@@ -1,5 +1,101 @@
 # Changelog
 
+## [0.0.1-alpha.19](https://github.com/aiyu-ayaan/BetweenUs/compare/v0.0.1-alpha.18...v0.0.1-alpha.19) (2026-08-30)
+
+### Features
+
+* Warn about failing echo cancellation during a call
+* Report server health, storage and bandwidth to the admin panel
+* Surface echo canceller failure in voice settings
+* Three-level noise suppression and echo canceller health
+* Admin server health and storage contract
+* Pin a face to the call stage, and stop the stage moving on its own
+* A call stage that holds still, and a pin for the face that matters
+* Make connection error banners dismissable across all views
+* Say what is holding a share's picture down
+* Put a status dot on every face in a conversation
+* Decide who may see when you were last here
+* Last seen in the header, and a profile a double tap away
+* Say who is here, when they were last here, and what they say
+* Give an account an about line and a last-seen time
+* Give the forward picker icons, faces and a limit
+* Forward a message into another channel
+* Carry a forwarded-from tag inside the message body
+* Open the photo behind an avatar
+* Add dedicated PermissionDetailScreen subpage for each permission
+* Add hierarchical settings subsections and options subpages
+* Fix icon colors and create dedicated permissions page
+* Declining stops the ring on this account's other devices
+* Update changelog for alpha release 0.0.1-alpha.18 with new features, bug fixes, and documentation improvements
+* Upgrade 3D hero showcase with interactive subsystem inspector and vector icons
+* Add interactive 3D logo showcase and spatial chips to landing page
+
+### Bug fixes
+
+* Let the API client load outside Vite for the self-checks
+* Scope event buffer lookup for query responses in smoke test
+* Ask for the microphone somebody chose, not one like it
+* Stop the SDP asking for a bitrate floor nobody can afford
+* Stop blaming the microphone for a link that never connected
+* Show the about line on a profile, and your own status on yours
+* List everywhere a forward could go, not one server's channels
+* Let the share picker be seen before the files are claimed
+* Give the seen-by row its tap back
+* Show the other person's photo in a direct message header
+* Derive the version code from the version name
+* Derive the build version from the repository manifest
+* Resolve system daylight/dark theme state synchronization in themes and settings
+* Disable navigation drawer gesture on settings screens
+* Start the app after an install and after an update
+* Cap a message at ten files where they are picked
+* Size the message cap for its manifest
+* Stop the ring elsewhere, and announce a call once
+* Apply WebRTC signals one at a time per peer
+* Recover a forked identity on the next sign-in
+
+### Other changes
+
+* Fix call echo, add tiered noise suppression, and admin server health
+* Noise suppression levels and why echo is a separate problem
+* Update development submodule pointer
+* Document the echo path and three-level noise suppression
+* Explain how the health snapshot is assembled
+* Document the health screen and its unmeasurable fields
+* Who is on the call stage, and what is allowed to move
+* How a microphone is chosen, and why it must be exact
+* What decides a share's picture, and what must never be a floor
+* Stop committing the Kotlin compiler's scratch directory
+* Describe who may see a last-seen time
+* Describe last seen and the about line across the suite
+* Describe forwarding across the clients
+* Describe the profile photo viewer across the clients
+* Make all sub-settings direct top-level items and remove nested cross-links
+* Enforce strict Setting -> Subsection -> Option hierarchy for settings
+* Remove redundant Calls & Data and Auto Update rows from main settings
+* Remove redundant Privacy & Safety row from main settings screen
+* Add rule that AI assistants must never push code
+* Document the patch marker and the docs deploy
+* Revert a failed release, rebuild one in place, deploy the docs
+* Add the patch marker and the docs scope
+* Document how the installer starts the app
+* Document the ten-file cap and what it protects
+* Document declining across an account's devices
+* Document call.answered and the once-per-call roster
+* Document one-signal-at-a-time negotiation
+* Document per-kind backups and identity recovery
+* !docs : Updating docs
+* Add top-level section links and automate changelog extraction
+* Add download links to navbar, hero section, and intro pointing to GitHub Releases
+* Update verifiable architecture, sequence, and lifecycle diagrams to Archify standard
+
+### Artifacts
+
+| Platform | This release |
+| --- | --- |
+| Server images | Built here |
+| Desktop (Windows) | Built here |
+| Android | Built here |
+
 ## [0.0.1-alpha.18](https://github.com/aiyu-ayaan/BetweenUs/compare/v0.0.1-alpha.17...v0.0.1-alpha.18) (2026-08-29)
 
 ### Features
