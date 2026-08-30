@@ -15,7 +15,7 @@ one is *for*.
 | [auth-service](/services/auth-service) | `/api/v1/auth`, `/api/v1/admin` | — | Sessions, OAuth, admin panel auth |
 | [server-service](/services/server-service) | `/api/v1/servers`, `/api/v1/channels` | — | Servers, roles, channels, invites |
 | [chat-service](/services/chat-service) | `/api/v1/messages`, `/api/v1/friends`, `/api/v1/dm`, `/api/v1/e2ee`, `/api/v1/uploads` | `/ws/chat` | Messages, DMs, friends, E2EE keys, uploads |
-| [presence-service](/services/presence-service) | `/api/v1/internal/presence` (internal) | `/ws/presence` | Online/typing/voice roster state |
+| [presence-service](/services/presence-service) | `/api/v1/internal/presence` (internal) | `/ws/presence` | Online / last seen / typing / voice roster state |
 | [notification-service](/services/notification-service) | `/api/v1/notifications` | — | Mute/quiet-hour prefs, unread, push devices |
 | [call-service](/services/call-service) | `/api/v1/calls` | `/ws/call` | Call signalling, ICE config |
 | [remote-gateway](/services/remote-gateway) | `/api/v1/remote` | `/ws/remote` | Machines, grants, sessions, audit |

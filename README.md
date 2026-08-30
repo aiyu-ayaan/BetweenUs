@@ -43,7 +43,8 @@ Messages, attachments, and call media are end-to-end encrypted: the server store
 | Listen together | A shared YouTube queue inside a voice call: everyone hears the same track in step, from their own connection, at full quality, with the video on screen. Browse the real youtube.com inside the app, signed in as yourself, and queue what you are looking at. Anybody can add, skip or pause; music ducks under whoever is talking. No audio is streamed between anybody |
 | Play together | Six board games inside a voice call - Tic-tac-toe, Connect Four, Reversi, Dots and Boxes, Ludo, and Carrom with a real physics simulation. One board everybody sees, two chairs anybody can take, and a rematch button. `call-service` referees the moves, so a move is a number on the wire rather than somebody's screen being streamed |
 | Android Client | Native Jetpack Compose + Material 3 app with E2EE messaging, WhatsApp-style media picker and composer, media viewers, and public gallery saving (`Pictures/BetweenUs`, `Movies/BetweenUs`) |
-| Presence | Online / idle / do not disturb / invisible, typing indicators, voice rosters |
+| Presence | Online / idle / do not disturb / invisible, last seen, typing indicators, voice rosters |
+| Profiles | An about line on every account, and a card - hovered on desktop and web, double-tapped on Android - carrying the picture, whether they are here, when they were last here, and what their line says |
 | Notifications | Desktop notifications, system tray, start with the system, per-channel and per-person mute, quiet hours, persisted unread with a line that survives a restart |
 | Remote desktop | A machine offers itself from Settings, dials out to the gateway, and is viewed and driven from another client; per-machine permissions with expiry, and an audit trail |
 
@@ -133,9 +134,13 @@ to be framed, so no browser tab can ever show it.
 | Take a chair, stand up, play again | ✅ | ✅ | — |
 | Watch without playing, and see whose move it is | ✅ | ✅ | — |
 | Ongoing-call notification | tray | — | ✅ foreground service |
-| **Presence and notifications** | | | |
+| **Presence and profiles** | | | |
 | Online, idle, do not disturb, invisible | ✅ | ✅ | ✅ |
+| Last seen, in the conversation header | ✅ | ✅ | ✅ |
+| An about line on your account, and everyone else's | ✅ | ✅ | ✅ |
+| The profile card: picture, presence, last seen, about | ✅ hover | ✅ hover | ✅ double tap |
 | Typing indicators, voice rosters | ✅ | ✅ | ✅ |
+| **Notifications** | | | |
 | Unread counts and the unread line | ✅ | ✅ | ✅ |
 | Notifications for messages, mentions and calls | ✅ | ✅ | ✅ FCM, app dead or alive |
 | Per-channel and per-person mute, quiet hours | ✅ | ✅ | ✅ |
@@ -844,6 +849,46 @@ Errors share one shape everywhere:
 
 Newest first. Every one of these is in `development/TRACK.md` with the reason it
 was built the way it was; this is the short version.
+
+### Last seen, and a line about yourself
+
+- **The conversation header answers "are they there".** A direct message now
+  draws "online", or "last seen yesterday at 11:55 PM", under the name - the
+  place every messenger puts it, because the question belongs beside the name
+  rather than behind a tap into a profile. On all three clients.
+- **Every last-seen line carries the clock.** A day on its own answers roughly
+  when and leaves the question people actually have - was that this morning, or
+  ten minutes before I looked - to be worked out from nothing. Today and
+  yesterday name themselves, then the weekday while a weekday still names one
+  day, then the date; all four with the time, and all four on the reader's own
+  clock.
+- **A profile card, on a hover or a double tap.** Picture, name, whether they
+  are here, when they were last here, and their about line. Resting on a member
+  row or a message's author opens it on desktop and web the way Teams does -
+  600ms to open, 200ms of grace to cross the gap and read it. Android reaches
+  the same card by the gesture a phone has instead: a double tap, which was the
+  one gesture nothing had claimed.
+- **An about line, defaulting to "Hey, I'm on Between Us."** 140 characters,
+  counted in code points so an emoji is one character to the person typing it.
+  It rides on the member and friend payloads the clients already fetch rather
+  than being fetched when a card opens, because a card that appears on hover has
+  no room for a spinner.
+- **Invisible really is invisible.** The last-seen value stops being written the
+  moment somebody chooses it and freezes at the last time they were genuinely
+  visible. A status that hid you but went on publishing when you were last here
+  would not be hiding you.
+- **Nobody can ask about a stranger.** `presence.query` is scoped through the
+  same audience every other presence event goes through - people you share a
+  server or a friendship with - so it cannot become a "who is online" oracle
+  over the whole deployment.
+- **A clock that runs fast does not report the future.** A laptop a few minutes
+  ahead of the server would otherwise be told somebody was last seen at 3:34
+  beside a wall clock reading 3:30, which reads as broken software rather than
+  as a wrong clock. Both clients clamp to now.
+- **The admin panel's "last seen" column stops being a guess.** It was the newest
+  live session, which only ever meant "when they last signed in"; it is the real
+  value now, and falls back to the old approximation only for an account that has
+  not connected since the column existed.
 
 ### An Android layout that uses the screen it is on
 

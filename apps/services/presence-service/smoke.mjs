@@ -252,7 +252,34 @@ ok(
   ),
 );
 
-// Closing a socket takes that user offline for everyone still connected.
+// --- last seen ---------------------------------------------------------------
+//
+// Bob is invisible by this point, which is exactly the case worth asserting: a
+// status that hid him but went on publishing when he was last here would not be
+// hiding him. Alice may ask - they share a server - and must be told `offline`
+// without a timestamp that is ticking along behind the disguise.
+a.send({ type: 'presence.query', userIds: [bob.user.id] });
+const bobSeen = await a.waitFor(
+  (event) => event.type === 'presence.changed' && event.user.userId === bob.user.id,
+);
+ok('a query is answered', bobSeen !== null);
+ok('an invisible user answers offline', bobSeen?.user.status === 'offline');
+
+// Carol shares nothing with Alice, so asking about her must be answered with
+// silence rather than with a status - a query anybody could aim at any id would
+// be the "who is online" oracle the audience scoping exists to remove.
+const before = a.events.length;
+a.send({ type: 'presence.query', userIds: [carol.user.id] });
+await new Promise((resolve) => setTimeout(resolve, 500));
+ok(
+  'a query about a stranger is answered with nothing',
+  !a.events
+    .slice(before)
+    .some((event) => event.type === 'presence.changed' && event.user.userId === carol.user.id),
+);
+
+// Closing a socket takes that user offline for everyone still connected, and
+// the event carries when they were last here.
 a.socket.close();
 const offline = await b.waitFor(
   (event) =>
@@ -261,6 +288,14 @@ const offline = await b.waitFor(
     event.user.status === 'offline',
 );
 ok('offline fanout', offline !== null);
+// Alice was visible for the whole run, so her departure is a moment somebody
+// can be told about. A timestamp in the future would be a clock problem; one
+// before this script started would be a value that never moved.
+ok('the offline event carries a last-seen time', typeof offline?.user.lastSeenAt === 'string');
+ok(
+  'and it is when she actually left',
+  Math.abs(Date.now() - new Date(offline.user.lastSeenAt).getTime()) < 5 * 60_000,
+);
 // Not "no presence.changed at all": Carol is in her own audience, so her own
 // arrival comes back to her. Everything about anybody else is what must never
 // reach her, and that is what this asserts.

@@ -55,6 +55,20 @@ is not returned to this account on any of its devices, and every other
 participant's copy is untouched. `Server.messageTtlSeconds` outranks it,
 because that one deletes the row rather than hiding it.
 
+Two fields describe the account to other people rather than to itself. `about`
+is the line under the name on a profile card — stored in the clear beside
+`displayName` and `avatarUrl`, because it is a caption on a name and not a
+secret, and defaulted to `Hey, I'm on Between Us.` so that a card nobody has
+edited still reads as a card. `NOT NULL` with that default, so an account older
+than the column reads as one that never changed it. The DTO caps it at
+`ABOUT_MAX_LENGTH` (140).
+
+`lastSeenAt` is nullable and is a **flush target, not the live value**: while
+somebody is connected the answer is in `presence:lastseen` in Redis, and
+presence-service writes here when their last window closes. Reads take the
+later of the two. It is never written while the account is invisible — see
+[presence-service](../services/presence-service.md).
+
 ### `RefreshToken`
 `id` **is** the JWT `jti` — revoking a token is a delete by primary key.
 `tokenHash` is stored, never the raw token. `revokedAt` marks reuse-detected

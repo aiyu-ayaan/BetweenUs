@@ -20,7 +20,7 @@ REST:
 
 WebSocket:
   /ws/chat        text channels, DMs, message events
-  /ws/presence    online status, typing indicators
+  /ws/presence    online status, last seen, typing indicators
   /ws/call        call signalling: offer/answer/ICE, roster
   /ws/remote      remote-desktop signalling: session, input, offer/answer/ICE
 ```
