@@ -152,6 +152,54 @@ Call bytes are the clients' own totals from `CallSession` and not this host's
 traffic — media is peer-to-peer and never passes through it. Attachment bytes
 are what this deployment actually served.
 
+#### How the snapshot is assembled
+
+Every probe is timed and caught **individually** — Postgres (`SELECT 1`), Redis
+(`PING`), and a `GET /health` against chat-service, presence-service,
+call-service and remote-gateway — each on its own 2.5 s deadline. A dependency
+that is down turns its own card red inside a `200`; it never fails the request.
+A page that 500s when something is broken tells an administrator only that
+something is broken, at the exact moment they need to know which thing. Every
+section (database, media, bandwidth, live) is wrapped the same way and returns
+its empty shape rather than propagating. `overall` is simply the worst state
+across the components, pessimistically: one `down` is `down`.
+
+Every URL in the response goes through `redactUrl` first. That strips
+`user:password@` **and** any query parameter whose name looks like a secret —
+`?password=`, `?sslpassword=`, `?token=` — because `new URL` parses
+`host:5432/db?password=hunter2` quite happily by reading `host:` as a scheme,
+and a redaction that only cleared the userinfo would hand that one straight
+back. Anything that does not parse at all is replaced wholesale rather than
+passed through.
+
+Where the numbers come from, and what they are not:
+
+| Field | Source | Caveat |
+| --- | --- | --- |
+| `database.*` | raw SQL over `pg_database_size`, `pg_stat_user_tables`, `pg_stat_activity`, `SHOW max_connections` / `server_version` | `rowEstimate` is `n_live_tup`, the planner's estimate — an exact `count(*)` per table is a scan of the whole database, which is a strange thing for a health page to do to a struggling server. Top 15 tables only |
+| `media.byKind` | the storage key's file extension | `Attachment` has **no** content-type column and cannot have one: the manifest naming the file is sealed inside the ciphertext. The extension comes from `buildKey`, so it is a hint about what was uploaded rather than a declaration |
+| `media.diskBytes` | a walk of `LOCAL_STORAGE_PATH`, `fs.statfs` for the free space | local driver only |
+| `bandwidth.*` | `CallSession` (`BigInt`, converted with `Number()` exactly as `calls.service.ts` does) and `Attachment.size` | no new tracking and no migration — it is what was already recorded. A client closed mid-call reported nothing, so the call totals are a floor |
+| `live.onlineUsers`, `activeCalls`, `activeCallParticipants` | Redis: `presence:online` (fresh entries only, same 90 s cutoff `PresenceStore` uses), `presence:voice:channels`, `presence:voice:<channelId>` | a second reader of presence-service's keys; if they change, this changes with them |
+| `live.activeRemoteSessions` | `RemoteSession` where `endedAt` is null | — |
+
+Two figures are honestly limited rather than exact, and the reason is written
+into the code beside each:
+
+- **`live.totalSockets` is connected *accounts*, not sockets.** Presence is
+  keyed per account — two windows of one account are one entry in
+  `presence:online` — and nothing anywhere keeps a per-device count, so it will
+  never exceed `onlineUsers`. A true socket count needs presence to key by
+  device, which is a change to presence-service rather than to this endpoint.
+- **`/ws/chat` reports `connections: 0`, meaning "not tracked".**
+  `chat-service` keeps its subscriptions inside the gateway process and
+  publishes nothing about them. The endpoint's `state` still comes from that
+  service's own probe, which is the question the endpoint list is really asked.
+
+The endpoint URLs are built from `PUBLIC_API_URL` with the scheme swapped for
+its WebSocket equivalent, never hardcoded: an administrator checking their
+tunnel wants the URL their clients actually dial.
+
 ### Outgoing mail
 
 SMTP is operator configuration, not environment: it lives in `SmtpSetting` and
