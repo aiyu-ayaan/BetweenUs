@@ -26,6 +26,7 @@ import { Avatar } from '../../components/Avatar';
 import { AttachmentList } from './Attachments';
 import { EmojiPicker } from './EmojiPicker';
 import { ChannelMenu } from './ChannelMenu';
+import { ForwardDialog } from './ForwardDialog';
 import { MessageMenu } from './MessageMenu';
 import { OneTimeToggle, SendPreview, isPreviewable, isImage } from './SendPreview';
 import { EmojiSuggest } from './EmojiSuggest';
@@ -387,6 +388,7 @@ function MessageList({
   const loadOlder = useChatStore((state) => state.loadOlder);
   const loadingOlder = useChatStore((state) => state.loadingOlder);
   const exhausted = useChatStore((state) => state.cursors[channel.id] === null);
+  const forwardMessage = useChatStore((state) => state.forwardMessage);
   const jumpTo = useChatStore((state) => state.jumpTo);
   const clearJump = useChatStore((state) => state.clearJump);
   const dividerId = useChatStore((state) => state.divider[channel.id] ?? null);
@@ -401,6 +403,15 @@ function MessageList({
   const [failure, setFailure] = useState<string | null>(null);
   /** The message whose "seen by" dialog is open, if any. */
   const [seenFor, setSeenFor] = useState<string | null>(null);
+  /** The message whose "forward to" dialog is open, if any. */
+  const [forwarding, setForwarding] = useState<string | null>(null);
+  /**
+   * What the last forward did, in words.
+   *
+   * A forward lands in a channel nobody is looking at, so without this it is
+   * an action that appears to do nothing at all.
+   */
+  const [forwardNote, setForwardNote] = useState<string | null>(null);
 
   /**
    * Where each reader's face is drawn: once, against the newest message of
@@ -577,6 +588,12 @@ function MessageList({
         </p>
       )}
 
+      {forwardNote && (
+        <p className="sticky top-0 z-10 mb-2 rounded-md bg-accent/15 px-3 py-2 text-sm text-accent">
+          {forwardNote}
+        </p>
+      )}
+
       {/* Only once the channel has been read back to its first message is the
           "this is the beginning" block true. Before that the top of the list is
           just the top of a page. An empty channel is exhausted by definition,
@@ -725,6 +742,20 @@ function MessageList({
                       </p>
                     )}
 
+                    {/* Above the quote and above the words: the first thing
+                        to know about a forwarded message is that the words are
+                        not the sender's. */}
+                    {!deleted && message.forwardedFrom && (
+                      <p className="mb-1 flex items-center gap-1 text-xs italic text-slate-500">
+                        {/* The reply mark mirrored, which is the forward mark. */}
+                        <ReplyIcon className="h-3 w-3 shrink-0 -scale-x-100" />
+                        <span className="truncate">
+                          Forwarded from {message.forwardedFrom.author}
+                          {message.forwardedFrom.channel && ` in ${message.forwardedFrom.channel}`}
+                        </span>
+                      </p>
+                    )}
+
                     {/* The quote belongs to the message, so it sits inside
                         the bubble and above everything the message says. */}
                     {!deleted && message.replyTo && <QuotedMessage reply={message.replyTo} />}
@@ -823,6 +854,14 @@ function MessageList({
               const target = messages.find((item) => item.id === menu.id);
               if (target) setReplyTo(quoteOf(target));
             },
+            onForward: (() => {
+              const target = messages.find((item) => item.id === menu.id);
+              // A tombstone has nothing to carry, and a one-time message must
+              // not be carried anywhere: being seen once by the people it was
+              // sent to is the whole of what it promised.
+              if (!target || target.deletedAt || target.viewOnce) return undefined;
+              return () => setForwarding(menu.id);
+            })(),
             onMoreEmoji: (at) => setPicker({ id: menu.id, at }),
             onEdit:
               messages.find((item) => item.id === menu.id)?.author.id === me?.id
@@ -854,6 +893,33 @@ function MessageList({
             />
           );
         })()}
+
+      {forwarding && (
+        <ForwardDialog
+          fromChannelId={channel.id}
+          onClose={() => setForwarding(null)}
+          onPick={(target) => {
+            const id = forwarding;
+            setForwarding(null);
+            const name =
+              [...useChatStore.getState().channels, ...useChatStore.getState().directs].find(
+                (entry) => entry.id === target,
+              )?.name ?? 'the conversation';
+            // Re-uploading a video takes as long as sending one did, so it
+            // says so first and corrects itself when it lands.
+            setForwardNote(`Forwarding to ${name}…`);
+            void forwardMessage(id, target)
+              .then(() => {
+                setForwardNote(`Forwarded to ${name}`);
+                window.setTimeout(() => setForwardNote(null), 4000);
+              })
+              .catch((error: unknown) => {
+                setForwardNote(null);
+                report(Promise.reject(error));
+              });
+          }}
+        />
+      )}
 
       {picker && (
         <EmojiPicker

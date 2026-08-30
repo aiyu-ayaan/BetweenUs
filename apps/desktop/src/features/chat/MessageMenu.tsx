@@ -13,6 +13,12 @@ export interface MessageMenuActions {
   onReact: (emoji: string) => void;
   /** Answers this message. Absent on a tombstone, which has nothing to quote. */
   onReply?: () => void;
+  /**
+   * Carries this message into another channel. Absent when there is nothing
+   * to carry: a tombstone, or a one-time message, whose whole bargain is that
+   * it is seen once by the people it was sent to.
+   */
+  onForward?: () => void;
   /** Opens the full picker at the position the menu was standing in. */
   onMoreEmoji: (at: { x: number; y: number }) => void;
   onEdit?: () => void;
@@ -71,7 +77,14 @@ export function MessageMenu({
   const width = 208;
   const rows =
     1 +
-    [actions.onReply, actions.onEdit, actions.onPin, actions.onCopy, actions.onDelete].filter(
+    [
+      actions.onReply,
+      actions.onForward,
+      actions.onEdit,
+      actions.onPin,
+      actions.onCopy,
+      actions.onDelete,
+    ].filter(
       Boolean,
     ).length;
   const height = 52 + rows * 34;
@@ -123,6 +136,18 @@ export function MessageMenu({
           label="Reply"
           onClick={() => {
             actions.onReply?.();
+            onClose();
+          }}
+        />
+      )}
+      {actions.onForward && (
+        <Item
+          // The reply mark, mirrored - which is the forward mark. One glyph
+          // rather than a second that says the same thing pointing the other way.
+          icon={<ReplyIcon className="h-4 w-4 -scale-x-100" />}
+          label="Forward"
+          onClick={() => {
+            actions.onForward?.();
             onClose();
           }}
         />

@@ -7,6 +7,7 @@ import type {
   Message,
   MessageAttachment,
   MessageCustomEmoji,
+  MessageForward,
   MessageReply,
   ServerMember,
   ServerWithRole,
@@ -28,7 +29,7 @@ import { decodeBody, encodeBody } from '../services/message-body';
 import { notifyMessage, publishUnreadCount, windowIsFocused } from '../services/notifications';
 import { mentionsMe } from '../services/mentions';
 import { cache } from '../services/cache';
-import { forgetAttachments } from '../services/attachments';
+import { forgetAttachments, openAttachment, uploadAttachment } from '../services/attachments';
 import { emojiFor, forgetEmoji, loadEmoji, usedEmoji } from '../services/server-emoji';
 import { useAuthStore } from './auth';
 
@@ -43,6 +44,8 @@ export interface DecryptedMessage extends Message {
   replyTo?: MessageReply;
   /** Pictures for the `:name:` shortcodes in `content`, carried with it. */
   emoji?: MessageCustomEmoji[];
+  /** Set when these are somebody else's words, carried in from elsewhere. */
+  forwardedFrom?: MessageForward;
 }
 
 interface ChatState {
@@ -144,6 +147,20 @@ interface ChatState {
     /** One-time: its media may be opened once, and opening it destroys it. */
     viewOnce?: boolean,
   ) => Promise<void>;
+  /**
+   * The same message again, in another channel.
+   *
+   * A copy and not a pointer, because a pointer could not be read: every body
+   * and every blob is sealed under the key of the channel it was sent to, and
+   * the destination holds a different one. So the plaintext is re-sealed there
+   * and the files are opened here and uploaded again - which is why this takes
+   * as long as sending them did the first time.
+   *
+   * What travels is what the message said, not what happened to it since. The
+   * reactions, the pins and the read receipts belong to the original and stay
+   * with it; only the tag saying whose words these were comes along.
+   */
+  forwardMessage: (messageId: string, toChannelId: string) => Promise<void>;
   /**
    * Reports that this account has opened a one-time message, which is what
    * destroys it. Idempotent, and does nothing for the author's own message.
@@ -555,6 +572,52 @@ export const useChatStore = create<ChatState>((set, get) => ({
     );
   },
 
+  forwardMessage: async (messageId, toChannelId) => {
+    const original = get().messages.find((message) => message.id === messageId);
+    if (!original) return;
+
+    const from = original.channelId;
+    const carried: MessageAttachment[] = [];
+    for (const attachment of original.attachments) {
+      const blob = await openAttachment(from, attachment);
+      // `openAttachment` may have turned a HEIC into a JPEG on the way out of
+      // the cache, so the blob's own type is the truthful one.
+      const file = new File([blob], attachment.name, {
+        type: blob.type || attachment.contentType,
+      });
+      carried.push(
+        await uploadAttachment(toChannelId, file, undefined, {
+          ...(attachment.duration != null
+            ? { voice: { duration: attachment.duration, waveform: attachment.waveform ?? [] } }
+            : {}),
+        }),
+      );
+    }
+
+    const target = [...get().channels, ...get().directs].find(
+      (channel) => channel.id === toChannelId,
+    );
+    const emoji = usedEmoji(original.content, emojiFor(target?.serverId ?? null));
+    const envelope = await encryptForChannel(
+      toChannelId,
+      encodeBody({
+        text: original.content,
+        attachments: carried,
+        ...(emoji.length > 0 ? { emoji } : {}),
+        forwardedFrom: {
+          author: original.author.displayName,
+          channel: originName(get(), from),
+        },
+      }),
+    );
+    await api.sendMessage(
+      toChannelId,
+      envelope,
+      carried.map((attachment) => attachment.key),
+      false,
+    );
+  },
+
   /**
    * Records this account's look at a one-time message, which is what spends
    * it. Outside the encrypted envelope, because the server is the one that has
@@ -841,6 +904,7 @@ function toDecrypted(message: Message, plaintext: string): DecryptedMessage {
     attachments: body.attachments,
     ...(body.replyTo ? { replyTo: body.replyTo } : {}),
     ...(body.emoji ? { emoji: body.emoji } : {}),
+    ...(body.forwardedFrom ? { forwardedFrom: body.forwardedFrom } : {}),
   };
 }
 
@@ -886,6 +950,19 @@ function subscribable(channels: Channel[], directs: Channel[]): string[] {
  * message that has been tombstoned or destroyed no longer has one. So this has
  * to run before the store's copy is replaced or removed.
  */
+/**
+ * What to call the place a forward came from.
+ *
+ * A channel has a name; a direct message is named after the person on the
+ * other end, and naming them is the honest answer to "where did this come
+ * from" - the alternative was a blank, which reads as a forward from nowhere.
+ */
+function originName(state: ChatState, channelId: string): string {
+  return (
+    [...state.channels, ...state.directs].find((channel) => channel.id === channelId)?.name ?? ''
+  );
+}
+
 function forgetMessageAttachments(messageIds: string[]): void {
   const state = useChatStore.getState();
   const wanted = new Set(messageIds);
