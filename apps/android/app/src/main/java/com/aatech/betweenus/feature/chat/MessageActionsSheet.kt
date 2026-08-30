@@ -26,6 +26,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
@@ -57,6 +58,12 @@ fun MessageActionsSheet(
     canModerate: Boolean,
     onDismiss: () -> Unit,
     onReply: () -> Unit,
+    /**
+     * Null when there is nothing to forward: a tombstone, or a one-time
+     * message, whose whole bargain is that it is seen once by the people it
+     * was sent to.
+     */
+    onForward: (() -> Unit)?,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
     onPin: () -> Unit,
@@ -90,6 +97,22 @@ fun MessageActionsSheet(
                 leading = { BetweenUsIcon(BetweenUsIcons.Reply, tint = Slate400) },
                 onClick = onReply,
             )
+            onForward?.let { forward ->
+                ListRow(
+                    title = "Forward",
+                    // The reply mark, mirrored - which is the forward mark. One
+                    // glyph rather than a second drawable that says the same
+                    // thing pointing the other way.
+                    leading = {
+                        BetweenUsIcon(
+                            BetweenUsIcons.Reply,
+                            tint = Slate400,
+                            modifier = Modifier.scale(scaleX = -1f, scaleY = 1f),
+                        )
+                    },
+                    onClick = forward,
+                )
+            }
             ListRow(
                 title = "Copy text",
                 leading = { BetweenUsIcon(BetweenUsIcons.Copy, tint = Slate400) },

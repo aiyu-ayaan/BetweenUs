@@ -12,6 +12,7 @@ import com.aatech.betweenus.core.data.Message
 import com.aatech.betweenus.core.data.MessageAttachment
 import com.aatech.betweenus.core.data.MessageBody
 import com.aatech.betweenus.core.data.MessageCustomEmoji
+import com.aatech.betweenus.core.data.MessageForward
 import com.aatech.betweenus.core.data.MessageReply
 import com.aatech.betweenus.core.data.BetweenUsApi
 import com.aatech.betweenus.core.data.UploadedObject
@@ -443,11 +444,15 @@ object Conversation {
          * and a server that cannot read the body cannot be told by the body.
          */
         viewOnce: Boolean = false,
+        /** Set when this is somebody else's message, carried in from elsewhere. */
+        forwardedFrom: MessageForward? = null,
     ) {
         // The pictures for whatever custom emoji the text uses, taken from the
         // server this channel belongs to. They travel inside the envelope, so a
         // reader who is not in that server still sees them.
-        val body = MessageBody(text, attachments, replyTo, usedEmoji(channelId, text)).encode()
+        val body =
+            MessageBody(text, attachments, replyTo, usedEmoji(channelId, text), forwardedFrom)
+                .encode()
         val sealed = E2ee.encryptForChannel(channelId, body)
         // The keys go outside the envelope as well as inside it: the server
         // cannot read the manifest, and without them nothing could ever sweep
@@ -463,6 +468,68 @@ object Conversation {
         )
         insert(read(message))
     }
+
+    /**
+     * The same message again, in another channel.
+     *
+     * A copy and not a pointer, because a pointer could not be read: every body
+     * and every blob is sealed under the key of the channel it was sent to, and
+     * the destination holds a different one. So the plaintext is re-sealed
+     * there, and the files are opened here and uploaded again - which is also
+     * why this is slow enough to want a progress indication for a video.
+     *
+     * What travels is what the message said, not what happened to it since. The
+     * reactions, the pins and the read receipts belong to the original and stay
+     * with it; only the tag saying whose words these were comes along.
+     *
+     * A one-time message is not forwardable and is not offered as one - the
+     * whole point of it is that it is seen once, by the people it was sent to.
+     */
+    suspend fun forward(
+        readable: ReadableMessage,
+        toChannelId: String,
+        onProgress: ((Float) -> Unit)? = null,
+    ) {
+        val from = readable.message.channelId
+        val files = readable.attachments
+        val carried = files.mapIndexed { index, attachment ->
+            val bytes = openAttachment(from, attachment)
+            uploadAttachment(
+                channelId = toChannelId,
+                name = attachment.name,
+                contentType = attachment.contentType,
+                bytes = bytes,
+                // Counted across the whole list, so three files read as one
+                // job rather than three bars that each start again at zero.
+                onProgress = { part ->
+                    onProgress?.invoke((index + part) / files.size)
+                },
+                duration = attachment.duration,
+                waveform = attachment.waveform,
+            )
+        }
+        send(
+            channelId = toChannelId,
+            text = readable.text,
+            attachments = carried,
+            forwardedFrom = MessageForward(
+                author = readable.message.author.label,
+                channel = originName(from),
+            ),
+        )
+    }
+
+    /**
+     * What to call the place a forward came from.
+     *
+     * A channel has a name; a direct message has a person, and naming them is
+     * the honest answer to "where did this come from" - the alternative was a
+     * blank, which reads as a forward from nowhere.
+     */
+    private fun originName(channelId: String): String =
+        Workspace.channel(channelId)?.name
+            ?: Workspace.directChannel(channelId)?.participant?.label
+            ?: ""
 
     suspend fun edit(message: Message, text: String) {
         val existing = _messages.value[message.channelId]?.firstOrNull { it.id == message.id }

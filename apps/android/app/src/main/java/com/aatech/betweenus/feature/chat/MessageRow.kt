@@ -45,6 +45,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
@@ -416,6 +417,37 @@ fun MessageRow(
                                 modifier = Modifier.padding(bottom = 2.dp),
                             )
                         }
+                        // Above the quote and above the words: the first thing
+                        // to know about a forwarded message is that the words
+                        // are not the sender's.
+                        readable.body.forwardedFrom
+                            ?.takeIf { !message.deleted }
+                            ?.let { origin ->
+                                Row(
+                                    modifier = Modifier.padding(bottom = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                ) {
+                                    // The reply mark mirrored, which is the
+                                    // forward mark - one glyph, not two.
+                                    BetweenUsIcon(
+                                        BetweenUsIcons.Reply,
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        size = 12.dp,
+                                        modifier = Modifier.scale(scaleX = -1f, scaleY = 1f),
+                                    )
+                                    Text(
+                                        text = "Forwarded from ${origin.author}" +
+                                            origin.channel.takeIf { it.isNotBlank() }
+                                                ?.let { " in $it" }.orEmpty(),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 1,
+                                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                                    )
+                                }
+                            }
+
                         // The quote belongs to the message, so it sits inside
                         // the bubble and above everything the message says.
                         readable.replyTo?.takeIf { !message.deleted }?.let { reply ->

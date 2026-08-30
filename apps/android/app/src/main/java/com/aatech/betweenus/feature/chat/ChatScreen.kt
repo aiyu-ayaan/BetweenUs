@@ -76,6 +76,7 @@ import com.aatech.betweenus.ui.components.BetweenUsIcons
 import com.aatech.betweenus.ui.components.Notice
 import com.aatech.betweenus.ui.components.StatusDot
 import com.aatech.betweenus.ui.theme.BetweenUsMotion
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
@@ -120,6 +121,16 @@ fun ChatScreen(
     /** A quoted message that has just been jumped to, flashed so it is findable. */
     var highlighted by remember { mutableStateOf<String?>(null) }
     var showPins by remember { mutableStateOf(false) }
+    /** The message whose "forward to" sheet is open, if any. */
+    var forwarding by remember { mutableStateOf<ReadableMessage?>(null) }
+    /**
+     * What the last forward did, in words.
+     *
+     * A forward lands in a channel nobody is looking at, so without this it is
+     * an action that appears to do nothing at all - the same complaint the
+     * share sheet used to earn.
+     */
+    var forwardNotice by remember(channelId) { mutableStateOf<String?>(null) }
     /** The message whose "seen by" sheet is open, if any. */
     var seenFor by remember(channelId) { mutableStateOf<ReadableMessage?>(null) }
     var failure by remember { mutableStateOf<String?>(null) }
@@ -624,6 +635,14 @@ fun ChatScreen(
             )
         }
 
+        forwardNotice?.let {
+            Notice(
+                it,
+                MaterialTheme.colorScheme.primary,
+                Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+            )
+        }
+
         // --- What is going out, if anything is ---
         //
         // Above the composer rather than over the whole screen, because the
@@ -793,6 +812,14 @@ fun ChatScreen(
             canModerate = Workspace.server(channel?.serverId)?.can("DELETE_MESSAGE") == true,
             onDismiss = { acting = null },
             onReply = { replyingTo = readable.quote(); acting = null },
+            // A tombstone has nothing to carry, and a one-time message must
+            // not be carried anywhere: being seen once by the people it was
+            // sent to is the whole of what it promised.
+            onForward = if (readable.message.deleted || readable.message.viewOnce) {
+                null
+            } else {
+                { forwarding = readable; acting = null }
+            },
             onEdit = { editing = readable; acting = null },
             onDelete = {
                 scope.launch {
@@ -815,6 +842,41 @@ fun ChatScreen(
                         .exceptionOrNull()?.message
                 }
                 acting = null
+            },
+        )
+    }
+
+    // The confirmation is a confirmation, not a banner. It stays long enough
+    // to be read and then leaves; the "..." while it is still going does not,
+    // because that one is still true.
+    LaunchedEffect(forwardNotice) {
+        if (forwardNotice?.endsWith("…") == false) {
+            delay(4_000)
+            forwardNotice = null
+        }
+    }
+
+    // --- Where a message is going, when it is going somewhere else ---
+    forwarding?.let { readable ->
+        ForwardSheet(
+            readable = readable,
+            onDismiss = { forwarding = null },
+            onPick = { target ->
+                forwarding = null
+                val name = Workspace.channel(target)?.name?.let { "#$it" }
+                    ?: Workspace.directChannel(target)?.participant?.label
+                    ?: "the conversation"
+                // Re-uploading a video takes as long as sending one did, so it
+                // says so first and corrects itself when it lands.
+                forwardNotice = "Forwarding to $name…"
+                scope.launch {
+                    runCatching { Conversation.forward(readable, target) }
+                        .onSuccess { forwardNotice = "Forwarded to $name" }
+                        .onFailure {
+                            forwardNotice = null
+                            failure = it.message ?: "That could not be forwarded"
+                        }
+                }
             },
         )
     }
