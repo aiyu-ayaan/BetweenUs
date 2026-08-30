@@ -7,6 +7,7 @@ import {
   IsUUID,
   Length,
 } from 'class-validator';
+import { MAX_MESSAGE_CONTENT_LENGTH } from '@betweenus/shared-types';
 import type {
   ClearChatsRequest,
   CreateMessageRequest,
@@ -24,7 +25,7 @@ export class CreateMessageDto implements CreateMessageRequest {
    * a key, a name, a size and a content type per file, all encrypted.
    */
   @IsString()
-  @Length(1, 32000)
+  @Length(1, MAX_MESSAGE_CONTENT_LENGTH)
   content!: string;
 
   /**
@@ -55,7 +56,7 @@ export class CreateMessageDto implements CreateMessageRequest {
 export class UpdateMessageDto implements UpdateMessageRequest {
   /** The replacement envelope, same shape and same ceiling as the original. */
   @IsString()
-  @Length(1, 32000)
+  @Length(1, MAX_MESSAGE_CONTENT_LENGTH)
   content!: string;
 }
 

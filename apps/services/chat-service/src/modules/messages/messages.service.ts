@@ -9,6 +9,7 @@ import { EVENTS, EventBus } from '@betweenus/events';
 import { PERMISSIONS, type Permission } from '@betweenus/permissions';
 import {
   isDisappearingWindow,
+  MAX_MESSAGE_CONTENT_LENGTH,
   type ClearChatsResponse,
   type Message,
   type MessageReactionSummary,
@@ -17,9 +18,13 @@ import {
 import { purgeMessageAttachments } from '../uploads/attachment-sweeper';
 
 const PAGE_SIZE = 50;
-// Content is an encrypted envelope, so the limit covers base64 expansion of a
-// 4000-character message plus the JSON wrapper.
-const MAX_CONTENT_LENGTH = 8000;
+/**
+ * Content is an encrypted envelope, so the limit has to cover the attachment
+ * manifest riding inside it as well as the words, and base64 on top of both.
+ * Shared with the DTO so the two ceilings cannot drift apart again - they did,
+ * and a message carrying ten pictures was refused by the lower of them.
+ */
+const MAX_CONTENT_LENGTH = MAX_MESSAGE_CONTENT_LENGTH;
 /**
  * An emoji is a handful of code points - a base, a skin tone, a zero-width
  * joiner, a variation selector. The cap is on the string, not on how many

@@ -998,6 +998,27 @@ export interface MessageAttachment {
 export const VOICE_WAVEFORM_BARS = 48;
 
 /**
+ * How long a message's stored `content` may be.
+ *
+ * Counted on the ciphertext envelope, not on what was typed: the envelope also
+ * carries the attachment manifest - a key, a url, a name, a size and a content
+ * type per file - and base64 makes all of it a third longer again. A cap sized
+ * for prose refuses a perfectly ordinary message the moment it carries a
+ * handful of pictures, which is what a cap of 8000 here used to do.
+ */
+export const MAX_MESSAGE_CONTENT_LENGTH = 32000;
+
+/**
+ * How many files one message may carry.
+ *
+ * Past this the point is a folder, not a chat - and every client caps its
+ * picker here so the manifest can never grow past
+ * [MAX_MESSAGE_CONTENT_LENGTH]. Refused where the files are chosen, which is
+ * the only place it can be explained.
+ */
+export const MAX_ATTACHMENTS_PER_MESSAGE = 10;
+
+/**
  * Whether an attachment should be drawn as a voice message rather than as a
  * file with a player stapled to it.
  *
