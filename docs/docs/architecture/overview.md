@@ -217,6 +217,29 @@ Supporting details, network ports, invariants, and trust boundaries are codified
 
 The web client is not a second codebase — `apps/web` imports the desktop app's entry point directly. Anything the browser cannot do (screen capture by source, synthetic input, the OS keychain) is decided at runtime by asking whether the Electron preload bridge exists, not by a build flag.
 
+### Profile photos
+
+Every avatar that stands for a person is the way to that person's picture, on
+every client. Tapping one opens the photo full size with the name under it;
+somebody who has not set a photo gets a short "profile photo not available"
+line instead of a dialog showing the same initial that was just tapped.
+
+There is one overlay per app rather than one per avatar:
+
+| Client | Avatar calls | Mounted once at |
+| --- | --- | --- |
+| Desktop, Web | `viewProfile()` in `components/ProfileView.tsx` | `<ProfileView />` in `App.tsx` |
+| Android | `ProfileViewer.open()` in `ui.components.ProfileViewer` | `ProfileDialogHost()` in `MainActivity` |
+
+Both avatar components take a `viewable` flag, on by default and turned off
+where the circle stands for a place rather than a person (a server's mark), or
+where the tap belongs to the control the avatar sits in — picking a share
+target, ringing somebody into a call, toggling a member into a new channel.
+
+A direct message header shows the other person's photo, not an initial or an
+anonymous outline. A `Channel` carries only their name, so the header reads the
+participant out of the client's direct-channel list to find the picture.
+
 ---
 
 ## Repository Layout

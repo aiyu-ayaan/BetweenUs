@@ -118,6 +118,12 @@ feature/remote          feature/update        feature/voice
   - **`PermissionDetailScreen`** (`Route.PermissionDetail`) — Dedicated per-permission deep-dive pages (Notifications, Mic, Camera, Nearby Devices, Media) with hardware operations, rationales, and live toggles.
   - **`PrivacyScreen`** (`Route.Privacy`) — Blocked users directory and message history clearing.
   - **`ThemesScreen`** (`Route.Themes`) — 16 curated themes, Material You dynamic wallpaper theming, and accent customization.
+- **`chat`** — the conversation. A direct message's header carries the other
+  person's `Avatar`, not an anonymous outline in a cookie: the drawer row that
+  opened the conversation is showing their photo, and a header drawing a glyph
+  beside it read as a different person. Tapping any avatar that stands for a
+  person opens their photo through `ProfileViewer` — see
+  [Profile photos](/architecture/overview#profile-photos).
 - **`home`** — the friends list, and **`AddFriendScreen`** (`Route.AddFriend`)
   beside it. Two searches, deliberately kept apart, matching the desktop's
   **Add friend** tab: the field on the friends list filters the people you
