@@ -119,11 +119,38 @@ Requires `GlobalRole.ADMIN`, checked by database lookup on every request
 | PATCH | `/users/:id` | Change role / disable / enable / open a password-reset window |
 | DELETE | `/users/:id` | Delete an account |
 | GET | `/audit` | Read `AdminAudit` |
+| GET | `/health` | One snapshot of the deployment (`?days=` sizes the bandwidth window, 30 by default) |
 | GET | `/oauth` | Read provider configs |
 | PUT | `/oauth/:provider` | Set a provider's credentials |
 | GET | `/smtp` | Outgoing mail settings (never the password) |
 | PUT | `/smtp` | Configure the deployment's SMTP server |
 | POST | `/smtp/test` | Send one test message |
+
+### Health & storage
+
+`GET /admin/health` answers one `AdminServerHealth`: the dependency probes, the
+reporting process's runtime, database and media storage, bandwidth over a
+window, and the live socket counts. It is measured at the moment of the call
+rather than cached, so the panel polls it (30 seconds, pausable) instead of
+subscribing to anything.
+
+Several fields are **deliberately nullable, and a null is never a zero**:
+
+| Field | Null when | The panel says |
+| --- | --- | --- |
+| `AdminComponentHealth.latencyMs` | the probe never came back | "No response", not "0 ms" |
+| `AdminMediaStorage.diskBytes` | driver is `s3` — walking a bucket is not free | "Not measurable here", with the reason |
+| `AdminMediaStorage.diskFreeBytes` | driver is `s3` — object storage has no volume to fill | as above |
+| `AdminDatabaseStorage.version`, `AdminRuntimeHealth.appVersion` | the server did not report one | "unknown" |
+
+Rendering any of those as `0 B` would be the panel inventing a measurement an
+operator cannot tell apart from a real one, which is the one way this screen
+could lie. `apps/admin/src/screens/HealthScreen.check.tsx` renders the view
+against an S3 fixture and asserts that it does not.
+
+Call bytes are the clients' own totals from `CallSession` and not this host's
+traffic — media is peer-to-peer and never passes through it. Attachment bytes
+are what this deployment actually served.
 
 ### Outgoing mail
 

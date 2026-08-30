@@ -16,6 +16,12 @@ resolution), `@betweenus/storage` (keys, allowlists, inline safety), and
 `auth-service` (login, rotation, reuse detection, OAuth redirects) — each
 against an in-memory database, no external services required.
 
+The admin panel carries its own: `pnpm --filter @betweenus/admin check` pins
+the byte and duration formatting (an off-by-1024 renders a plausible screen
+that is simply wrong) and renders the health screen from a typed fixture,
+including the S3 case where two storage figures are unknowable and must not be
+drawn as zero.
+
 ## Integration smoke scripts
 
 Real REST + WebSocket traffic against a running stack, not mocks:
