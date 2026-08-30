@@ -357,6 +357,27 @@ each peer signs its fingerprint with the channel key (which `call-service`
 never holds), and the other side refuses a connection whose fingerprint
 isn't signed. Full design: [`E2EE.md`](/security/e2ee).
 
+## Who is on the stage
+
+Layout is a client decision — no signal decides it, and one viewer's stage never
+moves anybody else's. Three rules, shared by the web/desktop client
+(`VoiceChannelView.tsx`, with the pure part in `stage-order.ts`) and Android
+(`VoiceChannelScreen.kt`):
+
+| | |
+| --- | --- |
+| **The stage is the other people** | The local tile is drawn as a small floating window over the corner of the stage, never as a grid cell — the one face in the call nobody joined to watch. It takes the whole stage only when there is nobody else in the call yet. |
+| **Nothing moves on its own** | Promoting a recent speaker exists to keep them on page one, so it runs only when there *is* a page two: while everybody fits on one page the order is left exactly as it arrived. Where one face fills the stage (a big call on either client), it follows the *last* speaker stickily rather than the current one, so a conversation does not throw the layout around between sentences. |
+| **A pin outranks both** | Any tile, the local one included, can be pinned to hold the stage with everybody else in a strip underneath. The pin is per-viewer, is never sent anywhere, and is dropped the moment that person leaves the call. |
+
+The first two are the same complaint answered twice: a grid that rearranges
+itself around whoever is talking is unreadable in exactly the moment somebody is
+trying to read it. `stage-order.check.ts` pins them down, because the fault is
+invisible in a screenshot and obvious in a call.
+
+A screen share never rearranges anything by itself either: it is announced by a
+banner and joined on purpose, and it never replaces the sharer's own tile.
+
 ## Live streaming: deliberately out of scope
 
 One-to-many streaming needs a media server — a broadcast to 50 viewers is 50
