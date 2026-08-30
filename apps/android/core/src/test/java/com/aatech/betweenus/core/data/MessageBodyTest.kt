@@ -53,6 +53,25 @@ class MessageBodyTest {
     }
 
     @Test
+    fun `a forward carries its tag and no files and is still a document`() {
+        val body = MessageBody(
+            text = "worth reading",
+            forwardedFrom = MessageForward("Ada", "general"),
+        )
+        val decoded = MessageBody.decode(body.encode())
+
+        assertEquals("worth reading", decoded.text)
+        assertEquals(MessageForward("Ada", "general"), decoded.forwardedFrom)
+    }
+
+    @Test
+    fun `a forward with no author is not a forward`() {
+        val encoded = MessageBody.BODY_MARKER +
+            "{\"text\":\"hi\",\"attachments\":[],\"forwardedFrom\":{\"channel\":\"general\"}}"
+        assertEquals(null, MessageBody.decode(encoded).forwardedFrom)
+    }
+
+    @Test
     fun `an encoded body carries the marker the desktop looks for`() {
         val encoded = MessageBody("hi", listOf(attachment)).encode()
         assertEquals("\u0000betweenus-body:1\n", encoded.take(MessageBody.BODY_MARKER.length))

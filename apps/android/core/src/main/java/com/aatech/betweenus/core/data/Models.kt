@@ -761,6 +761,35 @@ data class MessageReply(val id: String, val author: String, val preview: String)
     }
 }
 
+/**
+ * Where a forwarded message came from.
+ *
+ * A forward is a new message, not a pointer to the old one - it has to be,
+ * because the body is sealed under the key of the channel it was written in
+ * and nobody in the channel it lands in holds that key. So the plaintext is
+ * re-sealed for the destination and this rides along to say whose words they
+ * were, which is the whole of what the "Forwarded" tag on a bubble reports.
+ *
+ * A snapshot, like [MessageReply], and with no id on purpose: a jump-to-it
+ * link would point at a channel the reader may not be allowed to open.
+ *
+ * Byte for byte the desktop's `MessageForward`. Changing one changes both.
+ */
+data class MessageForward(val author: String, val channel: String) {
+    fun toJson(): JSONObject = JSONObject()
+        .put("author", author)
+        .put("channel", channel)
+
+    companion object {
+        /** Null without an author: there would be nothing for the tag to say. */
+        fun from(json: JSONObject): MessageForward? {
+            val author = json.optString("author")
+            if (author.isEmpty()) return null
+            return MessageForward(author, json.optString("channel"))
+        }
+    }
+}
+
 /** One of a server's own emoji, as the directory lists it. */
 data class ServerEmoji(
     val id: String,
@@ -808,15 +837,18 @@ data class MessageBody(
     val attachments: List<MessageAttachment> = emptyList(),
     val replyTo: MessageReply? = null,
     val emoji: List<MessageCustomEmoji> = emptyList(),
+    /** Set when this message is somebody else's, carried in from elsewhere. */
+    val forwardedFrom: MessageForward? = null,
 ) {
     fun encode(): String =
-        if (attachments.isEmpty() && replyTo == null && emoji.isEmpty()) {
+        if (attachments.isEmpty() && replyTo == null && emoji.isEmpty() && forwardedFrom == null) {
             text
         } else {
             BODY_MARKER + JSONObject()
                 .put("text", text)
                 .put("attachments", JSONArray().also { a -> attachments.forEach { a.put(it.toJson()) } })
                 .apply { replyTo?.let { put("replyTo", it.toJson()) } }
+                .apply { forwardedFrom?.let { put("forwardedFrom", it.toJson()) } }
                 .apply {
                     if (emoji.isNotEmpty()) {
                         put("emoji", JSONArray().also { a -> emoji.forEach { a.put(it.toJson()) } })
@@ -842,6 +874,8 @@ data class MessageBody(
                     emoji = json.optJSONArray("emoji")
                         ?.map { MessageCustomEmoji.from(it) }
                         .orEmpty(),
+                    forwardedFrom = json.optJSONObject("forwardedFrom")
+                        ?.let { MessageForward.from(it) },
                 )
             }
                 // A body we cannot read is still a message; show it rather than

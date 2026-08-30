@@ -20,7 +20,10 @@ const BODY_MARKER = '\u0000betweenus-body:1\n';
 
 export function encodeBody(body: MessageBody): string {
   const plain =
-    body.attachments.length === 0 && !body.replyTo && (body.emoji?.length ?? 0) === 0;
+    body.attachments.length === 0 &&
+    !body.replyTo &&
+    !body.forwardedFrom &&
+    (body.emoji?.length ?? 0) === 0;
   if (plain) return body.text;
   return BODY_MARKER + JSON.stringify(body);
 }
@@ -31,6 +34,7 @@ export function decodeBody(content: string): MessageBody {
   try {
     const parsed = JSON.parse(content.slice(BODY_MARKER.length)) as MessageBody;
     const reply = parsed.replyTo;
+    const forwarded = parsed.forwardedFrom;
     return {
       text: typeof parsed.text === 'string' ? parsed.text : '',
       attachments: Array.isArray(parsed.attachments) ? parsed.attachments : [],
@@ -46,6 +50,16 @@ export function decodeBody(content: string): MessageBody {
               id: reply.id,
               author: typeof reply.author === 'string' ? reply.author : '',
               preview: typeof reply.preview === 'string' ? reply.preview : '',
+            },
+          }
+        : {}),
+      // Who the words belonged to before somebody carried them here. Without
+      // an author there is nothing for the tag to say, so it is not a forward.
+      ...(forwarded && typeof forwarded.author === 'string' && forwarded.author.length > 0
+        ? {
+            forwardedFrom: {
+              author: forwarded.author,
+              channel: typeof forwarded.channel === 'string' ? forwarded.channel : '',
             },
           }
         : {}),

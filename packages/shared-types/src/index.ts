@@ -1083,12 +1083,34 @@ export interface MessageCustomEmoji {
   animated: boolean;
 }
 
+/**
+ * Where a forwarded message came from.
+ *
+ * A forward is a new message, not a pointer to the old one - it has to be,
+ * because the body is sealed under the key of the channel it was written in
+ * and nobody in the channel it lands in holds that key. So the plaintext is
+ * re-sealed for the destination and this rides along to say whose words they
+ * were, which is the whole of what the "Forwarded" tag on a bubble reports.
+ *
+ * A snapshot, like [MessageReply]. Editing the original does not rewrite the
+ * forwards of it, and there is no id here on purpose: a jump-to-it link would
+ * point at a channel the reader may not be allowed to open.
+ */
+export interface MessageForward {
+  /** Who wrote it, as they were named when it was forwarded. */
+  author: string;
+  /** The channel it was taken from, by name. */
+  channel: string;
+}
+
 export interface MessageBody {
   text: string;
   attachments: MessageAttachment[];
   replyTo?: MessageReply;
   /** Custom emoji appearing in `text`, by the name written between colons. */
   emoji?: MessageCustomEmoji[];
+  /** Set when this message is somebody else's, carried in from elsewhere. */
+  forwardedFrom?: MessageForward;
 }
 
 // --- End-to-end encryption ---

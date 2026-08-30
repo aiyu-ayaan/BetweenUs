@@ -63,6 +63,21 @@ async function main(): Promise<void> {
     { text: 'hi', attachments: [] },
   );
 
+  // A forward is a document too: text alone would lose the tag that says the
+  // words are somebody else's, which is the only thing marking it as a forward.
+  const forwarded = {
+    text: 'worth reading',
+    attachments: [],
+    forwardedFrom: { author: 'Ada', channel: 'general' },
+  };
+  assert.deepEqual(decodeBody(encodeBody(forwarded)), forwarded);
+
+  // Without an author there is nothing for the tag to say, so it is not a forward.
+  assert.deepEqual(
+    decodeBody('\u0000betweenus-body:1\n{"text":"hi","attachments":[],"forwardedFrom":{"channel":"general"}}'),
+    { text: 'hi', attachments: [] },
+  );
+
   // Quotes are one line, however many the original had.
   assert.equal(replyPreview('  two\n\nlines  '), 'two lines');
   assert.equal(replyPreview('x'.repeat(500)).length, REPLY_PREVIEW_CHARS);
