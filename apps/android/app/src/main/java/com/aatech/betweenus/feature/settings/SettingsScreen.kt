@@ -1,31 +1,21 @@
 package com.aatech.betweenus.feature.settings
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Slider
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -35,59 +25,49 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.flow.MutableStateFlow
-import com.aatech.betweenus.core.crypto.BackupSecret
-import com.aatech.betweenus.core.crypto.E2ee
-import com.aatech.betweenus.core.crypto.IdentityStatus
-import android.content.Intent
 import com.aatech.betweenus.core.data.Endpoint
-import com.aatech.betweenus.core.data.BetweenUsApi
-import com.aatech.betweenus.core.data.NotificationPreferences
 import com.aatech.betweenus.core.data.PresenceStatus
 import com.aatech.betweenus.core.data.PublicUser
 import com.aatech.betweenus.core.data.Session
-import com.aatech.betweenus.feature.voice.AudioPrefs
-import com.aatech.betweenus.feature.voice.CallAudio
-import com.aatech.betweenus.feature.voice.inputLabel
-import com.aatech.betweenus.feature.voice.rememberCallDevices
-import com.aatech.betweenus.feature.voice.routeLabel
-import com.aatech.betweenus.feature.voice.CallTones
-import com.aatech.betweenus.feature.voice.MicGate
-import com.aatech.betweenus.feature.voice.VoiceEngine
 import com.aatech.betweenus.core.store.LastPlace
 import com.aatech.betweenus.core.store.Presence
 import com.aatech.betweenus.core.store.ThemePreferences
-import com.aatech.betweenus.ui.theme.ANDROID_THEMES
-import com.aatech.betweenus.ui.theme.ACCENT_PRESETS
 import com.aatech.betweenus.feature.auth.ServerSheet
+import com.aatech.betweenus.feature.voice.VoiceEngine
 import com.aatech.betweenus.ui.components.Avatar
+import com.aatech.betweenus.ui.components.BetweenUsIcon
+import com.aatech.betweenus.ui.components.BetweenUsIcons
 import com.aatech.betweenus.ui.components.Chip
 import com.aatech.betweenus.ui.components.IconAction
 import com.aatech.betweenus.ui.components.ListRow
-import com.aatech.betweenus.ui.components.BetweenUsButton
-import com.aatech.betweenus.ui.components.BetweenUsField
-import com.aatech.betweenus.ui.components.BetweenUsIcon
-import com.aatech.betweenus.ui.components.BetweenUsIcons
-import com.aatech.betweenus.ui.components.Notice
 import com.aatech.betweenus.ui.components.SectionLabel
-import com.aatech.betweenus.ui.theme.StatusOnline
+import com.aatech.betweenus.ui.theme.ANDROID_THEMES
 import kotlinx.coroutines.launch
 
 /**
- * Account, presence, encryption, notifications, permissions, deployment.
+ * Main Settings Hub.
  *
- * The port of `apps/desktop/src/features/settings/UserSettings.tsx`, plus the
- * one section a phone needs that a desktop does not: what Android has been
- * asked for and what it said.
+ * Organized into structured subsections:
+ * - Account & Security -> AccountSecurityScreen
+ * - Privacy & Safety -> PrivacyScreen
+ * - Appearance & Themes -> ThemesScreen
+ * - Voice & Audio -> VoiceSettingsScreen
+ * - Notifications -> NotificationSettingsScreen
+ * - App Permissions -> PermissionsScreen
+ * - This Device -> DeviceSettingsScreen
+ * - Calls & Data Usage -> CallUsageScreen
+ * - Auto Update -> AutoUpdateScreen
+ * - Deployment & Server Settings -> ServerSettingsScreen / ServerSheet
  */
 @Composable
 fun SettingsScreen(
     user: PublicUser,
     onBack: () -> Unit,
+    onAccountSettings: () -> Unit,
+    onVoiceSettings: () -> Unit,
+    onNotificationSettings: () -> Unit,
+    onDeviceSettings: () -> Unit,
     onServerSettings: () -> Unit,
     onPermissions: () -> Unit,
     onAutoUpdate: () -> Unit,
@@ -97,55 +77,8 @@ fun SettingsScreen(
 ) {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
-
-    val identity by E2ee.status.collectAsState()
     val presence by Presence.self.collectAsState()
-
-    var displayName by remember { mutableStateOf(user.displayName) }
-    var note by remember { mutableStateOf<String?>(null) }
-    var busy by remember { mutableStateOf(false) }
     var pickingServer by remember { mutableStateOf(false) }
-    var passphrase by remember { mutableStateOf("") }
-    // On by default: a new phone that works the moment you sign in is what
-    // almost everybody wants, and the alternative used to be silently imposed -
-    // setting a passphrase overwrote the password backup and every later
-    // sign-in on a new device read the whole account as padlocks.
-    var keepPasswordRecovery by remember { mutableStateOf(true) }
-    var byPassword by remember { mutableStateOf<Boolean?>(null) }
-    var currentPassword by remember { mutableStateOf("") }
-    var newPassword by remember { mutableStateOf("") }
-    var preferences by remember { mutableStateOf<NotificationPreferences?>(null) }
-    // A machine setting, not an account one: which room you are sitting in is
-    // what decides whether a sound is welcome.
-    var callTones by remember { mutableStateOf(CallTones.enabled) }
-    // Machine settings, like the tones: the processing that suits a headset in
-    // a quiet room is the processing that ruins a call held on a train.
-    var mode by remember { mutableStateOf(AudioPrefs.mode) }
-    var route by remember { mutableStateOf(AudioPrefs.route) }
-    var input by remember { mutableStateOf(AudioPrefs.input) }
-    var echoCancellation by remember { mutableStateOf(AudioPrefs.echoCancellation) }
-    var noiseSuppression by remember { mutableStateOf(AudioPrefs.noiseSuppression) }
-    var autoGainControl by remember { mutableStateOf(AudioPrefs.autoGainControl) }
-    var sensitivity by remember { mutableStateOf(AudioPrefs.sensitivityDb) }
-    // Live, not read once: a headset connected while this screen is open used
-    // to leave a list saying there was none.
-    val devices by rememberCallDevices()
-
-    LaunchedEffect(Unit) {
-        preferences = runCatching { BetweenUsApi.notificationPreferences() }.getOrNull()
-    }
-
-    LaunchedEffect(identity) {
-        byPassword = runCatching { E2ee.passwordRecoveryEnabled() }.getOrNull()
-    }
-
-    fun act(block: suspend () -> Unit) {
-        scope.launch {
-            busy = true
-            note = runCatching { block() }.exceptionOrNull()?.message
-            busy = false
-        }
-    }
 
     Column(
         Modifier
@@ -153,6 +86,7 @@ fun SettingsScreen(
             .background(MaterialTheme.colorScheme.background)
             .navigationBarsPadding(),
     ) {
+        // --- Top App Bar ---
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -171,7 +105,7 @@ fun SettingsScreen(
         }
 
         Column(Modifier.verticalScroll(rememberScrollState()).padding(bottom = 40.dp)) {
-            // --- account ---
+            // --- User Profile Header ---
             Row(
                 modifier = Modifier.fillMaxWidth().padding(16.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -197,45 +131,7 @@ fun SettingsScreen(
                 }
             }
 
-            PicturePicker(
-                label = "avatar",
-                canClear = user.avatarUrl != null,
-                onPicked = { url -> Session.updateUser(BetweenUsApi.setAvatar(url)) },
-                onClear = { Session.updateUser(BetweenUsApi.setAvatar(null)) },
-                // No preview: the account row above this already draws the
-                // avatar, and two of the same picture on one screen reads as a
-                // second, different setting.
-            )
-
-            SectionLabel("Profile")
-            Column(Modifier.padding(horizontal = 12.dp)) {
-                BetweenUsField(
-                    label = "Display name",
-                    value = displayName,
-                    onValueChange = { displayName = it; note = null },
-                    placeholder = user.username,
-                    imeAction = ImeAction.Done,
-                    enabled = !busy,
-                )
-                Spacer(Modifier.height(10.dp))
-                BetweenUsButton(
-                    text = "Save",
-                    busy = busy,
-                    enabled = displayName.isNotBlank() && displayName != user.displayName,
-                    onClick = {
-                        act {
-                            // Fed back into the session: this name is drawn from
-                            // there, so saving it and not saying so left the old
-                            // one on screen until the next launch.
-                            Session.updateUser(
-                                BetweenUsApi.updateAccount(displayName.trim(), null, null),
-                            )
-                        }
-                    },
-                )
-            }
-
-            // --- presence ---
+            // --- Appear As / Presence Chips ---
             SectionLabel("Appear as")
             Row(
                 modifier = Modifier.padding(horizontal = 16.dp),
@@ -255,304 +151,25 @@ fun SettingsScreen(
                 }
             }
 
-            // --- encryption ---
-            SectionLabel("Encryption")
-            Column(Modifier.padding(horizontal = 16.dp)) {
-                Text(
-                    text = when (val state = identity) {
-                        is IdentityStatus.Ready -> when {
-                            state.backedUp ->
-                                "This device holds the account key, and it is backed up. Signing " +
-                                    "in elsewhere will restore your history."
-
-                            state.provisional ->
-                                "This device could not open the account key, so it made one of " +
-                                    "its own and reads only what has arrived since. Sign out and " +
-                                    "back in with your account password to recover the account " +
-                                    "key and every conversation sealed for it."
-
-                            else ->
-                                "This device has a key of its own, and no backup of it. Your " +
-                                    "other devices fill in older conversations as they open " +
-                                    "them. Set a recovery passphrase to make this device " +
-                                    "recoverable too."
-                        }
-
-                        IdentityStatus.Revoked ->
-                            "This device was revoked from another one. It can still read what it " +
-                                "already had; nothing sent since is encrypted for it."
-
-                        IdentityStatus.Absent -> "No identity key on this device yet."
-                    },
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                byPassword?.let { on ->
-                    Spacer(Modifier.height(6.dp))
-                    Text(
-                        text = if (on) {
-                            "Recovery by account password is on: signing in on a new device " +
-                                "restores your messages with nothing else to type."
-                        } else {
-                            "Recovery by account password is off. A new device needs your " +
-                                "recovery passphrase."
-                        },
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                Spacer(Modifier.height(10.dp))
-                BetweenUsField(
-                    label = "Recovery passphrase",
-                    value = passphrase,
-                    onValueChange = { passphrase = it; note = null },
-                    placeholder = "Something only you know",
-                    secret = true,
-                    imeAction = ImeAction.Done,
-                    enabled = !busy,
-                )
-                Spacer(Modifier.height(6.dp))
-                Text(
-                    text = "A passphrase is never sent anywhere in any form. Set one if your " +
-                        "threat model includes the running server, which does see your password " +
-                        "when you sign in.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Spacer(Modifier.height(4.dp))
-                ListRow(
-                    title = "Also let my password recover my messages",
-                    subtitle = "Leave this on and a new device works the moment you sign in. " +
-                        "Turn it off and only this passphrase gets you back.",
-                    trailing = {
-                        Switch(
-                            checked = keepPasswordRecovery,
-                            onCheckedChange = { keepPasswordRecovery = it },
-                            colors = switchColours(),
-                        )
-                    },
-                )
-                Spacer(Modifier.height(10.dp))
-                BetweenUsButton(
-                    text = "Seal my identity with this passphrase",
-                    busy = busy,
-                    enabled = passphrase.length >= 8,
-                    onClick = {
-                        act {
-                            E2ee.backupIdentity(BackupSecret.passphrase(passphrase))
-                            // Deliberately after the passphrase is stored, and
-                            // only when asked: the whole reason to turn the
-                            // password path off is a server that sees the
-                            // password at sign-in, and dropping it before the
-                            // replacement exists would leave a window with no
-                            // way back into the account at all.
-                            if (!keepPasswordRecovery) E2ee.disablePasswordRecovery()
-                            byPassword = keepPasswordRecovery
-                            passphrase = ""
-                        }
-                    },
-                )
-            }
-
-            // --- privacy ---
-            SectionLabel("Privacy")
+            // --- Account Subsection ---
+            SectionLabel("Account")
+            ListRow(
+                title = "Account & Security",
+                subtitle = "Profile name, avatar, password, encryption passphrase",
+                leading = { BetweenUsIcon(BetweenUsIcons.User) },
+                trailing = { BetweenUsIcon(BetweenUsIcons.ChevronRight, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
+                onClick = onAccountSettings,
+            )
             ListRow(
                 title = "Privacy & Safety",
                 subtitle = "Blocked people, and clearing your own messages",
                 leading = { BetweenUsIcon(BetweenUsIcons.Block) },
-                trailing = { BetweenUsIcon(BetweenUsIcons.ChevronRight) },
+                trailing = { BetweenUsIcon(BetweenUsIcons.ChevronRight, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
                 onClick = onPrivacy,
             )
 
-            // --- password ---
-            SectionLabel("Password")
-            Column(Modifier.padding(horizontal = 12.dp)) {
-                BetweenUsField(
-                    label = "Current",
-                    value = currentPassword,
-                    onValueChange = { currentPassword = it; note = null },
-                    placeholder = "Your password now",
-                    secret = true,
-                    enabled = !busy,
-                )
-                Spacer(Modifier.height(10.dp))
-                BetweenUsField(
-                    label = "New",
-                    value = newPassword,
-                    onValueChange = { newPassword = it; note = null },
-                    placeholder = "At least 8 characters",
-                    secret = true,
-                    imeAction = ImeAction.Done,
-                    enabled = !busy,
-                )
-                Spacer(Modifier.height(6.dp))
-                Text(
-                    text = "Changing it signs every other session out, and re-seals your identity " +
-                        "backup if it was keyed to the password.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Spacer(Modifier.height(10.dp))
-                BetweenUsButton(
-                    text = "Change password",
-                    busy = busy,
-                    enabled = currentPassword.isNotBlank() && newPassword.length >= 8,
-                    onClick = {
-                        act {
-                            BetweenUsApi.changePassword(currentPassword, newPassword)
-                            E2ee.rewrapBackupForPassword(newPassword)
-                            currentPassword = ""
-                            newPassword = ""
-                        }
-                    },
-                )
-            }
-
-            // --- call sounds ---
-            SectionLabel("Calls")
-
-            ListRow(
-                title = "Play through",
-                subtitle = routeLabel(route),
-                leading = { BetweenUsIcon(BetweenUsIcons.Speaker) },
-                trailing = {
-                    Chip(
-                        text = "Change",
-                        onClick = {
-                            // A cycle rather than a menu: there are at most
-                            // five of these and four of them are usually not
-                            // plugged in. The call screen has the full picker,
-                            // which is where somebody in a call reaches for it.
-                            val list = devices.routes
-                            val next = list[(list.indexOf(route) + 1).mod(list.size)]
-                            route = next
-                            AudioPrefs.route = next
-                            // Now, on a call that is already up: the moment
-                            // somebody reaches for this is the moment they have
-                            // just put a headset on.
-                            CallAudio.apply(context)
-                        },
-                    )
-                },
-            )
-
-            ListRow(
-                title = "Speak into",
-                subtitle = inputLabel(input),
-                leading = { BetweenUsIcon(BetweenUsIcons.Mic) },
-                trailing = {
-                    Chip(
-                        text = "Change",
-                        onClick = {
-                            val list = devices.inputs
-                            val next = list[(list.indexOf(input) + 1).mod(list.size)]
-                            input = next
-                            AudioPrefs.input = next
-                            CallAudio.apply(context)
-                        },
-                    )
-                },
-            )
-
-            ListRow(
-                title = "High fidelity microphone",
-                subtitle = if (mode == AudioPrefs.Mode.HIFI) {
-                    "Stereo at twice the bitrate, with the speech processing off"
-                } else {
-                    "Speech: mono, denoised, and silent between sentences"
-                },
-                leading = { BetweenUsIcon(BetweenUsIcons.Mic) },
-                trailing = {
-                    Switch(
-                        checked = mode == AudioPrefs.Mode.HIFI,
-                        onCheckedChange = { on ->
-                            mode = if (on) AudioPrefs.Mode.HIFI else AudioPrefs.Mode.CLEAR
-                            AudioPrefs.mode = mode
-                        },
-                        colors = switchColours(),
-                    )
-                },
-            )
-
-            if (mode == AudioPrefs.Mode.CLEAR) {
-                AudioSwitch(
-                    title = "Noise suppression",
-                    subtitle = "Drops the fan, the keyboard and the room",
-                    checked = noiseSuppression,
-                ) {
-                    noiseSuppression = it
-                    AudioPrefs.noiseSuppression = it
-                }
-                AudioSwitch(
-                    title = "Echo cancellation",
-                    subtitle = "Without it, the speaker sends the call back into itself",
-                    checked = echoCancellation,
-                ) {
-                    echoCancellation = it
-                    AudioPrefs.echoCancellation = it
-                }
-                AudioSwitch(
-                    title = "Automatic gain control",
-                    subtitle = "Evens out a quiet or a loud voice",
-                    checked = autoGainControl,
-                ) {
-                    autoGainControl = it
-                    AudioPrefs.autoGainControl = it
-                }
-            }
-
-            InputSensitivity(
-                threshold = sensitivity,
-                onChange = {
-                    sensitivity = it
-                    AudioPrefs.sensitivityDb = it
-                },
-            )
-
-            ListRow(
-                title = "Join and leave tones",
-                subtitle = "Two notes when somebody arrives or goes - up for one, down for the other",
-                leading = { BetweenUsIcon(BetweenUsIcons.Speaker) },
-                trailing = {
-                    Switch(
-                        checked = callTones,
-                        onCheckedChange = { on ->
-                            callTones = on
-                            CallTones.enabled = on
-                            // The toggle is the demonstration: turning it on
-                            // plays the sound it is turning on.
-                            if (on) CallTones.play(CallTones.Tone.JOIN)
-                        },
-                        colors = switchColours(),
-                    )
-                },
-            )
-
-            // --- notifications ---
-            SectionLabel("Notifications")
-            preferences?.let { prefs ->
-                ListRow(
-                    title = "Notify me",
-                    subtitle = "Mentions, direct messages, calls and remote sessions",
-                    leading = { BetweenUsIcon(BetweenUsIcons.Bell) },
-                    trailing = {
-                        Switch(
-                            checked = prefs.enabled,
-                            onCheckedChange = { enabled ->
-                                preferences = prefs.copy(enabled = enabled)
-                                act {
-                                    preferences =
-                                        BetweenUsApi.updateNotificationPreferences(enabled = enabled)
-                                }
-                            },
-                            colors = switchColours(),
-                        )
-                    },
-                )
-            }
-
-            // --- appearance ---
-            SectionLabel("Appearance")
+            // --- Preferences Subsection ---
+            SectionLabel("Preferences")
             val currentTheme by ThemePreferences.selectedTheme.collectAsState()
             val followSys by ThemePreferences.followSystem.collectAsState()
             val activeDef = ANDROID_THEMES[currentTheme] ?: ANDROID_THEMES["dark"]!!
@@ -565,46 +182,41 @@ fun SettingsScreen(
                 onClick = onThemes,
             )
 
-            // --- this device ---
-            SectionLabel("This device")
-            PermissionsRow(onOpen = onPermissions)
+            ListRow(
+                title = "Voice & Audio",
+                subtitle = "Devices, noise suppression, gate sensitivity, call tones",
+                leading = { BetweenUsIcon(BetweenUsIcons.Mic) },
+                trailing = { BetweenUsIcon(BetweenUsIcons.ChevronRight, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
+                onClick = onVoiceSettings,
+            )
 
             ListRow(
-                title = "Calls & data",
+                title = "Notifications",
+                subtitle = "Push alerts, mentions, direct messages, incoming calls",
+                leading = { BetweenUsIcon(BetweenUsIcons.Bell) },
+                trailing = { BetweenUsIcon(BetweenUsIcons.ChevronRight, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
+                onClick = onNotificationSettings,
+            )
+
+            PermissionsRow(onOpen = onPermissions)
+
+            // --- Device & Diagnostics Subsection ---
+            SectionLabel("This Device")
+            ListRow(
+                title = "This Device",
+                subtitle = "Crash reports, diagnostics, hardware specifications",
+                leading = { BetweenUsIcon(BetweenUsIcons.Monitor) },
+                trailing = { BetweenUsIcon(BetweenUsIcons.ChevronRight, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
+                onClick = onDeviceSettings,
+            )
+
+            ListRow(
+                title = "Calls & data usage",
                 subtitle = "Every call this account has been in, and what each one moved",
                 leading = { BetweenUsIcon(BetweenUsIcons.Phone) },
                 trailing = { BetweenUsIcon(BetweenUsIcons.ChevronRight, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
                 onClick = onCallUsage,
             )
-
-            var crashes by remember { mutableStateOf(CrashReports.enabled) }
-            ListRow(
-                title = "Keep a crash report",
-                subtitle = "On this phone only. Nothing is uploaded and nobody else is involved.",
-                leading = { BetweenUsIcon(BetweenUsIcons.File) },
-                trailing = {
-                    Switch(
-                        checked = crashes,
-                        onCheckedChange = {
-                            crashes = it
-                            CrashReports.enabled = it
-                        },
-                        colors = switchColours(),
-                    )
-                },
-            )
-            if (crashes && CrashReports.report() != null) {
-                ListRow(
-                    title = "Share the last crash",
-                    subtitle = "The stack, the Android version and the model. No account, no address.",
-                    leading = { BetweenUsIcon(BetweenUsIcons.Download) },
-                    onClick = {
-                        CrashReports.share(context)?.let {
-                            context.startActivity(Intent.createChooser(it, "Share the crash report"))
-                        }
-                    },
-                )
-            }
 
             ListRow(
                 title = "Auto update",
@@ -614,7 +226,7 @@ fun SettingsScreen(
                 onClick = onAutoUpdate,
             )
 
-            // --- deployment ---
+            // --- Deployment Subsection ---
             SectionLabel("Deployment")
             ListRow(
                 title = Endpoint.label(),
@@ -626,41 +238,25 @@ fun SettingsScreen(
                 title = "Server settings",
                 subtitle = "Name, channels, leaving",
                 leading = { BetweenUsIcon(BetweenUsIcons.Settings) },
+                trailing = { BetweenUsIcon(BetweenUsIcons.ChevronRight, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
                 onClick = onServerSettings,
             )
 
-            note?.let {
-                Spacer(Modifier.height(12.dp))
-                Notice(it, MaterialTheme.colorScheme.error, Modifier.padding(horizontal = 16.dp))
-            }
-
+            // --- Session Subsection ---
             SectionLabel("Session")
             ListRow(
                 title = "Sign out",
                 titleColor = MaterialTheme.colorScheme.error,
                 leading = { BetweenUsIcon(BetweenUsIcons.LogOut, tint = MaterialTheme.colorScheme.error) },
-                // A call outlives every screen, so signing out is the one place
-                // that has to reach across and end one it did not start.
                 onClick = {
                     scope.launch {
                         VoiceEngine.release()
-                        // The remembered place belongs to an account, not to
-                        // the app: the next person to sign in here must not
-                        // land in the last one's conversation.
                         LastPlace.forget()
-                        // So does the plaintext of its pictures.
                         com.aatech.betweenus.feature.chat.MediaCache.clear()
-                        // And so does anything still sitting in the shade: a
-                        // notification holds the words of a conversation this
-                        // account is walking away from.
-                        com.aatech.betweenus.feature.notifications.MessageNotifications
-                            .clearAll(context)
-                        com.aatech.betweenus.feature.notifications.SocialNotifications
-                            .clearAll(context)
+                        com.aatech.betweenus.feature.notifications.MessageNotifications.clearAll(context)
+                        com.aatech.betweenus.feature.notifications.SocialNotifications.clearAll(context)
                         com.aatech.betweenus.feature.notifications.PushGate.forgetPreferences()
                         com.aatech.betweenus.feature.chat.Outbox.forgetPending()
-                        // And this account stops reading whatever was on
-                        // screen, or the next one inherits its silence.
                         com.aatech.betweenus.core.store.ChannelFocus.forget()
                         Session.signOut()
                     }
@@ -672,152 +268,4 @@ fun SettingsScreen(
     if (pickingServer) {
         ServerSheet(onDismiss = { pickingServer = false })
     }
-}
-
-/**
- * The switch colours.
- *
- * The toolkit's own, now that the scheme is right: an expressive switch already
- * draws its checked track from the primary and its unchecked one from the
- * surface ramp, and the hand-written set this replaces was six lines of saying
- * the same thing slightly worse.
- */
-@Composable
-private fun switchColours() = SwitchDefaults.colors()
-
-/**
- * Input sensitivity: the threshold, and a meter to set it against.
- *
- * The meter is the point. A threshold in dBFS is a number nobody has an
- * intuition for, and setting one blind means either a gate that never opens or
- * one that never closes - both of which read as "the feature does not work"
- * rather than as "it is set wrong". With a live level beside it the setting
- * takes about four seconds: talk, watch where the bar sits, put the line under
- * it.
- *
- * The meter shows the level *before* the gate, which is the only way round it
- * can be: a meter of the gated signal would sit at silence exactly when
- * somebody is trying to find the threshold that stops it doing that.
- *
- * It only moves during a call. Opening a second capture just for this screen is
- * what the desktop does, and Android does not reliably allow two captures of
- * one microphone - so the row says so rather than showing a bar that is dead
- * for a reason nobody can see.
- */
-@Composable
-private fun InputSensitivity(threshold: Int?, onChange: (Int?) -> Unit) {
-    // The engine only exists once somebody has been in a call. No engine is a
-    // dead meter and a subtitle that says why, rather than a crash on a screen
-    // that is mostly about other things.
-    val engine = VoiceEngine.current()
-    val level by (engine?.micLevelDb ?: remember { MutableStateFlow(-100.0) }).collectAsState()
-    val open by (engine?.gateOpen ?: remember { MutableStateFlow(true) }).collectAsState()
-    val call by (engine?.state ?: remember {
-        MutableStateFlow<VoiceEngine.CallState>(VoiceEngine.CallState.Idle)
-    }).collectAsState()
-    val live = call is VoiceEngine.CallState.Live
-
-    ListRow(
-        title = "Input sensitivity",
-        subtitle = when {
-            threshold == null -> "Off: everything the microphone hears is sent"
-            live -> "Below ${'$'}threshold dB the microphone is closed"
-            else -> "Below ${'$'}threshold dB the microphone is closed. Join a call to see the meter."
-        },
-        leading = { BetweenUsIcon(BetweenUsIcons.Mic, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
-        trailing = {
-            Switch(
-                checked = threshold != null,
-                // -50 dBFS is under a normal speaking voice and over a quiet
-                // room, which is the setting most people would arrive at.
-                onCheckedChange = { on -> onChange(if (on) -50 else null) },
-                colors = switchColours(),
-            )
-        },
-    )
-
-    if (threshold == null) return
-
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 20.dp, vertical = 4.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        MicMeter(levelDb = level, thresholdDb = threshold, open = open, live = live)
-        Slider(
-            value = threshold.toFloat(),
-            onValueChange = { onChange(it.toInt()) },
-            valueRange = MicGate.MIN_THRESHOLD_DB.toFloat()..MicGate.MAX_THRESHOLD_DB.toFloat(),
-        )
-    }
-}
-
-/**
- * The level, the threshold, and whether the gate is open, in one bar.
- *
- * Green when what you are saying is getting through and grey when it is not,
- * because "is anybody hearing me" is the only question this screen is being
- * asked. The line is where the threshold sits, so the two are read together
- * rather than as a number and a picture.
- */
-@Composable
-private fun MicMeter(levelDb: Double, thresholdDb: Int, open: Boolean, live: Boolean) {
-    // dBFS is logarithmic and the interesting part is the top; -80 to 0 across
-    // the bar puts a speaking voice around two thirds of the way along, which
-    // is where a meter is easiest to read.
-    fun position(db: Double): Float = ((db + 80.0) / 80.0).coerceIn(0.0, 1.0).toFloat()
-
-    val filled = if (live) position(levelDb) else 0f
-
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(10.dp)
-            .clip(RoundedCornerShape(5.dp))
-            .background(MaterialTheme.colorScheme.surfaceContainerHighest),
-    ) {
-        if (filled > 0f) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth(filled)
-                    .fillMaxHeight()
-                    .background(
-                        if (open) StatusOnline else MaterialTheme.colorScheme.onSurfaceVariant,
-                    ),
-            )
-        }
-        // The threshold, drawn over the level rather than beside it.
-        Box(
-            modifier = Modifier
-                .fillMaxWidth(position(thresholdDb.toDouble()))
-                .fillMaxHeight(),
-            contentAlignment = Alignment.CenterEnd,
-        ) {
-            Box(
-                modifier = Modifier
-                    .width(2.dp)
-                    .fillMaxHeight()
-                    .background(MaterialTheme.colorScheme.onSurface),
-            )
-        }
-    }
-}
-
-/** One of the three microphone-processing switches. */
-@Composable
-private fun AudioSwitch(
-    title: String,
-    subtitle: String,
-    checked: Boolean,
-    onChange: (Boolean) -> Unit,
-) {
-    ListRow(
-        title = title,
-        subtitle = subtitle,
-        leading = { BetweenUsIcon(BetweenUsIcons.Settings, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
-        trailing = {
-            Switch(checked = checked, onCheckedChange = onChange, colors = switchColours())
-        },
-    )
 }

@@ -109,10 +109,14 @@ feature/remote          feature/update        feature/voice
   control an enrolled machine; it can't itself be enrolled as a target,
   since nothing on a phone can move a desktop's mouse. Same asymmetry as
   the web client (see [Architecture Overview](/architecture/overview)).
-- **`settings`** — account profile, local crash reporter, call data usage, a
-  dedicated **`PermissionsScreen`** (`Route.Permissions`) consolidating all runtime permissions with real-time health meters, a
-  **`PrivacyScreen`** (`Route.Privacy`) holding the block list and *Clear all my
-  messages*, and a dedicated **`ThemesScreen`** (`Route.Themes`) providing live interactive workbench previews, 16 curated themes across 5 categories, and custom accent tint swatches with spring transitions.
+- **`settings`** — modular Settings Hub (`Route.Settings`) structured hierarchically into dedicated sub-setting pages:
+  - **`AccountSecurityScreen`** (`Route.AccountSettings`) — Profile, display name, avatar customization, password management, and E2EE key/passphrase backup.
+  - **`VoiceSettingsScreen`** (`Route.VoiceSettings`) — Audio routing, input device, HiFi microphone mode, noise/echo processing, and pre-gate sensitivity dBFS meter.
+  - **`NotificationSettingsScreen`** (`Route.NotificationSettings`) — Push preferences and OS notification integration.
+  - **`DeviceSettingsScreen`** (`Route.DeviceSettings`) — "This Device" diagnostics, local crash reports, call data history, and auto-updates.
+  - **`PermissionsScreen`** (`Route.Permissions`) — Consolidated runtime permissions overview with live health meters and batch grant actions.
+  - **`PrivacyScreen`** (`Route.Privacy`) — Blocked users directory and message history clearing.
+  - **`ThemesScreen`** (`Route.Themes`) — 16 curated themes, Material You dynamic wallpaper theming, and accent customization.
 - **`home`** — the friends list, and **`AddFriendScreen`** (`Route.AddFriend`)
   beside it. Two searches, deliberately kept apart, matching the desktop's
   **Add friend** tab: the field on the friends list filters the people you

@@ -58,12 +58,16 @@ import com.aatech.betweenus.core.store.PendingPlace
 import com.aatech.betweenus.core.store.PendingShare
 import com.aatech.betweenus.feature.servers.InviteSheet
 import com.aatech.betweenus.feature.servers.ServerSettingsScreen
+import com.aatech.betweenus.feature.settings.AccountSecurityScreen
 import com.aatech.betweenus.feature.settings.BetweenUsPermissions
 import com.aatech.betweenus.feature.settings.CallUsageScreen
+import com.aatech.betweenus.feature.settings.DeviceSettingsScreen
+import com.aatech.betweenus.feature.settings.NotificationSettingsScreen
 import com.aatech.betweenus.feature.settings.PermissionsScreen
-import com.aatech.betweenus.feature.settings.SettingsScreen
 import com.aatech.betweenus.feature.settings.PrivacyScreen
+import com.aatech.betweenus.feature.settings.SettingsScreen
 import com.aatech.betweenus.feature.settings.ThemesScreen
+import com.aatech.betweenus.feature.settings.VoiceSettingsScreen
 import com.aatech.betweenus.feature.update.AutoUpdateScreen
 import com.aatech.betweenus.feature.update.UpdateSheet
 import com.aatech.betweenus.feature.update.UpdateState
@@ -469,12 +473,67 @@ fun Shell(user: PublicUser) {
                         SettingsScreen(
                             user = user,
                             onBack = { navigation.popBackStack() },
+                            onAccountSettings = { navigation.navigate(Route.AccountSettings) },
+                            onVoiceSettings = { navigation.navigate(Route.VoiceSettings) },
+                            onNotificationSettings = { navigation.navigate(Route.NotificationSettings) },
+                            onDeviceSettings = { navigation.navigate(Route.DeviceSettings) },
                             onServerSettings = { navigation.navigate(Route.ServerSettings) },
                             onPermissions = { navigation.navigate(Route.Permissions) },
                             onAutoUpdate = { navigation.navigate(Route.AutoUpdate) },
                             onCallUsage = { navigation.navigate(Route.CallUsage) },
                             onThemes = { navigation.navigate(Route.Themes) },
                             onPrivacy = { navigation.navigate(Route.Privacy) },
+                        )
+                    }
+                    composable(
+                        Route.AccountSettings,
+                        enterTransition = { slideInHorizontally(travel) { it } + fadeIn(fade) },
+                        exitTransition = { slideOutHorizontally(travel) { -it / 3 } + fadeOut(fade) },
+                        popEnterTransition = { slideInHorizontally(travel) { -it / 3 } + fadeIn(fade) },
+                        popExitTransition = { slideOutHorizontally(travel) { it } + fadeOut(fade) },
+                    ) {
+                        AccountSecurityScreen(
+                            user = user,
+                            onBack = { navigation.popBackStack() },
+                            onPrivacy = { navigation.navigate(Route.Privacy) },
+                        )
+                    }
+                    composable(
+                        Route.VoiceSettings,
+                        enterTransition = { slideInHorizontally(travel) { it } + fadeIn(fade) },
+                        exitTransition = { slideOutHorizontally(travel) { -it / 3 } + fadeOut(fade) },
+                        popEnterTransition = { slideInHorizontally(travel) { -it / 3 } + fadeIn(fade) },
+                        popExitTransition = { slideOutHorizontally(travel) { it } + fadeOut(fade) },
+                    ) {
+                        VoiceSettingsScreen(
+                            onBack = { navigation.popBackStack() },
+                            onCallUsage = { navigation.navigate(Route.CallUsage) },
+                        )
+                    }
+                    composable(
+                        Route.NotificationSettings,
+                        enterTransition = { slideInHorizontally(travel) { it } + fadeIn(fade) },
+                        exitTransition = { slideOutHorizontally(travel) { -it / 3 } + fadeOut(fade) },
+                        popEnterTransition = { slideInHorizontally(travel) { -it / 3 } + fadeIn(fade) },
+                        popExitTransition = { slideOutHorizontally(travel) { it } + fadeOut(fade) },
+                    ) {
+                        NotificationSettingsScreen(
+                            onBack = { navigation.popBackStack() },
+                            onPermissions = { navigation.navigate(Route.Permissions) },
+                        )
+                    }
+                    composable(
+                        Route.DeviceSettings,
+                        enterTransition = { slideInHorizontally(travel) { it } + fadeIn(fade) },
+                        exitTransition = { slideOutHorizontally(travel) { -it / 3 } + fadeOut(fade) },
+                        popEnterTransition = { slideInHorizontally(travel) { -it / 3 } + fadeIn(fade) },
+                        popExitTransition = { slideOutHorizontally(travel) { it } + fadeOut(fade) },
+                    ) {
+                        DeviceSettingsScreen(
+                            onBack = { navigation.popBackStack() },
+                            onPermissions = { navigation.navigate(Route.Permissions) },
+                            onCallUsage = { navigation.navigate(Route.CallUsage) },
+                            onAutoUpdate = { navigation.navigate(Route.AutoUpdate) },
                         )
                     }
                     composable(
@@ -517,7 +576,13 @@ fun Shell(user: PublicUser) {
                     composable(Route.AutoUpdate) {
                         AutoUpdateScreen(onBack = { navigation.popBackStack() })
                     }
-                    composable(Route.Permissions) {
+                    composable(
+                        Route.Permissions,
+                        enterTransition = { slideInHorizontally(travel) { it } + fadeIn(fade) },
+                        exitTransition = { slideOutHorizontally(travel) { -it / 3 } + fadeOut(fade) },
+                        popEnterTransition = { slideInHorizontally(travel) { -it / 3 } + fadeIn(fade) },
+                        popExitTransition = { slideOutHorizontally(travel) { it } + fadeOut(fade) },
+                    ) {
                         PermissionsScreen(
                             onDone = { navigation.popBackStack() },
                             onBack = { navigation.popBackStack() },
@@ -633,6 +698,10 @@ object Route {
     const val Members = "members"
     const val Voice = "voice"
     const val Settings = "settings"
+    const val AccountSettings = "account-settings"
+    const val VoiceSettings = "voice-settings"
+    const val NotificationSettings = "notification-settings"
+    const val DeviceSettings = "device-settings"
     const val Themes = "themes"
     const val Privacy = "privacy"
     const val ServerSettings = "server-settings"
