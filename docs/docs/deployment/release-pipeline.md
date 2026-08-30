@@ -19,6 +19,7 @@ flowchart TD
     subgraph T_TRIGGER ["Phase 1: Commit Marker Trigger"]
         direction TB
         Commit["<b>Commit on master with marker</b><br/><i>(!major · !feat · !fix · !alpha · !beta · !stable)</i>"]
+        Patch["<b>!patch on master</b><br/><i>No new version · rebuild this one in place</i>"]
         ReleasePR["<b>release-pr Job</b><br/><i>Bump package versions · Generate CHANGELOG.md · Open PR</i>"]
         Commit ==>|"1. Automated Workflow Dispatch"| ReleasePR
     end
@@ -42,6 +43,7 @@ flowchart TD
             AndroidBuild["<b>Android Build</b><br/><i>APK & AAB Bundles</i>"]
         end
         MergePR ==>|"Yes"| Matrix
+        Patch ==>|"Skips the PR entirely"| Matrix
     end
 
     %% TIER 4: PUBLICATION & TAG PROMOTION
@@ -49,9 +51,11 @@ flowchart TD
         direction TB
         GHRelease["<b>GitHub Release & Version Tag</b><br/><i>Attach Compiled Binaries & Release Notes</i>"]
         PromoteTags["<b>Promote Channel Tags</b><br/><i>Move :latest, :alpha, :beta to new release</i>"]
-        Rollback["<b>Automated Rollback</b><br/><i>Purge failed image tags & remove draft release</i>"]
+        Rollback["<b>Automated Rollback</b><br/><i>Purge image tags · delete tag & Release · revert the bump off master</i>"]
+        Docs["<b>Deploy Docs Site</b><br/><i>Only when the scope named docs</i>"]
 
         Matrix ==>|"All Jobs Succeed"| GHRelease ==> PromoteTags
+        GHRelease ==> Docs
         Matrix -.->|"Any Target Fails"| Rollback
     end
 
@@ -61,9 +65,9 @@ flowchart TD
     classDef success fill:#14532d,stroke:#22c55e,stroke-width:2px,color:#ffffff;
     classDef fail fill:#7f1d1d,stroke:#ef4444,stroke-width:2px,color:#ffffff;
 
-    class Commit,ReleasePR,DockerBuild,DesktopBuild,AndroidBuild primary;
+    class Commit,Patch,ReleasePR,DockerBuild,DesktopBuild,AndroidBuild primary;
     class MergePR decision;
-    class GHRelease,PromoteTags success;
+    class GHRelease,PromoteTags,Docs success;
     class Closed,Rollback fail;
 ```
 
@@ -87,9 +91,12 @@ flowchart TD
 | `!alpha` | `0.0.1` → `0.0.2-alpha.1`, pre-release |
 | `!beta` | promotes to `0.0.2-beta.1`, same base version |
 | `!stable` | promotes to `0.0.2`, no version bump |
+| `!patch` | no new version — rebuilds the artifacts of the current one |
 
 A push with no marker releases nothing. A channel promotes but never
-demotes in place.
+demotes in place. When a push carries several markers the strongest wins,
+and `!patch` is the weakest — a push asking for both a release and a
+rebuild of the old one wants the release, which already contains it.
 
 ## Scoping to one platform
 
@@ -98,11 +105,19 @@ demotes in place.
 !fix(android,desktop)  both clients, no server images
 !feat(docker)          the nine service images only
 !feat                  everything (empty scope = all)
+!fix(android,docs)     the APKs, and the docs site after the release
 ```
 
-A scope that isn't entirely platform names (`docker`/`desktop`/`android`
-and their aliases) is read as an ordinary conventional-commit scope and
-changes nothing — `!feat(chat)` still builds everything.
+A scope that isn't entirely known names (`docker`/`desktop`/`android` and
+their aliases, plus `docs`) is read as an ordinary conventional-commit
+scope and changes nothing — `!feat(chat)` still builds everything.
+
+`docs` is the odd name out: not a platform, and it never narrows what is
+built. It asks for the Docusaurus site to be deployed once the release is
+published — `!fix(docs)` is still a full release, `!fix(android,docs)` is
+still only the APKs. It uses `docs.yml`'s build and shares its concurrency
+group, and it sits outside the rollback story: a Pages outage should not
+undo a release whose images and installers are already out.
 
 ## What a skipped platform gets
 
@@ -115,18 +130,52 @@ keeping their own (older) filenames — which is the honest answer to "which
 build is this." The CHANGELOG carries a table saying exactly which half of
 each release is which.
 
+## Rebuilding a release that exists
+
+A release can be wrong without the version being wrong — an installer built
+against the wrong API URL, an image built before a secret was set. `!patch`
+replaces the artifacts of the version `master` already carries and produces
+no new one.
+
+```text
+!patch                 rebuild everything for this version
+!patch(desktop)        replace the installer, leave the rest alone
+!patch(docker,docs)    replace the images, and redeploy the docs site
+```
+
+It skips the release PR entirely (a patch has no diff to show). The image
+tags are moved onto the new build, which leaves the images they named
+before untagged; the installers and APKs replace the assets of the same
+name on the Release that already exists; the tag, the CHANGELOG entry and
+the version in the manifests are untouched, because the version has not
+changed. A platform the scope leaves out carries forward from the release
+being patched — itself — so leaving it alone is a no-op rather than a gap.
+
+A `!patch` on a version that was never released is refused, and **a patch
+is never rolled back**: the release it replaces is the one a rollback would
+delete. Fix what broke and push `!patch` again; repeating it is safe.
+
 ## Manual dispatch
 
-`workflow_dispatch` takes `mode: pr` (open a release PR by hand) or
+`workflow_dispatch` takes `mode: pr` (open a release PR by hand),
 `mode: release` (build and publish whatever `master` already carries — the
 way back after a rollback, or after a merged release PR this workflow
-missed).
+missed), or `mode: patch` (rebuild that version in place). `pr` and `patch`
+both read the `targets` input for what to build.
 
 ## On failure
 
-`rollback` deletes the version's image tags and any tag/Release that got as
-far as existing, and deliberately leaves the channel tags (`latest`,
-`alpha`, `beta`) untouched — they still point at the last release that
-finished. The version bump stays on `master`; the next release is computed
-from the failed version, so use `!fix` or `!alpha`, not a retry of the same
-number.
+`rollback` deletes the version's image tags, deletes any tag and Release
+that got as far as existing, and reverts the version bump and CHANGELOG
+entry off `master`. The channel tags (`latest`, `alpha`, `beta`) are
+deliberately left untouched — they still point at the last release that
+finished, which is why `promote` runs dead last.
+
+The revert is what used to be missing. The bump survived a failure, and a
+`master` claiming a version nobody published is what the *next* release
+computes from: a failed `v0.0.7` made the next one `v0.0.8`, skipping
+`v0.0.7` for good and leaving a CHANGELOG entry whose every download link
+was dead. Now the same marker can simply be pushed again. The revert commit
+carries `[skip ci]`, because a push that lowers the version field otherwise
+looks to the workflow exactly like a release PR landing; if branch
+protection refuses the push, the run summary says the bump is still there.

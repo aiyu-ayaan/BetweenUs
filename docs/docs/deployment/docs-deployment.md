@@ -66,6 +66,13 @@ Reusing the same "marker at the start of a commit subject" idea as
   (useful right after merging a docs PR that didn't itself carry the
   marker, or after a Pages outage).
 
+A release can also ask for this deploy, by naming `docs` in its marker
+scope (`!fix(android,docs)`). That runs the same build from `release.yml`
+after the release is published, and shares this concurrency group, so a
+`!docs` push and a release carrying `docs` queue behind one another rather
+than force-pushing `gh-pages` at the same moment. See
+[Release Pipeline](/deployment/release-pipeline).
+
 ## Running it locally first
 
 Always build locally before pushing a `!docs` commit — see
