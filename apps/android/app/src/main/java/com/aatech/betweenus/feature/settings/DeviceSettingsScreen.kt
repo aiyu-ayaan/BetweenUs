@@ -47,9 +47,6 @@ import com.aatech.betweenus.ui.components.SectionLabel
 @Composable
 fun DeviceSettingsScreen(
     onBack: () -> Unit,
-    onPermissions: () -> Unit,
-    onCallUsage: () -> Unit,
-    onAutoUpdate: () -> Unit,
 ) {
     val context = LocalContext.current
     var crashes by remember { mutableStateOf(CrashReports.enabled) }
@@ -78,10 +75,6 @@ fun DeviceSettingsScreen(
         }
 
         Column(Modifier.verticalScroll(rememberScrollState()).padding(bottom = 40.dp)) {
-            // --- App Permissions ---
-            SectionLabel("Permissions & Hardware")
-            PermissionsRow(onOpen = onPermissions)
-
             // --- Diagnostics & Crash Reports ---
             SectionLabel("Diagnostics & Stability")
 
@@ -114,25 +107,6 @@ fun DeviceSettingsScreen(
                     },
                 )
             }
-
-            // --- Network & Storage Data ---
-            SectionLabel("Data & Updates")
-
-            ListRow(
-                title = "Calls & data usage",
-                subtitle = "Bandwidth, bytes transferred, and peer connection history",
-                leading = { BetweenUsIcon(BetweenUsIcons.Phone) },
-                trailing = { BetweenUsIcon(BetweenUsIcons.ChevronRight, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
-                onClick = onCallUsage,
-            )
-
-            ListRow(
-                title = "Auto update",
-                subtitle = "Release channel, version check, and APK installer",
-                leading = { BetweenUsIcon(BetweenUsIcons.Download) },
-                trailing = { BetweenUsIcon(BetweenUsIcons.ChevronRight, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
-                onClick = onAutoUpdate,
-            )
 
             // --- Device Information Box ---
             SectionLabel("Device Specifications")

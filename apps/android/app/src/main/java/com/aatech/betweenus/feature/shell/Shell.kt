@@ -507,6 +507,10 @@ fun Shell(user: PublicUser) {
                             onDeviceSettings = { navigation.navigate(Route.DeviceSettings) },
                             onServerSettings = { navigation.navigate(Route.ServerSettings) },
                             onThemes = { navigation.navigate(Route.Themes) },
+                            onPermissions = { navigation.navigate(Route.Permissions) },
+                            onAutoUpdate = { navigation.navigate(Route.AutoUpdate) },
+                            onCallUsage = { navigation.navigate(Route.CallUsage) },
+                            onPrivacy = { navigation.navigate(Route.Privacy) },
                         )
                     }
                     composable(
@@ -519,7 +523,6 @@ fun Shell(user: PublicUser) {
                         AccountSecurityScreen(
                             user = user,
                             onBack = { navigation.popBackStack() },
-                            onPrivacy = { navigation.navigate(Route.Privacy) },
                         )
                     }
                     composable(
@@ -555,9 +558,6 @@ fun Shell(user: PublicUser) {
                     ) {
                         DeviceSettingsScreen(
                             onBack = { navigation.popBackStack() },
-                            onPermissions = { navigation.navigate(Route.Permissions) },
-                            onCallUsage = { navigation.navigate(Route.CallUsage) },
-                            onAutoUpdate = { navigation.navigate(Route.AutoUpdate) },
                         )
                     }
                     composable(

@@ -155,10 +155,17 @@ fun SettingsScreen(
             SectionLabel("Account")
             ListRow(
                 title = "Account & Security",
-                subtitle = "Profile name, avatar, password, encryption, privacy",
+                subtitle = "Profile name, avatar, password, encryption passphrase",
                 leading = { BetweenUsIcon(BetweenUsIcons.User) },
                 trailing = { BetweenUsIcon(BetweenUsIcons.ChevronRight, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
                 onClick = onAccountSettings,
+            )
+            ListRow(
+                title = "Privacy & Safety",
+                subtitle = "Blocked people, and clearing your own messages",
+                leading = { BetweenUsIcon(BetweenUsIcons.Block) },
+                trailing = { BetweenUsIcon(BetweenUsIcons.ChevronRight, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
+                onClick = { onPrivacy?.invoke() },
             )
 
             // --- Preferences Subsection ---
@@ -191,14 +198,38 @@ fun SettingsScreen(
                 onClick = onNotificationSettings,
             )
 
+            ListRow(
+                title = "App permissions",
+                subtitle = "Microphone, camera, notifications, nearby devices, media",
+                leading = { BetweenUsIcon(BetweenUsIcons.Shield) },
+                trailing = { BetweenUsIcon(BetweenUsIcons.ChevronRight, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
+                onClick = { onPermissions?.invoke() },
+            )
+
             // --- Device & Diagnostics Subsection ---
             SectionLabel("This Device")
             ListRow(
                 title = "This Device",
-                subtitle = "Permissions, crash reports, data usage, auto update",
+                subtitle = "Crash reports, diagnostics, hardware specifications",
                 leading = { BetweenUsIcon(BetweenUsIcons.Monitor) },
                 trailing = { BetweenUsIcon(BetweenUsIcons.ChevronRight, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
                 onClick = onDeviceSettings,
+            )
+
+            ListRow(
+                title = "Calls & data usage",
+                subtitle = "Every call this account has been in, and bandwidth logs",
+                leading = { BetweenUsIcon(BetweenUsIcons.Phone) },
+                trailing = { BetweenUsIcon(BetweenUsIcons.ChevronRight, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
+                onClick = { onCallUsage?.invoke() },
+            )
+
+            ListRow(
+                title = "Auto update",
+                subtitle = "Release channel, version checks, APK installer",
+                leading = { BetweenUsIcon(BetweenUsIcons.Download) },
+                trailing = { BetweenUsIcon(BetweenUsIcons.ChevronRight, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
+                onClick = { onAutoUpdate?.invoke() },
             )
 
             // --- Deployment Subsection ---

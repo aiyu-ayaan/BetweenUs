@@ -57,7 +57,6 @@ import kotlinx.coroutines.launch
 fun AccountSecurityScreen(
     user: PublicUser,
     onBack: () -> Unit,
-    onPrivacy: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
     val identity by E2ee.status.collectAsState()
@@ -164,16 +163,6 @@ fun AccountSecurityScreen(
                     },
                 )
             }
-
-            // --- Privacy & Safety Navigation ---
-            SectionLabel("Privacy & Safety")
-            ListRow(
-                title = "Privacy & Safety Settings",
-                subtitle = "Manage blocked people and message history",
-                leading = { BetweenUsIcon(BetweenUsIcons.Block) },
-                trailing = { BetweenUsIcon(BetweenUsIcons.ChevronRight, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
-                onClick = onPrivacy,
-            )
 
             // --- Password ---
             SectionLabel("Password")
