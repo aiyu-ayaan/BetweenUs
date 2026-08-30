@@ -12,6 +12,7 @@ import {
   GATE_CLOSED,
   GATE_RANGE,
   amplitudeToDb,
+  deviceConstraint,
   micCapture,
   micEncoding,
   micProcessing,
@@ -53,10 +54,18 @@ assert.equal(micCapture(clear).channelCount, 1);
 assert.equal(micCapture(hifi).channelCount, 2);
 
 // No device chosen means no `deviceId` constraint at all: the system default is
-// what most people want, and naming a device that has since been unplugged is
-// how a join fails with "device not found".
+// what most people want.
 assert.equal('deviceId' in micCapture(clear), false);
-assert.equal(micCapture({ ...clear, inputDeviceId: 'usb-mic' }).deviceId, 'usb-mic');
+assert.equal('deviceId' in deviceConstraint(null), false);
+
+// A chosen device is named with `exact`, and nothing weaker. The bare string is
+// the `ideal` form, which Chromium is free to ignore in favour of the system
+// default - and does. That is "changing the input device does not change the
+// input device", so it is asserted rather than left to a comment.
+assert.deepEqual(micCapture({ ...clear, inputDeviceId: 'usb-mic' }).deviceId, {
+  exact: 'usb-mic',
+});
+assert.deepEqual(deviceConstraint('usb-mic'), { deviceId: { exact: 'usb-mic' } });
 
 // Capture constraints are constraints and nothing else. The gate is applied
 // after the capture now rather than passed into it - see voice.ts.

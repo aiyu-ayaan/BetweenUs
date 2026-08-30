@@ -1,12 +1,18 @@
 /**
  * Run with `tsx src/services/audio-devices.check.ts`.
  *
- * Only the two pure decisions are checked here: whether a chosen device has
- * gone, and whether a live capture is now on the wrong one. The enumeration
- * itself needs a browser and is not worth faking.
+ * The two pure decisions - whether a chosen device has gone, and whether a live
+ * capture is now on the wrong one - and the one branch that is not pure but is
+ * worth faking three lines for: the retry that opens the system default when
+ * the device somebody chose is not there. Enumeration itself needs a browser.
  */
 import assert from 'node:assert/strict';
-import { captureIsStale, chosenIsMissing, realDevices } from './audio-devices';
+import {
+  captureIsStale,
+  chosenIsMissing,
+  openAudioCapture,
+  realDevices,
+} from './audio-devices';
 
 const device = (deviceId: string, kind: MediaDeviceKind): MediaDeviceInfo =>
   ({ deviceId, kind, label: deviceId, groupId: '' }) as MediaDeviceInfo;
@@ -45,5 +51,58 @@ assert.equal(chosenIsMissing(realDevices(unasked), 'audioinput', 'headset'), fal
 
 // A real list is passed through untouched.
 assert.deepEqual(realDevices([headset, webcamMic]), [headset, webcamMic]);
+
+// --- The fallback `exact` bought -------------------------------------------
+//
+// Naming the device with `exact` is what makes choosing one work at all, and it
+// is also what turns an unplugged device into a refusal. The retry is the whole
+// of that trade, so it is checked here rather than trusted: a fake
+// `getUserMedia` is three lines, and the alternative is finding out in a call.
+
+const asked: MediaTrackConstraints[] = [];
+
+function fakeGetUserMedia(fail: (attempt: number) => Error | null): void {
+  Object.defineProperty(globalThis, 'navigator', {
+    configurable: true,
+    value: {
+      mediaDevices: {
+        getUserMedia: (constraints: MediaStreamConstraints) => {
+          asked.push(constraints.audio as MediaTrackConstraints);
+          const error = fail(asked.length);
+          return error ? Promise.reject(error) : Promise.resolve('stream' as unknown as MediaStream);
+        },
+      },
+    },
+  });
+}
+
+const named = (name: string): Error => Object.assign(new Error(name), { name });
+
+// The chosen device is gone: refused once, then opened on the system default
+// with every other constraint intact.
+asked.length = 0;
+fakeGetUserMedia((attempt) => (attempt === 1 ? named('OverconstrainedError') : null));
+await openAudioCapture({ deviceId: { exact: 'headset' }, noiseSuppression: true });
+assert.equal(asked.length, 2);
+assert.deepEqual(asked[1], { noiseSuppression: true }, 'the retry drops only the device');
+
+// A browser that checked the hardware first says the same thing differently.
+asked.length = 0;
+fakeGetUserMedia((attempt) => (attempt === 1 ? named('NotFoundError') : null));
+await openAudioCapture({ deviceId: { exact: 'headset' } });
+assert.equal(asked.length, 2);
+
+// A refused permission is not a missing device. Retrying it would be denied
+// again and would report the wrong failure, so it is re-thrown untouched.
+asked.length = 0;
+fakeGetUserMedia(() => named('NotAllowedError'));
+await assert.rejects(openAudioCapture({ deviceId: { exact: 'headset' } }), /NotAllowedError/);
+assert.equal(asked.length, 1, 'a denied permission is asked once');
+
+// Nothing chosen, nothing to fall back to: one attempt, and its failure stands.
+asked.length = 0;
+fakeGetUserMedia(() => named('NotFoundError'));
+await assert.rejects(openAudioCapture({ noiseSuppression: true }), /NotFoundError/);
+assert.equal(asked.length, 1, 'no device named means no second attempt');
 
 console.log('audio-devices.check.ts ok');

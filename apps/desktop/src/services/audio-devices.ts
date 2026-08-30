@@ -109,3 +109,40 @@ export function captureIsStale(
   if (chosenIsMissing(devices, 'audioinput', chosen)) return false;
   return capturedDeviceId !== chosen;
 }
+
+/**
+ * Whether a `getUserMedia` failure is "that device is not there", as opposed to
+ * a refused permission or a machine with no microphone at all.
+ *
+ * `OverconstrainedError` is the spec's answer and what Chromium raises for an
+ * `exact` device id it cannot satisfy. `NotFoundError` is the same sentence
+ * from a browser that checked the hardware first, so both are treated as the
+ * device having gone - and a machine with genuinely nothing plugged in still
+ * fails, on the retry, which is the truthful failure.
+ */
+function deviceIsGone(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  return error.name === 'OverconstrainedError' || error.name === 'NotFoundError';
+}
+
+/**
+ * Opens a microphone, falling back to the system default when the chosen device
+ * has gone.
+ *
+ * Every audio constraint in this app names its device with `exact`, because
+ * nothing weaker is honoured - see `deviceConstraint`. `exact` is also what
+ * turns an unplugged headset from a silent substitution into a refusal, so the
+ * substitution is made here instead: deliberately, in one place, and only for
+ * the failure that actually means the device is missing. A denied permission is
+ * re-thrown, because retrying it would only be denied again while making the
+ * error say something else.
+ */
+export async function openAudioCapture(constraints: MediaTrackConstraints): Promise<MediaStream> {
+  try {
+    return await navigator.mediaDevices.getUserMedia({ audio: constraints });
+  } catch (error) {
+    if (constraints.deviceId === undefined || !deviceIsGone(error)) throw error;
+    const { deviceId: _gone, ...withoutDevice } = constraints;
+    return navigator.mediaDevices.getUserMedia({ audio: withoutDevice });
+  }
+}

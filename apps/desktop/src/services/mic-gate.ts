@@ -27,7 +27,8 @@
  * through, which is what the microphone did before this existed. Electron has
  * had worklets since long before the version this app runs on.
  */
-import { amplitudeToDb, stepGate, type AudioProcessor } from './voice-quality';
+import { amplitudeToDb, deviceConstraint, stepGate, type AudioProcessor } from './voice-quality';
+import { openAudioCapture } from './audio-devices';
 
 /** How often the worklet reports the level back, in seconds. */
 const REPORT_INTERVAL = 0.05;
@@ -206,9 +207,10 @@ export async function monitorMic(
   thresholdDb: number | null,
   onLevel: (level: MicLevel) => void,
 ): Promise<() => void> {
-  const stream = await navigator.mediaDevices.getUserMedia({
-    audio: deviceId ? { deviceId } : true,
-  });
+  // The same `exact` constraint the call itself captures with, or the meter
+  // would sit there measuring the default microphone while somebody adjusts the
+  // sensitivity of a different one.
+  const stream = await openAudioCapture(deviceConstraint(deviceId));
   const track = stream.getAudioTracks()[0];
   if (!track) throw new Error('That microphone handed back no audio');
   const context = new AudioContext();

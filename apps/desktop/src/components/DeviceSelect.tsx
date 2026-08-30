@@ -29,10 +29,10 @@ export function DeviceSelect({
   onChange: (deviceId: string | null) => void;
 }): JSX.Element {
   const options = devices.filter((device) => device.kind === kind && device.deviceId !== 'default');
-  // A chosen device that is no longer plugged in is not refused by the capture -
-  // the constraint is deliberately not `exact`, so it silently falls back to
-  // whatever the operating system calls the default. That fallback is the whole
-  // of "it picked the wrong microphone", so it is said out loud here.
+  // A chosen device that is no longer plugged in is captured with `exact` like
+  // any other, refused, and retried on the system default by `openAudioCapture`.
+  // The person still hears a microphone they did not choose, so the substitution
+  // is said out loud here rather than left to be discovered.
   const missing = chosenIsMissing(devices, kind, value);
 
   return (

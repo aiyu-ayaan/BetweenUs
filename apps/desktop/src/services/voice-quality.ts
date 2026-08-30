@@ -206,14 +206,32 @@ export function micProcessing(
   };
 }
 
+/**
+ * The `deviceId` half of an audio constraint, for a chosen device or none.
+ *
+ * `exact`, and it has to be. A bare `deviceId` string is the `ideal` form,
+ * which is advisory: the browser scores every microphone by fitness distance
+ * and is free to hand back a different one, and Chromium does - it opens
+ * whatever the operating system calls the default. That is the whole of
+ * "changing the input device does not change the input device". Every pick
+ * reopened the same microphone, and nothing said so, because a capture that
+ * ignored the constraint is not an error.
+ *
+ * Asking properly costs the silent fallback for a device that has been
+ * unplugged since it was chosen: `exact` refuses instead of substituting. That
+ * fallback is worth having and is now done deliberately, once, by
+ * `openAudioCapture` - rather than bought by asking in a form nothing honours.
+ */
+export function deviceConstraint(deviceId: string | null): Pick<MicConstraints, 'deviceId'> {
+  return deviceId ? { deviceId: { exact: deviceId } } : {};
+}
+
 /** Capture constraints for the microphone. */
 export function micCapture(settings: VoiceSettings): MicConstraints {
   return {
     ...micProcessing(settings),
     channelCount: settings.mode === 'hifi' ? 2 : 1,
-    // `exact` is deliberately not used: a device that has been unplugged since
-    // it was chosen should fall back to the default rather than fail the join.
-    ...(settings.inputDeviceId ? { deviceId: settings.inputDeviceId } : {}),
+    ...deviceConstraint(settings.inputDeviceId),
   };
 }
 

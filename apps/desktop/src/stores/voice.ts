@@ -29,7 +29,12 @@ import { startPushToTalk, stopPushToTalk } from '../services/push-to-talk';
 import { notBeingHeard, type LinkStats } from '../services/call-stats';
 import { visibleVideo } from '../services/media-presence';
 import { NoiseGate } from '../services/mic-gate';
-import { captureIsStale, chosenIsMissing, realDevices } from '../services/audio-devices';
+import {
+  captureIsStale,
+  chosenIsMissing,
+  openAudioCapture,
+  realDevices,
+} from '../services/audio-devices';
 import { playCallTone, rosterChange, setToneOutput } from '../services/call-tones';
 import { micCapture, micEncoding, micProcessing, type VoiceSettings } from '../services/voice-quality';
 import { shareOptions, type ShareIntent, type ShareSize } from '../services/share-quality';
@@ -858,7 +863,7 @@ function receiveMediaState(peer: CallPeer, payload: unknown): boolean {
 async function openMicrophone(settings: VoiceSettings): Promise<void> {
   if (!mesh) return;
 
-  const stream = await navigator.mediaDevices.getUserMedia({ audio: micCapture(settings) });
+  const stream = await openAudioCapture(micCapture(settings));
   const raw = stream.getAudioTracks()[0];
   if (!raw) throw new Error('That microphone handed back no audio');
 
