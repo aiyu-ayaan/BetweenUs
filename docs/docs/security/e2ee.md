@@ -165,6 +165,23 @@ sequenceDiagram
     Recipient->>Recipient: Decrypt Attachment Blob Locally with Manifest Key
 ```
 
+## Forwarding
+
+A forwarded message is a **new message, not a pointer to the original**. It has
+to be: the body and every attachment blob are sealed under the key of the
+channel they were written in, and nobody in the channel it lands in holds that
+key. So the forwarding client decrypts what it already can read, re-seals it
+for the destination, and uploads the files again under the destination's
+current epoch.
+
+Riding inside that new envelope is `forwardedFrom` — the original author and
+the channel it was taken from — which is what the "Forwarded from …" tag on the
+bubble reports. It carries no message id, deliberately: a jump-to-it link would
+point at a channel the reader may not be allowed to open.
+
+The server is not told any of this. A forward reaches it as an ordinary message
+with an ordinary envelope, and there is no endpoint for it.
+
 ## Deliberate leaks
 
 - **Reactions are plaintext** (`MessageReaction.emoji`) — the server has to
