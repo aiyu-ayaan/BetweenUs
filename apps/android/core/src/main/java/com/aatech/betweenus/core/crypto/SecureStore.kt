@@ -62,6 +62,19 @@ class SecureStore(context: Context) {
         prefs.edit().remove(name).apply()
     }
 
+    /**
+     * Drops every entry whose name starts with [prefix].
+     *
+     * What "forget the channel keys this identity could reach" is made of. The
+     * names carry the user id and channel id, so a prefix is the only way to
+     * name a set of them without keeping a second index of what was written.
+     */
+    fun removeByPrefix(prefix: String) {
+        val editor = prefs.edit()
+        prefs.all.keys.filter { it.startsWith(prefix) }.forEach { editor.remove(it) }
+        editor.apply()
+    }
+
     private fun secretKey(): SecretKey {
         (keyStore.getEntry(KEY_ALIAS, null) as? KeyStore.SecretKeyEntry)?.let { return it.secretKey }
 

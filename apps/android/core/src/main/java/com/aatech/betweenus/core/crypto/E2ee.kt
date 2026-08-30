@@ -28,13 +28,21 @@ class MissingChannelKeyError : Exception("No channel key on this device yet")
 /**
  * There is no `Locked`. A device that cannot open the account backup mints a
  * key of its own and signs in anyway - see [E2ee.initIdentity] - so there is no
- * state in which the app is signed in and waiting to be told a secret.
+ * state in which the app is signed in and waiting to be told a secret. That
+ * fork used to be permanent; it is provisional now, and every later sign-in
+ * with a secret that opens the backup undoes it.
  */
 sealed interface IdentityStatus {
     data object Absent : IdentityStatus
 
-    /** `backedUp` is whether *this device's* key is the one in the backup. */
-    data class Ready(val backedUp: Boolean) : IdentityStatus
+    /**
+     * `backedUp` is whether *this device's* key is the one in the backup.
+     *
+     * `provisional` is this device having minted its own because it could not
+     * open the account's - so it reads what arrives from now on, and history is
+     * still sealed to an identity it does not hold.
+     */
+    data class Ready(val backedUp: Boolean, val provisional: Boolean = false) : IdentityStatus
 
     /**
      * The owner revoked this machine from another one. Nothing new is wrapped
@@ -67,6 +75,19 @@ object E2ee {
 
     private var identity: Crypto.KeyPairJwk? = null
     private var userId: String? = null
+
+    /**
+     * The secret this session signed in with, kept for the length of the session.
+     *
+     * It used to be an argument and nothing else, so a sign-in whose identity
+     * setup failed once - the network dropped, the token was a moment late -
+     * lost it. [currentIdentity] then retried with no secret, could not open the
+     * account backup, and minted a device-local key instead, which was
+     * permanent. A password typed into a login form is dropped when the session
+     * ends, and that is the only thing keeping it here has to guarantee.
+     */
+    @Volatile
+    private var signInSecret: BackupSecret? = null
 
     private val identityLock = Mutex()
     private val channelLocks = ConcurrentHashMap<String, Mutex>()
@@ -109,35 +130,43 @@ object E2ee {
         identityLock.withLock {
             identity?.let { if (this.userId == userId) return@withLock it }
             this.userId = userId
+            // Held past this call on purpose: [currentIdentity] retries with no
+            // secret of its own, and a retry without one forks permanently.
+            if (secret != null) signInSecret = secret
+            val opener = secret ?: signInSecret
 
             val storageKey = "identity:$userId"
             store.get(storageKey)?.let { stored ->
-                val pair = runCatching { readPair(stored) }.getOrNull()
-                if (pair != null) {
-                    adopt(pair)
+                val saved = runCatching { readStored(stored) }.getOrNull()
+                if (saved != null) {
+                    // A device that forked gets another go, every time a secret
+                    // is at hand. This is the whole of "sign in on a new phone
+                    // and your messages are there": the fork below is silent and
+                    // one-way, so the only thing that makes it recoverable is
+                    // trying the backup again on the next sign-in rather than
+                    // short-circuiting on the key the fork left behind.
+                    if (saved.provisional && opener != null) {
+                        restoreFromBackup(storageKey, opener)?.let { return@withLock it }
+                    }
+                    adopt(saved.pair, provisional = saved.provisional)
                     // A device that already worked may still have no backup.
                     // Fix it quietly when a secret is at hand rather than
                     // waiting for the next reinstall to notice.
-                    ensureBackup(pair, secret)
-                    return@withLock pair
+                    ensureBackup(saved.pair, opener)
+                    return@withLock saved.pair
                 }
             }
 
             // A failed fetch must not be read as "there is no backup": that
             // would seal a fresh key over one that exists. It throws, and the
             // sign-in retries.
-            val backup = BetweenUsApi.identityBackup()
+            val backups = BetweenUsApi.identityBackups()
 
             // The account's own key, when the secret that opens it is at hand.
             // The good path and the only instant one: every epoch already
             // sealed for that identity opens the moment it lands.
-            if (backup != null && secret != null && secret.kind == backup.kind) {
-                val pair = openBackup(backup, secret)
-                if (pair != null) {
-                    store.put(storageKey, writePair(pair))
-                    adopt(pair, backedUp = true)
-                    return@withLock pair
-                }
+            if (opener != null) {
+                restoreFromBackup(storageKey, opener, backups)?.let { return@withLock it }
             }
 
             // Otherwise this device gets a key of its own and the sign-in
@@ -154,12 +183,47 @@ object E2ee {
             // converges without anyone typing anything. What it costs is that
             // history is not instant; it appears as the other devices open
             // those channels. See apps/desktop/src/services/e2ee.ts.
+            //
+            // The fork is marked when the account *had* a backup this device
+            // could not open, and that mark is what lets the next sign-in undo
+            // it. Unmarked means there was nothing to restore from, so this key
+            // is the account's own.
+            val provisional = backups.isNotEmpty()
             val pair = Crypto.generateIdentity()
-            store.put(storageKey, writePair(pair))
-            adopt(pair)
-            ensureBackup(pair, secret)
+            store.put(storageKey, writePair(pair, provisional))
+            adopt(pair, provisional = provisional)
+            ensureBackup(pair, opener)
             pair
         }
+
+    /**
+     * Opens whichever backup [secret] fits and makes it this device's identity.
+     *
+     * Null means "not this secret" - a wrong password, or a passphrase-only
+     * account signing in with a password - which is an ordinary outcome here,
+     * not a failure.
+     *
+     * Every channel key held on this device is dropped on the way out. They are
+     * still valid, but they are the *subset* a forked identity could reach, and
+     * the caches in front of them - memory and the sealed store both - would
+     * keep serving that subset while the wraps this identity can now open sat
+     * unread in the directory. Dropping them costs one re-read of a directory
+     * we have just been talking to.
+     */
+    private suspend fun restoreFromBackup(
+        storageKey: String,
+        secret: BackupSecret,
+        known: List<IdentityBackup>? = null,
+    ): Crypto.KeyPairJwk? {
+        val backups = known ?: runCatching { BetweenUsApi.identityBackups() }.getOrNull() ?: return null
+        val sealed = backups.firstOrNull { it.kind == secret.kind } ?: return null
+        val pair = openBackup(sealed, secret) ?: return null
+
+        store.put(storageKey, writePair(pair))
+        forgetAllKeys()
+        adopt(pair, backedUp = true)
+        return pair
+    }
 
     /** Seals the current identity under a secret the user chose. */
     suspend fun backupIdentity(secret: BackupSecret) {
@@ -173,9 +237,37 @@ object E2ee {
      * backup is keyed to a passphrase, which a password change does not touch.
      */
     suspend fun rewrapBackupForPassword(newPassword: String) {
-        val backup = BetweenUsApi.identityBackup() ?: return
-        if (backup.kind != "password") return
+        if (BetweenUsApi.identityBackups().none { it.kind == "password" }) return
         backupIdentity(BackupSecret.password(newPassword))
+        // The secret this session holds is now the old one, and a retry using it
+        // would fail to open the blob it has just re-sealed.
+        signInSecret = BackupSecret.password(newPassword)
+    }
+
+    /**
+     * Whether the account password can still recover this identity on a device
+     * that has never seen it.
+     *
+     * The one thing a settings screen has to be able to say plainly: it is the
+     * difference between "sign in anywhere" and "sign in anywhere and type a
+     * passphrase you wrote down once".
+     */
+    suspend fun passwordRecoveryEnabled(): Boolean =
+        BetweenUsApi.identityBackups().any { it.kind == "password" }
+
+    /**
+     * Turns the password path off, for somebody who set a recovery passphrase
+     * *because* a live server sees the password at sign-in and they would rather
+     * it could never open the backup.
+     *
+     * Refuses when it would leave the account with no backup at all. That is not
+     * a security setting, it is losing every message on the next reinstall.
+     */
+    suspend fun disablePasswordRecovery() {
+        if (BetweenUsApi.identityBackups().none { it.kind == "passphrase" }) {
+            error("Set a recovery passphrase first, or this account has no way back at all")
+        }
+        BetweenUsApi.deleteIdentityBackup("password")
     }
 
     fun reset() {
@@ -184,6 +276,7 @@ object E2ee {
         // signing back in should not have to fetch its backup again.
         identity = null
         userId = null
+        signInSecret = null
         channels.clear()
         channelLocks.clear()
         rekeyed.clear()
@@ -191,7 +284,11 @@ object E2ee {
         _status.value = IdentityStatus.Absent
     }
 
-    private suspend fun adopt(pair: Crypto.KeyPairJwk, backedUp: Boolean = false) {
+    private suspend fun adopt(
+        pair: Crypto.KeyPairJwk,
+        backedUp: Boolean = false,
+        provisional: Boolean = false,
+    ) {
         identity = pair
         try {
             // Idempotent: re-publishing keeps the directory correct if the row
@@ -206,7 +303,7 @@ object E2ee {
             }
             throw error
         }
-        _status.value = IdentityStatus.Ready(backedUp)
+        _status.value = IdentityStatus.Ready(backedUp, provisional)
     }
 
     /**
@@ -216,18 +313,26 @@ object E2ee {
      */
     private suspend fun ensureBackup(pair: Crypto.KeyPairJwk, secret: BackupSecret?) {
         runCatching {
-            val backup = BetweenUsApi.identityBackup()
+            val backups = BetweenUsApi.identityBackups()
+            val backedUp = backups.any { it.publicKey == pair.publicKey }
+
             // A backup that already stands is not this device's to replace
             // unless it is this device's key in it. Since a device that could
             // not open one mints its own, sealing over it here would take the
             // account's recoverable identity away from every device still
             // restoring from it. Deliberate re-sealing is [backupIdentity]'s.
-            if (backup != null) {
-                _status.value = IdentityStatus.Ready(backedUp = backup.publicKey == pair.publicKey)
-                return
-            }
-            if (secret == null) {
-                _status.value = IdentityStatus.Ready(backedUp = false)
+            //
+            // Scoped to the *kind* now. An account holding a passphrase backup
+            // and no password one is exactly the account that cannot recover on
+            // a fresh sign-in, so filling that gap when the password is at hand
+            // is the point rather than an overreach - and it only ever seals the
+            // key this device already holds, which is the identity the other
+            // devices restore from whenever `backedUp` says so.
+            if (secret == null || backups.any { it.kind == secret.kind } || !backedUp) {
+                _status.value = IdentityStatus.Ready(
+                    backedUp = backedUp,
+                    provisional = backups.isNotEmpty() && !backedUp,
+                )
                 return
             }
             BetweenUsApi.putIdentityBackup(seal(pair, secret))
@@ -255,18 +360,38 @@ object E2ee {
             Crypto.openIdentity(backup.salt, backup.iv, backup.ct, secret.value, backup.iterations)
         }.getOrNull()
 
-    private fun writePair(pair: Crypto.KeyPairJwk) = JSONObject()
+    /**
+     * What the sealed store holds. `provisional` marks a key this device minted
+     * for itself *while the account had a backup it could not open* - the fork
+     * described in [initIdentity]. It is the flag that makes the fork
+     * recoverable: without it the stored key short-circuits every later launch
+     * and the backup is never tried again, on any sign-in, ever.
+     */
+    private class StoredIdentity(val pair: Crypto.KeyPairJwk, val provisional: Boolean)
+
+    private fun writePair(pair: Crypto.KeyPairJwk, provisional: Boolean = false) = JSONObject()
         .put("publicKey", pair.publicKey)
         .put("privateKey", pair.privateKey)
+        .put("provisional", provisional)
         .toString()
 
-    private fun readPair(stored: String): Crypto.KeyPairJwk {
+    private fun readStored(stored: String): StoredIdentity {
         val json = JSONObject(stored)
-        return Crypto.KeyPairJwk(json.getString("publicKey"), json.getString("privateKey"))
+        return StoredIdentity(
+            pair = Crypto.KeyPairJwk(json.getString("publicKey"), json.getString("privateKey")),
+            // Absent on a blob written before the fork was recoverable. False is
+            // the safe reading: it was minted under rules that had no mark, and
+            // a sign-in that opens the backup replaces it either way.
+            provisional = json.optBoolean("provisional", false),
+        )
     }
 
     private suspend fun currentIdentity(): Crypto.KeyPairJwk =
-        identity ?: userId?.let { initIdentity(it) } ?: throw MissingChannelKeyError()
+        identity
+            // With the session's secret, not without it. A retry that dropped it
+            // opened no backup, minted a device-local key, and forked for good.
+            ?: userId?.let { initIdentity(it, signInSecret) }
+            ?: throw MissingChannelKeyError()
 
     // --- content ---
 
@@ -487,6 +612,21 @@ object E2ee {
     private fun forgetKeys(channelId: String) {
         channels.remove(channelId)
         keyStorageKey(channelId)?.let { runCatching { store.remove(it) } }
+    }
+
+    /**
+     * Drops every channel key this device holds, in memory and at rest.
+     *
+     * Called when the identity changes under it - [restoreFromBackup]. The keys
+     * are still valid, but they are the *subset* the old identity could reach,
+     * and both caches would go on serving that subset while the wraps the new
+     * identity can open sat unread in the directory.
+     */
+    private fun forgetAllKeys() {
+        channels.clear()
+        rekeyed.clear()
+        missedEpochs.clear()
+        userId?.let { runCatching { store.removeByPrefix("channelkeys:$it:") } }
     }
 
     private suspend fun loadChannelKey(channelId: String): ChannelKeyState {

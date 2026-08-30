@@ -106,6 +106,12 @@ fun SettingsScreen(
     var busy by remember { mutableStateOf(false) }
     var pickingServer by remember { mutableStateOf(false) }
     var passphrase by remember { mutableStateOf("") }
+    // On by default: a new phone that works the moment you sign in is what
+    // almost everybody wants, and the alternative used to be silently imposed -
+    // setting a passphrase overwrote the password backup and every later
+    // sign-in on a new device read the whole account as padlocks.
+    var keepPasswordRecovery by remember { mutableStateOf(true) }
+    var byPassword by remember { mutableStateOf<Boolean?>(null) }
     var currentPassword by remember { mutableStateOf("") }
     var newPassword by remember { mutableStateOf("") }
     var preferences by remember { mutableStateOf<NotificationPreferences?>(null) }
@@ -127,6 +133,10 @@ fun SettingsScreen(
 
     LaunchedEffect(Unit) {
         preferences = runCatching { BetweenUsApi.notificationPreferences() }.getOrNull()
+    }
+
+    LaunchedEffect(identity) {
+        byPassword = runCatching { E2ee.passwordRecoveryEnabled() }.getOrNull()
     }
 
     val notifications = rememberPermission(BetweenUsPermissions.NOTIFICATIONS) {}
@@ -255,13 +265,22 @@ fun SettingsScreen(
             Column(Modifier.padding(horizontal = 16.dp)) {
                 Text(
                     text = when (val state = identity) {
-                        is IdentityStatus.Ready -> if (state.backedUp) {
-                            "This device holds the account key, and it is backed up. Signing in " +
-                                "elsewhere will restore your history."
-                        } else {
-                            "This device has a key of its own, and no backup of it. Your other " +
-                                "devices fill in older conversations as they open them. Set a " +
-                                "recovery passphrase to make this device recoverable too."
+                        is IdentityStatus.Ready -> when {
+                            state.backedUp ->
+                                "This device holds the account key, and it is backed up. Signing " +
+                                    "in elsewhere will restore your history."
+
+                            state.provisional ->
+                                "This device could not open the account key, so it made one of " +
+                                    "its own and reads only what has arrived since. Sign out and " +
+                                    "back in with your account password to recover the account " +
+                                    "key and every conversation sealed for it."
+
+                            else ->
+                                "This device has a key of its own, and no backup of it. Your " +
+                                    "other devices fill in older conversations as they open " +
+                                    "them. Set a recovery passphrase to make this device " +
+                                    "recoverable too."
                         }
 
                         IdentityStatus.Revoked ->
@@ -273,6 +292,20 @@ fun SettingsScreen(
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                byPassword?.let { on ->
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        text = if (on) {
+                            "Recovery by account password is on: signing in on a new device " +
+                                "restores your messages with nothing else to type."
+                        } else {
+                            "Recovery by account password is off. A new device needs your " +
+                                "recovery passphrase."
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
                 Spacer(Modifier.height(10.dp))
                 BetweenUsField(
                     label = "Recovery passphrase",
@@ -291,6 +324,19 @@ fun SettingsScreen(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                Spacer(Modifier.height(4.dp))
+                ListRow(
+                    title = "Also let my password recover my messages",
+                    subtitle = "Leave this on and a new device works the moment you sign in. " +
+                        "Turn it off and only this passphrase gets you back.",
+                    trailing = {
+                        Switch(
+                            checked = keepPasswordRecovery,
+                            onCheckedChange = { keepPasswordRecovery = it },
+                            colors = switchColours(),
+                        )
+                    },
+                )
                 Spacer(Modifier.height(10.dp))
                 BetweenUsButton(
                     text = "Seal my identity with this passphrase",
@@ -299,6 +345,14 @@ fun SettingsScreen(
                     onClick = {
                         act {
                             E2ee.backupIdentity(BackupSecret.passphrase(passphrase))
+                            // Deliberately after the passphrase is stored, and
+                            // only when asked: the whole reason to turn the
+                            // password path off is a server that sees the
+                            // password at sign-in, and dropping it before the
+                            // replacement exists would leave a window with no
+                            // way back into the account at all.
+                            if (!keepPasswordRecovery) E2ee.disablePasswordRecovery()
+                            byPassword = keepPasswordRecovery
                             passphrase = ""
                         }
                     },

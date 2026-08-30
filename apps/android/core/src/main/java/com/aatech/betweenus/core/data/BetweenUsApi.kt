@@ -653,13 +653,27 @@ object BetweenUsApi {
         DeviceKey.from(authed("DELETE", "/api/v1/e2ee/devices/${enc(deviceId)}"))
     }
 
-    suspend fun identityBackup(): IdentityBackup? = io {
+    /**
+     * Every sealed identity this account holds, at most one per secret kind.
+     *
+     * Falls back to the single blob a server older than per-kind backups sends,
+     * so an updated app against an old deployment still recovers rather than
+     * deciding the account has nothing and minting a key of its own.
+     */
+    suspend fun identityBackups(): List<IdentityBackup> = io {
         val json = authed("GET", "/api/v1/e2ee/backup")
-        json.optJSONObject("backup")?.let { IdentityBackup.from(it) }
+        json.optJSONArray("backups")?.map { IdentityBackup.from(it) }
+            ?: json.optJSONObject("backup")?.let { listOf(IdentityBackup.from(it)) }
+            ?: emptyList()
     }
 
     suspend fun putIdentityBackup(backup: IdentityBackup): Unit = io {
         authed("PUT", "/api/v1/e2ee/backup", backup.toJson())
+    }
+
+    /** Drops one kind of backup. See `E2ee.disablePasswordRecovery`. */
+    suspend fun deleteIdentityBackup(kind: String): Unit = io {
+        authed("DELETE", "/api/v1/e2ee/backup/${enc(kind)}")
     }
 
     suspend fun channelDevices(channelId: String): List<DeviceKey> = io {
