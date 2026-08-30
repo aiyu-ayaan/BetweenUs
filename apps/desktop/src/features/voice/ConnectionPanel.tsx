@@ -7,7 +7,14 @@
  * the four numbers that decide how a call feels, and nothing else.
  */
 import { useVoiceStore } from '../../stores/voice';
-import { healthWarning, type LinkStats, type QualityLimit } from '../../services/call-stats';
+import {
+  echoAdvice,
+  echoCancellerFailing,
+  healthWarning,
+  type LinkStats,
+  type QualityLimit,
+} from '../../services/call-stats';
+import { useAudioSettings } from '../../stores/audioSettings';
 
 /** `qualityLimitationReason`, said the way somebody in a call would say it. */
 const LIMIT_REASON: Record<QualityLimit, string> = {
@@ -18,7 +25,18 @@ const LIMIT_REASON: Record<QualityLimit, string> = {
 
 export function ConnectionPanel({ onClose }: { onClose: () => void }): JSX.Element {
   const stats = useVoiceStore((state) => state.stats);
+  const echoErleDb = useVoiceStore((state) => state.echoErleDb);
+  const settings = useAudioSettings((state) => state.settings);
   const warning = healthWarning(stats);
+
+  // Separate from `healthWarning`, which reads the link. Echo is not a property
+  // of any link - it is this machine playing the call back into its own
+  // microphone - so it survives a connection that is otherwise perfect, and
+  // reporting it alongside packet loss would say the network is at fault.
+  const echoFailing = echoCancellerFailing(
+    settings.echoCancellation && settings.mode !== 'hifi',
+    echoErleDb,
+  );
 
   return (
     <div className="absolute bottom-full left-1/2 z-40 mb-2 w-[320px] -translate-x-1/2 animate-pop rounded-xl border border-edge bg-surface-900 p-3 shadow-pop">
@@ -34,6 +52,12 @@ export function ConnectionPanel({ onClose }: { onClose: () => void }): JSX.Eleme
       </div>
 
       {warning && <p className="mt-2 rounded bg-danger/10 px-2 py-1 text-xs text-danger">{warning}</p>}
+
+      {echoFailing && (
+        <p role="status" className="mt-2 rounded bg-amber-500/10 px-2 py-1 text-xs text-amber-200">
+          {echoAdvice(settings.outputDeviceId !== null)}
+        </p>
+      )}
 
       {stats.length === 0 ? (
         <p className="mt-3 text-xs text-slate-400">
