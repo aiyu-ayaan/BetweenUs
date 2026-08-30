@@ -33,11 +33,12 @@ import com.aatech.betweenus.core.data.PresenceStatus
 import com.aatech.betweenus.core.data.PublicUser
 import com.aatech.betweenus.core.data.Session
 import com.aatech.betweenus.core.store.LastPlace
+import com.aatech.betweenus.core.store.LastSeen
 import com.aatech.betweenus.core.store.Presence
 import com.aatech.betweenus.core.store.ThemePreferences
 import com.aatech.betweenus.feature.auth.ServerSheet
 import com.aatech.betweenus.feature.voice.VoiceEngine
-import com.aatech.betweenus.ui.components.Avatar
+import com.aatech.betweenus.ui.components.AvatarWithStatus
 import com.aatech.betweenus.ui.components.BetweenUsIcon
 import com.aatech.betweenus.ui.components.BetweenUsIcons
 import com.aatech.betweenus.ui.components.Chip
@@ -113,11 +114,21 @@ fun SettingsScreen(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                Avatar(
+                // Your own dot, on the screen that sets it. The chips below say
+                // which status is chosen; the dot is what the chips *do*, and
+                // seeing it change is how somebody knows the choice landed
+                // rather than trusting a chip that highlighted itself.
+                //
+                // It is the only place `invisible` is ever drawn as itself:
+                // everybody else's is resolved to offline before it leaves the
+                // server, which is what invisible means.
+                AvatarWithStatus(
                     id = user.id,
                     label = user.label,
                     url = user.avatarUrl?.let { Endpoint.absolute(it) },
+                    status = presence.wire,
                     size = 56.dp,
+                    ring = MaterialTheme.colorScheme.background,
                 )
                 Column {
                     Text(
@@ -127,6 +138,11 @@ fun SettingsScreen(
                     )
                     Text(
                         text = "@${user.username} · ${user.email}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Text(
+                        text = LastSeen.profile(presence, null),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )

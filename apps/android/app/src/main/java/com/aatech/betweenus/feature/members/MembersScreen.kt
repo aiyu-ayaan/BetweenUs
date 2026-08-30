@@ -248,7 +248,7 @@ fun MembersScreen(
     }
 
     profileOf?.let { person ->
-        ProfileSheet(person = person, onDismiss = { profileOf = null })
+        ProfileSheet(personArg = person, onDismiss = { profileOf = null })
     }
 
     menuFor?.let { member ->

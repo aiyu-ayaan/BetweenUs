@@ -16,6 +16,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Alignment
@@ -26,6 +27,7 @@ import com.aatech.betweenus.core.data.PresenceStatus
 import com.aatech.betweenus.core.data.UserSummary
 import com.aatech.betweenus.core.store.LastSeen
 import com.aatech.betweenus.core.store.Presence
+import com.aatech.betweenus.core.store.Workspace
 import com.aatech.betweenus.ui.components.AvatarWithStatus
 import com.aatech.betweenus.ui.theme.Slate200
 import com.aatech.betweenus.ui.theme.Slate400
@@ -49,12 +51,52 @@ import com.aatech.betweenus.ui.theme.Slate500
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ProfileSheet(
-    person: UserSummary,
+    /**
+     * Who to draw, as whoever opened the sheet knows them. It may be a message's
+     * author, which carries no about line - see `person` below.
+     */
+    personArg: UserSummary,
     onDismiss: () -> Unit,
 ) {
     val sheet = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val statuses by Presence.statuses.collectAsState()
     val lastSeen by Presence.lastSeen.collectAsState()
+    val members by Workspace.members.collectAsState()
+    val friends by Workspace.friends.collectAsState()
+    val directs by Workspace.directChannels.collectAsState()
+
+    /**
+     * The fullest copy of this person the app is holding.
+     *
+     * A message carries who wrote it - an id, a name and a picture - and never
+     * an about line: the same person writes fifty messages, and fifty copies of
+     * one sentence in a channel's history is fifty copies to keep in step when
+     * they edit it. So the sheet opened from a message was handed a summary with
+     * an empty `about` and drew no About section at all, which looked like the
+     * feature was missing rather than like the data was somewhere else.
+     *
+     * It is somewhere else: the member list, the friend list and the
+     * conversation list all carry it, because those are fetched per person
+     * rather than per message. Resolved here rather than at each call site so
+     * that every way into this sheet - a message, a face, a header, a member
+     * row - gets the same answer.
+     *
+     * Whatever was passed in stays the fallback, so somebody who has left the
+     * server still gets a sheet with their name and their presence on it.
+     */
+    val person = remember(personArg, members, friends, directs) {
+        // The first copy that actually carries a line, not the first copy that
+        // exists: a member row whose about is blank must not shadow the friend
+        // row that has one, which is the same person seen through two lists.
+        val candidates = sequence {
+            members.values.forEach { list ->
+                list.forEach { if (it.userId == personArg.id) yield(it.summary) }
+            }
+            friends.forEach { if (it.user.id == personArg.id) yield(it.user) }
+            directs.forEach { if (it.participant.id == personArg.id) yield(it.participant) }
+        }
+        candidates.firstOrNull { it.about.isNotBlank() } ?: personArg
+    }
 
     // A `presence.sync` carries only the people who are here, so the one case
     // the line exists for is the one the socket has said nothing about. Asked

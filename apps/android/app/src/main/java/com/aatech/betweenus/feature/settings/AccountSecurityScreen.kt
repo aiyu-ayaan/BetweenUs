@@ -41,7 +41,8 @@ import com.aatech.betweenus.core.data.LastSeenVisibility
 import com.aatech.betweenus.core.data.Endpoint
 import com.aatech.betweenus.core.data.PublicUser
 import com.aatech.betweenus.core.data.Session
-import com.aatech.betweenus.ui.components.Avatar
+import com.aatech.betweenus.core.store.Presence
+import com.aatech.betweenus.ui.components.AvatarWithStatus
 import com.aatech.betweenus.ui.components.BetweenUsButton
 import com.aatech.betweenus.ui.components.BetweenUsField
 import com.aatech.betweenus.ui.components.BetweenUsIcon
@@ -68,6 +69,9 @@ fun AccountSecurityScreen(
 
     var displayName by remember { mutableStateOf(user.displayName) }
     var about by remember { mutableStateOf(user.about) }
+    /** Your own chosen status, for the dot on the header. Live, so a change
+        made on the Settings screen behind this one is already reflected. */
+    val presence by Presence.self.collectAsState()
     var note by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
     var passphrase by remember { mutableStateOf("") }
@@ -118,11 +122,17 @@ fun AccountSecurityScreen(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                Avatar(
+                // The same dot the Settings screen draws, on the screen that
+                // edits the rest of the profile - so the picture, the name, the
+                // about line and whether you are showing as here are one card
+                // rather than two screens apart.
+                AvatarWithStatus(
                     id = user.id,
                     label = user.label,
                     url = user.avatarUrl?.let { Endpoint.absolute(it) },
+                    status = presence.wire,
                     size = 56.dp,
+                    ring = MaterialTheme.colorScheme.background,
                 )
                 Column {
                     Text(

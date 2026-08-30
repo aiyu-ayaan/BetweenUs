@@ -856,7 +856,7 @@ fun ChatScreen(
 
     // --- Who has read it, and when ---
     profileOf?.let { person ->
-        ProfileSheet(person = person, onDismiss = { profileOf = null })
+        ProfileSheet(personArg = person, onDismiss = { profileOf = null })
     }
 
     seenFor?.let { readable ->
