@@ -114,6 +114,25 @@ carries none, deliberately: who may read one depends on the reader, and a
 broadcast has one payload for every recipient. Clients re-ask when they watch
 somebody go offline — one round trip, at the only moment the answer changes.
 
+## Where the clients draw it
+
+A presence dot hangs off every face in the app, conversations included: the
+avatar beside a message, a direct message's header, the member column, the
+friends and conversation lists, and the pinned and search panels. Green for
+online, amber for idle, red for do-not-disturb, grey for offline — `invisible`
+never reaches anybody else, having been resolved to `offline` before it left.
+
+The dot is punched out of whatever sits behind it (`ringColour` on the desktop,
+`ring` on Android), because a message sits on the conversation background and a
+member row on a surface container — a cut-out in the wrong colour reads as a
+coloured circle inside a grey one.
+
+A **profile card** always states a status in words as well: `Online`, `Idle`,
+`Do not disturb`, a last-seen line, or `Offline`. A conversation **header**
+collapses idle and do-not-disturb to "online" instead, and may say nothing at
+all — it is answering "will this be read now", where a card is where somebody
+went looking for detail.
+
 ## Status resolution
 
 Online / idle / do-not-disturb / invisible are what the client *chose*;

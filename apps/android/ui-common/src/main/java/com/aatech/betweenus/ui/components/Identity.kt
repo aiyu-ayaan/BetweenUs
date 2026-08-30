@@ -144,6 +144,8 @@ fun AvatarWithStatus(
     size: Dp = 36.dp,
     viewable: Boolean = true,
     onDoubleTap: (() -> Unit)? = null,
+    /** The colour the dot is punched out of. See [StatusDot]. */
+    ring: Color = Surface900,
 ) {
     Box(modifier = modifier) {
         Avatar(id, label, url, size = size, viewable = viewable, onDoubleTap = onDoubleTap)
@@ -151,16 +153,31 @@ fun AvatarWithStatus(
             status = status,
             modifier = Modifier.align(Alignment.BottomEnd),
             size = (size.value * 0.32f).dp,
+            ring = ring,
         )
     }
 }
 
+/**
+ * The presence dot, punched out of whatever it is sitting on.
+ *
+ * [ring] is the cut-out, and it has to match the background behind the avatar
+ * or the dot reads as a coloured circle inside a grey one. Only the caller knows
+ * what that background is - a member row sits on a surface container and a
+ * message sits on the conversation's own background - so it is a parameter, the
+ * same way the desktop's `ringColour` is.
+ */
 @Composable
-fun StatusDot(status: String, modifier: Modifier = Modifier, size: Dp = 10.dp) {
+fun StatusDot(
+    status: String,
+    modifier: Modifier = Modifier,
+    size: Dp = 10.dp,
+    ring: Color = Surface900,
+) {
     Box(
         modifier = modifier
             .size(size + 4.dp)
-            .background(Surface900, CircleShape),
+            .background(ring, CircleShape),
         contentAlignment = Alignment.Center,
     ) {
         Box(Modifier.size(size).background(statusColor(status), CircleShape))

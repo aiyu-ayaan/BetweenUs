@@ -140,6 +140,7 @@ to be framed, so no browser tab can ever show it.
 | Who may see your last seen: everyone / friends / nobody | ✅ | ✅ | ✅ |
 | An about line on your account, and everyone else's | ✅ | ✅ | ✅ |
 | The profile card: picture, presence, last seen, about | ✅ hover | ✅ hover | ✅ double tap |
+| A status dot on every face in a conversation | ✅ | ✅ | ✅ |
 | Typing indicators, voice rosters | ✅ | ✅ | ✅ |
 | **Notifications** | | | |
 | Unread counts and the unread line | ✅ | ✅ | ✅ |
@@ -899,6 +900,16 @@ was built the way it was; this is the short version.
   account looks like too - so a missing line cannot be used to test for the
   setting or its tier. The status still arrives; it is the timestamp that is
   private, not the account.
+- **A dot on every face in a conversation.** The avatar beside a message, the
+  one in a direct message's header, and the ones in the pinned and search
+  panels all carry the presence dot every other list in the app already had - a
+  channel is a room of people you may not know are there, and the face was
+  already on screen. All three clients.
+- **A profile card always says something.** Offline with no timestamp - a new
+  account, one whose last seen is hidden from you - used to draw a blank where
+  the status belongs, which reads as a card that failed to load. It says
+  "Offline" now, and spells out idle and do-not-disturb where the header
+  deliberately collapses both to "online".
 - **A clock that runs fast does not report the future.** A laptop a few minutes
   ahead of the server would otherwise be told somebody was last seen at 3:34
   beside a wall clock reading 3:30, which reads as broken software rather than

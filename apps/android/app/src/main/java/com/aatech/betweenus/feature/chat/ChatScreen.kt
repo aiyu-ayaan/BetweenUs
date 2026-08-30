@@ -72,7 +72,7 @@ import com.aatech.betweenus.core.store.PendingShare
 import com.aatech.betweenus.core.store.Presence
 import com.aatech.betweenus.core.store.ReadableMessage
 import com.aatech.betweenus.core.store.Workspace
-import com.aatech.betweenus.ui.components.Avatar
+import com.aatech.betweenus.ui.components.AvatarWithStatus
 import com.aatech.betweenus.ui.components.EmptyState
 import com.aatech.betweenus.ui.components.IconAction
 import com.aatech.betweenus.ui.components.BetweenUsIcon
@@ -447,11 +447,17 @@ fun ChatScreen(
             // drawing an anonymous outline beside it read as a different
             // person. Tapping it opens the picture.
             if (direct != null) {
-                Avatar(
+                // The dot as well as the words under the name. The line says
+                // "online" or when they were last here; the dot is what carries
+                // it at a glance, and it is the only thing that says *which*
+                // kind of here - the line collapses idle and do-not-disturb.
+                AvatarWithStatus(
                     id = direct.participant.id,
                     label = direct.participant.label,
                     url = direct.participant.avatarUrl?.let { Endpoint.absolute(it) },
+                    status = (statuses[direct.participant.id] ?: PresenceStatus.OFFLINE).wire,
                     size = 40.dp,
+                    ring = MaterialTheme.colorScheme.surfaceContainer,
                     // Tapping the face still shows the face. The second tap is
                     // what asks who they are, which is the same gesture that
                     // asks it of an author down in the conversation.
@@ -592,6 +598,8 @@ fun ChatScreen(
                         receipts = anchors[readable.id].orEmpty(),
                         onLongPress = { acting = readable },
                         onOpenProfile = { profileOf = it },
+                        authorStatus = statuses[readable.message.author.id]
+                            ?: PresenceStatus.OFFLINE,
                         onReply = { replyingTo = readable.quote() },
                         onOpenSeenBy = { seenFor = readable },
                         onOpenQuoted = { quotedId ->

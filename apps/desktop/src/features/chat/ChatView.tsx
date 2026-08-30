@@ -23,7 +23,7 @@ import { useFriendsStore } from '../../stores/friends';
 import { usePresenceStore, useLastSeenOf, useStatusOf } from '../../stores/presence';
 import { presenceLine } from '../../services/last-seen';
 import { useIsMobile } from '../../services/responsive';
-import { Avatar } from '../../components/Avatar';
+import { Avatar, PersonAvatar } from '../../components/Avatar';
 import { ProfileHover } from '../../components/ProfileCard';
 import { AttachmentList } from './Attachments';
 import { EmojiPicker } from './EmojiPicker';
@@ -369,12 +369,21 @@ export function ChatView({
 
         <div className="flex min-w-0 items-center gap-1.5 md:gap-2">
           {isDirect ? (
-            <Avatar
-              name={peer?.displayName ?? channel.name}
-              avatarUrl={peer?.avatarUrl}
-              size="sm"
-              ringColour="border-surface-900"
-            />
+            // The dot as well as the words under the name. The line says
+            // "online" or when they were last here; the dot is what carries it
+            // at a glance, and it is the only thing that says *which* kind of
+            // here - the line deliberately collapses idle and do-not-disturb.
+            peer ? (
+              <PersonAvatar
+                userId={peer.id}
+                name={peer.displayName}
+                avatarUrl={peer.avatarUrl}
+                size="sm"
+                ringColour="border-surface-900"
+              />
+            ) : (
+              <Avatar name={channel.name} size="sm" ringColour="border-surface-900" />
+            )
           ) : channel.isPrivate ? (
             <LockIcon className="h-5 w-5 shrink-0 text-slate-500" />
           ) : (
@@ -795,7 +804,8 @@ function MessageList({
                     <div aria-hidden="true" className="h-10 w-10 shrink-0" />
                   ) : (
                     <AuthorHover author={message.author}>
-                      <Avatar
+                      <PersonAvatar
+                        userId={message.author.id}
                         name={message.author.displayName}
                         avatarUrl={message.author.avatarUrl}
                         ringColour="border-surface-900"

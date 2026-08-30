@@ -1,6 +1,6 @@
 /** Run with `tsx src/services/last-seen.check.ts`. The line under a name. */
 import assert from 'node:assert/strict';
-import { lastSeenLabel, presenceLine } from './last-seen';
+import { lastSeenLabel, presenceLine, profilePresence } from './last-seen';
 
 const now = new Date(2026, 7, 29, 15, 30); // Saturday 29 August 2026, 15:30 local
 const at = (y: number, m: number, d: number, h = 12, min = 0): string =>
@@ -77,5 +77,34 @@ assert.equal(
 assert.equal(presenceLine('dnd', null, now), 'online');
 assert.match(presenceLine('offline', at(2026, 8, 28, 23, 55), now) ?? '', /^last seen yesterday/);
 assert.equal(presenceLine('offline', null, now), null, 'offline and never seen is no line');
+
+// --- a card always says something --------------------------------------------
+
+// The bug this exists for: offline with no timestamp drew nothing at all, so a
+// profile card opened on a new account - or on somebody whose last seen is
+// hidden from you - had a blank where the status belongs and read as broken.
+assert.equal(profilePresence('offline', null, now), 'Offline');
+assert.equal(profilePresence('offline', undefined, now), 'Offline');
+assert.equal(profilePresence('offline', 'not a date', now), 'Offline');
+
+// With a timestamp it is the sentence, capitalised for a card.
+assert.match(profilePresence('offline', at(2026, 8, 28, 23, 55), now), /^Last seen yesterday at /);
+
+// And unlike the header, a card spells out which kind of "here" this is - the
+// dot beside it is the only other thing that says.
+assert.equal(profilePresence('online', null, now), 'Online');
+assert.equal(profilePresence('idle', null, now), 'Idle');
+assert.equal(profilePresence('dnd', null, now), 'Do not disturb');
+assert.equal(profilePresence('invisible', null, now), 'Invisible');
+
+// A status other than offline wins over any timestamp, exactly as in a header.
+assert.equal(profilePresence('online', at(2026, 8, 24), now), 'Online');
+
+// Never empty, for any combination. That is the whole contract.
+for (const status of ['online', 'idle', 'dnd', 'invisible', 'offline'] as const) {
+  for (const seen of [null, undefined, 'nonsense', at(2026, 8, 24)]) {
+    assert.ok(profilePresence(status, seen, now).length > 0, `${status}/${seen} must say something`);
+  }
+}
 
 console.log('last-seen: ok');

@@ -1,5 +1,6 @@
 import type { PresenceStatus } from '@betweenus/shared-types';
 import { absoluteUrl } from '../services/endpoint';
+import { usePresenceStore } from '../stores/presence';
 import { viewProfile } from './ProfileView';
 
 const SIZES = {
@@ -33,6 +34,43 @@ const DOT_LABELS: Record<PresenceStatus, string> = {
 };
 
 /**
+ * A person's avatar that looks its own presence up, by id.
+ *
+ * `Avatar` takes a status because most callers already hold one - a member row
+ * has the whole roster in hand. A message does not: it carries who wrote it and
+ * nothing about whether they are here, and threading a status down through the
+ * conversation would subscribe the message list to every status change in the
+ * deployment and repaint it when a stranger goes idle.
+ *
+ * So the lookup lives in the leaf, and the selector is scalar: this re-renders
+ * when *this* person's status changes and at no other time.
+ */
+export function PersonAvatar({
+  userId,
+  name,
+  avatarUrl,
+  size = 'md',
+  ringColour,
+}: {
+  userId: string;
+  name: string;
+  avatarUrl?: string | null;
+  size?: keyof typeof SIZES;
+  ringColour?: string;
+}): JSX.Element {
+  const status = usePresenceStore((state) => state.statuses.get(userId) ?? 'offline');
+  return (
+    <Avatar
+      name={name}
+      avatarUrl={avatarUrl}
+      status={status}
+      size={size}
+      {...(ringColour ? { ringColour } : {})}
+    />
+  );
+}
+
+/**
  * A round avatar with an optional status dot punched out of its corner, which
  * is how every list in this app identifies a person.
  */
@@ -46,7 +84,11 @@ export function Avatar({
 }: {
   name: string;
   avatarUrl?: string | null;
-  /** Omitted where status is meaningless - a message author, for instance. */
+  /**
+   * Omitted where status is meaningless - a server's icon, or a circle inside
+   * a control. Where the caller has a person's id but not their status,
+   * `PersonAvatar` above looks it up rather than being handed one.
+   */
   status?: PresenceStatus;
   size?: keyof typeof SIZES;
   /**

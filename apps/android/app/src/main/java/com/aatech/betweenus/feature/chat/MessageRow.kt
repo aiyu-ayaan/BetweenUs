@@ -90,12 +90,13 @@ import com.aatech.betweenus.core.data.LinkPreview
 import com.aatech.betweenus.core.data.Markup
 import com.aatech.betweenus.core.data.MessageAttachment
 import com.aatech.betweenus.core.data.MessageCustomEmoji
+import com.aatech.betweenus.core.data.PresenceStatus
 import com.aatech.betweenus.core.data.PublicUser
 import com.aatech.betweenus.core.data.UserSummary
 import com.aatech.betweenus.core.store.Conversation
 import com.aatech.betweenus.core.store.ReadableMessage
 import com.aatech.betweenus.core.store.Workspace
-import com.aatech.betweenus.ui.components.Avatar
+import com.aatech.betweenus.ui.components.AvatarWithStatus
 import com.aatech.betweenus.ui.components.tintFor
 import com.aatech.betweenus.ui.components.BetweenUsIcon
 import com.aatech.betweenus.ui.components.BetweenUsIcons
@@ -164,6 +165,14 @@ fun MessageRow(
      * still free for the one question the row cannot answer - who is this.
      */
     onOpenProfile: (UserSummary) -> Unit = {},
+    /**
+     * Whether the author is here, for the dot on their face.
+     *
+     * Passed in rather than read here: the conversation already holds the roster
+     * it collected once, and a lookup per row would be a subscription per row to
+     * a flow that ticks whenever anybody anywhere changes status.
+     */
+    authorStatus: PresenceStatus = PresenceStatus.OFFLINE,
     /** Swiping the row rightwards answers it, the way every phone chat does. */
     onReply: () -> Unit = {},
     onOpenSeenBy: () -> Unit = {},
@@ -368,11 +377,22 @@ fun MessageRow(
                 if (grouped) {
                     Spacer(Modifier.width(44.dp))
                 } else {
-                    Avatar(
+                    // The dot as well as the face, the same as the web and the
+                    // desktop draw it. A channel is a room of people you may
+                    // not know are there, and the face is already on screen -
+                    // the dot is the cheapest thing that could have said so.
+                    //
+                    // The cut-out is the conversation's own background rather
+                    // than the default, which is the surface a member row sits
+                    // on: a dot punched out of the wrong colour reads as a
+                    // coloured circle inside a grey one.
+                    AvatarWithStatus(
                         id = message.author.id,
                         label = message.author.label,
                         url = message.author.avatarUrl?.let { Endpoint.absolute(it) },
+                        status = authorStatus.wire,
                         size = 36.dp,
+                        ring = MaterialTheme.colorScheme.background,
                     )
                     Spacer(Modifier.width(8.dp))
                 }

@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { dayLabel } from './day';
 import { useChatStore, type DecryptedMessage } from '../../stores/chat';
 import { useAuthStore } from '../../stores/auth';
-import { Avatar } from '../../components/Avatar';
+import { PersonAvatar } from '../../components/Avatar';
 import { SearchIcon, XIcon } from '../../components/icons';
 
 export interface SearchPanelProps {
@@ -91,7 +91,8 @@ export function SearchPanel({
                 className="w-full cursor-pointer rounded-lg bg-surface-800 p-2.5 text-left transition-colors duration-200 hover:bg-white/[0.06]"
               >
                 <span className="flex items-center gap-2">
-                  <Avatar
+                  <PersonAvatar
+                    userId={message.author.id}
                     name={message.author.displayName}
                     avatarUrl={message.author.avatarUrl}
                     size="sm"

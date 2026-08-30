@@ -15,7 +15,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { PresenceStatus } from '@betweenus/shared-types';
 import { usePresenceStore } from '../stores/presence';
-import { presenceLine } from '../services/last-seen';
+import { profilePresence } from '../services/last-seen';
 import { Avatar } from './Avatar';
 
 /**
@@ -183,7 +183,11 @@ export function ProfileCard({
     return () => document.removeEventListener('keydown', escape);
   }, [onDismiss]);
 
-  const line = presenceLine(status as PresenceStatus, lastSeenAt);
+  // `profilePresence` and not `presenceLine`: a card always says something.
+  // Offline with no timestamp - a new account, or one whose last seen is hidden
+  // from you - used to draw nothing at all here, which read as a card that had
+  // failed to load rather than as somebody nobody has seen.
+  const line = profilePresence(status as PresenceStatus, lastSeenAt);
 
   return (
     <div
@@ -214,13 +218,7 @@ export function ProfileCard({
         </div>
       </div>
 
-      {line && (
-        <p className="mt-3 text-xs text-slate-400">
-          {/* "online" is a state and reads better capitalised on its own line;
-              "last seen…" is a sentence that already starts lower case. */}
-          {line === 'online' ? 'Online' : line.charAt(0).toUpperCase() + line.slice(1)}
-        </p>
-      )}
+      <p className="mt-3 text-xs text-slate-400">{line}</p>
 
       {person.about.trim() && (
         <>

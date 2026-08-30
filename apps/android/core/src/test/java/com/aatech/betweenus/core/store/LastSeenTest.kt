@@ -113,6 +113,52 @@ class LastSeenTest {
         assertNull(LastSeen.line(PresenceStatus.OFFLINE, null, now, zone))
     }
 
+    // --- a sheet always says something ---------------------------------------
+
+    @Test
+    fun `a profile sheet never draws a blank where the status belongs`() {
+        // The bug this exists for: offline with no timestamp said nothing at
+        // all, so a sheet opened on a new account - or on somebody whose last
+        // seen is hidden from you - had a hole in it and read as broken.
+        assertEquals("Offline", LastSeen.profile(PresenceStatus.OFFLINE, null, now, zone))
+        assertEquals("Offline", LastSeen.profile(PresenceStatus.OFFLINE, "", now, zone))
+        assertEquals("Offline", LastSeen.profile(PresenceStatus.OFFLINE, "not a date", now, zone))
+
+        // With a timestamp it is the sentence, capitalised for a sheet.
+        assertTrue(
+            LastSeen.profile(PresenceStatus.OFFLINE, at(2026, 8, 28, 23, 55), now, zone)
+                .startsWith("Last seen yesterday at "),
+        )
+    }
+
+    @Test
+    fun `a profile sheet spells out which kind of here this is`() {
+        // Unlike the header, which collapses both to "online" because it is
+        // answering "will this be read now". The dot beside it is the only
+        // other thing that says which.
+        assertEquals("Online", LastSeen.profile(PresenceStatus.ONLINE, null, now, zone))
+        assertEquals("Idle", LastSeen.profile(PresenceStatus.IDLE, null, now, zone))
+        assertEquals("Do not disturb", LastSeen.profile(PresenceStatus.DND, null, now, zone))
+        assertEquals("Invisible", LastSeen.profile(PresenceStatus.INVISIBLE, null, now, zone))
+
+        // And a status other than offline still wins over any timestamp.
+        assertEquals("Online", LastSeen.profile(PresenceStatus.ONLINE, at(2026, 8, 24), now, zone))
+    }
+
+    @Test
+    fun `every combination says something`() {
+        // The whole contract of `profile`, and the thing the header is allowed
+        // to break and this is not.
+        for (status in PresenceStatus.entries) {
+            for (seen in listOf(null, "", "nonsense", at(2026, 8, 24))) {
+                assertTrue(
+                    "$status/$seen",
+                    LastSeen.profile(status, seen, now, zone).isNotEmpty(),
+                )
+            }
+        }
+    }
+
     @Test
     fun `a heading raises the first letter and changes nothing else`() {
         assertEquals("Online", LastSeen.sentence(PresenceStatus.ONLINE, null, now, zone))

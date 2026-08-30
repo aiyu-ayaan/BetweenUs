@@ -63,7 +63,11 @@ fun ProfileSheet(
     LaunchedEffect(person.id) { Presence.askLastSeen(listOf(person.id)) }
 
     val status = statuses[person.id] ?: PresenceStatus.OFFLINE
-    val line = LastSeen.sentence(status, lastSeen[person.id])
+    // `profile` and not `sentence`: a sheet always says something. Offline with
+    // no timestamp - a new account, or one whose last seen is hidden from you -
+    // used to draw nothing at all here, which read as a sheet that had failed
+    // to load rather than as somebody nobody has seen.
+    val line = LastSeen.profile(status, lastSeen[person.id])
 
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheet) {
         Column(
@@ -95,14 +99,12 @@ fun ProfileSheet(
                     person.handle?.let {
                         Text(text = it, style = MaterialTheme.typography.bodySmall, color = Slate500)
                     }
-                    line?.let {
-                        Text(
-                            text = it,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = Slate400,
-                            modifier = Modifier.padding(top = 2.dp),
-                        )
-                    }
+                    Text(
+                        text = line,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Slate400,
+                        modifier = Modifier.padding(top = 2.dp),
+                    )
                 }
             }
 

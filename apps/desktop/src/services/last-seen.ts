@@ -87,10 +87,52 @@ export function lastSeenLabel(iso: string | null | undefined, now = new Date()):
  * be read now.
  */
 export function presenceLine(
-  status: 'online' | 'idle' | 'dnd' | 'invisible' | 'offline',
+  status: PresenceWord,
   lastSeenAt: string | null | undefined,
   now = new Date(),
 ): string | null {
   if (status !== 'offline') return 'online';
   return lastSeenLabel(lastSeenAt, now);
+}
+
+export type PresenceWord = 'online' | 'idle' | 'dnd' | 'invisible' | 'offline';
+
+/** What a card calls each status when it has nothing more specific to say. */
+const STATUS_WORDS: Record<PresenceWord, string> = {
+  online: 'Online',
+  idle: 'Idle',
+  dnd: 'Do not disturb',
+  // Only ever your own - everybody else's invisible is resolved to offline
+  // before it leaves the server.
+  invisible: 'Invisible',
+  offline: 'Offline',
+};
+
+/**
+ * The same fact for a profile card, which unlike a header **always** says
+ * something.
+ *
+ * A header may draw nothing: the name is above it and an empty line under a
+ * name is just a name. A card cannot - it is a panel opened to answer "who is
+ * this", and a blank where the status belongs reads as a card that failed to
+ * load rather than as an account nobody has seen. That happens more often than
+ * it sounds: a new account, one whose last-seen time is hidden from you, and
+ * one you have disqualified yourself from reading all arrive with no timestamp
+ * at all, and offline-with-no-timestamp was drawing nothing.
+ *
+ * It also spells idle and do-not-disturb out, where `presenceLine` collapses
+ * both to "online". A header answers "will this be read now"; a card is the
+ * place somebody went looking for detail, and the dot beside it is the only
+ * other thing saying which.
+ */
+export function profilePresence(
+  status: PresenceWord,
+  lastSeenAt: string | null | undefined,
+  now = new Date(),
+): string {
+  if (status !== 'offline') return STATUS_WORDS[status];
+
+  const seen = lastSeenLabel(lastSeenAt, now);
+  if (!seen) return STATUS_WORDS.offline;
+  return seen.charAt(0).toUpperCase() + seen.slice(1);
 }

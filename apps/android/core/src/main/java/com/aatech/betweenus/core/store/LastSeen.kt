@@ -104,11 +104,46 @@ object LastSeen {
     ): String? =
         if (status != PresenceStatus.OFFLINE) "online" else label(lastSeenAt, now, zone)
 
-    /** The same line with its first letter raised, for a heading or a card. */
+    /** The same line with its first letter raised, for a heading. */
     fun sentence(
         status: PresenceStatus,
         lastSeenAt: String?,
         now: LocalDateTime = LocalDateTime.now(),
         zone: ZoneId = ZoneId.systemDefault(),
     ): String? = line(status, lastSeenAt, now, zone)?.replaceFirstChar { it.uppercase() }
+
+    /**
+     * The same fact for a profile sheet, which unlike a header **always** says
+     * something.
+     *
+     * A header may draw nothing: the name is above it, and an empty line under
+     * a name is just a name. A sheet cannot - it is a panel opened to answer
+     * "who is this", and a blank where the status belongs reads as a sheet that
+     * failed to load rather than as an account nobody has seen. That case is
+     * commoner than it sounds: a new account, one whose last-seen time is
+     * hidden from you, and one you have disqualified yourself from reading all
+     * arrive with no timestamp at all.
+     *
+     * It also spells out idle and do-not-disturb, where [line] collapses both
+     * to "online". A header answers "will this be read now"; a sheet is where
+     * somebody went looking for detail, and the dot beside it is the only other
+     * thing that says which.
+     *
+     * The mirror of `profilePresence` in `last-seen.ts`.
+     */
+    fun profile(
+        status: PresenceStatus,
+        lastSeenAt: String?,
+        now: LocalDateTime = LocalDateTime.now(),
+        zone: ZoneId = ZoneId.systemDefault(),
+    ): String = when (status) {
+        PresenceStatus.ONLINE -> "Online"
+        PresenceStatus.IDLE -> "Idle"
+        PresenceStatus.DND -> "Do not disturb"
+        // Only ever your own: everybody else's invisible is resolved to offline
+        // before it leaves the server.
+        PresenceStatus.INVISIBLE -> "Invisible"
+        PresenceStatus.OFFLINE ->
+            label(lastSeenAt, now, zone)?.replaceFirstChar { it.uppercase() } ?: "Offline"
+    }
 }
