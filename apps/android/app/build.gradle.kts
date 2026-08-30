@@ -44,11 +44,10 @@ val hasKeystore = keystoreFile?.exists() == true
 /**
  * The version this build carries.
  *
- * The release workflow is the source of truth - it derives the name from the
- * marker on the commit and passes a monotonic code alongside it. Building by
- * hand falls back to the repository manifest, which the release PR bumps for
- * every platform, so a local APK reports the same version as the rest of the
- * monorepo instead of a placeholder.
+ * The name comes from the repository manifest, which the release PR bumps for
+ * every platform, so Android tracks the monorepo version with nothing to bump
+ * twice. The environment still wins, for a one-off build of a version that is
+ * not checked out.
  */
 val manifestVersion: String? = rootProject.file("../../package.json")
     .takeIf { it.exists() }
@@ -61,9 +60,40 @@ val appVersionName = System.getenv("BETWEENUS_VERSION_NAME")?.takeIf { it.isNotB
     ?: manifestVersion
     ?: "0.0.0"
 
-// No monotonic counter outside CI, so a hand build stays at 1: it only has to
-// be an integer, and nothing installs over the Play/GitHub artifacts anyway.
-val appVersionCode = System.getenv("BETWEENUS_VERSION_CODE")?.trim()?.toIntOrNull() ?: 1
+/**
+ * The code the name implies, so nothing has to be counted by hand.
+ *
+ * Android orders installs by this integer alone, and it must rise exactly when
+ * the version does - a run number rises with builds instead, which makes two
+ * codes for one version and none for a version rebuilt later. Packing the
+ * version into digits keeps the two in step: `1.4.2-beta.3` is 10402103, and
+ * the stable release of the same numbers is 10402200, above every one of its
+ * pre-releases.
+ */
+fun versionCodeOf(name: String): Int {
+    val match = Regex("""^v?(\d+)\.(\d+)\.(\d+)(?:-(alpha|beta)\.(\d+))?$""", RegexOption.IGNORE_CASE)
+        .matchEntire(name.trim()) ?: error("Version '$name' is not a shape the release workflow produces.")
+    val (major, minor, patch, label, number) = match.destructured
+    // Each field owns a fixed slot, so overflowing one would silently steal the
+    // next one's digits and ship a code below the release before it.
+    require(minor.toInt() < 100 && patch.toInt() < 100 && (number.toIntOrNull() ?: 0) < 100) {
+        "Version '$name' overflows a version code slot; widen the packing before releasing it."
+    }
+    // A stable release has no pre-release number and must still beat `beta.99`.
+    val stage = when (label.lowercase()) {
+        "alpha" -> 0
+        "beta" -> 1
+        else -> 2
+    }
+    return major.toInt() * 10_000_000 +
+        minor.toInt() * 100_000 +
+        patch.toInt() * 1_000 +
+        stage * 100 +
+        (number.toIntOrNull() ?: 0)
+}
+
+val appVersionCode = System.getenv("BETWEENUS_VERSION_CODE")?.trim()?.toIntOrNull()
+    ?: versionCodeOf(appVersionName)
 
 android {
     namespace = "com.aatech.betweenus"

@@ -877,8 +877,11 @@ jobs:
 
       - name: Build ${{ matrix.label }}
         env:
+          # No version code: the build derives it from the name, so a rebuild of
+          # a version produces the same code and every release produces a higher
+          # one - which a run number, counting builds rather than versions,
+          # does not.
           BETWEENUS_VERSION_NAME: ${{ needs.merged.outputs.version }}
-          BETWEENUS_VERSION_CODE: ${{ github.run_number }}
           ANDROID_KEYSTORE_FILE: ${{ steps.keystore.outputs.path }}
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
