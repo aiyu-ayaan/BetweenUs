@@ -73,6 +73,29 @@ const inFlight = new Map<string, Promise<ChannelKeyState>>();
 const rekeyed = new Set<string>();
 
 /**
+ * The secret this session signed in with, kept for the length of the session.
+ *
+ * It used to be an argument and nothing else, so a sign-in whose identity setup
+ * failed once - the network dropped, the token was a moment late - lost it. The
+ * retry then ran with no secret at all, could not open the account backup, and
+ * minted a machine-local key instead, which is permanent (see `loadIdentity`).
+ * A password typed into a login form is dropped when the session ends, and that
+ * is the only thing keeping it here has to guarantee.
+ */
+let signInSecret: BackupSecret | null = null;
+
+/**
+ * What the keychain holds. `provisional` marks a key this machine minted for
+ * itself *while the account had a backup it could not open* - the fork
+ * described in `loadIdentity`. It is the flag that makes the fork recoverable:
+ * without it the stored key short-circuits every later launch and the backup is
+ * never tried again, on any sign-in, ever.
+ */
+interface StoredIdentity extends IdentityKeyPair {
+  provisional?: boolean;
+}
+
+/**
  * Loads this device's identity key and publishes the public half. Called once
  * per sign-in, with the password when there is one to hand.
  *
@@ -84,11 +107,14 @@ export function initIdentity(userId: string, secret?: BackupSecret): Promise<Ide
   if (identityReady && identityUserId === userId) return identityReady;
 
   identityUserId = userId;
+  // Held past this call on purpose: the retry below has no secret of its own,
+  // and a retry without one forks the identity permanently.
+  if (secret) signInSecret = secret;
   // A failure here - the network was down, the token had not been minted yet -
   // must not be remembered. Keeping the rejected promise left the device
   // unregistered for the whole session, and every channel it tried to key
   // afterwards ended in "No channel key on this device yet".
-  identityReady = loadIdentity(userId, secret).catch((error: unknown) => {
+  identityReady = loadIdentity(userId, secret ?? signInSecret ?? undefined).catch((error: unknown) => {
     if (identityUserId === userId) identityReady = null;
     throw error;
   });
@@ -100,8 +126,20 @@ async function loadIdentity(userId: string, secret?: BackupSecret): Promise<Iden
   const stored = await secureGet(storageKey);
 
   if (stored) {
-    const pair = JSON.parse(stored) as IdentityKeyPair;
-    await adopt(pair);
+    const saved = JSON.parse(stored) as StoredIdentity;
+    const pair: IdentityKeyPair = { publicKey: saved.publicKey, privateKey: saved.privateKey };
+
+    // A machine that forked gets another go, every time a secret is at hand.
+    // This is the whole of "sign in on a new phone and your messages are
+    // there": the fork below is silent and one-way, so the only thing that
+    // makes it recoverable is trying the backup again on the next sign-in
+    // rather than short-circuiting on the key the fork left behind.
+    if (saved.provisional && secret) {
+      const recovered = await restoreFromBackup(storageKey, secret);
+      if (recovered) return recovered;
+    }
+
+    await adopt(pair, false, saved.provisional === true);
     // A machine that already worked may still have no backup - it predates
     // this, or nobody could supply a secret at the time. Fix it quietly when a
     // secret is at hand rather than waiting for the next reinstall to notice.
@@ -111,18 +149,14 @@ async function loadIdentity(userId: string, secret?: BackupSecret): Promise<Iden
 
   // A failed fetch must not be read as "there is no backup": that would seal a
   // fresh key over one that exists. It throws, and the sign-in retries.
-  const { backup } = await api.identityBackup();
+  const { backups } = await identityBackups();
 
   // The account's own key, when the secret that opens it is at hand. This is
   // the good path and the only instant one: every epoch already sealed for
   // that identity opens the moment it lands, with nothing to wait for.
-  if (backup && secret && secret.kind === backup.kind) {
-    const pair = await openBackup(backup, secret);
-    if (pair) {
-      await secureSet(storageKey, JSON.stringify(pair));
-      await adopt(pair, true);
-      return pair;
-    }
+  if (secret) {
+    const recovered = await restoreFromBackup(storageKey, secret, backups);
+    if (recovered) return recovered;
   }
 
   // Otherwise this machine gets a key of its own, and the sign-in carries on.
@@ -143,11 +177,59 @@ async function loadIdentity(userId: string, secret?: BackupSecret): Promise<Iden
   // open those channels. An account whose only other machine is offline, or
   // which has none, reads what arrives from now on until one of them is back.
   // Settings -> Encryption is where somebody who wants it sooner can say so.
+  //
+  // The fork is marked when the account *had* a backup this machine could not
+  // open, and that mark is what lets the next sign-in undo it. Unmarked means
+  // there was nothing to restore from, so this key is the account's own.
+  const provisional = backups.length > 0;
   const pair = await generateIdentity();
-  await secureSet(storageKey, JSON.stringify(pair));
-  await adopt(pair);
+  await secureSet(storageKey, JSON.stringify({ ...pair, provisional } satisfies StoredIdentity));
+  await adopt(pair, false, provisional);
   await ensureBackup(pair, secret);
   return pair;
+}
+
+/**
+ * Opens whichever backup `secret` fits and makes it this machine's identity.
+ *
+ * Null means "not this secret" - a wrong password, or a passphrase-only account
+ * signing in with a password - which is an ordinary outcome, not a failure.
+ *
+ * Every channel key held on this machine is dropped on the way out. They are
+ * still valid, but they are the *subset* a forked identity could reach, and the
+ * caches in front of them would keep serving that subset while the wraps this
+ * identity can now open sat unread in the directory. Dropping them costs one
+ * re-read of a directory we have just been talking to.
+ */
+async function restoreFromBackup(
+  storageKey: string,
+  secret: BackupSecret,
+  known?: IdentityBackup[],
+): Promise<IdentityKeyPair | null> {
+  const backups = known ?? (await identityBackups()).backups;
+  const sealed = backups.find((it) => it.kind === secret.kind);
+  if (!sealed) return null;
+
+  const pair = await openBackup(sealed, secret);
+  if (!pair) return null;
+
+  await secureSet(storageKey, JSON.stringify({ ...pair } satisfies StoredIdentity));
+  channels.clear();
+  inFlight.clear();
+  rekeyed.clear();
+  missedEpochs.clear();
+  await adopt(pair, true);
+  return pair;
+}
+
+/**
+ * The account's sealed identities. Reads the list, falling back to the single
+ * blob a server older than per-kind backups sends.
+ */
+async function identityBackups(): Promise<{ backups: IdentityBackup[] }> {
+  const response = await api.identityBackup();
+  if (response.backups) return { backups: response.backups };
+  return { backups: response.backup ? [response.backup] : [] };
 }
 
 /** The wrong secret is an ordinary outcome here, not an error: null, and on. */
@@ -163,7 +245,11 @@ async function openBackup(
 }
 
 /** Publishes the public half and marks this machine ready. */
-async function adopt(pair: IdentityKeyPair, backedUp = false): Promise<void> {
+async function adopt(
+  pair: IdentityKeyPair,
+  backedUp = false,
+  provisional = false,
+): Promise<void> {
   identity = pair;
   try {
     // Idempotent: re-publishing keeps the directory correct if the row was
@@ -183,7 +269,7 @@ async function adopt(pair: IdentityKeyPair, backedUp = false): Promise<void> {
     }
     throw error;
   }
-  setIdentityStatus({ status: 'ready', backedUp });
+  setIdentityStatus({ status: 'ready', backedUp, provisional });
 }
 
 const DEVICE_ID_KEY = 'betweenus.deviceId';
@@ -239,18 +325,27 @@ function deviceLabel(): string {
  */
 async function ensureBackup(pair: IdentityKeyPair, secret?: BackupSecret): Promise<void> {
   try {
-    const { backup } = await api.identityBackup();
+    const { backups } = await identityBackups();
+    const backedUp = backups.some((it) => it.publicKey === pair.publicKey);
+
     // A backup that already stands is not this machine's to replace unless it
     // is this machine's key in it. Since a machine that could not open one
     // mints its own, sealing over it here would take the account's recoverable
     // identity away from every machine still restoring from it - quietly, and
     // for good. Deliberately re-sealing is `backupIdentity`'s job, not this.
-    if (backup) {
-      setIdentityStatus({ status: 'ready', backedUp: backup.publicKey === pair.publicKey });
-      return;
-    }
-    if (!secret) {
-      setIdentityStatus({ status: 'ready', backedUp: false });
+    //
+    // Scoped to the *kind* now. An account that has a passphrase backup and no
+    // password one is exactly the account that cannot recover on a fresh
+    // sign-in, so filling that gap when the password is at hand is the point
+    // rather than an overreach - and it only ever seals the key this machine
+    // already holds, which is the identity the other machines restore from
+    // whenever `backedUp` says so.
+    if (!secret || backups.some((it) => it.kind === secret.kind) || !backedUp) {
+      setIdentityStatus({
+        status: 'ready',
+        backedUp,
+        provisional: backups.length > 0 && !backedUp,
+      });
       return;
     }
     await api.putIdentityBackup(await sealIdentity(pair, secret.value, secret.kind));
@@ -273,13 +368,53 @@ export async function backupIdentity(secret: BackupSecret): Promise<void> {
 }
 
 /**
+ * Whether the account password can still recover this identity on a machine
+ * that has never seen it.
+ *
+ * The one thing a settings panel has to be able to say plainly, because it is
+ * the difference between "sign in anywhere" and "sign in anywhere and type a
+ * passphrase you wrote down once".
+ */
+export async function passwordRecoveryEnabled(): Promise<boolean> {
+  const { backups } = await identityBackups();
+  return backups.some((it) => it.kind === 'password');
+}
+
+/**
+ * Turns the password path off, for somebody who set a recovery passphrase
+ * *because* a live server sees the password at sign-in and they would rather it
+ * could not open anything.
+ *
+ * Refuses when it would leave the account with no backup at all, which is not a
+ * security setting - it is losing every message on the next reinstall.
+ */
+export async function setPasswordRecovery(
+  enabled: boolean,
+  password?: string,
+): Promise<void> {
+  if (enabled) {
+    if (!password) throw new Error('The account password is needed to seal a backup with it');
+    await backupIdentity({ value: password, kind: 'password' });
+    return;
+  }
+  const { backups } = await identityBackups();
+  if (!backups.some((it) => it.kind === 'passphrase')) {
+    throw new Error('Set a recovery passphrase first, or this account has no way back at all');
+  }
+  await api.deleteIdentityBackup('password');
+}
+
+/**
  * Re-seals the backup after a password change. Skipped silently when the backup
  * is keyed to a passphrase instead, which a password change does not touch.
  */
 export async function rewrapBackupForPassword(newPassword: string): Promise<void> {
-  const { backup } = await api.identityBackup();
-  if (backup?.kind !== 'password') return;
+  const { backups } = await identityBackups();
+  if (!backups.some((it) => it.kind === 'password')) return;
   await backupIdentity({ value: newPassword, kind: 'password' });
+  // The secret this session holds is now the old one, and a retry that used it
+  // would fail to open the blob it just re-sealed.
+  signInSecret = { value: newPassword, kind: 'password' };
 }
 
 export function resetE2ee(): void {
@@ -287,6 +422,7 @@ export function resetE2ee(): void {
   identity = null;
   identityUserId = null;
   identityReady = null;
+  signInSecret = null;
   channels.clear();
   inFlight.clear();
   rekeyed.clear();
@@ -657,7 +793,9 @@ async function shareKey(
 /** Waits for sign-in key setup instead of racing it, and retries a failed one. */
 async function currentIdentity(): Promise<IdentityKeyPair> {
   if (identityReady) return identityReady;
-  if (identityUserId) return initIdentity(identityUserId);
+  // With the session's secret, not without it. A retry that dropped it opened
+  // no backup, minted a machine-local key, and forked the account for good.
+  if (identityUserId) return initIdentity(identityUserId, signInSecret ?? undefined);
   if (identity) return identity;
   throw new MissingChannelKeyError();
 }

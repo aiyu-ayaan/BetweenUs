@@ -90,7 +90,7 @@ model User {
   deviceKeys      DeviceKey[]
   /// One per installation that can be pushed to - see DeviceToken.
   deviceTokens    DeviceToken[]
-  identityBackup  IdentityBackup?
+  identityBackups IdentityBackup[]
   identities      UserIdentity[]
   notifications   NotificationSetting?
   channelReads    ChannelRead[]
@@ -391,7 +391,8 @@ model DeviceKey {
 /// open. The server stores the blob and hands it back to its owner; it holds
 /// nothing that opens it.
 model IdentityBackup {
-  userId     String   @id
+  id         String   @id @default(uuid())
+  userId     String
   version    Int      @default(1)
   /// "password" or "passphrase": what the client must ask the user for.
   kind       String
@@ -407,6 +408,11 @@ model IdentityBackup {
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  /// One backup per secret kind, not one per account. A recovery passphrase
+  /// used to replace the password-sealed blob, which quietly took away the
+  /// only thing a fresh sign-in can open on its own - see development/devdocs/E2EE.md.
+  @@unique([userId, kind])
+  @@index([userId])
   @@map("identity_backups")
 }
 

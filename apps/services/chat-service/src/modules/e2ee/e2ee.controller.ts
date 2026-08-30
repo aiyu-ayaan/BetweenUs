@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -12,6 +13,7 @@ import {
 } from '@nestjs/common';
 import { CurrentUser, JwtAuthGuard, type AuthenticatedUser } from '@betweenus/auth';
 import type {
+  BackupSecretKind,
   ChannelKeysResponse,
   DeviceKey,
   IdentityBackupResponse,
@@ -51,7 +53,12 @@ export class E2eeController {
     return this.e2ee.revokeDevice(user.id, deviceId);
   }
 
-  /** The caller's sealed identity key, for a machine that has none of its own. */
+  /**
+   * The caller's sealed identity keys, for a machine that has none of its own.
+   *
+   * Plural: an account may hold a password-sealed blob and a passphrase-sealed
+   * one, and a client opens whichever its secret matches.
+   */
   @Get('backup')
   backup(@CurrentUser() user: AuthenticatedUser): Promise<IdentityBackupResponse> {
     return this.e2ee.identityBackup(user.id);
@@ -63,6 +70,22 @@ export class E2eeController {
     @Body() dto: PutIdentityBackupDto,
   ): Promise<{ ok: true }> {
     await this.e2ee.putIdentityBackup(user.id, dto);
+    return { ok: true };
+  }
+
+  /**
+   * Removes one kind of backup. What "do not let my account password recover my
+   * messages" is made of, once a recovery passphrase is standing.
+   */
+  @Delete('backup/:kind')
+  async deleteBackup(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('kind') kind: string,
+  ): Promise<{ ok: true }> {
+    if (kind !== 'password' && kind !== 'passphrase') {
+      throw new BadRequestException({ code: 'INVALID_BACKUP_KIND', message: 'Unknown backup kind' });
+    }
+    await this.e2ee.deleteIdentityBackup(user.id, kind satisfies BackupSecretKind);
     return { ok: true };
   }
 

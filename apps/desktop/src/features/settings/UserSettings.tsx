@@ -22,7 +22,13 @@ import {
   updateNotificationPreferences,
 } from '../../services/notifications';
 import { serverUrl } from '../../services/endpoint';
-import { backupIdentity, deviceId, rewrapBackupForPassword } from '../../services/e2ee';
+import {
+  backupIdentity,
+  deviceId,
+  passwordRecoveryEnabled,
+  rewrapBackupForPassword,
+  setPasswordRecovery,
+} from '../../services/e2ee';
 import { useIdentityStore } from '../../stores/identity';
 import { useFriendsStore } from '../../stores/friends';
 import { useAgentStore } from '../../services/remote-agent';
@@ -626,16 +632,34 @@ function AccountSection(): JSX.Element {
 function EncryptionSection(): JSX.Element {
   const identity = useIdentityStore((state) => state.identity);
   const [passphrase, setPassphrase] = useState('');
+  const [keepPassword, setKeepPassword] = useState(true);
+  const [byPassword, setByPassword] = useState<boolean | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    void passwordRecoveryEnabled()
+      .then(setByPassword)
+      .catch(() => setByPassword(null));
+  }, [identity]);
 
   const save = async (): Promise<void> => {
     setSaving(true);
     setNote(null);
     try {
       await backupIdentity({ value: passphrase, kind: 'passphrase' });
+      // Deliberately after the passphrase is stored, and only when asked: the
+      // whole reason to turn the password path off is a server that sees the
+      // password at sign-in, and dropping it before the replacement exists
+      // would leave a window with no way back into the account at all.
+      if (!keepPassword) await setPasswordRecovery(false);
       setPassphrase('');
-      setNote('Saved. Signing in on another machine will ask for this passphrase.');
+      setByPassword(keepPassword);
+      setNote(
+        keepPassword
+          ? 'Saved. Your password still restores this account on a new device; the passphrase is a second way in.'
+          : 'Saved. Only this passphrase restores the account now - your password no longer will.',
+      );
     } catch (error) {
       setNote(error instanceof Error ? error.message : 'That could not be saved');
     } finally {
@@ -653,10 +677,19 @@ function EncryptionSection(): JSX.Element {
       <p className="mt-2 text-sm text-slate-300">
         {identity.status === 'ready' && identity.backedUp
           ? 'This machine holds the account key, and it is backed up. Signing in elsewhere restores it.'
-          : identity.status === 'ready'
-            ? 'This machine has a key of its own, and no backup of it. Your other machines fill in older conversations as they open them. Set a recovery passphrase - or sign in once with your account password - to make this machine hold the account key instead.'
-            : 'Waiting for the account key.'}
+          : identity.status === 'ready' && identity.provisional
+            ? 'This machine could not open the account key, so it made one of its own and reads only what has arrived since. Sign out and back in with your account password to recover the account key and every conversation sealed for it.'
+            : identity.status === 'ready'
+              ? 'This machine has a key of its own, and no backup of it. Your other machines fill in older conversations as they open them. Set a recovery passphrase - or sign in once with your account password - to make this machine hold the account key instead.'
+              : 'Waiting for the account key.'}
       </p>
+      {byPassword !== null && (
+        <p className="mt-1 text-sm text-slate-400">
+          {byPassword
+            ? 'Recovery by account password is on: signing in on a new device restores your messages with nothing else to type.'
+            : 'Recovery by account password is off. A new device needs your recovery passphrase.'}
+        </p>
+      )}
       <div className="mt-3 space-y-4">
         <TextField
           label="Recovery passphrase"
@@ -672,9 +705,25 @@ function EncryptionSection(): JSX.Element {
         >
           {saving ? 'Saving…' : 'Set recovery passphrase'}
         </button>
+        <label className="flex cursor-pointer items-start gap-2 text-sm text-slate-300">
+          <input
+            type="checkbox"
+            checked={keepPassword}
+            onChange={(event) => setKeepPassword(event.target.checked)}
+            className="mt-0.5 cursor-pointer accent-accent"
+          />
+          <span>
+            Also let my account password recover my messages
+            <span className="block text-xs text-slate-500">
+              Leave this on and a new device works the moment you sign in. Turn it off and only
+              this passphrase gets you back - which is the point if you would rather the server,
+              which sees your password when you sign in, could never open the backup.
+            </span>
+          </span>
+        </label>
         <p className="text-xs text-slate-500">
-          Replaces password-based recovery for this account. Nobody - including this deployment -
-          can recover your history if you forget it.
+          Nobody - including this deployment - can recover your history if you forget the
+          passphrase and have turned password recovery off.
         </p>
         {note && <p className="text-sm text-slate-300">{note}</p>}
       </div>

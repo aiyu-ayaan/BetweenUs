@@ -51,8 +51,21 @@ const devices = new Map<string, { userId: string; deviceId: string; publicKey: s
  * millisecond apart would make that a flaky assertion rather than a clear one.
  */
 const revoked = new Map<string, number>();
-/** The one sealed identity an account may have, by user id. */
+/**
+ * Sealed identities, keyed `userId:kind`.
+ *
+ * Per kind rather than per account, the way the table is: a recovery passphrase
+ * used to overwrite the password-sealed blob, and the password blob is the only
+ * one a fresh sign-in holds the secret for.
+ */
 const backups = new Map<string, Record<string, unknown>>();
+
+/** Every backup an account holds, as `GET /e2ee/backup` returns them. */
+function backupsFor(userId: string): Record<string, unknown>[] {
+  return [...backups.entries()]
+    .filter(([key]) => key.startsWith(`${userId}:`))
+    .map(([, value]) => value);
+}
 let tick = 0;
 let stored: StoredKey[] = [];
 let caller = 'alice';
@@ -190,11 +203,21 @@ function stubDirectory(): void {
     }
     if (url.pathname === '/api/v1/e2ee/devices') return Promise.resolve(json(knownDevices()));
 
-    // One sealed identity per account, so a machine that cannot open the one
-    // that is there can be told apart from an account that has none.
+    // Sealed identities, so a machine that cannot open the one that is there
+    // can be told apart from an account that has none.
     if (url.pathname === '/api/v1/e2ee/backup') {
-      if (method === 'GET') return Promise.resolve(json({ backup: backups.get(caller) ?? null }));
-      backups.set(caller, body as Record<string, unknown>);
+      if (method === 'GET') {
+        const held = backupsFor(caller);
+        return Promise.resolve(
+          json({ backups: held, backup: held.find((it) => it.kind === 'password') ?? held[0] ?? null }),
+        );
+      }
+      const blob = body as Record<string, unknown>;
+      backups.set(`${caller}:${String(blob.kind)}`, blob);
+      return Promise.resolve(json({ ok: true }));
+    }
+    if (url.pathname.startsWith('/api/v1/e2ee/backup/')) {
+      backups.delete(`${caller}:${url.pathname.split('/').pop() ?? ''}`);
       return Promise.resolve(json({ ok: true }));
     }
 
@@ -543,7 +566,7 @@ async function main(): Promise<void> {
   MEMBERS = [...MEMBERS, 'erin'];
   await signIn('erin');
   await backupIdentity({ value: 'erin-account-password', kind: 'password' });
-  const erinsBackup = backups.get('erin');
+  const erinsBackup = backups.get('erin:password');
   assert.notEqual(erinsBackup, undefined, 'erin has an account backup to be locked out of');
 
   // A machine with nothing of its own on it, which is what a new one is. The
@@ -552,7 +575,7 @@ async function main(): Promise<void> {
   forgetIdentity('erin');
   await signIn('erin', 'device-2');
   assert.deepEqual(
-    backups.get('erin'),
+    backups.get('erin:password'),
     erinsBackup,
     'a machine that could not open the backup must never replace it',
   );
@@ -563,11 +586,32 @@ async function main(): Promise<void> {
     'a provider sign-in with no secret must reach a usable key rather than stop and ask',
   );
 
-  // The same laptop, signed in later with the account password. It is holding a
-  // key of its own by now, and the password must not quietly promote that key
-  // to the account's backup: every machine still restoring from the real one
-  // would be locked out of everything, and nothing would say so.
+  const forkedKey = devices.get('erin:erin-device-2')?.publicKey;
+  assert.notEqual(
+    forkedKey,
+    erinsBackup?.publicKey,
+    'a machine that could not open the backup is on a key of its own - that is the fork',
+  );
+
+  // The same laptop, signed in later with the account password. Two things at
+  // once, and both are the reported bug.
+  //
+  // It must *recover*: the fork was permanent, because the minted key sat in
+  // the keychain and every later launch short-circuited on it without ever
+  // asking for the backup again. A phone signed in with the right password read
+  // every message it had ever been sent as a padlock, for the life of the
+  // install, with no way back and nothing on screen to say so.
+  //
+  // And the password must still not quietly promote the minted key to the
+  // account's backup: every machine still restoring from the real one would be
+  // locked out of everything, and nothing would say so.
   await signIn('erin', 'device-2', { value: 'erin-account-password', kind: 'password' });
+  await settle();
+  assert.equal(
+    devices.get('erin:erin-device-2')?.publicKey,
+    erinsBackup?.publicKey,
+    'a forked machine must take the account key back on the next sign-in that can open the backup',
+  );
 
   // And the secret, when there is one, still puts the account key on the
   // machine that asks with it.
@@ -587,11 +631,40 @@ async function main(): Promise<void> {
   // restoring from the real one is locked out of everything and nothing says so.
   await settle();
   assert.deepEqual(
-    backups.get('erin'),
+    backups.get('erin:password'),
     erinsBackup,
     'no sign-in may replace the account backup with a key of its own',
   );
   assert.notEqual(fromErinsThird, undefined, 'the restored machine can seal too');
+
+  // A recovery passphrase must not take the password path away.
+  //
+  // The table was keyed on the account, so setting one overwrote the
+  // password-sealed blob - and that blob is the only thing a fresh sign-in
+  // holds the secret for. Losing it turned every later "sign in on a new
+  // device" into the fork above, which is a padlock on the whole account.
+  await backupIdentity({ value: 'erin-recovery-passphrase', kind: 'passphrase' });
+  assert.deepEqual(
+    backups.get('erin:password'),
+    erinsBackup,
+    'setting a recovery passphrase must leave the password backup standing',
+  );
+  assert.notEqual(
+    backups.get('erin:passphrase'),
+    undefined,
+    'the passphrase backup is stored alongside it, not instead of it',
+  );
+
+  // And a new machine still recovers with the password alone, which is the
+  // whole promise: sign in anywhere, read everything, type nothing extra.
+  forgetIdentity('erin');
+  await signIn('erin', 'device-4', { value: 'erin-account-password', kind: 'password' });
+  await settle();
+  assert.equal(
+    devices.get('erin:erin-device-4')?.publicKey,
+    erinsBackup?.publicKey,
+    'the account password must still restore the account key after a passphrase was set',
+  );
 
   console.log('e2ee.check.ts: ok');
 }

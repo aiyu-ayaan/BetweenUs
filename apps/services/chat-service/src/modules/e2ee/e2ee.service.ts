@@ -126,21 +126,16 @@ export class E2eeService {
    * does not open it.
    */
   async identityBackup(userId: string): Promise<IdentityBackupResponse> {
-    const row = await prisma.identityBackup.findUnique({ where: { userId } });
-    if (!row) return { backup: null };
+    const rows = await prisma.identityBackup.findMany({ where: { userId } });
+    const backups = rows.map(toIdentityBackup);
 
     return {
-      backup: {
-        v: 1,
-        kind: row.kind as BackupSecretKind,
-        kdf: row.kdf as IdentityBackup['kdf'],
-        iterations: row.iterations,
-        salt: row.salt,
-        iv: row.iv,
-        ct: row.ciphertext,
-        publicKey: row.publicKey,
-        updatedAt: row.updatedAt.toISOString(),
-      },
+      backups,
+      // A client older than per-kind backups reads one blob and one kind. Give
+      // it the password one when it exists, because the password is the secret
+      // such a client actually holds at sign-in; handing it the passphrase blob
+      // would make it decide it cannot open anything and mint its own identity.
+      backup: backups.find((it) => it.kind === 'password') ?? backups[0] ?? null,
     };
   }
 
@@ -152,7 +147,6 @@ export class E2eeService {
    */
   async putIdentityBackup(userId: string, dto: PutIdentityBackupRequest): Promise<void> {
     const data = {
-      kind: dto.kind,
       kdf: dto.kdf,
       iterations: dto.iterations,
       salt: dto.salt,
@@ -160,7 +154,26 @@ export class E2eeService {
       ciphertext: dto.ct,
       publicKey: dto.publicKey,
     };
-    await prisma.identityBackup.upsert({ where: { userId }, update: data, create: { userId, ...data } });
+    // Scoped to the kind, so writing a passphrase backup leaves the password
+    // one standing. It used to be keyed on the account, and setting a
+    // passphrase silently took away the only blob a fresh sign-in can open.
+    await prisma.identityBackup.upsert({
+      where: { userId_kind: { userId, kind: dto.kind } },
+      update: data,
+      create: { userId, kind: dto.kind, ...data },
+    });
+  }
+
+  /**
+   * Drops one kind of backup, which is how somebody says "my password must not
+   * be able to recover my messages".
+   *
+   * Deleting the last one is allowed. It is the same thing as never having had
+   * one, and refusing would be the server deciding how recoverable an account
+   * is - a choice that belongs to whoever holds the keys, not to the courier.
+   */
+  async deleteIdentityBackup(userId: string, kind: BackupSecretKind): Promise<void> {
+    await prisma.identityBackup.deleteMany({ where: { userId, kind } });
   }
 
   /**
@@ -464,6 +477,29 @@ export class E2eeService {
 }
 
 /** One row of the directory, as the contract has it. */
+function toIdentityBackup(row: {
+  kind: string;
+  kdf: string;
+  iterations: number;
+  salt: string;
+  iv: string;
+  ciphertext: string;
+  publicKey: string;
+  updatedAt: Date;
+}): IdentityBackup {
+  return {
+    v: 1,
+    kind: row.kind as BackupSecretKind,
+    kdf: row.kdf as IdentityBackup['kdf'],
+    iterations: row.iterations,
+    salt: row.salt,
+    iv: row.iv,
+    ct: row.ciphertext,
+    publicKey: row.publicKey,
+    updatedAt: row.updatedAt.toISOString(),
+  };
+}
+
 function toDeviceKey(row: {
   userId: string;
   deviceId: string;

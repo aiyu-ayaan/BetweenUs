@@ -1,5 +1,6 @@
 import { sampleServerClock } from './server-clock';
 import type {
+  BackupSecretKind,
   CreateServerInviteRequest,
   ApiErrorBody,
   AuthResponse,
@@ -611,11 +612,15 @@ export const api = {
   revokeDevice: (deviceId: string): Promise<DeviceKey> =>
     request(`/api/v1/e2ee/devices/${encodeURIComponent(deviceId)}`, { method: 'DELETE' }),
 
-  /** This account's sealed identity key, for a machine that holds none. */
+  /** This account's sealed identity keys, for a machine that holds none. */
   identityBackup: (): Promise<IdentityBackupResponse> => request('/api/v1/e2ee/backup'),
 
   putIdentityBackup: (body: PutIdentityBackupRequest): Promise<{ ok: true }> =>
     request('/api/v1/e2ee/backup', { method: 'PUT', body: JSON.stringify(body) }),
+
+  /** Drops one kind of backup. See `setPasswordRecovery` in `services/e2ee.ts`. */
+  deleteIdentityBackup: (kind: BackupSecretKind): Promise<{ ok: true }> =>
+    request(`/api/v1/e2ee/backup/${kind}`, { method: 'DELETE' }),
 
   channelDevices: (channelId: string): Promise<DeviceKey[]> =>
     request(`/api/v1/e2ee/devices?channelId=${encodeURIComponent(channelId)}`),

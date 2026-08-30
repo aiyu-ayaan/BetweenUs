@@ -1227,7 +1227,23 @@ export interface IdentityBackup {
 export type PutIdentityBackupRequest = Omit<IdentityBackup, 'updatedAt'>;
 
 export interface IdentityBackupResponse {
-  /** `null` when this account has never uploaded one. */
+  /**
+   * Every backup this account holds, at most one per {@link BackupSecretKind}.
+   *
+   * A list rather than a single blob because the two kinds answer different
+   * questions and an account is allowed both. The password one is what a fresh
+   * sign-in can open unaided; the passphrase one is for somebody whose threat
+   * model includes the running server. Keying the table on the account alone
+   * meant setting the second destroyed the first, and a device that can open
+   * neither mints its own identity - which reads every message ever sent to the
+   * account as a padlock, permanently.
+   */
+  backups: IdentityBackup[];
+  /**
+   * @deprecated Read {@link backups}. Kept so a client older than per-kind
+   * backups still finds one: the password blob when there is one, because that
+   * is the secret such a client has at sign-in, otherwise whatever there is.
+   */
   backup: IdentityBackup | null;
 }
 
