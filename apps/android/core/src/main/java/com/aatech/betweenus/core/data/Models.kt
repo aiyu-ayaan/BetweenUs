@@ -43,12 +43,35 @@ internal fun <T> jsonArrayOfObjects(values: Collection<T>, toJson: (T) -> JSONOb
 
 // --- users ---
 
+/**
+ * What a new account's about line says until its owner changes it.
+ *
+ * A default rather than an empty string, because an empty profile card is a
+ * card that looks broken - and because the first thing anybody does with this
+ * field is discover it exists by seeing somebody else's. The same value the
+ * server defaults the column to and the other clients place in the field.
+ */
+const val DEFAULT_ABOUT = "Hey, I’m on Between Us."
+
+/**
+ * How long an about line may be, in characters.
+ *
+ * 140 is the length that still reads as one line under a heading at the widths
+ * the profile sheet is drawn at. Counted in code points, so a line of emoji is
+ * measured the way somebody typing it counts - and that keeps this count under
+ * the server's ceiling, which measures UTF-16 units and is therefore never
+ * smaller. Shared with `ABOUT_MAX_LENGTH` in `@betweenus/shared-types`.
+ */
+const val ABOUT_MAX_LENGTH = 140
+
 /** The public face of an account: a search result, a DM header, an author. */
 data class UserSummary(
     val id: String,
     val username: String,
     val displayName: String,
     val avatarUrl: String?,
+    /** The line under the name on a profile card. Blank draws nothing at all. */
+    val about: String = "",
 ) {
     val label: String get() = displayName.ifBlank { username }
 
@@ -68,6 +91,7 @@ data class UserSummary(
         .put("username", username)
         .put("displayName", displayName)
         .put("avatarUrl", avatarUrl)
+        .put("about", about)
 
     companion object {
         fun from(json: JSONObject) = UserSummary(
@@ -75,6 +99,7 @@ data class UserSummary(
             username = json.optString("username"),
             displayName = json.optString("displayName"),
             avatarUrl = json.stringOrNull("avatarUrl"),
+            about = json.optString("about"),
         )
     }
 }
@@ -254,8 +279,13 @@ data class ServerMember(
     val deniedPermissions: List<String>,
     /** Ids of the custom roles this member holds, highest rank first. */
     val roleIds: List<String>,
+    /** The line under the name on this member's profile card. */
+    val about: String = "",
 ) {
     val label: String get() = displayName.ifBlank { username }
+
+    /** The same person, as the shape a profile sheet and a DM header take. */
+    val summary: UserSummary get() = UserSummary(userId, username, displayName, avatarUrl, about)
 
     /**
      * The "@name" line drawn under [label], or null when it would only repeat
@@ -278,6 +308,7 @@ data class ServerMember(
         .put("grantedPermissions", jsonArrayOf(grantedPermissions))
         .put("deniedPermissions", jsonArrayOf(deniedPermissions))
         .put("roleIds", jsonArrayOf(roleIds))
+        .put("about", about)
 
     companion object {
         fun from(json: JSONObject) = ServerMember(
@@ -290,6 +321,7 @@ data class ServerMember(
             grantedPermissions = json.strings("grantedPermissions"),
             deniedPermissions = json.strings("deniedPermissions"),
             roleIds = json.strings("roleIds"),
+            about = json.optString("about"),
         )
     }
 }

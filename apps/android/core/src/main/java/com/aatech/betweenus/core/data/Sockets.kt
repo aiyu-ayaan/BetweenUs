@@ -7,6 +7,7 @@ import okhttp3.Request
 import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
+import org.json.JSONArray
 import org.json.JSONObject
 import java.net.URLEncoder
 import java.util.concurrent.CopyOnWriteArraySet
@@ -421,6 +422,22 @@ object PresenceSocket : JsonSocket("/ws/presence") {
 
     fun typing(channelId: String) =
         send(JSONObject().put("type", "typing.start").put("channelId", channelId))
+
+    /**
+     * "When were these people last here?"
+     *
+     * Asked when a conversation opens or a profile sheet does. The answers come
+     * back as ordinary `presence.changed` events, so nothing waits on a reply
+     * and the store has one road in rather than two.
+     */
+    fun query(userIds: List<String>) {
+        if (userIds.isEmpty()) return
+        send(
+            JSONObject()
+                .put("type", "presence.query")
+                .put("userIds", JSONArray().also { array -> userIds.forEach(array::put) }),
+        )
+    }
 
     /**
      * "This conversation is on screen in front of me."

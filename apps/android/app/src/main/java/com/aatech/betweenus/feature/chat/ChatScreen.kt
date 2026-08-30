@@ -52,6 +52,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.LifecycleResumeEffect
+import com.aatech.betweenus.feature.members.ProfileSheet
 import com.aatech.betweenus.feature.settings.BetweenUsPermissions
 import com.aatech.betweenus.feature.settings.NotificationPermissionBanner
 import androidx.compose.ui.text.font.FontWeight
@@ -61,8 +62,11 @@ import androidx.compose.ui.unit.sp
 import com.aatech.betweenus.core.crypto.E2ee
 import com.aatech.betweenus.core.data.Endpoint
 import com.aatech.betweenus.core.data.MessageReply
+import com.aatech.betweenus.core.data.PresenceStatus
 import com.aatech.betweenus.core.data.PublicUser
+import com.aatech.betweenus.core.data.UserSummary
 import com.aatech.betweenus.core.store.Conversation
+import com.aatech.betweenus.core.store.LastSeen
 import com.aatech.betweenus.core.store.Receipts
 import com.aatech.betweenus.core.store.PendingShare
 import com.aatech.betweenus.core.store.Presence
@@ -99,6 +103,8 @@ fun ChatScreen(
     val everything by Conversation.messages.collectAsState()
     val loading by Conversation.loading.collectAsState()
     val typingByChannel by Presence.typing.collectAsState()
+    val statuses by Presence.statuses.collectAsState()
+    val lastSeen by Presence.lastSeen.collectAsState()
     val receiptsByChannel by Conversation.receipts.collectAsState()
 
     val messages = everything[channelId].orEmpty()
@@ -133,6 +139,8 @@ fun ChatScreen(
     var forwardNotice by remember(channelId) { mutableStateOf<String?>(null) }
     /** The message whose "seen by" sheet is open, if any. */
     var seenFor by remember(channelId) { mutableStateOf<ReadableMessage?>(null) }
+    /** Whose profile the sheet is showing, or null. Opened by a double tap. */
+    var profileOf by remember(channelId) { mutableStateOf<UserSummary?>(null) }
     var failure by remember { mutableStateOf<String?>(null) }
 
     var showAttachmentSheet by remember { mutableStateOf(false) }
@@ -223,6 +231,20 @@ fun ChatScreen(
      * conversation below the screen. See `Follow.kt`.
      */
     var following by remember(channelId) { mutableStateOf(true) }
+
+    /**
+     * The header's line needs to know when this person was last here, and a
+     * `presence.sync` carries only the people who are here now - so the one
+     * case the line exists for is the one the socket says nothing about.
+     *
+     * Asked when the conversation opens and not again: a timestamp a few
+     * minutes stale reads identically, and somebody coming back arrives as a
+     * `presence.changed` of its own, which turns the line to "online" without
+     * anybody asking.
+     */
+    LaunchedEffect(direct?.participant?.id) {
+        direct?.participant?.id?.let { Presence.askLastSeen(listOf(it)) }
+    }
 
     // What the outbox is doing, and whether it is doing it for this channel.
     // Everything it reports outlives this screen; drawing it is the only part
@@ -423,6 +445,10 @@ fun ChatScreen(
                     label = direct.participant.label,
                     url = direct.participant.avatarUrl?.let { Endpoint.absolute(it) },
                     size = 40.dp,
+                    // Tapping the face still shows the face. The second tap is
+                    // what asks who they are, which is the same gesture that
+                    // asks it of an author down in the conversation.
+                    onDoubleTap = { profileOf = direct.participant },
                 )
             } else {
                 Box(
@@ -452,8 +478,18 @@ fun ChatScreen(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
+                // Name over status, the way every messenger draws a
+                // one-to-one conversation: "are they there" is the question
+                // beside a name, not one behind a tap into a profile. It
+                // replaces "Encrypted direct message", which said something
+                // true about every conversation in the app and therefore
+                // nothing about this one - the padlock is elsewhere.
                 val caption = when {
-                    direct != null -> "Encrypted direct message"
+                    direct != null ->
+                        LastSeen.line(
+                            statuses[direct.participant.id] ?: PresenceStatus.OFFLINE,
+                            lastSeen[direct.participant.id],
+                        )
                     !channel?.topic.isNullOrBlank() -> channel!!.topic!!
                     else -> null
                 }
@@ -548,6 +584,7 @@ fun ChatScreen(
                         highlighted = highlighted == readable.id,
                         receipts = anchors[readable.id].orEmpty(),
                         onLongPress = { acting = readable },
+                        onOpenProfile = { profileOf = it },
                         onReply = { replyingTo = readable.quote() },
                         onOpenSeenBy = { seenFor = readable },
                         onOpenQuoted = { quotedId ->
@@ -803,6 +840,10 @@ fun ChatScreen(
     }
 
     // --- Who has read it, and when ---
+    profileOf?.let { person ->
+        ProfileSheet(person = person, onDismiss = { profileOf = null })
+    }
+
     seenFor?.let { readable ->
         SeenBySheet(
             sentAt = readable.message.createdAt,

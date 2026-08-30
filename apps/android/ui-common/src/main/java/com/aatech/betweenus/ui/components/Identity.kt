@@ -3,6 +3,8 @@ package com.aatech.betweenus.ui.components
 import androidx.compose.animation.core.animateDpAsState
 import android.widget.Toast
 import androidx.compose.foundation.background
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
@@ -46,6 +48,7 @@ import kotlin.math.absoluteValue
  * colour has to be stable across sessions and across clients, so it is a hash
  * of the id and not a random pick.
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun Avatar(
     id: String,
@@ -55,29 +58,44 @@ fun Avatar(
     size: Dp = 36.dp,
     shape: androidx.compose.ui.graphics.Shape = CircleShape,
     viewable: Boolean = true,
+    /**
+     * What a second tap asks, where anything asks it: who is this.
+     *
+     * Null everywhere it means nothing - a server's icon, a circle inside a
+     * control - and the same gesture as a double tap on a message, so one
+     * question has one answer wherever a face is drawn.
+     */
+    onDoubleTap: (() -> Unit)? = null,
 ) {
     val context = LocalContext.current
+    val showPhoto = {
+        if (url != null) {
+            ProfileViewer.open(label, url)
+        } else {
+            Toast.makeText(context, "Profile photo not available", Toast.LENGTH_SHORT).show()
+        }
+    }
     Box(
         modifier = modifier
             .size(size)
             .clip(shape)
             .background(if (url == null) tintFor(id) else Surface700)
-            // Tapping a face shows the face. It has to be taken before the row
-            // underneath gets it - a row is usually clickable too - which is
-            // what a `clickable` on the circle itself does.
+            // Tapping a face shows the face, and a second tap asks who it
+            // belongs to. It has to be taken before the row underneath gets it
+            // - a row is usually clickable too - which is what a gesture on the
+            // circle itself does.
             .then(
-                if (viewable) {
-                    Modifier.clickable {
-                        if (url != null) {
-                            ProfileViewer.open(label, url)
-                        } else {
-                            Toast
-                                .makeText(context, "Profile photo not available", Toast.LENGTH_SHORT)
-                                .show()
-                        }
-                    }
-                } else {
-                    Modifier
+                when {
+                    !viewable -> Modifier
+                    onDoubleTap == null -> Modifier.clickable { showPhoto() }
+                    // `combinedClickable` rather than two modifiers: a single
+                    // tap has to wait out the double-tap window before it can
+                    // know it was single, and only one gesture detector can be
+                    // the thing that waits.
+                    else -> Modifier.combinedClickable(
+                        onClick = showPhoto,
+                        onDoubleClick = onDoubleTap,
+                    )
                 }
             ),
         contentAlignment = Alignment.Center,
@@ -125,9 +143,10 @@ fun AvatarWithStatus(
     modifier: Modifier = Modifier,
     size: Dp = 36.dp,
     viewable: Boolean = true,
+    onDoubleTap: (() -> Unit)? = null,
 ) {
     Box(modifier = modifier) {
-        Avatar(id, label, url, size = size, viewable = viewable)
+        Avatar(id, label, url, size = size, viewable = viewable, onDoubleTap = onDoubleTap)
         StatusDot(
             status = status,
             modifier = Modifier.align(Alignment.BottomEnd),

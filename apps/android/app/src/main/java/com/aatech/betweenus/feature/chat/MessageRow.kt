@@ -91,6 +91,7 @@ import com.aatech.betweenus.core.data.Markup
 import com.aatech.betweenus.core.data.MessageAttachment
 import com.aatech.betweenus.core.data.MessageCustomEmoji
 import com.aatech.betweenus.core.data.PublicUser
+import com.aatech.betweenus.core.data.UserSummary
 import com.aatech.betweenus.core.store.Conversation
 import com.aatech.betweenus.core.store.ReadableMessage
 import com.aatech.betweenus.core.store.Workspace
@@ -156,6 +157,13 @@ fun MessageRow(
     /** Who has read this far. Empty for anything but your own newest messages. */
     receipts: List<ChannelReadReceipt> = emptyList(),
     onLongPress: () -> Unit,
+    /**
+     * A double tap opens who wrote it. The phone's answer to the desktop's
+     * hover card: a single tap on a row does nothing, a long press opens the
+     * message's own actions and a swipe replies, so this was the one gesture
+     * still free for the one question the row cannot answer - who is this.
+     */
+    onOpenProfile: (UserSummary) -> Unit = {},
     /** Swiping the row rightwards answers it, the way every phone chat does. */
     onReply: () -> Unit = {},
     onOpenSeenBy: () -> Unit = {},
@@ -336,6 +344,10 @@ fun MessageRow(
             .combinedClickable(
                 onClick = {},
                 onLongClick = { if (!message.deleted) onLongPress() },
+                // A tombstone has no author worth opening: the row says the
+                // message was deleted, and whose it was is what it stopped
+                // being about.
+                onDoubleClick = { if (!message.deleted) onOpenProfile(message.author) },
             )
             .padding(
                 horizontal = 10.dp,

@@ -27,11 +27,14 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import com.aatech.betweenus.core.crypto.BackupSecret
 import com.aatech.betweenus.core.crypto.E2ee
 import com.aatech.betweenus.core.crypto.IdentityStatus
+import com.aatech.betweenus.core.data.ABOUT_MAX_LENGTH
+import com.aatech.betweenus.core.data.DEFAULT_ABOUT
 import com.aatech.betweenus.core.data.BetweenUsApi
 import com.aatech.betweenus.core.data.Endpoint
 import com.aatech.betweenus.core.data.PublicUser
@@ -62,6 +65,7 @@ fun AccountSecurityScreen(
     val identity by E2ee.status.collectAsState()
 
     var displayName by remember { mutableStateOf(user.displayName) }
+    var about by remember { mutableStateOf(user.about) }
     var note by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
     var passphrase by remember { mutableStateOf("") }
@@ -129,6 +133,16 @@ fun AccountSecurityScreen(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+                    if (user.about.isNotBlank()) {
+                        Text(
+                            text = user.about,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.padding(top = 2.dp),
+                        )
+                    }
                 }
             }
 
@@ -150,14 +164,56 @@ fun AccountSecurityScreen(
                     enabled = !busy,
                 )
                 Spacer(Modifier.height(10.dp))
+                BetweenUsField(
+                    label = "About",
+                    value = about,
+                    // Cut by code point, so an emoji is one character to the
+                    // person typing it - and so the count here can never exceed
+                    // the server's, which measures UTF-16 units.
+                    onValueChange = { text ->
+                        val points = text.codePoints().toArray()
+                        about = if (points.size <= ABOUT_MAX_LENGTH) {
+                            text
+                        } else {
+                            String(points, 0, ABOUT_MAX_LENGTH)
+                        }
+                        note = null
+                    },
+                    placeholder = DEFAULT_ABOUT,
+                    imeAction = ImeAction.Done,
+                    enabled = !busy,
+                )
+                Spacer(Modifier.height(4.dp))
+                val left = ABOUT_MAX_LENGTH - about.codePointCount(0, about.length)
+                Text(
+                    // The count appears only in the last quarter, which is
+                    // where somebody is deciding what to leave out. A counter
+                    // that is always there is a number nobody reads.
+                    text = if (left <= ABOUT_MAX_LENGTH / 4) {
+                        "$left left · shown on your profile to anyone who can see your name"
+                    } else {
+                        "Shown on your profile to anyone who can see your name."
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(10.dp))
                 BetweenUsButton(
                     text = "Save Profile",
                     busy = busy,
-                    enabled = displayName.isNotBlank() && displayName != user.displayName,
+                    // An empty about line is a value - "draw nothing under my
+                    // name" - so only the display name has a blank to refuse.
+                    enabled = displayName.isNotBlank() &&
+                        (displayName != user.displayName || about != user.about),
                     onClick = {
                         act {
                             Session.updateUser(
-                                BetweenUsApi.updateAccount(displayName.trim(), null, null),
+                                BetweenUsApi.updateAccount(
+                                    displayName.trim(),
+                                    null,
+                                    null,
+                                    about.trim(),
+                                ),
                             )
                         }
                     },

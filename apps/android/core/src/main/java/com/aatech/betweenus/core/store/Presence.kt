@@ -36,6 +36,16 @@ object Presence {
     private val _voice = MutableStateFlow<Map<String, List<String>>>(emptyMap())
     val voice: StateFlow<Map<String, List<String>>> = _voice.asStateFlow()
 
+    /**
+     * userId -> when that person was last here, ISO-8601.
+     *
+     * Only filled for people who are away: the server sends no timestamp for
+     * anybody online, because "online, last seen a moment ago" says one thing
+     * twice and the second half is the half that goes stale.
+     */
+    private val _lastSeen = MutableStateFlow<Map<String, String>>(emptyMap())
+    val lastSeen: StateFlow<Map<String, String>> = _lastSeen.asStateFlow()
+
     private val _self = MutableStateFlow(PresenceStatus.ONLINE)
     val self: StateFlow<PresenceStatus> = _self.asStateFlow()
 
@@ -75,9 +85,15 @@ object Presence {
                 }
 
                 "presence.changed" -> event.optJSONObject("user")?.let { user ->
-                    _statuses.update {
-                        it + (user.optString("userId") to PresenceStatus.of(user.optString("status")))
-                    }
+                    val userId = user.optString("userId")
+                    _statuses.update { it + (userId to PresenceStatus.of(user.optString("status"))) }
+
+                    // Kept rather than replaced when the event carries nothing:
+                    // somebody coming online sends no timestamp, and dropping
+                    // the old one would leave the line under their name blank
+                    // for the rest of the session once they went away again.
+                    val seen = user.optString("lastSeenAt")
+                    if (seen.isNotBlank()) _lastSeen.update { it + (userId to seen) }
                 }
 
                 "voice.changed" -> event.optJSONObject("voice")?.let { room ->
@@ -105,9 +121,22 @@ object Presence {
         _statuses.value = emptyMap()
         _typing.value = emptyMap()
         _voice.value = emptyMap()
+        _lastSeen.value = emptyMap()
     }
 
     fun statusOf(userId: String): PresenceStatus = _statuses.value[userId] ?: PresenceStatus.OFFLINE
+
+    fun lastSeenOf(userId: String): String? = _lastSeen.value[userId]
+
+    /**
+     * "When were these people last here?"
+     *
+     * Called when a conversation goes on screen or a profile sheet opens. A
+     * `presence.sync` carries only the people who *are* here, so the one case
+     * a last-seen line exists for is the one case the socket says nothing about
+     * until it is asked.
+     */
+    fun askLastSeen(userIds: List<String>) = PresenceSocket.query(userIds.filter { it.isNotBlank() })
 
     fun setStatus(status: PresenceStatus) {
         _self.value = status

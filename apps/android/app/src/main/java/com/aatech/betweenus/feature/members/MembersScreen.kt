@@ -83,6 +83,8 @@ fun MembersScreen(
     var candidates by remember { mutableStateOf<List<UserSummary>>(emptyList()) }
     var editing by remember { mutableStateOf<ServerMember?>(null) }
     var menuFor by remember { mutableStateOf<ServerMember?>(null) }
+    /** Whose profile the sheet is showing, or null. Opened by a double tap. */
+    var profileOf by remember { mutableStateOf<UserSummary?>(null) }
 
     LaunchedEffect(serverId) { serverId?.let { Workspace.loadMembers(it, force = true) } }
 
@@ -227,6 +229,7 @@ fun MembersScreen(
                     self = member.userId == selfId,
                     onOpenDirect = { openDirect(member) },
                     onMenu = { menuFor = member },
+                    onOpenProfile = { profileOf = member.summary },
                 )
             }
 
@@ -238,9 +241,14 @@ fun MembersScreen(
                     self = member.userId == selfId,
                     onOpenDirect = { openDirect(member) },
                     onMenu = { menuFor = member },
+                    onOpenProfile = { profileOf = member.summary },
                 )
             }
         }
+    }
+
+    profileOf?.let { person ->
+        ProfileSheet(person = person, onDismiss = { profileOf = null })
     }
 
     menuFor?.let { member ->
@@ -286,6 +294,7 @@ private fun MemberRow(
     self: Boolean,
     onOpenDirect: () -> Unit,
     onMenu: () -> Unit,
+    onOpenProfile: () -> Unit,
 ) {
     ListRow(
         title = member.label,
@@ -297,6 +306,9 @@ private fun MemberRow(
                 url = member.avatarUrl?.let { Endpoint.absolute(it) },
                 status = status,
                 size = 36.dp,
+                // The same second tap that opens a profile from a message.
+                // One question, one gesture, wherever a face is drawn.
+                onDoubleTap = onOpenProfile,
             )
         },
         trailing = {

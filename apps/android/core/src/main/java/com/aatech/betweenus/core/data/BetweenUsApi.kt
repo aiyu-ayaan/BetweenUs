@@ -20,6 +20,8 @@ data class PublicUser(
     val username: String,
     val displayName: String,
     val avatarUrl: String?,
+    /** The line under the name on a profile card. See `ABOUT_MAX_LENGTH`. */
+    val about: String = "",
     val role: String,
     /**
      * This account's own disappearing window in seconds, or null for "keep
@@ -32,7 +34,7 @@ data class PublicUser(
     val messageTtlSeconds: Int? = null,
 ) {
     val label: String get() = displayName.ifBlank { username }
-    val summary: UserSummary get() = UserSummary(id, username, displayName, avatarUrl)
+    val summary: UserSummary get() = UserSummary(id, username, displayName, avatarUrl, about)
 
     /** The "@name" line, or null when it would only repeat [label]. */
     val handle: String? get() = summary.handle
@@ -44,6 +46,7 @@ data class PublicUser(
             username = json.optString("username"),
             displayName = json.optString("displayName"),
             avatarUrl = json.stringOrNull("avatarUrl"),
+            about = json.optString("about"),
             role = json.optString("role", "USER"),
             messageTtlSeconds = if (json.isNull("messageTtlSeconds")) null
             else json.optInt("messageTtlSeconds").takeIf { it > 0 },
@@ -106,12 +109,20 @@ object BetweenUsApi {
 
     suspend fun me(): PublicUser = io { PublicUser.from(authed("GET", "/api/v1/auth/me")) }
 
-    suspend fun updateAccount(displayName: String?, username: String?, avatarUrl: String?): PublicUser =
+    suspend fun updateAccount(
+        displayName: String?,
+        username: String?,
+        avatarUrl: String?,
+        about: String? = null,
+    ): PublicUser =
         io {
             val body = JSONObject()
             displayName?.let { body.put("displayName", it) }
             username?.let { body.put("username", it) }
             avatarUrl?.let { body.put("avatarUrl", it) }
+            // An empty string is a value here - "draw no line under my name" -
+            // so it is null that means "leave it alone", as it does above.
+            about?.let { body.put("about", it) }
             PublicUser.from(authed("PATCH", "/api/v1/auth/account", body))
         }
 
