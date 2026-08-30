@@ -26,14 +26,38 @@ object PendingShare {
     private val _uris = MutableStateFlow<List<Uri>>(emptyList())
     val uris: StateFlow<List<Uri>> = _uris.asStateFlow()
 
+    /**
+     * The channel these files have been aimed at, once somebody has said.
+     *
+     * Null until then, and that is the whole of it: a share with no target has
+     * not been answered yet and no conversation may take it. Without this the
+     * picker could not be seen. A share arriving while a channel was already
+     * open put the files in front of two things at once - the picker, and that
+     * channel's chat screen, which claimed them on sight and cleared the list
+     * the picker was being shown for. The picker appeared and vanished inside
+     * a frame, and the files landed in whichever conversation happened to be
+     * open, which is exactly the behaviour the picker was added to end.
+     */
+    private val _target = MutableStateFlow<String?>(null)
+    val target: StateFlow<String?> = _target.asStateFlow()
+
     /** Appended, not replaced: two shares in a row are two lots of files. */
     fun offer(incoming: List<Uri>) {
         if (incoming.isEmpty()) return
         _uris.value = _uris.value + incoming
+        // A second share is a second question. Whatever the last one was aimed
+        // at, this one has not been answered.
+        _target.value = null
     }
 
-    /** Taken once, by the conversation they were dropped into. */
+    /** Where the picker said they are going. */
+    fun aim(channelId: String) {
+        _target.value = channelId
+    }
+
+    /** Taken once, by the conversation they were aimed at. */
     fun clear() {
         _uris.value = emptyList()
+        _target.value = null
     }
 }

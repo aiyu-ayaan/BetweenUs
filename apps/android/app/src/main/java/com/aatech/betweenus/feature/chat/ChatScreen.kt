@@ -346,10 +346,17 @@ fun ChatScreen(
      * is open - which is what makes the flow from the system share sheet
      * "pick BetweenUs, look at what you are sending, send it" rather than a
      * photo appearing in a channel nobody chose. Taken once; see [PendingShare].
+     *
+     * Only by the conversation the picker aimed them at. "Whichever chat is
+     * open" is what this used to be, and it meant a chat screen underneath the
+     * picker claimed the files and cleared them before anybody could choose -
+     * so the picker flashed out of existence and the share landed wherever the
+     * app happened to be standing.
      */
     val shared by PendingShare.uris.collectAsState()
-    LaunchedEffect(shared) {
-        if (shared.isEmpty()) return@LaunchedEffect
+    val shareTarget by PendingShare.target.collectAsState()
+    LaunchedEffect(shared, shareTarget) {
+        if (shared.isEmpty() || shareTarget != channelId) return@LaunchedEffect
         // Described first, cleared last. Clearing is a state change this
         // effect is keyed on, so doing it first would cancel this coroutine
         // in the middle of reading the names off the content resolver.

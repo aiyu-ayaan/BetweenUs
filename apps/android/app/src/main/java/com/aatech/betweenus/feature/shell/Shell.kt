@@ -668,6 +668,10 @@ fun Shell(user: PublicUser) {
                     count = shareWaiting.size,
                     onPick = { picked, server ->
                         choosingShareTarget = false
+                        // Aimed before the channel is opened. The chat screen
+                        // takes the files only once they are addressed to it,
+                        // so saying where they go has to happen first.
+                        PendingShare.aim(picked)
                         openChannel(picked, server)
                     },
                     onCancel = {
