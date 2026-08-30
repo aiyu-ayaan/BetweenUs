@@ -1,20 +1,30 @@
 /**
  * Where a message is being forwarded to.
  *
- * The server it is already in, and every other text channel of it. Not the
- * whole workspace: a forward is nearly always "the rest of this server needs
- * to see this", and the one answer that is never right is the channel it is
- * already in - so that one is left out rather than offered and then explained.
+ * Everywhere it could go, minus the one place it already is. This started as
+ * the current server's other text channels and that was too narrow to be
+ * usable: a server with one channel in it - which is every server on the day
+ * it is made - offered nothing at all, and the dialog's whole answer was that
+ * there was no answer. A forward is not a per-server action.
  *
- * A direct message has no server, so it offers the other conversations
- * instead. The same rule read the other way: everywhere this could go that is
- * not where it already is.
+ * So it is every direct message and every server's text channels, searchable,
+ * in one column - the same list the phone's forward sheet draws, because two
+ * pickers that answer "which conversation" differently is one of them being
+ * wrong.
+ *
+ * The store only holds the *active* server's channels, since `selectServer`
+ * clears them on every switch. The other servers are fetched here, once, while
+ * the dialog is open, and thrown away with it - a list this is read from for
+ * as long as it takes to click a row does not belong in the store, where it
+ * would go stale for the sidebar to trip over.
  *
  * Nothing is sent from here. Picking hands the channel back, and the send
  * happens on the chat view where a failure has somewhere to be reported.
  */
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import type { Channel } from '@betweenus/shared-types';
 import { useChatStore } from '../../stores/chat';
+import { api } from '../../services/api';
 import { HashIcon, MessageIcon, SearchIcon } from '../../components/icons';
 
 export function ForwardDialog({
@@ -23,12 +33,15 @@ export function ForwardDialog({
   onClose,
 }: {
   fromChannelId: string;
-  onPick: (channelId: string) => void;
+  onPick: (channelId: string, name: string) => void;
   onClose: () => void;
 }): JSX.Element {
-  const channels = useChatStore((state) => state.channels);
-  const directs = useChatStore((state) => state.directs);
   const servers = useChatStore((state) => state.servers);
+  const loadedChannels = useChatStore((state) => state.channels);
+  const activeServerId = useChatStore((state) => state.activeServerId);
+  const directs = useChatStore((state) => state.directs);
+  const loadDirects = useChatStore((state) => state.loadDirects);
+  const [fetched, setFetched] = useState<Record<string, Channel[]>>({});
   const [query, setQuery] = useState('');
 
   useEffect(() => {
@@ -39,26 +52,56 @@ export function ForwardDialog({
     return () => document.removeEventListener('keydown', escape);
   }, [onClose]);
 
-  const source = [...channels, ...directs].find((channel) => channel.id === fromChannelId);
-  const serverId = source?.serverId ?? null;
-  const server = servers.find((entry) => entry.id === serverId);
+  useEffect(() => {
+    let live = true;
+    void loadDirects().catch(() => undefined);
+    // A server whose channels have never been opened has none in the store, and
+    // a list that is short because nothing fetched it looks exactly like a list
+    // that is short because there is nowhere to send it.
+    for (const server of servers) {
+      if (server.id === activeServerId) continue;
+      void api
+        .channels(server.id)
+        .then((channels) => {
+          if (live) setFetched((known) => ({ ...known, [server.id]: channels }));
+        })
+        .catch(() => undefined);
+    }
+    return () => {
+      live = false;
+    };
+    // Servers do not change while a dialog is open; this is the one fetch pass.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const needle = query.trim().toLowerCase();
   const matches = (text: string): boolean =>
     needle.length === 0 || text.toLowerCase().includes(needle);
 
-  const targets = (
-    serverId === null
-      ? directs.filter((direct) => direct.id !== fromChannelId)
-      : channels.filter(
-          (channel) =>
-            channel.serverId === serverId &&
-            channel.type === 'TEXT' &&
-            channel.id !== fromChannelId,
-        )
-  ).filter((channel) => matches(channel.name));
+  const people = directs.filter(
+    (direct) => direct.id !== fromChannelId && matches(direct.name),
+  );
 
-  const heading = serverId === null ? 'Direct messages' : (server?.name ?? 'This server');
+  const sections = useMemo(
+    () =>
+      servers
+        .map((server) => ({
+          server,
+          channels: (server.id === activeServerId
+            ? loadedChannels
+            : (fetched[server.id] ?? [])
+          ).filter(
+            (channel) =>
+              channel.type === 'TEXT' && channel.id !== fromChannelId && matches(channel.name),
+          ),
+        }))
+        .filter((section) => section.channels.length > 0),
+    // `matches` closes over `needle`, which is what actually changes here.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [servers, activeServerId, loadedChannels, fetched, fromChannelId, needle],
+  );
+
+  const empty = people.length === 0 && sections.length === 0;
 
   return (
     <div
@@ -80,7 +123,7 @@ export function ForwardDialog({
               autoFocus
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder={serverId === null ? 'A name' : 'A channel'}
+              placeholder="A name or a channel"
               aria-label="Search for somewhere to forward this to"
               className="min-w-0 flex-1 bg-transparent text-sm text-slate-100 outline-none placeholder:text-slate-600"
             />
@@ -88,40 +131,37 @@ export function ForwardDialog({
         </div>
 
         <div className="overflow-y-auto px-2 py-2">
-          {targets.length === 0 ? (
+          {empty ? (
             <p className="px-3 py-6 text-center text-sm text-slate-500">
               {needle.length > 0
                 ? 'Nothing by that name.'
-                : serverId === null
-                  ? 'No other conversation to send it to yet.'
-                  : 'This server has nowhere else to put it yet.'}
+                : 'Start a conversation or make another channel, and it will be on this list.'}
             </p>
           ) : (
             <ul>
-              {[heading].map((label) => (
-                <li
-                  key={label}
-                  className="px-3 pb-1 pt-2 text-xs font-semibold uppercase tracking-wide text-slate-500"
-                >
-                  {label}
-                </li>
+              {people.length > 0 && <Heading label="Direct messages" />}
+              {people.map((direct) => (
+                <Row
+                  key={direct.id}
+                  name={direct.name}
+                  icon={<MessageIcon className="h-4 w-4 shrink-0 text-slate-500" />}
+                  onClick={() => onPick(direct.id, direct.name)}
+                />
               ))}
-              {targets.map((channel) => (
-                <li key={channel.id}>
-                  <button
-                    type="button"
-                    onClick={() => onPick(channel.id)}
-                    className="flex w-full cursor-pointer items-center gap-3 rounded-lg px-3 py-2 text-left transition-colors duration-150 hover:bg-white/[0.05]"
-                  >
-                    {serverId === null ? (
-                      <MessageIcon className="h-4 w-4 shrink-0 text-slate-500" />
-                    ) : (
-                      <HashIcon className="h-4 w-4 shrink-0 text-slate-500" />
-                    )}
-                    <span className="min-w-0 flex-1 truncate text-sm text-slate-100">
-                      {channel.name}
-                    </span>
-                  </button>
+
+              {sections.map(({ server, channels }) => (
+                <li key={server.id}>
+                  <ul>
+                    <Heading label={server.name} />
+                    {channels.map((channel) => (
+                      <Row
+                        key={channel.id}
+                        name={channel.name}
+                        icon={<HashIcon className="h-4 w-4 shrink-0 text-slate-500" />}
+                        onClick={() => onPick(channel.id, `#${channel.name}`)}
+                      />
+                    ))}
+                  </ul>
                 </li>
               ))}
             </ul>
@@ -137,5 +177,36 @@ export function ForwardDialog({
         </button>
       </div>
     </div>
+  );
+}
+
+function Heading({ label }: { label: string }): JSX.Element {
+  return (
+    <li className="px-3 pb-1 pt-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+      {label}
+    </li>
+  );
+}
+
+function Row({
+  name,
+  icon,
+  onClick,
+}: {
+  name: string;
+  icon: JSX.Element;
+  onClick: () => void;
+}): JSX.Element {
+  return (
+    <li>
+      <button
+        type="button"
+        onClick={onClick}
+        className="flex w-full cursor-pointer items-center gap-3 rounded-lg px-3 py-2 text-left transition-colors duration-150 hover:bg-white/[0.05]"
+      >
+        {icon}
+        <span className="min-w-0 flex-1 truncate text-sm text-slate-100">{name}</span>
+      </button>
+    </li>
   );
 }

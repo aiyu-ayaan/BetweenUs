@@ -898,13 +898,9 @@ function MessageList({
         <ForwardDialog
           fromChannelId={channel.id}
           onClose={() => setForwarding(null)}
-          onPick={(target) => {
+          onPick={(target, name) => {
             const id = forwarding;
             setForwarding(null);
-            const name =
-              [...useChatStore.getState().channels, ...useChatStore.getState().directs].find(
-                (entry) => entry.id === target,
-              )?.name ?? 'the conversation';
             // Re-uploading a video takes as long as sending one did, so it
             // says so first and corrects itself when it lands.
             setForwardNote(`Forwarding to ${name}…`);

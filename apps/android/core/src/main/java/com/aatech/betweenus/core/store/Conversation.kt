@@ -446,13 +446,25 @@ object Conversation {
         viewOnce: Boolean = false,
         /** Set when this is somebody else's message, carried in from elsewhere. */
         forwardedFrom: MessageForward? = null,
+        /**
+         * The emoji pictures to carry, when the caller already knows them.
+         *
+         * A forward is why: its text was written in another server, so working
+         * them out from the destination would drop exactly the shortcodes the
+         * pictures exist to keep readable.
+         */
+        emoji: List<MessageCustomEmoji>? = null,
     ) {
         // The pictures for whatever custom emoji the text uses, taken from the
         // server this channel belongs to. They travel inside the envelope, so a
         // reader who is not in that server still sees them.
-        val body =
-            MessageBody(text, attachments, replyTo, usedEmoji(channelId, text), forwardedFrom)
-                .encode()
+        val body = MessageBody(
+            text,
+            attachments,
+            replyTo,
+            emoji ?: usedEmoji(channelId, text),
+            forwardedFrom,
+        ).encode()
         val sealed = E2ee.encryptForChannel(channelId, body)
         // The keys go outside the envelope as well as inside it: the server
         // cannot read the manifest, and without them nothing could ever sweep
@@ -516,6 +528,10 @@ object Conversation {
                 author = readable.message.author.label,
                 channel = originName(from),
             ),
+            // The pictures the original carried, not the destination's. The
+            // text was written somewhere else and its shortcodes mean what
+            // they meant there.
+            emoji = readable.body.emoji,
         )
     }
 

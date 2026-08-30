@@ -594,10 +594,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
       );
     }
 
-    const target = [...get().channels, ...get().directs].find(
-      (channel) => channel.id === toChannelId,
-    );
-    const emoji = usedEmoji(original.content, emojiFor(target?.serverId ?? null));
+    // The pictures the original carried, not the destination's. The text was
+    // written somewhere else - possibly in another server entirely - and its
+    // shortcodes mean what they meant there. Working them out again from where
+    // it is landing would drop exactly the ones the pictures exist to keep
+    // readable.
+    const emoji = original.emoji ?? [];
     const envelope = await encryptForChannel(
       toChannelId,
       encodeBody({
