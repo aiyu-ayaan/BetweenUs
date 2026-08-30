@@ -111,7 +111,8 @@ feature/remote          feature/update        feature/voice
   the web client (see [Architecture Overview](/architecture/overview)).
 - **`settings`** — modular Settings Hub (`Route.Settings`) structured hierarchically into dedicated sub-setting pages:
   - **`AccountSecurityScreen`** (`Route.AccountSettings`) — Profile, display name, avatar customization, password management, and E2EE key/passphrase backup.
-  - **`VoiceSettingsScreen`** (`Route.VoiceSettings`) — Audio routing, input device, HiFi microphone mode, noise/echo processing, and pre-gate sensitivity dBFS meter.
+  - **`VoiceSettingsScreen`** (`Route.VoiceSettings`) — Audio routing, input device, HiFi microphone mode, three-level noise suppression, echo cancellation, automatic gain
+    control, and pre-gate sensitivity dBFS meter.
   - **`NotificationSettingsScreen`** (`Route.NotificationSettings`) — Push preferences and OS notification integration.
   - **`DeviceSettingsScreen`** (`Route.DeviceSettings`) — "This Device" diagnostics, local crash reports, call data history, and auto-updates.
   - **`PermissionsScreen`** (`Route.Permissions`) — Consolidated runtime permissions overview with live health meters and batch grant actions.
@@ -347,6 +348,65 @@ tombstone has an empty body and names nothing) and calls `MediaCache.forget`,
 which drops the bitmaps and deletes the video file. The wire between the two
 lives in `BetweenUsApp`, because the cache is in the app module and the store is
 in core.
+
+## Who cancels the echo, and when the setting takes effect
+
+There are two sets of audio switches on Android and they are not the same
+switches, which is what made the settings screen partly cosmetic.
+
+**`AudioPrefs.captureConstraints()`** are `MediaConstraints` on the WebRTC
+audio source — `googEchoCancellation`, `googNoiseSuppression`,
+`googAutoGainControl`. They decide *whether* the microphone is processed, they
+are read every time a call starts a microphone, and they always worked.
+
+**`JavaAudioDeviceModule.setUseHardwareAcousticEchoCanceler` /
+`setUseHardwareNoiseSuppressor`** decide *who does the processing*. `true`
+hands the job to the OEM's own canceller and stands WebRTC's AEC3 and NS down
+in favour of it. Both were hardcoded `true` and the module was built once per
+process, so neither switch in the settings screen reached them at all.
+
+That is the echo people report. An OEM echo canceller is tuned for the
+earpiece, where the coupling from speaker to microphone is weak; on the
+loudspeaker the coupling is an order of magnitude harder and the OEM path is
+frequently not up to it. WebRTC's own AEC3 costs battery and is device
+independent, which is the trade worth making exactly there.
+
+So `AudioPrefs.hardwareProcessingFor` prefers the software path in two cases,
+and only two:
+
+| Situation | Echo cancelled by | Noise suppressed by |
+| --- | --- | --- |
+| Earpiece or headset, suppression `STANDARD` | The phone | The phone |
+| **Loudspeaker** (including `AUTO` with no headset present) | **WebRTC AEC3** | The phone |
+| Suppression `HIGH` | **WebRTC AEC3** | **WebRTC NS** |
+| Echo cancellation off / suppression `OFF` | Nobody | Nobody |
+| High-fidelity microphone mode | Nobody | Nobody |
+
+The loudspeaker case is decided by `CallAudio.onLoudspeaker`, which runs the
+same `wantedRoute()` and `resolve()` a live call runs rather than reading the
+stored preference. `AUTO` is what almost everybody is on, and `AUTO` with no
+headset present *is* the loudspeaker — reading the preference alone would
+answer "not the speaker" for the exact configuration that echoes worst.
+
+**Noise suppression is three levels, not a switch**, matching the desktop's
+`NoiseSuppression` so a setting means the same thing on both: `OFF` is no
+suppression, `STANDARD` is what the switch turned on used to do, and `HIGH`
+forces the software path — more aggressive, more battery, and identical on
+every handset. The level is stored under a new key (`ns.level`); the old
+boolean (`ns`) is still read and never written, so an existing `true` migrates
+to `STANDARD` and `false` to `OFF`. `AudioPrefs.suppressionOf` is that decision
+on its own and is unit-tested, because a migration that silently fails looks
+exactly like the app working while resetting everybody's setting.
+
+**The setting applies from the next call, and the screen says so.** A device
+module cannot be swapped underneath a `PeerConnectionFactory` — the factory
+takes it at construction — so honouring a change means disposing the factory,
+and the factory owns every live peer connection, the microphone track and the
+video source. Rebuilding mid-call would drop every peer to rebuild them a
+moment later, which is worse than waiting. `VoiceEngine.refreshAudioStack()`
+therefore runs at the top of `join()`, before anything is built from the
+factory and after the previous call's teardown, and does nothing at all when
+the settings are unchanged.
 
 ## Input sensitivity, and the hook that makes it possible
 
