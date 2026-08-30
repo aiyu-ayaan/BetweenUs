@@ -19,6 +19,7 @@ import { pruneExpired, useChatStore, type DecryptedMessage } from '../../stores/
 import { UNDECRYPTABLE } from '../../services/e2ee';
 import { api } from '../../services/api';
 import { useAuthStore } from '../../stores/auth';
+import { useFriendsStore } from '../../stores/friends';
 import { usePresenceStore } from '../../stores/presence';
 import { useIsMobile } from '../../services/responsive';
 import { Avatar } from '../../components/Avatar';
@@ -176,6 +177,14 @@ export function ChatView({
   const { messages, loadingMessages, error } = useChatStore();
   const channel = useChatStore((state) => state.activeChannel());
   const isMobile = useIsMobile();
+  // The person on the other end of a direct message. A `Channel` carries their
+  // name and nothing else, so the header used to draw an initial next to the
+  // very sidebar row that was showing their photo; the friends store is where
+  // the picture lives.
+  const activeId = useChatStore((state) => state.activeChannelId);
+  const peer = useFriendsStore((state) =>
+    state.directChannels.find((direct) => direct.channelId === activeId)?.participant ?? null,
+  );
 
   /**
    * Messages do not disappear on their own while a window is open.
@@ -263,7 +272,12 @@ export function ChatView({
 
         <div className="flex min-w-0 items-center gap-1.5 md:gap-2">
           {isDirect ? (
-            <Avatar name={channel.name} size="sm" ringColour="border-surface-900" />
+            <Avatar
+              name={peer?.displayName ?? channel.name}
+              avatarUrl={peer?.avatarUrl}
+              size="sm"
+              ringColour="border-surface-900"
+            />
           ) : channel.isPrivate ? (
             <LockIcon className="h-5 w-5 shrink-0 text-slate-500" />
           ) : (
