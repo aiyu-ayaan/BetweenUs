@@ -145,6 +145,36 @@ measured only over connected links: a call where none are connected shows
 "could not be reached" alone, rather than that plus an input-device dropdown
 that cannot fix it. See `notBeingHeard` in `call-stats.ts` and `CallStats.kt`.
 
+## Choosing a microphone
+
+**A device id is named with `exact`, always.** The bare `deviceId: "abc"` form
+is `ideal` — advisory. The browser scores every microphone by fitness distance
+and is free to hand back a different one, and Chromium does: it opens whatever
+the operating system calls the default. Nothing reports this, because a capture
+that ignored an advisory constraint is not an error. Every pick therefore
+reopened the same microphone, which is "changing the input device does not
+change the input device".
+
+`micCapture` and the settings level meter both build the constraint through
+`deviceConstraint` in `voice-quality.ts`, so there is one answer to this rather
+than one per capture site.
+
+**What `exact` costs, and where it is paid.** A device unplugged since it was
+chosen is now refused rather than silently substituted. The substitution is
+still wanted, so it is made deliberately in `openAudioCapture`
+(`audio-devices.ts`): on `OverconstrainedError` or `NotFoundError` the capture
+is retried once with the device constraint dropped and every other constraint
+intact. A denied permission is re-thrown untouched — retrying it would only be
+denied again, while making the error say something it does not mean.
+
+The person is still hearing a microphone they did not choose, so `DeviceSelect`
+says so above the dropdown rather than leaving it to be discovered mid-call.
+
+This is a browser-capture concern only. Android does not choose a microphone
+through constraints: `CallAudio.kt` routes the whole call to one communication
+device through `AudioManager`, which is why choosing a headset's microphone
+there also puts the call in that headset.
+
 ## What decides a share's picture
 
 Two mechanisms, and only one of them is negotiated.
