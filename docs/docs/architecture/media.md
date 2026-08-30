@@ -138,6 +138,34 @@ apart because only one of them is fixable from the client:
 The client cannot tell which it is facing, so it assumes the second and
 retries properly before concluding the first. See below.
 
+## One signal at a time
+
+Negotiation is the WebRTC spec's perfect-negotiation shape: politeness is
+decided by comparing peer ids, the impolite side offers, and on a collision the
+polite side yields. That algorithm assumes something the transport does not
+provide on its own — **that one signal is fully applied before the next one is
+looked at.**
+
+Every client takes signals off a socket that does not wait for the handler.
+Applying a description is asynchronous several times over: verifying the DTLS
+fingerprint can go to the network for a fresh channel key, and adopting
+transceivers, creating an answer and setting it are each their own await. So two
+descriptions arriving close together ran *concurrently* and interleaved, and
+perfect negotiation's decisions — is this a collision, is there still an offer
+outstanding — were read from `signalingState` and then acted on well after
+another run had moved the connection on.
+
+The case that showed it: an offer and a re-offer from the connection chaser
+landing together. Both passed the collision check while the state was still
+`have-remote-offer`, the first drove the connection to `stable` with its answer,
+and the second reached `setLocalDescription('answer')` a moment later —
+`Called in wrong state: stable`, in red, on a call that was otherwise fine.
+
+So each peer applies its signals through **one queue**, and the whole receive
+path is a critical section over that peer's connection. Per peer and never per
+call: separate connections share no state, and queueing them behind each other
+would make the slowest peer's key re-read everybody else's problem.
+
 ## When a link breaks
 
 A peer connection that stops carrying media is not a peer connection that is
@@ -272,3 +300,6 @@ only when, a media server exists to carry it.
 - Never require an inbound port for media.
 - Never hand a client an address only the server can reach — peers exchange
   ICE candidates and work it out themselves.
+- Never apply two signals to one peer connection at once. Perfect negotiation
+  reads `signalingState` to decide what to do; a concurrent run invalidates that
+  reading before it is acted on.
