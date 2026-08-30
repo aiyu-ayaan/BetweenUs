@@ -133,21 +133,30 @@ takes a call notification away is the roster going empty, and somebody who
 rings and then does not join produces no roster at all — which would otherwise
 leave an ongoing incoming-call notification for a call that never existed.
 
-### Answering on one device stops the rest
+### Dealing with a ring on one device stops the rest
 
 A ring is aimed at an **account**, and an account is not a device. It lands on
 the phone, the laptop and the browser tab alike, which is the point — but it
-means answering somewhere has to be able to take the ringer down everywhere
-else, and nothing could. The roster announcement is addressed to the channel's
-audience *minus the call's participants*, so the moment somebody answers they
-become the one account the announcement skips. The other devices rang on until
-they timed out, or until the whole call ended.
+means dealing with it somewhere has to be able to take the ringer down
+everywhere else, and nothing could.
 
-So whoever newly appears in a roster has answered that call somewhere, and gets
-a `call.answered` push. It is the third push here whose only job is to take
-something off a screen, beside `message.deleted` and `channel.read`, and it
-carries no names because there is nothing to draw. Two differences from those
-two:
+Neither half of "dealing with it" was visible. The roster announcement is
+addressed to the channel's audience *minus the call's participants*, so the
+moment somebody answers they become the one account the announcement skips.
+And declining was not sent anywhere at all — it was a local decision on
+whichever device said no. Either way the rest of the account's devices rang on
+until they timed out, or until the whole call ended.
+
+Both now produce a `call.handled` push, carrying `how`: `answered` or
+`declined`. Answering is derived — whoever newly appears in a roster has
+answered that call somewhere — and declining has an endpoint of its own,
+`POST /api/v1/calls/decline`, because it leaves no other trace. One push type
+rather than two, because the effect is identical wherever it lands and only the
+memory afterwards differs (below).
+
+It is the third push here whose only job is to take something off a screen,
+beside `message.deleted` and `channel.read`, and it carries no names because
+there is nothing to draw. Two differences from those two:
 
 - **It is urgent.** A late badge correction is cosmetic; a late one of these is
   a phone ringing in a pocket while its owner is already talking.
@@ -155,10 +164,24 @@ two:
   off can still have a ringer standing from before it did, and taking one down
   is not a notification.
 
-Clients that are running do not wait for it: the presence socket already
-carries every roster they can hear, so seeing themselves arrive in one is the
-same fact by a faster road. The push is for the devices that are not running,
-and for the window whose socket happens to be reconnecting at that moment.
+Clients that are running do not wait for the push. For an answer the presence
+socket already carries every roster they can hear, so seeing themselves arrive
+in one is the same fact by a faster road; for a decline the gateway relays
+`call.handled` straight back to that account's sockets, since no roster will
+ever mention it. The push is for the devices that are not running, and for the
+window whose socket happens to be reconnecting at that moment.
+
+**A decline has to be remembered, an answer does not.** That is the whole of
+what `how` decides. A device that merely takes the ringer down will ring again
+for the next thing that would have rung it — a roster it has not seen yet, a
+push that arrives late — so `declined` is held for as long as the call lasts
+and the empty roster at the end is what expires it. Which is one more reason
+the *end* of a call is still announced.
+
+**Nobody tells the caller.** Declining is this account talking to its own other
+devices. A ring is not a handshake — it rings out for whoever sent it either
+way — and turning a decline into a message back to them would be a different
+feature, not this one.
 
 On Android there are two things to close, not one. The shade entry is a
 notification and the full-screen ringer is an **activity**, and an activity is

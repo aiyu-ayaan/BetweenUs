@@ -170,6 +170,12 @@ notification they are talking about.
   their other devices — and *whether the room should be told*, which is only
   true at the two ends of a call. A join event alone could say the first and
   never the second.
+- `call.declined` is aimed the same way `call.ring` is, except that it is
+  aimed *back* at the account that sent it. It exists because declining leaves
+  no other trace: answering shows up in `call.roster` — the account appears in
+  it — and a decline shows up nowhere, so the phone in the other pocket had
+  nothing to go on and rang until it timed out. It is deliberately not
+  delivered to whoever rang.
 - `call.ring` sits beside `call.roster` rather than inside it. A roster is a
   fact about a channel and is broadcast to everybody who can hear it; a ring is
   aimed at one account by somebody who chose to aim it, and that difference is
