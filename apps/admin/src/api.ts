@@ -25,7 +25,11 @@ import type {
   PublicUser,
 } from '@betweenus/shared-types';
 
-const API_URL = import.meta.env.VITE_API_URL ?? '';
+// Optional chaining rather than a plain read: `import.meta.env` is Vite's, and
+// this module is also pulled in by the screens' self-checks, which run under
+// plain Node where it does not exist at all. An empty base URL is what the
+// browser bundle gets anyway when the variable is unset.
+const API_URL = import.meta.env?.VITE_API_URL ?? '';
 const REFRESH_KEY = 'betweenus.admin.refreshToken';
 
 export class ApiError extends Error {
