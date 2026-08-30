@@ -5,10 +5,8 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -16,7 +14,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -27,26 +24,21 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.pager.HorizontalPager
-import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -64,23 +56,11 @@ import com.aatech.betweenus.ui.components.BetweenUsIcons
 import com.aatech.betweenus.ui.components.Chip
 import com.aatech.betweenus.ui.components.IconAction
 import com.aatech.betweenus.ui.components.ListRow
-import com.aatech.betweenus.ui.theme.Accent
-import com.aatech.betweenus.ui.theme.Edge
-import com.aatech.betweenus.ui.theme.Ground
-import com.aatech.betweenus.ui.theme.Slate100
-import com.aatech.betweenus.ui.theme.Slate300
-import com.aatech.betweenus.ui.theme.Slate400
-import com.aatech.betweenus.ui.theme.Slate50
-import com.aatech.betweenus.ui.theme.Slate500
+import com.aatech.betweenus.ui.components.SectionLabel
 import com.aatech.betweenus.ui.theme.StatusIdle
 import com.aatech.betweenus.ui.theme.StatusOnline
-import com.aatech.betweenus.ui.theme.Surface700
-import com.aatech.betweenus.ui.theme.Surface800
-import com.aatech.betweenus.ui.theme.Surface900
-import com.aatech.betweenus.ui.theme.Surface950
-import kotlinx.coroutines.launch
 
-private data class PermissionItem(
+data class PermissionItem(
     val id: String,
     val title: String,
     val category: String,
@@ -91,23 +71,32 @@ private data class PermissionItem(
     val requiresAny: Boolean = false,
 )
 
-private fun getPermissionItems(): List<PermissionItem> {
+fun getPermissionItems(): List<PermissionItem> {
     val list = mutableListOf(
+        PermissionItem(
+            id = "notifications",
+            title = "Notifications",
+            category = "Alerts & Calls",
+            detail = "Alerts for incoming direct messages, mentions, and incoming audio/video calls.",
+            rationale = "Required on Android 13+ so the app can alert you when closed and keep call audio active in the background.",
+            icon = BetweenUsIcons.Bell,
+            permissions = listOfNotNull(BetweenUsPermissions.NOTIFICATIONS),
+        ),
         PermissionItem(
             id = "mic",
             title = "Microphone",
             category = "Calls & Voice",
-            detail = "Speaking in voice channels, 1-on-1 calls, and group calls.",
-            rationale = "Without it you can still listen to others, but won't be able to talk in calls.",
+            detail = "Speaking in voice channels, 1-on-1 audio/video calls, and recording voice notes.",
+            rationale = "Active only when participating in an ongoing call or recording a voice note. Never accessed in the background.",
             icon = BetweenUsIcons.Mic,
             permissions = listOf(BetweenUsPermissions.MICROPHONE),
         ),
         PermissionItem(
             id = "camera",
             title = "Camera",
-            category = "Calls & Media",
-            detail = "Streaming live video in calls and capturing photos to send in chat.",
-            rationale = "Only activated when you choose to turn on video or capture a photo.",
+            category = "Video & Media",
+            detail = "Streaming live video during calls and capturing instant photos to send in chats.",
+            rationale = "Active only when you choose to turn video on in a call or take a photo to attach.",
             icon = BetweenUsIcons.Video,
             permissions = listOf(BetweenUsPermissions.CAMERA),
         ),
@@ -118,25 +107,11 @@ private fun getPermissionItems(): List<PermissionItem> {
             PermissionItem(
                 id = "bluetooth",
                 title = "Nearby Devices",
-                category = "Audio Devices",
-                detail = "Detecting and routing audio seamlessly to your paired Bluetooth headsets.",
-                rationale = "Without it Android cannot switch call audio to your wireless earbuds.",
+                category = "Audio Routing",
+                detail = "Detecting, connecting, and routing call audio to Bluetooth wireless headsets and earbuds.",
+                rationale = "Without this permission, Android prevents the app from discovering and switching audio to Bluetooth headsets.",
                 icon = BetweenUsIcons.Speaker,
                 permissions = listOf(BetweenUsPermissions.BLUETOOTH),
-            ),
-        )
-    }
-
-    if (BetweenUsPermissions.NOTIFICATIONS != null) {
-        list.add(
-            PermissionItem(
-                id = "notifications",
-                title = "Notifications",
-                category = "Messages & Calls",
-                detail = "Receiving alerts for mentions, direct messages, and incoming calls when the app is in the background.",
-                rationale = "Also keeps background call audio alive when your screen is locked.",
-                icon = BetweenUsIcons.Bell,
-                permissions = listOf(BetweenUsPermissions.NOTIFICATIONS),
             ),
         )
     }
@@ -144,10 +119,10 @@ private fun getPermissionItems(): List<PermissionItem> {
     list.add(
         PermissionItem(
             id = "media",
-            title = "Photos & Videos",
+            title = "Photos & Media",
             category = "Chat Attachments",
-            detail = "Browsing and attaching your recent photos and videos directly in chats.",
-            rationale = "The system photo picker and document browser still work without this.",
+            detail = "Browsing and attaching images and videos directly from your local gallery.",
+            rationale = "The system document picker and camera remain fully functional even without this permission.",
             icon = BetweenUsIcons.Image,
             permissions = BetweenUsPermissions.MEDIA,
             requiresAny = true,
@@ -158,6 +133,7 @@ private fun getPermissionItems(): List<PermissionItem> {
 }
 
 private fun isItemGranted(context: Context, item: PermissionItem): Boolean {
+    if (item.permissions.isEmpty()) return true
     return if (item.requiresAny) {
         BetweenUsPermissions.anyGranted(context, item.permissions)
     } else {
@@ -166,7 +142,11 @@ private fun isItemGranted(context: Context, item: PermissionItem): Boolean {
 }
 
 /**
- * Interactive carousel for permissions with live progress and WhatsApp-style step progression.
+ * Comprehensive Permissions Page for BetweenUs Android.
+ *
+ * Provides a unified overview of all runtime permissions (Notifications, Microphone,
+ * Camera, Nearby Bluetooth Devices, and Media Storage), detailed rationales, live status
+ * indicators, individual request triggers, batch grant, and Android System Settings shortcuts.
  */
 @Composable
 fun PermissionsScreen(
@@ -174,7 +154,6 @@ fun PermissionsScreen(
     onBack: (() -> Unit)? = null,
 ) {
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
     val items = remember { getPermissionItems() }
 
     var tick by remember { mutableIntStateOf(0) }
@@ -184,9 +163,7 @@ fun PermissionsScreen(
     }
 
     val refusedMap = remember { mutableStateMapOf<String, Boolean>() }
-    val pagerState = rememberPagerState(initialPage = 0) { items.size }
 
-    // Launcher for single item request with auto-advance
     val singleLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions(),
     ) { results ->
@@ -194,13 +171,8 @@ fun PermissionsScreen(
         results.forEach { (perm, granted) ->
             if (!granted) refusedMap[perm] = true
         }
-        // Auto-advance to next slide if available
-        if (pagerState.currentPage < items.size - 1) {
-            scope.launch { pagerState.animateScrollToPage(pagerState.currentPage + 1) }
-        }
     }
 
-    // Launcher for "Allow All Permissions" batch request
     val allLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions(),
     ) { results ->
@@ -209,7 +181,6 @@ fun PermissionsScreen(
             if (!granted) refusedMap[perm] = true
         }
         BetweenUsPermissions.markIntroduced(context)
-        onDone()
     }
 
     val grantedStatus = remember(tick) {
@@ -226,10 +197,6 @@ fun PermissionsScreen(
         label = "permissionsProgress",
     )
 
-    val currentItem = items.getOrNull(pagerState.currentPage) ?: items.first()
-    val isCurrentGranted = grantedStatus[currentItem.id] == true
-    val isCurrentRefused = currentItem.permissions.any { refusedMap[it] == true } && !isCurrentGranted
-
     fun requestSingle(item: PermissionItem) {
         val missing = if (item.requiresAny) {
             if (BetweenUsPermissions.anyGranted(context, item.permissions)) emptyList() else item.permissions
@@ -238,8 +205,6 @@ fun PermissionsScreen(
         }
         if (missing.isNotEmpty()) {
             singleLauncher.launch(missing.toTypedArray())
-        } else if (pagerState.currentPage < items.size - 1) {
-            scope.launch { pagerState.animateScrollToPage(pagerState.currentPage + 1) }
         }
     }
 
@@ -263,348 +228,289 @@ fun PermissionsScreen(
     Column(
         Modifier
             .fillMaxSize()
-            .background(Ground)
+            .background(MaterialTheme.colorScheme.background)
             .navigationBarsPadding(),
     ) {
         // --- Top Bar ---
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(Surface950)
+                .background(MaterialTheme.colorScheme.surfaceContainer)
                 .statusBarsPadding()
-                .padding(horizontal = 8.dp, vertical = 6.dp),
+                .padding(start = 4.dp, end = 12.dp, top = 6.dp, bottom = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             if (onBack != null) {
                 IconAction(BetweenUsIcons.ChevronLeft, "Back", onBack)
             }
             Text(
-                text = "Permissions",
-                style = MaterialTheme.typography.titleMedium,
-                color = Slate50,
+                text = "App Permissions",
+                style = MaterialTheme.typography.titleLargeEmphasized,
+                color = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier
                     .weight(1f)
                     .padding(start = if (onBack != null) 4.dp else 12.dp),
             )
-            Text(
-                text = if (allGranted) "Done" else "Skip",
-                style = MaterialTheme.typography.labelLarge,
-                color = if (allGranted) StatusOnline else Slate400,
-                modifier = Modifier
-                    .clip(RoundedCornerShape(8.dp))
-                    .clickable {
-                        BetweenUsPermissions.markIntroduced(context)
-                        onDone()
-                    }
-                    .padding(horizontal = 12.dp, vertical = 8.dp),
+            Chip(
+                text = "System Settings",
+                onClick = { BetweenUsPermissions.openSettings(context) },
             )
         }
-        HorizontalDivider(color = Edge)
 
-        // --- Progress Tracker Section ---
         Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp, vertical = 12.dp),
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(bottom = 32.dp),
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = "STEP ${pagerState.currentPage + 1} OF ${items.size}",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = Slate500,
-                    fontWeight = FontWeight.Bold,
-                )
-                Text(
-                    text = "$grantedCount of ${items.size} granted",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = if (allGranted) StatusOnline else Accent,
-                    fontWeight = FontWeight.SemiBold,
-                )
-            }
-            Spacer(Modifier.height(8.dp))
-            LinearProgressIndicator(
-                progress = { progress },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(6.dp)
-                    .clip(RoundedCornerShape(3.dp)),
-                color = if (allGranted) StatusOnline else Accent,
-                trackColor = Surface700,
-                strokeCap = StrokeCap.Round,
-            )
-        }
-
-        // --- Carousel Horizontal Pager ---
-        HorizontalPager(
-            state = pagerState,
-            contentPadding = PaddingValues(horizontal = 24.dp),
-            pageSpacing = 16.dp,
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxWidth(),
-        ) { page ->
-            val item = items[page]
-            val granted = grantedStatus[item.id] == true
-            val refused = item.permissions.any { refusedMap[it] == true } && !granted
-
+            // --- Overview Health Summary Card ---
             Box(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .clip(RoundedCornerShape(20.dp))
-                    .background(Surface900)
-                    .border(1.dp, Edge, RoundedCornerShape(20.dp))
-                    .padding(20.dp),
-                contentAlignment = Alignment.Center,
+                    .fillMaxWidth()
+                    .padding(16.dp)
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(MaterialTheme.colorScheme.surfaceContainer)
+                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(16.dp))
+                    .padding(16.dp),
             ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .verticalScroll(rememberScrollState()),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center,
-                ) {
-                    // Category Pill
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(999.dp))
-                            .background(Surface800)
-                            .border(1.dp, Edge, RoundedCornerShape(999.dp))
-                            .padding(horizontal = 12.dp, vertical = 4.dp),
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Text(
-                            text = item.category.uppercase(),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = Slate400,
-                            fontWeight = FontWeight.Bold,
-                        )
-                    }
-
-                    Spacer(Modifier.height(20.dp))
-
-                    // Large Icon Tile with Status Styling
-                    Box(
-                        modifier = Modifier
-                            .size(80.dp)
-                            .clip(RoundedCornerShape(22.dp))
-                            .background(
-                                when {
-                                    granted -> StatusOnline.copy(alpha = 0.15f)
-                                    refused -> StatusIdle.copy(alpha = 0.15f)
-                                    else -> Accent.copy(alpha = 0.15f)
-                                },
-                            )
-                            .border(
-                                width = 1.dp,
-                                color = when {
-                                    granted -> StatusOnline.copy(alpha = 0.4f)
-                                    refused -> StatusIdle.copy(alpha = 0.4f)
-                                    else -> Accent.copy(alpha = 0.4f)
-                                },
-                                shape = RoundedCornerShape(22.dp),
-                            ),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        BetweenUsIcon(
-                            icon = item.icon,
-                            tint = when {
-                                granted -> StatusOnline
-                                refused -> StatusIdle
-                                else -> Accent
-                            },
-                            size = 38.dp,
-                        )
-                    }
-
-                    Spacer(Modifier.height(16.dp))
-
-                    // Title
-                    Text(
-                        text = item.title,
-                        style = MaterialTheme.typography.headlineSmall,
-                        color = Slate50,
-                        fontWeight = FontWeight.Bold,
-                        textAlign = TextAlign.Center,
-                    )
-
-                    Spacer(Modifier.height(8.dp))
-
-                    // Primary Detail
-                    Text(
-                        text = item.detail,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Slate300,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.padding(horizontal = 8.dp),
-                    )
-
-                    Spacer(Modifier.height(16.dp))
-
-                    // Rationale Box
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(Surface800)
-                            .border(1.dp, Edge, RoundedCornerShape(12.dp))
-                            .padding(horizontal = 14.dp, vertical = 10.dp),
-                    ) {
-                        Text(
-                            text = item.rationale,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = Slate400,
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-                    }
-
-                    Spacer(Modifier.height(16.dp))
-
-                    // Status Pill / Action
-                    when {
-                        granted -> {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Box(
                                 modifier = Modifier
-                                    .clip(RoundedCornerShape(999.dp))
-                                    .background(StatusOnline.copy(alpha = 0.15f))
-                                    .padding(horizontal = 14.dp, vertical = 6.dp),
+                                    .size(36.dp)
+                                    .clip(CircleShape)
+                                    .background(
+                                        if (allGranted) StatusOnline.copy(alpha = 0.15f)
+                                        else MaterialTheme.colorScheme.primaryContainer,
+                                    ),
+                                contentAlignment = Alignment.Center,
                             ) {
-                                BetweenUsIcon(BetweenUsIcons.Check, tint = StatusOnline, size = 16.dp)
+                                BetweenUsIcon(
+                                    icon = if (allGranted) BetweenUsIcons.Check else BetweenUsIcons.Shield,
+                                    tint = if (allGranted) StatusOnline else MaterialTheme.colorScheme.primary,
+                                    size = 20.dp,
+                                )
+                            }
+                            Column {
                                 Text(
-                                    text = "Permission Granted",
+                                    text = if (allGranted) "All Permissions Granted" else "Permissions Health",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                )
+                                Text(
+                                    text = "$grantedCount of ${items.size} permissions active",
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = StatusOnline,
-                                    fontWeight = FontWeight.SemiBold,
+                                    color = if (allGranted) StatusOnline else MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
                         }
-                        refused -> {
-                            Chip(
-                                text = "Refused — Open Settings",
-                                tone = StatusIdle,
-                                onClick = { BetweenUsPermissions.openSettings(context) },
-                            )
-                        }
-                        else -> {
-                            Chip(
-                                text = "Required for ${item.title}",
-                                tone = Slate400,
-                                selected = false,
-                            )
-                        }
                     }
-                }
-            }
-        }
 
-        Spacer(Modifier.height(14.dp))
+                    LinearProgressIndicator(
+                        progress = { progress },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(6.dp)
+                            .clip(RoundedCornerShape(3.dp)),
+                        color = if (allGranted) StatusOnline else MaterialTheme.colorScheme.primary,
+                        trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                        strokeCap = StrokeCap.Round,
+                    )
 
-        // --- Pager Dot Indicators ---
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.Center,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            items.indices.forEach { index ->
-                val isCurrent = index == pagerState.currentPage
-                val isGranted = grantedStatus[items[index].id] == true
-
-                Box(
-                    modifier = Modifier
-                        .padding(horizontal = 4.dp)
-                        .size(width = if (isCurrent) 22.dp else 8.dp, height = 8.dp)
-                        .clip(RoundedCornerShape(4.dp))
-                        .background(
-                            when {
-                                isCurrent -> Accent
-                                isGranted -> StatusOnline
-                                else -> Surface700
-                            },
-                        )
-                        .clickable {
-                            scope.launch { pagerState.animateScrollToPage(index) }
-                        },
-                )
-            }
-        }
-
-        Spacer(Modifier.height(14.dp))
-
-        // --- Bottom Action Footer (WhatsApp Style) ---
-        HorizontalDivider(color = Edge)
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(Surface950)
-                .padding(horizontal = 20.dp, vertical = 14.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            // Main Action Button (WhatsApp Style: Allow active item or continue)
-            BetweenUsButton(
-                text = when {
-                    allGranted -> "All Set — Continue"
-                    isCurrentGranted && pagerState.currentPage < items.size - 1 -> "Next"
-                    isCurrentGranted -> "Continue"
-                    isCurrentRefused -> "Open Settings"
-                    else -> "Allow ${currentItem.title}"
-                },
-                onClick = {
-                    when {
-                        allGranted -> {
-                            BetweenUsPermissions.markIntroduced(context)
-                            onDone()
-                        }
-                        isCurrentGranted && pagerState.currentPage < items.size - 1 -> {
-                            scope.launch { pagerState.animateScrollToPage(pagerState.currentPage + 1) }
-                        }
-                        isCurrentGranted -> {
-                            BetweenUsPermissions.markIntroduced(context)
-                            onDone()
-                        }
-                        isCurrentRefused -> {
-                            BetweenUsPermissions.openSettings(context)
-                        }
-                        else -> {
-                            requestSingle(currentItem)
-                        }
-                    }
-                },
-                modifier = Modifier.fillMaxWidth(),
-            )
-
-            if (!allGranted) {
-                Spacer(Modifier.height(10.dp))
-                // Secondary Batch Option
-                OutlinedButton(
-                    onClick = { requestAll() },
-                    shape = RoundedCornerShape(10.dp),
-                    colors = ButtonDefaults.outlinedButtonColors(
-                        contentColor = Slate300,
-                    ),
-                    border = BorderStroke(1.dp, Surface700),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(44.dp),
-                ) {
                     Text(
-                        text = "Allow All Permissions at Once",
-                        style = MaterialTheme.typography.bodyMedium,
+                        text = "BetweenUs uses end-to-end encryption for private communications. Permissions are strictly used on this device for real-time calls, alerts, and photo sharing.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }
 
-            Spacer(Modifier.height(8.dp))
-            Text(
-                text = "You can skip anything. BetweenUs will ask again when needed.",
-                style = MaterialTheme.typography.bodySmall,
-                color = Slate500,
-                textAlign = TextAlign.Center,
-            )
+            SectionLabel("Manage Permissions (${items.size})")
+
+            // --- Permission Cards List ---
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                items.forEach { item ->
+                    val isGranted = grantedStatus[item.id] == true
+                    val isRefused = item.permissions.any { refusedMap[it] == true } && !isGranted
+
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(MaterialTheme.colorScheme.surfaceContainer)
+                            .border(
+                                width = 1.dp,
+                                color = if (isGranted) StatusOnline.copy(alpha = 0.35f) else MaterialTheme.colorScheme.outlineVariant,
+                                shape = RoundedCornerShape(14.dp),
+                            )
+                            .padding(14.dp),
+                    ) {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.weight(1f),
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(36.dp)
+                                            .clip(RoundedCornerShape(10.dp))
+                                            .background(
+                                                when {
+                                                    isGranted -> StatusOnline.copy(alpha = 0.12f)
+                                                    isRefused -> StatusIdle.copy(alpha = 0.12f)
+                                                    else -> MaterialTheme.colorScheme.surfaceContainerHighest
+                                                },
+                                            ),
+                                        contentAlignment = Alignment.Center,
+                                    ) {
+                                        BetweenUsIcon(
+                                            icon = item.icon,
+                                            tint = when {
+                                                isGranted -> StatusOnline
+                                                isRefused -> StatusIdle
+                                                else -> MaterialTheme.colorScheme.primary
+                                            },
+                                            size = 20.dp,
+                                        )
+                                    }
+                                    Column {
+                                        Text(
+                                            text = item.title,
+                                            style = MaterialTheme.typography.titleMedium,
+                                            color = MaterialTheme.colorScheme.onSurface,
+                                        )
+                                        Text(
+                                            text = item.category.uppercase(),
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
+                                }
+
+                                // Status Badge / Action Button
+                                when {
+                                    isGranted -> {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(8.dp))
+                                                .background(StatusOnline.copy(alpha = 0.15f))
+                                                .padding(horizontal = 10.dp, vertical = 6.dp),
+                                        ) {
+                                            BetweenUsIcon(BetweenUsIcons.Check, tint = StatusOnline, size = 14.dp)
+                                            Text(
+                                                text = "Granted",
+                                                style = MaterialTheme.typography.labelMedium,
+                                                color = StatusOnline,
+                                                fontWeight = FontWeight.SemiBold,
+                                            )
+                                        }
+                                    }
+                                    isRefused -> {
+                                        Chip(
+                                            text = "Open Settings",
+                                            tone = StatusIdle,
+                                            onClick = { BetweenUsPermissions.openSettings(context) },
+                                        )
+                                    }
+                                    else -> {
+                                        Chip(
+                                            text = "Allow",
+                                            selected = true,
+                                            onClick = { requestSingle(item) },
+                                        )
+                                    }
+                                }
+                            }
+
+                            Text(
+                                text = item.detail,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurface,
+                            )
+
+                            Text(
+                                text = item.rationale,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(20.dp))
+
+            // --- Bottom Batch & Navigation Actions ---
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                if (!allGranted) {
+                    BetweenUsButton(
+                        text = "Allow All Missing Permissions",
+                        onClick = { requestAll() },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+
+                OutlinedButton(
+                    onClick = { BetweenUsPermissions.openSettings(context) },
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = MaterialTheme.colorScheme.onSurface,
+                    ),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp),
+                ) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        BetweenUsIcon(BetweenUsIcons.Settings, size = 18.dp)
+                        Text(
+                            text = "Open Android App Settings",
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                    }
+                }
+
+                if (onBack == null) {
+                    Spacer(Modifier.height(4.dp))
+                    BetweenUsButton(
+                        text = "Continue to BetweenUs",
+                        onClick = {
+                            BetweenUsPermissions.markIntroduced(context)
+                            onDone()
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            }
         }
     }
 }
@@ -622,7 +528,7 @@ fun NotificationPermissionBanner(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .background(Color(0xFF281E12))
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
             .border(1.dp, StatusIdle.copy(alpha = 0.35f))
             .padding(horizontal = 14.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -638,12 +544,12 @@ fun NotificationPermissionBanner(
                 text = "Notifications are turned off",
                 style = MaterialTheme.typography.labelMedium,
                 fontWeight = FontWeight.Bold,
-                color = Slate100,
+                color = MaterialTheme.colorScheme.onSurface,
             )
             Text(
                 text = "You won't receive message alerts or incoming call notifications.",
                 style = MaterialTheme.typography.bodySmall,
-                color = Slate400,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
         Text(
@@ -666,7 +572,7 @@ fun NotificationPermissionBanner(
         ) {
             BetweenUsIcon(
                 icon = BetweenUsIcons.X,
-                tint = Slate400,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 size = 14.dp,
             )
         }
@@ -681,17 +587,27 @@ fun PermissionsRow(onOpen: () -> Unit) {
     ListRow(
         title = "App permissions",
         subtitle = if (missing == 0) {
-            "Everything BetweenUs asks Android for is granted"
+            "All permissions granted"
         } else {
-            "$missing not granted"
+            "$missing permission${if (missing == 1) "" else "s"} not granted"
         },
-        leading = { BetweenUsIcon(BetweenUsIcons.Shield) },
+        leading = {
+            BetweenUsIcon(
+                BetweenUsIcons.Shield,
+                tint = if (missing == 0) StatusOnline else MaterialTheme.colorScheme.primary,
+            )
+        },
         trailing = {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (missing == 0) BetweenUsIcon(BetweenUsIcons.Check, tint = StatusOnline, size = 18.dp)
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                if (missing == 0) {
+                    BetweenUsIcon(BetweenUsIcons.Check, tint = StatusOnline, size = 16.dp)
+                }
+                BetweenUsIcon(BetweenUsIcons.ChevronRight, tint = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         },
         onClick = onOpen,
     )
 }
-

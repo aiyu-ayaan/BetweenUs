@@ -110,6 +110,7 @@ feature/remote          feature/update        feature/voice
   since nothing on a phone can move a desktop's mouse. Same asymmetry as
   the web client (see [Architecture Overview](/architecture/overview)).
 - **`settings`** — account profile, local crash reporter, call data usage, a
+  dedicated **`PermissionsScreen`** (`Route.Permissions`) consolidating all runtime permissions with real-time health meters, a
   **`PrivacyScreen`** (`Route.Privacy`) holding the block list and *Clear all my
   messages*, and a dedicated **`ThemesScreen`** (`Route.Themes`) providing live interactive workbench previews, 16 curated themes across 5 categories, and custom accent tint swatches with spring transitions.
 - **`home`** — the friends list, and **`AddFriendScreen`** (`Route.AddFriend`)

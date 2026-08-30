@@ -139,11 +139,6 @@ fun SettingsScreen(
         byPassword = runCatching { E2ee.passwordRecoveryEnabled() }.getOrNull()
     }
 
-    val notifications = rememberPermission(BetweenUsPermissions.NOTIFICATIONS) {}
-    val microphone = rememberPermission(BetweenUsPermissions.MICROPHONE) {}
-    val camera = rememberPermission(BetweenUsPermissions.CAMERA) {}
-    val bluetooth = rememberPermission(BetweenUsPermissions.BLUETOOTH) {}
-
     fun act(block: suspend () -> Unit) {
         scope.launch {
             busy = true
@@ -556,39 +551,31 @@ fun SettingsScreen(
                 )
             }
 
-            // --- android permissions ---
+            // --- appearance ---
+            SectionLabel("Appearance")
+            val currentTheme by ThemePreferences.selectedTheme.collectAsState()
+            val followSys by ThemePreferences.followSystem.collectAsState()
+            val activeDef = ANDROID_THEMES[currentTheme] ?: ANDROID_THEMES["dark"]!!
+
+            ListRow(
+                title = "Themes & appearance",
+                subtitle = "${activeDef.name} · ${if (followSys) "Sync with system" else activeDef.category} · 16 themes",
+                leading = { BetweenUsIcon(BetweenUsIcons.Palette) },
+                trailing = { BetweenUsIcon(BetweenUsIcons.ChevronRight, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
+                onClick = onThemes,
+            )
+
+            // --- this device ---
             SectionLabel("This device")
             PermissionsRow(onOpen = onPermissions)
-            PermissionRow(
-                title = "Notifications",
-                detail = "So a message or a call can reach you when the app is closed.",
-                icon = BetweenUsIcons.Bell,
-                granted = BetweenUsPermissions.granted(context, BetweenUsPermissions.NOTIFICATIONS),
-                request = notifications,
+
+            ListRow(
+                title = "Calls & data",
+                subtitle = "Every call this account has been in, and what each one moved",
+                leading = { BetweenUsIcon(BetweenUsIcons.Phone) },
+                trailing = { BetweenUsIcon(BetweenUsIcons.ChevronRight, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
+                onClick = onCallUsage,
             )
-            PermissionRow(
-                title = "Microphone",
-                detail = "Asked for when you join a voice channel, not before.",
-                icon = BetweenUsIcons.Mic,
-                granted = BetweenUsPermissions.granted(context, BetweenUsPermissions.MICROPHONE),
-                request = microphone,
-            )
-            PermissionRow(
-                title = "Camera",
-                detail = "Asked for when you turn video on in a call.",
-                icon = BetweenUsIcons.Video,
-                granted = BetweenUsPermissions.granted(context, BetweenUsPermissions.CAMERA),
-                request = camera,
-            )
-            if (BetweenUsPermissions.BLUETOOTH != null) {
-                PermissionRow(
-                    title = "Nearby devices",
-                    detail = "Without it Android reports no Bluetooth headset, paired or not.",
-                    icon = BetweenUsIcons.Speaker,
-                    granted = BetweenUsPermissions.granted(context, BetweenUsPermissions.BLUETOOTH),
-                    request = bluetooth,
-                )
-            }
 
             var crashes by remember { mutableStateOf(CrashReports.enabled) }
             ListRow(
@@ -620,31 +607,11 @@ fun SettingsScreen(
             }
 
             ListRow(
-                title = "Calls & data",
-                subtitle = "Every call this account has been in, and what each one moved",
-                leading = { BetweenUsIcon(BetweenUsIcons.Phone) },
-                onClick = onCallUsage,
-            )
-
-            ListRow(
                 title = "Auto update",
                 subtitle = "Channel, and whether this app updates itself from GitHub",
                 leading = { BetweenUsIcon(BetweenUsIcons.Download) },
-                onClick = onAutoUpdate,
-            )
-
-            // --- appearance ---
-            SectionLabel("Appearance")
-            val currentTheme by ThemePreferences.selectedTheme.collectAsState()
-            val followSys by ThemePreferences.followSystem.collectAsState()
-            val activeDef = ANDROID_THEMES[currentTheme] ?: ANDROID_THEMES["dark"]!!
-
-            ListRow(
-                title = "Themes & appearance",
-                subtitle = "${activeDef.name} · ${if (followSys) "Sync with system" else activeDef.category} · 16 themes",
-                leading = { BetweenUsIcon(BetweenUsIcons.Palette) },
                 trailing = { BetweenUsIcon(BetweenUsIcons.ChevronRight, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
-                onClick = onThemes,
+                onClick = onAutoUpdate,
             )
 
             // --- deployment ---
@@ -851,32 +818,6 @@ private fun AudioSwitch(
         leading = { BetweenUsIcon(BetweenUsIcons.Settings, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
         trailing = {
             Switch(checked = checked, onCheckedChange = onChange, colors = switchColours())
-        },
-    )
-}
-
-@Composable
-private fun PermissionRow(
-    title: String,
-    detail: String,
-    icon: Int,
-    granted: Boolean,
-    request: PermissionRequest,
-) {
-    ListRow(
-        title = title,
-        subtitle = if (request.refused) {
-            "Refused. Android will not ask again from here."
-        } else {
-            detail
-        },
-        leading = { BetweenUsIcon(icon, tint = if (granted) StatusOnline else MaterialTheme.colorScheme.onSurfaceVariant) },
-        trailing = {
-            when {
-                granted -> BetweenUsIcon(BetweenUsIcons.Check, tint = StatusOnline, size = 18.dp)
-                request.refused -> Chip("Open settings", onClick = { request.openSettings() })
-                else -> Chip("Allow", onClick = { request.request() })
-            }
         },
     )
 }

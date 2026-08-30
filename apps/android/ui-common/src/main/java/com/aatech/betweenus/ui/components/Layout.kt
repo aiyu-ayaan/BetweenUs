@@ -23,12 +23,14 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialShapes
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ripple
 import androidx.compose.material3.Text
 import androidx.compose.material3.toShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -118,6 +120,7 @@ fun ListRow(
         selected -> scheme.onSecondaryContainer
         else -> scheme.onSurface
     }
+    val iconColor = if (selected) scheme.onSecondaryContainer else scheme.onSurfaceVariant
 
     Row(
         modifier = modifier
@@ -137,7 +140,11 @@ fun ListRow(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        leading?.invoke()
+        if (leading != null) {
+            CompositionLocalProvider(LocalContentColor provides iconColor) {
+                leading()
+            }
+        }
         Column(Modifier.weight(1f)) {
             Text(
                 text = title,
@@ -160,7 +167,11 @@ fun ListRow(
                 )
             }
         }
-        trailing?.invoke(this)
+        if (trailing != null) {
+            CompositionLocalProvider(LocalContentColor provides iconColor) {
+                trailing(this)
+            }
+        }
     }
 }
 

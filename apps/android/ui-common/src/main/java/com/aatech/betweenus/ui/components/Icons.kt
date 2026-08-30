@@ -91,22 +91,29 @@ object BetweenUsIcons {
  * to 14sp body text; a tap target is made by the thing around it, never by
  * growing the glyph.
  *
- * The default tint is the content colour of whatever it is inside. That is what
- * lets a Material button own its own disabled and pressed colours - an icon
- * that names its own tint stays bright inside a greyed-out button.
+ * The default tint resolves from [tint] if provided, or from [LocalContentColor]
+ * if explicitly set to a valid non-black content color, falling back to
+ * [MaterialTheme.colorScheme.onSurfaceVariant] so icons always have appropriate
+ * contrast and never default to invisible black on dark backgrounds.
  */
 @Composable
 fun BetweenUsIcon(
     @DrawableRes icon: Int,
     modifier: Modifier = Modifier,
-    tint: Color = LocalContentColor.current,
+    tint: Color = Color.Unspecified,
     size: Dp = 20.dp,
     contentDescription: String? = null,
 ) {
+    val currentContent = LocalContentColor.current
+    val resolvedTint = when {
+        tint != Color.Unspecified -> tint
+        currentContent != Color.Unspecified && currentContent != Color.Black -> currentContent
+        else -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
     Icon(
         painter = painterResource(icon),
         contentDescription = contentDescription,
-        tint = tint,
+        tint = resolvedTint,
         modifier = modifier.size(size),
     )
 }
