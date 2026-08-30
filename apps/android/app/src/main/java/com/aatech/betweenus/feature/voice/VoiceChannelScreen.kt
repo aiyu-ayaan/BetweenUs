@@ -128,14 +128,30 @@ import kotlin.math.roundToInt
 private const val CHROME_IDLE_MS = 4_000L
 
 /**
+ * What the pin holds when the pinned tile is your own camera.
+ *
+ * The local tile has no peer id - it is not a peer - so it needs a name of its
+ * own to be pinnable by the same one piece of state as everybody else.
+ */
+private const val SELF_PIN = "self"
+
+/**
  * A WhatsApp/modern-style voice & video call screen.
  *
  * Designed with adaptive layouts (no vertical scrolling in calls):
  * - 1-on-1: Remote peer fills the screen with local self-view in a floating PiP card.
- * - 3-person (2 remote): 2 vertical tiles on top half, balanced layout on bottom half.
- * - 4-person (3-4 remote): 2x2 equal grid filling the viewport cleanly.
- * - 5+ person: Active speaker hero view with horizontal thumbnail strip.
+ * - 2-4 remote: a grid of the other people, self still floating over it.
+ * - 5+ remote, or anybody pinned: one face on the stage with the rest in a
+ *   thumbnail strip along the bottom.
  * - Floating glassmorphic control dock with camera flip, mute, video, share, speaker, and end call.
+ *
+ * Two rules run through all of it:
+ *
+ * - **The stage is the other people.** Your own camera is a small floating
+ *   window, never a grid cell - you are not in the call to watch yourself.
+ * - **Nothing moves on its own.** The unpinned stage follows the last speaker
+ *   stickily rather than the current one, so a conversation does not throw the
+ *   layout around between sentences. A pin fixes it outright.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -218,6 +234,17 @@ fun VoiceChannelScreen(
     val pipTile = participants.firstOrNull { it.peer.peerId == lastSpeaker }
         ?: participants.firstOrNull { it.video != null }
         ?: participants.firstOrNull()
+
+    // Pinned by hand: "keep showing me that one". One viewer's decision -
+    // nobody else's stage moves - and it is dropped the moment they leave,
+    // because a pin on somebody who hung up would hold an empty stage.
+    var pinned by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(participants) {
+        val stillHere = pinned == SELF_PIN || participants.any { it.peer.peerId == pinned }
+        if (pinned != null && !stillHere) pinned = null
+    }
+    val pinnedPeer = participants.firstOrNull { it.peer.peerId == pinned }
+    val selfPinned = pinned == SELF_PIN
 
     val watching = participants.firstOrNull { it.visibleScreen != null }
     var dismissed by remember { mutableStateOf<String?>(null) }
@@ -516,7 +543,7 @@ fun VoiceChannelScreen(
                         }
 
                         // 1-on-1 Call: Remote fills screen, Local in floating PiP
-                        participants.size == 1 -> {
+                        !selfPinned && pinnedPeer == null && participants.size == 1 -> {
                             val remote = participants.first()
                             CallTile(
                                 label = remote.peer.username,
@@ -527,6 +554,7 @@ fun VoiceChannelScreen(
                                 speaking = remote.speaking,
                                 connected = remote.connected,
                                 status = statusOf(remote),
+                                onPin = { pinned = remote.peer.peerId },
                                 // Clear of the floating dock, which is drawn
                                 // over the bottom of this tile - but only while
                                 // the dock is there. Held up against nothing,
@@ -548,6 +576,7 @@ fun VoiceChannelScreen(
                                 onFlipCamera = {
                                     if (cameraOn) engine.switchCamera()
                                 },
+                                onPin = { pinned = SELF_PIN },
                                 modifier = Modifier
                                     .align(Alignment.TopEnd)
                                     .padding(top = 68.dp, end = 14.dp),
@@ -563,31 +592,70 @@ fun VoiceChannelScreen(
                         // mostly empty, with a face stranded in the middle of
                         // each. `CallGrid` picks the column count from the
                         // stage shape and caps how tall a tile may go.
-                        participants.size in 2..4 -> {
-                            // Three remotes leave an odd cell in a 2x2, and
-                            // your own camera is the obvious thing to put in
-                            // it. Every other count floats the self view.
-                            val selfInGrid = participants.size == 3
+                        !selfPinned && pinnedPeer == null && participants.size in 2..4 -> {
+                            // The grid is the other people, whatever the count.
+                            // Your own camera used to fill the odd cell of a
+                            // 2x2 when there were three of them, which spent a
+                            // quarter of the stage on the one face in the call
+                            // nobody is there to watch; it floats now, the same
+                            // as every other count.
                             CallGrid(
-                                count = participants.size + if (selfInGrid) 1 else 0,
+                                count = participants.size,
                                 modifier = Modifier
                                     .fillMaxSize()
                                     .padding(top = 64.dp, bottom = 96.dp, start = 8.dp, end = 8.dp),
                             ) { index, tileModifier ->
-                                val participant = participants.getOrNull(index)
-                                if (participant != null) {
-                                    CallTile(
-                                        label = participant.peer.username,
-                                        id = participant.peer.userId,
-                                        track = participant.video,
-                                        eglContext = engine.eglBase.eglBaseContext,
-                                        muted = !participant.micEnabled,
-                                        speaking = participant.speaking,
-                                        connected = participant.connected,
-                                        status = statusOf(participant),
-                                        modifier = tileModifier,
-                                    )
-                                } else {
+                                val participant = participants[index]
+                                CallTile(
+                                    label = participant.peer.username,
+                                    id = participant.peer.userId,
+                                    track = participant.video,
+                                    eglContext = engine.eglBase.eglBaseContext,
+                                    muted = !participant.micEnabled,
+                                    speaking = participant.speaking,
+                                    connected = participant.connected,
+                                    status = statusOf(participant),
+                                    onPin = { pinned = participant.peer.peerId },
+                                    modifier = tileModifier,
+                                )
+                            }
+
+                            FloatingPipTile(
+                                label = "${self.label} (you)",
+                                id = self.id,
+                                track = localVideo,
+                                speaking = selfSpeaking,
+                                eglContext = engine.eglBase.eglBaseContext,
+                                muted = muted,
+                                onFlipCamera = {
+                                    if (cameraOn) engine.switchCamera()
+                                },
+                                onPin = { pinned = SELF_PIN },
+                                modifier = Modifier
+                                    .align(Alignment.BottomEnd)
+                                    .padding(bottom = 110.dp, end = 14.dp),
+                            )
+                        }
+
+                        // Somebody pinned, or too many for a grid: one face
+                        // on the stage and everybody else in a strip along the
+                        // bottom.
+                        //
+                        // With nobody pinned the stage goes to whoever spoke
+                        // last and *stays* there - the same sticky choice the
+                        // picture-in-picture window makes, see `pipTile`.
+                        // Handing it to whoever is speaking this instant threw
+                        // the stage back and forth across every "mm-hm" in a
+                        // conversation, which is what this screen was being
+                        // told off for.
+                        else -> {
+                            val hero = if (selfPinned) null else pinnedPeer ?: pipTile
+                            val others = participants.filterNot { it.peer.peerId == hero?.peer?.peerId }
+
+                            Box(modifier = Modifier.fillMaxSize()) {
+                                // The stage: the pinned face, the last speaker,
+                                // or your own camera when you pinned yourself.
+                                if (hero == null) {
                                     CallTile(
                                         label = "${self.label} (you)",
                                         id = self.id,
@@ -597,48 +665,29 @@ fun VoiceChannelScreen(
                                         muted = muted,
                                         isLocal = true,
                                         fit = RendererCommon.ScalingType.SCALE_ASPECT_FILL,
-                                        modifier = tileModifier,
+                                        labelBottomPadding = if (chrome) 92.dp else 12.dp,
+                                        pinned = selfPinned,
+                                        onPin = { pinned = if (selfPinned) null else SELF_PIN },
+                                        modifier = Modifier.fillMaxSize(),
+                                    )
+                                } else {
+                                    CallTile(
+                                        label = hero.peer.username,
+                                        id = hero.peer.userId,
+                                        track = hero.video,
+                                        eglContext = engine.eglBase.eglBaseContext,
+                                        muted = !hero.micEnabled,
+                                        speaking = hero.speaking,
+                                        connected = hero.connected,
+                                        status = statusOf(hero),
+                                        labelBottomPadding = if (chrome) 92.dp else 12.dp,
+                                        pinned = pinnedPeer != null,
+                                        onPin = {
+                                            pinned = if (pinnedPeer != null) null else hero.peer.peerId
+                                        },
+                                        modifier = Modifier.fillMaxSize(),
                                     )
                                 }
-                            }
-
-                            if (!selfInGrid) {
-                                FloatingPipTile(
-                                    label = "${self.label} (you)",
-                                    id = self.id,
-                                    track = localVideo,
-                                    speaking = selfSpeaking,
-                                    eglContext = engine.eglBase.eglBaseContext,
-                                    muted = muted,
-                                    onFlipCamera = {
-                                        if (cameraOn) engine.switchCamera()
-                                    },
-                                    modifier = Modifier
-                                        .align(Alignment.BottomEnd)
-                                        .padding(bottom = 110.dp, end = 14.dp),
-                                )
-                            }
-                        }
-
-                        // 5+ Participants: Hero active speaker stage with bottom participant strip
-                        else -> {
-                            val activeSpeaker = participants.firstOrNull { it.speaking }
-                                ?: participants.first()
-                            val others = participants.filterNot { it.peer.peerId == activeSpeaker.peer.peerId }
-
-                            Box(modifier = Modifier.fillMaxSize()) {
-                                // Large Active Speaker Card
-                                CallTile(
-                                    label = activeSpeaker.peer.username,
-                                    id = activeSpeaker.peer.userId,
-                                    track = activeSpeaker.video,
-                                    eglContext = engine.eglBase.eglBaseContext,
-                                    muted = !activeSpeaker.micEnabled,
-                                    speaking = activeSpeaker.speaking,
-                                    connected = activeSpeaker.connected,
-                                    status = statusOf(activeSpeaker),
-                                    modifier = Modifier.fillMaxSize(),
-                                )
 
                                 // Filmstrip of other participants at bottom
                                 LazyRow(
@@ -667,27 +716,33 @@ fun VoiceChannelScreen(
                                                 status = statusOf(participant),
                                                 isCompact = true,
                                                 fit = RendererCommon.ScalingType.SCALE_ASPECT_FILL,
+                                                onPin = { pinned = participant.peer.peerId },
                                                 modifier = Modifier.fillMaxSize(),
                                             )
                                         }
                                     }
                                 }
 
-                                // Local self in PiP
-                                FloatingPipTile(
-                                    label = "${self.label} (you)",
-                                    id = self.id,
-                                    track = localVideo,
-                                    speaking = selfSpeaking,
-                                    eglContext = engine.eglBase.eglBaseContext,
-                                    muted = muted,
-                                    onFlipCamera = {
-                                        if (cameraOn) engine.switchCamera()
-                                    },
-                                    modifier = Modifier
-                                        .align(Alignment.TopEnd)
-                                        .padding(top = 68.dp, end = 14.dp),
-                                )
+                                // Local self in PiP - unless it is already on
+                                // the stage, where a second copy of your own
+                                // face is the last thing anybody needs.
+                                if (!selfPinned) {
+                                    FloatingPipTile(
+                                        label = "${self.label} (you)",
+                                        id = self.id,
+                                        track = localVideo,
+                                        speaking = selfSpeaking,
+                                        eglContext = engine.eglBase.eglBaseContext,
+                                        muted = muted,
+                                        onFlipCamera = {
+                                            if (cameraOn) engine.switchCamera()
+                                        },
+                                        onPin = { pinned = SELF_PIN },
+                                        modifier = Modifier
+                                            .align(Alignment.TopEnd)
+                                            .padding(top = 68.dp, end = 14.dp),
+                                    )
+                                }
                             }
                         }
                     }
@@ -1071,6 +1126,8 @@ private fun FloatingPipTile(
     onFlipCamera: () -> Unit,
     modifier: Modifier = Modifier,
     speaking: Boolean = false,
+    /** Tapped to put your own camera on the stage. See `CallTile.onPin`. */
+    onPin: (() -> Unit)? = null,
 ) {
     // Dragged anywhere on the stage and let go, and it settles into whichever
     // corner it was nearest - the way WhatsApp does it, and the reason it is
@@ -1186,6 +1243,15 @@ private fun FloatingPipTile(
             }
         }
 
+        if (onPin != null) {
+            PinButton(
+                pinned = false,
+                compact = true,
+                onClick = onPin,
+                modifier = Modifier.align(Alignment.TopStart),
+            )
+        }
+
         // Quick flip button if video is active
         if (track != null) {
             Box(
@@ -1286,6 +1352,15 @@ private fun CallTile(
     status: String? = null,
     isLocal: Boolean = false,
     isCompact: Boolean = false,
+    /** Drawn as pinned, and the button says "unpin" rather than "pin". */
+    pinned: Boolean = false,
+    /**
+     * Tapped to pin this tile to the stage, or to let it go again.
+     *
+     * Null on a tile there is nothing to pin - the one already filling a
+     * picture-in-picture window, say.
+     */
+    onPin: (() -> Unit)? = null,
     /**
      * How a frame that is not the shape of its tile is dealt with.
      *
@@ -1401,5 +1476,53 @@ private fun CallTile(
                     .size(if (isCompact) 6.dp else 8.dp),
             )
         }
+
+        // Pinning is one viewer's decision - nobody else's stage moves - so it
+        // is on the tile rather than in a menu somewhere else. There is no
+        // hover on a phone, so the button is always there rather than always
+        // hidden.
+        if (onPin != null) {
+            PinButton(
+                pinned = pinned,
+                compact = isCompact,
+                onClick = onPin,
+                modifier = Modifier.align(Alignment.TopStart),
+            )
+        }
+    }
+}
+
+/**
+ * The pin, on a tile or on the floating self view.
+ *
+ * Small, dark, and out of the way in a corner: it sits over somebody's face for
+ * the whole call, so it has to be findable without being the thing you look at.
+ */
+@Composable
+private fun PinButton(
+    pinned: Boolean,
+    compact: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val size = if (compact) 22.dp else 30.dp
+    Box(
+        modifier = modifier
+            .padding(if (compact) 4.dp else 8.dp)
+            .size(size)
+            .clip(CircleShape)
+            .background(if (pinned) Accent else Color.Black.copy(alpha = 0.55f))
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onClick,
+            ),
+        contentAlignment = Alignment.Center,
+    ) {
+        BetweenUsIcon(
+            icon = BetweenUsIcons.Pin,
+            tint = if (pinned) Neutral99 else Slate100,
+            size = if (compact) 11.dp else 15.dp,
+        )
     }
 }
