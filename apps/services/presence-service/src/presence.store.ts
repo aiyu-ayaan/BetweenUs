@@ -19,6 +19,7 @@ import type {
   VoiceState,
 } from '@betweenus/shared-types';
 import { voiceLifetime } from './voice-lifetime';
+import { readableLastSeen, toVisibility } from './last-seen-visibility';
 
 const ONLINE_KEY = 'presence:online';
 const STATUS_KEY = 'presence:status';
@@ -95,7 +96,8 @@ export class PresenceStore implements OnModuleDestroy {
   }
 
   /**
-   * When each of these accounts was last seen, ISO-8601, newest answer wins.
+   * When each of these accounts was last seen, ISO-8601, as far as `askerId` is
+   * allowed to know.
    *
    * Redis and Postgres are both consulted rather than one falling back to the
    * other: Redis is ahead for anybody who has connected since the last flush,
@@ -103,23 +105,59 @@ export class PresenceStore implements OnModuleDestroy {
    * the later of the two is right in both directions and needs no bookkeeping
    * about which store is authoritative.
    *
-   * An account that has never been seen is simply absent from the map, which is
-   * what every client renders as "no last seen" rather than as a date in 1970.
+   * **The privacy filter lives here rather than at the call sites**, so there is
+   * one place that decides who may read a last-seen time and no way to reach the
+   * value without going through it. `LastSeenVisibility`, the friendship it may
+   * depend on, and the reciprocity rule are all applied before anything is
+   * returned - see `last-seen-visibility.ts` for what the rule actually is.
+   *
+   * An account that has never been seen, one whose setting excludes the asker,
+   * and one the asker has disqualified themselves from reading are all simply
+   * absent from the map. That is deliberate: every client already draws a
+   * missing timestamp as no line at all, so which of the three reasons produced
+   * it is not something the wire says.
    */
-  async lastSeenOf(userIds: string[]): Promise<Map<string, string>> {
+  async lastSeenOf(askerId: string, userIds: string[]): Promise<Map<string, string>> {
     if (userIds.length === 0) return new Map();
 
-    const [live, rows] = await Promise.all([
+    const [live, rows, asker, friendships] = await Promise.all([
       this.redis.hmget(LAST_SEEN_KEY, ...userIds),
       prisma.user.findMany({
         where: { id: { in: userIds } },
-        select: { id: true, lastSeenAt: true },
+        select: { id: true, lastSeenAt: true, lastSeenVisibility: true },
+      }),
+      prisma.user.findUnique({
+        where: { id: askerId },
+        select: { lastSeenVisibility: true },
+      }),
+      // Only the friendships that could matter - the asker's, with these
+      // subjects - rather than their whole friend list.
+      prisma.friendship.findMany({
+        where: {
+          status: 'ACCEPTED',
+          OR: [
+            { userAId: askerId, userBId: { in: userIds } },
+            { userBId: askerId, userAId: { in: userIds } },
+          ],
+        },
+        select: { userAId: true, userBId: true },
       }),
     ]);
+
+    const friendIds = new Set(
+      friendships.map((row) => (row.userAId === askerId ? row.userBId : row.userAId)),
+    );
+    const allowed = readableLastSeen(
+      askerId,
+      toVisibility(asker?.lastSeenVisibility),
+      rows.map((row) => ({ id: row.id, visibility: toVisibility(row.lastSeenVisibility) })),
+      friendIds,
+    );
 
     const stored = new Map(rows.map((row) => [row.id, row.lastSeenAt?.getTime() ?? 0]));
     const seen = new Map<string, string>();
     userIds.forEach((userId, index) => {
+      if (!allowed.has(userId)) return;
       const at = Math.max(Number(live[index] ?? 0), stored.get(userId) ?? 0);
       if (at > 0) seen.set(userId, new Date(at).toISOString());
     });

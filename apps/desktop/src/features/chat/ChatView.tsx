@@ -278,14 +278,26 @@ export function ChatView({
    * `presence.sync` only carries the people who are here now - so the one case
    * the line exists for is the one case the socket says nothing about.
    *
-   * Asked when the conversation opens and not again. A last-seen time that is a
-   * few minutes stale reads identically, and somebody coming back online
-   * arrives as a `presence.changed` of its own, which changes the line to
-   * "online" without anybody asking.
+   * Asked again when they go offline, because the event that says so cannot
+   * carry the answer: who may read a last-seen time depends on the reader, and
+   * a broadcast has one payload for everybody. `presence.query` is the road
+   * that can answer per-asker.
+   *
+   * Not asked on any other change. A timestamp a few minutes stale reads
+   * identically, and coming back online arrives as its own event, which turns
+   * the line to "online" without anybody asking anything.
    */
+  // A boolean selector on purpose. `useStatusOf` would subscribe this component
+  // to the whole status map, and repainting every message on screen because
+  // somebody in another server went idle is what `PeerPresence` exists to
+  // avoid; this re-runs only when this one person's presence crosses the line
+  // the effect actually cares about.
+  const peerAway = usePresenceStore(
+    (state) => (state.statuses.get(peer?.id ?? '') ?? 'offline') === 'offline',
+  );
   useEffect(() => {
     if (peer) usePresenceStore.getState().askLastSeen([peer.id]);
-  }, [peer?.id]);
+  }, [peer?.id, peerAway]);
   /**
    * How a file dropped anywhere in the conversation reaches the composer that
    * owns the pending list. A ref rather than lifted state on purpose: the drop

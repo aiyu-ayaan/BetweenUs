@@ -25,6 +25,7 @@ import type {
   AuthResponse,
   AuthTokens,
   ForgotPasswordResponse,
+  LastSeenVisibility,
   PublicUser,
   UsernameAvailability,
 } from '@betweenus/shared-types';
@@ -462,6 +463,12 @@ export class AuthService {
         // Trimmed, and an empty string is a value: it means "draw no line
         // under my name", which is different from never having touched it.
         ...(dto.about !== undefined ? { about: dto.about.trim() } : {}),
+        // The wire spells it lower case and the column spells it upper; one
+        // conversion each way, both in this file, so nothing else has to know
+        // there are two spellings.
+        ...(dto.lastSeenVisibility !== undefined
+          ? { lastSeenVisibility: fromVisibility(dto.lastSeenVisibility) }
+          : {}),
         // Same rule: null is "switch the personal disappearing window off",
         // which is a value, and an absent key is "do not touch it".
         ...(dto.messageTtlSeconds !== undefined
@@ -560,6 +567,37 @@ function assertEnabled(user: User): void {
 /** bcrypt hash of a value nobody can log in with; used to equalise login timing. */
 const DUMMY_HASH = '$2a$12$C6UzMDM.H6dfI/f/IKcEe.4Y8Q3M4RwuHhWzR0GkD8hR4T6Bl0Wcy';
 
+/**
+ * The column's spelling of a last-seen setting, in the one the wire uses.
+ *
+ * An unknown value is read as the widest it could be narrowed from, which is
+ * also what the column defaults to: guessing narrower would silently hide
+ * people who never asked to be hidden, and this only ever sees a value written
+ * by a build that had the enum.
+ */
+export function toVisibility(value: string): LastSeenVisibility {
+  switch (value) {
+    case 'FRIENDS':
+      return 'friends';
+    case 'NOBODY':
+      return 'nobody';
+    default:
+      return 'everyone';
+  }
+}
+
+/** And back, for a write. */
+function fromVisibility(value: LastSeenVisibility): 'EVERYONE' | 'FRIENDS' | 'NOBODY' {
+  switch (value) {
+    case 'friends':
+      return 'FRIENDS';
+    case 'nobody':
+      return 'NOBODY';
+    case 'everyone':
+      return 'EVERYONE';
+  }
+}
+
 export function toPublicUser(user: User): PublicUser {
   return {
     id: user.id,
@@ -568,6 +606,7 @@ export function toPublicUser(user: User): PublicUser {
     displayName: user.displayName,
     avatarUrl: user.avatarUrl,
     about: user.about,
+    lastSeenVisibility: toVisibility(user.lastSeenVisibility),
     role: user.role,
     mustChangePassword: user.mustChangePassword,
     messageTtlSeconds: user.messageTtlSeconds,

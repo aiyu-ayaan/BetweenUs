@@ -1,5 +1,10 @@
 import { useEffect, useState } from 'react';
-import { ABOUT_MAX_LENGTH, DEFAULT_ABOUT } from '@betweenus/shared-types';
+import {
+  ABOUT_MAX_LENGTH,
+  DEFAULT_ABOUT,
+  LAST_SEEN_VISIBILITIES,
+  type LastSeenVisibility,
+} from '@betweenus/shared-types';
 import type { ActiveStatus, DeviceKey } from '@betweenus/shared-types';
 import { useAuthStore } from '../../stores/auth';
 import { useChatStore } from '../../stores/chat';
@@ -444,6 +449,84 @@ function PrivacySection(): JSX.Element {
   );
 }
 
+const LAST_SEEN_LABELS: Record<LastSeenVisibility, string> = {
+  everyone: 'Everyone',
+  friends: 'My friends',
+  nobody: 'Nobody',
+};
+
+/**
+ * What each choice actually means, said before it is made.
+ *
+ * Especially the third. Reciprocity is the rule that keeps this setting from
+ * being a one-way mirror, and a rule somebody only discovers by losing
+ * something is a rule they experience as a bug.
+ */
+const LAST_SEEN_NOTES: Record<LastSeenVisibility, string> = {
+  everyone: 'Anyone who shares a server or a friendship with you.',
+  friends: 'Only people you have accepted as friends.',
+  nobody: 'Nobody sees when you were last here - and you will not see anyone else’s either.',
+};
+
+/**
+ * Who may see when you were last here.
+ *
+ * Saved on the press rather than behind the Profile section's Save button: it
+ * is a switch, not a field being edited, and a privacy switch that needs a
+ * second press to take effect is one people believe they have set when they
+ * have not.
+ */
+function LastSeenPrivacy(): JSX.Element {
+  const user = useAuthStore((state) => state.user);
+  const refreshUser = useAuthStore((state) => state.refreshUser);
+  const chosen = user?.lastSeenVisibility ?? 'everyone';
+  const [saving, setSaving] = useState<LastSeenVisibility | null>(null);
+  const [note, setNote] = useState<string | null>(null);
+
+  const choose = async (lastSeenVisibility: LastSeenVisibility): Promise<void> => {
+    if (lastSeenVisibility === chosen) return;
+    setSaving(lastSeenVisibility);
+    setNote(null);
+    try {
+      await api.updateAccount({ lastSeenVisibility });
+      await refreshUser();
+    } catch (error) {
+      setNote(error instanceof Error ? error.message : 'That could not be saved');
+    } finally {
+      setSaving(null);
+    }
+  };
+
+  return (
+    <>
+      <p className="mt-1 text-sm text-slate-400">{LAST_SEEN_NOTES[chosen]}</p>
+      <div className="mt-3 flex flex-wrap gap-2">
+        {LAST_SEEN_VISIBILITIES.map((option) => (
+          <button
+            key={option}
+            type="button"
+            disabled={saving !== null}
+            onClick={() => void choose(option)}
+            aria-pressed={chosen === option}
+            className={`cursor-pointer rounded px-4 py-2 text-sm transition-colors duration-200 disabled:opacity-60 ${
+              chosen === option
+                ? 'bg-accent text-white'
+                : 'bg-surface-800 text-slate-200 hover:bg-white/[0.06]'
+            }`}
+          >
+            {LAST_SEEN_LABELS[option]}
+          </button>
+        ))}
+      </div>
+      <p className="mt-2 text-xs text-slate-500">
+        This is not the same as Invisible. Invisible hides that you are here now; this decides who
+        may read when you were last here at all.
+      </p>
+      {note && <p className="mt-2 text-sm text-slate-300">{note}</p>}
+    </>
+  );
+}
+
 /**
  * The about line, with the count that only appears once it matters.
  *
@@ -610,6 +693,9 @@ function AccountSection(): JSX.Element {
           </button>
         ))}
       </div>
+
+      <h2 className="mt-8 text-base font-semibold text-slate-50">Last seen</h2>
+      <LastSeenPrivacy />
 
       <h2 className="mt-8 text-base font-semibold text-slate-50">Profile</h2>
       <div className="mt-3 space-y-4">

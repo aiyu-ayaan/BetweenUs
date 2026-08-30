@@ -15,6 +15,7 @@ import type {
   GlobalRole,
 } from '@betweenus/shared-types';
 import { MailService } from '../mail/mail.service';
+import { toVisibility } from '../auth/auth.service';
 import { PROVIDERS, type ProviderName, callbackUrl } from './oauth-providers';
 import type { AdminOAuthProviderDto, AdminSmtpDto, AdminUserUpdateDto } from './dto';
 
@@ -69,6 +70,7 @@ function toAdminUser(user: UserWithDetail): AdminUser {
     displayName: user.displayName,
     avatarUrl: user.avatarUrl,
     about: user.about,
+    lastSeenVisibility: toVisibility(user.lastSeenVisibility),
     role: user.role,
     mustChangePassword: user.mustChangePassword,
     messageTtlSeconds: user.messageTtlSeconds,
@@ -81,6 +83,12 @@ function toAdminUser(user: UserWithDetail): AdminUser {
     // session only for an account that has not connected since the column
     // existed - which is where this number used to come from for everybody, and
     // was only ever "when they last signed in".
+    //
+    // `lastSeenVisibility` is deliberately not applied here. It governs what one
+    // account may learn about another over `/ws/presence`; this is an operator
+    // reading their own deployment's user table, which they can do with `psql`
+    // whatever this code does. Filtering it would be theatre, and the panel
+    // shows the setting itself in the same row so it is not a hidden one.
     lastSeenAt:
       user.lastSeenAt?.toISOString() ?? user.refreshTokens[0]?.createdAt.toISOString() ?? null,
   };

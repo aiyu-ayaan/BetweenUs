@@ -9,9 +9,15 @@ import {
   MinLength,
   ValidateIf,
 } from 'class-validator';
-import { ABOUT_MAX_LENGTH, DISAPPEARING_WINDOWS, UPLOADED_PICTURE_URL } from '@betweenus/shared-types';
+import {
+  ABOUT_MAX_LENGTH,
+  DISAPPEARING_WINDOWS,
+  LAST_SEEN_VISIBILITIES,
+  UPLOADED_PICTURE_URL,
+} from '@betweenus/shared-types';
 import type {
   ChangePasswordRequest,
+  LastSeenVisibility,
   ForgotPasswordRequest,
   LoginRequest,
   RefreshRequest,
@@ -114,6 +120,18 @@ export class UpdateAccountDto implements UpdateAccountRequest {
   @IsString()
   @MaxLength(ABOUT_MAX_LENGTH * 2)
   about?: string;
+
+  /**
+   * Who may see when this account was last here.
+   *
+   * Validated against the published list rather than trusted, because an
+   * unrecognised value written straight through would be a privacy setting
+   * nothing can read back - and the safe reading of one of those is the widest,
+   * which is the opposite of what somebody narrowing it intended.
+   */
+  @IsOptional()
+  @IsIn(LAST_SEEN_VISIBILITIES)
+  lastSeenVisibility?: LastSeenVisibility;
 
   /**
    * An uploaded picture, or null to go back to the initial. It has to be one of

@@ -22,6 +22,8 @@ data class PublicUser(
     val avatarUrl: String?,
     /** The line under the name on a profile card. See `ABOUT_MAX_LENGTH`. */
     val about: String = "",
+    /** Who may read this account's last-seen time. Reciprocal at NOBODY. */
+    val lastSeenVisibility: LastSeenVisibility = LastSeenVisibility.EVERYONE,
     val role: String,
     /**
      * This account's own disappearing window in seconds, or null for "keep
@@ -47,6 +49,7 @@ data class PublicUser(
             displayName = json.optString("displayName"),
             avatarUrl = json.stringOrNull("avatarUrl"),
             about = json.optString("about"),
+            lastSeenVisibility = LastSeenVisibility.of(json.optString("lastSeenVisibility")),
             role = json.optString("role", "USER"),
             messageTtlSeconds = if (json.isNull("messageTtlSeconds")) null
             else json.optInt("messageTtlSeconds").takeIf { it > 0 },
@@ -125,6 +128,19 @@ object BetweenUsApi {
             about?.let { body.put("about", it) }
             PublicUser.from(authed("PATCH", "/api/v1/auth/account", body))
         }
+
+    /**
+     * Who may see when this account was last here.
+     *
+     * Its own call rather than a field on [updateAccount] because it is a
+     * switch and not a field being edited: it is saved the moment it is
+     * pressed, and a privacy switch that waits for a Save button is one people
+     * believe they have set when they have not.
+     */
+    suspend fun setLastSeenVisibility(visibility: LastSeenVisibility): PublicUser = io {
+        val body = JSONObject().put("lastSeenVisibility", visibility.wire)
+        PublicUser.from(authed("PATCH", "/api/v1/auth/account", body))
+    }
 
     /**
      * Sets this account's own disappearing window, or clears it with null.

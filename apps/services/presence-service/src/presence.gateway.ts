@@ -280,17 +280,21 @@ export class PresenceGateway implements OnModuleDestroy {
 
     // The last window of this account has gone, so the last-seen value has
     // stopped moving - which is the moment it is worth a row rather than a
-    // Redis key. Flushed before it is read back, so what everybody is told and
-    // what survives a restart are the same number.
+    // Redis key.
     await this.store.flushLastSeen(userId);
-    const lastSeenAt = (await this.store.lastSeenOf([userId])).get(userId);
 
+    // The event deliberately carries no timestamp. Who may read one depends on
+    // the reader - the subject's `LastSeenVisibility`, a friendship, and whether
+    // the reader has hidden their own - and a broadcast has one payload for
+    // every recipient. Clients that care ask with `presence.query` when they see
+    // somebody go offline, and that road is per-asker and can answer honestly.
+    //
     // The call roster is not touched: a presence socket closing is not evidence
     // that a call ended, and call-service publishes the departure itself the
     // moment its own socket goes - including when it goes by being terminated
     // for missing a heartbeat.
     await this.events.publish(EVENTS.PRESENCE_CHANGED, {
-      user: { userId, status: 'offline', ...(lastSeenAt ? { lastSeenAt } : {}) },
+      user: { userId, status: 'offline' },
     });
     this.logger.info('Presence disconnected', { userId });
   }
@@ -379,7 +383,9 @@ export class PresenceGateway implements OnModuleDestroy {
         if (visible.length === 0) return;
 
         const [seen, statuses] = await Promise.all([
-          this.store.lastSeenOf(visible),
+          // The privacy filter is inside this call, so anybody the asker may
+          // not read is simply missing from the map - see `lastSeenOf`.
+          this.store.lastSeenOf(state.userId, visible),
           Promise.all(visible.map((userId) => this.store.stateOf(userId))),
         ]);
 

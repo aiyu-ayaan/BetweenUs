@@ -168,6 +168,8 @@ export interface PublicUser {
   mustChangePassword: boolean;
   /** The line under the name on a profile card. See `ABOUT_MAX_LENGTH`. */
   about: string;
+  /** Who may see when this account was last here. See `LastSeenVisibility`. */
+  lastSeenVisibility: LastSeenVisibility;
   /**
    * This account's own disappearing-message window, in seconds, or null for
    * "keep everything".
@@ -233,6 +235,29 @@ export interface UsernameAvailability {
   reason?: 'taken' | 'invalid';
 }
 
+/**
+ * Who may see when an account was last here.
+ *
+ * `everyone` is the ceiling rather than the whole world: presence is already
+ * scoped to the people who share a server or an accepted friendship with you,
+ * so it means everyone who could already see your name. `friends` narrows that
+ * to accepted friendships, and `nobody` switches the answer off.
+ *
+ * **`nobody` is reciprocal.** An account that hides when it was last here does
+ * not get to read anybody else's either - WhatsApp's rule, and the only thing
+ * that keeps the setting from being a one-way mirror everybody switches on the
+ * moment it costs them nothing. It is enforced in `presence-service`; a client
+ * hiding a value it was sent would not be hiding anything.
+ *
+ * It is not the same switch as `invisible`. Invisible hides that you are here
+ * *now* and freezes the last-seen value where it stood; this decides who may
+ * read that value at all, whichever status you are wearing.
+ */
+export type LastSeenVisibility = 'everyone' | 'friends' | 'nobody';
+
+/** In the order the pickers draw them, widest first. */
+export const LAST_SEEN_VISIBILITIES: LastSeenVisibility[] = ['everyone', 'friends', 'nobody'];
+
 export interface UpdateAccountRequest {
   username?: string;
   displayName?: string;
@@ -245,6 +270,12 @@ export interface UpdateAccountRequest {
    * line is `DEFAULT_ABOUT`.
    */
   about?: string;
+  /**
+   * Who may see when this account was last here. Choosing `nobody` also stops
+   * this account seeing anybody else's - the rule is reciprocal, and the
+   * clients say so beside the option rather than letting it be discovered.
+   */
+  lastSeenVisibility?: LastSeenVisibility;
   /**
    * This account's personal disappearing window in seconds; null switches it
    * off. Must be one of `DISAPPEARING_WINDOWS`.
@@ -1799,6 +1830,16 @@ export interface PresenceState {
    * published when you were last here would not be invisibility, so the value
    * stops being written the moment the status is chosen and freezes at the last
    * time the account was genuinely visible.
+   *
+   * And never sent to somebody the subject's `LastSeenVisibility` excludes, or
+   * to an account that has hidden its own. The field is absent in both cases,
+   * which is the same thing a client draws for an account nobody has ever seen
+   * go offline - so a missing timestamp says nothing about which of the three
+   * reasons produced it.
+   *
+   * Only ever sent in reply to a `presence.query`. A `presence.changed` that is
+   * broadcast to an audience cannot carry it: the answer is different per
+   * recipient, and a broadcast has one payload for all of them.
    */
   lastSeenAt?: string;
 }

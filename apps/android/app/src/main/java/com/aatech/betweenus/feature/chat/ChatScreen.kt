@@ -237,13 +237,20 @@ fun ChatScreen(
      * `presence.sync` carries only the people who are here now - so the one
      * case the line exists for is the one the socket says nothing about.
      *
-     * Asked when the conversation opens and not again: a timestamp a few
-     * minutes stale reads identically, and somebody coming back arrives as a
-     * `presence.changed` of its own, which turns the line to "online" without
-     * anybody asking.
+     * Asked again when they go offline, because the event that says so cannot
+     * carry the answer: who may read a last-seen time depends on the reader -
+     * their setting, the friendship, and whether they have hidden their own -
+     * and a broadcast has one payload for everybody. `presence.query` is the
+     * road that can answer per-asker.
+     *
+     * Nothing else re-asks. A timestamp a few minutes stale reads identically,
+     * and coming back online arrives as its own event, which turns the line to
+     * "online" without anybody asking anything.
      */
-    LaunchedEffect(direct?.participant?.id) {
-        direct?.participant?.id?.let { Presence.askLastSeen(listOf(it)) }
+    val peerId = direct?.participant?.id
+    val peerAway = (statuses[peerId] ?: PresenceStatus.OFFLINE) == PresenceStatus.OFFLINE
+    LaunchedEffect(peerId, peerAway) {
+        peerId?.let { Presence.askLastSeen(listOf(it)) }
     }
 
     // What the outbox is doing, and whether it is doing it for this channel.

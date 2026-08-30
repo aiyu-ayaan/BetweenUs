@@ -55,6 +55,14 @@ const register = async (name) => {
   });
 };
 
+/** Changes one account's last-seen privacy setting. */
+const setLastSeenVisibility = (session, lastSeenVisibility) =>
+  json(`${AUTH}/api/v1/auth/account`, {
+    method: 'PATCH',
+    headers: { Authorization: `Bearer ${session.tokens.accessToken}` },
+    body: JSON.stringify({ lastSeenVisibility }),
+  });
+
 /**
  * A socket that keeps every server event, so a test can wait for one that may
  * already have arrived. Polling a buffer beats racing a listener.
@@ -278,8 +286,7 @@ ok(
     .some((event) => event.type === 'presence.changed' && event.user.userId === carol.user.id),
 );
 
-// Closing a socket takes that user offline for everyone still connected, and
-// the event carries when they were last here.
+// Closing a socket takes that user offline for everyone still connected.
 a.socket.close();
 const offline = await b.waitFor(
   (event) =>
@@ -288,13 +295,66 @@ const offline = await b.waitFor(
     event.user.status === 'offline',
 );
 ok('offline fanout', offline !== null);
-// Alice was visible for the whole run, so her departure is a moment somebody
-// can be told about. A timestamp in the future would be a clock problem; one
-// before this script started would be a value that never moved.
-ok('the offline event carries a last-seen time', typeof offline?.user.lastSeenAt === 'string');
+// And it carries no timestamp, deliberately. Who may read a last-seen time
+// depends on the reader, and a broadcast has one payload for all of them - so
+// the answer only ever travels down `presence.query`, which is per-asker.
+ok('the offline broadcast carries no timestamp', offline?.user.lastSeenAt === undefined);
+
+// Bob asks about Alice, who has just left and has never narrowed her setting.
+// This is the path that may answer, and the only one.
+b.send({ type: 'presence.query', userIds: [alice.user.id] });
+const aliceSeen = await b.waitFor(
+  (event) =>
+    event.type === 'presence.changed' &&
+    event.user.userId === alice.user.id &&
+    typeof event.user.lastSeenAt === 'string',
+);
+ok('a query answers with a last-seen time', aliceSeen !== null);
 ok(
   'and it is when she actually left',
-  Math.abs(Date.now() - new Date(offline.user.lastSeenAt).getTime()) < 5 * 60_000,
+  Math.abs(Date.now() - new Date(aliceSeen.user.lastSeenAt).getTime()) < 5 * 60_000,
+);
+
+// --- the privacy setting, and the rule that makes it worth having ------------
+//
+// Alice narrows hers to friends. Bob shares a server with her and is not her
+// friend, so the timestamp he could read a moment ago must stop arriving - the
+// same query, the same account, a different answer.
+await setLastSeenVisibility(alice, 'friends');
+const beforeFriends = b.events.length;
+b.send({ type: 'presence.query', userIds: [alice.user.id] });
+await new Promise((resolve) => setTimeout(resolve, 500));
+ok(
+  'friends-only hides it from a server-mate',
+  b.events
+    .slice(beforeFriends)
+    .filter((event) => event.type === 'presence.changed' && event.user.userId === alice.user.id)
+    .every((event) => event.user.lastSeenAt === undefined),
+);
+// The status still arrives. It is the timestamp that is private, not the
+// account - a query that went silent would say something by going silent.
+ok(
+  'but the status still arrives',
+  b.events
+    .slice(beforeFriends)
+    .some((event) => event.type === 'presence.changed' && event.user.userId === alice.user.id),
+);
+
+// And reciprocity: Bob hides his own, Alice opens hers all the way back up, and
+// Bob still gets nothing. This is the rule that stops the setting being a
+// one-way mirror, and it is the one worth an end-to-end assertion because it
+// depends on two accounts' settings at once.
+await setLastSeenVisibility(alice, 'everyone');
+await setLastSeenVisibility(bob, 'nobody');
+const beforeHiding = b.events.length;
+b.send({ type: 'presence.query', userIds: [alice.user.id] });
+await new Promise((resolve) => setTimeout(resolve, 500));
+ok(
+  "somebody who hides their own reads nobody else's",
+  b.events
+    .slice(beforeHiding)
+    .filter((event) => event.type === 'presence.changed' && event.user.userId === alice.user.id)
+    .every((event) => event.user.lastSeenAt === undefined),
 );
 // Not "no presence.changed at all": Carol is in her own audience, so her own
 // arrival comes back to her. Everything about anybody else is what must never

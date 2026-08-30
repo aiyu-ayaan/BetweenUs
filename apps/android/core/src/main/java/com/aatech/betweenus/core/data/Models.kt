@@ -64,6 +64,53 @@ const val DEFAULT_ABOUT = "Hey, I’m on Between Us."
  */
 const val ABOUT_MAX_LENGTH = 140
 
+/**
+ * Who may see when this account was last here.
+ *
+ * EVERYONE is the ceiling rather than the whole world: presence is already
+ * scoped to the people who share a server or an accepted friendship, so it
+ * means everybody who could already see the name.
+ *
+ * **NOBODY is reciprocal** - an account that hides its own last-seen time does
+ * not get to read anybody else's. The server enforces that; this enum only has
+ * to spell it the same way the wire does and say it out loud in the picker.
+ *
+ * It is not the same switch as [PresenceStatus.INVISIBLE]. Invisible hides that
+ * you are here *now* and freezes the value where it stands; this decides who
+ * may read that value at all, whichever status you are wearing.
+ */
+enum class LastSeenVisibility { EVERYONE, FRIENDS, NOBODY;
+
+    /** What the wire calls it: lowercase, the way the other clients send it. */
+    val wire: String get() = name.lowercase()
+
+    val label: String
+        get() = when (this) {
+            EVERYONE -> "Everyone"
+            FRIENDS -> "My friends"
+            NOBODY -> "Nobody"
+        }
+
+    /** Said before the choice is made, especially for the reciprocal one. */
+    val note: String
+        get() = when (this) {
+            EVERYONE -> "Anyone who shares a server or a friendship with you."
+            FRIENDS -> "Only people you have accepted as friends."
+            NOBODY ->
+                "Nobody sees when you were last here — and you will not see anyone else’s either."
+        }
+
+    companion object {
+        /**
+         * An unrecognised value reads as the widest, which is what the column
+         * defaults to. Guessing narrower would silently hide people who never
+         * asked to be hidden.
+         */
+        fun of(value: String?): LastSeenVisibility =
+            entries.firstOrNull { it.wire == value?.lowercase() } ?: EVERYONE
+    }
+}
+
 /** The public face of an account: a search result, a DM header, an author. */
 data class UserSummary(
     val id: String,

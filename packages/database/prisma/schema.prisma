@@ -40,6 +40,20 @@ enum GlobalRole {
   ADMIN
 }
 
+/// Who may see when this account was last here.
+///
+/// EVERYONE is the ceiling rather than the whole world: presence is already
+/// scoped to the people who share a server or an accepted friendship with you,
+/// so "everyone" means everyone who could already see your name. FRIENDS
+/// narrows that to accepted friendships, and NOBODY switches the answer off.
+///
+/// NOBODY is reciprocal - see `User.lastSeenVisibility`.
+enum LastSeenVisibility {
+  EVERYONE
+  FRIENDS
+  NOBODY
+}
+
 model User {
   id                 String     @id @default(uuid())
   email              String     @unique
@@ -62,6 +76,17 @@ model User {
   /// a status that hid you but kept publishing when you were last here would
   /// not be hiding you.
   lastSeenAt         DateTime?
+  /// Who may read `lastSeenAt`.
+  ///
+  /// **NOBODY is reciprocal**: an account that hides when it was last here does
+  /// not get to read anybody else's either. That is WhatsApp's rule and it is
+  /// the only thing that keeps the setting from being a one-way mirror - a
+  /// feature everybody switches on the moment it costs them nothing.
+  ///
+  /// Enforced server-side in `presence-service`, never by the client hiding a
+  /// value it was sent: a timestamp that reaches a client is a timestamp that
+  /// account can read, whatever the UI does with it.
+  lastSeenVisibility LastSeenVisibility @default(EVERYONE)
   role               GlobalRole @default(USER)
   /// Set for accounts created with a generated password (the bootstrap admin);
   /// they can do nothing until they choose their own.

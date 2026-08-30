@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
@@ -36,6 +37,7 @@ import com.aatech.betweenus.core.crypto.IdentityStatus
 import com.aatech.betweenus.core.data.ABOUT_MAX_LENGTH
 import com.aatech.betweenus.core.data.DEFAULT_ABOUT
 import com.aatech.betweenus.core.data.BetweenUsApi
+import com.aatech.betweenus.core.data.LastSeenVisibility
 import com.aatech.betweenus.core.data.Endpoint
 import com.aatech.betweenus.core.data.PublicUser
 import com.aatech.betweenus.core.data.Session
@@ -152,6 +154,9 @@ fun AccountSecurityScreen(
                 onPicked = { url -> Session.updateUser(BetweenUsApi.setAvatar(url)) },
                 onClear = { Session.updateUser(BetweenUsApi.setAvatar(null)) },
             )
+
+            SectionLabel("Last seen")
+            LastSeenPrivacy(chosen = user.lastSeenVisibility, enabled = !busy, onFail = { note = it })
 
             SectionLabel("Profile Information")
             Column(Modifier.padding(horizontal = 12.dp)) {
@@ -344,5 +349,66 @@ fun AccountSecurityScreen(
                 Notice(it, MaterialTheme.colorScheme.error, Modifier.padding(horizontal = 16.dp))
             }
         }
+    }
+}
+
+/**
+ * Who may see when you were last here.
+ *
+ * Saved on the press rather than behind the Save Profile button below it: this
+ * is a switch and not a field being edited, and a privacy switch that needs a
+ * second press to take effect is one people believe they have set when they
+ * have not.
+ *
+ * The note under the row is the whole reason it is a row of chips and not a
+ * three-item dropdown. `NOBODY` is reciprocal - choosing it costs you everyone
+ * else's last seen too - and a rule somebody only discovers by losing something
+ * is a rule they experience as a bug.
+ */
+@Composable
+private fun LastSeenPrivacy(
+    chosen: LastSeenVisibility,
+    enabled: Boolean,
+    onFail: (String) -> Unit,
+) {
+    val scope = rememberCoroutineScope()
+    var saving by remember { mutableStateOf(false) }
+
+    Column(Modifier.padding(horizontal = 16.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            LastSeenVisibility.entries.forEach { option ->
+                FilterChip(
+                    selected = option == chosen,
+                    enabled = enabled && !saving,
+                    onClick = {
+                        if (option == chosen) return@FilterChip
+                        saving = true
+                        scope.launch {
+                            try {
+                                Session.updateUser(BetweenUsApi.setLastSeenVisibility(option))
+                            } catch (error: Exception) {
+                                onFail(error.message ?: "That could not be saved")
+                            } finally {
+                                saving = false
+                            }
+                        }
+                    },
+                    label = { Text(option.label) },
+                )
+            }
+        }
+        Spacer(Modifier.height(6.dp))
+        Text(
+            text = chosen.note,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(4.dp))
+        Text(
+            text = "This is not the same as Invisible. Invisible hides that you are here now; " +
+                "this decides who may read when you were last here at all.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
