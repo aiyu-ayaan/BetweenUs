@@ -1824,6 +1824,14 @@ export class Mesh {
     const links = [...this.links.values()];
     const samples = await Promise.all(links.map((link) => link.sample()));
 
+    // The echo canceller is one per machine, not one per link, so the reading
+    // is kept here rather than on any of the rows below. Every link reports the
+    // same local source; the first one that has a number is as good as any.
+    const erle = samples.find(
+      (sample) => sample.echoReturnLossEnhancementDb !== null,
+    );
+    this.echoReturnLossEnhancementDb = erle?.echoReturnLossEnhancementDb ?? null;
+
     return links.map((link, index) => {
       const now = samples[index]!;
       const before = this.lastSamples.get(link.peer.peerId);
@@ -1831,6 +1839,15 @@ export class Mesh {
       return toStats(link.peer.peerId, link.peer.username, now, before);
     });
   }
+
+  /**
+   * How many dB of echo the canceller removed as of the last `stats()` call.
+   *
+   * Null before the first sample, and on any build that does not report the
+   * statistic. Read by the voice store, which is what the settings screen
+   * watches - see `echoCancellerFailing`.
+   */
+  echoReturnLossEnhancementDb: number | null = null;
 
   /** Broadcasts on every peer's data channel, or to one peer. */
   sendData(payload: unknown, to?: string[]): void {

@@ -41,6 +41,7 @@ assert.equal(lossPercent(1, 799), 0.1);
 
 const sample = (patch: Partial<LinkSample>): LinkSample => ({
   at: 0,
+  echoReturnLossEnhancementDb: null,
   inboundAudioBytes: 0,
   inboundVideoBytes: 0,
   outboundAudioBytes: 0,

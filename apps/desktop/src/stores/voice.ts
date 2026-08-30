@@ -156,6 +156,14 @@ interface VoiceState {
    * seconds, alongside the video poll the mesh already runs.
    */
   stats: LinkStats[];
+  /**
+   * Echo return loss enhancement, in dB, from the local microphone.
+   *
+   * A machine-wide reading rather than a per-link one: there is one canceller.
+   * Null until a sample has been taken, and on builds that do not report it.
+   * The settings screen turns this into the one sentence a person can act on.
+   */
+  echoErleDb: number | null;
   /** Set when this client is sending no audio while believing it is. */
   notHeard: boolean;
   /**
@@ -253,6 +261,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
   error: null,
   dismissError: () => set({ error: null }),
   stats: [],
+  echoErleDb: null,
   notHeard: false,
   screenHolder: null,
 
@@ -955,6 +964,7 @@ function startStatsPoll(): void {
       quietSamples = stats.some((link) => link.sendingAudio) ? 0 : quietSamples + 1;
       useVoiceStore.setState({
         stats,
+        echoErleDb: current.echoReturnLossEnhancementDb,
         notHeard: notBeingHeard(intendsToSend, stats, quietSamples),
       });
     });
@@ -968,7 +978,7 @@ function stopStatsPoll(): void {
   if (statsTimer !== null) window.clearInterval(statsTimer);
   statsTimer = null;
   quietSamples = 0;
-  useVoiceStore.setState({ stats: [], notHeard: false });
+  useVoiceStore.setState({ stats: [], echoErleDb: null, notHeard: false });
 }
 
 async function closeMicrophone(): Promise<void> {

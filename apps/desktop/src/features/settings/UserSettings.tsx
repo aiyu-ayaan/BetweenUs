@@ -10,6 +10,7 @@ import { useAuthStore } from '../../stores/auth';
 import { useChatStore } from '../../stores/chat';
 import { usePresenceStore } from '../../stores/presence';
 import { useVoiceStore } from '../../stores/voice';
+import { echoAdvice, echoCancellerFailing } from '../../services/call-stats';
 import { useAudioSettings } from '../../stores/audioSettings';
 import { monitorMic, type MicLevel } from '../../services/mic-gate';
 import { describeKey } from '../../services/talk-key';
@@ -974,6 +975,7 @@ function VoiceSection(): JSX.Element {
   const status = useVoiceStore((state) => state.status);
   const micEnabled = useVoiceStore((state) => state.micEnabled);
   const cameraEnabled = useVoiceStore((state) => state.cameraEnabled);
+  const echoErleDb = useVoiceStore((state) => state.echoErleDb);
   const settings = useAudioSettings((state) => state.settings);
   const update = useAudioSettings((state) => state.update);
 
@@ -1012,6 +1014,10 @@ function VoiceSection(): JSX.Element {
   }, [testing, settings.inputDeviceId]);
 
   const hifi = settings.mode === 'hifi';
+  // Only true while a call is running and the canceller has reported a number
+  // that says it is not working. Off deliberately - which hi-fi mode does - is
+  // not a fault, and a browser that reports nothing raises nothing.
+  const echoFailing = echoCancellerFailing(settings.echoCancellation && !hifi, echoErleDb);
 
   return (
     <>
@@ -1225,11 +1231,16 @@ function VoiceSection(): JSX.Element {
 
       <h2 className="mt-8 text-base font-semibold text-slate-50">Processing</h2>
       <div className="mt-3 space-y-1 rounded-lg bg-surface-800 p-4">
-        <Switch
+        <Levels
           label="Noise suppression"
-          hint="Asks for the strongest suppressor this machine has - where the runtime supports voice isolation, that is a model that keeps a voice and drops the rest."
-          checked={settings.noiseSuppression}
+          hint="Standard is the ordinary suppressor and handles steady noise - a fan, a hum, an air conditioner. High additionally asks for voice isolation, a model that removes a keyboard, a dog or a flatmate; it costs noticeably more processor, so it is worth turning on for a noisy room rather than leaving on everywhere."
+          value={settings.noiseSuppression}
           disabled={hifi}
+          options={[
+            ['off', 'Off'],
+            ['standard', 'Standard'],
+            ['high', 'High'],
+          ]}
           onChange={(noiseSuppression) => update({ noiseSuppression })}
         />
         <Switch
@@ -1239,6 +1250,19 @@ function VoiceSection(): JSX.Element {
           disabled={hifi}
           onChange={(echoCancellation) => update({ echoCancellation })}
         />
+        {/* Measured rather than guessed. The canceller reports how much it is
+            actually removing, and this is the only place that reading is worth
+            anything: somebody is on this screen because they have been told
+            they are echoing, and the cause is almost always the output device
+            two settings above rather than anything in this section. */}
+        {echoFailing && (
+          <p
+            role="status"
+            className="mt-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-200"
+          >
+            {echoAdvice(settings.outputDeviceId !== null)}
+          </p>
+        )}
         <Switch
           label="Automatic gain control"
           hint="Evens out a quiet or a loud voice. Turn it off if your microphone is already set up."
@@ -1619,6 +1643,66 @@ function Switch({
         className="mt-1 h-5 w-5 shrink-0 cursor-pointer accent-accent"
       />
     </label>
+  );
+}
+
+/**
+ * One setting with three or more named steps, as a radio group.
+ *
+ * A real `radiogroup` rather than styled buttons, because arrow-key movement
+ * between the options and the "3 of 3 selected" a screen reader announces both
+ * come free with the role and have to be rebuilt by hand without it. The
+ * selected step is marked by more than colour - it carries a border and a
+ * weight change - so it is still readable to somebody who cannot see the
+ * accent.
+ */
+function Levels<T extends string>({
+  label,
+  hint,
+  value,
+  options,
+  disabled = false,
+  onChange,
+}: {
+  label: string;
+  hint?: string;
+  value: T;
+  options: Array<[T, string]>;
+  disabled?: boolean;
+  onChange: (value: T) => void;
+}): JSX.Element {
+  return (
+    <div className={`py-2.5 sm:py-2 ${disabled ? 'opacity-50' : ''}`}>
+      <span className="block text-slate-100" id={`levels-${label}`}>
+        {label}
+      </span>
+      {hint && <span className="mt-0.5 block text-sm text-slate-400">{hint}</span>}
+      <div
+        role="radiogroup"
+        aria-labelledby={`levels-${label}`}
+        className="mt-2.5 inline-flex rounded-lg border border-edge bg-surface-950 p-0.5"
+      >
+        {options.map(([option, optionLabel]) => (
+          <button
+            key={option}
+            type="button"
+            role="radio"
+            aria-checked={value === option}
+            disabled={disabled}
+            onClick={() => onChange(option)}
+            className={`min-h-[36px] rounded-md px-4 text-sm transition-colors duration-200 ${
+              disabled ? '' : 'cursor-pointer'
+            } ${
+              value === option
+                ? 'bg-accent/20 font-medium text-slate-50 ring-1 ring-accent/60'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            {optionLabel}
+          </button>
+        ))}
+      </div>
+    </div>
   );
 }
 

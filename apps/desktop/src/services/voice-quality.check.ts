@@ -55,7 +55,7 @@ assert.deepEqual(micProcessing(hifi), {
   voiceIsolation: false,
 });
 assert.deepEqual(
-  micProcessing({ ...hifi, echoCancellation: true, noiseSuppression: true, autoGainControl: true }),
+  micProcessing({ ...hifi, echoCancellation: true, noiseSuppression: 'high', autoGainControl: true }),
   micProcessing(hifi),
 );
 
