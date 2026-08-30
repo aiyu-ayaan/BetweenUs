@@ -145,6 +145,8 @@ interface VoiceState {
    */
   encrypted: boolean;
   error: string | null;
+  /** Clears the current error banner across all views. */
+  dismissError: () => void;
   /**
    * Per-peer measurements, and a warning when they say something is wrong.
    *
@@ -249,6 +251,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
   sharedDisplayId: null,
   encrypted: false,
   error: null,
+  dismissError: () => set({ error: null }),
   stats: [],
   notHeard: false,
   screenHolder: null,

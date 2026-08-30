@@ -53,6 +53,7 @@ import {
   ScreenShareIcon,
   SpeakerIcon,
   UsersIcon,
+  XIcon,
 } from '../../components/icons';
 
 /** Tiles per page. Nine keeps every face big enough to read on a laptop. */
@@ -175,9 +176,21 @@ export function VoiceChannelView({
 
       <div className="flex min-h-0 flex-1 flex-col gap-3 p-4">
         {error && (
-          <p role="alert" className="rounded bg-red-500/10 px-3 py-2 text-center text-sm text-red-300">
-            {error}
-          </p>
+          <div
+            role="alert"
+            className="flex items-center justify-between gap-3 rounded bg-red-500/10 px-3 py-2 text-sm text-red-300"
+          >
+            <span className="min-w-0 flex-1 text-center">{error}</span>
+            <button
+              type="button"
+              onClick={() => useVoiceStore.getState().dismissError()}
+              className="inline-flex h-5 w-5 shrink-0 cursor-pointer items-center justify-center rounded text-red-300/70 transition-colors hover:bg-red-500/20 hover:text-red-100"
+              title="Dismiss error"
+              aria-label="Dismiss error"
+            >
+              <XIcon className="h-3.5 w-3.5" />
+            </button>
+          </div>
         )}
 
         {notHeard && (

@@ -282,8 +282,20 @@ function VoiceError(): JSX.Element | null {
   if (!error) return null;
 
   return (
-    <p role="alert" className="mx-2 mt-1 rounded bg-danger/10 px-2 py-1.5 text-xs text-danger">
-      {error}
-    </p>
+    <div
+      role="alert"
+      className="mx-2 mt-1 flex items-start justify-between gap-1.5 rounded bg-danger/10 px-2 py-1.5 text-xs text-danger"
+    >
+      <span className="min-w-0 flex-1 break-words">{error}</span>
+      <button
+        type="button"
+        onClick={() => useVoiceStore.getState().dismissError()}
+        className="inline-flex h-4 w-4 shrink-0 cursor-pointer items-center justify-center rounded text-danger/70 transition-colors hover:bg-danger/20 hover:text-danger"
+        title="Dismiss error"
+        aria-label="Dismiss error"
+      >
+        <XIcon className="h-3 w-3" />
+      </button>
+    </div>
   );
 }

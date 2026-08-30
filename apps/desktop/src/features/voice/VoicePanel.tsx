@@ -4,7 +4,7 @@ import { usePeerAudio } from '../../stores/peerAudio';
 import { CallDuration } from './CallDuration';
 import { VoiceControls } from './VoiceControls';
 import { NotHeardNotice } from './NotHeardNotice';
-import { LockIcon, MicOffIcon, SpeakerIcon, SpeakerOffIcon } from '../../components/icons';
+import { LockIcon, MicOffIcon, SpeakerIcon, SpeakerOffIcon, XIcon } from '../../components/icons';
 
 /**
  * Sits at the bottom of whichever sidebar is on screen while connected to a
@@ -57,9 +57,21 @@ export function VoicePanel(): JSX.Element | null {
       </p>
 
       {error && (
-        <p role="alert" className="mb-2 rounded bg-danger/10 px-2 py-1 text-xs text-danger">
-          {error}
-        </p>
+        <div
+          role="alert"
+          className="mb-2 flex items-start justify-between gap-1.5 rounded bg-danger/10 px-2 py-1.5 text-xs text-danger"
+        >
+          <span className="min-w-0 flex-1 break-words">{error}</span>
+          <button
+            type="button"
+            onClick={() => useVoiceStore.getState().dismissError()}
+            className="inline-flex h-4 w-4 shrink-0 cursor-pointer items-center justify-center rounded text-danger/70 transition-colors hover:bg-danger/20 hover:text-danger"
+            title="Dismiss error"
+            aria-label="Dismiss error"
+          >
+            <XIcon className="h-3 w-3" />
+          </button>
+        </div>
       )}
 
       {/* The one measurement worth interrupting somebody for. Everything else
