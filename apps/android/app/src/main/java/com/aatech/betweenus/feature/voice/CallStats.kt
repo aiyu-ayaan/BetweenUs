@@ -39,6 +39,13 @@ data class LinkSample(
     val frameHeight: Int? = null,
     val framesPerSecond: Double? = null,
     /**
+     * Whether this link has a path at all: ICE settled and DTLS came up.
+     *
+     * Distinct from every byte counter above, which cannot tell "connected and
+     * saying nothing" from "never connected" - both read as a still counter.
+     */
+    val connected: Boolean = true,
+    /**
      * "direct" or "relay" once ICE has settled on a pair, null before that.
      *
      * Costs an operator nothing when it is direct and relay bandwidth when it
@@ -62,6 +69,8 @@ data class LinkStats(
     val framesPerSecond: Int? = null,
     /** False when we are sending them no audio at all - see [notBeingHeard]. */
     val sendingAudio: Boolean = true,
+    /** False while this link has no path at all - see [notBeingHeard]. */
+    val connected: Boolean = true,
 )
 
 object CallStats {
@@ -103,6 +112,12 @@ object CallStats {
      * sends comfort noise rather than nothing at all. What this catches is the
      * capture that failed, the device that was unplugged, and the sender that
      * was never attached.
+     *
+     * And deliberately only over links that have a path. A connection that
+     * never came up carries nothing in either direction, so the best microphone
+     * in the world reads as silent on it, and "nobody can hear you, try another
+     * input" is then the wrong answer to a call that had simply failed to
+     * connect - prominent, actionable, and impossible to act on successfully.
      */
     fun notBeingHeard(
         intendsToSend: Boolean,
@@ -111,9 +126,12 @@ object CallStats {
         requiredSamples: Int = 3,
     ): Boolean {
         if (!intendsToSend) return false
-        if (stats.isEmpty()) return false
         if (quietSamples < requiredSamples) return false
-        return stats.none { it.sendingAudio }
+        // Nobody to be heard by: an empty call, or one where no link has a
+        // path. Neither is evidence about the microphone.
+        val reachable = stats.filter { it.connected }
+        if (reachable.isEmpty()) return false
+        return reachable.none { it.sendingAudio }
     }
 
     /**
@@ -183,6 +201,7 @@ object CallStats {
             } else {
                 true
             },
+            connected = now.connected,
         )
     }
 

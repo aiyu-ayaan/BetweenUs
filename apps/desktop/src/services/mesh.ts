@@ -1162,6 +1162,10 @@ class PeerLink {
       frameWidth: null,
       frameHeight: null,
       framesPerSecond: null,
+      // Asked here rather than inferred from the counters below, because a
+      // link that is up and quiet and a link that never came up produce the
+      // same still counters, and only one of them is a microphone fault.
+      connected: this.connectedNow(),
       transport: null,
     };
     if (this.closed) return now;

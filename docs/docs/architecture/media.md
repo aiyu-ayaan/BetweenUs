@@ -138,6 +138,13 @@ apart because only one of them is fixable from the client:
 The client cannot tell which it is facing, so it assumes the second and
 retries properly before concluding the first. See below.
 
+**What a link with no path must not be blamed on.** It carries nothing in
+either direction, so a working microphone reads as silent on it. The "nobody
+can hear you — your microphone is sending nothing" warning is therefore
+measured only over connected links: a call where none are connected shows
+"could not be reached" alone, rather than that plus an input-device dropdown
+that cannot fix it. See `notBeingHeard` in `call-stats.ts` and `CallStats.kt`.
+
 ## One signal at a time
 
 Negotiation is the WebRTC spec's perfect-negotiation shape: politeness is

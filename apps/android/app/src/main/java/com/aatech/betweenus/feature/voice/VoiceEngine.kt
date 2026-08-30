@@ -2049,6 +2049,11 @@ class VoiceEngine(private val context: Context) {
                     packetsLost = packetsLost,
                     packetsReceived = packetsReceived,
                     roundTripSeconds = roundTrip,
+                    // Asked rather than inferred from the counters, because a
+                    // link that is up and quiet and a link that never came up
+                    // produce the same still counters, and only one of them is
+                    // a microphone fault.
+                    connected = connectedNow(),
                     frameWidth = picture.first,
                     frameHeight = picture.second,
                     framesPerSecond = picture.third,

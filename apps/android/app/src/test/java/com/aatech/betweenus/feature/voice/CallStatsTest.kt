@@ -136,6 +136,19 @@ class CallStatsTest {
         // One peer hearing us and another not is that peer's problem, and the
         // microphone is what this warning is about.
         assertEquals(false, CallStats.notBeingHeard(true, listOf(silent, second), 9))
+
+        // A link with no path carries nothing whatever the microphone does, so
+        // it is no evidence about the microphone: "nobody can hear you, try
+        // another input" is the wrong answer to a call that never connected.
+        val unreachable = silent.copy(connected = false)
+        assertEquals(
+            "a link with no path is not a microphone fault",
+            false,
+            CallStats.notBeingHeard(true, listOf(unreachable), 9),
+        )
+        // A dead link is ignored, not counted as a vote either way.
+        assertTrue(CallStats.notBeingHeard(true, listOf(unreachable, silent), 9))
+        assertEquals(false, CallStats.notBeingHeard(true, listOf(unreachable, second), 9))
     }
 
     @Test

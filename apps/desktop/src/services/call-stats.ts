@@ -33,6 +33,13 @@ export interface LinkSample {
   frameHeight: number | null;
   framesPerSecond: number | null;
   /**
+   * Whether this link has a path at all: ICE settled and DTLS came up.
+   *
+   * Distinct from every byte counter above, which cannot tell "connected and
+   * saying nothing" from "never connected" - both read as a still counter.
+   */
+  connected: boolean;
+  /**
    * Whether the media went straight to the other machine or through a relay.
    *
    * Null until ICE has settled on a pair. It costs an operator nothing when it
@@ -57,6 +64,8 @@ export interface LinkStats {
   framesPerSecond: number | null;
   /** False when we are sending them no audio at all - see `notBeingHeard`. */
   sendingAudio: boolean;
+  /** False while this link has no path at all - see `notBeingHeard`. */
+  connected: boolean;
 }
 
 /**
@@ -100,6 +109,16 @@ export function lossPercent(lost: number, received: number): number | null {
  * sends comfort noise rather than nothing at all. What this catches is the
  * capture that failed, the device that was unplugged, and the sender that was
  * never attached.
+ *
+ * And deliberately only over links that have a path. A connection that never
+ * came up carries nothing in either direction, so the best microphone in the
+ * world reads as silent on it - which is how "nobody can hear you, try another
+ * input" came to be the message on screen during a call that had simply failed
+ * to connect, sitting directly under the mesh's own "could not be reached".
+ * That is the worst kind of wrong answer: prominent, actionable, and impossible
+ * to act on successfully, because no input device on the machine is the
+ * problem. The two notices contradicted each other and the wrong one was the
+ * one with a dropdown, so it was the one people spent the call on.
  */
 export function notBeingHeard(
   intendsToSend: boolean,
@@ -108,9 +127,12 @@ export function notBeingHeard(
   requiredSamples = 3,
 ): boolean {
   if (!intendsToSend) return false;
-  if (stats.length === 0) return false;
   if (quietSamples < requiredSamples) return false;
-  return stats.every((link) => !link.sendingAudio);
+  // Nobody to be heard by: an empty call, or one where no link has a path.
+  // Neither is evidence about the microphone.
+  const reachable = stats.filter((link) => link.connected);
+  if (reachable.length === 0) return false;
+  return reachable.every((link) => !link.sendingAudio);
 }
 
 /**
@@ -173,6 +195,7 @@ export function toStats(
     // Any movement at all counts. Opus sends a few hundred bytes a second even
     // through silence, so a sender that is attached and working is never still.
     sendingAudio: before ? now.outboundAudioBytes > before.outboundAudioBytes : true,
+    connected: now.connected,
   };
 }
 

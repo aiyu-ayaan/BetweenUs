@@ -46,6 +46,7 @@ const sample = (patch: Partial<LinkSample>): LinkSample => ({
   frameWidth: null,
   frameHeight: null,
   framesPerSecond: null,
+  connected: true,
   transport: null,
   ...patch,
 });
@@ -107,6 +108,17 @@ assert.equal(notBeingHeard(true, [], 9), false, 'nobody to be heard by is not a 
 // One peer hearing us and another not is that peer's problem, not the
 // microphone's - and the microphone is what this warning is about.
 assert.equal(notBeingHeard(true, [silent, second], 9), false);
+// A link with no path carries nothing whatever the microphone does, so it is
+// no evidence about the microphone. This is the pair of contradictory notices:
+// "could not be reached" and "nobody can hear you, try another input" on screen
+// at once, where only the first is true and only the second looks fixable.
+const unreachable: LinkStats[] = [{ ...silent, connected: false }];
+assert.equal(notBeingHeard(true, unreachable, 9), false);
+// One live link that is not hearing us still fires, even next to a dead one:
+// the dead link is ignored, not counted as a vote either way.
+assert.equal(notBeingHeard(true, [...unreachable, silent], 9), true);
+// ... and a live link that is hearing us still settles it.
+assert.equal(notBeingHeard(true, [...unreachable, second], 9), false);
 
 // Health warnings fire where a person would notice, and not before.
 assert.equal(healthWarning([second]), null);
