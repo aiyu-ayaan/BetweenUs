@@ -1160,7 +1160,7 @@ private fun FloatingPipTile(
             )
         } else {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Avatar(id = id, label = label, url = null, size = 48.dp)
+                Avatar(id = id, label = label, url = null, size = 48.dp, viewable = false)
             }
         }
 
@@ -1341,6 +1341,7 @@ private fun CallTile(
                 label = label,
                 url = null,
                 size = if (isCompact) 36.dp else 72.dp,
+                viewable = false,
             )
         }
 

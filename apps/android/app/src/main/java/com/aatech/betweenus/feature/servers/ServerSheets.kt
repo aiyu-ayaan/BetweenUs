@@ -257,6 +257,7 @@ private fun InviteCard(
             url = invite.iconUrl,
             size = 72.dp,
             shape = RoundedCornerShape(20.dp),
+            viewable = false,
         )
         Spacer(Modifier.height(10.dp))
         Text(

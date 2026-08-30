@@ -188,6 +188,7 @@ private fun InviteRow(
             url = member.avatarUrl,
             status = status.name.lowercase(),
             size = 36.dp,
+            viewable = false,
         )
         Column(Modifier.weight(1f)) {
             Text(member.label, style = MaterialTheme.typography.bodyMedium, color = Slate100)

@@ -158,6 +158,7 @@ fun ShareTargetScreen(
                                 url = direct.participant.avatarUrl?.let { Endpoint.absolute(it) },
                                 status = statuses[direct.participant.id]?.wire ?: "offline",
                                 size = 36.dp,
+                                viewable = false,
                             )
                         },
                         onClick = { onPick(direct.channelId, null) },

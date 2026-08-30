@@ -189,7 +189,7 @@ private fun IncomingCall(caller: String, onAnswer: () -> Unit, onDecline: () -> 
     ) {
         Spacer(Modifier.height(72.dp))
 
-        Avatar(id = caller, label = caller, url = null, size = 96.dp)
+        Avatar(id = caller, label = caller, url = null, size = 96.dp, viewable = false)
 
         Spacer(Modifier.height(20.dp))
 

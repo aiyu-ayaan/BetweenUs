@@ -1,7 +1,9 @@
 package com.aatech.betweenus.ui.components
 
 import androidx.compose.animation.core.animateDpAsState
+import android.widget.Toast
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -18,6 +20,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.LineHeightStyle
@@ -51,12 +54,32 @@ fun Avatar(
     modifier: Modifier = Modifier,
     size: Dp = 36.dp,
     shape: androidx.compose.ui.graphics.Shape = CircleShape,
+    viewable: Boolean = true,
 ) {
+    val context = LocalContext.current
     Box(
         modifier = modifier
             .size(size)
             .clip(shape)
-            .background(if (url == null) tintFor(id) else Surface700),
+            .background(if (url == null) tintFor(id) else Surface700)
+            // Tapping a face shows the face. It has to be taken before the row
+            // underneath gets it - a row is usually clickable too - which is
+            // what a `clickable` on the circle itself does.
+            .then(
+                if (viewable) {
+                    Modifier.clickable {
+                        if (url != null) {
+                            ProfileViewer.open(label, url)
+                        } else {
+                            Toast
+                                .makeText(context, "Profile photo not available", Toast.LENGTH_SHORT)
+                                .show()
+                        }
+                    }
+                } else {
+                    Modifier
+                }
+            ),
         contentAlignment = Alignment.Center,
     ) {
         if (url != null) {
@@ -101,9 +124,10 @@ fun AvatarWithStatus(
     status: String,
     modifier: Modifier = Modifier,
     size: Dp = 36.dp,
+    viewable: Boolean = true,
 ) {
     Box(modifier = modifier) {
-        Avatar(id, label, url, size = size)
+        Avatar(id, label, url, size = size, viewable = viewable)
         StatusDot(
             status = status,
             modifier = Modifier.align(Alignment.BottomEnd),
@@ -162,6 +186,7 @@ fun ServerTile(
             url = iconUrl,
             size = 46.dp,
             shape = shape,
+            viewable = false,
             modifier = if (selected) {
                 Modifier.border(2.dp, MaterialTheme.colorScheme.primary, shape)
             } else {

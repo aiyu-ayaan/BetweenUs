@@ -274,7 +274,7 @@ private fun VoiceMember(name: String) {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Avatar(id = name, label = name, url = null, size = 20.dp)
+        Avatar(id = name, label = name, url = null, size = 20.dp, viewable = false)
         Text(
             text = name,
             style = MaterialTheme.typography.bodySmall,

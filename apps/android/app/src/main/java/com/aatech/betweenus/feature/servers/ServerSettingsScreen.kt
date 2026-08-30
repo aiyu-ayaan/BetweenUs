@@ -136,6 +136,7 @@ fun ServerSettingsScreen(serverId: String?, onBack: () -> Unit) {
                         url = server.iconUrl?.let { Endpoint.absolute(it) },
                         size = 56.dp,
                         shape = RoundedCornerShape(18.dp),
+                        viewable = false,
                     )
                 },
             )

@@ -417,7 +417,7 @@ private fun FilmstripTile(
                 modifier = Modifier.fillMaxSize(),
             )
         } else {
-            Avatar(id = id, label = label, url = null, size = 28.dp)
+            Avatar(id = id, label = label, url = null, size = 28.dp, viewable = false)
         }
 
         Row(
