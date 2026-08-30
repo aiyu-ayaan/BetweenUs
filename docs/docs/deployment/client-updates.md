@@ -109,6 +109,24 @@ running app, which is exactly what made the button look dead.
 If it cannot be started at all, the download is on the disk and runnable, so
 the file manager opens on it and the reason is shown.
 
+### Starting BetweenUs when the installer is done
+
+electron-builder starts the app from two places — the finish page's
+"Run BetweenUs" checkbox, and the silent install an update performs — and both
+went through `StdUtils::ExecShellAsUser`, whose job is handing a launch *down*
+from an elevated installer to the signed-in user. It does that by asking the
+desktop shell to run the file on its behalf, and the error it fails with is
+discarded. A shell that will not take the call ends both paths the same way:
+the installer finishes and nothing opens, after a first install and after an
+update alike.
+
+This installer is never elevated, so there is nothing to hand a launch down
+from. `apps/desktop/nsis/installer.nsh` replaces both with a plain
+`ExecShell` on the installed executable — the finish page through
+`customFinishPage`, the silent update through `customInstall`. A machine where
+the old call worked now starts the app twice; the second copy sees the
+single-instance lock, hands the window to the first and quits.
+
 ### When it downloads
 
 A check finds an offer and fetches it there and then: the download is the slow
