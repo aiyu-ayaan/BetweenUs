@@ -14,6 +14,17 @@
 
 import type { CallTransport } from '@betweenus/shared-types';
 
+/**
+ * Why the picture leaving this machine is smaller or slower than it was asked
+ * to be, straight from `qualityLimitationReason` on the outbound stream.
+ *
+ * The one number that separates "the link cannot carry it" from "this machine
+ * cannot encode it" from "nothing is holding it back and it still looks like
+ * that". Without it a soft share is a guess, and the guess is usually wrong:
+ * `bandwidth` and `cpu` want opposite fixes.
+ */
+export type QualityLimit = 'bandwidth' | 'cpu' | 'other';
+
 /** One `getStats` sample of one peer connection, already reduced to numbers. */
 export interface LinkSample {
   at: number;
@@ -32,6 +43,10 @@ export interface LinkSample {
   frameWidth: number | null;
   frameHeight: number | null;
   framesPerSecond: number | null;
+  /** The same, for the biggest picture leaving this machine. */
+  sendWidth: number | null;
+  sendHeight: number | null;
+  sendLimitedBy: QualityLimit | null;
   /**
    * Whether this link has a path at all: ICE settled and DTLS came up.
    *
@@ -62,6 +77,10 @@ export interface LinkStats {
   frameWidth: number | null;
   frameHeight: number | null;
   framesPerSecond: number | null;
+  /** What is leaving this machine, and what is holding it down. */
+  sendWidth: number | null;
+  sendHeight: number | null;
+  sendLimitedBy: QualityLimit | null;
   /** False when we are sending them no audio at all - see `notBeingHeard`. */
   sendingAudio: boolean;
   /** False while this link has no path at all - see `notBeingHeard`. */
@@ -192,6 +211,9 @@ export function toStats(
     frameWidth: now.frameWidth,
     frameHeight: now.frameHeight,
     framesPerSecond: now.framesPerSecond === null ? null : Math.round(now.framesPerSecond),
+    sendWidth: now.sendWidth,
+    sendHeight: now.sendHeight,
+    sendLimitedBy: now.sendLimitedBy,
     // Any movement at all counts. Opus sends a few hundred bytes a second even
     // through silence, so a sender that is attached and working is never still.
     sendingAudio: before ? now.outboundAudioBytes > before.outboundAudioBytes : true,

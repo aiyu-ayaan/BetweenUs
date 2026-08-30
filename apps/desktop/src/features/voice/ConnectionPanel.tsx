@@ -7,7 +7,14 @@
  * the four numbers that decide how a call feels, and nothing else.
  */
 import { useVoiceStore } from '../../stores/voice';
-import { healthWarning, type LinkStats } from '../../services/call-stats';
+import { healthWarning, type LinkStats, type QualityLimit } from '../../services/call-stats';
+
+/** `qualityLimitationReason`, said the way somebody in a call would say it. */
+const LIMIT_REASON: Record<QualityLimit, string> = {
+  bandwidth: 'the link',
+  cpu: 'this PC',
+  other: 'the encoder',
+};
 
 export function ConnectionPanel({ onClose }: { onClose: () => void }): JSX.Element {
   const stats = useVoiceStore((state) => state.stats);
@@ -70,11 +77,22 @@ function PeerRow({ link }: { link: LinkStats }): JSX.Element {
         />
         {link.frameWidth && link.frameHeight && (
           <Stat
-            label="Video"
+            label="In"
             value={`${link.frameWidth}×${link.frameHeight}${
               link.framesPerSecond ? ` @ ${link.framesPerSecond}` : ''
             }`}
           />
+        )}
+        {link.sendWidth && link.sendHeight && (
+          <Stat label="Out" value={`${link.sendWidth}×${link.sendHeight}`} />
+        )}
+        {/*
+          Only when something is actually holding the picture down, and it is
+          the whole answer to "why did my share go soft": the link, this
+          machine's encoder, or neither.
+        */}
+        {link.sendLimitedBy && (
+          <Stat label="Held by" value={LIMIT_REASON[link.sendLimitedBy]} tone="warn" />
         )}
       </dl>
     </li>

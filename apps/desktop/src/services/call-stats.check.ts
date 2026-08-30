@@ -46,6 +46,9 @@ const sample = (patch: Partial<LinkSample>): LinkSample => ({
   frameWidth: null,
   frameHeight: null,
   framesPerSecond: null,
+  sendWidth: null,
+  sendHeight: null,
+  sendLimitedBy: null,
   connected: true,
   transport: null,
   ...patch,
@@ -84,6 +87,22 @@ assert.equal(second.lossPercent, 1);
 assert.equal(second.roundTripMs, 42);
 assert.equal(second.framesPerSecond, 30);
 assert.equal(second.sendingAudio, true);
+
+// Nothing is holding the send side down, which is not the same as "there is no
+// send side": both read as null and the panel shows neither.
+assert.equal(second.sendLimitedBy, null);
+
+// A share being shrunk before it leaves. The picture on the wire is a quarter
+// of the one being captured, and the reason is the whole point of the reading.
+const throttled = toStats(
+  'p1',
+  'Ann',
+  sample({ at: 2_000, sendWidth: 960, sendHeight: 540, sendLimitedBy: 'bandwidth' }),
+  sample({ at: 1_000 }),
+);
+assert.equal(throttled.sendWidth, 960);
+assert.equal(throttled.sendHeight, 540);
+assert.equal(throttled.sendLimitedBy, 'bandwidth');
 
 // Outbound audio that has not moved between two samples is a microphone that
 // is not on the wire, whatever the level meter says.

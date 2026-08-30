@@ -1162,6 +1162,9 @@ class PeerLink {
       frameWidth: null,
       frameHeight: null,
       framesPerSecond: null,
+      sendWidth: null,
+      sendHeight: null,
+      sendLimitedBy: null,
       // Asked here rather than inferred from the counters below, because a
       // link that is up and quiet and a link that never came up produce the
       // same still counters, and only one of them is a microphone fault.
@@ -1207,6 +1210,25 @@ class PeerLink {
         const bytes = Number(entry.bytesSent ?? 0);
         if (entry.kind === 'audio') now.outboundAudioBytes += bytes;
         else now.outboundVideoBytes += bytes;
+
+        // The send side of the same question. A share that arrives soft was
+        // either shrunk here before it left or damaged on the way, and the two
+        // look identical from the far end - so what left, and what stopped it
+        // leaving bigger, is read at the source. `none` is not a limit and is
+        // dropped: a row saying "Limited by: none" is a row that trains people
+        // to stop reading the panel.
+        if (entry.kind === 'video') {
+          const width = Number(entry.frameWidth ?? 0);
+          const height = Number(entry.frameHeight ?? 0);
+          if (width * height > (now.sendWidth ?? 0) * (now.sendHeight ?? 0)) {
+            now.sendWidth = width || null;
+            now.sendHeight = height || null;
+          }
+          const reason = entry.qualityLimitationReason;
+          if (reason === 'bandwidth' || reason === 'cpu' || reason === 'other') {
+            now.sendLimitedBy = reason;
+          }
+        }
         return;
       }
 
