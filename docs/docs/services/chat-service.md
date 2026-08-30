@@ -320,6 +320,14 @@ direction is something the far side can test for.
 Attachments are encrypted client-side before upload and served only as
 opaque downloads — see [`E2EE.md`](/security/e2ee).
 
+A message may carry `MAX_ATTACHMENTS_PER_MESSAGE` (10) files. The cap is a
+client one, enforced in the picker on every platform where it can be explained,
+and it exists so the attachment manifest sealed inside the message body stays
+under `MAX_MESSAGE_CONTENT_LENGTH` (32 000 characters) — the ceiling the
+`content` field is validated against, on the ciphertext rather than on the
+words. Both constants live in `packages/shared-types` so the service DTO and
+the four clients cannot drift apart.
+
 ## Message Markup & Formatting
 
 Messages support full client-side markdown parsing:
