@@ -454,6 +454,153 @@ export interface AdminSmtpTestRequest {
   to?: string;
 }
 
+// --- Admin: server health & storage ---
+
+/**
+ * Whether a dependency is answering, and how fast.
+ *
+ * Three states rather than a boolean, because "we could not reach it to ask"
+ * and "it answered that it is unwell" want different reactions from whoever is
+ * reading the panel at 3am, and collapsing them into `false` throws away the
+ * only clue about which.
+ */
+export type AdminHealthState = 'up' | 'degraded' | 'down';
+
+/** One dependency or service, as the panel draws it. */
+export interface AdminComponentHealth {
+  /** Stable key, e.g. `postgres`, `redis`, `chat-service`. */
+  id: string;
+  label: string;
+  state: AdminHealthState;
+  /** Round trip of the probe, in milliseconds. Null when it never answered. */
+  latencyMs: number | null;
+  /** Where the probe was sent. Never carries credentials - see `redactUrl`. */
+  url: string | null;
+  /** The failure in one sentence, when there is one. Never a stack trace. */
+  error: string | null;
+  /** Free-form extras the card shows as a definition list. */
+  detail?: Record<string, string | number>;
+}
+
+/** What the host process itself reports about the machine it is on. */
+export interface AdminRuntimeHealth {
+  /** Seconds the reporting service has been up. */
+  uptimeSeconds: number;
+  /** Resident set size of the reporting process, in bytes. */
+  memoryRssBytes: number;
+  memoryHeapUsedBytes: number;
+  memoryHeapTotalBytes: number;
+  /** 1/5/15-minute load averages. Zeroes on Windows, which reports none. */
+  loadAverage: [number, number, number];
+  cpuCount: number;
+  nodeVersion: string;
+  platform: string;
+  /** Deployment version, from the package or the release tag. */
+  appVersion: string | null;
+}
+
+/** One Postgres table, biggest first. */
+export interface AdminTableSize {
+  table: string;
+  /** Rows, from the planner's estimate - exact counts lock the table. */
+  rowEstimate: number;
+  /** Heap plus indexes plus TOAST, in bytes. */
+  totalBytes: number;
+  indexBytes: number;
+}
+
+export interface AdminDatabaseStorage {
+  /** `pg_database_size` of the live database, in bytes. */
+  totalBytes: number;
+  /** Largest tables, already sorted descending. */
+  tables: AdminTableSize[];
+  /** Open backends, and what the server will allow. */
+  connections: number;
+  maxConnections: number;
+  /** Server version string, e.g. `16.3`. */
+  version: string | null;
+}
+
+/**
+ * Where uploads live and how much of it they occupy.
+ *
+ * `driver` decides which of the two sizes is authoritative: a local disk can be
+ * measured directly, an S3 bucket cannot be walked cheaply, so there the sum of
+ * `Attachment.size` is the only honest number and `diskBytes` stays null.
+ */
+export interface AdminMediaStorage {
+  driver: 'local' | 's3';
+  /** Sum of every stored object's recorded size, in bytes. */
+  recordedBytes: number;
+  /** Measured on disk. Null for S3, where walking the bucket is not free. */
+  diskBytes: number | null;
+  /** Free space on the volume holding the uploads. Null for S3. */
+  diskFreeBytes: number | null;
+  attachmentCount: number;
+  /** Attachments, split by broad content type. */
+  byKind: Array<{ kind: string; count: number; bytes: number }>;
+  /** Bucket name or the absolute directory, whichever applies. */
+  location: string | null;
+}
+
+/**
+ * What has moved, over a window.
+ *
+ * Call traffic is peer-to-peer and never touches this host - it is the clients'
+ * own reported totals from `CallSession`, which is the only place it is
+ * knowable at all. Attachment bytes are what this deployment actually served.
+ */
+export interface AdminBandwidth {
+  /** Days the window covers. */
+  windowDays: number;
+  callBytes: number;
+  callBytesSent: number;
+  callBytesReceived: number;
+  callSessions: number;
+  attachmentBytes: number;
+  attachmentCount: number;
+  /** Oldest first, one entry per day, for the trend line. */
+  daily: Array<{ date: string; callBytes: number; attachmentBytes: number }>;
+}
+
+/** A realtime endpoint, and how many sockets are on it right now. */
+export interface AdminLiveEndpoint {
+  id: string;
+  label: string;
+  /** The public URL a client dials, e.g. `wss://host/ws/chat`. */
+  url: string;
+  connections: number;
+  state: AdminHealthState;
+}
+
+/** Who is connected, across the realtime surfaces. */
+export interface AdminLiveConnections {
+  /** Distinct users presence believes are online. */
+  onlineUsers: number;
+  /** Sockets, which exceeds users whenever somebody has two clients open. */
+  totalSockets: number;
+  /** Voice/video calls with at least one participant. */
+  activeCalls: number;
+  activeCallParticipants: number;
+  /** Remote-desktop sessions currently relayed. */
+  activeRemoteSessions: number;
+  endpoints: AdminLiveEndpoint[];
+}
+
+/** Everything the Health & storage screen draws, in one response. */
+export interface AdminServerHealth {
+  /** When the snapshot was taken, ISO 8601. */
+  at: string;
+  /** Worst state across `components` - what the header badge shows. */
+  overall: AdminHealthState;
+  components: AdminComponentHealth[];
+  runtime: AdminRuntimeHealth;
+  database: AdminDatabaseStorage;
+  media: AdminMediaStorage;
+  bandwidth: AdminBandwidth;
+  live: AdminLiveConnections;
+}
+
 export interface AuthResponse extends AuthTokens {
   user: PublicUser;
 }
