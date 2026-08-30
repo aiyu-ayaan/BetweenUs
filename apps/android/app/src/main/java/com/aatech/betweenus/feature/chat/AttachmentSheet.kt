@@ -60,6 +60,18 @@ import com.aatech.betweenus.ui.theme.Slate500
 import com.aatech.betweenus.ui.theme.Surface700
 
 /**
+ * How many files one message may carry.
+ *
+ * The same number every client uses - `MAX_ATTACHMENTS_PER_MESSAGE` in
+ * `packages/shared-types`, and the two have to agree. Past it the manifest
+ * inside the encrypted envelope outgrows the length the server will store, and
+ * a message the picker was happy to build comes back refused. Enforced here,
+ * where the files are chosen and a refusal can be explained, rather than at the
+ * end of an upload.
+ */
+const val MAX_ATTACHMENTS = 10
+
+/**
  * WhatsApp-style media and attachment picker bottom sheet.
  *
  * Provides quick actions to send:
@@ -75,12 +87,20 @@ import com.aatech.betweenus.ui.theme.Surface700
 fun AttachmentSheet(
     onDismiss: () -> Unit,
     onPicked: (List<Uri>) -> Unit,
+    /**
+     * How many more files this message can take, counting what is already
+     * waiting in the preview - the sheet is opened from there as well as from
+     * the composer, so it cannot assume it is starting from nothing.
+     */
+    room: Int = MAX_ATTACHMENTS,
 ) {
     val context = LocalContext.current
     val sheet = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     var media by remember { mutableStateOf<List<MediaItem>>(emptyList()) }
     var selected by remember { mutableStateOf<List<Uri>>(emptyList()) }
+    /** Set when a tap was refused because [room] is already spoken for. */
+    var full by remember { mutableStateOf(false) }
     var allowed by remember {
         mutableStateOf(BetweenUsPermissions.anyGranted(context, BetweenUsPermissions.MEDIA))
     }
@@ -95,14 +115,27 @@ fun AttachmentSheet(
         if (!allowed) access.request()
     }
 
+    /**
+     * The one door out of this sheet, so the cap is applied once however the
+     * files were chosen: the system gallery stops at it itself, the document
+     * and audio pickers have no way of being told about it.
+     */
     fun finish(uris: List<Uri>) {
-        if (uris.isNotEmpty()) onPicked(uris)
+        if (uris.isNotEmpty()) onPicked(uris.take(room))
         onDismiss()
     }
 
+    // Told the real remaining count, so it refuses the eleventh tap rather than
+    // letting somebody choose fifteen and quietly handing back ten. The
+    // contract will not take a maximum below two, which is what the single-item
+    // picker underneath is for.
     val gallery = rememberLauncherForActivityResult(
-        ActivityResultContracts.PickMultipleVisualMedia(),
+        remember(room) { ActivityResultContracts.PickMultipleVisualMedia(room.coerceAtLeast(2)) },
     ) { uris -> finish(uris) }
+
+    val onePhoto = rememberLauncherForActivityResult(
+        ActivityResultContracts.PickVisualMedia(),
+    ) { uri -> finish(listOfNotNull(uri)) }
 
     val document = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenMultipleDocuments(),
@@ -167,9 +200,10 @@ fun AttachmentSheet(
                     label = "Gallery",
                     backgroundColor = Color(0xFFAF52DE),
                     onClick = {
-                        gallery.launch(
-                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo),
+                        val request = PickVisualMediaRequest(
+                            ActivityResultContracts.PickVisualMedia.ImageAndVideo,
                         )
+                        if (room > 1) gallery.launch(request) else onePhoto.launch(request)
                     },
                     modifier = Modifier.weight(1f),
                 )
@@ -199,7 +233,7 @@ fun AttachmentSheet(
                 )
                 if (selected.isNotEmpty()) {
                     Text(
-                        text = "${selected.size} selected",
+                        text = "${selected.size} of $room selected",
                         style = MaterialTheme.typography.labelMedium,
                         color = Accent,
                     )
@@ -224,11 +258,18 @@ fun AttachmentSheet(
                                 item = item,
                                 position = selected.indexOf(item.uri),
                                 onClick = {
-                                    selected = if (item.uri in selected) {
-                                        selected - item.uri
-                                    } else {
-                                        selected + item.uri
+                                    selected = when {
+                                        item.uri in selected -> selected - item.uri
+                                        // Said at the tap that was refused, not
+                                        // after the send that would have been.
+                                        selected.size >= room -> {
+                                            full = true
+                                            selected
+                                        }
+
+                                        else -> selected + item.uri
                                     }
+                                    if (selected.size < room) full = false
                                 },
                             )
                         }
@@ -246,6 +287,16 @@ fun AttachmentSheet(
                         },
                     )
                 }
+            }
+
+            if (full) {
+                Text(
+                    text = "A message can carry $MAX_ATTACHMENTS files at most. " +
+                        "Send these, then pick the rest.",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = Slate500,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
+                )
             }
 
             if (selected.isNotEmpty()) {

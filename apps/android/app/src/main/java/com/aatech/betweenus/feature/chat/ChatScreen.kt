@@ -134,6 +134,25 @@ fun ChatScreen(
     var previewOnce by remember { mutableStateOf(false) }
 
     /**
+     * Puts picked media in front of the person before it goes anywhere, and
+     * never more of it than one message may carry.
+     *
+     * The cap lives here rather than in the picker because there are four ways
+     * in - the sheet, the gallery, the camera and a paste - and only this list
+     * knows about all of them. Past [MAX_ATTACHMENTS] the manifest inside the
+     * encrypted envelope outgrows what the server will store, and the send
+     * comes back refused with a message about characters that has nothing to do
+     * with the pictures that caused it.
+     */
+    fun preview(items: List<PickedPreview>) {
+        val room = MAX_ATTACHMENTS - previewing.size
+        if (items.size > room) {
+            failure = "A message can carry $MAX_ATTACHMENTS files at most"
+        }
+        if (room > 0) previewing = previewing + items.take(room)
+    }
+
+    /**
      * Messages do not disappear on their own while a conversation is open.
      *
      * The server destroys what has expired and says so, but only to a client
@@ -162,7 +181,7 @@ fun ChatScreen(
         if (taken && photoUri != null) {
             // Straight to the preview: a photo just taken is the one most worth
             // looking at before it goes anywhere.
-            scope.launch { previewing = previewing + describePicked(context, photoUri!!) }
+            scope.launch { preview(listOf(describePicked(context, photoUri!!))) }
         }
     }
 
@@ -654,7 +673,7 @@ fun ChatScreen(
             onCameraClick = { cameraPermission.request() },
             // A pasted picture is a picked picture. Same preview, same Send.
             onPasteMedia = { uri ->
-                scope.launch { previewing = previewing + describePicked(context, uri) }
+                scope.launch { preview(listOf(describePicked(context, uri))) }
             },
             // Straight to the outbox, not to the preview: a voice message is
             // sent by the same gesture that finishes it, and there is no
@@ -693,6 +712,7 @@ fun ChatScreen(
     if (showAttachmentSheet) {
         AttachmentSheet(
             onDismiss = { showAttachmentSheet = false },
+            room = MAX_ATTACHMENTS - previewing.size,
             onPicked = { uris ->
                 scope.launch {
                     // Everything picked goes to the preview and then to
@@ -700,7 +720,7 @@ fun ChatScreen(
                     // read, sealed and uploaded here instead, in this screen's
                     // own scope - so it was never checked before it went, and
                     // leaving the channel killed it halfway.
-                    previewing = previewing + uris.map { describePicked(context, it) }
+                    preview(uris.map { describePicked(context, it) })
                 }
             },
         )

@@ -7,6 +7,7 @@ import {
   type FormEvent,
   type KeyboardEvent,
 } from 'react';
+import { MAX_ATTACHMENTS_PER_MESSAGE } from '@betweenus/shared-types';
 import type {
   Channel,
   LinkPreview,
@@ -1419,8 +1420,12 @@ function TypingIndicator({ channelId }: { channelId: string }): JSX.Element {
   );
 }
 
-/** More than this in one message and the point is a folder, not a chat. */
-const MAX_FILES = 10;
+/**
+ * More than this in one message and the point is a folder, not a chat - and the
+ * manifest of that many files still fits the envelope the server will accept.
+ * Every client caps at the same number.
+ */
+const MAX_FILES = MAX_ATTACHMENTS_PER_MESSAGE;
 
 /**
  * Every property that decides where a character lands.
@@ -1639,10 +1644,13 @@ function MessageComposer({
     setFailure(null);
     setFiles((current) => {
       const room = MAX_FILES - current.length;
-      if (room <= 0) {
+      // Said whenever something was dropped, not only when the list was already
+      // full: picking fifteen pictures and being given ten without a word looks
+      // like the picker losing them.
+      if (incoming.length > room) {
         setFailure(`A message can carry ${MAX_FILES} files at most`);
-        return current;
       }
+      if (room <= 0) return current;
       return [...current, ...incoming.slice(0, room)];
     });
     // Pictures and video get looked at before they are sent; a spreadsheet has
