@@ -24,8 +24,24 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { Channel } from '@betweenus/shared-types';
 import { useChatStore } from '../../stores/chat';
+import { useFriendsStore } from '../../stores/friends';
+import { useStatusOf } from '../../stores/presence';
 import { api } from '../../services/api';
-import { HashIcon, MessageIcon, SearchIcon } from '../../components/icons';
+import { Avatar } from '../../components/Avatar';
+import { ServerIcon } from '../../components/ServerIcon';
+import { HashIcon, SearchIcon } from '../../components/icons';
+
+/**
+ * How many conversations the list shows before it stops.
+ *
+ * Somebody with sixty of them would otherwise get sixty rows above the first
+ * server heading, and the channels - the other half of what this picker is
+ * for - would be off the bottom of a dialog that is already as tall as it is
+ * allowed to get. Six is about a screen's worth of "the people I actually talk
+ * to"; the rest are one click or one search away, and searching lifts the cap
+ * entirely because a search is somebody naming who they want.
+ */
+const DIRECTS_SHOWN = 6;
 
 export function ForwardDialog({
   fromChannelId,
@@ -39,10 +55,16 @@ export function ForwardDialog({
   const servers = useChatStore((state) => state.servers);
   const loadedChannels = useChatStore((state) => state.channels);
   const activeServerId = useChatStore((state) => state.activeServerId);
-  const directs = useChatStore((state) => state.directs);
-  const loadDirects = useChatStore((state) => state.loadDirects);
+  // The friends store's copy, not the chat store's: that one flattens a
+  // conversation into a `Channel` and drops the participant, which is where the
+  // face and the online dot live. A row that says who it is with a grey bubble
+  // is a row that has forgotten the only thing worth drawing on it.
+  const directChannels = useFriendsStore((state) => state.directChannels);
+  const loadFriends = useFriendsStore((state) => state.load);
+  const statusOf = useStatusOf();
   const [fetched, setFetched] = useState<Record<string, Channel[]>>({});
   const [query, setQuery] = useState('');
+  const [allDirects, setAllDirects] = useState(false);
 
   useEffect(() => {
     const escape = (event: KeyboardEvent): void => {
@@ -54,7 +76,7 @@ export function ForwardDialog({
 
   useEffect(() => {
     let live = true;
-    void loadDirects().catch(() => undefined);
+    void loadFriends().catch(() => undefined);
     // A server whose channels have never been opened has none in the store, and
     // a list that is short because nothing fetched it looks exactly like a list
     // that is short because there is nowhere to send it.
@@ -78,9 +100,16 @@ export function ForwardDialog({
   const matches = (text: string): boolean =>
     needle.length === 0 || text.toLowerCase().includes(needle);
 
-  const people = directs.filter(
-    (direct) => direct.id !== fromChannelId && matches(direct.name),
+  const matched = directChannels.filter(
+    (direct) =>
+      direct.channelId !== fromChannelId &&
+      (matches(direct.participant.displayName) || matches(direct.participant.username)),
   );
+  // A search is somebody naming who they want, so it lifts the cap rather than
+  // hiding the one row they typed the name of.
+  const capped = allDirects || needle.length > 0;
+  const people = capped ? matched : matched.slice(0, DIRECTS_SHOWN);
+  const hidden = matched.length - people.length;
 
   const sections = useMemo(
     () =>
@@ -142,17 +171,51 @@ export function ForwardDialog({
               {people.length > 0 && <Heading label="Direct messages" />}
               {people.map((direct) => (
                 <Row
-                  key={direct.id}
-                  name={direct.name}
-                  icon={<MessageIcon className="h-4 w-4 shrink-0 text-slate-500" />}
-                  onClick={() => onPick(direct.id, direct.name)}
+                  key={direct.channelId}
+                  name={direct.participant.displayName || direct.participant.username}
+                  icon={
+                    <Avatar
+                      name={direct.participant.displayName}
+                      avatarUrl={direct.participant.avatarUrl}
+                      status={statusOf(direct.participant.id)}
+                      size="sm"
+                      ringColour="border-surface-900"
+                      // The face is part of the row, not a control of its own:
+                      // clicking it must pick the conversation, not open the
+                      // photo over the top of the picker.
+                      viewable={false}
+                    />
+                  }
+                  onClick={() =>
+                    onPick(
+                      direct.channelId,
+                      direct.participant.displayName || direct.participant.username,
+                    )
+                  }
                 />
               ))}
+              {hidden > 0 && (
+                <li>
+                  <button
+                    type="button"
+                    onClick={() => setAllDirects(true)}
+                    className="w-full cursor-pointer rounded-lg px-3 py-1.5 text-left text-xs font-medium text-slate-400 transition-colors duration-150 hover:bg-white/[0.05] hover:text-slate-200"
+                  >
+                    Show {hidden} more conversation{hidden === 1 ? '' : 's'}
+                  </button>
+                </li>
+              )}
 
               {sections.map(({ server, channels }) => (
                 <li key={server.id}>
                   <ul>
-                    <Heading label={server.name} />
+                    <Heading
+                      label={server.name}
+                      // The server's own picture beside its name. A column of
+                      // "# general" rows all look alike, and the heading is the
+                      // only thing saying which server one belongs to.
+                      icon={<ServerIcon server={server} size="xs" />}
+                    />
                     {channels.map((channel) => (
                       <Row
                         key={channel.id}
@@ -180,10 +243,11 @@ export function ForwardDialog({
   );
 }
 
-function Heading({ label }: { label: string }): JSX.Element {
+function Heading({ label, icon }: { label: string; icon?: JSX.Element }): JSX.Element {
   return (
-    <li className="px-3 pb-1 pt-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
-      {label}
+    <li className="flex items-center gap-2 px-3 pb-1 pt-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
+      {icon}
+      <span className="min-w-0 truncate">{label}</span>
     </li>
   );
 }

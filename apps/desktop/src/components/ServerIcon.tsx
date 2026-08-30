@@ -6,6 +6,8 @@ import { absoluteUrl } from '../services/endpoint';
  * in the rail.
  */
 const SIZES = {
+  /** Beside a section heading, where it sits at the cap height of the words. */
+  xs: 'h-4 w-4 text-[8px]',
   sm: 'h-7 w-7 text-xs',
   rail: 'h-full w-full text-xs',
   md: 'h-10 w-10 text-sm',

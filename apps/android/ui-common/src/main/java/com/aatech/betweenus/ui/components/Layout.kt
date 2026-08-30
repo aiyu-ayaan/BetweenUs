@@ -58,13 +58,25 @@ import com.aatech.betweenus.ui.theme.BetweenUsMotion
 
 /** The uppercase divider the sidebars group things under. */
 @Composable
-fun SectionLabel(text: String, modifier: Modifier = Modifier, trailing: @Composable (() -> Unit)? = null) {
+fun SectionLabel(
+    text: String,
+    modifier: Modifier = Modifier,
+    /**
+     * A mark before the words - a server's icon, where the label is a server
+     * name. Optional because most section labels name a kind of thing rather
+     * than a particular one, and a kind of thing has no picture.
+     */
+    leading: @Composable (() -> Unit)? = null,
+    trailing: @Composable (() -> Unit)? = null,
+) {
     Row(
         modifier = modifier
             .fillMaxWidth()
             .padding(start = 20.dp, end = 12.dp, top = 16.dp, bottom = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
+        leading?.invoke()
         Text(
             text = text.uppercase(),
             style = MaterialTheme.typography.labelSmallEmphasized,

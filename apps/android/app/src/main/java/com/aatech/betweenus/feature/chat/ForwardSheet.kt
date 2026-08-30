@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -27,6 +28,7 @@ import com.aatech.betweenus.core.data.Endpoint
 import com.aatech.betweenus.core.store.Presence
 import com.aatech.betweenus.core.store.ReadableMessage
 import com.aatech.betweenus.core.store.Workspace
+import com.aatech.betweenus.ui.components.Avatar
 import com.aatech.betweenus.ui.components.AvatarWithStatus
 import com.aatech.betweenus.ui.components.BetweenUsField
 import com.aatech.betweenus.ui.components.BetweenUsIcon
@@ -34,6 +36,17 @@ import com.aatech.betweenus.ui.components.BetweenUsIcons
 import com.aatech.betweenus.ui.components.EmptyState
 import com.aatech.betweenus.ui.components.ListRow
 import com.aatech.betweenus.ui.components.SectionLabel
+
+/**
+ * How many conversations the list shows before it stops.
+ *
+ * Somebody with sixty of them would otherwise get sixty rows above the first
+ * server heading, and the channels - the other half of what this picker is for
+ * - would be off the bottom of a sheet that is already as tall as it is
+ * allowed to get. Six is about a screen's worth of "the people I actually talk
+ * to"; the rest are one tap or one search away.
+ */
+private const val DIRECTS_SHOWN = 6
 
 /**
  * Where a message is being forwarded to.
@@ -69,6 +82,7 @@ fun ForwardSheet(
     val statuses by Presence.statuses.collectAsState()
 
     var query by remember { mutableStateOf("") }
+    var allDirects by remember { mutableStateOf(false) }
 
     // Every server's channels, not only the one being read. A server whose
     // channels were never opened on this device has none cached, and a list
@@ -82,9 +96,13 @@ fun ForwardSheet(
     val needle = query.trim().lowercase()
     fun matches(text: String) = needle.isEmpty() || text.lowercase().contains(needle)
 
-    val people = directs
+    val matched = directs
         .filter { it.channelId != from }
         .filter { matches(it.participant.label) || matches(it.participant.username) }
+    // A search is somebody naming who they want, so it lifts the cap rather
+    // than hiding the one row they typed the name of.
+    val people = if (allDirects || needle.isNotEmpty()) matched else matched.take(DIRECTS_SHOWN)
+    val hidden = matched.size - people.size
 
     val serversWithMatches = servers.map { server ->
         server to channelsByServer[server.id].orEmpty()
@@ -146,10 +164,38 @@ fun ForwardSheet(
                             onClick = { onPick(direct.channelId) },
                         )
                     }
+                    if (hidden > 0) {
+                        item(key = "more-directs") {
+                            ListRow(
+                                title = "Show $hidden more conversation" +
+                                    if (hidden == 1) "" else "s",
+                                leading = { BetweenUsIcon(BetweenUsIcons.ChevronDown) },
+                                onClick = { allDirects = true },
+                            )
+                        }
+                    }
                 }
 
                 serversWithMatches.forEach { (server, channels) ->
-                    item(key = "server-${server.id}") { SectionLabel(server.name) }
+                    item(key = "server-${server.id}") {
+                        // The server's own picture beside its name. A column of
+                        // "# general" rows all look alike, and the heading is
+                        // the only thing saying which server one belongs to -
+                        // so it should be recognisable at the speed the rail is.
+                        SectionLabel(
+                            text = server.name,
+                            leading = {
+                                Avatar(
+                                    id = server.id,
+                                    label = server.name,
+                                    url = server.iconUrl?.let { Endpoint.absolute(it) },
+                                    size = 20.dp,
+                                    shape = RoundedCornerShape(6.dp),
+                                    viewable = false,
+                                )
+                            },
+                        )
+                    }
                     items(channels, key = { "channel-${it.id}" }) { channel ->
                         ListRow(
                             title = channel.name,
