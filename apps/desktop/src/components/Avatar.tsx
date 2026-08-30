@@ -1,5 +1,6 @@
 import type { PresenceStatus } from '@betweenus/shared-types';
 import { absoluteUrl } from '../services/endpoint';
+import { viewProfile } from './ProfileView';
 
 const SIZES = {
   sm: 'h-8 w-8 text-xs',
@@ -41,6 +42,7 @@ export function Avatar({
   status,
   size = 'md',
   ringColour = 'border-surface-800',
+  viewable = true,
 }: {
   name: string;
   avatarUrl?: string | null;
@@ -52,9 +54,30 @@ export function Avatar({
    * avatar is sitting on, which only the caller knows.
    */
   ringColour?: string;
+  /**
+   * Whether tapping it opens the picture. True for a person, which is nearly
+   * everywhere; false where the circle stands for a place or is inside a
+   * control whose own job the tap belongs to.
+   */
+  viewable?: boolean;
 }): JSX.Element {
   return (
-    <div className={`relative shrink-0 ${SIZES[size]}`}>
+    <div
+      // A div and not a button: most of these sit inside a row that is itself
+      // a button, and a button inside a button is not markup a browser will
+      // keep. Stopping the event is what keeps the row from also firing.
+      onClick={
+        viewable
+          ? (event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              viewProfile(name, avatarUrl);
+            }
+          : undefined
+      }
+      title={viewable ? `View ${name}'s profile photo` : undefined}
+      className={`relative shrink-0 ${SIZES[size]} ${viewable ? 'cursor-pointer' : ''}`}
+    >
       {avatarUrl ? (
         <img
           // Stored pictures come back rooted at /api/v1/uploads; resolve them

@@ -124,6 +124,7 @@ export function UserPanel({ onOpenSettings }: { onOpenSettings: () => void }): J
           status={selfStatus}
           size="sm"
           ringColour="border-surface-850"
+          viewable={false}
         />
         <span className="min-w-0 flex-1">
           <span className="block truncate text-sm font-medium text-slate-100">

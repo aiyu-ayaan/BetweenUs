@@ -106,6 +106,7 @@ export function InvitePicker({ onClose }: { onClose: () => void }): JSX.Element 
                     size="sm"
                     status={statusOf(member.userId)}
                     ringColour="border-surface-800"
+                    viewable={false}
                   />
                   <span className="min-w-0 flex-1 truncate text-sm text-slate-200">
                     {member.displayName || member.username}

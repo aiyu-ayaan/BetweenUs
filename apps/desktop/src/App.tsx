@@ -38,6 +38,7 @@ import { VoiceChannelView } from './features/voice/VoiceChannelView';
 import { CallAudio } from './features/voice/CallAudio';
 import { ShareControlConsent } from './features/voice/ShareControlConsent';
 import { IncomingCall } from './features/voice/IncomingCall';
+import { ProfileView } from './components/ProfileView';
 import { TopBar } from './features/shell/TopBar';
 import { MobileDrawer } from './features/shell/MobileDrawer';
 import { useIsMobile } from './services/responsive';
@@ -587,6 +588,10 @@ function Workbench(): JSX.Element {
       {/* Above every other overlay, because it is the only one somebody is
           waiting on the other end of. */}
       <IncomingCall />
+
+      {/* The picture behind any avatar in the app, and the line that says
+          somebody has not set one. */}
+      <ProfileView />
 
       {settings === 'user' && <UserSettings onClose={() => setSettings('none')} />}
       {settings === 'server' && <ServerSettings onClose={() => setSettings('none')} />}

@@ -148,6 +148,7 @@ export function CreateChannelDialog({
                           avatarUrl={member.avatarUrl}
                           size="sm"
                           ringColour="border-surface-950"
+                          viewable={false}
                         />
                         <span className="min-w-0 flex-1">
                           <span className="block truncate text-sm text-slate-100">

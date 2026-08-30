@@ -48,6 +48,7 @@ export function QuickSwitcher({ onClose }: { onClose: () => void }): JSX.Element
             name={direct.participant.displayName}
             avatarUrl={direct.participant.avatarUrl}
             size="sm"
+            viewable={false}
           />
         ),
         open: () => void openDirect(direct.participant.id),
