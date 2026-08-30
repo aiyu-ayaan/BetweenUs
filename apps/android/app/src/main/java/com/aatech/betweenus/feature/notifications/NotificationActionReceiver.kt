@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import androidx.core.app.RemoteInput
 import com.aatech.betweenus.core.data.AuthPhase
+import com.aatech.betweenus.core.data.BetweenUsApi
 import com.aatech.betweenus.core.data.Session
 import com.aatech.betweenus.core.store.Conversation
 import com.aatech.betweenus.feature.chat.Outbox
@@ -43,6 +44,24 @@ class NotificationActionReceiver : BroadcastReceiver() {
                 // call does: every arrival and departure is another roster
                 // push, and each one would ring again.
                 SocialNotifications.declineCall(application, channelId)
+
+                // And it is a decision for the *account*, not for this phone.
+                // A ring lands on every device signed in, so saying no here
+                // and nowhere else leaves a laptop ringing at somebody who has
+                // already decided. Best effort: the ringer on this phone is
+                // already down, which is what the button asked for, and the
+                // other devices ring out on their own timer if this fails.
+                val pending = goAsync()
+                scope.launch {
+                    try {
+                        withTimeoutOrNull(TIMEOUT_MS) {
+                            PushGate.ensureSession()
+                            runCatching { BetweenUsApi.declineCall(channelId) }
+                        }
+                    } finally {
+                        pending.finish()
+                    }
+                }
                 return
             }
 

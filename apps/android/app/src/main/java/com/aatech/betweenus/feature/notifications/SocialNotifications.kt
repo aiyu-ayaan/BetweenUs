@@ -203,7 +203,18 @@ object SocialNotifications {
         NotificationManagerCompat.from(context).cancel(id)
     }
 
-    /** Said no. Silent until this call ends, not until the app restarts. */
+    /**
+     * Said no. Silent until this call ends, not until the app restarts.
+     *
+     * Remembering it is the half that cannot be skipped: a roster this device
+     * has not seen yet, or a push that arrives late, would otherwise ask a
+     * question this phone has already answered with no.
+     *
+     * Telling anybody is [PushService]'s and the ringer's job rather than
+     * this one's - it is called both when *this* phone declines and when the
+     * push says another device did, and a decline that echoed itself back
+     * around the account would be a loop.
+     */
     fun declineCall(context: Context, channelId: String) {
         declined.add(channelId)
         clearRinging(context, channelId)

@@ -35,6 +35,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.aatech.betweenus.MainActivity
+import com.aatech.betweenus.core.data.BetweenUsApi
 import com.aatech.betweenus.feature.notifications.SocialNotifications
 import com.aatech.betweenus.ui.components.Avatar
 import com.aatech.betweenus.ui.components.BetweenUsIcon
@@ -44,6 +45,9 @@ import com.aatech.betweenus.ui.theme.Danger
 import com.aatech.betweenus.ui.theme.Ground
 import com.aatech.betweenus.ui.theme.Slate400
 import com.aatech.betweenus.ui.theme.Slate50
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 
 /**
@@ -61,6 +65,13 @@ import kotlinx.coroutines.launch
  * notification is not.
  */
 class IncomingCallActivity : ComponentActivity() {
+
+    /**
+     * Deliberately not `lifecycleScope`: this activity finishes on the same
+     * tap, and a decline cancelled by its own screen closing would be a
+     * decline that never left the phone.
+     */
+    private val declineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -114,6 +125,15 @@ class IncomingCallActivity : ComponentActivity() {
                     },
                     onDecline = {
                         SocialNotifications.declineCall(this, channelId)
+                        // A decision for the account, not for this phone: the
+                        // ring landed on every device signed in, and saying no
+                        // only here leaves a laptop ringing at somebody who has
+                        // already decided. Fire and forget - the ringer here is
+                        // already down, and the rest ring out on their own
+                        // timer if this never lands.
+                        declineScope.launch {
+                            runCatching { BetweenUsApi.declineCall(channelId) }
+                        }
                         finish()
                     },
                 )

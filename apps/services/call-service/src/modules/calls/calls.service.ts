@@ -120,6 +120,31 @@ export class CallsService {
   }
 
   /**
+   * "I have said no to that, here."
+   *
+   * Fans back to the account that declined and to nobody else, which is the
+   * whole job: a ring is aimed at an account and lands on every device it
+   * owns, so saying no on one of them used to leave the rest ringing until
+   * they timed out. Answering at least showed up in `call.roster`; declining
+   * left no trace anywhere, which is why it needed an endpoint of its own.
+   *
+   * Deliberately silent towards whoever rang. A ring is not a handshake - it
+   * rings out for them either way - and telling the caller would be a new
+   * feature rather than this one.
+   *
+   * Access is checked for the same reason the ring endpoint checks it: an
+   * endpoint that takes any channel id from anyone is a way to probe which
+   * ones exist. Nothing else here can fail. Declining a call that has already
+   * ended, or one that never rang this account, is a no-op rather than an
+   * error - the client is saying what it did, not asking permission, and there
+   * is no state to be wrong about.
+   */
+  async decline(userId: string, channelId: string): Promise<void> {
+    await this.requireChannelAccess(userId, channelId);
+    await this.events.publish(EVENTS.CALL_DECLINED, { channelId, userId });
+  }
+
+  /**
    * Opens a row for one person's stay in one call.
    *
    * Called by the gateway once a join has been allowed, because the gateway is

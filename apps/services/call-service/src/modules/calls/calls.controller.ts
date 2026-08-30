@@ -2,7 +2,7 @@ import { Body, Controller, Get, HttpCode, Post, Query, UseGuards } from '@nestjs
 import { CurrentUser, JwtAuthGuard, type AuthenticatedUser } from '@betweenus/auth';
 import type { CallAnalytics, CallHistoryEntry, CallIceResponse } from '@betweenus/shared-types';
 import { CallsService } from './calls.service';
-import { CallIceDto, CallRingDto } from './dto';
+import { CallDeclineDto, CallIceDto, CallRingDto } from './dto';
 
 @Controller('calls')
 @UseGuards(JwtAuthGuard)
@@ -54,5 +54,15 @@ export class CallsController {
   @HttpCode(204)
   ring(@CurrentUser() user: AuthenticatedUser, @Body() dto: CallRingDto): Promise<void> {
     return this.calls.ring(user.id, dto.channelId, dto.userId);
+  }
+
+  /**
+   * "I said no to that." Reaches this account's other devices and nobody else -
+   * see `CallsService.decline`.
+   */
+  @Post('decline')
+  @HttpCode(204)
+  decline(@CurrentUser() user: AuthenticatedUser, @Body() dto: CallDeclineDto): Promise<void> {
+    return this.calls.decline(user.id, dto.channelId);
   }
 }

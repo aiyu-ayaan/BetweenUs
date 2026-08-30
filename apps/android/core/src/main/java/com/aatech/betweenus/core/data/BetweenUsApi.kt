@@ -660,6 +660,17 @@ object BetweenUsApi {
      * so an updated app against an old deployment still recovers rather than
      * deciding the account has nothing and minting a key of its own.
      */
+    /**
+     * "I said no to that, here."
+     *
+     * Reaches this account's own other devices and nobody else - the caller is
+     * deliberately not told, and a ring rings out for them either way. See
+     * `CallsService.decline`.
+     */
+    suspend fun declineCall(channelId: String): Unit = io {
+        authed("POST", "/api/v1/calls/decline", obj("channelId" to channelId))
+    }
+
     suspend fun identityBackups(): List<IdentityBackup> = io {
         val json = authed("GET", "/api/v1/e2ee/backup")
         json.optJSONArray("backups")?.map { IdentityBackup.from(it) }

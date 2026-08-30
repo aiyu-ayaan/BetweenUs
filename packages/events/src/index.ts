@@ -50,6 +50,21 @@ export const EVENTS = {
    * the presence gateway - never have to agree about how to split a list.
    */
   CALL_RING: 'call.ring',
+  /**
+   * Somebody said no to a ring, on one of their devices.
+   *
+   * The counterpart to `call.ring` and aimed the same way, except that it is
+   * aimed *back* at the account that declined rather than at anybody else. It
+   * exists because declining leaves no other trace: answering shows up in
+   * `call.roster` - the account appears in it - and a decline shows up
+   * nowhere, so the phone in the other pocket had nothing to go on and rang
+   * until it timed out.
+   *
+   * It is deliberately not sent to whoever rang. A ring is not a handshake and
+   * it rings out for the caller either way; telling them would be a new
+   * feature, not this one.
+   */
+  CALL_DECLINED: 'call.declined',
   MESSAGE_CREATED: 'message.created',
   MESSAGE_UPDATED: 'message.updated',
   MESSAGE_DELETED: 'message.deleted',
@@ -126,6 +141,8 @@ export interface EventPayloads {
     /** Who is being rung. */
     targetId: string;
   };
+  /** Who said no, and to what. Both subscribers deliver only to that account. */
+  [EVENTS.CALL_DECLINED]: { channelId: string; userId: string };
   [EVENTS.MESSAGE_CREATED]: { message: Message };
   [EVENTS.MESSAGE_UPDATED]: { message: Message };
   /** Carries the tombstone, because a deleted message still renders as one. */

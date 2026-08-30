@@ -206,6 +206,14 @@ presenceSocket.on((event) => {
       return;
     }
 
+    // Answered or declined on another device of this same account. Answering
+    // is visible in the roster below; declining reaches no roster at all, so
+    // without this a window went on ringing after somebody said no elsewhere.
+    case 'call.handled': {
+      useRingStore.getState().handledElsewhere(event.channelId);
+      return;
+    }
+
     case 'voice.changed': {
       const voice = new Map(state.voice);
       const before = voice.get(event.voice.channelId) ?? [];
@@ -215,11 +223,11 @@ presenceSocket.on((event) => {
 
       // This account is in that call now, and this window is not the one that
       // put it there - so it is still ringing at somebody who is already
-      // talking. The `call.answered` push says the same thing to the devices
+      // talking. The `call.handled` push says the same thing to the devices
       // that are not running; this is the road for the ones that are.
       const self = useAuthStore.getState().user?.id;
       if (self && event.voice.userIds.includes(self)) {
-        useRingStore.getState().answeredElsewhere(event.voice.channelId);
+        useRingStore.getState().handledElsewhere(event.voice.channelId);
       }
       return;
     }

@@ -15,6 +15,7 @@
  * microphone, and only a person may do that.
  */
 import { create } from 'zustand';
+import { api } from '../services/api';
 import { startRinging, stopRinging } from '../services/call-tones';
 import { notifyRing } from '../services/notifications';
 import { useChatStore } from './chat';
@@ -43,19 +44,30 @@ interface RingState {
   show: (ring: Ring) => void;
   /** Joins the call. The only path that opens a microphone. */
   answer: () => void;
-  /** Said no, or it rang out. Nothing is sent back - a ring is not a handshake. */
+  /**
+   * Said no, on purpose, here.
+   *
+   * Separate from [dismiss] because it is the only one of the two that is
+   * worth telling anybody about. The caller still is not told - a ring is not
+   * a handshake, and it rings out for them either way - but this account's
+   * *other* devices are, or they go on ringing at somebody who has already
+   * decided.
+   */
+  decline: () => void;
+  /** Said no, or it rang out. Silent: see [decline] for the half that is not. */
   dismiss: () => void;
   /**
-   * Picked up somewhere else, on another device of this same account.
+   * Answered or declined somewhere else, on another device of this same
+   * account.
    *
    * A ring is aimed at an *account*, so it lands on every device that account
-   * owns - and answering on one of them used to leave the rest ringing at
-   * somebody who was already talking, until they timed out or the whole call
-   * ended. Nothing told them: the roster announcement is addressed to everyone
-   * who can hear the channel minus whoever is in the call, which is precisely
-   * the account that needs to know.
+   * owns - and dealing with it on one of them used to leave the rest ringing,
+   * until they timed out or the whole call ended. Neither half could be seen
+   * from here: answering puts the account in the roster, which is exactly who
+   * the roster announcement is addressed *around*, and declining was not sent
+   * anywhere at all.
    */
-  answeredElsewhere: (channelId: string) => void;
+  handledElsewhere: (channelId: string) => void;
 }
 
 let timeout: number | null = null;
@@ -101,13 +113,23 @@ export const useRingStore = create<RingState>((set, get) => ({
     void useVoiceStore.getState().join(ring.channelId);
   },
 
+  decline: () => {
+    const ring = get().incoming;
+    get().dismiss();
+    if (!ring) return;
+    // Nothing waits on this and nothing is shown if it fails. The ringer here
+    // is already down, which is what the person pressing the button asked for;
+    // the other devices ring out on their own timer as they always did.
+    void api.callDecline(ring.channelId).catch(() => undefined);
+  },
+
   dismiss: () => {
     clearTimer();
     stopRinging();
     set({ incoming: null });
   },
 
-  answeredElsewhere: (channelId) => {
+  handledElsewhere: (channelId) => {
     if (get().incoming?.channelId !== channelId) return;
     get().dismiss();
   },

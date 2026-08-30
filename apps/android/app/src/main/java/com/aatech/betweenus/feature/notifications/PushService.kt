@@ -66,7 +66,7 @@ class PushService : FirebaseMessagingService() {
                     "server.member.added" -> handleServerAdded(data)
                     "call.roster" -> handleCallRoster(data)
                     "call.ring" -> handleCallRing(data)
-                    "call.answered" -> handleCallAnswered(data)
+                    "call.handled" -> handleCallHandled(data)
                     "remote.session" -> handleRemoteSession(data)
                     else -> Unit
                 }
@@ -235,23 +235,32 @@ class PushService : FirebaseMessagingService() {
      * call you from it.
      */
     /**
-     * This account picked the call up somewhere else.
+     * This account answered or declined that ring somewhere else.
      *
      * A ring is aimed at an account and lands on every device it owns, so
-     * answering on one of them left the rest ringing at somebody who was
-     * already talking - until they timed out, or until the whole call ended.
-     * Nothing told them: the roster announcement goes to everyone who can hear
-     * the channel *minus whoever is in the call*, which is exactly the account
-     * that needs to know.
+     * dealing with it on one of them left the rest ringing at somebody who was
+     * already talking, or who had already said no - until they timed out, or
+     * until the whole call ended. Neither half could be seen from here.
+     * Answering puts the account in the roster, and the roster announcement
+     * goes to everyone who can hear the channel *minus whoever is in the
+     * call*; declining was not sent anywhere at all.
+     *
+     * `how` decides what this phone remembers afterwards. A decline has to
+     * last as long as the call does, or the next roster this device has not
+     * seen yet rings it again for something already refused.
      *
      * No session, no preferences and no gates. There is nothing to draw and
      * nothing to decide: an account that has switched notifications off can
      * still have a ringer up from before it did, and taking one down is not a
      * notification.
      */
-    private fun handleCallAnswered(data: Map<String, String>) {
+    private fun handleCallHandled(data: Map<String, String>) {
         val channelId = data["channelId"] ?: return
-        SocialNotifications.clearRinging(applicationContext, channelId)
+        if (data["how"] == "declined") {
+            SocialNotifications.declineCall(applicationContext, channelId)
+        } else {
+            SocialNotifications.clearRinging(applicationContext, channelId)
+        }
     }
 
     private suspend fun handleCallRing(data: Map<String, String>) {

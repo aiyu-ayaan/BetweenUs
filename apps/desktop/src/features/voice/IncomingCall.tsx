@@ -21,7 +21,7 @@ import { useRingStore } from '../../stores/ring';
 export function IncomingCall(): JSX.Element | null {
   const incoming = useRingStore((state) => state.incoming);
   const answer = useRingStore((state) => state.answer);
-  const dismiss = useRingStore((state) => state.dismiss);
+  const decline = useRingStore((state) => state.decline);
 
   // Escape declines. Nothing else is bound: Enter is not, because a window
   // that gets focus mid-keystroke would answer a call on a keypress meant for
@@ -29,11 +29,11 @@ export function IncomingCall(): JSX.Element | null {
   useEffect(() => {
     if (!incoming) return;
     const key = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape') dismiss();
+      if (event.key === 'Escape') decline();
     };
     document.addEventListener('keydown', key);
     return () => document.removeEventListener('keydown', key);
-  }, [incoming, dismiss]);
+  }, [incoming, decline]);
 
   if (!incoming) return null;
 
@@ -68,7 +68,7 @@ export function IncomingCall(): JSX.Element | null {
           <CallButton
             label="Decline"
             className="bg-danger hover:bg-danger-hover"
-            onClick={dismiss}
+            onClick={decline}
             icon={<PhoneOffIcon className="h-6 w-6" />}
           />
           <CallButton

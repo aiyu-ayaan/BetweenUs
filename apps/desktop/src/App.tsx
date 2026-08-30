@@ -173,11 +173,12 @@ function Session(): JSX.Element {
         });
         return;
       }
-      // Picked up on another device. The presence socket says the same thing
-      // through the roster (see `stores/ring.ts`), and for the same reason as
-      // above it is not the only road worth listening on.
-      if (message.betweenus === 'push' && message.data.type === 'call.answered') {
-        useRingStore.getState().answeredElsewhere(message.data.channelId);
+      // Answered or declined on another device. The presence socket says the
+      // same thing - the roster for an answer, `call.handled` for a decline -
+      // and for the same reason as above it is not the only road worth
+      // listening on.
+      if (message.betweenus === 'push' && message.data.type === 'call.handled') {
+        useRingStore.getState().handledElsewhere(message.data.channelId);
       }
     });
   }, []);

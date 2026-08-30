@@ -54,9 +54,9 @@
  *   version of the one above, and the difference is what earns it a ringtone
  *   and a full-screen ringer: a person pressed a button with this account's
  *   name under it, where a roster is a fact about a room.
- * - `call.answered` - this account picked that call up somewhere. The third of
- *   the pushes that exist to take something away, and the only thing that can
- *   stop the ringer on the devices where nobody answered.
+ * - `call.handled` - this account answered or declined that ring somewhere.
+ *   The third of the pushes that exist to take something away, and the only
+ *   thing that can stop the ringer on the devices where nobody touched it.
  * - `remote.session` - somebody is on one of this account's machines. The one
  *   notification here that exists because of what it means when it is
  *   unexpected, and the only one that ignores every preference: see below.
@@ -67,7 +67,7 @@ import { EVENTS, EventBus } from '@betweenus/events';
 import type { EventName, EventPayloads } from '@betweenus/events';
 import { Logger } from '@betweenus/logger';
 import type {
-  CallAnsweredPushData,
+  CallHandledPushData,
   CallPushData,
   CallRingPushData,
   ChannelReadPushData,
@@ -138,6 +138,9 @@ export class PushService implements OnModuleInit {
     await this.on(EVENTS.SERVER_MEMBER_ADDED, (payload) => this.onServerMemberAdded(payload));
     await this.on(EVENTS.CALL_ROSTER, (payload) => this.onCallRoster(payload.voice));
     await this.on(EVENTS.CALL_RING, (payload) => this.onCallRing(payload));
+    await this.on(EVENTS.CALL_DECLINED, (payload) =>
+      this.cancelRing(payload.userId, payload.channelId, 'declined'),
+    );
     await this.on(EVENTS.REMOTE_SESSION, (payload) => this.onRemoteSession(payload));
   }
 
@@ -338,17 +341,7 @@ export class PushService implements OnModuleInit {
     // still has a ringer up if it was ringing before it turned them off, and a
     // cancel is not a notification.
     const answered = joined(previous, userIds);
-    if (answered.length > 0) {
-      const cancel: CallAnsweredPushData = { type: 'call.answered', channelId };
-      // Urgent, unlike the other two cancels. A late badge correction is a
-      // cosmetic delay; a late one of these is a phone that goes on ringing in
-      // somebody's pocket while they are already talking on another device,
-      // which is the whole complaint this exists to answer.
-      await this.deliver(
-        answered.map((userId) => ({ userId, data: cancel })),
-        { urgent: true },
-      );
-    }
+    for (const userId of answered) await this.cancelRing(userId, channelId, 'answered');
 
     // A channel nobody has been told about, whose call has already ended:
     // nothing to cancel, so nothing to send.
@@ -418,6 +411,35 @@ export class PushService implements OnModuleInit {
     if (payload.callerAvatarUrl) data.callerAvatarUrl = payload.callerAvatarUrl;
 
     await this.deliver([{ userId: payload.targetId, data }], { urgent: true });
+  }
+
+  /**
+   * Takes the ringer down on the devices where nobody dealt with it.
+   *
+   * A ring is aimed at an *account*, so it lands on the phone, the laptop and
+   * the browser tab alike - and the account is the one thing neither half of
+   * the fan-out could tell afterwards. Answering is invisible to it: the roster
+   * announcement is addressed to everybody who can hear the channel *minus
+   * whoever is in the call*, so answering moves you into the one group it
+   * skips. Declining was invisible too, because nothing about it was sent
+   * anywhere at all. Either way the rest of the account's devices rang on until
+   * they timed out or the whole call ended.
+   *
+   * Urgent, unlike the other two cancels here. A late badge correction is a
+   * cosmetic delay; a late one of these is a phone going on ringing in somebody's
+   * pocket while they are already talking - or while they have already said no.
+   *
+   * Past every preference, for the same reason `message.deleted` is: an account
+   * that has switched notifications off can still have a ringer standing from
+   * before it did, and taking one down is not a notification.
+   */
+  private async cancelRing(
+    userId: string,
+    channelId: string,
+    how: CallHandledPushData['how'],
+  ): Promise<void> {
+    const data: CallHandledPushData = { type: 'call.handled', channelId, how };
+    await this.deliver([{ userId, data }], { urgent: true });
   }
 
   /** Whether `userId` has muted `otherId`, whatever channel they write in. */

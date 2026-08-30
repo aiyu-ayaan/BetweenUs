@@ -1290,6 +1290,21 @@ export interface CallRingRequest {
 }
 
 /**
+ * "I have said no to that, here."
+ *
+ * Who declined is the authenticated user and is never in the body: this is the
+ * one thing a decline says, and a decline that could name its own sender would
+ * be a way to silence somebody else's phone.
+ *
+ * It goes nowhere near the caller. Declining is not a message to whoever rang -
+ * a ring is not a handshake, and it rings out for them either way - it is this
+ * account telling its *own* other devices to stop.
+ */
+export interface CallDeclineRequest {
+  channelId: string;
+}
+
+/**
  * One call somebody was in, as their own log reads it back.
  *
  * Written from the gateway's own knowledge of when the socket joined and left,
@@ -1743,6 +1758,14 @@ export type ServerPresenceEvent =
       callerName: string;
       callerAvatarUrl?: string;
     }
+  /**
+   * The same thing `CallHandledPushData` carries, for the clients that are
+   * running. Answering is visible to a running client already - it can see
+   * itself arrive in the roster - but declining is not: nothing about it
+   * reaches a roster, so without this a laptop would go on ringing after
+   * somebody said no on their phone.
+   */
+  | { type: 'call.handled'; channelId: string; how: CallHandled }
   | { type: 'pong' }
   | { type: 'error'; code: string; message: string };
 
@@ -2049,24 +2072,40 @@ export interface RemoteSessionPushData {
 
 /** Everything that can arrive as a data-only push. */
 /**
- * This account is now in a call, on one of its devices.
+ * How a ring stopped mattering to the account it was aimed at.
+ *
+ * The two ways a person deals with a ringing phone. They are one value rather
+ * than two push types because the effect is the same everywhere it lands - the
+ * ringer comes down - and the difference is only what the device should
+ * remember afterwards. See {@link CallHandledPushData}.
+ */
+export type CallHandled = 'answered' | 'declined';
+
+/**
+ * This account has dealt with that ring, on one of its devices.
  *
  * The third push here whose only job is to take something *off* a screen, and
  * for the same reason as `channel.read`: a ring is aimed at an account and
- * lands on every device it owns, so answering on one of them leaves the rest
- * ringing at somebody who is already talking.
+ * lands on every device it owns, so dealing with it on one of them leaves the
+ * rest ringing at somebody who has already answered or already said no.
  *
- * Nothing could tell them before. The roster announcement is addressed to
- * everyone who can hear the channel *minus whoever is in the call*, so the one
- * account that needs to hear "you answered" is the exact account it skips - and
- * the other devices rang on until they timed out, or until the whole call
- * ended.
+ * Nothing could tell them before. Answering is invisible to the fan-out - the
+ * roster announcement is addressed to everyone who can hear the channel *minus
+ * whoever is in the call*, so the one account that needs to hear "you
+ * answered" is the exact account it skips - and declining was not sent
+ * anywhere at all. Either way the other devices rang on until they timed out.
+ *
+ * `how` is what the receiving device does *after* taking the ringer down.
+ * `declined` has to be remembered for the rest of the call, or the next thing
+ * that would have rung - a roster this device has not seen yet, a second push
+ * arriving late - asks a question that has already been answered with no.
  *
  * Carries no names: there is nothing to draw. It is a cancel.
  */
-export interface CallAnsweredPushData {
-  type: 'call.answered';
+export interface CallHandledPushData {
+  type: 'call.handled';
   channelId: string;
+  how: CallHandled;
 }
 
 export type PushData =
@@ -2077,7 +2116,7 @@ export type PushData =
   | ServerMemberPushData
   | CallPushData
   | CallRingPushData
-  | CallAnsweredPushData
+  | CallHandledPushData
   | RemoteSessionPushData;
 
 // --- Chat WebSocket protocol (/ws/chat) ---

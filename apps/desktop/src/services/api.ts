@@ -748,4 +748,16 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ channelId, userId }),
     }),
+
+  /**
+   * "I said no to that, here."
+   *
+   * Reaches this account's own other devices and nobody else - the caller is
+   * deliberately not told. See `CallsService.decline`.
+   */
+  callDecline: (channelId: string): Promise<void> =>
+    request('/api/v1/calls/decline', {
+      method: 'POST',
+      body: JSON.stringify({ channelId }),
+    }),
 };

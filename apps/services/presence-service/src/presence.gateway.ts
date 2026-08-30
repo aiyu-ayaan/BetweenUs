@@ -166,6 +166,19 @@ export class PresenceGateway implements OnModuleDestroy {
       });
     });
 
+    // Somebody said no to a ring, on one of their devices. Straight back to
+    // that same account and to nobody else - the caller is deliberately not
+    // told, and nobody else was ever ringing.
+    //
+    // Answering needs no equivalent: a running client sees itself arrive in
+    // `call.roster` above and draws the same conclusion. Declining reaches no
+    // roster, so without this a laptop went on ringing after somebody said no
+    // on their phone.
+    await this.events.subscribe(EVENTS.CALL_DECLINED, (envelope) => {
+      const { userId, channelId } = envelope.payload;
+      this.sendToUser(userId, { type: 'call.handled', channelId, how: 'declined' });
+    });
+
     this.logger.info('Presence WebSocket gateway ready', { path: '/ws/presence' });
   }
 
