@@ -152,6 +152,7 @@ private fun isItemGranted(context: Context, item: PermissionItem): Boolean {
 fun PermissionsScreen(
     onDone: () -> Unit,
     onBack: (() -> Unit)? = null,
+    onOpenDetail: ((String) -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val items = remember { getPermissionItems() }
@@ -356,6 +357,13 @@ fun PermissionsScreen(
                                 color = if (isGranted) StatusOnline.copy(alpha = 0.35f) else MaterialTheme.colorScheme.outlineVariant,
                                 shape = RoundedCornerShape(14.dp),
                             )
+                            .let {
+                                if (onOpenDetail != null) {
+                                    it.clickable { onOpenDetail(item.id) }
+                                } else {
+                                    it
+                                }
+                            }
                             .padding(14.dp),
                     ) {
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -454,6 +462,27 @@ fun PermissionsScreen(
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
+
+                            if (onOpenDetail != null) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(top = 4.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Text(
+                                        text = "View details & permissions architecture",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.primary,
+                                    )
+                                    BetweenUsIcon(
+                                        BetweenUsIcons.ChevronRight,
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        size = 14.dp,
+                                    )
+                                }
+                            }
                         }
                     }
                 }

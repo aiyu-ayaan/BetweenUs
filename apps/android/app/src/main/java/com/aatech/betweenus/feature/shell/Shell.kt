@@ -63,6 +63,7 @@ import com.aatech.betweenus.feature.settings.BetweenUsPermissions
 import com.aatech.betweenus.feature.settings.CallUsageScreen
 import com.aatech.betweenus.feature.settings.DeviceSettingsScreen
 import com.aatech.betweenus.feature.settings.NotificationSettingsScreen
+import com.aatech.betweenus.feature.settings.PermissionDetailScreen
 import com.aatech.betweenus.feature.settings.PermissionsScreen
 import com.aatech.betweenus.feature.settings.PrivacyScreen
 import com.aatech.betweenus.feature.settings.SettingsScreen
@@ -586,6 +587,21 @@ fun Shell(user: PublicUser) {
                         PermissionsScreen(
                             onDone = { navigation.popBackStack() },
                             onBack = { navigation.popBackStack() },
+                            onOpenDetail = { permissionId ->
+                                navigation.navigate("${Route.PermissionDetail}/$permissionId")
+                            },
+                        )
+                    }
+                    composable(
+                        "${Route.PermissionDetail}/{permissionId}",
+                        enterTransition = { slideInHorizontally(travel) { it } + fadeIn(fade) },
+                        exitTransition = { slideOutHorizontally(travel) { -it / 3 } + fadeOut(fade) },
+                        popEnterTransition = { slideInHorizontally(travel) { -it / 3 } + fadeIn(fade) },
+                        popExitTransition = { slideOutHorizontally(travel) { it } + fadeOut(fade) },
+                    ) { entry ->
+                        PermissionDetailScreen(
+                            permissionId = entry.arguments?.getString("permissionId").orEmpty(),
+                            onBack = { navigation.popBackStack() },
                         )
                     }
                     composable(Route.ServerSettings) {
@@ -706,6 +722,7 @@ object Route {
     const val Privacy = "privacy"
     const val ServerSettings = "server-settings"
     const val Permissions = "permissions"
+    const val PermissionDetail = "permission-detail"
     const val AutoUpdate = "auto-update"
     const val CallUsage = "call-usage"
     const val Remote = "remote"

@@ -115,6 +115,7 @@ feature/remote          feature/update        feature/voice
   - **`NotificationSettingsScreen`** (`Route.NotificationSettings`) — Push preferences and OS notification integration.
   - **`DeviceSettingsScreen`** (`Route.DeviceSettings`) — "This Device" diagnostics, local crash reports, call data history, and auto-updates.
   - **`PermissionsScreen`** (`Route.Permissions`) — Consolidated runtime permissions overview with live health meters and batch grant actions.
+  - **`PermissionDetailScreen`** (`Route.PermissionDetail`) — Dedicated per-permission deep-dive pages (Notifications, Mic, Camera, Nearby Devices, Media) with hardware operations, rationales, and live toggles.
   - **`PrivacyScreen`** (`Route.Privacy`) — Blocked users directory and message history clearing.
   - **`ThemesScreen`** (`Route.Themes`) — 16 curated themes, Material You dynamic wallpaper theming, and accent customization.
 - **`home`** — the friends list, and **`AddFriendScreen`** (`Route.AddFriend`)
