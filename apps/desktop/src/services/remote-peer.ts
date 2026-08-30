@@ -30,6 +30,7 @@
  * the gateway learning it; see "Known limits" in development/E2EE.md.
  */
 import type { IceServer, RemoteSignal } from '@betweenus/shared-types';
+import { serialize } from './signal-queue';
 import {
   PLAYOUT_DELAY,
   patchVideoBandwidth,
@@ -71,6 +72,8 @@ export class ScreenLink {
   /** Files, and only files. See `remote-transfer.ts` for what travels on it. */
   private channel: RTCDataChannel | null = null;
   private closed = false;
+  /** Signals from the far end, applied strictly one at a time. See `accept`. */
+  private readonly queue = serialize();
 
   /**
    * `sending` is what makes this the agent's end. It decides who offers and
@@ -281,8 +284,22 @@ export class ScreenLink {
     }
   }
 
-  /** A signal relayed from the other end of this session. */
-  async accept(signal: RemoteSignal): Promise<void> {
+  /**
+   * A signal relayed from the other end of this session, queued behind the ones
+   * already being applied.
+   *
+   * Same reason as `mesh.ts`: `accept` is async, the socket does not wait for
+   * it, and the body is a critical section over `this.pc`. Two descriptions
+   * arriving together - which switching the shared screen produces, since it
+   * renegotiates - interleaved at the awaits, and the second reached
+   * `setLocalDescription` after the first had already driven the connection to
+   * `stable`, which throws.
+   */
+  accept(signal: RemoteSignal): Promise<void> {
+    return this.queue(() => this.apply(signal));
+  }
+
+  private async apply(signal: RemoteSignal): Promise<void> {
     if (this.closed) return;
     try {
       if (signal.kind === 'ice') {

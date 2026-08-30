@@ -22,6 +22,8 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlin.math.sqrt
 import org.json.JSONObject
 import org.webrtc.AudioTrack
@@ -1242,6 +1244,33 @@ class VoiceEngine(private val context: Context) {
 
         private var makingOffer = false
         private var closed = false
+
+        /**
+         * Signals from this peer, applied strictly one at a time.
+         *
+         * [onSignal] launches a coroutine per signal and nothing waits for it,
+         * so two descriptions arriving close together used to run *concurrently*
+         * and interleave at every suspension point inside. That breaks perfect
+         * negotiation at the root: the state checks in [onDescription] read
+         * `signalingState` before [verifyFingerprint], which can go to the
+         * network for a fresh channel key, so by the time the second run acts on
+         * its decision the first has already moved the connection on.
+         *
+         * An offer and a re-offer from [chase] landing together is the case that
+         * shows: both pass the collision check while the state is still
+         * HAVE_REMOTE_OFFER, the first drives the connection to STABLE with its
+         * answer, and the second reaches [setLocal] a moment later and fails
+         * with "Called in wrong state: stable" across a call that is otherwise
+         * fine.
+         *
+         * It also makes [pendingCandidates] safe. That list was appended to from
+         * the socket thread and drained inside [onDescription] at the same time.
+         *
+         * One lock per peer, not one for the call: separate links share no state
+         * and queueing them behind each other would make the slowest peer's key
+         * re-read everybody else's problem.
+         */
+        private val signals = Mutex()
         /** When the channel key was last re-read for this peer. See [verifyFingerprint]. */
         private var keyReadAt = 0L
 
@@ -1583,22 +1612,31 @@ class VoiceEngine(private val context: Context) {
 
         fun onSignal(data: JSONObject) {
             when (data.optString("kind")) {
-                "offer", "answer" -> scope.launch { onDescription(data) }
+                "offer", "answer" -> scope.launch { signals.withLock { onDescription(data) } }
+                // Through the same lock as a description, because it touches the
+                // same two things one does: the connection, and the pending
+                // list a description drains.
                 "ice" -> data.optJSONObject("candidate")?.let { payload ->
                     val candidate = IceCandidate(
                         payload.optString("sdpMid"),
                         payload.optInt("sdpMLineIndex"),
                         payload.optString("candidate"),
                     )
-                    if (pc.remoteDescription == null) {
-                        pendingCandidates += candidate
-                    } else {
-                        pc.addIceCandidate(candidate)
+                    scope.launch {
+                        signals.withLock {
+                            if (closed) return@withLock
+                            if (pc.remoteDescription == null) {
+                                pendingCandidates += candidate
+                            } else {
+                                pc.addIceCandidate(candidate)
+                            }
+                        }
                     }
                 }
             }
         }
 
+        /** Called only under [signals]; the whole body is a critical section over [pc]. */
         private suspend fun onDescription(payload: JSONObject) {
             if (closed) return
             val sdp = payload.optString("sdp")

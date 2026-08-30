@@ -14,6 +14,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import org.json.JSONArray
 import org.json.JSONObject
 import org.webrtc.DefaultVideoDecoderFactory
@@ -50,6 +52,19 @@ class RemoteEngine(context: Context) {
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+
+    /**
+     * RTC signals, applied strictly one at a time.
+     *
+     * Events are dispatched with a `launch` per event and nothing waits for
+     * them, so two offers arriving close together - which switching the shared
+     * screen produces, since it renegotiates - used to run concurrently and
+     * interleave at every suspension point. The second then reached
+     * `setLocalDescription` after the first had already driven the connection to
+     * STABLE, which fails with "Called in wrong state: stable". The same shape
+     * as `VoiceEngine.PeerLink.signals` and `mesh.ts`.
+     */
+    private val signals = Mutex()
 
     val eglBase: EglBase = EglBase.create()
 
@@ -264,10 +279,11 @@ class RemoteEngine(context: Context) {
             // session holding REMOTE_CLIPBOARD.
             "clipboard.set" -> _remoteClipboard.value = event.optString("text").ifEmpty { null }
 
-            "rtc.signal" -> event.optJSONObject("data")?.let { onRtcSignal(it) }
+            "rtc.signal" -> event.optJSONObject("data")?.let { signals.withLock { onRtcSignal(it) } }
         }
     }
 
+    /** Called only under [signals]; the whole body is a critical section over the connection. */
     private suspend fun onRtcSignal(data: JSONObject) {
         val pc = connection ?: return
         when (data.optString("kind")) {

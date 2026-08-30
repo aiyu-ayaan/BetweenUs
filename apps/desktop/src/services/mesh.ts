@@ -83,6 +83,7 @@ import type {
   ServerCallEvent,
 } from '@betweenus/shared-types';
 import type { ClockSample } from './listen-sync';
+import { serialize } from './signal-queue';
 import { wsUrl } from './endpoint';
 import { deviceId } from './e2ee';
 import {
@@ -385,6 +386,17 @@ class PeerLink {
   /** Perfect negotiation bookkeeping. */
   private makingOffer = false;
   private ignoreOffer = false;
+  /**
+   * Signals from this peer, applied strictly one at a time.
+   *
+   * `accept` is async and the socket dispatches into it without waiting, so two
+   * descriptions arriving close together used to run *concurrently* and
+   * interleave at every `await` inside. The state checks below read
+   * `signalingState` before `verify`, which can go to the network for a fresh
+   * channel key, so the second run acted on a reading the first had already
+   * invalidated. See `signal-queue.ts` for the failure it produced.
+   */
+  private readonly queue = serialize();
   /** When the channel key was last re-read for this peer. See `verify`. */
   private keyReadAt = 0;
   /** Offers sent for a link that never got an answer. See `chase`. */
@@ -919,8 +931,19 @@ class PeerLink {
     });
   }
 
+  /**
+   * Queues one signal behind the ones already being applied to this peer.
+   *
+   * The whole body of `apply` is a critical section over `this.pc`: every check
+   * it makes about `signalingState` is invalidated by another run touching the
+   * connection, and every `await` in it is a chance for that to happen.
+   */
+  accept(signal: CallSignal): Promise<void> {
+    return this.queue(() => this.apply(signal));
+  }
+
   /** The perfect-negotiation receive path, verbatim from the WebRTC spec's shape. */
-  async accept(signal: CallSignal): Promise<void> {
+  private async apply(signal: CallSignal): Promise<void> {
     if (this.closed) return;
 
     try {
