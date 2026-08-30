@@ -130,9 +130,36 @@ const mockVideoSdp = [
 const patchedSdp = patchVideoBandwidth(mockVideoSdp, movie.publish);
 assert.match(patchedSdp, /b=AS:\d+/);
 assert.match(patchedSdp, /b=TIAS:\d+/);
-assert.match(patchedSdp, /x-google-min-bitrate=\d+/);
 assert.match(patchedSdp, /x-google-start-bitrate=\d+/);
 assert.match(patchedSdp, /x-google-max-bitrate=\d+/);
+
+// Never a floor. A minimum the link cannot afford is paid for in pixels, which
+// is a share that sits at 480p on a connection with room for 1080p.
+assert.doesNotMatch(patchedSdp, /x-google-min-bitrate/);
+
+// And the start is a probe the path can absorb, not a fraction of a ceiling
+// nothing was ever going to carry.
+const start = Number(/x-google-start-bitrate=(\d+)/.exec(patchedSdp)?.[1]);
+assert.ok(start > 0 && start <= 5_000, `start bitrate ${start} kbps is not a survivable probe`);
+
+// Retransmission is not a picture: `apt=` is the whole of an rtx format line,
+// and a bitrate hint appended to it is how a patched description gets refused
+// in one piece.
+const withRtx = patchVideoBandwidth(
+  [
+    'v=0',
+    'm=video 9 UDP/TLS/RTP/SAVPF 96 97',
+    'c=IN IP4 0.0.0.0',
+    'a=rtpmap:96 H264/90000',
+    'a=fmtp:96 packetization-mode=1',
+    'a=rtpmap:97 rtx/90000',
+    'a=fmtp:97 apt=96',
+    '',
+  ].join('\r\n'),
+  movie.publish,
+);
+assert.match(withRtx, /a=fmtp:97 apt=96\r?\n/);
+assert.match(withRtx, /a=fmtp:96 packetization-mode=1;x-google-max-bitrate=/);
 
 // Codec sorting prioritizes H.264 High Profile (6400..) with packetization-mode=1
 const mockCodecs = [

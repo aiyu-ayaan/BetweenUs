@@ -252,20 +252,41 @@ export function shareOptions(
 }
 
 /**
- * Patches SDP with explicit video bandwidth limits (`b=AS`, `b=TIAS`) and
- * codec bitrate hints (`x-google-min-bitrate`, `x-google-start-bitrate`,
- * `x-google-max-bitrate`).
+ * Where congestion control begins, in kbps.
  *
- * WebRTC's default Bandwidth Estimation (BWE) starts sending video at ~300 kbps
- * and ramps up painfully slowly over many seconds. In a direct P2P connection,
- * these SDP attributes signal high initial and maximum bitrate capabilities
- * immediately, eliminating blurry start-up artifacts and unlocking full quality.
+ * WebRTC's own default is about 300 kbps, which is the several blurry seconds
+ * at the start of every share. This is a fast start, not a guess at the link:
+ * the estimator has to survive its first probe, and a probe the path cannot
+ * absorb is answered with loss, which collapses the estimate far below where it
+ * would have climbed on its own.
+ */
+const START_KBPS = 2_500;
+
+/** Video payload types with no encoder behind them. See `patchVideoBandwidth`. */
+const NOT_A_PICTURE = new Set(['rtx', 'red', 'ulpfec', 'flexfec-03']);
+
+/**
+ * Patches SDP with an explicit video bandwidth ceiling (`b=AS`, `b=TIAS`) and
+ * codec bitrate hints (`x-google-start-bitrate`, `x-google-max-bitrate`).
+ *
+ * Every number here is a ceiling or a starting point. Neither is a floor, and
+ * the earlier `x-google-min-bitrate` was: a quarter of the ceiling, so 12.5 Mbps
+ * on the 50 Mbps default this is called with at negotiation time - a minimum
+ * the encoder was told to meet on links that were never going to carry it. An
+ * encoder made to meet a bitrate floor pays for it in pixels, because 640x480 at
+ * 12.5 Mbps is reachable and 1920x1080 is not. Paired with a start bitrate of
+ * 60% of the ceiling - 30 Mbps, blown at a link in its first second - that is a
+ * share which knocks over its own estimate and then sits at 480p on a good
+ * network, which is the bug this replaced.
+ *
+ * The real ceiling is applied per sender by `PeerLink.tune`, which needs no
+ * renegotiation and so is the one that sees the share's own profile. This is
+ * only here to stop the estimator crawling.
  */
 export function patchVideoBandwidth(sdp: string, publish?: SharePublish | null): string {
   const bitrate = publish?.maxBitrate ?? 50_000_000;
   const maxKbps = Math.round(bitrate / 1000);
-  const minKbps = Math.max(1000, Math.round(maxKbps * 0.25));
-  const startKbps = Math.max(minKbps, Math.round(maxKbps * 0.6));
+  const startKbps = Math.min(maxKbps, START_KBPS);
   const tiasBps = bitrate;
 
   const sections = sdp.split(/(?=m=)/g);
@@ -291,12 +312,17 @@ export function patchVideoBandwidth(sdp: string, publish?: SharePublish | null):
     let match: RegExpExecArray | null;
     const pts: string[] = [];
     while ((match = rtpmapRegex.exec(mediaSection)) !== null) {
-      if (match[1]) pts.push(match[1]);
+      // Only payloads that carry a picture. Retransmission and the error
+      // correction codecs share the video clock rate but have no encoder to
+      // hint at, and `rtx`'s format line is one parameter long - appending to
+      // `apt=96` is how a whole patched description gets refused, which loses
+      // the hints on the codecs that did want them.
+      if (match[1] && match[2] && !NOT_A_PICTURE.has(match[2].toLowerCase())) pts.push(match[1]);
     }
 
     for (const pt of pts) {
       const fmtpRegex = new RegExp(`^a=fmtp:${pt}\\s+(.+)$`, 'm');
-      const hints = `x-google-min-bitrate=${minKbps};x-google-max-bitrate=${maxKbps};x-google-start-bitrate=${startKbps}`;
+      const hints = `x-google-max-bitrate=${maxKbps};x-google-start-bitrate=${startKbps}`;
       if (fmtpRegex.test(mediaSection)) {
         mediaSection = mediaSection.replace(
           fmtpRegex,
