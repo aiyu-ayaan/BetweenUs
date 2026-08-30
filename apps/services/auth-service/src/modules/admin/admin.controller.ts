@@ -17,6 +17,7 @@ import type {
   AdminAuditPage,
   AdminOAuthProvider,
   AdminSmtpSettings,
+  AdminServerHealth,
   AdminSmtpTestResult,
   AdminStatus,
   AdminUser,
@@ -24,12 +25,16 @@ import type {
 } from '@betweenus/shared-types';
 import { AdminGuard } from './admin.guard';
 import { AdminService } from './admin.service';
+import { AdminHealthService } from './health.service';
 import { AdminOAuthProviderDto, AdminSmtpDto, AdminSmtpTestDto, AdminUserUpdateDto } from './dto';
 import { isProviderName } from './oauth-providers';
 
 @Controller('admin')
 export class AdminController {
-  constructor(private readonly admin: AdminService) {}
+  constructor(
+    private readonly admin: AdminService,
+    private readonly health: AdminHealthService,
+  ) {}
 
   /**
    * Deliberately unauthenticated: the panel has to be able to say "run
@@ -49,6 +54,25 @@ export class AdminController {
     @Query('cursor') cursor?: string,
   ): Promise<AdminUserPage> {
     return this.admin.users(query, Number(take) || 50, cursor || undefined);
+  }
+
+  /**
+   * Everything the Health & storage screen draws, in one request.
+   *
+   * `days` is the bandwidth window only; the rest of the response is a snapshot
+   * of right now. It is parsed here and clamped in the service, because a
+   * window is a domain decision rather than a routing one - see
+   * `clampWindowDays`.
+   *
+   * This never fails on a dependency. A dead Postgres or an unreachable
+   * call-service comes back as a red card inside a 200, which is the entire
+   * point of a health page: a 500 here would tell an administrator only that
+   * something is wrong, at the exact moment they need to know which thing.
+   */
+  @Get('health')
+  @UseGuards(JwtAuthGuard, AdminGuard)
+  serverHealth(@Query('days') days = '30'): Promise<AdminServerHealth> {
+    return this.health.snapshot(Number(days));
   }
 
   @Get('audit')

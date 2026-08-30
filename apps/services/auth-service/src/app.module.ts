@@ -10,6 +10,7 @@ import { UsernameDirectory } from './modules/auth/username-directory';
 import { MailService } from './modules/mail/mail.service';
 import { AdminController } from './modules/admin/admin.controller';
 import { AdminService } from './modules/admin/admin.service';
+import { AdminHealthService } from './modules/admin/health.service';
 import { OAuthController } from './modules/oauth/oauth.controller';
 import { OAuthService } from './modules/oauth/oauth.service';
 
@@ -25,6 +26,7 @@ const SERVICE_NAME = 'auth-service';
   providers: [
     AuthService,
     AdminService,
+    AdminHealthService,
     MailService,
     UsernameDirectory,
     OAuthService,

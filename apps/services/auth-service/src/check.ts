@@ -27,6 +27,14 @@ import type { MailService } from './modules/mail/mail.service';
 import { CREDENTIALS_RATE_LIMIT, LOGIN_RATE_LIMIT } from './modules/auth/rate-limits';
 import { pageSize, paginate } from './modules/admin/admin.service';
 import {
+  clampWindowDays,
+  kindOfExtension,
+  redactUrl,
+  stateForLatency,
+  toNumber,
+  worstState,
+} from './modules/admin/health.service';
+import {
   challengeFor,
   isAllowedRedirect,
   trustedRedirectOrigins,
@@ -530,6 +538,104 @@ async function checkUsernameAvailability(): Promise<void> {
   assert.equal((await second.usernameAvailable('somebodyelse')).available, true);
 }
 
+/**
+ * The health page's pure logic.
+ *
+ * Every one of these is a thing that goes wrong silently rather than loudly: a
+ * rollup that reports green while a component is down, a connection string that
+ * reaches a browser with its password still in it, a `BigInt` that throws on
+ * serialisation only once somebody has actually made a call, and a bucketing
+ * rule that quietly files every video under "other". None of them fail a
+ * request, which is exactly why they are pinned here.
+ */
+function checkHealthRollup(): void {
+  // The badge is the worst card, never an average and never the first one.
+  assert.equal(worstState([]), 'up', 'nothing to report is not a failure');
+  assert.equal(worstState(['up', 'up']), 'up');
+  assert.equal(worstState(['up', 'degraded', 'up']), 'degraded');
+  assert.equal(worstState(['up', 'degraded', 'down']), 'down');
+  assert.equal(worstState(['down', 'up']), 'down', 'order must not matter');
+
+  // A probe that answers is judged on how long it took about it.
+  assert.equal(stateForLatency(5), 'up');
+  assert.equal(stateForLatency(9_000), 'degraded');
+
+  // The window is a query string, so it is a stranger. Both directions clamp,
+  // and anything unparseable falls back rather than becoming a NaN date.
+  assert.equal(clampWindowDays(30), 30);
+  assert.equal(clampWindowDays(0), 1);
+  assert.equal(clampWindowDays(-90), 1);
+  assert.equal(clampWindowDays(10_000), 365);
+  assert.equal(clampWindowDays(Number.NaN), 30, 'a missing or junk ?days= is the default');
+  assert.equal(clampWindowDays(7.9), 7, 'truncated, never rounded up past the cap');
+}
+
+function checkHealthRedaction(): void {
+  // The one that matters: a password in a connection string, on its way to a
+  // browser. Host, port and database survive because they are what the reader
+  // came for; the credentials do not, in any form.
+  assert.equal(
+    redactUrl('postgresql://betweenus:hunter2@db:5432/betweenus'),
+    'postgresql://db:5432/betweenus',
+  );
+  assert.equal(redactUrl('redis://:secret-pass@redis:6379'), 'redis://redis:6379');
+  assert.equal(redactUrl('redis://user@redis:6379'), 'redis://redis:6379');
+  assert.ok(!redactUrl('postgresql://u:p@db:5432/x')?.includes('p@'));
+
+  // A URL with nothing to hide is left alone apart from normalisation.
+  assert.equal(redactUrl('http://call-service:3007/health'), 'http://call-service:3007/health');
+
+  // A secret in the query string, which `new URL` parses perfectly happily -
+  // `host:` reads as a scheme - so clearing only the userinfo would hand this
+  // one back intact. It did, in the first version of `redactUrl`.
+  assert.ok(!redactUrl('host:5432/db?password=hunter2')?.includes('hunter2'));
+  assert.equal(
+    redactUrl('postgresql://db:5432/betweenus?sslpassword=hunter2&sslmode=require'),
+    'postgresql://db:5432/betweenus?sslpassword=***&sslmode=require',
+    'the parameters that are not secrets are left readable',
+  );
+
+  // Absent is null, and a string that does not parse at all is replaced
+  // wholesale rather than passed through on the assumption it was harmless.
+  assert.equal(redactUrl(null), null);
+  assert.equal(redactUrl(''), null);
+  assert.equal(redactUrl('not a url at all'), '(unparseable url)');
+}
+
+function checkHealthBytes(): void {
+  // BigInt is not JSON-serialisable, so this conversion is the difference
+  // between a response and a 500.
+  assert.equal(toNumber(1_234n), 1234);
+  assert.equal(typeof toNumber(1_234n), 'number');
+  assert.equal(toNumber(0n), 0);
+  // An aggregate over no rows is null, and that is a real answer here.
+  assert.equal(toNumber(null), 0);
+  assert.equal(toNumber(undefined), 0);
+  assert.equal(toNumber(42), 42);
+  assert.ok(JSON.stringify({ bytes: toNumber(9_000_000_000n) }) === '{"bytes":9000000000}');
+  // Above 2^53 the number is approximate and says so by not being exact; what
+  // must not happen is a throw or a negative.
+  assert.ok(toNumber(2n ** 70n) > 0);
+}
+
+function checkHealthKinds(): void {
+  assert.equal(kindOfExtension('png'), 'image');
+  assert.equal(kindOfExtension('JPG'), 'image', 'an extension is matched case-insensitively');
+  assert.equal(kindOfExtension('.webp'), 'image', 'with or without its dot');
+  assert.equal(kindOfExtension('mp4'), 'video');
+  assert.equal(kindOfExtension('mkv'), 'video');
+  assert.equal(kindOfExtension('ogg'), 'audio');
+  assert.equal(kindOfExtension('opus'), 'audio', 'voice notes are audio, not other');
+  assert.equal(kindOfExtension('pdf'), 'document');
+  assert.equal(kindOfExtension('zip'), 'document');
+  assert.equal(kindOfExtension('exe'), 'other');
+  // A key with no extension at all - an upload whose original name had none.
+  assert.equal(kindOfExtension(null), 'other');
+  assert.equal(kindOfExtension(''), 'other');
+  // Substring matches must not leak between buckets.
+  assert.equal(kindOfExtension('mp3x'), 'other');
+}
+
 async function main(): Promise<void> {
   const db = fakeDb();
   const usernames = new UsernameDirectory(db);
@@ -648,6 +754,10 @@ async function main(): Promise<void> {
 
   checkLoginBuckets();
   checkPagination();
+  checkHealthRollup();
+  checkHealthRedaction();
+  checkHealthBytes();
+  checkHealthKinds();
 
   checkOAuthRedirects();
   checkAppRedirect();
