@@ -39,9 +39,24 @@ interface PresenceState {
   typing: Map<string, Map<string, TypingEntry>>;
   /** channelId -> user ids currently in that voice channel */
   voice: Map<string, string[]>;
+  /**
+   * userId -> when that person was last here, ISO-8601.
+   *
+   * Only filled for people who are away: the server does not send it for
+   * anybody online, because "online, last seen a moment ago" says one thing
+   * twice and the second half is the half that goes stale.
+   */
+  lastSeen: Map<string, string>;
 
   isOnline: (userId: string) => boolean;
   statusOf: (userId: string) => PresenceStatus;
+  lastSeenOf: (userId: string) => string | null;
+  /**
+   * "When were these people last here?" - asked when a card opens or a direct
+   * message goes on screen. The answers arrive as ordinary `presence.changed`
+   * events, so nothing here waits on a reply.
+   */
+  askLastSeen: (userIds: string[]) => void;
   typistsIn: (channelId: string) => string[];
   voiceMembers: (channelId: string) => string[];
   notifyTyping: (channelId: string) => void;
@@ -63,10 +78,19 @@ export const usePresenceStore = create<PresenceState>((set, get) => ({
   chosenStatus: 'online',
   typing: new Map(),
   voice: new Map(),
+  lastSeen: new Map(),
 
   isOnline: (userId) => get().online.has(userId),
 
   statusOf: (userId) => get().statuses.get(userId) ?? 'offline',
+
+  lastSeenOf: (userId) => get().lastSeen.get(userId) ?? null,
+
+  askLastSeen: (userIds) => {
+    const wanted = userIds.filter(Boolean);
+    if (wanted.length === 0) return;
+    presenceSocket.send({ type: 'presence.query', userIds: wanted });
+  },
 
   typistsIn: (channelId) => {
     const now = Date.now();
@@ -107,6 +131,7 @@ export const usePresenceStore = create<PresenceState>((set, get) => ({
       chosenStatus: 'online',
       typing: new Map(),
       voice: new Map(),
+      lastSeen: new Map(),
     }),
 }));
 
@@ -122,6 +147,19 @@ export const usePresenceStore = create<PresenceState>((set, get) => ({
 export function useStatusOf(): (userId: string) => PresenceStatus {
   const statuses = usePresenceStore((state) => state.statuses);
   return (userId) => statuses.get(userId) ?? 'offline';
+}
+
+/**
+ * The same trick as `useStatusOf`, for the timestamp.
+ *
+ * Selecting `state.lastSeenOf` would select a function whose reference never
+ * changes, so a header showing "last seen yesterday" would keep saying that
+ * after the person came back and went again. Selecting the map is what makes
+ * the subscription real.
+ */
+export function useLastSeenOf(): (userId: string) => string | null {
+  const lastSeen = usePresenceStore((state) => state.lastSeen);
+  return (userId) => lastSeen.get(userId) ?? null;
 }
 
 /**
@@ -175,7 +213,15 @@ presenceSocket.on((event) => {
         online.add(event.user.userId);
         statuses.set(event.user.userId, event.user.status);
       }
-      usePresenceStore.setState({ online, statuses });
+
+      // Kept rather than replaced when the event carries nothing: somebody
+      // coming online sends no timestamp, and dropping the old one would make
+      // the line under their name blank for the rest of the session the moment
+      // they go away again.
+      const lastSeen = new Map(state.lastSeen);
+      if (event.user.lastSeenAt) lastSeen.set(event.user.userId, event.user.lastSeenAt);
+
+      usePresenceStore.setState({ online, statuses, lastSeen });
       return;
     }
 

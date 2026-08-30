@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { ABOUT_MAX_LENGTH, DEFAULT_ABOUT } from '@betweenus/shared-types';
 import type { ActiveStatus, DeviceKey } from '@betweenus/shared-types';
 import { useAuthStore } from '../../stores/auth';
 import { useChatStore } from '../../stores/chat';
@@ -443,6 +444,51 @@ function PrivacySection(): JSX.Element {
   );
 }
 
+/**
+ * The about line, with the count that only appears once it matters.
+ *
+ * Its own field rather than another `TextField` because this is the one that
+ * has a ceiling, and a limit somebody only discovers by having their sentence
+ * cut off is a limit that should have been on screen. It shows up in the last
+ * quarter, which is where somebody is deciding what to leave out.
+ *
+ * Cut by code point rather than by `String.length`, so an emoji is one
+ * character to the person typing it. That also keeps the client's count under
+ * the server's ceiling in the one direction that matters: the DTO measures
+ * UTF-16 units, which is never fewer.
+ */
+function AboutField({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (next: string) => void;
+}): JSX.Element {
+  const used = [...value].length;
+  const left = ABOUT_MAX_LENGTH - used;
+
+  return (
+    <label className="block">
+      <span className="mb-1.5 flex items-baseline justify-between text-xs font-bold uppercase tracking-wide text-slate-400">
+        <span>About</span>
+        {left <= ABOUT_MAX_LENGTH / 4 && (
+          <span className={left < 0 ? 'text-danger' : 'text-slate-500'}>{left}</span>
+        )}
+      </span>
+      <textarea
+        rows={2}
+        value={value}
+        placeholder={DEFAULT_ABOUT}
+        onChange={(event) => onChange([...event.target.value].slice(0, ABOUT_MAX_LENGTH).join(''))}
+        className="w-full resize-none rounded bg-surface-900 px-3 py-2 text-sm text-slate-100 outline-none ring-1 ring-edge transition-shadow duration-200 focus:ring-2 focus:ring-accent"
+      />
+      <span className="mt-1 block text-xs text-slate-500">
+        Shown on your profile card to anyone who can see your name.
+      </span>
+    </label>
+  );
+}
+
 function AccountSection(): JSX.Element {
   const user = useAuthStore((state) => state.user);
   const refreshUser = useAuthStore((state) => state.refreshUser);
@@ -451,6 +497,7 @@ function AccountSection(): JSX.Element {
 
   const [displayName, setDisplayName] = useState(user?.displayName ?? '');
   const [username, setUsername] = useState(user?.username ?? '');
+  const [about, setAbout] = useState(user?.about ?? '');
   const [savingProfile, setSavingProfile] = useState(false);
   const [profileNote, setProfileNote] = useState<string | null>(null);
 
@@ -464,7 +511,11 @@ function AccountSection(): JSX.Element {
     setSavingProfile(true);
     setProfileNote(null);
     try {
-      await api.updateAccount({ displayName: displayName.trim(), username: username.trim() });
+      await api.updateAccount({
+        displayName: displayName.trim(),
+        username: username.trim(),
+        about: about.trim(),
+      });
       await refreshUser();
       setProfileNote('Saved.');
     } catch (error) {
@@ -508,6 +559,9 @@ function AccountSection(): JSX.Element {
           <div className="min-w-0 flex-1 pb-1">
             <p className="truncate text-xl font-bold text-slate-50">{user?.displayName}</p>
             <p className="truncate text-sm text-slate-400">@{user?.username}</p>
+            {user?.about.trim() && (
+              <p className="mt-1 line-clamp-2 break-words text-sm text-slate-300">{user.about}</p>
+            )}
           </div>
         </div>
 
@@ -561,6 +615,7 @@ function AccountSection(): JSX.Element {
       <div className="mt-3 space-y-4">
         <TextField label="Display name" value={displayName} onChange={setDisplayName} />
         <TextField label="Username" value={username} onChange={setUsername} />
+        <AboutField value={about} onChange={setAbout} />
         <button
           type="button"
           disabled={savingProfile}

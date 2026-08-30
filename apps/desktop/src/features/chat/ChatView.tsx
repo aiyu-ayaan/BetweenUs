@@ -20,9 +20,11 @@ import { UNDECRYPTABLE } from '../../services/e2ee';
 import { api } from '../../services/api';
 import { useAuthStore } from '../../stores/auth';
 import { useFriendsStore } from '../../stores/friends';
-import { usePresenceStore } from '../../stores/presence';
+import { usePresenceStore, useLastSeenOf, useStatusOf } from '../../stores/presence';
+import { presenceLine } from '../../services/last-seen';
 import { useIsMobile } from '../../services/responsive';
 import { Avatar } from '../../components/Avatar';
+import { ProfileHover } from '../../components/ProfileCard';
 import { AttachmentList } from './Attachments';
 import { EmojiPicker } from './EmojiPicker';
 import { ChannelMenu } from './ChannelMenu';
@@ -132,6 +134,74 @@ function MuteButton({ channelId }: { channelId: string }): JSX.Element {
 }
 
 /**
+ * The profile card over a message's author, in a server channel.
+ *
+ * A message carries only who wrote it - a name, a picture and an id - and the
+ * card also wants the about line, which is on the member row the right-hand
+ * column is already holding. Looked up rather than sent with every message:
+ * the same person writes fifty of them, and fifty copies of one sentence in a
+ * channel's history is fifty copies to keep in step when they edit it.
+ *
+ * An author who is no longer a member - somebody who left, or wrote in a
+ * conversation this window has no member list for - simply gets a card with no
+ * about line rather than no card, because the half of it that comes from
+ * presence is the half worth resting on a name for.
+ */
+function AuthorHover({
+  author,
+  children,
+}: {
+  author: DecryptedMessage['author'];
+  children: React.ReactNode;
+}): JSX.Element {
+  const member = useChatStore((state) => state.members.find((row) => row.userId === author.id));
+
+  return (
+    <ProfileHover
+      person={{
+        userId: author.id,
+        displayName: author.displayName,
+        username: member?.username ?? author.username,
+        avatarUrl: author.avatarUrl,
+        about: member?.about ?? '',
+        colour: member?.colour ?? null,
+      }}
+    >
+      {children}
+    </ProfileHover>
+  );
+}
+
+/**
+ * "online", or when this person was last here, under their name in the header.
+ *
+ * Its own component so that a status change re-renders one line rather than the
+ * whole conversation: `ChatView` holds the message list, and subscribing it to
+ * a presence map that ticks every time anybody anywhere goes idle would repaint
+ * every message on screen to change four words.
+ *
+ * It re-renders on its own clock as well as on events, because "last seen today
+ * at 7:07 PM" is fixed but "last seen yesterday" is not - a conversation left
+ * open across midnight would otherwise go on calling it today until something
+ * else happened to redraw.
+ */
+function PeerPresence({ userId }: { userId: string }): JSX.Element | null {
+  const statusOf = useStatusOf();
+  const lastSeenOf = useLastSeenOf();
+  const [, tick] = useState(0);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => tick((count) => count + 1), 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  const line = presenceLine(statusOf(userId), lastSeenOf(userId));
+  if (!line) return null;
+
+  return <p className="truncate text-xs text-slate-400">{line}</p>;
+}
+
+/**
  * A header toggle for one of the right-hand panels. Clicking the panel that is
  * already open goes back to the member list, which is where the column started.
  */
@@ -202,6 +272,20 @@ export function ChatView({
     const ticker = window.setInterval(() => pruneExpired(), 30_000);
     return () => window.clearInterval(ticker);
   }, []);
+
+  /**
+   * The header's line needs to know when this person was last here, and a
+   * `presence.sync` only carries the people who are here now - so the one case
+   * the line exists for is the one case the socket says nothing about.
+   *
+   * Asked when the conversation opens and not again. A last-seen time that is a
+   * few minutes stale reads identically, and somebody coming back online
+   * arrives as a `presence.changed` of its own, which changes the line to
+   * "online" without anybody asking.
+   */
+  useEffect(() => {
+    if (peer) usePresenceStore.getState().askLastSeen([peer.id]);
+  }, [peer?.id]);
   /**
    * How a file dropped anywhere in the conversation reaches the composer that
    * owns the pending list. A ref rather than lifted state on purpose: the drop
@@ -284,7 +368,17 @@ export function ChatView({
           ) : (
             <HashIcon className="h-5 w-5 shrink-0 text-slate-500" />
           )}
-          <h1 className="truncate text-[15px] font-semibold text-slate-50">{channel.name}</h1>
+          {isDirect && peer ? (
+            // Name over status, the way every messenger draws a one-to-one
+            // conversation: the question "are they there" belongs beside the
+            // name, not behind a click into a profile.
+            <div className="min-w-0 leading-tight">
+              <h1 className="truncate text-[15px] font-semibold text-slate-50">{channel.name}</h1>
+              <PeerPresence userId={peer.id} />
+            </div>
+          ) : (
+            <h1 className="truncate text-[15px] font-semibold text-slate-50">{channel.name}</h1>
+          )}
         </div>
 
         {channel.topic && !isMobile && (
@@ -688,11 +782,13 @@ function MessageList({
                   (grouped ? (
                     <div aria-hidden="true" className="h-10 w-10 shrink-0" />
                   ) : (
-                    <Avatar
-                      name={message.author.displayName}
-                      avatarUrl={message.author.avatarUrl}
-                      ringColour="border-surface-900"
-                    />
+                    <AuthorHover author={message.author}>
+                      <Avatar
+                        name={message.author.displayName}
+                        avatarUrl={message.author.avatarUrl}
+                        ringColour="border-surface-900"
+                      />
+                    </AuthorHover>
                   ))}
 
                 <div className={`flex min-w-0 max-w-[78%] flex-col ${isSelf ? 'items-end' : 'items-start'}`}>
@@ -737,9 +833,11 @@ function MessageList({
                         side of the screen your bubble is on already said
                         that. */}
                     {!isSelf && !grouped && (
-                      <p className="mb-0.5 truncate text-sm font-semibold text-accent">
-                        {message.author.displayName}
-                      </p>
+                      <AuthorHover author={message.author}>
+                        <p className="mb-0.5 truncate text-sm font-semibold text-accent">
+                          {message.author.displayName}
+                        </p>
+                      </AuthorHover>
                     )}
 
                     {/* Above the quote and above the words: the first thing

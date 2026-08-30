@@ -1111,8 +1111,11 @@ function patchProfile(user: UserSummary): void {
     Object.fromEntries(Object.entries(record).map(([key, list]) => [key, list.map(map)]));
 
   useChatStore.setState({
+    // A member row is the one place the about line is held, so it is patched
+    // here and nowhere else - a message author carries a name and a picture
+    // and has never carried a sentence about the person.
     members: state.members.map((member) =>
-      member.userId === user.id ? { ...member, ...face } : member,
+      member.userId === user.id ? { ...member, ...face, about: user.about } : member,
     ),
     messages: state.messages.map(inMessage),
     pins: state.pins.map(inMessage),

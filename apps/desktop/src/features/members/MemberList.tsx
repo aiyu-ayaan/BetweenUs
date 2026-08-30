@@ -5,6 +5,7 @@ import { useFriendsStore } from '../../stores/friends';
 import { usePresenceStore, useStatusOf } from '../../stores/presence';
 import { useAuthStore } from '../../stores/auth';
 import { Avatar } from '../../components/Avatar';
+import { ProfileHover } from '../../components/ProfileCard';
 import {
   isUserMuted,
   onPreferencesChanged,
@@ -130,6 +131,21 @@ function Group({
       <ul>
         {members.map((member) => (
           <li key={member.userId}>
+            {/* Resting on the row opens the card; the click and the right
+                click still open the menu of things to *do* about the person.
+                Two gestures, two questions - "who is this" wants no click at
+                all, and "message them" was never going to be answered by
+                hovering. */}
+            <ProfileHover
+              person={{
+                userId: member.userId,
+                displayName: member.displayName,
+                username: member.username,
+                avatarUrl: member.avatarUrl,
+                about: member.about,
+                colour: member.colour,
+              }}
+            >
             <div
               onContextMenu={(event) => {
                 event.preventDefault();
@@ -163,6 +179,7 @@ function Group({
                 )}
               </span>
             </div>
+            </ProfileHover>
           </li>
         ))}
       </ul>
