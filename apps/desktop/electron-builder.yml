@@ -21,6 +21,12 @@ win:
   icon: public/icon.png
 nsis:
   artifactName: BetweenUs-${version}-Setup.${ext}
+  # Both places electron-builder starts the app go through StdUtils, which is
+  # for de-elevating a launch this installer never needs to. See nsis/installer
+  # .nsh and development/devdocs/UPDATES.md. Named explicitly rather than left
+  # in the build resources: `build/` is gitignored, so a file there would exist
+  # on one machine and never reach a release.
+  include: nsis/installer.nsh
   # An assisted installer, not a one-click one: somebody installing BetweenUs
   # for the first time gets to say where it goes, and gets a licence-free
   # wizard they can read rather than a progress bar that has already finished.
