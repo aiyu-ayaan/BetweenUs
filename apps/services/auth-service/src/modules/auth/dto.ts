@@ -9,7 +9,7 @@ import {
   MinLength,
   ValidateIf,
 } from 'class-validator';
-import { DISAPPEARING_WINDOWS, UPLOADED_PICTURE_URL } from '@betweenus/shared-types';
+import { ABOUT_MAX_LENGTH, DISAPPEARING_WINDOWS, UPLOADED_PICTURE_URL } from '@betweenus/shared-types';
 import type {
   ChangePasswordRequest,
   ForgotPasswordRequest,
@@ -100,6 +100,20 @@ export class UpdateAccountDto implements UpdateAccountRequest {
   @IsString()
   @Length(1, 64)
   displayName?: string;
+
+  /**
+   * The line under the name on a profile card.
+   *
+   * An empty string is allowed and means "draw no line", so the lower bound is
+   * zero rather than one. The upper bound is `ABOUT_MAX_LENGTH`, measured in
+   * UTF-16 units by `MaxLength` where the clients count code points - a line of
+   * astral emoji is therefore cut off by the client before it ever reaches a
+   * limit here, which is the safe direction for the two counts to disagree in.
+   */
+  @IsOptional()
+  @IsString()
+  @MaxLength(ABOUT_MAX_LENGTH * 2)
+  about?: string;
 
   /**
    * An uploaded picture, or null to go back to the initial. It has to be one of

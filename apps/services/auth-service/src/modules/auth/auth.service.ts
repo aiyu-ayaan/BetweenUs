@@ -459,6 +459,9 @@ export class AuthService {
         // null is a real value here - it clears the picture back to the
         // initial - so only an absent key means "leave it alone".
         ...(dto.avatarUrl !== undefined ? { avatarUrl: dto.avatarUrl } : {}),
+        // Trimmed, and an empty string is a value: it means "draw no line
+        // under my name", which is different from never having touched it.
+        ...(dto.about !== undefined ? { about: dto.about.trim() } : {}),
         // Same rule: null is "switch the personal disappearing window off",
         // which is a value, and an absent key is "do not touch it".
         ...(dto.messageTtlSeconds !== undefined
@@ -479,6 +482,7 @@ export class AuthService {
         username: updated.username,
         displayName: updated.displayName,
         avatarUrl: updated.avatarUrl,
+        about: updated.about,
       },
     });
     return toPublicUser(updated);
@@ -563,6 +567,7 @@ export function toPublicUser(user: User): PublicUser {
     username: user.username,
     displayName: user.displayName,
     avatarUrl: user.avatarUrl,
+    about: user.about,
     role: user.role,
     mustChangePassword: user.mustChangePassword,
     messageTtlSeconds: user.messageTtlSeconds,

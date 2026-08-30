@@ -24,6 +24,7 @@ interface UserRow {
   username: string;
   displayName: string;
   avatarUrl: string | null;
+  about: string;
 }
 
 @Injectable()
@@ -75,7 +76,7 @@ export class FriendsService {
           { displayName: { contains: term, mode: 'insensitive' } },
         ],
       },
-      select: { id: true, username: true, displayName: true, avatarUrl: true },
+      select: { id: true, username: true, displayName: true, avatarUrl: true, about: true },
       orderBy: { username: 'asc' },
       take: SEARCH_LIMIT,
     });
@@ -388,5 +389,6 @@ function toSummary(row: UserRow): UserSummary {
     username: row.username,
     displayName: row.displayName,
     avatarUrl: row.avatarUrl,
+    about: row.about,
   };
 }

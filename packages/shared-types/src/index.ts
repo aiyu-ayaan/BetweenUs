@@ -166,6 +166,8 @@ export interface PublicUser {
   role: GlobalRole;
   /** True for an account issued a generated password; it can do nothing else. */
   mustChangePassword: boolean;
+  /** The line under the name on a profile card. See `ABOUT_MAX_LENGTH`. */
+  about: string;
   /**
    * This account's own disappearing-message window, in seconds, or null for
    * "keep everything".
@@ -237,11 +239,40 @@ export interface UpdateAccountRequest {
   /** Storage URL of an uploaded picture; null clears it back to the initial. */
   avatarUrl?: string | null;
   /**
+   * The line under the name on a profile card. Trimmed, and no longer than
+   * `ABOUT_MAX_LENGTH`. An empty string is allowed and means the card draws no
+   * line at all - which is different from never having changed it, where the
+   * line is `DEFAULT_ABOUT`.
+   */
+  about?: string;
+  /**
    * This account's personal disappearing window in seconds; null switches it
    * off. Must be one of `DISAPPEARING_WINDOWS`.
    */
   messageTtlSeconds?: number | null;
 }
+
+/**
+ * What a new account's about line says until its owner changes it.
+ *
+ * A default rather than an empty string, because an empty profile card is a
+ * card that looks broken - and because the first thing anybody does with this
+ * field is discover it exists by seeing somebody else's.
+ */
+export const DEFAULT_ABOUT = 'Hey, I’m on Between Us.';
+
+/**
+ * How long an about line may be, in characters.
+ *
+ * 140 is the length that still reads as one line under a heading at the widths
+ * the profile card is drawn at on all three clients - a phone's card is about
+ * 300dp across, and much past this the line becomes a paragraph and the card
+ * stops being a card. WhatsApp settled on 139 for the same reason.
+ *
+ * Counted in code points rather than UTF-16 units wherever it is enforced, so a
+ * line of emoji is measured the way somebody typing it counts.
+ */
+export const ABOUT_MAX_LENGTH = 140;
 
 // --- OAuth login ---
 
@@ -572,6 +603,8 @@ export interface ServerMember {
   roleIds: string[];
   /** From the highest-ranked custom role that has one; null if none does. */
   colour: string | null;
+  /** The line under the name on this member's profile card. See `UserSummary`. */
+  about: string;
   joinedAt: string;
 }
 
@@ -682,6 +715,15 @@ export interface UserSummary {
   username: string;
   displayName: string;
   avatarUrl: string | null;
+  /**
+   * The line under the name on a profile card.
+   *
+   * Carried on the summary rather than fetched per person when a card opens:
+   * a card that appears on hover has no room for a spinner, and 140 characters
+   * beside a name that is already being sent is cheaper than the request that
+   * would otherwise fetch it.
+   */
+  about: string;
 }
 
 export type FriendshipStatus = 'PENDING' | 'ACCEPTED';
@@ -1744,6 +1786,21 @@ export type PresenceStatus = ActiveStatus | 'offline';
 export interface PresenceState {
   userId: string;
   status: PresenceStatus;
+  /**
+   * When this account was last connected and visible, ISO-8601, or undefined
+   * when nobody has ever seen it go - a brand new account, or one whose only
+   * sessions predate the column.
+   *
+   * Only meaningful while `status` is `offline`: somebody who is here now was
+   * last seen now, and a client that drew "last seen a moment ago" over a green
+   * dot would be saying the same thing twice and one of them wrong.
+   *
+   * Never sent for an account that is invisible. Invisibility that still
+   * published when you were last here would not be invisibility, so the value
+   * stops being written the moment the status is chosen and freezes at the last
+   * time the account was genuinely visible.
+   */
+  lastSeenAt?: string;
 }
 
 /** Who is currently connected to a voice channel's room. */
@@ -1770,6 +1827,21 @@ export type ClientPresenceEvent =
   | { type: 'channel.blur'; channelId: string }
   | { type: 'voice.join'; channelId: string }
   | { type: 'voice.leave'; channelId: string }
+  /**
+   * "When were these people last here?"
+   *
+   * Asked when a profile card opens or a direct message is put on screen, and
+   * answered with one `presence.changed` per user the caller is allowed to hear
+   * about - which is the same audience scoping every other presence event goes
+   * through, so this cannot be used to probe for accounts a stranger shares
+   * nothing with.
+   *
+   * A pull rather than part of `presence.sync`, because a sync carries who is
+   * online and the people a last-seen time is interesting for are exactly the
+   * ones who are not: sending every offline account's timestamp on connect
+   * would be the whole user table.
+   */
+  | { type: 'presence.query'; userIds: string[] }
   | { type: 'ping' };
 
 export type ServerPresenceEvent =

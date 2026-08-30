@@ -20,6 +20,17 @@ import { audienceOfChannel, audienceOfUser } from './audience';
 
 const HEARTBEAT_INTERVAL_MS = 30_000;
 
+/**
+ * The most accounts one `presence.query` will answer for.
+ *
+ * A card opens for one person and a conversation header asks about one; the
+ * largest honest batch is a member column, and a column longer than this is
+ * scrolled rather than read at once. The cap is here so that a client asking
+ * about the whole user table gets an answer about a hundred of them instead of
+ * a database query per id.
+ */
+const QUERY_LIMIT = 100;
+
 interface SocketState {
   userId: string;
   username: string;
@@ -266,12 +277,20 @@ export class PresenceGateway implements OnModuleDestroy {
     if (this.hasOtherSocket(userId, socket)) return;
 
     await this.store.goOffline(userId);
+
+    // The last window of this account has gone, so the last-seen value has
+    // stopped moving - which is the moment it is worth a row rather than a
+    // Redis key. Flushed before it is read back, so what everybody is told and
+    // what survives a restart are the same number.
+    await this.store.flushLastSeen(userId);
+    const lastSeenAt = (await this.store.lastSeenOf([userId])).get(userId);
+
     // The call roster is not touched: a presence socket closing is not evidence
     // that a call ended, and call-service publishes the departure itself the
     // moment its own socket goes - including when it goes by being terminated
     // for missing a heartbeat.
     await this.events.publish(EVENTS.PRESENCE_CHANGED, {
-      user: { userId, status: 'offline' },
+      user: { userId, status: 'offline', ...(lastSeenAt ? { lastSeenAt } : {}) },
     });
     this.logger.info('Presence disconnected', { userId });
   }
@@ -331,6 +350,55 @@ export class PresenceGateway implements OnModuleDestroy {
         await this.store.touch(state.userId);
         this.send(socket, { type: 'pong' });
         return;
+
+      /**
+       * "When were these people last here?"
+       *
+       * Answered one `presence.changed` at a time rather than in a batch of its
+       * own, so a client has exactly one road into its presence state and the
+       * answer to a question and the news of a change are the same shape.
+       *
+       * Scoped through `audienceOfUser`, the same set every broadcast is scoped
+       * to. Without it this would be the one event a client could aim at an
+       * arbitrary id, and a "who is online" oracle over the whole deployment is
+       * the thing `audience.ts` was written to remove.
+       */
+      case 'presence.query': {
+        if (!Array.isArray(event.userIds) || event.userIds.length === 0) return;
+        const asked = [...new Set(event.userIds)].slice(0, QUERY_LIMIT);
+
+        let allowed: Set<string>;
+        try {
+          allowed = await audienceOfUser(state.userId);
+        } catch (error) {
+          this.logger.warn('Could not scope a presence query', { reason: String(error) });
+          return;
+        }
+
+        const visible = asked.filter((userId) => allowed.has(userId));
+        if (visible.length === 0) return;
+
+        const [seen, statuses] = await Promise.all([
+          this.store.lastSeenOf(visible),
+          Promise.all(visible.map((userId) => this.store.stateOf(userId))),
+        ]);
+
+        visible.forEach((userId, index) => {
+          const status = statuses[index] ?? 'offline';
+          const lastSeenAt = seen.get(userId);
+          // Only for somebody who is not here. "Online, last seen a moment
+          // ago" says one thing twice, and the second half goes stale first.
+          this.send(socket, {
+            type: 'presence.changed',
+            user: {
+              userId,
+              status,
+              ...(status === 'offline' && lastSeenAt ? { lastSeenAt } : {}),
+            },
+          });
+        });
+        return;
+      }
 
       /**
        * The window is showing this channel and has the user's attention.

@@ -1101,7 +1101,7 @@ function toMember(
     id: string;
     userId: string;
     joinedAt: Date;
-    user: { username: string; displayName: string; avatarUrl: string | null };
+    user: { username: string; displayName: string; avatarUrl: string | null; about: string };
   },
 ): ServerMember {
   return {
@@ -1116,6 +1116,7 @@ function toMember(
     deniedPermissions: row.deniedPermissions,
     roleIds: row.roles.map((held) => held.role.id),
     colour: colourOf(row.roles),
+    about: row.user.about,
     joinedAt: row.joinedAt.toISOString(),
   };
 }

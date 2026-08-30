@@ -10,6 +10,7 @@
  */
 import { Injectable, OnModuleDestroy } from '@nestjs/common';
 import Redis from 'ioredis';
+import { prisma } from '@betweenus/database';
 import { envOr } from '@betweenus/config';
 import type {
   ActiveStatus,
@@ -24,6 +25,15 @@ const STATUS_KEY = 'presence:status';
 const VOICE_KEY = (channelId: string): string => `presence:voice:${channelId}`;
 const VOICE_INDEX = 'presence:voice:channels';
 const FOCUS_KEY = (channelId: string): string => `presence:focus:${channelId}`;
+/**
+ * userId -> the last millisecond this account was seen connected and visible.
+ *
+ * A hash rather than a score on `presence:online`, because that sorted set is
+ * trimmed of anybody stale - which is precisely the moment the answer starts
+ * being interesting. Nothing expires it: one small entry per account that has
+ * ever connected, which is the same order as the user table.
+ */
+const LAST_SEEN_KEY = 'presence:lastseen';
 
 /** Anything else in the hash is a status this build does not know; ignore it. */
 const ACTIVE_STATUSES: ActiveStatus[] = ['online', 'idle', 'dnd', 'invisible'];
@@ -37,13 +47,83 @@ export class PresenceStore implements OnModuleDestroy {
     maxRetriesPerRequest: null,
   });
 
-  /** Marks a user online, or refreshes their heartbeat. */
+  /**
+   * Marks a user online, or refreshes their heartbeat, and notes the moment as
+   * when they were last seen.
+   *
+   * An invisible account is skipped for the second half only. It is genuinely
+   * connected, so it still ages correctly out of `presence:online`; it is just
+   * not *seen*, and a last-seen time that kept ticking while somebody was
+   * hidden would be a green dot spelled differently.
+   */
   async touch(userId: string): Promise<void> {
-    await this.redis.zadd(ONLINE_KEY, Date.now(), userId);
+    const now = Date.now();
+    await this.redis.zadd(ONLINE_KEY, now, userId);
+    if ((await this.statusOf(userId)) === 'invisible') return;
+    await this.redis.hset(LAST_SEEN_KEY, userId, now);
   }
 
   async goOffline(userId: string): Promise<void> {
     await this.redis.zrem(ONLINE_KEY, userId);
+  }
+
+  /**
+   * Writes the live last-seen value through to Postgres.
+   *
+   * Called when an account's last window closes, which is the only moment the
+   * value stops changing and therefore the only moment it is worth a row write.
+   * Redis answers while somebody is online and for as long as it keeps the
+   * hash; this is what survives a wipe, a restart, or an absence long enough
+   * that nobody remembers the session.
+   *
+   * A failure is logged nowhere and swallowed here on purpose: the caller is a
+   * socket closing, and a database that is briefly unhappy must not turn a
+   * disconnect into an unhandled rejection. The value stays in Redis and the
+   * next disconnect writes it.
+   */
+  async flushLastSeen(userId: string): Promise<void> {
+    const seen = await this.redis.hget(LAST_SEEN_KEY, userId);
+    if (seen === null) return;
+    try {
+      await prisma.user.update({
+        where: { id: userId },
+        data: { lastSeenAt: new Date(Number(seen)) },
+      });
+    } catch {
+      return;
+    }
+  }
+
+  /**
+   * When each of these accounts was last seen, ISO-8601, newest answer wins.
+   *
+   * Redis and Postgres are both consulted rather than one falling back to the
+   * other: Redis is ahead for anybody who has connected since the last flush,
+   * and Postgres is the only answer for anybody whose entry a wipe took. Taking
+   * the later of the two is right in both directions and needs no bookkeeping
+   * about which store is authoritative.
+   *
+   * An account that has never been seen is simply absent from the map, which is
+   * what every client renders as "no last seen" rather than as a date in 1970.
+   */
+  async lastSeenOf(userIds: string[]): Promise<Map<string, string>> {
+    if (userIds.length === 0) return new Map();
+
+    const [live, rows] = await Promise.all([
+      this.redis.hmget(LAST_SEEN_KEY, ...userIds),
+      prisma.user.findMany({
+        where: { id: { in: userIds } },
+        select: { id: true, lastSeenAt: true },
+      }),
+    ]);
+
+    const stored = new Map(rows.map((row) => [row.id, row.lastSeenAt?.getTime() ?? 0]));
+    const seen = new Map<string, string>();
+    userIds.forEach((userId, index) => {
+      const at = Math.max(Number(live[index] ?? 0), stored.get(userId) ?? 0);
+      if (at > 0) seen.set(userId, new Date(at).toISOString());
+    });
+    return seen;
   }
 
   /**
@@ -67,6 +147,22 @@ export class PresenceStore implements OnModuleDestroy {
   async visibleStatusOf(userId: string): Promise<PresenceStatus> {
     const status = await this.statusOf(userId);
     return status === 'invisible' ? 'offline' : status;
+  }
+
+  /**
+   * One account's status as everybody else sees it, connection included.
+   *
+   * `visibleStatusOf` answers only what was *chosen*, and a chosen status
+   * outlives the connection - so somebody who has never been seen, and
+   * somebody who signed off a week ago, both read back `online` from it. This
+   * is the one that asks whether they are actually here, and it is what a
+   * `presence.query` needs: the question is being asked precisely about people
+   * who are probably not.
+   */
+  async stateOf(userId: string): Promise<PresenceStatus> {
+    const score = await this.redis.zscore(ONLINE_KEY, userId);
+    if (score === null || Number(score) < Date.now() - STALE_AFTER_MS) return 'offline';
+    return this.visibleStatusOf(userId);
   }
 
   async onlineUsers(): Promise<PresenceState[]> {

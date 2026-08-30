@@ -47,6 +47,21 @@ model User {
   displayName        String
   passwordHash       String
   avatarUrl          String?
+  /// A line about yourself, shown on the profile card everywhere the app draws
+  /// one. Not encrypted and not private: it is a caption on a name, the same
+  /// way an avatar is, and every client that can see the name renders it.
+  /// Capped at ABOUT_MAX_LENGTH (140) by the DTO, which is the length that
+  /// still reads as one line under a heading.
+  about              String     @default("Hey, I’m on Between Us.")
+  /// The last moment presence-service saw this account connected and visible.
+  ///
+  /// Redis holds the live value while somebody is online (`presence:lastseen`);
+  /// this column is what it is flushed to when the last window goes, so a
+  /// person who has been away for a week still has an answer after a Redis
+  /// wipe or a service restart. Never written while the account is invisible -
+  /// a status that hid you but kept publishing when you were last here would
+  /// not be hiding you.
+  lastSeenAt         DateTime?
   role               GlobalRole @default(USER)
   /// Set for accounts created with a generated password (the bootstrap admin);
   /// they can do nothing until they choose their own.

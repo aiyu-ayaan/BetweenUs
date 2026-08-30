@@ -49,8 +49,8 @@ export function paginate<T extends { id: string }>(
 const USER_DETAIL = {
   identities: { select: { provider: true } },
   _count: { select: { memberships: true } },
-  // The newest live session is the closest thing to "last seen" without a
-  // presence lookup across services.
+  // The fallback for "last seen": the newest live session, for an account that
+  // predates the column presence-service now writes. See `toAdminUser`.
   refreshTokens: {
     where: { revokedAt: null },
     orderBy: { createdAt: 'desc' },
@@ -68,6 +68,7 @@ function toAdminUser(user: UserWithDetail): AdminUser {
     username: user.username,
     displayName: user.displayName,
     avatarUrl: user.avatarUrl,
+    about: user.about,
     role: user.role,
     mustChangePassword: user.mustChangePassword,
     messageTtlSeconds: user.messageTtlSeconds,
@@ -76,7 +77,12 @@ function toAdminUser(user: UserWithDetail): AdminUser {
     passwordResetUntil: user.passwordResetUntil?.toISOString() ?? null,
     identities: user.identities.map((identity) => identity.provider),
     serverCount: user._count.memberships,
-    lastSeenAt: user.refreshTokens[0]?.createdAt.toISOString() ?? null,
+    // The real value now that presence-service keeps one, and the newest live
+    // session only for an account that has not connected since the column
+    // existed - which is where this number used to come from for everybody, and
+    // was only ever "when they last signed in".
+    lastSeenAt:
+      user.lastSeenAt?.toISOString() ?? user.refreshTokens[0]?.createdAt.toISOString() ?? null,
   };
 }
 
