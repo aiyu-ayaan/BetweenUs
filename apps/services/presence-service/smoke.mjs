@@ -79,10 +79,10 @@ const connect = (token) =>
         events,
         send: (event) => socket.send(JSON.stringify(event)),
         /** Resolves with the first event matching `match`, or null after `ms`. */
-        waitFor: async (match, ms = 4000) => {
+        waitFor: async (match, ms = 4000, startFrom = 0) => {
           const deadline = Date.now() + ms;
           for (;;) {
-            const hit = events.find(match);
+            const hit = events.slice(startFrom).find(match);
             if (hit) return hit;
             if (Date.now() > deadline) return null;
             await new Promise((r) => setTimeout(r, 50));
@@ -266,9 +266,12 @@ ok(
 // status that hid him but went on publishing when he was last here would not be
 // hiding him. Alice may ask - they share a server - and must be told `offline`
 // without a timestamp that is ticking along behind the disguise.
+const beforeBobQuery = a.events.length;
 a.send({ type: 'presence.query', userIds: [bob.user.id] });
 const bobSeen = await a.waitFor(
   (event) => event.type === 'presence.changed' && event.user.userId === bob.user.id,
+  4000,
+  beforeBobQuery,
 );
 ok('a query is answered', bobSeen !== null);
 ok('an invisible user answers offline', bobSeen?.user.status === 'offline');
@@ -302,12 +305,15 @@ ok('the offline broadcast carries no timestamp', offline?.user.lastSeenAt === un
 
 // Bob asks about Alice, who has just left and has never narrowed her setting.
 // This is the path that may answer, and the only one.
+const beforeAliceQuery = b.events.length;
 b.send({ type: 'presence.query', userIds: [alice.user.id] });
 const aliceSeen = await b.waitFor(
   (event) =>
     event.type === 'presence.changed' &&
     event.user.userId === alice.user.id &&
     typeof event.user.lastSeenAt === 'string',
+  4000,
+  beforeAliceQuery,
 );
 ok('a query answers with a last-seen time', aliceSeen !== null);
 ok(
