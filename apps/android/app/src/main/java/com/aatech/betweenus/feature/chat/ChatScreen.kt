@@ -59,6 +59,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.aatech.betweenus.core.crypto.E2ee
+import com.aatech.betweenus.core.data.Endpoint
 import com.aatech.betweenus.core.data.MessageReply
 import com.aatech.betweenus.core.data.PublicUser
 import com.aatech.betweenus.core.store.Conversation
@@ -67,6 +68,7 @@ import com.aatech.betweenus.core.store.PendingShare
 import com.aatech.betweenus.core.store.Presence
 import com.aatech.betweenus.core.store.ReadableMessage
 import com.aatech.betweenus.core.store.Workspace
+import com.aatech.betweenus.ui.components.Avatar
 import com.aatech.betweenus.ui.components.EmptyState
 import com.aatech.betweenus.ui.components.IconAction
 import com.aatech.betweenus.ui.components.BetweenUsIcon
@@ -393,28 +395,31 @@ fun ChatScreen(
                 IconAction(BetweenUsIcons.LayoutSidebar, "Open the channel list", it)
             }
 
-            Box(
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(MaterialShapes.Cookie9Sided.toShape())
-                    .background(
-                        if (direct != null) {
-                            MaterialTheme.colorScheme.primaryContainer
-                        } else {
-                            MaterialTheme.colorScheme.surfaceContainerHighest
-                        },
-                    ),
-                contentAlignment = Alignment.Center,
-            ) {
-                BetweenUsIcon(
-                    icon = if (direct != null) BetweenUsIcons.User else BetweenUsIcons.Hash,
-                    tint = if (direct != null) {
-                        MaterialTheme.colorScheme.onPrimaryContainer
-                    } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    },
-                    size = 20.dp,
+            // The person, not a glyph standing in for one. The drawer row that
+            // opened this conversation is showing their photo, and a header
+            // drawing an anonymous outline beside it read as a different
+            // person. Tapping it opens the picture.
+            if (direct != null) {
+                Avatar(
+                    id = direct.participant.id,
+                    label = direct.participant.label,
+                    url = direct.participant.avatarUrl?.let { Endpoint.absolute(it) },
+                    size = 40.dp,
                 )
+            } else {
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(MaterialShapes.Cookie9Sided.toShape())
+                        .background(MaterialTheme.colorScheme.surfaceContainerHighest),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    BetweenUsIcon(
+                        icon = BetweenUsIcons.Hash,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        size = 20.dp,
+                    )
+                }
             }
 
             Column(
