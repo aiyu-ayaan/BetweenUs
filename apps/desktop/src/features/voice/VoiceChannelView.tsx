@@ -16,9 +16,15 @@
  * Cameras and a shared screen can be on at once, so a share is its own thing
  * and never replaces the sharer's tile.
  *
- * The grid pages at nine tiles rather than shrinking forever, and whoever spoke
- * most recently is pulled to the front so an active speaker is on page one -
- * the same bargain Teams makes. Speaking is marked in amber.
+ * The grid pages at nine tiles rather than shrinking forever. Whoever spoke
+ * most recently is pulled to the front only when there is a page two to be
+ * pulled onto: while everybody fits on one page, moving faces around buys
+ * nothing and costs the reader their place, so the order stays put.
+ *
+ * The grid is the *other* people. Your own camera is a small floating window
+ * over the corner of it - you are not in the call to watch yourself - and any
+ * one person can be pinned to fill the stage with everybody else in a strip
+ * underneath.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Channel } from '@betweenus/shared-types';
@@ -33,6 +39,7 @@ import { VoiceControls } from './VoiceControls';
 import { NotHeardNotice } from './NotHeardNotice';
 import { VideoSink } from './MediaSink';
 import { ShareStage } from './ShareStage';
+import { PAGE_SIZE, orderStage, splitStage } from './stage-order';
 import { ListenBar, ListenPanel } from './ListenPanel';
 import { GameBar, GamePanel } from './GamePanel';
 import { AppsPanel } from './AppsPanel';
@@ -50,16 +57,12 @@ import {
   MenuIcon,
   MicOffIcon,
   MinimizeIcon,
+  PinIcon,
   ScreenShareIcon,
   SpeakerIcon,
   UsersIcon,
   XIcon,
 } from '../../components/icons';
-
-/** Tiles per page. Nine keeps every face big enough to read on a laptop. */
-const PAGE_SIZE = 9;
-/** How long after speaking someone keeps their place at the front. */
-const PROMOTION_MS = 60_000;
 
 interface Stage {
   key: string;
@@ -114,6 +117,15 @@ export function VoiceChannelView({
       }));
 
   const ordered = useOrderedStage(stage);
+
+  // Pinned by hand, and only for as long as they are in the call - a pin left
+  // on somebody who hung up would hold an empty stage.
+  const [pinned, setPinned] = useState<string | null>(null);
+  const present = stage.map((tile) => tile.key).join(',');
+  useEffect(() => {
+    if (pinned !== null && !present.split(',').includes(pinned)) setPinned(null);
+  }, [pinned, present]);
+
   const listenOpen = useListenStore((state) => state.open);
   const gameOpen = useGameStore((state) => state.open);
   const gameFullscreen = useGameStore((state) => state.fullscreen);
@@ -242,7 +254,11 @@ export function VoiceChannelView({
         ) : watched ? (
           <Theatre share={watched} tiles={ordered} />
         ) : (
-          <PagedGrid tiles={ordered} />
+          <PagedGrid
+            tiles={ordered}
+            pinned={pinned}
+            onTogglePin={(key) => setPinned((current) => (current === key ? null : key))}
+          />
         )}
 
         {/* In fullscreen the panel portals itself to the body, so it is mounted
@@ -289,13 +305,7 @@ function toStage(tile: VoiceTile): Stage {
   };
 }
 
-/**
- * Recent speakers first, everyone else in their existing order.
- *
- * Sorting the whole list by who spoke last would reshuffle the grid on every
- * word; letting a promotion lapse after a minute means a quiet room settles
- * back down and stays put.
- */
+/** `orderStage` on a clock - see stage-order.ts for the rule itself. */
 function useOrderedStage(stage: Stage[]): Stage[] {
   // Promotions expire on a timer, so a room that goes quiet re-settles without
   // needing an event to arrive first.
@@ -305,13 +315,7 @@ function useOrderedStage(stage: Stage[]): Stage[] {
     return () => clearInterval(timer);
   }, []);
 
-  return useMemo(() => {
-    const now = Date.now();
-    const recent = (tile: Stage): number =>
-      now - tile.lastSpokeAt < PROMOTION_MS ? tile.lastSpokeAt : 0;
-
-    return [...stage].sort((left, right) => recent(right) - recent(left));
-  }, [stage]);
+  return useMemo(() => orderStage(stage, Date.now()), [stage]);
 }
 
 function EmptyStage(): JSX.Element {
@@ -882,23 +886,64 @@ function getGridClass(count: number): string {
   return 'grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5 sm:gap-3 w-full max-w-7xl h-full max-h-[78vh]';
 }
 
-/** Modern adaptive call grid with paging when participants exceed PAGE_SIZE */
-function PagedGrid({ tiles }: { tiles: Stage[] }): JSX.Element {
+/**
+ * The call stage: the other people, paged, with your own camera in a small
+ * floating window over the corner of it.
+ *
+ * Pinning one person swaps the grid for that face at full size with everybody
+ * else in a strip underneath - the "no, keep looking at them" a call needs when
+ * somebody is presenting, drawing, or simply the one being talked to.
+ */
+function PagedGrid({
+  tiles,
+  pinned,
+  onTogglePin,
+}: {
+  tiles: Stage[];
+  pinned: string | null;
+  onTogglePin: (key: string) => void;
+}): JSX.Element {
   const [page, setPage] = useState(0);
-  const pages = Math.max(1, Math.ceil(tiles.length / PAGE_SIZE));
+  const { self, grid, hero, strip } = splitStage(tiles, pinned);
+
+  if (hero) {
+    return (
+      <div className="relative flex min-h-0 flex-1 flex-col gap-3 w-full h-full p-2">
+        <div className="flex min-h-0 flex-1">
+          <StageTile tile={hero} pinned onTogglePin={onTogglePin} />
+        </div>
+        {strip.length > 0 && (
+          <ul className="flex shrink-0 gap-2 overflow-x-auto pb-1">
+            {strip.map((tile) => (
+              <li key={tile.key} className="h-24 w-40 shrink-0 sm:h-28 sm:w-48">
+                <StageTile tile={tile} compact onTogglePin={onTogglePin} />
+              </li>
+            ))}
+          </ul>
+        )}
+        {self && hero.key !== self.key && !grid.includes(self) && (
+          <SelfPip tile={self} onTogglePin={onTogglePin} />
+        )}
+      </div>
+    );
+  }
+
+  const pages = Math.max(1, Math.ceil(grid.length / PAGE_SIZE));
   const current = Math.min(page, pages - 1);
-  const shown = tiles.slice(current * PAGE_SIZE, current * PAGE_SIZE + PAGE_SIZE);
+  const shown = grid.slice(current * PAGE_SIZE, current * PAGE_SIZE + PAGE_SIZE);
   const gridClass = getGridClass(shown.length);
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-4 w-full h-full p-2">
+    <div className="relative flex min-h-0 flex-1 flex-col items-center justify-center gap-4 w-full h-full p-2">
       <ul className={`${gridClass} items-stretch justify-items-stretch transition-all duration-300`}>
         {shown.map((tile) => (
           <li key={tile.key} className="flex min-h-0 min-w-0 w-full h-full">
-            <StageTile tile={tile} />
+            <StageTile tile={tile} onTogglePin={onTogglePin} />
           </li>
         ))}
       </ul>
+
+      {self && !grid.includes(self) && <SelfPip tile={self} onTogglePin={onTogglePin} />}
 
       {pages > 1 && (
         <nav aria-label="Participant pages" className="flex shrink-0 items-center gap-3">
@@ -950,21 +995,77 @@ function PagerButton({
 }
 
 /**
+ * Your own camera, small, over the corner of the stage.
+ *
+ * A grid that gives your own face the same room as everybody else's spends half
+ * a two-person call showing you yourself; this is the same bargain every phone
+ * call app makes. It is still a real tile - mute state, speaking ring, and a
+ * pin if you do want to look at yourself full size.
+ */
+function SelfPip({
+  tile,
+  onTogglePin,
+}: {
+  tile: Stage;
+  onTogglePin: (key: string) => void;
+}): JSX.Element {
+  return (
+    <div className="pointer-events-auto absolute bottom-3 right-3 z-30 w-32 sm:w-44 md:w-52 aspect-video drop-shadow-2xl">
+      <StageTile tile={tile} compact onTogglePin={onTogglePin} />
+    </div>
+  );
+}
+
+/**
  * Cinematic participant card tile:
  * - Uniform height and width across participants
  * - Ambient blurred background behind video to seamlessly fill container
  * - Sharp centered contained video
  * - Speaking pulse glow and user status badges
  */
-function StageTile({ tile }: { tile: Stage }): JSX.Element {
+function StageTile({
+  tile,
+  compact = false,
+  pinned = false,
+  onTogglePin,
+}: {
+  tile: Stage;
+  /** Thumbnail sizing: no floor on the height, smaller avatar and captions. */
+  compact?: boolean;
+  pinned?: boolean;
+  onTogglePin?: (key: string) => void;
+}): JSX.Element {
   return (
     <div
-      className={`relative flex min-h-[140px] sm:min-h-[160px] w-full h-full items-center justify-center overflow-hidden rounded-xl sm:rounded-2xl bg-surface-900/90 border border-white/10 shadow-2xl transition-all duration-300 ring-2 ${
+      className={`group relative flex ${
+        compact ? '' : 'min-h-[140px] sm:min-h-[160px]'
+      } w-full h-full items-center justify-center overflow-hidden rounded-xl sm:rounded-2xl bg-surface-900/90 border border-white/10 shadow-2xl transition-all duration-300 ring-2 ${
         tile.speaking
           ? 'ring-emerald-400 shadow-[0_0_20px_rgba(52,211,153,0.3)]'
           : 'ring-transparent'
       }`}
     >
+      {/* Pinning is a per-viewer decision - nobody else's stage moves - so it
+          lives on the tile rather than in a menu. Kept visible once pinned:
+          the way out of a pin has to be as findable as the way in. */}
+      {onTogglePin && (
+        <button
+          type="button"
+          onClick={() => onTogglePin(tile.key)}
+          aria-pressed={pinned}
+          aria-label={pinned ? `Unpin ${tile.name}` : `Pin ${tile.name}`}
+          title={pinned ? 'Unpin' : 'Pin to the stage'}
+          className={`absolute left-2 top-2 z-30 flex cursor-pointer items-center gap-1 rounded-lg border border-white/10 px-2 py-1 text-[11px] font-semibold backdrop-blur-md transition-all duration-200 focus-visible:opacity-100 active:scale-95 ${
+            pinned
+              ? 'bg-accent text-white opacity-100'
+              : 'bg-black/65 text-slate-200 opacity-0 hover:bg-black/80 hover:text-white group-hover:opacity-100'
+          }`}
+        >
+          <PinIcon className="h-3.5 w-3.5" />
+          {!compact && <span>{pinned ? 'Unpin' : 'Pin'}</span>}
+        </button>
+      )}
+
       {tile.videoTrack ? (
         <>
           {/* Ambient blurred backdrop for luxury presentation */}
@@ -977,11 +1078,13 @@ function StageTile({ tile }: { tile: Stage }): JSX.Element {
           </div>
         </>
       ) : (
-        <div className="relative z-10 flex flex-col items-center justify-center gap-3">
+        <div className={`relative z-10 flex flex-col items-center justify-center ${compact ? 'gap-1.5' : 'gap-3'}`}>
           <div className="relative">
             <span
               aria-hidden="true"
-              className="flex h-16 w-16 sm:h-24 sm:w-24 items-center justify-center rounded-full bg-gradient-to-br from-indigo-600/80 to-purple-600/80 text-xl sm:text-3xl font-bold text-white shadow-xl border border-white/20 select-none"
+              className={`flex ${
+                compact ? 'h-10 w-10 text-base' : 'h-16 w-16 sm:h-24 sm:w-24 text-xl sm:text-3xl'
+              } items-center justify-center rounded-full bg-gradient-to-br from-indigo-600/80 to-purple-600/80 font-bold text-white shadow-xl border border-white/20 select-none`}
             >
               {tile.name.charAt(0).toUpperCase()}
             </span>
@@ -1011,9 +1114,11 @@ function StageTile({ tile }: { tile: Stage }): JSX.Element {
       {tile.speaking && (
         <div className="absolute right-3 top-3 z-20 flex items-center gap-1.5 rounded-full bg-black/60 px-2 py-0.5 backdrop-blur-md border border-emerald-500/30">
           <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
-          <span className="text-[10px] font-semibold text-emerald-300 uppercase tracking-wider">
-            Speaking
-          </span>
+          {!compact && (
+            <span className="text-[10px] font-semibold text-emerald-300 uppercase tracking-wider">
+              Speaking
+            </span>
+          )}
         </div>
       )}
     </div>
