@@ -65,10 +65,16 @@ object Updates {
      */
     private var scheduler: Context? = null
 
-    /** What this build is, or null for a hand-built one that carries `0.0.0`. */
+    /**
+     * What this build is, or null for a checkout whose manifest could not be
+     * read and which fell back to `0.0.0`.
+     */
     val installed: Version? by lazy { Version.parse(BuildConfig.VERSION_NAME) }
 
     val installedName: String get() = BuildConfig.VERSION_NAME
+
+    /** The build behind the name - the release run number, or 1 by hand. */
+    val installedCode: Int get() = BuildConfig.VERSION_CODE
 
     private val _state = MutableStateFlow<UpdateState>(UpdateState.Idle)
     val state: StateFlow<UpdateState> = _state.asStateFlow()

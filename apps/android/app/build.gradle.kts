@@ -46,10 +46,23 @@ val hasKeystore = keystoreFile?.exists() == true
  *
  * The release workflow is the source of truth - it derives the name from the
  * marker on the commit and passes a monotonic code alongside it. Building by
- * hand gives the placeholder below, which is fine for a debug install and is
- * never what reaches a release.
+ * hand falls back to the repository manifest, which the release PR bumps for
+ * every platform, so a local APK reports the same version as the rest of the
+ * monorepo instead of a placeholder.
  */
-val appVersionName = System.getenv("BETWEENUS_VERSION_NAME")?.takeIf { it.isNotBlank() } ?: "0.0.0"
+val manifestVersion: String? = rootProject.file("../../package.json")
+    .takeIf { it.exists() }
+    ?.readText()
+    ?.substringAfter("\"version\": \"", "")
+    ?.substringBefore("\"")
+    ?.takeIf { it.isNotBlank() }
+
+val appVersionName = System.getenv("BETWEENUS_VERSION_NAME")?.takeIf { it.isNotBlank() }
+    ?: manifestVersion
+    ?: "0.0.0"
+
+// No monotonic counter outside CI, so a hand build stays at 1: it only has to
+// be an integer, and nothing installs over the Play/GitHub artifacts anyway.
 val appVersionCode = System.getenv("BETWEENUS_VERSION_CODE")?.trim()?.toIntOrNull() ?: 1
 
 android {

@@ -159,7 +159,7 @@ fun DeviceSettingsScreen(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                         Text(
-                            text = Updates.installedName,
+                            text = "${Updates.installedName} (${Updates.installedCode})",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurface,
                         )
