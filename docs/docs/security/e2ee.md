@@ -34,8 +34,10 @@ flowchart TD
         SignIn["<b>User Signs In</b>"]
         HasKey{"<b>Identity Key Found<br/>in OS Keychain?</b>"}
         UseKey["<b>Use Local Identity Key</b><br/><i>(ECDH P-256 Keypair)</i>"]
+        Provisional{"<b>Marked Provisional?</b><br/><i>(minted while a backup existed)</i>"}
         SignIn --> HasKey
-        HasKey -->|"Yes"| UseKey
+        HasKey -->|"Yes"| Provisional
+        Provisional -->|"No"| UseKey
     end
 
     %% TIER 2: BACKUP & RECOVERY CLUSTER
@@ -44,10 +46,12 @@ flowchart TD
         GetBackup["<b>GET /api/v1/e2ee/backup</b>"]
         BackupExists{"<b>Encrypted Backup Exists?</b>"}
         OpenBackup["<b>Decrypt Backup with Password</b><br/><i>(PBKDF2 + AES-256-GCM)</i>"]
-        GenOwnKey["<b>Generate New Device Keypair</b><br/><i>(Preserve Remote Backup)</i>"]
+        GenOwnKey["<b>Generate New Device Keypair</b><br/><i>Mark PROVISIONAL, preserve remote backup</i>"]
         GenBackup["<b>Generate Key & PUT /api/v1/e2ee/backup</b>"]
 
         HasKey -->|"No"| GetBackup
+        Provisional -->|"Yes, and a secret is at hand"| GetBackup
+        Provisional -->|"Yes, no secret"| UseKey
         GetBackup --> BackupExists
         BackupExists -->|"Yes (Secret Matches)"| OpenBackup --> UseKey
         BackupExists -->|"Yes (No Secret)"| GenOwnKey
@@ -118,7 +122,7 @@ session is for — two different actions, both needed).
 | --- | --- | --- |
 | Device identity key (ECDH P-256) | Private half sealed in the OS keychain, per machine | That machine |
 | Device public keys | `device_keys` table | Everyone in the server |
-| Sealed identity backup | `identity_backups` table | Whoever knows the account password or a recovery passphrase |
+| Sealed identity backup, one per secret kind | `identity_backups` table | Whoever knows the account password or a recovery passphrase |
 | Channel key (AES-256-GCM) | In memory on member devices | Channel members |
 | Wrapped channel key | `channel_keys` table | Only the device it was sealed for |
 | Message body | `messages.content` | Channel members |
@@ -192,6 +196,14 @@ in use and open that user's backup afterward. Anyone whose threat model
 includes the running deployment should set a recovery passphrase instead —
 it is never sent anywhere in any form.
 
+An account holds **one backup per secret kind**, not one in total. Setting a
+recovery passphrase used to overwrite the password-sealed blob, and that blob is
+the only one a fresh sign-in holds the secret for — the password is in hand at
+that moment and nothing else is. Losing it meant every later sign-in on a new
+device fell into the fork below and stayed there. The passphrase now sits beside
+the password backup, and the switch that turns password recovery off is a
+deliberate choice on the same screen rather than a side effect.
+
 ### Signing in without the secret
 
 A sign-in that cannot open the backup is not stopped and is never asked for a
@@ -208,12 +220,20 @@ Two properties make that safe rather than lossy:
 - `channel_keys` is addressed per `recipientDeviceId`, so the new machine
   publishes its own public half under its own device id and takes nothing away
   from the rows already sealed for the others.
+- The self-minted key is **marked provisional** whenever the account had a
+  backup this machine could not open, and the next sign-in carrying a secret
+  tries the backup again rather than short-circuiting on it. Unmarked, that key
+  ended the story: a device signed in with the correct account password read
+  every message the account had ever been sent as a padlock, for the life of the
+  install, and nothing on screen said why.
 
 The cost is that history is not instant there. It reads what arrives from now
 on, and older conversations fill in as the account's other machines open them —
 the same "repairing a second device" path above. Supplying the secret (signing
 in with the account password, or setting a recovery passphrase) restores the
-account key outright and is the only instant path.
+account key outright and is the only instant path — and, because the key was
+marked, signing in with the password later works just as well as signing in with
+it first.
 
 ## Safety numbers
 

@@ -23,7 +23,7 @@ erDiagram
     User ||--o{ RefreshToken : has
     User ||--o{ DeviceKey : "has (E2EE identity)"
     User ||--o{ DeviceToken : "has (push)"
-    User ||--|| IdentityBackup : "backs up identity to"
+    User ||--o{ IdentityBackup : "backs up identity to (one per secret kind)"
     User ||--o{ UserIdentity : "links OAuth"
     User ||--o{ Friendship : "is party to"
     User ||--o{ UserBlock : "blocks / is blocked by"
@@ -94,8 +94,10 @@ wrapped for it.
 ### `IdentityBackup`
 The identity private key, sealed client-side (PBKDF2 over a password or
 passphrase the server never sees) so signing in on a second machine or
-reinstalling doesn't mean losing history. One per user; the server stores
-opaque ciphertext it cannot open.
+reinstalling doesn't mean losing history. Unique on `(userId, kind)` — one per
+secret kind, not one per user, so setting a recovery passphrase no longer
+overwrites the password-sealed blob that a fresh sign-in is the only thing
+holding the secret for. The server stores opaque ciphertext it cannot open.
 
 ### `ChannelKey`
 A channel's symmetric content key, wrapped once per `(recipient user,
