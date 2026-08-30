@@ -8,6 +8,7 @@
 #            0.0.2-alpha.1 -> 0.0.2-alpha.2
 #   !beta    0.0.2-alpha.3 -> 0.0.2-beta.1    promote, same base version
 #   !stable  0.0.2-beta.2  -> 0.0.2           promote to stable, no bump
+#   !patch   0.0.2         -> 0.0.2           no new version: rebuild in place
 #
 # A marker may name the platforms the release is for, in the scope position:
 #
@@ -30,6 +31,31 @@
 # The first release cannot carry anything forward, so a scoped marker with no
 # previous tag behind it quietly builds everything instead.
 #
+# A scope may also name `docs`, which is not a platform and never narrows what
+# is built. It asks for the Docusaurus site to be deployed once the release is
+# published: `!fix(docs)` is a full release with the site after it, and
+# `!fix(android,docs)` is the APKs with the site after it.
+#
+# REBUILDING A RELEASE THAT EXISTS
+#
+# `!patch` is the one marker that produces no new version. It rebuilds the
+# artifacts of the version master already carries and pushes them over the ones
+# that are there: the image tags are re-created, so `<service>-<version>` names
+# the new build and the image it named before is left untagged, and the
+# installers and the APKs are re-attached to the Release that exists. Nothing
+# else moves - the tag, the CHANGELOG entry and the version in the manifests are
+# already correct, because the version has not changed.
+#
+# It skips step 1 entirely: the release PR exists to show a diff, and a patch has
+# none. Its scope works like any other marker, so `!patch(desktop)` replaces the
+# installer and leaves the images and the APKs alone; a platform it skips carries
+# forward from the release being patched, which is that release itself.
+#
+# There is no rollback for a patch, on purpose. The release a patch replaces is
+# the one a rollback would delete, and deleting a release that works because its
+# rebuild failed is worse than the half-replaced set the failure leaves behind. A
+# patch is safe to repeat, and repeating it is the fix.
+#
 # A push with no marker is not a release and this workflow does nothing. The
 # rules live in scripts/release-version.mjs and the notes in
 # scripts/release-notes.mjs; `pnpm check` runs both self-tests, so a change to
@@ -48,7 +74,7 @@
 #
 # The order in step 2 is the whole rollback story:
 #
-#   images -> manifest, desktop, android  ->  publish  ->  promote
+#   images -> manifest, desktop, android  ->  publish  ->  promote  ->  docs
 #
 # `images` builds each service twice, amd64 and arm64, on a runner of that
 # architecture, and pushes both by digest under no tag at all. `manifest` is
@@ -67,6 +93,17 @@
 # worst of both: `alpha` pointing at a build whose version tags rollback had
 # just deleted, and no Release to say what it was.
 #
+# `rollback` also takes the version bump back off master. The bump and the
+# CHANGELOG entry the release PR wrote used to survive a failure, and a master
+# claiming a version that was never published is what the next release computes
+# from - so the release after a failed v0.0.7 was v0.0.8, v0.0.7 was skipped for
+# good, and the CHANGELOG kept an entry whose every download link was dead. The
+# revert carries `[skip ci]`, because a push that lowers the version field looks
+# to `merged` exactly like a release PR landing.
+#
+# `docs` is deliberately outside all of that. It runs after `publish`, and a
+# Pages outage does not undo a release whose images and installers are out.
+#
 # Nothing here deploys. The Release carries a docker-compose.yml pinned to the
 # version, and a server takes it when its operator decides to: a running
 # deployment holds the only copy of its data and does not get restarted by a
@@ -80,11 +117,11 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: 'pr = open the release PR; release = build and publish the version master already carries'
+        description: 'pr = open the release PR; release = build and publish the version master already carries; patch = rebuild the artifacts of that version in place'
         required: true
         default: pr
         type: choice
-        options: [pr, release]
+        options: [pr, release, patch]
       marker:
         description: 'Release type (pr mode only)'
         required: false
@@ -92,7 +129,7 @@ on:
         type: choice
         options: [alpha, beta, stable, fix, feat, major]
       targets:
-        description: 'What to build (pr mode only): all, or any of docker/desktop/android, comma-separated'
+        description: 'What to build (pr and patch modes): all, or any of docker/desktop/android, comma-separated; add docs to deploy the docs site after it'
         required: false
         default: all
         type: string
@@ -124,6 +161,7 @@ jobs:
       current: ${{ steps.current.outputs.version }}
       targets: ${{ steps.targets.outputs.targets }}
       carry: ${{ steps.targets.outputs.carry }}
+      docs: ${{ steps.next.outputs.docs }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -191,6 +229,7 @@ jobs:
           } >> "$GITHUB_OUTPUT"
           echo "building: $targets"
           echo "carrying from: ${carry:-<nothing>}"
+          echo "docs site: ${{ steps.next.outputs.docs }}"
 
       - name: Nothing to release
         if: steps.next.outputs.release != 'true'
@@ -199,7 +238,9 @@ jobs:
   release-pr:
     name: Release PR for v${{ needs.version.outputs.version }}
     needs: version
-    if: needs.version.outputs.release == 'true'
+    # A `!patch` has no diff to show, so it has no PR either: it goes straight to
+    # step 2 and replaces the artifacts of the version master already carries.
+    if: needs.version.outputs.release == 'true' && needs.version.outputs.marker != 'patch'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -226,6 +267,20 @@ jobs:
             writeFileSync(path, JSON.stringify(manifest, null, 2) + '\n');
           }
           NODE
+
+      # What `merged` reads back once this PR lands. A merge commit says nothing
+      # about the marker that started it, so the scope is written down here or it
+      # is lost - and a lost scope means the release rebuilds everything, whatever
+      # `!alpha(android)` asked for. `merged` has read this file since the day it
+      # was designed and nothing ever wrote it, so that is what every release did.
+      - name: Record what this release builds
+        env:
+          TARGETS: ${{ needs.version.outputs.targets }}
+          DOCS: ${{ needs.version.outputs.docs }}
+        run: |
+          echo "$TARGETS" > .github/release-targets
+          if [ "$DOCS" = true ]; then echo docs >> .github/release-targets; fi
+          cat .github/release-targets
 
       # Everything since the last released tag, which is what this version
       # contains. On the first release there is no tag and the whole history is
@@ -270,6 +325,7 @@ jobs:
             | Marker | `!${{ needs.version.outputs.marker }}` |
             | Builds | `${{ needs.version.outputs.targets }}` |
             | Carries the rest from | `${{ needs.version.outputs.carry || 'nothing - first release' }}` |
+            | Docs site | `${{ needs.version.outputs.docs == 'true' && 'deployed after this release' || 'not touched' }}` |
 
             Anything not in **Builds** keeps the artifacts of the release named
             above: its images are re-tagged under this version and its
@@ -307,7 +363,7 @@ jobs:
 
   merged:
     name: Detect a merged release PR
-    if: github.event_name == 'push' || inputs.mode == 'release'
+    if: github.event_name == 'push' || inputs.mode != 'pr'
     runs-on: ubuntu-latest
     outputs:
       release: ${{ steps.detect.outputs.release }}
@@ -316,6 +372,8 @@ jobs:
       prerelease: ${{ steps.detect.outputs.prerelease }}
       targets: ${{ steps.detect.outputs.targets }}
       carry: ${{ steps.detect.outputs.carry }}
+      patch: ${{ steps.detect.outputs.patch }}
+      docs: ${{ steps.detect.outputs.docs }}
     steps:
       # The whole history: HEAD^ is what the version is compared against - on a
       # merge commit that is master as it stood before the PR went in - and the
@@ -332,18 +390,31 @@ jobs:
         id: detect
         env:
           EVENT: ${{ github.event_name }}
+          MODE: ${{ inputs.mode }}
+          INPUT_TARGETS: ${{ inputs.targets }}
           SUBJECT: ${{ github.event.head_commit.message }}
+          BEFORE_SHA: ${{ github.event.before }}
         run: |
           subject="$(printf '%s' "$SUBJECT" | head -1)"
           current="$(node -p "require('./package.json').version")"
           release=false
+          patch=false
+          docs=false
+          targets=""
 
           if [ "$EVENT" = workflow_dispatch ]; then
             # Asked for by hand: release whatever master carries. This is the
             # way back after a rollback, and after a release PR that merged
             # without this job noticing.
             release=true
-            echo "Dispatched: releasing v${current} as master stands."
+            if [ "$MODE" = patch ]; then
+              patch=true
+              scope="$(printf '%s' "${INPUT_TARGETS:-all}" | tr -d ' ')"
+              echo "!patch(${scope:-all}): manual patch" > subjects.txt
+              echo "Dispatched: rebuilding v${current} in place."
+            else
+              echo "Dispatched: releasing v${current} as master stands."
+            fi
           else
             # A squash or rebase merge puts the PR title on the commit, so the
             # subject answers on its own.
@@ -368,6 +439,30 @@ jobs:
             if [ -n "$previous" ] && [ "$previous" != "$current" ]; then
               release=true
             fi
+
+            # No new version, so it may still be a `!patch`: a marker asking for
+            # the artifacts of the version master already carries to be built
+            # again and pushed over the ones that are there. A patch never goes
+            # through a release PR, so its scope is still on the push that asked
+            # for it rather than written down in .github/release-targets.
+            #
+            # Read after the two tests above and not before them: a push that
+            # both lands a release PR and carries a `!patch` is a release, and
+            # the release contains the rebuild.
+            if [ "$release" != true ]; then
+              if [ -n "$BEFORE_SHA" ] && [ "$(echo "$BEFORE_SHA" | tr -d 0)" != "" ] \
+                 && git cat-file -e "$BEFORE_SHA^{commit}" 2>/dev/null; then
+                git log "$BEFORE_SHA..$GITHUB_SHA" --format=%s > subjects.txt
+              else
+                git log -1 --format=%s > subjects.txt
+              fi
+              plan="$(node scripts/release-version.mjs --current "$current" --subjects-file subjects.txt)"
+              if [ "$(printf '%s\n' "$plan" | sed -n 's/^marker=//p')" = patch ]; then
+                release=true
+                patch=true
+                echo "!patch: rebuilding v${current} in place."
+              fi
+            fi
           fi
 
           echo "release=$release" >> "$GITHUB_OUTPUT"
@@ -381,19 +476,40 @@ jobs:
             *-beta.*)  channel=beta ;;
             *)         channel=latest ;;
           esac
-          # What the release PR wrote down. Absent - a release cut before this
-          # file existed, or a hand-made bump - means everything, which is what
-          # every release did until then.
-          targets="$(head -1 .github/release-targets 2>/dev/null | tr -d '[:space:]')"
-          [ -n "$targets" ] || targets=docker,desktop,android
 
-          # The last release that exists, which is where a platform this one
-          # skips takes its artifacts from. HEAD is not tagged yet.
-          carry="$(git describe --tags --abbrev=0 --match 'v*' 2>/dev/null || true)"
-          carry="${carry#v}"
-          if [ -z "$carry" ] && [ "$targets" != docker,desktop,android ]; then
-            echo "::notice::No previous release to carry from; building everything."
-            targets=docker,desktop,android
+          if [ "$patch" = true ]; then
+            # A patch replaces a release that exists. Without the tag there is
+            # nothing to replace, and the run would build artifacts for a version
+            # nobody has ever been able to download.
+            if ! git rev-parse -q --verify "refs/tags/v${current}" > /dev/null; then
+              echo "::error::v${current} has never been released; a patch has nothing to replace."
+              exit 1
+            fi
+            plan="${plan:-$(node scripts/release-version.mjs --current "$current" --subjects-file subjects.txt)}"
+            targets="$(printf '%s\n' "$plan" | sed -n 's/^targets=//p')"
+            case "$(printf '%s\n' "$plan" | sed -n 's/^docs=//p')" in true) docs=true ;; esac
+            # A platform the patch skips carries from the release being patched,
+            # which is this one: its images are re-tagged from themselves and its
+            # assets re-attached to the Release they are already on. Both are
+            # no-ops, which is exactly what "leave that platform alone" means.
+            carry="$current"
+          else
+            # What the release PR wrote down: the platforms on the first line, and
+            # `docs` on a line of its own when the marker asked for the site.
+            # Absent - a release cut before this file existed, or a hand-made bump
+            # - means everything, which is what every release did until then.
+            targets="$(head -1 .github/release-targets 2>/dev/null | tr -d '[:space:]')"
+            [ -n "$targets" ] || targets=docker,desktop,android
+            if grep -qx docs .github/release-targets 2>/dev/null; then docs=true; fi
+
+            # The last release that exists, which is where a platform this one
+            # skips takes its artifacts from. HEAD is not tagged yet.
+            carry="$(git describe --tags --abbrev=0 --match 'v*' 2>/dev/null || true)"
+            carry="${carry#v}"
+            if [ -z "$carry" ] && [ "$targets" != docker,desktop,android ]; then
+              echo "::notice::No previous release to carry from; building everything."
+              targets=docker,desktop,android
+            fi
           fi
 
           {
@@ -402,9 +518,12 @@ jobs:
             echo "prerelease=$([ "$channel" = latest ] && echo false || echo true)"
             echo "targets=$targets"
             echo "carry=$carry"
+            echo "patch=$patch"
+            echo "docs=$docs"
           } >> "$GITHUB_OUTPUT"
           echo "Releasing v$current on the $channel channel."
           echo "Building: $targets; carrying the rest from ${carry:-<nothing>}."
+          echo "Replacing what is already there: $patch. Docs site: $docs."
 
   # amd64 and arm64, one runner each, both native. QEMU was the other option
   # and it is the wrong one here: every image runs `pnpm install` and `tsc`
@@ -562,6 +681,11 @@ jobs:
               exit 1
             fi
 
+            # On a `!patch` this tag already exists, and `create` moves it onto
+            # the build that just finished. Docker Hub keeps no second name for
+            # the manifest it pointed at before, so the old image is untagged -
+            # deleted, as far as anything pulling by tag is concerned - and the
+            # tag never stops resolving the way an explicit delete would leave it.
             docker buildx imagetools create \
               --tag "${IMAGE_REPO}:${target}-${VERSION}" $refs
             docker buildx imagetools inspect "${IMAGE_REPO}:${target}-${VERSION}" \
@@ -934,6 +1058,10 @@ jobs:
             echo CHANGELOG_EOF
           } >> "$GITHUB_OUTPUT"
 
+      # On a `!patch` the tag and the Release are already there, and this updates
+      # them: an asset whose name matches one already attached replaces it, which
+      # is what a rebuilt installer or APK is. The notes are re-read from the same
+      # CHANGELOG entry, so they do not change - nothing about the version did.
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ needs.merged.outputs.version }}
@@ -986,6 +1114,58 @@ jobs:
             bundle/nginx.conf
             bundle/backup.sh
 
+  # The docs site, when the marker asked for it with a `docs` scope. It is the
+  # same build and the same deploy as docs.yml, from the commit that was
+  # released, and it shares that workflow’s concurrency group so a `!docs` push
+  # and a release carrying `docs` queue behind one another rather than
+  # force-pushing gh-pages at the same moment.
+  #
+  # Outside the rollback story on purpose: the site is documentation, not an
+  # artifact of the release, and a Pages outage should not undo a release whose
+  # images and installers are already out.
+  docs:
+    name: Deploy the docs site
+    needs: [merged, publish]
+    if: needs.merged.outputs.release == 'true' && needs.merged.outputs.docs == 'true'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: docs-deploy
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: docs/package-lock.json
+
+      - name: Install dependencies
+        working-directory: docs
+        run: npm ci
+
+      - name: Build
+        working-directory: docs
+        run: npm run build
+
+      - name: Deploy to gh-pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: docs/build
+          publish_branch: gh-pages
+          user_name: 'github-actions[bot]'
+          user_email: 'github-actions[bot]@users.noreply.github.com'
+          commit_message: 'docs: deploy v${{ needs.merged.outputs.version }}'
+
+      - name: Summary
+        run: |
+          {
+            echo "### Docs deployed for v${{ needs.merged.outputs.version }}"
+            echo
+            echo "Pushed to \`gh-pages\` from \`${{ github.sha }}\`."
+          } >> "$GITHUB_STEP_SUMMARY"
+
   # --- If any of that failed, leave nothing half-published -------------------
 
   rollback:
@@ -994,9 +1174,25 @@ jobs:
     if: always() && needs.merged.outputs.release == 'true' && contains(needs.*.result, 'failure')
     runs-on: ubuntu-latest
     steps:
+      # master, not the release commit: the last step pushes to it. The
+      # RELEASE_TOKEN when there is one, because GITHUB_TOKEN cannot push to a
+      # protected branch.
+      - uses: actions/checkout@v4
+        if: needs.merged.outputs.patch != 'true'
+        with:
+          ref: master
+          fetch-depth: 0
+          token: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
+
+      # Nothing below runs for a `!patch`. A patch replaces the artifacts of a
+      # release that already exists, so every undo here would delete that
+      # release - the good one - because its rebuild failed. What a failed patch
+      # leaves is a half-replaced set, and running it again is the fix.
+
       # Docker Hub has no API in the CLI for deleting a tag, so this is the REST
       # one. The same token that pushed can delete.
       - name: Delete the version image tags
+        if: needs.merged.outputs.patch != 'true'
         env:
           DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
           DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
@@ -1032,6 +1228,7 @@ jobs:
       # but leaves the worst mess: a version people can see and download that
       # has no images behind it.
       - name: Delete the tag and the Release
+        if: needs.merged.outputs.patch != 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VERSION: ${{ needs.merged.outputs.version }}
@@ -1045,17 +1242,87 @@ jobs:
               || echo "no tag v${VERSION} to delete"
           fi
 
+      # The images and the Release are gone; the version bump and the CHANGELOG
+      # entry the release PR wrote are on master, and they used to be left there.
+      # A master claiming a version that was never published is what the NEXT
+      # release computes from, so a failed v0.0.7 made the next one v0.0.8 and
+      # v0.0.7 was skipped for good - with a CHANGELOG entry still describing it,
+      # every download link in it dead.
+      #
+      # `[skip ci]` is not decoration. Without it this push comes straight back
+      # through `merged`, which reads a changed version field as a release PR
+      # landing and would try to publish the version this job just took down.
+      - name: Take the version bump off master
+        if: needs.merged.outputs.patch != 'true'
+        env:
+          VERSION: ${{ needs.merged.outputs.version }}
+          SHA: ${{ github.sha }}
+        run: |
+          previous="$(git show "${SHA}^:package.json" 2>/dev/null \
+            | node -pe 'JSON.parse(require("node:fs").readFileSync(0,"utf8")).version' \
+            2>/dev/null || true)"
+          if [ -z "$previous" ] || [ "$previous" = "$VERSION" ]; then
+            echo "${SHA} did not bump the version; there is nothing to take off master."
+            exit 0
+          fi
+          # Anything pushed since is not this job’s to move.
+          if [ "$(git rev-parse HEAD)" != "$SHA" ]; then
+            echo "::warning::master has moved past ${SHA}; the v${VERSION} bump is still on it and has to be reverted by hand."
+            exit 0
+          fi
+
+          git config user.name 'github-actions[bot]'
+          git config user.email 'github-actions[bot]@users.noreply.github.com'
+
+          # `-m 1` for a merge commit, which reverts the whole PR against master.
+          # A squash or rebase merge is a single commit and takes no parent number.
+          if [ "$(git rev-list --parents -n 1 "$SHA" | wc -w)" -gt 2 ]; then
+            git revert --no-commit -m 1 "$SHA"
+          else
+            git revert --no-commit "$SHA"
+          fi
+          git commit -q \
+            -m "revert(release): back out v${VERSION} [skip ci]" \
+            -m "The release failed and was rolled back, so master goes back to v${previous}."
+
+          if git push origin HEAD:master; then
+            echo "master is back on v${previous}."
+            echo "REVERTED=$previous" >> "$GITHUB_ENV"
+          else
+            echo "::warning::Could not push the revert - branch protection, most likely. Revert ${SHA} by hand."
+          fi
+
       - name: Say what is left to do
         env:
           VERSION: ${{ needs.merged.outputs.version }}
+          PATCH: ${{ needs.merged.outputs.patch }}
         run: |
+          if [ "$PATCH" = true ]; then
+            {
+              echo "### Patch of v${VERSION} failed"
+              echo
+              echo "Nothing was undone. A patch replaces the artifacts of a release that"
+              echo "already exists, and undoing it would delete that release - so what is"
+              echo "published now is the old set with whatever this run managed to push"
+              echo "over it."
+              echo
+              echo "Fix what failed and push \`!patch\` again. Repeating it is safe."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
           {
             echo "### Release v${VERSION} rolled back"
             echo
             echo "Version image tags removed; the \`${{ needs.merged.outputs.channel }}\` tags"
             echo "still point at the last release that finished, and no Release was left behind."
             echo
-            echo "The version bump is still on master. Fix what failed and push another"
-            echo "marker - the next release will be computed from v${VERSION}, so use"
-            echo "\`!fix\` or \`!alpha\` rather than trying to re-cut this one."
+            if [ -n "${REVERTED:-}" ]; then
+              echo "The version bump and its CHANGELOG entry have been reverted off master,"
+              echo "which is back on v${REVERTED}. Fix what failed and push the same marker"
+              echo "again - it will compute v${VERSION} a second time."
+            else
+              echo "The version bump is **still on master** - the revert did not go through,"
+              echo "see the step above. Take it off by hand, or push \`!fix\`/\`!alpha\`"
+              echo "rather than trying to re-cut v${VERSION}."
+            fi
           } >> "$GITHUB_STEP_SUMMARY"
