@@ -1,5 +1,6 @@
 package com.aatech.betweenus.feature.settings
 
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -69,8 +70,14 @@ fun ThemesScreen(
     val dynamicColor by ThemePreferences.dynamicColor.collectAsState()
     val currentAccent by ThemePreferences.customAccentId.collectAsState()
 
+    val isSystemDark = isSystemInDarkTheme()
     val isDynamicSupported = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
-    val activeDef = ANDROID_THEMES[currentTheme] ?: ANDROID_THEMES["dark"]!!
+
+    val effectiveThemeId = when {
+        followSystem -> if (!isSystemDark) "light" else if (currentTheme == "light") "dark" else currentTheme
+        else -> currentTheme
+    }
+    val activeDef = ANDROID_THEMES[effectiveThemeId] ?: ANDROID_THEMES["dark"]!!
 
     var categoryFilter by remember { mutableStateOf("all") }
     val themeList = remember { ANDROID_THEMES.values.toList() }
@@ -140,7 +147,11 @@ fun ThemesScreen(
                             color = MaterialTheme.colorScheme.primary,
                         )
                         Text(
-                            text = activeDef.name,
+                            text = when {
+                                dynamicColor && isDynamicSupported -> "Material You (Dynamic)"
+                                followSystem -> "${activeDef.name} (${if (isSystemDark) "System Dark" else "System Light"})"
+                                else -> activeDef.name
+                            },
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -343,7 +354,7 @@ fun ThemesScreen(
                             horizontalArrangement = Arrangement.spacedBy(10.dp),
                         ) {
                             rowThemes.forEach { theme ->
-                                val isSelected = currentTheme == theme.id
+                                val isSelected = !dynamicColor && (effectiveThemeId == theme.id)
                                 val borderColor by animateColorAsState(
                                     targetValue = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
                                     animationSpec = BetweenUsMotion.effect(),

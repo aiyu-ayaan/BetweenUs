@@ -1,5 +1,7 @@
 package com.aatech.betweenus.feature.settings
 
+import android.os.Build
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -172,11 +174,26 @@ fun SettingsScreen(
             SectionLabel("Preferences")
             val currentTheme by ThemePreferences.selectedTheme.collectAsState()
             val followSys by ThemePreferences.followSystem.collectAsState()
-            val activeDef = ANDROID_THEMES[currentTheme] ?: ANDROID_THEMES["dark"]!!
+            val dynamicCol by ThemePreferences.dynamicColor.collectAsState()
+            val isSysDark = isSystemInDarkTheme()
+            val isDynamicSupp = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+
+            val effectiveThemeKey = if (followSys) {
+                if (!isSysDark) "light" else if (currentTheme == "light") "dark" else currentTheme
+            } else {
+                currentTheme
+            }
+            val activeDef = ANDROID_THEMES[effectiveThemeKey] ?: ANDROID_THEMES["dark"]!!
+
+            val themeSubtitle = when {
+                dynamicCol && isDynamicSupp -> "Material You · Dynamic Wallpaper"
+                followSys -> "${activeDef.name} · Sync with system (${if (isSysDark) "Dark" else "Light"})"
+                else -> "${activeDef.name} · ${activeDef.category} · 16 themes"
+            }
 
             ListRow(
                 title = "Themes & appearance",
-                subtitle = "${activeDef.name} · ${if (followSys) "Sync with system" else activeDef.category} · 16 themes",
+                subtitle = themeSubtitle,
                 leading = { BetweenUsIcon(BetweenUsIcons.Palette) },
                 trailing = { BetweenUsIcon(BetweenUsIcons.ChevronRight, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
                 onClick = onThemes,

@@ -43,7 +43,7 @@ object ThemePreferences {
 
     fun setTheme(themeId: String) {
         _selectedTheme.value = themeId
-        _followSystem.value = false // Explicit theme selection disables follow system
+        _followSystem.value = false
         _dynamicColor.value = false
         if (::prefs.isInitialized) {
             prefs.edit()
@@ -56,15 +56,31 @@ object ThemePreferences {
 
     fun setFollowSystem(follow: Boolean) {
         _followSystem.value = follow
+        if (follow) {
+            _dynamicColor.value = false
+        }
         if (::prefs.isInitialized) {
-            prefs.edit().putBoolean(KEY_FOLLOW_SYSTEM, follow).apply()
+            prefs.edit()
+                .putBoolean(KEY_FOLLOW_SYSTEM, follow)
+                .apply {
+                    if (follow) putBoolean(KEY_DYNAMIC_COLOR, false)
+                }
+                .apply()
         }
     }
 
     fun setDynamicColor(dynamic: Boolean) {
         _dynamicColor.value = dynamic
+        if (dynamic) {
+            _followSystem.value = false
+        }
         if (::prefs.isInitialized) {
-            prefs.edit().putBoolean(KEY_DYNAMIC_COLOR, dynamic).apply()
+            prefs.edit()
+                .putBoolean(KEY_DYNAMIC_COLOR, dynamic)
+                .apply {
+                    if (dynamic) putBoolean(KEY_FOLLOW_SYSTEM, false)
+                }
+                .apply()
         }
     }
 
