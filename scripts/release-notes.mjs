@@ -29,7 +29,7 @@ const NOISE = [
 
 // The scope is part of what gets stripped: `!feat(chat): x` is a marker with a
 // scope, and leaving `(chat):` at the front of the note helps nobody.
-const MARKER = /^\s*!(major|feat|fix|stable|alpha|beta)(?![a-z0-9])(?:\([^)]*\))?[:\s-]*/i;
+const MARKER = /^\s*!(major|feat|fix|stable|alpha|beta|patch)(?![a-z0-9])(?:\([^)]*\))?[:\s-]*/i;
 const TYPE = /^(feat|fix|chore|docs|refactor|perf|test|build|ci|style|revert)(\([^)]*\))?(!)?:\s*/i;
 
 // The platforms a release builds, in the order the table lists them, and what
@@ -164,6 +164,9 @@ function selfCheck() {
 
   strictEqual(clean('!feat(chat): add pinning.'), 'Add pinning');
   strictEqual(clean('fix: the thing'), 'The thing');
+  strictEqual(clean('!patch(desktop): rebuild the installer'), 'Rebuild the installer');
+  // The marker says "rebuild now", not what kind of change it is.
+  strictEqual(classify('!patch: fix(desktop): the installer'), 'fixes');
 
   const entry = notes(
     [

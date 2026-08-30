@@ -11,6 +11,7 @@
 //   !beta    0.0.2-alpha.3 -> 0.0.2-beta.1  promote, same base
 //            0.0.2-beta.1  -> 0.0.2-beta.2
 //   !stable  0.0.2-beta.2 -> 0.0.2          promote to stable, no bump
+//   !patch   0.0.2        -> 0.0.2          no bump at all: rebuild in place
 //
 // WHAT A RELEASE BUILDS
 //
@@ -31,6 +32,29 @@
 // installers and APKs are attached to it - so every version is a complete set
 // whatever was rebuilt for it. See the table the notes carry.
 //
+// REBUILDING A VERSION IN PLACE
+//
+// `!patch` is the odd one out: it produces no new version, it replaces the
+// artifacts of the one master already carries. The image tags are pushed over,
+// the installers and the APKs are re-attached to the Release that exists, and
+// the CHANGELOG is not touched - there is nothing new to say about a version
+// whose contents did not change. It skips the release PR, because the diff that
+// PR exists to show would be empty.
+//
+// Its scope works like any other marker's, so `!patch(desktop)` replaces the
+// installer and leaves the images and the APKs where they are.
+//
+// THE DOCS SITE
+//
+// `docs` is a scope name too, and it is an extra rather than a platform: it asks
+// for the Docusaurus site to be deployed once the release is published.
+//
+//   !fix(docs)             a full release, and the docs site after it
+//   !fix(android,docs)     the APKs, and the docs site after it
+//
+// It never narrows what is built - a scope naming only `docs` still builds
+// everything, the same as an empty one.
+//
 // A push with no marker is not a release. When several pushed commits carry
 // markers the strongest wins, in the order listed above - a push containing
 // both !fix and !alpha is a stable fix, because the alpha it would have
@@ -50,12 +74,18 @@ import { readFileSync } from 'node:fs';
 const CHANNELS = { alpha: 1, beta: 2 };
 
 // Strongest first: the winner of a push carrying more than one marker.
-const MARKERS = ['major', 'feat', 'fix', 'stable', 'beta', 'alpha'];
+// `patch` is last: a push asking for a real release AND a rebuild of the old
+// one wants the release, which already contains the rebuild.
+const MARKERS = ['major', 'feat', 'fix', 'stable', 'beta', 'alpha', 'patch'];
 
 const VERSION_RE = /^(\d+)\.(\d+)\.(\d+)(?:-(alpha|beta)\.(\d+))?$/;
 
 // What a release can build, in the order the notes list them.
 export const TARGETS = ['docker', 'desktop', 'android'];
+
+// Neither a platform nor an artifact: the scope name that asks for the docs
+// site to be deployed after the release, alongside whatever else was built.
+const DOCS_ALIASES = new Set(['docs', 'doc', 'documentation', 'site']);
 
 // The spellings a human reaches for. `web` and `admin-web` are Docker images
 // like every other service, so they are the same target.
@@ -98,32 +128,44 @@ export function detectMarker(subjects) {
     .filter((s) => s && !RELEASE_COMMIT_RE.test(s));
   const found = new Set();
   for (const subject of candidates) {
-    const match = /^\s*!(major|feat|fix|stable|alpha|beta)(?![a-z0-9])/i.exec(subject);
+    const match = /^\s*!(major|feat|fix|stable|alpha|beta|patch)(?![a-z0-9])/i.exec(subject);
     if (match) found.add(match[1].toLowerCase());
   }
   return MARKERS.find((marker) => found.has(marker)) ?? '';
 }
 
-// The platforms a push asks for, from the scope of its markers.
-//
-// The scope is shared with conventional commits, so it is only read as a
-// platform list when EVERY name in it is one - `!feat(chat)` is a feature with
-// a scope, `!feat(android)` is a feature for one platform, and there is no
-// third reading. `all` is the explicit way to say what an empty scope means.
+const SCOPE_RE = /^\s*!(?:major|feat|fix|stable|alpha|beta|patch)\(([^)]*)\)/i;
+
+/**
+ * The names in a marker's scope, or null when the scope is not one.
+ *
+ * The scope is shared with conventional commits, so it is only read as a name
+ * list when EVERY word in it is one - `!feat(chat)` is a feature with a scope,
+ * `!feat(android)` is a feature for one platform, and there is no third
+ * reading. A scope holding one platform and one other word is a conventional
+ * scope, not a half-understood platform list.
+ */
+function scopeNames(subject) {
+  const match = SCOPE_RE.exec(String(subject).trim());
+  if (!match) return null;
+  const names = match[1]
+    .split(/[,+\s]+/)
+    .map((name) => name.trim().toLowerCase())
+    .filter(Boolean);
+  if (names.length === 0) return null;
+  const known = (name) => name === 'all' || name in TARGET_ALIASES || DOCS_ALIASES.has(name);
+  return names.every(known) ? names : null;
+}
+
+// The platforms a push asks for, from the scope of its markers. `all` is the
+// explicit way to say what an empty scope means.
 export function parseTargets(subjects) {
   const chosen = new Set();
   for (const subject of subjects) {
-    const match = /^\s*!(?:major|feat|fix|stable|alpha|beta)\(([^)]*)\)/i.exec(String(subject).trim());
-    if (!match) continue;
-    const names = match[1]
-      .split(/[,+\s]+/)
-      .map((name) => name.trim().toLowerCase())
-      .filter(Boolean);
-    if (names.length === 0) continue;
-    // All or nothing: a scope holding one platform and one other word is a
-    // conventional scope, not a half-understood platform list.
-    if (!names.every((name) => name === 'all' || name in TARGET_ALIASES)) continue;
-    for (const name of names) {
+    for (const name of scopeNames(subject) ?? []) {
+      // `docs` is an extra, not a platform, and never narrows what is built:
+      // `!fix(docs)` is a full release that also deploys the site.
+      if (DOCS_ALIASES.has(name)) continue;
       if (name === 'all') TARGETS.forEach((target) => chosen.add(target));
       else chosen.add(TARGET_ALIASES[name]);
     }
@@ -131,6 +173,13 @@ export function parseTargets(subjects) {
   // No marker named a platform: build the lot, which is what every release did
   // before this existed.
   return chosen.size === 0 ? [...TARGETS] : TARGETS.filter((target) => chosen.has(target));
+}
+
+/** Whether any marker asked for the docs site to go out with the release. */
+export function parseDocs(subjects) {
+  return subjects.some((subject) =>
+    (scopeNames(subject) ?? []).some((name) => DOCS_ALIASES.has(name)),
+  );
 }
 
 export function nextVersion(current, marker) {
@@ -150,6 +199,12 @@ export function nextVersion(current, marker) {
     case 'stable':
       if (!channel) throw new Error(`!stable needs a pre-release to promote; ${current} is already stable.`);
       return stable(major, minor, patch);
+    case 'patch':
+      // Deliberately not a bump. `!patch` rebuilds the artifacts of the
+      // version that is already released, so the answer is that version.
+      return channel
+        ? `${stable(major, minor, patch)}-${channel}.${pre}`
+        : stable(major, minor, patch);
     case 'alpha':
     case 'beta': {
       const sameOrLower = channel && CHANNELS[channel] <= CHANNELS[marker];
@@ -180,6 +235,9 @@ function selfCheck() {
   eq('0.1.0', 'major', '1.0.0');
   eq('1.4.2', 'fix', '1.4.3');
   eq('0.0.2-beta.1', 'fix', '0.0.3');
+  // !patch is the one marker that answers with the version it was given.
+  eq('1.4.2', 'patch', '1.4.2');
+  eq('0.0.2-alpha.3', 'patch', '0.0.2-alpha.3');
 
   throws(() => nextVersion('0.0.1', 'stable'), /already stable/);
   throws(() => parseVersion('1.2'), /Invalid version/);
@@ -197,6 +255,9 @@ function selfCheck() {
   strictEqual(detectMarker(['!feature: not a marker']), '');
   // A scoped marker is still a marker.
   strictEqual(detectMarker(['!alpha(android): x']), 'alpha');
+  strictEqual(detectMarker(['!patch: rebuild the installer']), 'patch');
+  // A real release beats a rebuild of the old one: it already contains it.
+  strictEqual(detectMarker(['!patch: x', '!fix: y']), 'fix');
 
   const targets = (subjects) => parseTargets(subjects).join(',');
   strictEqual(targets(['!alpha: everything']), 'docker,desktop,android');
@@ -212,6 +273,21 @@ function selfCheck() {
   // An unscoped marker beside a scoped one does not widen it: the scoped one
   // is the only statement anybody made about platforms.
   strictEqual(targets(['!alpha(android): x', 'fix: unrelated']), 'android');
+
+  strictEqual(targets(['!patch(desktop): x']), 'desktop', 'a patch has a scope like any marker');
+
+  // `docs` is an extra, never a narrowing: it says what happens after the
+  // release, not what the release builds.
+  const docs = (subjects) => parseDocs(subjects);
+  strictEqual(docs(['!fix: x']), false);
+  strictEqual(docs(['!fix(docs): x']), true);
+  strictEqual(targets(['!fix(docs): x']), 'docker,desktop,android', 'docs alone builds everything');
+  strictEqual(docs(['!fix(android,docs): x']), true);
+  strictEqual(targets(['!fix(android,docs): x']), 'android', 'and does not widen a scope either');
+  strictEqual(docs(['!patch(docs): x']), true, 'a patch can redeploy the site too');
+  // Still a conventional scope when a word in it is neither.
+  strictEqual(docs(['!fix(docs,chat): x']), false);
+  strictEqual(docs(['docs: a written thing']), false, 'a docs commit is not a docs deploy');
 
   console.log('release-version self-check passed');
 }
@@ -237,6 +313,7 @@ function main(argv) {
         `marker=${marker}`,
         `version=${nextVersion(current, marker)}`,
         `targets=${parseTargets(subjects).join(',')}`,
+        `docs=${parseDocs(subjects)}`,
       ]
     : ['release=false'];
 
