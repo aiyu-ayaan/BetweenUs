@@ -506,7 +506,6 @@ fun Shell(user: PublicUser) {
                             onNotificationSettings = { navigation.navigate(Route.NotificationSettings) },
                             onDeviceSettings = { navigation.navigate(Route.DeviceSettings) },
                             onServerSettings = { navigation.navigate(Route.ServerSettings) },
-                            onPermissions = { navigation.navigate(Route.Permissions) },
                             onThemes = { navigation.navigate(Route.Themes) },
                         )
                     }

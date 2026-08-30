@@ -69,8 +69,8 @@ fun SettingsScreen(
     onNotificationSettings: () -> Unit,
     onDeviceSettings: () -> Unit,
     onServerSettings: () -> Unit,
-    onPermissions: () -> Unit,
     onThemes: () -> Unit,
+    onPermissions: (() -> Unit)? = null,
     onAutoUpdate: (() -> Unit)? = null,
     onCallUsage: (() -> Unit)? = null,
     onPrivacy: (() -> Unit)? = null,
@@ -191,13 +191,11 @@ fun SettingsScreen(
                 onClick = onNotificationSettings,
             )
 
-            PermissionsRow(onOpen = onPermissions)
-
             // --- Device & Diagnostics Subsection ---
             SectionLabel("This Device")
             ListRow(
                 title = "This Device",
-                subtitle = "Crash reports, data usage, auto update, specifications",
+                subtitle = "Permissions, crash reports, data usage, auto update",
                 leading = { BetweenUsIcon(BetweenUsIcons.Monitor) },
                 trailing = { BetweenUsIcon(BetweenUsIcons.ChevronRight, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
                 onClick = onDeviceSettings,
