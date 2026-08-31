@@ -122,8 +122,14 @@ no-multicast-peers
 # --- Abuse limits ----------------------------------------------------------
 # The credential reaches every signed-in client (see "What a static credential
 # means" below), so bound what a copied one can cost.
-user-quota=12
-total-quota=1200
+#
+# Note what user-quota means here: every client authenticates as the SAME
+# username, so this is a cap on concurrent allocations across the whole
+# deployment, not per person. Set it high enough for everyone who might be in
+# a relayed call at once - roughly one allocation per peer connection - or
+# calls start being refused at the busiest moment.
+user-quota=100
+total-quota=300
 
 # --- Never let a relayed session reach a private network -------------------
 # An open relay with no peer restrictions is a port scanner aimed at the
@@ -261,7 +267,8 @@ relay's do not: `TURN_CREDENTIAL` is handed to every client that calls
 response and use the relay for their own traffic until it changes. A client
 has to hold the credential to allocate with it, so this is bounded rather than
 prevented — that is what `user-quota`, `total-quota` and the `denied-peer-ip`
-lines above are for.
+lines above are for. The same sharing is why `user-quota` is not a per-person
+limit here: one username means one bucket for everybody.
 
 Rotate by changing `user=` in `turnserver.conf` and `TURN_CREDENTIAL`
 together, then restarting coturn and both services.
@@ -279,6 +286,13 @@ for, so whoever runs it — or steals its credential — still cannot read a cal
 | Worked, then stopped after ~90 days | Certificate renewed without restarting coturn |
 | Log says "Running STUN-only" after configuring | One of the three variables empty, or the services were not restarted |
 | Log says TURN_URLS is set but a credential is not | Exactly that — the relay was dropped rather than handed out broken |
+
+## A worked example
+
+[coturn on Oracle Cloud](/deployment/turn-server-oracle) follows one real
+deployment end to end — an Always Free VM relaying for a stack on a Raspberry
+Pi — including the three places Oracle behaves differently from the
+instructions above.
 
 ## Cost
 
