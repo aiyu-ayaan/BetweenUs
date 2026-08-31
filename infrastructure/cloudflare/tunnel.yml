@@ -68,6 +68,28 @@
 #     even that opens no port here.
 #
 # This file having one rule in it is the result, not a simplification of it.
+#
+# ---------------------------------------------------------------------------
+# A TURN relay cannot be put behind this tunnel
+# ---------------------------------------------------------------------------
+#
+# It is the obvious thought - the tunnel already publishes this host without a
+# port forward, so publish coturn through it too - and it does not work.
+#
+# The edge terminates TLS for a proxied hostname and expects HTTP inside it.
+# TURN over TLS is its own binary protocol, not HTTP, so a client dialling
+# turns:betweenus.example.com:443 is refused at the edge and never reaches
+# coturn. An ingress rule of `service: tcp://...` does not change that: those
+# are reached with `cloudflared access` or WARP on the *client* side, and a
+# browser's WebRTC stack cannot run either. Arbitrary TCP for ordinary public
+# clients is Cloudflare Spectrum, an Enterprise product.
+#
+# So a relay lives somewhere with a public address of its own - a small VM is
+# enough, since it forwards packets it has no key for - or the deployment uses
+# Cloudflare's TURN service, which exists for this exact reason. Either is
+# configured in .env (TURN_URLS or CLOUDFLARE_TURN_KEY_ID) and neither adds a
+# rule to this file, because both are dialled outbound by the peers rather
+# than published from here.
 
 tunnel: betweenus
 credentials-file: /etc/cloudflared/betweenus.json

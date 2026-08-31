@@ -91,10 +91,19 @@ Media:       Client <========================================> Client
 | Symmetric / carrier-grade NAT | TURN relay, only if one is configured — otherwise no path exists |
 
 STUN needs no tunnel and no port — the client dials a public STUN server
-itself. TURN is optional and off by default; when an operator wants that
-last category of network to work, Cloudflare's own TURN service fits
-naturally since it's outbound-only too, and `call-service` mints short-lived
-credentials for it per call.
+itself. TURN is optional and off by default; when an operator wants that last
+category of network to work, there are two ways to configure one:
+Cloudflare's own TURN service (`call-service` mints short-lived credentials
+for it per call), or any standard TURN server the operator runs, named with
+`TURN_URLS`, `TURN_USERNAME` and `TURN_CREDENTIAL`.
+
+**Neither of them goes through this tunnel, and one of them cannot.** A
+Cloudflare Tunnel carries HTTP and WebSocket; its edge terminates TLS on 443
+and expects HTTP inside, so TURN over TLS — its own binary protocol — is
+refused before it arrives. cloudflared's TCP ingress needs cloudflared or WARP
+on the client side, which a browser cannot run. A self-run relay therefore
+needs a host with a public address of its own; it is reached outbound by both
+peers, so it still opens no port on the machine behind this tunnel.
 
 On a STUN-only deployment the last row is the accepted ceiling, and it is a
 narrower row than it looks. Most failures that *present* as "no path" are a

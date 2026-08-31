@@ -125,7 +125,31 @@ to be the fix, not another workaround.
   those, and configuring one is the operator's choice. The default is
   STUN-only, and `call-service` records that once per process — not as an
   error, but because the limit is invisible from everywhere else.
-- **No port forwarding, ever.** Both peers dial out.
+- **Either kind of relay.** `CLOUDFLARE_TURN_KEY_ID` +
+  `CLOUDFLARE_TURN_KEY_API_TOKEN` mints short-lived credentials from
+  Cloudflare's TURN service; `TURN_URLS` + `TURN_USERNAME` +
+  `TURN_CREDENTIAL` names any standard TURN server the operator runs — coturn,
+  eturnal, another provider — with a long-term credential, because a self-run
+  relay has no API to mint against. Cloudflare wins if both are set. A `turn:`
+  URL is never handed out without both credentials: an `RTCPeerConnection`
+  built from one *throws*, which would break every call in the deployment
+  rather than only the ones needing a relay, so a half-configured relay is
+  logged once and dropped.
+- **No port forwarding, ever** — on the machine running BetweenUs. Both peers
+  dial out, to each other and to the relay. The relay itself is the exception
+  and it is somebody else's host: see below.
+
+**A relay needs an address of its own, and the tunnel cannot give it one.**
+This is the part that surprises people running behind a Cloudflare Tunnel with
+nothing else exposed. A tunnel carries HTTP and WebSocket: its edge terminates
+TLS on 443 and expects HTTP inside it, and TURN over TLS is its own binary
+protocol, so a `turns:` URL aimed at the tunnel's hostname is refused before it
+reaches anything. cloudflared's TCP ingress does not close the gap either — it
+needs cloudflared or WARP running on the *client*, which a browser's WebRTC
+stack has no way to do. A relay therefore lives on a host with a public address
+of its own (a small VM is enough — it forwards packets, it does not decode
+them), or the deployment uses Cloudflare's TURN service, which is reachable for
+exactly this reason.
 
 **What STUN-only actually costs.** Two categories, and they are worth keeping
 apart because only one of them is fixable from the client:

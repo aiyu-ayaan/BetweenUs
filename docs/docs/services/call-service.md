@@ -59,7 +59,7 @@ Held in process beside the roster, and it dies with the call. Full design:
 
 | Method | Path | What it does |
 | --- | --- | --- |
-| POST | `/ice` | Mint ICE server configuration (STUN always; short-lived TURN credentials when a TURN provider is configured) |
+| POST | `/ice` | ICE server configuration (STUN always; a relay when one is configured — short-lived credentials minted from Cloudflare's TURN service, or the long-term credential of a TURN server the operator runs) |
 | POST | `/ring` | Ring one person into a call in a channel both can see. Rate-limited per pair |
 | GET | `/history` | This account's own call log, newest first (last 50). Takes no user id |
 | GET | `/analytics?days=30` | The same rows added up: a point per day, busiest channels, most time with, direct/relay split |
