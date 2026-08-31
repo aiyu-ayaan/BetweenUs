@@ -274,12 +274,9 @@ services:
       # gives. Pulling an image instead of building one changes nothing about
       # where media goes: directly between the peers, never through here.
       STUN_URLS: ${STUN_URLS:-stun:stun.l.google.com:19302,stun:stun.cloudflare.com:3478}
-      CLOUDFLARE_TURN_KEY_ID: ${CLOUDFLARE_TURN_KEY_ID:-}
-      CLOUDFLARE_TURN_KEY_API_TOKEN: ${CLOUDFLARE_TURN_KEY_API_TOKEN:-}
-      CLOUDFLARE_TURN_TTL_SECONDS: ${CLOUDFLARE_TURN_TTL_SECONDS:-86400}
-      # Or a relay of your own, if you would rather not use Cloudflare's.
-      # All three together, or it is ignored. The relay needs a reachable
-      # address of its own - a small VM, not this host behind the tunnel.
+      # The relay this deployment runs, for the pairs of networks STUN cannot
+      # join directly. All three together, or it is ignored: the relay needs a
+      # reachable address of its own - a small VM, not this host behind the tunnel.
       TURN_URLS: ${TURN_URLS:-}
       TURN_USERNAME: ${TURN_USERNAME:-}
       TURN_CREDENTIAL: ${TURN_CREDENTIAL:-}
@@ -299,12 +296,9 @@ services:
       <<: *service-env
       REMOTE_GATEWAY_PORT: 3008
       STUN_URLS: ${STUN_URLS:-stun:stun.l.google.com:19302,stun:stun.cloudflare.com:3478}
-      CLOUDFLARE_TURN_KEY_ID: ${CLOUDFLARE_TURN_KEY_ID:-}
-      CLOUDFLARE_TURN_KEY_API_TOKEN: ${CLOUDFLARE_TURN_KEY_API_TOKEN:-}
-      CLOUDFLARE_TURN_TTL_SECONDS: ${CLOUDFLARE_TURN_TTL_SECONDS:-86400}
-      # Or a relay of your own, if you would rather not use Cloudflare's.
-      # All three together, or it is ignored. The relay needs a reachable
-      # address of its own - a small VM, not this host behind the tunnel.
+      # The relay this deployment runs, for the pairs of networks STUN cannot
+      # join directly. All three together, or it is ignored: the relay needs a
+      # reachable address of its own - a small VM, not this host behind the tunnel.
       TURN_URLS: ${TURN_URLS:-}
       TURN_USERNAME: ${TURN_USERNAME:-}
       TURN_CREDENTIAL: ${TURN_CREDENTIAL:-}

@@ -85,11 +85,9 @@
 # clients is Cloudflare Spectrum, an Enterprise product.
 #
 # So a relay lives somewhere with a public address of its own - a small VM is
-# enough, since it forwards packets it has no key for - or the deployment uses
-# Cloudflare's TURN service, which exists for this exact reason. Either is
-# configured in .env (TURN_URLS or CLOUDFLARE_TURN_KEY_ID) and neither adds a
-# rule to this file, because both are dialled outbound by the peers rather
-# than published from here.
+# enough, since it forwards packets it has no key for. It is configured in .env
+# (TURN_URLS) and adds no rule to this file, because the peers dial it outbound
+# rather than it being published from here.
 
 tunnel: betweenus
 credentials-file: /etc/cloudflared/betweenus.json
