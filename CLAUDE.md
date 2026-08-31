@@ -7,6 +7,7 @@ Complete architecture specifications, guidelines, protocols, API catalogs, and d
 - [`development/claude.md`](development/claude.md) — Master architecture and AI developer reference
 - [`development/devdocs/`](development/devdocs/) — Internal development specifications and implementation trackers
 - [`development/Commit.md`](development/Commit.md) — Commit conventions and local git guidelines
+- [`development/Release-Commit.md`](development/Release-Commit.md) — Release trigger commit conventions (`!alpha`, `!fix`, etc.) and AI automation procedure
 - [`docs/`](docs/) — Full Docusaurus documentation suite (architecture, services, database, system design, security, deployment)
 - [`README.md`](README.md) — Public repository overview and quick start
 
