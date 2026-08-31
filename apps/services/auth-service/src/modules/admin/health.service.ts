@@ -28,6 +28,7 @@ import type {
   AdminLiveConnections,
   AdminLiveEndpoint,
   AdminMediaStorage,
+  AdminRelayHealth,
   AdminRuntimeHealth,
   AdminServerHealth,
   AdminTableSize,
@@ -39,6 +40,13 @@ const PROBE_TIMEOUT_MS = 2_500;
 
 /** Slower than this and the component is answering, but not well. */
 const SLOW_MS = 750;
+
+/**
+ * The relay probe is two UDP round trips to another host, so it gets longer
+ * than a local dependency does. Still bounded: a dead relay must not hold the
+ * health page open.
+ */
+const RELAY_PROBE_TIMEOUT_MS = 6_000;
 
 /** Biggest tables only: the panel draws a list, not a schema dump. */
 const TABLE_LIMIT = 15;
@@ -289,16 +297,21 @@ export class AdminHealthService {
    */
   async snapshot(days: number): Promise<AdminServerHealth> {
     const windowDays = clampWindowDays(days);
-    const [components, database, media, bandwidth, live] = await Promise.all([
+    const [components, database, media, bandwidth, live, relay] = await Promise.all([
       this.components(),
       this.database(),
       this.media(),
       this.bandwidth(windowDays),
       this.live(),
+      this.relay(),
     ]);
 
     return {
       at: new Date().toISOString(),
+      // The relay is deliberately not folded into `overall`. Running without
+      // one is the default and not a fault, and a deployment that chose
+      // STUN-only must not be shown a permanently red badge for it. The relay
+      // card carries its own state.
       overall: worstState(components.map((component) => component.state)),
       components,
       runtime: this.runtime(),
@@ -306,7 +319,41 @@ export class AdminHealthService {
       media,
       bandwidth,
       live: { ...live, endpoints: this.endpoints(components, live) },
+      relay,
     };
+  }
+
+  /**
+   * The TURN relay, as `call-service` reports it.
+   *
+   * Asked rather than worked out here: `call-service` owns `TURN_URLS` and is
+   * what hands ICE to clients, so it is the only source that cannot disagree
+   * with what a call actually gets. Reading the variable a second time in this
+   * process would recreate exactly the split-brain that removing the hosted
+   * minting path was meant to end.
+   *
+   * A `call-service` that cannot be reached is reported as such rather than as
+   * a broken relay: those are different problems with different fixes, and the
+   * sibling probe above already says which one this is.
+   */
+  private async relay(): Promise<AdminRelayHealth> {
+    const base = envOr('CALL_SERVICE_URL', 'http://call-service:3007');
+    try {
+      const response = await withTimeout(
+        fetch(`${base}/api/v1/internal/relay`),
+        RELAY_PROBE_TIMEOUT_MS,
+      );
+      if (!response.ok) throw new Error(`call-service answered ${response.status}`);
+      return (await response.json()) as AdminRelayHealth;
+    } catch (error) {
+      return {
+        configured: false,
+        username: null,
+        probes: [],
+        state: 'down',
+        error: `Could not ask call-service about the relay: ${messageOf(error)}`,
+      };
+    }
   }
 
   /**

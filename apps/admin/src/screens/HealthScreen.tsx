@@ -140,12 +140,139 @@ export function HealthView({ health }: { health: AdminServerHealth }): JSX.Eleme
   return (
     <div className="space-y-6">
       <Components components={health.components} />
+      <Relay relay={health.relay} />
       <Runtime runtime={health.runtime} />
       <Database database={health.database} />
       <Media media={health.media} />
       <Bandwidth bandwidth={health.bandwidth} />
       <Live live={health.live} />
     </div>
+  );
+}
+
+/**
+ * The TURN relay, and whether it would actually carry a call.
+ *
+ * Every line here is the answer to a question somebody asks at the point calls
+ * have started failing, so none of it is a summary: the relayed address proves
+ * an allocation really happened, the mapped address is how the relay sees this
+ * deployment, and an error is written as the thing to change rather than as a
+ * status code.
+ *
+ * "Not configured" is drawn as a plain statement rather than a warning. Running
+ * STUN-only is the default and a legitimate choice; what it costs - the pairs of
+ * networks that will never connect - is said once, without colouring the card
+ * red for a deployment that is working exactly as its operator intended.
+ */
+export function Relay({ relay }: { relay: AdminServerHealth['relay'] }): JSX.Element {
+  if (relay.error) {
+    return (
+      <Card title="TURN relay">
+        <p className="rounded bg-red-500/10 px-3 py-2 text-sm text-red-300">{relay.error}</p>
+        <p className="mt-2 text-xs text-slate-500">
+          The relay itself may be fine. This is the call service not answering, which the
+          Components card above reports separately.
+        </p>
+      </Card>
+    );
+  }
+
+  if (!relay.configured) {
+    return (
+      <Card title="TURN relay">
+        <p className="text-sm text-slate-300">Not configured — calls run STUN-only.</p>
+        <p className="mt-2 text-xs text-slate-500">
+          Most networks connect directly and are unaffected. Pairs that cannot — symmetric NAT on
+          both ends, or two mobile carriers — will join a call, show both people, and then carry no
+          audio or video. Set <code className="text-slate-400">TURN_URLS</code>,{' '}
+          <code className="text-slate-400">TURN_USERNAME</code> and{' '}
+          <code className="text-slate-400">TURN_CREDENTIAL</code> to fix that.
+        </p>
+      </Card>
+    );
+  }
+
+  return (
+    <Card title="TURN relay" action={<StatePill state={relay.state} />}>
+      {relay.username && (
+        <p className="mb-3 text-xs text-slate-500">
+          Authenticating as <span className="font-mono text-slate-400">{relay.username}</span>. The
+          credential is never sent to this panel.
+        </p>
+      )}
+
+      <ul className="grid gap-3 sm:grid-cols-2">
+        {relay.probes.map((probe) => {
+          // `unprobed` and `invalid` are not health states, so they borrow the
+          // nearest honest styling rather than claiming to be up or down.
+          const style =
+            probe.state === 'up'
+              ? STATES.up
+              : probe.state === 'down'
+                ? STATES.down
+                : STATES.degraded;
+
+          return (
+            <li
+              key={probe.url}
+              className={`rounded-md border bg-surface-900 p-3 ${style.ring.split(' ')[0] ?? ''}`}
+            >
+              <div className="flex items-center gap-2">
+                <span aria-hidden="true" className={style.text}>
+                  {style.glyph}
+                </span>
+                <span className="break-all font-mono text-xs text-slate-100">{probe.url}</span>
+                <span className={`ml-auto shrink-0 text-xs font-semibold ${style.text}`}>
+                  {probe.state === 'up'
+                    ? 'Allocating'
+                    : probe.state === 'unprobed'
+                      ? 'Not checked'
+                      : probe.state === 'invalid'
+                        ? 'Unreadable'
+                        : 'Failing'}
+                </span>
+              </div>
+
+              {probe.latencyMs !== null && (
+                <p className="mt-1 text-xs text-slate-400">{probe.latencyMs} ms to allocate</p>
+              )}
+
+              {probe.relayedAddress && (
+                <dl className="mt-2 space-y-1 text-xs">
+                  <div className="flex gap-2">
+                    <dt className="text-slate-500">Relays through</dt>
+                    <dd className="ml-auto font-mono text-slate-300">{probe.relayedAddress}</dd>
+                  </div>
+                  {probe.mappedAddress && (
+                    <div className="flex gap-2">
+                      <dt className="text-slate-500">Sees us as</dt>
+                      <dd className="ml-auto font-mono text-slate-300">{probe.mappedAddress}</dd>
+                    </div>
+                  )}
+                </dl>
+              )}
+
+              {probe.error && (
+                <p
+                  className={`mt-2 rounded px-2 py-1 text-xs ${
+                    probe.state === 'down' ? 'bg-red-500/10 text-red-300' : 'text-slate-500'
+                  }`}
+                >
+                  {probe.error}
+                </p>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+
+      <p className="mt-3 text-xs text-slate-500">
+        Checked by asking the relay for a real allocation with this deployment's own credential,
+        then handing it straight back. A green row means a call with no direct path would be
+        carried; it does not mean every client's network can reach the relay, which only a real
+        call between two such networks proves.
+      </p>
+    </Card>
   );
 }
 

@@ -122,6 +122,31 @@ const local: AdminServerHealth = {
       },
     ],
   },
+  /** A relay that allocates, beside a TLS listener that is honestly unchecked. */
+  relay: {
+    configured: true,
+    username: 'betweenus',
+    state: 'up',
+    error: null,
+    probes: [
+      {
+        url: 'turn:203.0.113.10:3478',
+        state: 'up',
+        latencyMs: 69,
+        relayedAddress: '203.0.113.10:59440',
+        mappedAddress: '198.51.100.7:30789',
+        error: null,
+      },
+      {
+        url: 'turns:relay.example.com:443?transport=tcp',
+        state: 'unprobed',
+        latencyMs: null,
+        relayedAddress: null,
+        mappedAddress: null,
+        error: 'TLS and TCP listeners are not probed from here - verify with Trickle ICE',
+      },
+    ],
+  },
 };
 
 /**
@@ -145,6 +170,8 @@ const s3: AdminServerHealth = {
   bandwidth: { ...local.bandwidth, daily: [] },
   live: { ...local.live, endpoints: [] },
   runtime: { ...local.runtime, loadAverage: [0, 0, 0], appVersion: null },
+  /** No relay at all: the default, and specifically not an error. */
+  relay: { configured: false, username: null, probes: [], state: 'up', error: null },
 };
 
 const first = renderToStaticMarkup(<HealthView health={local} />);
@@ -204,6 +231,26 @@ assert.ok(second.includes('No table sizes were reported.'));
 assert.ok(second.includes('Nothing has been uploaded yet.'));
 assert.ok(second.includes('No traffic recorded in this window.'));
 assert.ok(second.includes('No realtime endpoints were reported.'));
+
+// The relay card. A working relay must show the *evidence* - the address an
+// allocation actually came back with - because "up" on its own is the claim
+// this screen exists to stop anybody having to take on trust.
+assert.ok(first.includes('203.0.113.10:59440'), 'the relayed address is shown, not just a tick');
+assert.ok(first.includes('198.51.100.7:30789'), 'and how the relay sees this deployment');
+assert.ok(first.includes('69 ms to allocate'));
+assert.ok(!first.includes('7n2'), 'no credential ever reaches the markup');
+assert.ok(
+  first.includes('Not checked'),
+  'a TLS listener is labelled unchecked rather than being claimed as up',
+);
+
+// No relay is a legitimate deployment, so it is a statement and not a warning -
+// and it says what it costs, which is the part an operator needs.
+assert.ok(second.includes('calls run STUN-only'), 'an unconfigured relay says so plainly');
+assert.ok(
+  second.includes('carry no audio or video'),
+  'and names the consequence, which is the only reason the line is worth reading',
+);
 assert.ok(!second.includes('NaN'), 'no division by a zero denominator reached the markup');
 assert.ok(
   second.includes('Not reported on this platform'),

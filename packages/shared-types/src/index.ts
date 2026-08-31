@@ -588,6 +588,53 @@ export interface AdminLiveConnections {
 }
 
 /** Everything the Health & storage screen draws, in one response. */
+/**
+ * What one relay URL answered when asked for an allocation.
+ *
+ * `up` means the relay accepted the deployment's own credential and handed back
+ * an address it would forward media through - the only evidence that actually
+ * predicts a relayed call working. `unprobed` is a TLS or TCP listener, which
+ * is checked with Trickle ICE rather than guessed at here.
+ */
+export interface RelayProbeResult {
+  url: string;
+  state: 'up' | 'down' | 'unprobed' | 'invalid';
+  /** Round trip of the full allocate exchange, in milliseconds. */
+  latencyMs: number | null;
+  /** `XOR-RELAYED-ADDRESS`: where this relay would forward media. */
+  relayedAddress: string | null;
+  /** `XOR-MAPPED-ADDRESS`: how the relay sees the service that asked. */
+  mappedAddress: string | null;
+  /** The failure in one sentence, with what to change. Never a stack trace. */
+  error: string | null;
+}
+
+/**
+ * The deployment's TURN relay, as the panel draws it.
+ *
+ * Reported by `call-service` rather than by the service answering the admin
+ * API, because `call-service` is what actually hands ICE to clients. A status
+ * assembled from a second copy of `TURN_URLS` could show green while clients
+ * were being given something else, which is the class of bug that removing the
+ * hosted minting path was meant to end.
+ */
+export interface AdminRelayHealth {
+  /** False when no relay is configured, which is a valid deployment. */
+  configured: boolean;
+  /** The username clients are given. The credential is never returned. */
+  username: string | null;
+  /** One entry per URL in `TURN_URLS`, probed in order. */
+  probes: RelayProbeResult[];
+  /** Worst state across `probes`; `up` when nothing is configured to fail. */
+  state: AdminHealthState;
+  /**
+   * Why `call-service` could not be asked at all, when that is what happened.
+   * Distinct from a relay that answered badly - this is the reporter being
+   * unreachable, not the relay.
+   */
+  error: string | null;
+}
+
 export interface AdminServerHealth {
   /** When the snapshot was taken, ISO 8601. */
   at: string;
@@ -599,6 +646,8 @@ export interface AdminServerHealth {
   media: AdminMediaStorage;
   bandwidth: AdminBandwidth;
   live: AdminLiveConnections;
+  /** The TURN relay, live-probed. See `AdminRelayHealth`. */
+  relay: AdminRelayHealth;
 }
 
 export interface AuthResponse extends AuthTokens {
