@@ -1,5 +1,31 @@
 # Changelog
 
+## [0.0.1-alpha.20](https://github.com/aiyu-ayaan/BetweenUs/compare/v0.0.1-alpha.19...v0.0.1-alpha.20) (2026-08-31)
+
+### Features
+
+* Accept an operator's own TURN server, not only Cloudflare's
+
+### Other changes
+
+* Add custom TURN relay support and coturn deployment runbooks
+* Ignore session handoff file in gitignore
+* A worked coturn setup on Oracle Cloud
+* Update submodule pointer for the TURN runbook link
+* A runbook for standing up a coturn relay
+* Update submodule pointer for the TURN credential note
+* Update submodule pointer for the phase 28 relay docs
+* A second way to configure a relay, and where it has to live
+* Pass TURN_URLS through to call-service and remote-gateway
+
+### Artifacts
+
+| Platform | This release |
+| --- | --- |
+| Server images | Built here |
+| Desktop (Windows) | Built here |
+| Android | Built here |
+
 ## [0.0.1-alpha.19](https://github.com/aiyu-ayaan/BetweenUs/compare/v0.0.1-alpha.18...v0.0.1-alpha.19) (2026-08-30)
 
 ### Features
