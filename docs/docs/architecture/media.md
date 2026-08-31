@@ -30,7 +30,7 @@ flowchart TD
     subgraph TN ["Trust Boundary 3: NAT Traversal"]
         direction LR
         STUN["<b>Public STUN Server</b><br/><i>Public IP/Port Discovery</i>"]
-        TURN["<b>Optional TURN Relay</b><br/><i>Symmetric NAT Fallback (Cloudflare Calls)</i>"]
+        TURN["<b>Optional TURN Relay</b><br/><i>Symmetric NAT Fallback (Cloudflare TURN, or the operator's own coturn)</i>"]
     end
 
     %% TIER 4: CLIENT B
@@ -150,6 +150,8 @@ stack has no way to do. A relay therefore lives on a host with a public address
 of its own (a small VM is enough — it forwards packets, it does not decode
 them), or the deployment uses Cloudflare's TURN service, which is reachable for
 exactly this reason.
+
+Setting one up, end to end: [TURN relay (coturn)](/deployment/turn-server).
 
 **What STUN-only actually costs.** Two categories, and they are worth keeping
 apart because only one of them is fixable from the client:

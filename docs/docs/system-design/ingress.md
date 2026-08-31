@@ -103,7 +103,8 @@ and expects HTTP inside, so TURN over TLS — its own binary protocol — is
 refused before it arrives. cloudflared's TCP ingress needs cloudflared or WARP
 on the client side, which a browser cannot run. A self-run relay therefore
 needs a host with a public address of its own; it is reached outbound by both
-peers, so it still opens no port on the machine behind this tunnel.
+peers, so it still opens no port on the machine behind this tunnel. The full
+setup is [TURN relay (coturn)](/deployment/turn-server).
 
 On a STUN-only deployment the last row is the accepted ceiling, and it is a
 narrower row than it looks. Most failures that *present* as "no path" are a
