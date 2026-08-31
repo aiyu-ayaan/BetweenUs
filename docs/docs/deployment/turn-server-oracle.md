@@ -198,9 +198,8 @@ TURN_USERNAME="betweenus"
 TURN_CREDENTIAL="<LONG_RANDOM_SECRET>"
 ```
 
-Leave `CLOUDFLARE_TURN_KEY_ID` empty — it takes precedence if set. Then rebuild
-the two services that hand out ICE, because the change lives inside their
-images and restarting an old image will not have it:
+Then rebuild the two services that hand out ICE, because the change lives
+inside their images and restarting an old image will not have it:
 
 ```bash
 docker compose -f infrastructure/docker/docker-compose.build.yml build call-service remote-gateway

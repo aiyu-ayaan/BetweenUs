@@ -30,7 +30,7 @@ flowchart TD
     subgraph TN ["Trust Boundary 3: NAT Traversal"]
         direction LR
         STUN["<b>Public STUN Server</b><br/><i>Public IP/Port Discovery</i>"]
-        TURN["<b>Optional TURN Relay</b><br/><i>Symmetric NAT Fallback (Cloudflare TURN, or the operator's own coturn)</i>"]
+        TURN["<b>Optional TURN Relay</b><br/><i>Symmetric NAT Fallback (the operator's own coturn)</i>"]
     end
 
     %% TIER 4: CLIENT B
@@ -125,16 +125,20 @@ to be the fix, not another workaround.
   those, and configuring one is the operator's choice. The default is
   STUN-only, and `call-service` records that once per process — not as an
   error, but because the limit is invisible from everywhere else.
-- **Either kind of relay.** `CLOUDFLARE_TURN_KEY_ID` +
-  `CLOUDFLARE_TURN_KEY_API_TOKEN` mints short-lived credentials from
-  Cloudflare's TURN service; `TURN_URLS` + `TURN_USERNAME` +
+- **One way to configure the relay.** `TURN_URLS` + `TURN_USERNAME` +
   `TURN_CREDENTIAL` names any standard TURN server the operator runs — coturn,
   eturnal, another provider — with a long-term credential, because a self-run
-  relay has no API to mint against. Cloudflare wins if both are set. A `turn:`
-  URL is never handed out without both credentials: an `RTCPeerConnection`
-  built from one *throws*, which would break every call in the deployment
-  rather than only the ones needing a relay, so a half-configured relay is
-  logged once and dropped.
+  relay has no API to mint against. All three are read from the environment, so
+  resolving them reaches nothing and cannot fail. A `turn:` URL is never handed
+  out without both credentials: an `RTCPeerConnection` built from one *throws*,
+  which would break every call in the deployment rather than only the ones
+  needing a relay, so a half-configured relay is logged once and dropped.
+- **Why one way and not two.** A hosted service used to be checked first, its
+  short-lived credentials minted per call over HTTPS. The key was deleted at
+  the provider; every mint answered `404`; and a failed mint resolved to "no
+  relay" rather than to the coturn configured beside it, so every client got
+  STUN-only while a working relay sat unused. Reading the relay out of local
+  configuration removes the failure mode along with the feature.
 - **No port forwarding, ever** — on the machine running BetweenUs. Both peers
   dial out, to each other and to the relay. The relay itself is the exception
   and it is somebody else's host: see below.
@@ -147,9 +151,8 @@ protocol, so a `turns:` URL aimed at the tunnel's hostname is refused before it
 reaches anything. cloudflared's TCP ingress does not close the gap either — it
 needs cloudflared or WARP running on the *client*, which a browser's WebRTC
 stack has no way to do. A relay therefore lives on a host with a public address
-of its own (a small VM is enough — it forwards packets, it does not decode
-them), or the deployment uses Cloudflare's TURN service, which is reachable for
-exactly this reason.
+of its own — a small VM is enough, since it forwards packets it has no key for
+and does not decode them.
 
 Setting one up, end to end: [TURN relay (coturn)](/deployment/turn-server).
 

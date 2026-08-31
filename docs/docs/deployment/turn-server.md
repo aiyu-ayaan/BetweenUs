@@ -231,8 +231,8 @@ logged once and ignored, and the deployment stays STUN-only — deliberately: a
 `turn:` URL with no credentials makes `RTCPeerConnection` throw, which would
 break every call rather than only the relayed ones.
 
-If `CLOUDFLARE_TURN_KEY_ID` is also set, Cloudflare's service wins. Unset it
-to use your own.
+These three are the only way a relay is configured. Nothing is fetched to
+resolve them, so a relay that is named here is a relay clients are given.
 
 ## 7. Verify
 
@@ -261,8 +261,8 @@ the pairs that had no path.
 
 ## What a static credential means
 
-Cloudflare's TURN credentials are minted per call and expire. A self-run
-relay's do not: `TURN_CREDENTIAL` is handed to every client that calls
+A hosted relay's credentials are typically minted per call and expire. A
+self-run relay's do not: `TURN_CREDENTIAL` is handed to every client that calls
 `POST /api/v1/calls/ice`, so anybody with an account can read it out of that
 response and use the relay for their own traffic until it changes. A client
 has to hold the credential to allocate with it, so this is bounded rather than

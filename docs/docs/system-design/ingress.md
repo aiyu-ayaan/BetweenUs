@@ -92,12 +92,10 @@ Media:       Client <========================================> Client
 
 STUN needs no tunnel and no port — the client dials a public STUN server
 itself. TURN is optional and off by default; when an operator wants that last
-category of network to work, there are two ways to configure one:
-Cloudflare's own TURN service (`call-service` mints short-lived credentials
-for it per call), or any standard TURN server the operator runs, named with
+category of network to work, they run a standard TURN server and name it with
 `TURN_URLS`, `TURN_USERNAME` and `TURN_CREDENTIAL`.
 
-**Neither of them goes through this tunnel, and one of them cannot.** A
+**It does not go through this tunnel, and it could not.** A
 Cloudflare Tunnel carries HTTP and WebSocket; its edge terminates TLS on 443
 and expects HTTP inside, so TURN over TLS — its own binary protocol — is
 refused before it arrives. cloudflared's TCP ingress needs cloudflared or WARP
