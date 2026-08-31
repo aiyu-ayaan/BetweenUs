@@ -1,5 +1,31 @@
 # Changelog
 
+## [0.0.1-alpha.21](https://github.com/aiyu-ayaan/BetweenUs/compare/v0.0.1-alpha.20...v0.0.1-alpha.21) (2026-08-31)
+
+### Features
+
+* Show whether the TURN relay would actually carry a call
+
+### Bug fixes
+
+* Resolve the relay from configuration, not from a mint that can 404
+
+### Other changes
+
+* Add live TURN relay health probe and unify static relay configuration
+* Update submodule pointer for the phase 29 relay docs
+* One relay, configured in one place
+* Stop passing a hosted TURN key nothing reads any more
+* !docs : Updating docs
+
+### Artifacts
+
+| Platform | This release |
+| --- | --- |
+| Server images | Built here |
+| Desktop (Windows) | Built here |
+| Android | Built here |
+
 ## [0.0.1-alpha.20](https://github.com/aiyu-ayaan/BetweenUs/compare/v0.0.1-alpha.19...v0.0.1-alpha.20) (2026-08-31)
 
 ### Features
