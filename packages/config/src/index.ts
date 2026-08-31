@@ -95,8 +95,7 @@ export function baseConfig(portVar: string, defaultPort: number): BaseServiceCon
 export {
   iceServers,
   onIceProblem,
-  parseIceServers,
-  resetTurnCache,
+  resetIceWarnings,
   stunServers,
   type IceServerConfig,
 } from './ice';
