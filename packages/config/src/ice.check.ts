@@ -16,6 +16,22 @@
 import assert from 'node:assert/strict';
 import { iceServers, onIceProblem, parseIceServers, resetTurnCache, stunServers } from './ice';
 
+/**
+ * Both ways of configuring a relay, unset.
+ *
+ * A developer's own `.env` is loaded by this package, so a check that asserts
+ * "no relay is configured" has to say so rather than assume it - one machine
+ * with a coturn in its `.env` would otherwise fail a suite that passes
+ * everywhere else.
+ */
+function unconfigureEveryRelay(): void {
+  delete process.env.CLOUDFLARE_TURN_KEY_ID;
+  delete process.env.CLOUDFLARE_TURN_KEY_API_TOKEN;
+  delete process.env.TURN_URLS;
+  delete process.env.TURN_USERNAME;
+  delete process.env.TURN_CREDENTIAL;
+}
+
 function stunIsAlwaysThere(): void {
   delete process.env.STUN_URLS;
   const servers = stunServers();
@@ -88,8 +104,7 @@ function nothingUsableIsAnEmptyList(): void {
 
 async function unconfiguredAsksNobodyAndStillWorks(): Promise<void> {
   resetTurnCache();
-  delete process.env.CLOUDFLARE_TURN_KEY_ID;
-  delete process.env.CLOUDFLARE_TURN_KEY_API_TOKEN;
+  unconfigureEveryRelay();
 
   let called = false;
   const realFetch = globalThis.fetch;
@@ -123,8 +138,7 @@ async function unconfiguredAsksNobodyAndStillWorks(): Promise<void> {
  */
 async function aMissingRelayIsSaidOutLoudExactlyOnce(): Promise<void> {
   resetTurnCache();
-  delete process.env.CLOUDFLARE_TURN_KEY_ID;
-  delete process.env.CLOUDFLARE_TURN_KEY_API_TOKEN;
+  unconfigureEveryRelay();
 
   const said: string[] = [];
   onIceProblem((message) => said.push(message));
@@ -171,6 +185,166 @@ async function aFailedMintIsNotAFailedCall(): Promise<void> {
   }
 }
 
+/** What a deployment running its own coturn gets, and that it asks nobody. */
+async function anOwnRelayIsHandedOutWithItsCredentials(): Promise<void> {
+  resetTurnCache();
+  delete process.env.CLOUDFLARE_TURN_KEY_ID;
+  delete process.env.CLOUDFLARE_TURN_KEY_API_TOKEN;
+  process.env.TURN_URLS = ' turns:turn.example.com:443?transport=tcp , turn:turn.example.com:3478 ';
+  process.env.TURN_USERNAME = 'betweenus';
+  process.env.TURN_CREDENTIAL = 'secret';
+
+  const realFetch = globalThis.fetch;
+  let called = false;
+  globalThis.fetch = (() => {
+    called = true;
+    return Promise.reject(new Error('a relay of one\'s own is not minted from anywhere'));
+  }) as typeof fetch;
+
+  try {
+    const servers = await iceServers();
+    assert.equal(called, false, 'static credentials are read, never fetched');
+
+    const relay = servers.find((server) => server.urls.some((url) => url.startsWith('turn')));
+    assert.ok(relay, 'the relay reaches the client');
+    assert.deepEqual(
+      relay?.urls,
+      ['turns:turn.example.com:443?transport=tcp', 'turn:turn.example.com:3478'],
+      'comma-separated, trimmed, in the order the operator wrote them',
+    );
+    assert.equal(relay?.username, 'betweenus');
+    assert.equal(relay?.credential, 'secret');
+
+    assert.ok(
+      servers[0]?.urls.every((url) => url.startsWith('stun:')),
+      'and STUN still comes first: a relay is the fallback, not the path',
+    );
+  } finally {
+    globalThis.fetch = realFetch;
+    delete process.env.TURN_URLS;
+    delete process.env.TURN_USERNAME;
+    delete process.env.TURN_CREDENTIAL;
+    resetTurnCache();
+  }
+}
+
+/**
+ * A deployment already minting from Cloudflare keeps doing exactly that.
+ *
+ * The precedence is what makes this change additive: an operator who has set
+ * both must not silently move onto the other one on an upgrade.
+ */
+async function cloudflareWinsWhenBothAreConfigured(): Promise<void> {
+  resetTurnCache();
+  process.env.CLOUDFLARE_TURN_KEY_ID = 'key';
+  process.env.CLOUDFLARE_TURN_KEY_API_TOKEN = 'token';
+  process.env.TURN_URLS = 'turns:own.example.com:443?transport=tcp';
+  process.env.TURN_USERNAME = 'betweenus';
+  process.env.TURN_CREDENTIAL = 'secret';
+
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = (() =>
+    Promise.resolve(
+      new Response(
+        JSON.stringify({
+          iceServers: {
+            urls: 'turn:turn.cloudflare.com:3478',
+            username: 'minted',
+            credential: 'minted-secret',
+          },
+        }),
+        { headers: { 'content-type': 'application/json' } },
+      ),
+    )) as typeof fetch;
+
+  try {
+    const servers = await iceServers();
+    const relays = servers.filter((server) => server.urls.some((url) => url.startsWith('turn')));
+    assert.equal(relays.length, 1, 'one relay, not both');
+    assert.equal(relays[0]?.username, 'minted', 'and it is the minted one');
+  } finally {
+    globalThis.fetch = realFetch;
+    delete process.env.CLOUDFLARE_TURN_KEY_ID;
+    delete process.env.CLOUDFLARE_TURN_KEY_API_TOKEN;
+    delete process.env.TURN_URLS;
+    delete process.env.TURN_USERNAME;
+    delete process.env.TURN_CREDENTIAL;
+    resetTurnCache();
+  }
+}
+
+/**
+ * A relay with no credentials is worse than no relay at all.
+ *
+ * `new RTCPeerConnection({ iceServers: [{ urls: 'turn:...' }] })` throws, so
+ * handing one out does not degrade the calls that needed a relay - it takes
+ * down every call in the deployment, including the ones that were connecting
+ * on STUN alone.
+ */
+async function aHalfConfiguredRelayIsDroppedAndSaidOutLoud(): Promise<void> {
+  resetTurnCache();
+  delete process.env.CLOUDFLARE_TURN_KEY_ID;
+  delete process.env.CLOUDFLARE_TURN_KEY_API_TOKEN;
+  process.env.TURN_URLS = 'turns:turn.example.com:443?transport=tcp';
+  delete process.env.TURN_USERNAME;
+  delete process.env.TURN_CREDENTIAL;
+
+  const said: string[] = [];
+  onIceProblem((message) => said.push(message));
+
+  try {
+    const servers = await iceServers();
+    assert.ok(
+      servers.every((server) => server.urls.every((url) => url.startsWith('stun:'))),
+      'no relay entry leaves without the credentials a client would throw over',
+    );
+    assert.ok(servers.length > 0, 'and the calls that never needed one still work');
+    assert.ok(
+      said.some((message) => /TURN_USERNAME or TURN_CREDENTIAL/.test(message)),
+      'the operator is told which half is missing',
+    );
+
+    const before = said.length;
+    await iceServers();
+    assert.equal(said.length, before, 'once per process, like every other fact about the config');
+  } finally {
+    onIceProblem(() => undefined);
+    delete process.env.TURN_URLS;
+    resetTurnCache();
+  }
+}
+
+/** STUN named in the relay variable is not a relay, and is not counted as one. */
+async function stunInTheRelayVariableIsNotARelay(): Promise<void> {
+  resetTurnCache();
+  delete process.env.CLOUDFLARE_TURN_KEY_ID;
+  delete process.env.CLOUDFLARE_TURN_KEY_API_TOKEN;
+  process.env.TURN_URLS = 'stun:stun.example.com:3478';
+  process.env.TURN_USERNAME = 'betweenus';
+  process.env.TURN_CREDENTIAL = 'secret';
+
+  const said: string[] = [];
+  onIceProblem((message) => said.push(message));
+
+  try {
+    const servers = await iceServers();
+    assert.ok(
+      servers.every((server) => server.credential === undefined),
+      'nothing is handed out carrying a credential for a server that wants none',
+    );
+    assert.ok(
+      said.some((message) => /STUN servers belong in STUN_URLS/.test(message)),
+      'and the operator is told where it should have gone',
+    );
+  } finally {
+    onIceProblem(() => undefined);
+    delete process.env.TURN_URLS;
+    delete process.env.TURN_USERNAME;
+    delete process.env.TURN_CREDENTIAL;
+    resetTurnCache();
+  }
+}
+
 async function main(): Promise<void> {
   stunIsAlwaysThere();
   anOperatorCanNameTheirOwn();
@@ -180,6 +354,10 @@ async function main(): Promise<void> {
   await unconfiguredAsksNobodyAndStillWorks();
   await aMissingRelayIsSaidOutLoudExactlyOnce();
   await aFailedMintIsNotAFailedCall();
+  await anOwnRelayIsHandedOutWithItsCredentials();
+  await cloudflareWinsWhenBothAreConfigured();
+  await aHalfConfiguredRelayIsDroppedAndSaidOutLoud();
+  await stunInTheRelayVariableIsNotARelay();
   console.log('ice self-check passed');
 }
 
