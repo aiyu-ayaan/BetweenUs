@@ -30,3 +30,6 @@ firebase-adminsdk*.json
 # Gradle plugin is applied only when it is there, so a clone without one still
 # builds. See FCM/README.md.
 google-services.json
+
+# Session handoff documents
+betweenus-turn-session-handoff.md
