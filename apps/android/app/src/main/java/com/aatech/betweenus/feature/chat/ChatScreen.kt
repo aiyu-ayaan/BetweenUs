@@ -400,13 +400,27 @@ fun ChatScreen(
      */
     val shared by PendingShare.uris.collectAsState()
     val shareTarget by PendingShare.target.collectAsState()
-    LaunchedEffect(shared, shareTarget) {
+    // Keyed on [channelId] as well as on the share, and that is the whole of why
+    // the picker used to lead nowhere.
+    //
+    // One `ChatScreen` serves every conversation - the route is static and the
+    // channel is state - so picking a conversation from the share sheet changes
+    // this screen's argument rather than mounting a new screen. The share had
+    // already been aimed by then, so this effect had already run once, against
+    // whichever conversation happened to be open, and returned because the
+    // target was not that one. Nothing it was keyed on changed afterwards, so
+    // it never ran again: the files stayed in `PendingShare` and the preview
+    // never opened. It only ever worked when the conversation picked was the
+    // one already on screen.
+    LaunchedEffect(shared, shareTarget, channelId) {
         if (shared.isEmpty() || shareTarget != channelId) return@LaunchedEffect
         // Described first, cleared last. Clearing is a state change this
         // effect is keyed on, so doing it first would cancel this coroutine
         // in the middle of reading the names off the content resolver.
-        val described = shared.map { describePicked(context, it) }
-        previewing = previewing + described
+        // Through [preview] rather than straight onto the list, so a share of
+        // thirty photos meets the same cap the paperclip does and says so,
+        // instead of building a message the send would refuse.
+        preview(shared.map { describePicked(context, it) })
         PendingShare.clear()
     }
 
