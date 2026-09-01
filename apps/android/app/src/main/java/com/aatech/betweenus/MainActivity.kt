@@ -36,6 +36,8 @@ import com.aatech.betweenus.core.store.PendingShare
 import com.aatech.betweenus.core.store.Workspace
 import com.aatech.betweenus.feature.auth.LoginScreen
 import com.aatech.betweenus.feature.shell.Shell
+import com.aatech.betweenus.feature.voice.CallPip
+import com.aatech.betweenus.feature.voice.VoiceEngine
 import com.aatech.betweenus.ui.components.BetweenUsLogoTile
 import com.aatech.betweenus.ui.components.ProfileDialogHost
 import com.aatech.betweenus.ui.theme.Ground
@@ -68,6 +70,32 @@ class MainActivity : ComponentActivity() {
                 BetweenUsRoot()
             }
         }
+    }
+
+    /**
+     * The app is being left - home, the recents gesture, another app.
+     *
+     * A video call follows the person out of the app as a floating window, the
+     * way every other video call on the platform behaves. An audio call does
+     * not: there is nothing to see in it, and a black rectangle with a name in
+     * it earns none of the screen it would take. It keeps running either way -
+     * the foreground service is what holds it up, not the activity - and the
+     * ongoing-call notification is where an audio call stays reachable from.
+     *
+     * This used to be what Back did, which answered "leave this screen" with
+     * "leave the app": no channel list fits in a hundred-point window, so
+     * reading the conversation the call was about meant ending the call.
+     * Back leaves only the screen now (see `CallDock.kt`), and leaving the app
+     * is what shrinks it.
+     */
+    override fun onUserLeaveHint() {
+        super.onUserLeaveHint()
+        val engine = VoiceEngine.current() ?: return
+        if (engine.state.value !is VoiceEngine.CallState.Live) return
+        if (!engine.hasPicture()) return
+        // Refusals are ordinary and there is nothing to do about them: the call
+        // carries on in the background regardless. See CallPip.
+        CallPip.enter(this)
     }
 
     /**

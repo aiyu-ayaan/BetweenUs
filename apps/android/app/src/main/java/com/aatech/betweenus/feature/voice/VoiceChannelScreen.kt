@@ -3,7 +3,6 @@ package com.aatech.betweenus.feature.voice
 import android.app.Activity
 import android.content.Context
 import android.media.projection.MediaProjectionManager
-import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
@@ -218,11 +217,20 @@ fun VoiceChannelScreen(
         onDispose { lifecycle.removeObserver(observer) }
     }
 
-    // Back during a call shrinks it rather than ending it. Only if the system
-    // refuses does back mean what it usually means.
+    // Back is back. It leaves the call *screen* and not the call, which is what
+    // the strip along the top and the floating window are for - see
+    // `CallDock.kt`.
+    //
+    // It used to shrink the whole activity into system picture-in-picture,
+    // which answered "I want to leave this screen" with "then leave the app".
+    // That is the wrong shape for the thing people actually do in the middle of
+    // a call, which is read the conversation the call is about: there is no
+    // channel list inside a hundred-point window, and coming back out of one
+    // landed on the drawer rather than on the call. Picture-in-picture is still
+    // here, and it is now what *leaving the app* does - see
+    // `MainActivity.onUserLeaveHint`.
     val inPip = rememberInPictureInPicture()
-    val leaveScreen = { if (!(inCallNow && CallPip.enter(context))) onBack() }
-    BackHandler(enabled = inCallNow && !inPip) { leaveScreen() }
+    val leaveScreen = onBack
 
     // Who the little window shows: whoever spoke last, and never yourself.
     //

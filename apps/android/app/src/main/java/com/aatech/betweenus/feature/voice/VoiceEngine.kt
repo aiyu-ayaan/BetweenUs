@@ -2,6 +2,7 @@ package com.aatech.betweenus.feature.voice
 
 import android.content.Context
 import android.content.Intent
+import android.os.SystemClock
 import com.aatech.betweenus.core.crypto.Crypto
 import com.aatech.betweenus.core.crypto.E2ee
 import com.aatech.betweenus.core.data.CallPeer
@@ -296,6 +297,24 @@ class VoiceEngine(private val context: Context) {
     private val _state = MutableStateFlow<CallState>(CallState.Idle)
     val state: StateFlow<CallState> = _state.asStateFlow()
 
+    private val _liveSince = MutableStateFlow<Long?>(null)
+
+    /**
+     * When this call started carrying anything, as an elapsed-realtime stamp,
+     * or null when there is no call.
+     *
+     * Elapsed realtime rather than wall clock, because a duration measured
+     * against the wall clock jumps whenever the network hands the phone a
+     * corrected time - and a call that has been running four minutes must not
+     * suddenly read as an hour because a timezone or an NTP sync landed.
+     *
+     * Stamped at `joined` rather than at `join`: the seconds somebody spends
+     * waiting for a connection are not seconds of a call, and a counter that
+     * starts before anybody can hear you is a counter that lies about the one
+     * thing it is for.
+     */
+    val liveSince: StateFlow<Long?> = _liveSince.asStateFlow()
+
     private val _participants = MutableStateFlow<List<Participant>>(emptyList())
     val participants: StateFlow<List<Participant>> = _participants.asStateFlow()
 
@@ -557,6 +576,7 @@ class VoiceEngine(private val context: Context) {
         channelId?.let { PresenceSocket.leaveVoice(it) }
         // The state goes first, and it matters. See `teardown`.
         _state.value = CallState.Idle
+        _liveSince.value = null
         channelId = null
         _screenHolder.value = null
         teardown()
@@ -942,6 +962,18 @@ class VoiceEngine(private val context: Context) {
         }
     }
 
+    /**
+     * Whether this call has a picture in it: anybody's camera, or a screen.
+     *
+     * Asked rather than observed, because the two callers are both a moment
+     * rather than a stream - the app being left, and the dock deciding whether
+     * there is anything to float. A flow would be a subscription for a question
+     * asked twice.
+     */
+    fun hasPicture(): Boolean =
+        _participants.value.any { it.video != null } ||
+            (_localVideo.value != null && (_cameraOn.value || _sharing.value))
+
     private fun inCall(): Boolean =
         _state.value is CallState.Live || _state.value is CallState.Connecting
 
@@ -1198,6 +1230,10 @@ class VoiceEngine(private val context: Context) {
                 joinTimeout?.cancel()
                 joinTimeout = null
                 _state.value = CallState.Live(channelId.orEmpty())
+                // Only the first time. A reconnection inside one call is not a
+                // new call, and restarting the clock on one would tell somebody
+                // their forty-minute conversation had just begun.
+                if (_liveSince.value == null) _liveSince.value = SystemClock.elapsedRealtime()
                 val peers = event.optJSONArray("peers")
                 for (index in 0 until (peers?.length() ?: 0)) {
                     addPeer(CallPeer.from(peers!!.getJSONObject(index)))

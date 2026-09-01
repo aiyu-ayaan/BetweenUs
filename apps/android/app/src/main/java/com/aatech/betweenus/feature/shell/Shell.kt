@@ -76,6 +76,10 @@ import com.aatech.betweenus.feature.update.UpdateSheet
 import com.aatech.betweenus.feature.update.UpdateState
 import com.aatech.betweenus.feature.update.UpdateWorker
 import com.aatech.betweenus.feature.update.Updates
+import com.aatech.betweenus.feature.voice.CallBar
+import com.aatech.betweenus.feature.voice.FloatingCall
+import com.aatech.betweenus.feature.voice.VoiceEngine
+import com.aatech.betweenus.feature.voice.rememberCallDock
 import com.aatech.betweenus.feature.voice.VoiceChannelScreen
 import com.aatech.betweenus.ui.components.ShellPanes
 import com.aatech.betweenus.ui.components.rememberShellFrame
@@ -135,12 +139,22 @@ fun Shell(user: PublicUser) {
     /**
      * Which screens the channel list belongs over.
      *
-     * The same two that draw a hamburger, and that is not a coincidence: a
-     * drawer you can swipe open on a screen with no button for it is a drawer
-     * that arrives by accident, and a button on a screen the swipe refuses is a
-     * control that half works.
+     * The screens somebody might reasonably leave sideways rather than
+     * backwards: the two that draw a hamburger, plus a call.
+     *
+     * A call is on the list because being in one is not a reason to be unable
+     * to reach a conversation - it is most of the reason people want one. Its
+     * own way out is the chevron in the call's top bar, which leaves the screen
+     * and not the call; the swipe is the shortcut past the conversation you
+     * were on to a different one.
+     *
+     * Leaving it off was also half of a bug worth not repeating: the drawer can
+     * arrive on a screen by a window resize, and Material wires the scrim's tap
+     * to this same switch - so a screen the swipe refuses is a screen a drawer
+     * cannot be dismissed from either. The rule below is the other half.
      */
-    val drawerGesturesEnabled = !isSettingsRoute && (currentRoute == Route.Chat || currentRoute == Route.Friends)
+    val drawerGesturesEnabled = !isSettingsRoute &&
+        (currentRoute == Route.Chat || currentRoute == Route.Friends || currentRoute == Route.Voice)
 
     /**
      * A drawer open on a screen that has no way to open it is closed.
@@ -434,9 +448,23 @@ fun Shell(user: PublicUser) {
             // Above everything rather than over it: a banner drawn on top of
             // the screen covers the one control - the menu button - somebody
             // reaching for it would want.
+            /**
+             * A call somebody has walked away from.
+             *
+             * Null on the call screen itself and out of a call; see
+             * `CallDock.kt` for why back leaves this behind rather than
+             * shrinking the whole app into a floating window.
+             */
+            val callDock = rememberCallDock(onCallScreen = currentRoute == Route.Voice)
+            val returnToCall = {
+                voiceChannelId = callDock?.channelId ?: voiceChannelId
+                navigation.navigate(Route.Voice) { launchSingleTop = true }
+            }
+
             Column(Modifier.fillMaxSize()) {
                 ConnectionBanner()
                 ClockBanner()
+                CallBar(dock = callDock, onReturn = returnToCall)
                 /**
                  * Screens arrive rather than appear.
                  *
@@ -718,6 +746,22 @@ fun Shell(user: PublicUser) {
                         )
                     }
                 }
+            }
+
+            // The picture of a call somebody has walked away from, over
+            // whatever they walked to. Only when there is one: an audio call is
+            // the strip along the top and nothing else, because a black
+            // rectangle with a name in it earns none of the screen it would
+            // take from the conversation underneath. See `CallDock.kt`.
+            //
+            // Above the screen stack and below the sheets: it must not sit on
+            // top of a question somebody has been asked.
+            VoiceEngine.current()?.let { engine ->
+                FloatingCall(
+                    dock = callDock,
+                    eglContext = engine.eglBase.eglBaseContext,
+                    onReturn = returnToCall,
+                )
             }
 
             // A newer release, offered once the app is actually usable rather

@@ -450,28 +450,44 @@ The meter only moves during a call — Android does not reliably allow a second
 capture of one microphone, so the row says so rather than showing a bar that is
 dead for a reason nobody can see.
 
-## Backing out of a call, and coming back to it
+## Backing out of a call
 
-Back during a call shrinks it into system picture-in-picture rather than ending
-it — the activity is what Android shrinks, so the call keeps running and no
-video renderer is rebuilt. It needs no permission; it has three ways to be
-refused (no such device, the per-app switch, an activity on its way out), and
-all three come back as "no" for the caller to handle, so backing out on a phone
-without it simply leaves the screen.
+Back leaves the call **screen**, not the call. It used to shrink the whole
+activity into system picture-in-picture, which answered "I want to leave this
+screen" with "then leave the app" — the wrong shape for the thing people
+actually do mid-call, which is read the conversation the call is about. There is
+no channel list inside a hundred-point window, and coming back out of one landed
+on the drawer rather than on the call.
 
-Coming back is where the bug was. The route never changed — shrinking a window
-is not navigation — but the shell's navigation drawer did: the window goes to
-about a hundred points wide and back again, and the drawer sheet settles to the
-nearest anchor on the way, so the conversation list arrived over the call. It
-was then stuck, because a call is one of the screens the drawer swipe is turned
-off on and Material wires the scrim's tap to that same switch: nothing on screen
-could put it away.
+What stands in for the screen is the call dock:
 
-Two rules now. A drawer open on a screen that has no way to open it closes
-itself — stated that way rather than as a list of screens, so the next screen
-added does not have to be remembered twice. And an open drawer is always
-closable, whatever it ended up over; the switch is about whether a swipe may
-*open* it.
+- A **bar** along the top, beside the connection and clock banners: who you are
+  talking to, how long it has been, mute, hang up. Tapping it returns to the
+  call. It pushes the screen down rather than covering it. On an audio call this
+  is the whole of it — a floating black rectangle showing nothing earns none of
+  the screen it would take from the conversation underneath.
+- A **floating window**, only when the call has a picture in it. Small,
+  draggable, tap to return. It stays where it is put: the only thing that knows
+  what it is in the way of is the person reading.
+
+The duration is measured from an elapsed-realtime stamp taken when the call
+became live, not when it started connecting, and a reconnection inside one call
+does not restart it. Elapsed realtime because a wall-clock duration jumps
+whenever the network hands the phone a corrected time; from "live" because the
+seconds spent waiting to connect are not seconds of a call.
+
+Picture-in-picture is still here, and it is now what **leaving the app** does —
+and only for a call with a picture in it. So the two shapes match what is
+actually in the call: audio follows you out as a notification and a bar, video
+follows you out as a window.
+
+Two rules keep the drawer honest alongside this. A drawer open on a screen that
+has no way to open it closes itself — stated that way rather than as a list of
+screens, so the next screen added does not have to be remembered twice. And an
+open drawer is always closable, whatever it ended up over; the switch is about
+whether a swipe may *open* it, and Material wires the scrim's tap to the same
+flag. The channel list is reachable from a call, because being in a call is not
+a reason to be unable to reach a conversation.
 
 ## The sound of a shared screen
 
