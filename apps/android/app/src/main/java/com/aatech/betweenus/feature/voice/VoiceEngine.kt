@@ -756,7 +756,12 @@ class VoiceEngine(private val context: Context) {
         leave()
         releaseAudioStack()
         eglBase.release()
-        synchronized(VoiceEngine) { if (instance === this) instance = null }
+        synchronized(VoiceEngine) {
+            if (instance === this) {
+                instance = null
+                _live.value = null
+            }
+        }
     }
 
     // --- local media ---
@@ -2314,9 +2319,31 @@ class VoiceEngine(private val context: Context) {
         @Volatile
         private var instance: VoiceEngine? = null
 
+        private val _live = MutableStateFlow<VoiceEngine?>(null)
+
+        /**
+         * The engine as something a composable can watch for, rather than ask
+         * about once.
+         *
+         * [current] answers "is there one now", which is the right question for
+         * a listener firing on a process that may have no call in it. It is the
+         * wrong one for a screen that outlives every call: `remember` would
+         * cache the null from before the first call and never see the engine
+         * that arrived afterwards, so the call dock would appear only for
+         * people who had already been in a call when the shell was composed.
+         *
+         * The engine is not built to be watched for - the flow is empty until
+         * something genuinely needs one - so watching costs nothing on a
+         * process that never makes a call.
+         */
+        val live: StateFlow<VoiceEngine?> = _live.asStateFlow()
+
         fun of(context: Context): VoiceEngine =
             instance ?: synchronized(this) {
-                instance ?: VoiceEngine(context.applicationContext).also { instance = it }
+                instance ?: VoiceEngine(context.applicationContext).also {
+                    instance = it
+                    _live.value = it
+                }
             }
 
         /**

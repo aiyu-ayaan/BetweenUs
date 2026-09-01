@@ -105,7 +105,10 @@ data class CallDockState(
  */
 @Composable
 fun rememberCallDock(onCallScreen: Boolean): CallDockState? {
-    val engine = remember { VoiceEngine.current() } ?: return null
+    // Watched rather than asked once: this is composed for the life of the
+    // shell, and `remember { current() }` would cache the null from before the
+    // first call and never notice the engine that arrived afterwards.
+    val engine = VoiceEngine.live.collectAsState().value ?: return null
 
     val state by engine.state.collectAsState()
     val liveSince by engine.liveSince.collectAsState()

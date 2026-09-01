@@ -756,7 +756,7 @@ fun Shell(user: PublicUser) {
             //
             // Above the screen stack and below the sheets: it must not sit on
             // top of a question somebody has been asked.
-            VoiceEngine.current()?.let { engine ->
+            VoiceEngine.live.collectAsState().value?.let { engine ->
                 FloatingCall(
                     dock = callDock,
                     eglContext = engine.eglBase.eglBaseContext,
