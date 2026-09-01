@@ -450,6 +450,29 @@ The meter only moves during a call — Android does not reliably allow a second
 capture of one microphone, so the row says so rather than showing a bar that is
 dead for a reason nobody can see.
 
+## Backing out of a call, and coming back to it
+
+Back during a call shrinks it into system picture-in-picture rather than ending
+it — the activity is what Android shrinks, so the call keeps running and no
+video renderer is rebuilt. It needs no permission; it has three ways to be
+refused (no such device, the per-app switch, an activity on its way out), and
+all three come back as "no" for the caller to handle, so backing out on a phone
+without it simply leaves the screen.
+
+Coming back is where the bug was. The route never changed — shrinking a window
+is not navigation — but the shell's navigation drawer did: the window goes to
+about a hundred points wide and back again, and the drawer sheet settles to the
+nearest anchor on the way, so the conversation list arrived over the call. It
+was then stuck, because a call is one of the screens the drawer swipe is turned
+off on and Material wires the scrim's tap to that same switch: nothing on screen
+could put it away.
+
+Two rules now. A drawer open on a screen that has no way to open it closes
+itself — stated that way rather than as a list of screens, so the next screen
+added does not have to be remembered twice. And an open drawer is always
+closable, whatever it ended up over; the switch is about whether a swipe may
+*open* it.
+
 ## The sound of a shared screen
 
 A share used to be silent. It carries sound now, captured with

@@ -132,10 +132,40 @@ fun Shell(user: PublicUser) {
         else -> currentRoute?.startsWith(Route.PermissionDetail) == true
     }
 
+    /**
+     * Which screens the channel list belongs over.
+     *
+     * The same two that draw a hamburger, and that is not a coincidence: a
+     * drawer you can swipe open on a screen with no button for it is a drawer
+     * that arrives by accident, and a button on a screen the swipe refuses is a
+     * control that half works.
+     */
     val drawerGesturesEnabled = !isSettingsRoute && (currentRoute == Route.Chat || currentRoute == Route.Friends)
 
-    LaunchedEffect(isSettingsRoute) {
-        if (isSettingsRoute && drawer.isOpen) {
+    /**
+     * A drawer open on a screen that has no way to open it is closed.
+     *
+     * This used to name the settings routes and only them, and the route it
+     * missed was the call. Coming back from picture-in-picture landed on the
+     * conversation list drawn over the call - and stuck there, because a call
+     * is one of the screens the swipe is turned off on, so nothing on screen
+     * could put it away again: not the swipe, and not the scrim, which
+     * `ModalNavigationDrawer` wires to the same switch.
+     *
+     * Stated as "no way in means no way to be here" rather than as a list, so
+     * the next screen added does not have to be remembered twice. A call is the
+     * whole screen and the drawer is not part of it.
+     *
+     * Keyed on the drawer as well as on the screen, because the two ways to
+     * arrive here are opposites: walking onto a call with the drawer already
+     * open, and the drawer opening while a call is already in front. The second
+     * is the one picture-in-picture produces - the window shrinks to a hundred
+     * points wide and grows back, and the sheet settles to the nearest anchor
+     * on the way - and a rule that only watched the screen would have watched
+     * the half that did not move.
+     */
+    LaunchedEffect(drawerGesturesEnabled, drawer.isOpen) {
+        if (!drawerGesturesEnabled && drawer.isOpen) {
             drawer.close()
         }
     }
@@ -763,7 +793,13 @@ fun Shell(user: PublicUser) {
     } else {
         ModalNavigationDrawer(
             drawerState = drawer,
-            gesturesEnabled = !twoPane && drawerGesturesEnabled,
+            // Open is always closable, whatever screen it ended up over. The
+            // switch is about whether a swipe may *open* it; Material wires the
+            // scrim's tap to the same flag, so leaving it plainly off meant a
+            // drawer that arrived on a screen it does not belong on - a window
+            // resize on the way out of picture-in-picture is enough - could not
+            // be dismissed by anything the person could reach.
+            gesturesEnabled = !twoPane && (drawerGesturesEnabled || drawer.isOpen),
             drawerContent = {
                 ModalDrawerSheet(
                     drawerContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
