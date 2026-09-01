@@ -381,10 +381,14 @@ export const api = {
   removeServerEmoji: (serverId: string, emojiId: string): Promise<void> =>
     request(`/api/v1/servers/${serverId}/emoji/${emojiId}`, { method: 'DELETE' }),
 
-  addMember: (serverId: string, username: string): Promise<ServerMember> =>
+  addMember: (
+    serverId: string,
+    username: string,
+    shareHistory = false,
+  ): Promise<ServerMember> =>
     request(`/api/v1/servers/${serverId}/members`, {
       method: 'POST',
-      body: JSON.stringify({ username }),
+      body: JSON.stringify({ username, shareHistory }),
     }),
 
   removeMember: (serverId: string, userId: string): Promise<void> =>

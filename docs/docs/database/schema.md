@@ -159,6 +159,10 @@ One row per `(server, user)`. `role` is the fixed 5-rung hierarchy
 (`OWNER`/`ADMIN`/`MODERATOR`/`MEMBER`/`GUEST`). `grantedPermissions` /
 `deniedPermissions` are per-member overrides on top of the role — see
 [Auth & Permissions](/system-design/auth-and-permissions) for the resolver.
+`historyShared` records that this member was let in *with* what was said
+before they arrived; it is `false` unless somebody asked for it, and it is a
+note the clients act on rather than a grant the server can make — see
+[E2EE](/security/e2ee).
 
 ### `ServerCustomRole` / `ServerMemberRole`
 Named, coloured, ranked roles a server invents for itself, additive on top

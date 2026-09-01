@@ -274,9 +274,23 @@ export class ServersService {
    * `MANAGE_ROLE` decision, and this one only needs `MANAGE_MEMBER`.
    *
    * Someone already in the server is returned as they are rather than refused:
-   * the outcome the caller asked for is already true.
+   * the outcome the caller asked for is already true. That includes
+   * [shareHistory]: it is a decision about letting somebody in, and they are
+   * already in, so re-adding them is not a way to widen what they can read.
+   *
+   * [shareHistory] is the one thing here the server cannot carry out itself. It
+   * holds no key, so all it does is write the decision down; the key directory
+   * turns it into a longer gap list for that member's devices, and a machine
+   * that already holds those epochs seals them across the next time it opens
+   * the channel. Off unless somebody asked for it - a newcomer reading a year
+   * of a conversation they were not in should be a thing somebody chose.
    */
-  async addMember(actorId: string, serverId: string, username: string): Promise<ServerMember> {
+  async addMember(
+    actorId: string,
+    serverId: string,
+    username: string,
+    shareHistory = false,
+  ): Promise<ServerMember> {
     const actor = await this.requireMembershipRow(actorId, serverId);
     this.require(permissionsOf(actor), PERMISSIONS.MANAGE_MEMBER);
 
@@ -310,7 +324,7 @@ export class ServersService {
     if (existing) return toMember(existing);
 
     const member = await prisma.serverMember.create({
-      data: { serverId, userId: user.id, role: 'MEMBER' },
+      data: { serverId, userId: user.id, role: 'MEMBER', historyShared: shareHistory },
       include: { user: true, roles: HELD_ROLES },
     });
     await this.events.publish(EVENTS.SERVER_MEMBER_ADDED, { serverId, userId: user.id });

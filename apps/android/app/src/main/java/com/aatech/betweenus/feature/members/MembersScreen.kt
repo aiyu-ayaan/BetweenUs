@@ -2,6 +2,7 @@ package com.aatech.betweenus.feature.members
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -11,6 +12,7 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -76,6 +78,8 @@ fun MembersScreen(
 
     var adding by remember { mutableStateOf("") }
     var note by remember { mutableStateOf<String?>(null) }
+    /** Whether the next person added arrives able to read what came before. */
+    var shareHistory by remember { mutableStateOf(false) }
     // Typing a username exactly right, blind, was the whole interaction here;
     // people who could not guess the spelling could not add anybody. The
     // search is the same one the desktop offers, and friends-only because the
@@ -182,6 +186,36 @@ fun MembersScreen(
                             placeholder = "A friend's username",
                             imeAction = ImeAction.Search,
                         )
+                        // Off, and it goes back to off after every add: this
+                        // is a decision about one person, and a switch that
+                        // remembered "yes" would hand the next newcomer a year
+                        // of a conversation because of a tap about somebody
+                        // else.
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 10.dp)
+                                .clickable { shareHistory = !shareHistory },
+                            verticalAlignment = Alignment.Top,
+                        ) {
+                            Checkbox(checked = shareHistory, onCheckedChange = { shareHistory = it })
+                            Column(Modifier.padding(start = 4.dp, top = 12.dp)) {
+                                Text(
+                                    text = "Let them read the history",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                )
+                                Text(
+                                    text = "Off by default: a new member reads from the moment " +
+                                        "they join. Turning it on hands them the keys to what " +
+                                        "was said before, as soon as one of the devices holding " +
+                                        "those keys opens each channel.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+
                         if (adding.trim().length >= 2 && candidates.isEmpty() && note == null) {
                             Notice(
                                 "No friend by that name. Only friends can be added; " +
@@ -210,9 +244,10 @@ fun MembersScreen(
                             IconAction(BetweenUsIcons.UserPlus, "Add to this server", {
                                 scope.launch {
                                     note = runCatching {
-                                        BetweenUsApi.addMember(serverId, user.username)
+                                        BetweenUsApi.addMember(serverId, user.username, shareHistory)
                                         Workspace.loadMembers(serverId, force = true)
                                         adding = ""
+                                        shareHistory = false
                                     }.exceptionOrNull()?.message
                                 }
                             })

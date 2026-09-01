@@ -149,7 +149,7 @@ export class ServersController {
     @Param('serverId', ParseUUIDPipe) serverId: string,
     @Body() dto: AddServerMemberDto,
   ): Promise<ServerMember> {
-    return this.servers.addMember(user.id, serverId, dto.username);
+    return this.servers.addMember(user.id, serverId, dto.username, dto.shareHistory === true);
   }
 
   @Patch(':serverId/members/:userId')

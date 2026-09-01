@@ -66,6 +66,11 @@ export class AddServerMemberDto implements AddServerMemberRequest {
   @IsString()
   @Length(2, 32)
   username!: string;
+
+  /** Whether they arrive able to read the history. Off unless asked for. */
+  @IsOptional()
+  @IsBoolean()
+  shareHistory?: boolean;
 }
 
 /**

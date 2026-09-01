@@ -622,6 +622,21 @@ model ServerMember {
   grantedPermissions String[]   @default([])
   /// Permissions withheld even though the role would grant them. Deny wins.
   deniedPermissions  String[]   @default([])
+  /// Whether this member was let in *with* what was said before they arrived.
+  ///
+  /// A newcomer normally reads from the moment they join and no further back:
+  /// they hold no earlier epoch, nobody may hand them one, and every message
+  /// before that stays a padlock. That is the right default and it stays the
+  /// default. But it is a decision somebody should be able to make, and the
+  /// server cannot make it - it holds no key - so this is the flag the clients
+  /// act on: with it set, the key directory offers this member's devices every
+  /// epoch of every channel in the server rather than only the ones they
+  /// already hold somewhere, and the first member's machine to open the channel
+  /// seals them. See `gaps()` in chat-service's e2ee service.
+  ///
+  /// It is not retroactive in the other direction: clearing it takes nothing
+  /// back, because a key that has been sealed for a device has been sealed.
+  historyShared      Boolean    @default(false)
   joinedAt           DateTime   @default(now())
 
   server Server             @relation(fields: [serverId], references: [id], onDelete: Cascade)

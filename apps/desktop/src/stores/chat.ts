@@ -198,8 +198,14 @@ interface ChatState {
   saveServer: (change: UpdateServerRequest) => Promise<void>;
   leaveServer: () => Promise<void>;
   deleteServer: () => Promise<void>;
-  /** Adds someone to the server on screen, by the username they can be told. */
-  addMember: (username: string) => Promise<void>;
+  /**
+   * Adds someone to the server on screen, by the username they can be told.
+   *
+   * [shareHistory] decides whether they arrive able to read what was said
+   * before them. Off by default, which is what the E2EE model does on its own:
+   * they hold no earlier channel key and nothing offers them one.
+   */
+  addMember: (username: string, shareHistory?: boolean) => Promise<void>;
   updateMember: (userId: string, change: UpdateServerMemberRequest) => Promise<void>;
   kickMember: (userId: string) => Promise<void>;
   deleteChannel: (channelId: string) => Promise<void>;
@@ -770,10 +776,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
     chatSocket.syncSubscriptions(subscribable([], get().directs));
   },
 
-  addMember: async (username) => {
+  addMember: async (username, shareHistory = false) => {
     const serverId = get().activeServerId;
     if (!serverId) return;
-    const member = await api.addMember(serverId, username);
+    const member = await api.addMember(serverId, username, shareHistory);
     // Already a member: the list is right as it stands.
     if (get().members.some((item) => item.userId === member.userId)) return;
     set({ members: [...get().members, member] });

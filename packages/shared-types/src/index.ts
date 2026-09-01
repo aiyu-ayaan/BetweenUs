@@ -872,6 +872,15 @@ export type UpdateServerRoleRequest = Partial<CreateServerRoleRequest>;
  */
 export interface AddServerMemberRequest {
   username: string;
+  /**
+   * Let them read what was said before they arrived.
+   *
+   * Absent and false mean the same thing and are the default: a newcomer holds
+   * no earlier channel key, nobody offers them one, and the conversation before
+   * this moment stays sealed. Setting it records the opposite decision on the
+   * membership, which the key directory then acts on - see `E2EE.md`.
+   */
+  shareHistory?: boolean;
 }
 
 /** Every field is optional; only what is sent is changed. */

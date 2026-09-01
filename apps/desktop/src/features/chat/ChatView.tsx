@@ -502,7 +502,7 @@ export function ChatView({
 const PAGE_TRIGGER_PX = 400;
 
 function MessageList({
-  messages,
+  messages: received,
   loading,
   error,
   channel,
@@ -512,6 +512,25 @@ function MessageList({
   error: string | null;
   channel: Channel;
 }): JSX.Element {
+  /**
+   * A row that says "Encrypted" and nothing else is a row nobody can act on.
+   *
+   * It used to be drawn in place, so a conversation this machine holds no key
+   * for was a column of padlocks with the readable messages scattered through
+   * it - and every one of them repeated a fact the notice below already states
+   * once, for the whole channel. So the rows come out and the notice stays: one
+   * explanation, and the messages that can actually be read left legible
+   * between the ones that cannot.
+   *
+   * They are hidden rather than dropped. Nothing here deletes anything, and the
+   * moment a machine that holds those keys opens this channel they come back on
+   * their own.
+   */
+  const sealed = received.some((message) => message.content === UNDECRYPTABLE);
+  const messages = sealed
+    ? received.filter((message) => message.content !== UNDECRYPTABLE)
+    : received;
+
   const isDirect = channel.type === 'DM';
   const viewport = useRef<HTMLDivElement>(null);
   const list = useRef<HTMLUListElement>(null);
@@ -753,16 +772,16 @@ function MessageList({
           "this is the beginning" block true. Before that the top of the list is
           just the top of a page. An empty channel is exhausted by definition,
           but says so before the first fetch has answered. */}
-      {(exhausted || (messages.length === 0 && !loadingOlder)) && (
+      {(exhausted || (received.length === 0 && !loadingOlder)) && (
         <EmptyChannel channel={channel} />
       )}
 
-      {/* Said once for the channel rather than once per message. What a row can
-          say is that it is sealed; what somebody actually needs is why, and
-          that it repairs itself - a machine holding these keys hands them over
-          the next time it opens this channel, so there is nothing to do but
-          open BetweenUs where you first signed in. */}
-      {messages.some((message) => message.content === UNDECRYPTABLE) && (
+      {/* Said once for the channel rather than once per message - the rows
+          themselves are hidden, see above. What somebody needs is why, and that
+          it repairs itself: a machine holding these keys hands them over the
+          next time it opens this channel, so there is nothing to do but open
+          BetweenUs where you first signed in. */}
+      {sealed && (
         <p className="mb-2 rounded-md bg-surface-800 px-3 py-2 text-xs text-slate-400">
           Some of these messages were sealed for another of your devices. Open
           BetweenUs on the device you first signed in with and they will unlock here.

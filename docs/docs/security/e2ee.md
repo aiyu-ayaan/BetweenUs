@@ -103,6 +103,27 @@ deliberately bounded — "their owner already holds it" — so a new device
 only ever recovers access the same person already has elsewhere, never a
 year of history handed to someone who joined yesterday.
 
+## Letting a new member read the history
+
+The one deliberate exception to that bound, and it is a decision somebody
+makes rather than a default. Adding a member (`POST
+/api/v1/servers/:serverId/members`) takes `shareHistory`, which is stored on
+`server_members.historyShared` and is `false` unless asked for.
+
+With it set, the gap list above stops asking whether that member already
+holds an epoch and offers their devices **every** epoch of every channel in
+the server. The server still hands over nothing itself — it holds no key —
+and the publish rules are unchanged: a caller may only add entries to an
+epoch it already holds. So the history opens the first time a machine that
+holds those keys opens the channel, not the moment the member is added.
+An account whose fellow members are all offline waits until one is back.
+
+Clearing the flag takes nothing back. A key that has been sealed for a
+device has been sealed.
+
+Without it, the default stands: a newcomer mints the next epoch, reads from
+the moment they arrive, and everything before that stays a padlock.
+
 ## Revocation
 
 Deletes the wraps addressed to that device and refuses to seal for it

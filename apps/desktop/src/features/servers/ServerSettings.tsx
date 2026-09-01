@@ -1032,6 +1032,15 @@ function AddMember(): JSX.Element {
   const [results, setResults] = useState<UserSummary[]>([]);
   const [note, setNote] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  /**
+   * Whether they arrive able to read what was said before they got here.
+   *
+   * Off, and it stays off between adds: this is a decision about one person,
+   * and a switch that remembered "yes" from the last one would hand the next
+   * newcomer a year of a conversation because of a click somebody made about
+   * somebody else.
+   */
+  const [shareHistory, setShareHistory] = useState(false);
 
   // Anyone already in the server is dropped from the results: offering to add
   // them again is an invitation to a confusing no-op.
@@ -1056,10 +1065,15 @@ function AddMember(): JSX.Element {
     setBusy(true);
     setNote(null);
     try {
-      await addMember(username);
-      setNote(`${username} is in the server.`);
+      await addMember(username, shareHistory);
+      setNote(
+        shareHistory
+          ? `${username} is in the server, and the history will open for them as soon as one of the machines holding it opens each channel.`
+          : `${username} is in the server. They can read from now on.`,
+      );
       setQuery('');
       setResults([]);
+      setShareHistory(false);
     } catch (error) {
       setNote(error instanceof Error ? error.message : 'That person could not be added');
     } finally {
@@ -1096,6 +1110,23 @@ function AddMember(): JSX.Element {
           Add
         </button>
       </div>
+
+      <label className="mt-3 flex max-w-xl cursor-pointer items-start gap-2.5 text-sm text-slate-300">
+        <input
+          type="checkbox"
+          checked={shareHistory}
+          onChange={(event) => setShareHistory(event.target.checked)}
+          className="mt-0.5 h-4 w-4 cursor-pointer accent-accent"
+        />
+        <span>
+          Let them read the history
+          <span className="mt-0.5 block text-xs text-slate-400">
+            Off by default: a new member reads from the moment they join. Turning it on hands
+            them the keys to what was said before - not instantly, but as soon as one of the
+            machines that already holds those keys opens each channel.
+          </span>
+        </span>
+      </label>
 
       {note && (
         <p role="status" className="mt-2 text-sm text-slate-300">

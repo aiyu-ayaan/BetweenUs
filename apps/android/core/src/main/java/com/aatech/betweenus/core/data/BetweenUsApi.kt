@@ -281,9 +281,24 @@ object BetweenUsApi {
         authedArray("GET", "/api/v1/servers/$serverId/members").map { ServerMember.from(it) }
     }
 
-    suspend fun addMember(serverId: String, username: String): ServerMember = io {
+    /**
+     * [shareHistory] is whether they arrive able to read what was said before
+     * they got here. Off is the default and is what the encryption does on its
+     * own: they hold no earlier channel key and nothing offers them one. On, the
+     * key directory starts listing every epoch as missing for their devices and
+     * a machine that already holds them seals them across. See E2EE.md.
+     */
+    suspend fun addMember(
+        serverId: String,
+        username: String,
+        shareHistory: Boolean = false,
+    ): ServerMember = io {
         ServerMember.from(
-            authed("POST", "/api/v1/servers/$serverId/members", obj("username" to username)),
+            authed(
+                "POST",
+                "/api/v1/servers/$serverId/members",
+                obj("username" to username, "shareHistory" to shareHistory),
+            ),
         )
     }
 

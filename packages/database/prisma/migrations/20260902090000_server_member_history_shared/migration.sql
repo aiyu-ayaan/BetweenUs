@@ -1,0 +1,11 @@
+-- Whether a member was let in with the history that predates them.
+--
+-- False is what every existing row did before this column existed: a newcomer
+-- reads from the moment they arrive and no further back, because they hold no
+-- earlier epoch and nothing offers them one.
+--
+-- The column is a courier's note, not a grant. The server holds no key and
+-- cannot hand anybody anything; what this changes is which epochs the key
+-- directory *lists* as missing for this member's devices, which a machine that
+-- already holds them then seals. See chat-service's `gaps()`.
+ALTER TABLE "server_members" ADD COLUMN "historyShared" BOOLEAN NOT NULL DEFAULT false;

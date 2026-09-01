@@ -107,7 +107,23 @@ fun ChatScreen(
     val lastSeen by Presence.lastSeen.collectAsState()
     val receiptsByChannel by Conversation.receipts.collectAsState()
 
-    val messages = everything[channelId].orEmpty()
+    val received = everything[channelId].orEmpty()
+
+    /**
+     * A row that says "Encrypted" and nothing else is a row nobody can act on.
+     *
+     * It used to be drawn in place, so a conversation this device holds no key
+     * for was a column of padlocks with the readable messages scattered through
+     * it - and every one of them repeated a fact the notice at the top of the
+     * list already states once, for the whole channel. So the rows come out and
+     * the notice stays.
+     *
+     * Hidden rather than dropped: nothing here deletes anything, and the moment
+     * a device holding those keys opens this channel they come back on their
+     * own.
+     */
+    val sealed = received.any { it.text == E2ee.UNDECRYPTABLE }
+    val messages = if (sealed) received.filterNot { it.text == E2ee.UNDECRYPTABLE } else received
     val receipts = receiptsByChannel[channelId].orEmpty()
     /**
      * Where each reader's face is drawn: once, against the newest message of
@@ -553,7 +569,7 @@ fun ChatScreen(
 
         // --- Message History List ---
         Box(Modifier.weight(1f)) {
-            if (messages.isEmpty() && !busy) {
+            if (received.isEmpty() && !busy) {
                 EmptyState(
                     icon = BetweenUsIcons.Message,
                     title = "Nothing here yet",
@@ -567,11 +583,11 @@ fun ChatScreen(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 10.dp),
             ) {
-                // Said once for the channel rather than once per message. A row
-                // can say it is sealed; what somebody needs is why, and that it
-                // repairs itself - a machine holding those keys hands them over
-                // the next time it opens this channel.
-                if (messages.any { it.text == E2ee.UNDECRYPTABLE }) {
+                // Said once for the channel rather than once per message - the
+                // rows themselves are hidden, see `sealed`. What somebody needs
+                // is why, and that it repairs itself: a machine holding those
+                // keys hands them over the next time it opens this channel.
+                if (sealed) {
                     item {
                         Text(
                             text = "Some of these messages were sealed for another of your " +

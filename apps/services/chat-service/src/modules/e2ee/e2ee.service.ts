@@ -245,7 +245,8 @@ export class E2eeService {
    * to open on.
    *
    * The "their owner already holds it" condition is the whole of the boundary,
-   * and it is not a detail. Without it this would hand every past epoch to
+   * and it is not a detail (but see `historySharedWith` for the one deliberate
+   * exception to it). Without it this would hand every past epoch to
    * somebody who joined the channel yesterday, which is the opposite of the
    * rule the rest of this file keeps: a member reads from when they joined.
    * With it, the only thing being repaired is a person's own access on a second
@@ -261,7 +262,7 @@ export class E2eeService {
     epoch: number,
   ): Promise<Array<{ epoch: number; devices: DeviceKey[] }>> {
     const memberIds = await this.memberIds(channelId);
-    const [covered, devices] = await Promise.all([
+    const [covered, devices, withHistory] = await Promise.all([
       prisma.channelKey.findMany({
         where: { channelId },
         select: { epoch: true, recipientUserId: true, recipientDeviceId: true },
@@ -269,6 +270,7 @@ export class E2eeService {
       prisma.deviceKey.findMany({
         where: { userId: { in: memberIds }, revokedAt: null },
       }),
+      this.historySharedWith(channelId, memberIds),
     ]);
 
     const has = new Set(
@@ -286,7 +288,12 @@ export class E2eeService {
         devices: devices
           .filter(
             (device) =>
-              owners.has(`${at}:${device.userId}`) &&
+              // Either they already hold this epoch somewhere of their own, or
+              // somebody deliberately let them in with the history - see
+              // `historySharedWith`. Everyone else is offered nothing they did
+              // not already have, which is the rule the whole of this file is
+              // built on.
+              (owners.has(`${at}:${device.userId}`) || withHistory.has(device.userId)) &&
               !has.has(`${at}:${device.userId}:${device.deviceId}`),
           )
           .map(toDeviceKey),
@@ -295,6 +302,44 @@ export class E2eeService {
       // The newest epochs matter most - they are what the next message uses -
       // and a channel with a long history should not be one enormous response.
       .slice(0, MAX_GAP_EPOCHS);
+  }
+
+  /**
+   * Members somebody deliberately let in with the history that predates them.
+   *
+   * The rule everywhere else here is that a machine may only be handed an epoch
+   * its owner already holds somewhere - so a newcomer reads from the moment
+   * they arrive and no further back. That is still the default, and it is still
+   * what happens unless a person with `MANAGE_MEMBER` said otherwise while
+   * adding them.
+   *
+   * When they did, `server_members.historyShared` records it, and this is where
+   * that note is turned into an answer: those members' devices appear in the
+   * gap list for *every* epoch of every channel in the server, and the first
+   * machine that already holds them seals them across. The server hands over
+   * nothing itself - it holds no key - and the publish rules are unchanged: a
+   * caller may still only add to an epoch it holds.
+   *
+   * A direct message has no server and therefore no such note. It also needs
+   * none: both participants have been there since the first message.
+   */
+  private async historySharedWith(
+    channelId: string,
+    memberIds: string[],
+  ): Promise<Set<string>> {
+    if (memberIds.length === 0) return new Set();
+
+    const channel = await prisma.channel.findUnique({
+      where: { id: channelId },
+      select: { serverId: true },
+    });
+    if (!channel?.serverId) return new Set();
+
+    const shared = await prisma.serverMember.findMany({
+      where: { serverId: channel.serverId, userId: { in: memberIds }, historyShared: true },
+      select: { userId: true },
+    });
+    return new Set(shared.map((row) => row.userId));
   }
 
   /**
