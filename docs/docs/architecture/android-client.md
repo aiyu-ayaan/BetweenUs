@@ -450,6 +450,29 @@ The meter only moves during a call — Android does not reliably allow a second
 capture of one microphone, so the row says so rather than showing a bar that is
 dead for a reason nobody can see.
 
+## The sound of a shared screen
+
+A share used to be silent. It carries sound now, captured with
+`AudioPlaybackCaptureConfiguration` (Android 10 and later) off the **same**
+`MediaProjection` the frames come from — one consent, not two, because the
+system spends the token the first time it is used. The app's own audio is
+excluded from the capture, or the call feeds itself back into the share.
+
+That sound is **mixed into the microphone buffer** rather than sent on the
+call's screen-audio slot, and that is a constraint of the library rather than a
+choice: libwebrtc on Android has one audio device module per factory, it reads
+the microphone, and there is no public way to hand arbitrary audio to a second
+track. The far end plays what arrives on the microphone slot, so nothing on the
+desktop had to change.
+
+Two things follow. Muting yourself cannot disable the track, because the track
+is carrying two things — so mute closes the microphone at the device module
+instead, which is where it genuinely happened all along: the buffer arrives
+already zeroed, and the screen's sound is added to that silence. And the mixed
+signal goes through the call's echo canceller and noise suppressor, which were
+tuned for a voice in a room, so music through them is thinner than music
+through a path built for it.
+
 ## Push notifications
 
 Firebase Cloud Messaging, data-only payloads — the server can't read a

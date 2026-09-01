@@ -112,10 +112,13 @@ class VoiceEngine(private val context: Context) {
         SCREEN(MediaStreamTrack.MediaType.MEDIA_TYPE_VIDEO, "screen"),
 
         /**
-         * Never sent from a phone: Android's playback capture needs its own
-         * consent flow and is not wired up. The slot still exists, because
-         * dropping it would shift every m-line after it and the desktop counts
-         * on the order.
+         * Never sent from a phone, and see [ShareAudio] for why that is not the
+         * same as a phone sharing its screen in silence: libwebrtc's Android
+         * build has one audio device module and no way to feed a second audio
+         * track, so the sound of a shared screen is mixed into [MIC] instead.
+         *
+         * The slot still exists, because dropping it would shift every m-line
+         * after it and the desktop counts on the order.
          */
         SCREEN_AUDIO(MediaStreamTrack.MediaType.MEDIA_TYPE_AUDIO, "screenAudio"),
     }
@@ -455,6 +458,19 @@ class VoiceEngine(private val context: Context) {
     private val earlyPeers = mutableListOf<CallPeer>()
 
     private var audioTrack: AudioTrack? = null
+
+    /**
+     * The sound of a shared screen, mixed into the microphone capture. See
+     * [ShareAudio] for why it rides there rather than on its own slot.
+     */
+    private val shareAudio = ShareAudio()
+
+    /**
+     * The live projection while a share is running, so the playback capture can
+     * be started on the audio thread - at the first buffer, which is the first
+     * moment the rate and channel count it has to match are known.
+     */
+    private var shareProjection: android.media.projection.MediaProjection? = null
     private var videoCapturer: VideoCapturer? = null
     private var cameraTrack: VideoTrack? = null
     private var screenTrack: VideoTrack? = null
@@ -803,11 +819,29 @@ class VoiceEngine(private val context: Context) {
     private fun onCaptureBuffer(
         buffer: java.nio.ByteBuffer,
         @Suppress("UNUSED_PARAMETER") audioFormat: Int,
-        @Suppress("UNUSED_PARAMETER") channelCount: Int,
+        channelCount: Int,
         sampleRate: Int,
         bytesRead: Int,
         @Suppress("UNUSED_PARAMETER") captureTimeNs: Long,
     ): Long {
+        // The sound of a shared screen, added to this buffer before anything
+        // else looks at it - so the gate, the meter and the encoder all see the
+        // one signal that is actually going out. See [ShareAudio].
+        //
+        // Started here rather than where the share starts, because this is the
+        // first moment anything knows the rate and channel count the capture is
+        // running at, and the two streams have to match to be added at all.
+        val projection = shareProjection
+        if (projection != null && !shareAudio.running) {
+            if (!shareAudio.start(projection, sampleRate, channelCount)) {
+                // Too old a platform, or the record would not build. The share
+                // goes on without sound, which is what it did before this
+                // existed; retrying every 10ms for the length of it would not.
+                shareProjection = null
+            }
+        }
+        shareAudio.mix(buffer, bytesRead)
+
         val threshold = AudioPrefs.sensitivityDb
 
         val level = MicGate.amplitudeToDb(MicGate.rootMeanSquare(buffer, bytesRead))
@@ -842,7 +876,20 @@ class VoiceEngine(private val context: Context) {
         // alone: coming back from a phone call must not unmute somebody who
         // was muted before it rang.
         val muted = _muted.value || _interruption.value == Interruption.HOLD
-        audioTrack?.setEnabled(!muted)
+
+        // Disabling the track stops everything it carries, and while a screen
+        // is being shared it is carrying two things - see [ShareAudio]. Muting
+        // yourself must not also mute the video you are showing people, so the
+        // track stays enabled and the microphone is closed at the device module
+        // instead. That is where mute genuinely happens either way: the buffer
+        // arrives already zeroed, and the screen's sound is added to silence.
+        //
+        // Keyed on the share rather than on whether the playback capture
+        // actually came up, which is decided later and on another thread. When
+        // it did not, this leaves an enabled track carrying a zeroed buffer -
+        // which is silence, the same silence the disabled track would have
+        // been.
+        audioTrack?.setEnabled(!muted || _sharing.value)
         runCatching { audioDevice?.setMicrophoneMute(muted) }
     }
 
@@ -975,21 +1022,34 @@ class VoiceEngine(private val context: Context) {
         // else's stage without either of them meaning it.
         CallSocket.claimScreen()
 
+        val capturer = ScreenCapturerAndroid(
+            permission,
+            object : android.media.projection.MediaProjection.Callback() {
+                override fun onStop() {
+                    scope.launch { stopVideo() }
+                }
+            },
+        )
         val track = beginCapture(
-            ScreenCapturerAndroid(
-                permission,
-                object : android.media.projection.MediaProjection.Callback() {
-                    override fun onStop() {
-                        scope.launch { stopVideo() }
-                    }
-                },
-            ),
+            capturer,
             size.width,
             size.height,
             ShareQuality.SCREEN_FRAME_RATE,
         ) ?: return
         screenTrack = track
         _sharing.value = true
+
+        // The same projection the frames are coming from, not a second one:
+        // the system hands out one per consent, and asking again with the token
+        // already spent fails. It is only available after `startCapture`, which
+        // is what `beginCapture` has just done.
+        //
+        // Left for the audio thread to pick up. The playback capture has to be
+        // opened at whatever rate and channel count the device module is
+        // reading the microphone in, and the first capture buffer is the first
+        // thing that says what those are.
+        shareProjection = runCatching { capturer.mediaProjection }.getOrNull()
+
         publish(Slot.SCREEN, track)
         afterMediaChange()
     }
@@ -1027,6 +1087,11 @@ class VoiceEngine(private val context: Context) {
      */
     fun stopVideo(replaced: Boolean = false) {
         if (_sharing.value && !replaced) CallSocket.releaseScreen()
+        // Before the capturer is disposed: the playback capture is holding the
+        // projection that capturer owns, and reading from one that has been
+        // torn down underneath it is the crash rather than the silence.
+        shareProjection = null
+        shareAudio.stop()
         runCatching { videoCapturer?.stopCapture() }
         videoCapturer?.dispose()
         videoCapturer = null
@@ -1047,6 +1112,10 @@ class VoiceEngine(private val context: Context) {
     }
 
     private fun afterMediaChange() {
+        // Starting or stopping a share changes what the microphone track is
+        // carrying, and therefore what muting is allowed to do to it. See
+        // [applyMute].
+        applyMute()
         publishMediaState()
         if (inCall()) CallService.start(context, callLabel(), foregroundTypes(), _muted.value)
     }
