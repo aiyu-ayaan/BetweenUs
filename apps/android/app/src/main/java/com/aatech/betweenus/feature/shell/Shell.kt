@@ -149,7 +149,16 @@ fun Shell(user: PublicUser) {
      * branches below are the same shell with one part moved, not two shells.
      */
     val frame = rememberShellFrame()
-    val twoPane = frame.panes == ShellPanes.TWO
+    val isTwoPaneLayout = frame.panes == ShellPanes.TWO
+    var voiceFullscreen by rememberSaveable { mutableStateOf(false) }
+
+    LaunchedEffect(currentRoute) {
+        if (currentRoute != Route.Voice) {
+            voiceFullscreen = false
+        }
+    }
+
+    val twoPane = isTwoPaneLayout && !(currentRoute == Route.Voice && voiceFullscreen)
 
     /**
      * What the hamburger does, or null when there is nothing for it to do.
@@ -494,7 +503,13 @@ fun Shell(user: PublicUser) {
                             self = user,
                             joinOnArrival = joinOnArrival,
                             onJoined = { joinOnArrival = false },
-                            onBack = { navigation.popBackStack() },
+                            onBack = {
+                                voiceFullscreen = false
+                                navigation.popBackStack()
+                            },
+                            isTwoPane = isTwoPaneLayout,
+                            isFullscreen = voiceFullscreen,
+                            onToggleFullscreen = { voiceFullscreen = !voiceFullscreen },
                         )
                     }
                     composable(Route.Settings) {

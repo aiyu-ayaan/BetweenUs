@@ -16,12 +16,14 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -105,6 +107,9 @@ fun ShareStage(
     selfSpeaking: Boolean,
     cameraOn: Boolean,
     sharing: Boolean,
+    isTwoPane: Boolean = false,
+    isFullscreen: Boolean = false,
+    onToggleFullscreen: (() -> Unit)? = null,
     onToggleMute: () -> Unit,
     onToggleCamera: () -> Unit,
     onToggleShare: () -> Unit,
@@ -174,35 +179,53 @@ fun ShareStage(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(Color.Black.copy(alpha = 0.6f))
+                    .background(Color.Black.copy(alpha = 0.65f))
                     .systemBarsPadding()
-                    .padding(horizontal = 8.dp, vertical = 6.dp),
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                IconAction(BetweenUsIcons.ChevronLeft, "Back to the call", onClose)
+                IconAction(
+                    icon = BetweenUsIcons.ChevronLeft,
+                    contentDescription = "Back to the call",
+                    tint = Color(0xFFF1F5F9),
+                    onClick = onClose,
+                )
                 Column(Modifier.weight(1f).padding(start = 8.dp)) {
                     Text(
                         text = "$label is presenting",
                         style = MaterialTheme.typography.titleSmall,
-                        color = Slate100,
+                        color = Color(0xFFF8FAFC),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
                     Text(
                         text = orientation.label,
                         style = MaterialTheme.typography.bodySmall,
-                        color = Slate400,
+                        color = Color(0xFF94A3B8),
                     )
                 }
-                // Maximize rather than a rotate mark: the icon set is generated
-                // from the desktop's, and inventing one here would be a fourth
-                // set that nearly agrees. The line above says which mode it is
-                // in, which is the part that has to be unambiguous.
+
+                if (isTwoPane && onToggleFullscreen != null) {
+                    IconAction(
+                        icon = if (isFullscreen) BetweenUsIcons.Minimize else BetweenUsIcons.Maximize,
+                        contentDescription = if (isFullscreen) "Exit full screen" else "Full screen",
+                        tint = if (isFullscreen) Accent else Color(0xFFF1F5F9),
+                        onClick = onToggleFullscreen,
+                    )
+                    Spacer(Modifier.width(4.dp))
+                }
+
                 IconAction(
-                    icon = BetweenUsIcons.Maximize,
+                    icon = if (isTwoPane) BetweenUsIcons.RotateRight else BetweenUsIcons.Maximize,
                     contentDescription = "Change the orientation",
-                    tint = if (orientation == StageOrientation.FOLLOW_PHONE) Slate400 else Accent,
-                    onClick = { orientation = orientation.next() },
+                    tint = if (orientation == StageOrientation.FOLLOW_PHONE) Color(0xFF94A3B8) else Accent,
+                    onClick = {
+                        val next = orientation.next()
+                        orientation = next
+                        if (next == StageOrientation.LANDSCAPE && !isFullscreen) {
+                            onToggleFullscreen?.invoke()
+                        }
+                    },
                 )
             }
         }
@@ -216,63 +239,67 @@ fun ShareStage(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(Color.Black.copy(alpha = 0.6f))
+                    .background(Color.Black.copy(alpha = 0.65f))
                     .systemBarsPadding(),
             ) {
                 // The people, small, along the bottom: a share without the room
                 // it is being shown to is a video, not a meeting.
-                LazyRow(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    item {
-                        FilmstripTile(
-                            label = "$self (you)",
-                            id = selfId,
-                            eglContext = eglContext,
-                            track = null,
-                            muted = muted,
-                            speaking = selfSpeaking,
-                        )
-                    }
-                    items(participants, key = { it.peer.peerId }) { participant ->
-                        FilmstripTile(
-                            label = participant.peer.username,
-                            id = participant.peer.userId,
-                            eglContext = eglContext,
-                            track = participant.visibleCamera,
-                            muted = !participant.micEnabled,
-                            speaking = participant.speaking,
-                        )
+                val hasTilesToShow = participants.isNotEmpty() || cameraOn || selfSpeaking
+                if (hasTilesToShow) {
+                    LazyRow(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        item {
+                            FilmstripTile(
+                                label = "$self (you)",
+                                id = selfId,
+                                eglContext = eglContext,
+                                track = null,
+                                muted = muted,
+                                speaking = selfSpeaking,
+                            )
+                        }
+                        items(participants, key = { it.peer.peerId }) { participant ->
+                            FilmstripTile(
+                                label = participant.peer.username,
+                                id = participant.peer.userId,
+                                eglContext = eglContext,
+                                track = participant.visibleCamera,
+                                muted = !participant.micEnabled,
+                                speaking = participant.speaking,
+                            )
+                        }
                     }
                 }
 
                 Row(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),
                     horizontalArrangement = Arrangement.SpaceEvenly,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     IconAction(
                         icon = if (muted) BetweenUsIcons.MicOff else BetweenUsIcons.Mic,
                         contentDescription = if (muted) "Unmute" else "Mute",
-                        tint = if (muted) Danger else Slate100,
+                        tint = if (muted) Danger else Color(0xFFF1F5F9),
                         onClick = onToggleMute,
                     )
                     IconAction(
                         icon = if (cameraOn) BetweenUsIcons.Video else BetweenUsIcons.VideoOff,
                         contentDescription = if (cameraOn) "Turn the camera off" else "Turn the camera on",
-                        tint = if (cameraOn) Accent else Slate400,
+                        tint = if (cameraOn) Accent else Color(0xFF94A3B8),
                         onClick = onToggleCamera,
                     )
                     IconAction(
                         icon = BetweenUsIcons.ScreenShare,
                         contentDescription = if (sharing) "Stop sharing" else "Share the screen",
-                        tint = if (sharing) Accent else Slate400,
+                        tint = if (sharing) Accent else Color(0xFF94A3B8),
                         onClick = onToggleShare,
                     )
                     IconAction(
                         icon = BetweenUsIcons.Speaker,
                         contentDescription = "Where the call plays",
+                        tint = Color(0xFFF1F5F9),
                         onClick = onAudioDevices,
                     )
                     IconAction(
@@ -396,10 +423,11 @@ private fun FilmstripTile(
         modifier = Modifier
             .size(width = 96.dp, height = 64.dp)
             .clip(RoundedCornerShape(10.dp))
-            .background(Surface900)
-            .then(
-                if (speaking) Modifier.border(2.dp, StatusOnline, RoundedCornerShape(10.dp))
-                else Modifier,
+            .background(Color(0xFF15181F))
+            .border(
+                if (speaking) 2.dp else 1.dp,
+                if (speaking) StatusOnline else Color.White.copy(alpha = 0.15f),
+                RoundedCornerShape(10.dp),
             ),
         contentAlignment = Alignment.Center,
     ) {
@@ -413,7 +441,7 @@ private fun FilmstripTile(
                 // The strip sits over the share's own renderer.
                 overlay = true,
                 corner = 10.dp,
-                cornerColor = Surface900,
+                cornerColor = Color(0xFF15181F),
                 modifier = Modifier.fillMaxSize(),
             )
         } else {
@@ -421,15 +449,19 @@ private fun FilmstripTile(
         }
 
         Row(
-            modifier = Modifier.align(Alignment.BottomStart).padding(4.dp),
+            modifier = Modifier
+                .align(Alignment.BottomStart)
+                .padding(4.dp)
+                .background(Color.Black.copy(alpha = 0.65f), RoundedCornerShape(4.dp))
+                .padding(horizontal = 4.dp, vertical = 1.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(3.dp),
         ) {
-            if (muted) BetweenUsIcon(icon = BetweenUsIcons.MicOff, tint = Danger, size = 12.dp)
+            if (muted) BetweenUsIcon(icon = BetweenUsIcons.MicOff, tint = Danger, size = 10.dp)
             Text(
                 text = label,
                 style = MaterialTheme.typography.labelSmall,
-                color = Slate100,
+                color = Color(0xFFF1F5F9),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )

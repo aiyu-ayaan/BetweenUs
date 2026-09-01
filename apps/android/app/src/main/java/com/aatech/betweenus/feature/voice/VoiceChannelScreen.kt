@@ -67,6 +67,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.findRootCoordinates
 import androidx.compose.ui.layout.onPlaced
+import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
@@ -161,6 +162,9 @@ fun VoiceChannelScreen(
     joinOnArrival: Boolean = false,
     onJoined: () -> Unit = {},
     onBack: () -> Unit,
+    isTwoPane: Boolean = false,
+    isFullscreen: Boolean = false,
+    onToggleFullscreen: (() -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val engine = remember { VoiceEngine.of(context) }
@@ -328,6 +332,9 @@ fun VoiceChannelScreen(
             selfSpeaking = selfSpeaking,
             cameraOn = cameraOn,
             sharing = sharing,
+            isTwoPane = isTwoPane,
+            isFullscreen = isFullscreen,
+            onToggleFullscreen = onToggleFullscreen,
             onToggleMute = engine::toggleMute,
             onToggleCamera = { if (cameraOn) engine.stopVideo() else camera.request() },
             onToggleShare = {
@@ -363,7 +370,7 @@ fun VoiceChannelScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Ground)
+            .background(Color(0xFF0B0D12))
             // `systemBarsIgnoringVisibility`, not `systemBarsPadding`. A call
             // hides the bars, which takes the insets to zero - so the padding
             // vanished and the header slid up under a status bar that is still
@@ -573,6 +580,7 @@ fun VoiceChannelScreen(
                                 speaking = selfSpeaking,
                                 eglContext = engine.eglBase.eglBaseContext,
                                 muted = muted,
+                                chrome = chrome,
                                 onFlipCamera = {
                                     if (cameraOn) engine.switchCamera()
                                 },
@@ -627,13 +635,14 @@ fun VoiceChannelScreen(
                                 speaking = selfSpeaking,
                                 eglContext = engine.eglBase.eglBaseContext,
                                 muted = muted,
+                                chrome = chrome,
                                 onFlipCamera = {
                                     if (cameraOn) engine.switchCamera()
                                 },
                                 onPin = { pinned = SELF_PIN },
                                 modifier = Modifier
                                     .align(Alignment.BottomEnd)
-                                    .padding(bottom = 110.dp, end = 14.dp),
+                                    .padding(bottom = if (chrome) 84.dp else 16.dp, end = 14.dp),
                             )
                         }
 
@@ -734,6 +743,7 @@ fun VoiceChannelScreen(
                                         speaking = selfSpeaking,
                                         eglContext = engine.eglBase.eglBaseContext,
                                         muted = muted,
+                                        chrome = chrome,
                                         onFlipCamera = {
                                             if (cameraOn) engine.switchCamera()
                                         },
@@ -788,7 +798,7 @@ fun VoiceChannelScreen(
                         ),
                     contentAlignment = Alignment.Center,
                 ) {
-                    BetweenUsIcon(BetweenUsIcons.ChevronLeft, tint = Slate100, size = 20.dp)
+                    BetweenUsIcon(BetweenUsIcons.ChevronLeft, tint = Color(0xFFF1F5F9), size = 20.dp)
                 }
 
                 Spacer(Modifier.width(12.dp))
@@ -798,7 +808,7 @@ fun VoiceChannelScreen(
                         text = channel?.name ?: "Voice Call",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold,
-                        color = Slate50,
+                        color = Color(0xFFF8FAFC),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
@@ -819,9 +829,33 @@ fun VoiceChannelScreen(
                         color = when {
                             state is VoiceEngine.CallState.Failed -> Danger
                             state is VoiceEngine.CallState.Live && !signalling -> Amber200
-                            else -> Slate400
+                            else -> Color(0xFF94A3B8)
                         },
                     )
+                }
+
+                if (isTwoPane && onToggleFullscreen != null) {
+                    Box(
+                        modifier = Modifier
+                            .size(38.dp)
+                            .clip(CircleShape)
+                            .background(Color.Black.copy(alpha = 0.45f))
+                            .border(1.dp, Color.White.copy(alpha = 0.15f), CircleShape)
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null,
+                                onClick = onToggleFullscreen,
+                            ),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        BetweenUsIcon(
+                            icon = if (isFullscreen) BetweenUsIcons.Minimize else BetweenUsIcons.Maximize,
+                            tint = if (isFullscreen) Accent else Color(0xFFF1F5F9),
+                            size = 18.dp,
+                            contentDescription = if (isFullscreen) "Exit full screen" else "Full screen",
+                        )
+                    }
+                    Spacer(Modifier.width(8.dp))
                 }
 
                 if (isInCall) {
@@ -838,7 +872,7 @@ fun VoiceChannelScreen(
                             ),
                         contentAlignment = Alignment.Center,
                     ) {
-                        BetweenUsIcon(BetweenUsIcons.Speaker, tint = Slate100, size = 18.dp)
+                        BetweenUsIcon(BetweenUsIcons.Speaker, tint = Color(0xFFF1F5F9), size = 18.dp)
                     }
                 }
             }
@@ -1084,7 +1118,7 @@ private val PIP_CORNER = 18.dp
  */
 private val PIP_INSET_SIDE = 14.dp
 private val PIP_INSET_TOP = 68.dp
-private val PIP_INSET_BOTTOM = 110.dp
+private val PIP_INSET_BOTTOM = 84.dp
 
 /**
  * Where the top-left of the PiP tile is allowed to be, in stage pixels.
@@ -1126,26 +1160,13 @@ private fun FloatingPipTile(
     onFlipCamera: () -> Unit,
     modifier: Modifier = Modifier,
     speaking: Boolean = false,
+    chrome: Boolean = true,
     /** Tapped to put your own camera on the stage. See `CallTile.onPin`. */
     onPin: (() -> Unit)? = null,
 ) {
-    // Dragged anywhere on the stage and let go, and it settles into whichever
-    // corner it was nearest - the way WhatsApp does it, and the reason it is
-    // never left half over somebody's face.
-    //
-    // The corners are worked out from where the tile was actually placed
-    // rather than from the screen, because the callers do not agree on where
-    // that is: most anchor it top-end, the four-person layout anchors it
-    // bottom-end. The old arithmetic assumed the first and clamped the second
-    // into dragging itself off the bottom of the screen.
     val density = LocalDensity.current
     val scope = rememberCoroutineScope()
     val drag = remember { Animatable(Offset.Zero, Offset.VectorConverter) }
-    // Where the layout put us, and how big the screen is, both in root
-    // coordinates. The root rather than the parent because the parent of this
-    // node is the caller's own padding, which is the size of the tile plus a
-    // margin and says nothing about the room there is to move in. Zero until
-    // the first placement, which is why the drag does nothing until then.
     var anchor by remember { mutableStateOf(Offset.Zero) }
     var stage by remember { mutableStateOf(Size.Zero) }
 
@@ -1155,8 +1176,8 @@ private fun FloatingPipTile(
             stage = stage,
             tile = tile,
             side = PIP_INSET_SIDE.toPx(),
-            top = PIP_INSET_TOP.toPx(),
-            bottom = PIP_INSET_BOTTOM.toPx(),
+            top = if (chrome) PIP_INSET_TOP.toPx() else 16.dp.toPx(),
+            bottom = if (chrome) PIP_INSET_BOTTOM.toPx() else 16.dp.toPx(),
         )
     }
     val placed = stage.width > 0f && stage.height > 0f
@@ -1164,11 +1185,17 @@ private fun FloatingPipTile(
     Box(
         modifier = modifier
             .onPlaced { coordinates ->
-                anchor = coordinates.localToRoot(Offset.Zero)
-                stage = coordinates.findRootCoordinates().size.toSize()
+                val parent = coordinates.parentLayoutCoordinates
+                if (parent != null) {
+                    anchor = coordinates.positionInParent()
+                    stage = parent.size.toSize()
+                } else {
+                    anchor = coordinates.localToRoot(Offset.Zero)
+                    stage = coordinates.findRootCoordinates().size.toSize()
+                }
             }
             .offset { IntOffset(drag.value.x.roundToInt(), drag.value.y.roundToInt()) }
-            .pointerInput(placed) {
+            .pointerInput(placed, bounds) {
                 if (!placed) return@pointerInput
                 detectDragGestures(
                     onDrag = { change, moved ->
@@ -1196,9 +1223,7 @@ private fun FloatingPipTile(
             .height(PIP_HEIGHT)
             .shadow(14.dp, RoundedCornerShape(PIP_CORNER))
             .clip(RoundedCornerShape(PIP_CORNER))
-            .background(Surface900)
-            // The same green every other tile uses, so "that one is talking"
-            // reads the same whoever it is.
+            .background(Color(0xFF15181F))
             .border(
                 if (speaking) 2.5.dp else 1.5.dp,
                 if (speaking) StatusOnline else Color.White.copy(alpha = 0.22f),
@@ -1206,9 +1231,6 @@ private fun FloatingPipTile(
             ),
     ) {
         if (track != null) {
-            // A TextureView rather than the surface renderer: this tile floats
-            // over whoever else is in the call, so its corners have to show
-            // them rather than a block of its own background. See ClippedVideo.
             ClippedVideo(
                 track = track,
                 eglContext = eglContext,
@@ -1221,12 +1243,12 @@ private fun FloatingPipTile(
             }
         }
 
-        // Bottom label pill
+        // Bottom-left: name + muted mic pill — same style as CallTile.
         Row(
             modifier = Modifier
                 .align(Alignment.BottomStart)
                 .padding(6.dp)
-                .background(Color.Black.copy(alpha = 0.65f), RoundedCornerShape(8.dp))
+                .background(Color.Black.copy(alpha = 0.75f), RoundedCornerShape(8.dp))
                 .padding(horizontal = 6.dp, vertical = 2.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(4.dp),
@@ -1234,7 +1256,7 @@ private fun FloatingPipTile(
             Text(
                 text = "You",
                 style = MaterialTheme.typography.labelSmall,
-                color = Slate100,
+                color = Color(0xFFF1F5F9),
                 fontSize = 10.sp,
                 fontWeight = FontWeight.Medium,
             )
@@ -1243,16 +1265,20 @@ private fun FloatingPipTile(
             }
         }
 
+        // Bottom-right: pin circle button — mirrors CallTile's BottomEnd pin
+        // so the two controls sit at the same height on opposite sides.
         if (onPin != null) {
             PinButton(
                 pinned = false,
                 compact = true,
                 onClick = onPin,
-                modifier = Modifier.align(Alignment.TopStart),
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(6.dp),
             )
         }
 
-        // Quick flip button if video is active
+        // Top-right: flip camera button (only while video is active).
         if (track != null) {
             Box(
                 modifier = Modifier
@@ -1260,7 +1286,7 @@ private fun FloatingPipTile(
                     .padding(6.dp)
                     .size(24.dp)
                     .clip(CircleShape)
-                    .background(Color.Black.copy(alpha = 0.55f))
+                    .background(Color.Black.copy(alpha = 0.65f))
                     .clickable(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null,
@@ -1268,7 +1294,7 @@ private fun FloatingPipTile(
                     ),
                 contentAlignment = Alignment.Center,
             ) {
-                BetweenUsIcon(BetweenUsIcons.RotateRight, tint = Slate100, size = 12.dp)
+                BetweenUsIcon(BetweenUsIcons.RotateRight, tint = Color(0xFFF1F5F9), size = 12.dp)
             }
         }
     }
@@ -1381,7 +1407,7 @@ private fun CallTile(
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(if (isCompact) 12.dp else 18.dp))
-            .background(Surface900)
+            .background(Color(0xFF15181F))
             .then(
                 if (speaking) {
                     Modifier.border(
@@ -1392,7 +1418,7 @@ private fun CallTile(
                 } else {
                     Modifier.border(
                         1.dp,
-                        Edge,
+                        Color.White.copy(alpha = 0.15f),
                         RoundedCornerShape(if (isCompact) 12.dp else 18.dp),
                     )
                 },
@@ -1407,7 +1433,7 @@ private fun CallTile(
                 overlay = isLocal,
                 mirror = isLocal,
                 corner = if (isCompact) 12.dp else 18.dp,
-                cornerColor = Surface900,
+                cornerColor = Color(0xFF15181F),
                 modifier = Modifier.fillMaxSize(),
             )
         } else {
@@ -1427,7 +1453,7 @@ private fun CallTile(
                 .padding(if (isCompact) 4.dp else 10.dp)
                 .padding(bottom = labelBottomPadding)
                 .background(
-                    Color.Black.copy(alpha = 0.65f),
+                    Color.Black.copy(alpha = 0.75f),
                     RoundedCornerShape(if (isCompact) 6.dp else 8.dp),
                 )
                 .padding(
@@ -1440,7 +1466,7 @@ private fun CallTile(
             Text(
                 text = if (status != null) "$label · $status" else label,
                 style = if (isCompact) MaterialTheme.typography.labelSmall else MaterialTheme.typography.bodySmall,
-                color = if (connected) Slate100 else Slate500,
+                color = if (connected) Color(0xFFF1F5F9) else Color(0xFF94A3B8),
                 fontSize = if (isCompact) 10.sp else 12.sp,
                 fontWeight = FontWeight.Medium,
                 maxLines = 1,
@@ -1460,7 +1486,7 @@ private fun CallTile(
                 Text(
                     text = "connecting…",
                     style = MaterialTheme.typography.labelSmall,
-                    color = Slate500,
+                    color = Color(0xFF94A3B8),
                     fontSize = if (isCompact) 9.sp else 11.sp,
                 )
             }
@@ -1481,12 +1507,23 @@ private fun CallTile(
         // is on the tile rather than in a menu somewhere else. There is no
         // hover on a phone, so the button is always there rather than always
         // hidden.
+        //
+        // Compact (filmstrip) tiles keep the pin at the top corner so it is
+        // easy to hit on a small surface; the full-stage tile moves it to
+        // the bottom-right so it sits at the same level as the name pill.
         if (onPin != null) {
             PinButton(
                 pinned = pinned,
                 compact = isCompact,
                 onClick = onPin,
-                modifier = Modifier.align(Alignment.TopStart),
+                modifier = if (isCompact) {
+                    Modifier.align(Alignment.TopStart)
+                } else {
+                    Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(10.dp)
+                        .padding(bottom = labelBottomPadding)
+                },
             )
         }
     }
@@ -1511,7 +1548,7 @@ private fun PinButton(
             .padding(if (compact) 4.dp else 8.dp)
             .size(size)
             .clip(CircleShape)
-            .background(if (pinned) Accent else Color.Black.copy(alpha = 0.55f))
+            .background(if (pinned) Accent else Color.Black.copy(alpha = 0.65f))
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
@@ -1521,7 +1558,7 @@ private fun PinButton(
     ) {
         BetweenUsIcon(
             icon = BetweenUsIcons.Pin,
-            tint = if (pinned) Neutral99 else Slate100,
+            tint = if (pinned) Neutral99 else Color(0xFFF1F5F9),
             size = if (compact) 11.dp else 15.dp,
         )
     }
