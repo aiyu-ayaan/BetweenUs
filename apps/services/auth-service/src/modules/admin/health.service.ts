@@ -15,6 +15,7 @@
 import { Injectable } from '@nestjs/common';
 import { cpus, loadavg, platform } from 'node:os';
 import { readdir, stat, statfs } from 'node:fs/promises';
+import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import Redis from 'ioredis';
 import { envOr } from '@betweenus/config';
@@ -37,6 +38,22 @@ import { publicBaseUrl } from './oauth-providers';
 
 /** How long any single probe gets before it is called `down`. */
 const PROBE_TIMEOUT_MS = 2_500;
+
+/**
+ * Version from package.json, read once at startup. Used as the last fallback
+ * for `appVersion` when neither `APP_VERSION` nor `npm_package_version` is set
+ * (which happens when the process is started directly with `node dist/main.js`).
+ */
+const PACKAGE_VERSION = (() => {
+  try {
+    const pkg = JSON.parse(
+      readFileSync(resolve(__dirname, '../../../package.json'), 'utf8'),
+    ) as { version?: string };
+    return pkg.version ?? null;
+  } catch {
+    return null;
+  }
+})();
 
 /** Slower than this and the component is answering, but not well. */
 const SLOW_MS = 750;
@@ -378,8 +395,8 @@ export class AdminHealthService {
       nodeVersion: process.version,
       platform: platform(),
       // The release tag when a pipeline set one, the package version otherwise.
-      // Neither is guaranteed in a hand-rolled deployment, hence nullable.
-      appVersion: process.env.APP_VERSION ?? process.env.npm_package_version ?? null,
+      // PACKAGE_VERSION is the last resort for processes not started via npm.
+      appVersion: process.env.APP_VERSION ?? process.env.npm_package_version ?? PACKAGE_VERSION,
     };
   }
 
