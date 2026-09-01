@@ -45,6 +45,7 @@ import com.aatech.betweenus.core.crypto.IdentityStatus
 import com.aatech.betweenus.core.data.BetweenUsApi
 import com.aatech.betweenus.core.data.ChannelType
 import com.aatech.betweenus.core.data.Connectivity
+import com.aatech.betweenus.core.data.ServerClock
 import com.aatech.betweenus.core.data.PublicUser
 import com.aatech.betweenus.core.store.LastPlace
 import com.aatech.betweenus.core.store.Workspace
@@ -442,12 +443,6 @@ fun Shell(user: PublicUser) {
                 )
             }
 
-            val connectivityState by Connectivity.state.collectAsState()
-            val bannerVisible = connectivityState != Connectivity.State.ONLINE
-
-            // Above everything rather than over it: a banner drawn on top of
-            // the screen covers the one control - the menu button - somebody
-            // reaching for it would want.
             /**
              * A call somebody has walked away from.
              *
@@ -461,6 +456,33 @@ fun Shell(user: PublicUser) {
                 navigation.navigate(Route.Voice) { launchSingleTop = true }
             }
 
+            /**
+             * Whether anything above the screen has already stood clear of the
+             * status bar.
+             *
+             * Every strip in the column below draws its own colour behind the
+             * status bar and then pads itself clear of it, which is what makes
+             * one of them look like part of the system bar rather than a card
+             * floating under it. The screen underneath does exactly the same,
+             * so unless it is told the inset has been spent it stands clear of
+             * a status bar that is no longer above it - and the gap is a
+             * status bar's height of nothing between the strip and the screen.
+             *
+             * This used to name the connection banner and only it. The call bar
+             * was the second strip to be added and the second to leave that gap
+             * behind; the clock banner had been leaving it since it was
+             * written. So it asks about all three now, and a fourth has one
+             * place to be added rather than two.
+             */
+            val connectivityState by Connectivity.state.collectAsState()
+            val clockOffset by ServerClock.offsetMs.collectAsState()
+            val topStripVisible = connectivityState != Connectivity.State.ONLINE ||
+                ServerClock.isWrong(clockOffset) ||
+                callDock != null
+
+            // Above everything rather than over it: a banner drawn on top of
+            // the screen covers the one control - the menu button - somebody
+            // reaching for it would want.
             Column(Modifier.fillMaxSize()) {
                 ConnectionBanner()
                 ClockBanner()
@@ -491,7 +513,7 @@ fun Shell(user: PublicUser) {
                     modifier = Modifier
                         .weight(1f)
                         .then(
-                            if (bannerVisible) Modifier.consumeWindowInsets(WindowInsets.statusBars)
+                            if (topStripVisible) Modifier.consumeWindowInsets(WindowInsets.statusBars)
                             else Modifier
                         ),
                     enterTransition = {

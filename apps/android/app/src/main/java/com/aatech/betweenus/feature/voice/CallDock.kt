@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -40,6 +41,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import com.aatech.betweenus.core.store.Workspace
@@ -184,9 +186,13 @@ fun CallBar(
                 .background(scheme.primaryContainer)
                 .clickable(onClick = onReturn)
                 .statusBarsPadding()
-                .padding(start = 16.dp, end = 4.dp, top = 6.dp, bottom = 6.dp),
+                // No vertical padding of its own: the buttons are the tallest
+                // thing in the row and they carry their own touch target, so
+                // padding above and below them is a bar half again as tall as
+                // it needs to be for nothing anybody can press.
+                .padding(start = 16.dp, end = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Box(
                 modifier = Modifier
@@ -194,18 +200,26 @@ fun CallBar(
                     .clip(CircleShape)
                     .background(if (entry.connecting) scheme.outline else scheme.primary),
             )
+            // The name gives way and the clock does not. A long channel name
+            // ellipses; a duration that ellipsed would be a number with the
+            // last digit missing, which is worse than no number at all.
             Text(
                 text = entry.label,
                 style = MaterialTheme.typography.labelLarge,
                 color = scheme.onPrimaryContainer,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f, fill = false),
             )
             Text(
                 text = if (entry.connecting) "Connecting…" else rememberElapsed(entry.liveSince),
                 style = MaterialTheme.typography.labelLarge,
                 color = scheme.onPrimaryContainer.copy(alpha = 0.75f),
-                modifier = Modifier.weight(1f),
+                maxLines = 1,
             )
+
+            // Everything after this sits against the right edge.
+            Spacer(Modifier.weight(1f))
 
             // The two things worth doing without going back to the call. Mute
             // is the one people reach for in a hurry - somebody walked into the
@@ -215,6 +229,7 @@ fun CallBar(
                 icon = if (entry.muted) BetweenUsIcons.MicOff else BetweenUsIcons.Mic,
                 contentDescription = if (entry.muted) "Unmute" else "Mute",
                 onClick = { VoiceEngine.of(context).toggleMute() },
+                compact = true,
             )
             // The phone glyph in the error colour: there is no separate
             // hung-up phone in the set, and a red one already reads as the end
@@ -224,6 +239,7 @@ fun CallBar(
                 contentDescription = "Leave the call",
                 onClick = { VoiceEngine.of(context).leave() },
                 tint = scheme.error,
+                compact = true,
             )
         }
     }
