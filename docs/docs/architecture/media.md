@@ -273,21 +273,43 @@ Two mechanisms, and only one of them is negotiated.
 | **Per-sender parameters** | `PeerLink.tune` sets `maxBitrate`, `maxFramerate` and `degradationPreference` through `RTCRtpSender.setParameters`. No renegotiation, so it is applied the instant a share starts and is the only place that sees the share's own profile — the ceiling computed by `bitrateFor` from the pixels actually being captured. |
 | **SDP hints** | `patchVideoBandwidth` writes `b=AS`, `b=TIAS` and `x-google-max-bitrate` / `x-google-start-bitrate` into every video m-line at negotiation time — which is call-join time, long before anybody shares. It exists only so congestion control does not begin at WebRTC's ~300 kbps default and crawl. |
 
+Both clients have both. `ShareQuality.kt` holds the phone's ceilings,
+`SdpQuality.patch` its hints, and `PeerLink.tune` in `VoiceEngine.kt` its
+per-sender parameters — the same numbers, because the two ends are talking to
+each other.
+
 **Every number in the SDP is a ceiling or a starting point. None of them is a
 floor.** `x-google-min-bitrate` used to be one, set to a quarter of the ceiling
-— 12.5 Mbps against the default this is called with when no share is running.
-An encoder told to meet a bitrate floor its link cannot afford pays for it in
-pixels, because 640×480 at 12.5 Mbps is reachable and 1920×1080 is not. Paired
-with a start bitrate of 60% of that same ceiling — 30 Mbps thrown at a path in
-its first second, answered with loss, collapsing the estimate below where it
-would have climbed unaided — that is a share which knocks over its own
-bandwidth estimate and then sits at 480p on a connection with room for 1080p.
-The start is now a fixed, survivable probe.
+— 12.5 Mbps against the desktop's default, 5 Mbps against the phone's, both of
+them the value the patch is called with when no share is running. An encoder
+told to meet a bitrate floor its link cannot afford pays for it in pixels,
+because 640×480 at 5 Mbps is reachable and 1920×1080 is not. Paired with a
+start bitrate of 60% of that same ceiling — thrown at a path in its first
+second, answered with loss, collapsing the estimate below where it would have
+climbed unaided — that is a share which knocks over its own bandwidth estimate
+and then sits at 480p on a connection with room for 1080p. The start is now a
+fixed, survivable probe on both clients.
+
+Fixing it on one client was never enough. **These hints configure whichever
+encoder reads them**, and the ones written into an answer are read by the far
+end — so a phone that still asked for a floor was a phone telling a desktop to
+shrink the screen it was sending, and the symptom followed the direction of the
+share rather than the client that had the bug.
 
 The hints are appended only to payload types that have an encoder behind them.
 `rtx`, `red` and `ulpfec` share the video clock rate but do not; `rtx`'s format
 line is `apt=` and nothing else, and appending to it is how an entire patched
-description gets refused — losing the hints on the codecs that did want them.
+description gets refused — losing the hints on the codecs that did want them,
+and on Android the raised H.264 level with them.
+
+**Which H.264.** Asking for H.264 gets hardware encoding, which is what makes 60
+fps affordable; it does not say *which* H.264, and the profile a device offers
+first is Constrained Baseline — no CABAC, no 8×8 transform, and text visibly
+softer at the same bitrate. Both clients rank the offer before handing it to
+`setCodecPreferences`: `sortPreferredVideoCodecs` on the desktop and
+`ShareQuality.codecRank` on Android, both preferring High profile and
+`packetization-mode=1`. A rank and not a filter — a device with no High profile
+encoder gets whatever it does have rather than a failed share.
 
 **Why a share went soft.** `qualityLimitationReason` on the outbound stream is
 the one reading that separates *the link cannot carry it* from *this machine
