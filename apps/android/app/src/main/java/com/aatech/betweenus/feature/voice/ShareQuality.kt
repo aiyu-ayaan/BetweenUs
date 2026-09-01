@@ -85,6 +85,36 @@ object ShareQuality {
 
     fun cameraBitrate(): Int = CAMERA_BITRATE
 
+    /**
+     * What one video codec is worth on a screen. Higher sorts first.
+     *
+     * H.264 is the one codec with a hardware encoder on essentially every
+     * phone, and hardware is what makes 60 fps possible without the battery
+     * paying for it. That much was already asked for - but "H.264" is several
+     * codecs wearing one name, and the one a phone offers first is Constrained
+     * Baseline: no CABAC, no 8x8 transform, and text that is visibly softer at
+     * the same bitrate. High profile is the one worth having, and a preference
+     * nobody states is a preference nobody gets. The desktop's
+     * `sortPreferredVideoCodecs` makes the same two distinctions.
+     *
+     * `profile-level-id` is three bytes and the first is the profile: `64` is
+     * High, whatever constraint flags and level follow it. Read as the profile
+     * rather than matched against `6400` because `640c1f` is High too.
+     *
+     * `packetization-mode=1` allows a NAL unit to span packets. Mode 0 caps
+     * every one of them at the MTU, which at these bitrates is the encoder
+     * fragmenting slices for the network's benefit rather than the picture's.
+     *
+     * A rank, not a filter: everything stays offered, so a phone with no High
+     * profile encoder gets whatever it does have rather than a failed share.
+     */
+    fun codecRank(name: String, parameters: Map<String, String>): Int {
+        if (!name.equals("H264", ignoreCase = true)) return 0
+        val high = if (parameters["profile-level-id"]?.startsWith("64", ignoreCase = true) == true) 2 else 0
+        val whole = if (parameters["packetization-mode"] == "1") 1 else 0
+        return 4 + high + whole
+    }
+
     private fun even(value: Int): Int = max(2, value - (value % 2))
 
     @Suppress("DEPRECATION")

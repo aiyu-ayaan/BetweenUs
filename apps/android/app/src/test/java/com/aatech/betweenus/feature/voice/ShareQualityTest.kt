@@ -60,4 +60,46 @@ class ShareQualityTest {
         val huge = ShareQuality.screenBitrate(ShareQuality.Size(7680, 4320))
         assertEquals(50_000_000, huge)
     }
+
+    // --- Which codec, and which H.264 ---------------------------------------
+
+    @Test
+    fun `H264 outranks everything else`() {
+        assertTrue(
+            ShareQuality.codecRank("H264", emptyMap()) >
+                ShareQuality.codecRank("VP9", mapOf("profile-level-id" to "64001f")),
+        )
+    }
+
+    @Test
+    fun `high profile outranks the baseline a phone offers first`() {
+        val baseline = ShareQuality.codecRank(
+            "H264",
+            mapOf("profile-level-id" to "42e01f", "packetization-mode" to "1"),
+        )
+        val high = ShareQuality.codecRank(
+            "H264",
+            mapOf("profile-level-id" to "64001f", "packetization-mode" to "1"),
+        )
+        assertTrue("baseline $baseline should not beat high $high", high > baseline)
+    }
+
+    @Test
+    fun `high profile is read from the profile byte, not the whole prefix`() {
+        // 640c1f is High with constraint_set3 set. Matching on "6400" alone
+        // would rank it as baseline and hand a phone the softer encoder.
+        val constrained = ShareQuality.codecRank("H264", mapOf("profile-level-id" to "640c1f"))
+        val plain = ShareQuality.codecRank("H264", mapOf("profile-level-id" to "64001f"))
+        assertEquals(plain, constrained)
+    }
+
+    @Test
+    fun `a whole NAL unit beats one chopped to the MTU`() {
+        val mode1 = ShareQuality.codecRank(
+            "H264",
+            mapOf("profile-level-id" to "42e01f", "packetization-mode" to "1"),
+        )
+        val mode0 = ShareQuality.codecRank("H264", mapOf("profile-level-id" to "42e01f"))
+        assertTrue(mode1 > mode0)
+    }
 }

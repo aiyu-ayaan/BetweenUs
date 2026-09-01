@@ -73,11 +73,55 @@ class SdpQualityTest {
         val patched = SdpQuality.patch(offer, 20_000_000)
 
         // H264 already had an fmtp line, so the hints are appended to it.
-        assertTrue(patched.contains("profile-level-id=420034;x-google-min-bitrate=5000"))
+        assertTrue(patched.contains("profile-level-id=420034;x-google-max-bitrate=20000"))
         // VP8 had none, so one is written.
-        assertTrue(patched.contains("a=fmtp:98 x-google-min-bitrate=5000"))
-        assertTrue(patched.contains("x-google-start-bitrate=12000"))
-        assertTrue(patched.contains("x-google-max-bitrate=20000"))
+        assertTrue(patched.contains("a=fmtp:98 x-google-max-bitrate=20000"))
+        assertTrue(patched.contains("x-google-start-bitrate=2500"))
+    }
+
+    @Test
+    fun `nothing here is a floor`() {
+        // A minimum the link cannot afford is paid for in pixels: 640x480 at 5
+        // Mbps is reachable and 1920x1080 is not, so an encoder made to meet
+        // the floor sends 480p on a connection with room for 1080p.
+        assertFalse(SdpQuality.patch(offer, 20_000_000).contains("x-google-min-bitrate"))
+    }
+
+    @Test
+    fun `the start bitrate is a probe a real link can absorb`() {
+        // Not a fraction of the ceiling. 12 Mbps thrown at a phone's link in
+        // its first second is answered with loss, which collapses the estimate
+        // below where it would have climbed unaided.
+        val start = Regex("x-google-start-bitrate=(\\d+)")
+            .find(SdpQuality.patch(offer, 50_000_000))
+            ?.groupValues?.get(1)?.toInt()
+        assertEquals(2500, start)
+
+        // And a ceiling under the probe is the ceiling, not the probe.
+        assertTrue(SdpQuality.patch(offer, 1_000_000).contains("x-google-start-bitrate=1000"))
+    }
+
+    @Test
+    fun `retransmission is not a picture`() {
+        // `apt=96` is the whole of an rtx format line and there is no encoder
+        // behind it. Appending to it is how a patched description gets refused
+        // in one piece, losing the hints on the codecs that did want them - and
+        // the raised H264 level with them.
+        val withRtx = SdpQuality.patch(
+            listOf(
+                "v=0",
+                "m=video 9 UDP/TLS/RTP/SAVPF 96 97",
+                "c=IN IP4 0.0.0.0",
+                "a=rtpmap:96 H264/90000",
+                "a=fmtp:96 packetization-mode=1",
+                "a=rtpmap:97 rtx/90000",
+                "a=fmtp:97 apt=96",
+            ).joinToString("\r\n") + "\r\n",
+            20_000_000,
+        )
+
+        assertTrue("rtx was hinted at: $withRtx", withRtx.contains("a=fmtp:97 apt=96\r\n"))
+        assertTrue(withRtx.contains("a=fmtp:96 packetization-mode=1;x-google-max-bitrate=20000"))
     }
 
     @Test

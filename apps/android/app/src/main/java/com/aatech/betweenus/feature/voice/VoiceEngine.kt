@@ -1691,6 +1691,11 @@ class VoiceEngine(private val context: Context) {
          * encoder on essentially every phone - and hardware is what makes a
          * high frame rate possible without the battery paying for it. Ignored
          * where it is unavailable; the call works either way.
+         *
+         * Which H.264 is the half this used to leave to the platform, and the
+         * platform's answer is Constrained Baseline. [ShareQuality.codecRank]
+         * has what that costs. Sorting is stable, so codecs of equal rank keep
+         * the order the encoder factory put them in.
          */
         private fun preferScreenCodec() {
             val transceiver = transceivers[Slot.SCREEN] ?: return
@@ -1698,7 +1703,9 @@ class VoiceEngine(private val context: Context) {
                 val codecs = factory().getRtpSenderCapabilities(
                     MediaStreamTrack.MediaType.MEDIA_TYPE_VIDEO,
                 ).codecs
-                val sorted = codecs.sortedByDescending { it.name.equals("H264", ignoreCase = true) }
+                val sorted = codecs.sortedByDescending {
+                    ShareQuality.codecRank(it.name, it.parameters.orEmpty())
+                }
                 transceiver.setCodecPreferences(sorted)
             }
         }

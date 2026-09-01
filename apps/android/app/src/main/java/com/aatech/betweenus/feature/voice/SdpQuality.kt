@@ -1,6 +1,7 @@
 package com.aatech.betweenus.feature.voice
 
 import kotlin.math.max
+import kotlin.math.min
 import kotlin.math.roundToInt
 
 /**
@@ -25,7 +26,12 @@ import kotlin.math.roundToInt
  *
  * **The start bitrate.** Congestion control begins around 300 kbps and ramps
  * slowly, which on a direct peer-to-peer link is caution paid for by every
- * viewer in the first ten seconds. `x-google-start-bitrate` skips the ramp.
+ * viewer in the first ten seconds. `x-google-start-bitrate` skips the ramp -
+ * with a probe the path can absorb rather than a fraction of the ceiling. See
+ * [START_KBPS].
+ *
+ * Every number written here is a ceiling or a starting point, and none of them
+ * is a floor. [bitrateHints] has the one that used to be, and what it cost.
  *
  * The same three the desktop patches into its own descriptions - see
  * `patchVideoBandwidth` in `apps/desktop/src/services/share-quality.ts`. The
@@ -44,11 +50,23 @@ object SdpQuality {
      */
     private const val TARGET_LEVEL = 0x34
 
+    /**
+     * Where congestion control begins, in kbps.
+     *
+     * A fast start, not a guess at the link: the estimator has to survive its
+     * first probe, and a probe the path cannot absorb is answered with loss,
+     * which collapses the estimate far below where it would have climbed on its
+     * own. The same number the desktop probes with.
+     */
+    private const val START_KBPS = 2_500
+
+    /** Video payload types with no encoder behind them. See [bitrateHints]. */
+    private val NOT_A_PICTURE = setOf("rtx", "red", "ulpfec", "flexfec-03")
+
     /** Applies all three to every video section of an SDP. */
     fun patch(sdp: String, maxBitrateBps: Int): String {
         val maxKbps = max(1, (maxBitrateBps / 1000.0).roundToInt())
-        val minKbps = max(1000, (maxKbps * 0.25).roundToInt())
-        val startKbps = max(minKbps, (maxKbps * 0.6).roundToInt())
+        val startKbps = min(maxKbps, START_KBPS)
 
         // Split before each m= line, so a section is one media stream and
         // whatever preceded the first one is left alone.
@@ -58,7 +76,7 @@ object SdpQuality {
             } else {
                 section
                     .let { bandwidth(it, maxKbps, maxBitrateBps) }
-                    .let { bitrateHints(it, minKbps, maxKbps, startKbps) }
+                    .let { bitrateHints(it, maxKbps, startKbps) }
                     .let { raiseH264Level(it) }
             }
         }
@@ -150,15 +168,38 @@ object SdpQuality {
         }
     }
 
-    /** Google's non-standard but universally honoured bitrate hints. */
-    internal fun bitrateHints(section: String, minKbps: Int, maxKbps: Int, startKbps: Int): String {
-        val hints = "x-google-min-bitrate=$minKbps;" +
-            "x-google-max-bitrate=$maxKbps;" +
-            "x-google-start-bitrate=$startKbps"
+    /**
+     * Google's non-standard but universally honoured bitrate hints.
+     *
+     * A ceiling and a starting point, and never a floor. `x-google-min-bitrate`
+     * used to be one - a quarter of the ceiling, so 5 Mbps against the 20 this
+     * is called with at negotiation time, which is call-join time, long before
+     * anybody shares. An encoder told to meet a bitrate floor its link cannot
+     * afford pays for it in pixels, because 640x480 at 5 Mbps is reachable and
+     * 1920x1080 is not. Paired with a start of 60% of that same ceiling - 12
+     * Mbps thrown at a phone's link in its first second, answered with loss,
+     * collapsing the estimate below where it would have climbed unaided - that
+     * is the share which starts sharp and is at 480p ten seconds later on a
+     * connection with room for 1080p.
+     *
+     * It matters on this side and not only the desktop's, which fixed the same
+     * two numbers: these hints configure whichever encoder reads them, and the
+     * ones written into an answer are read by the far end. A phone asking for a
+     * floor is a phone telling a desktop to shrink the screen it is sending.
+     *
+     * Only payloads with an encoder behind them. Retransmission and the error
+     * correction codecs share the 90 kHz video clock and have nothing to hint
+     * at, and `apt=96` is the whole of an `rtx` format line - appending to it is
+     * how a patched description gets refused in one piece, which loses the
+     * hints on the codecs that did want them and the raised level with them.
+     */
+    internal fun bitrateHints(section: String, maxKbps: Int, startKbps: Int): String {
+        val hints = "x-google-max-bitrate=$maxKbps;x-google-start-bitrate=$startKbps"
 
         var patched = section
-        for (payload in Regex("^a=rtpmap:(\\d+)\\s+\\S+/90000", RegexOption.MULTILINE)
+        for (payload in Regex("^a=rtpmap:(\\d+)\\s+([^\\s/]+)/90000", RegexOption.MULTILINE)
             .findAll(section)
+            .filterNot { it.groupValues[2].lowercase() in NOT_A_PICTURE }
             .map { it.groupValues[1] }
             .toList()) {
             val fmtp = Regex("^a=fmtp:$payload (.+)$", RegexOption.MULTILINE)
