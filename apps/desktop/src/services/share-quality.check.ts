@@ -161,7 +161,7 @@ const withRtx = patchVideoBandwidth(
 assert.match(withRtx, /a=fmtp:97 apt=96\r?\n/);
 assert.match(withRtx, /a=fmtp:96 packetization-mode=1;x-google-max-bitrate=/);
 
-// Codec sorting prioritizes H.264 High Profile (6400..) with packetization-mode=1
+// Codec sorting prioritizes H.264 High profile with packetization-mode=1
 const mockCodecs = [
   { mimeType: 'video/VP8', clockRate: 90000 },
   { mimeType: 'video/H264', clockRate: 90000, sdpFmtpLine: 'profile-level-id=42e01f' },
@@ -170,5 +170,42 @@ const mockCodecs = [
 
 const sorted = sortPreferredVideoCodecs(mockCodecs, 'H264');
 assert.equal(sorted[0]?.sdpFmtpLine, 'profile-level-id=640032;packetization-mode=1');
+
+// The profile is the first byte of profile-level-id, and 0x64 is High whatever
+// the constraint flags after it say. `640c1f` is Constrained High - the profile
+// Chromium actually offers - and matching the prefix `6400` rejected it, which
+// left every share negotiating Constrained Baseline.
+const chromiumCodecs = [
+  {
+    mimeType: 'video/H264',
+    clockRate: 90000,
+    sdpFmtpLine: 'level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=42e01f',
+  },
+  {
+    mimeType: 'video/H264',
+    clockRate: 90000,
+    sdpFmtpLine: 'level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=640c1f',
+  },
+] as RTCRtpCodec[];
+
+assert.match(
+  sortPreferredVideoCodecs(chromiumCodecs, 'H264')[0]?.sdpFmtpLine ?? '',
+  /profile-level-id=640c1f/,
+  'Constrained High must outrank Constrained Baseline',
+);
+
+// Baseline with whole NAL units still beats baseline chopped to the MTU.
+const baselineOnly = [
+  { mimeType: 'video/H264', clockRate: 90000, sdpFmtpLine: 'profile-level-id=42e01f' },
+  {
+    mimeType: 'video/H264',
+    clockRate: 90000,
+    sdpFmtpLine: 'packetization-mode=1;profile-level-id=42e01f',
+  },
+] as RTCRtpCodec[];
+assert.match(
+  sortPreferredVideoCodecs(baselineOnly, 'H264')[0]?.sdpFmtpLine ?? '',
+  /packetization-mode=1/,
+);
 
 console.log('share-quality self-check passed');

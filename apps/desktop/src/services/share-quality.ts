@@ -343,9 +343,33 @@ export function patchVideoBandwidth(sdp: string, publish?: SharePublish | null):
 }
 
 /**
- * Sorts video codecs to prefer H.264 High Profile (profile-level-id 6400..)
- * with packetization-mode=1, which provides superior image sharpness and CABAC
- * compression efficiency over baseline profile.
+ * Whether an H.264 format line describes a High profile.
+ *
+ * `profile-level-id` is three bytes — profile_idc, constraint flags, level —
+ * and `0x64` in the first is High, whatever the other two say. Matching the
+ * four-character prefix `6400` reads the profile *and half the constraint
+ * flags*, so it accepts High (`6400xx`) and rejects **Constrained High
+ * (`640cxx`)**, which is the profile Chromium actually offers. That is a
+ * preference which has never once fired: with no High profile recognised, the
+ * sort fell through to packetization mode and left Constrained Baseline first,
+ * so every share has been negotiating baseline — no CABAC, no 8x8 transform,
+ * and text visibly softer at the same bitrate.
+ *
+ * Both High profiles carry the two features that matter here, so both count.
+ */
+function isHighProfile(fmtp: string): boolean {
+  return /profile-level-id=64[0-9a-f]{4}/.test(fmtp);
+}
+
+/**
+ * Sorts video codecs to prefer H.264 High profile with packetization-mode=1,
+ * which is sharper per bit than baseline on exactly the content a share
+ * carries. Mode 1 lets a NAL unit span packets; mode 0 caps every one of them
+ * at the MTU, which fragments slices for the network's benefit rather than the
+ * picture's.
+ *
+ * A sort and not a filter: everything stays offered, so a machine with no High
+ * profile encoder gets whatever it does have rather than a failed share.
  */
 export function sortPreferredVideoCodecs(
   codecs: RTCRtpCodec[],
@@ -355,17 +379,12 @@ export function sortPreferredVideoCodecs(
   const matched = codecs.filter((c) => c.mimeType.toLowerCase().endsWith(`/${target}`));
   const others = codecs.filter((c) => !c.mimeType.toLowerCase().endsWith(`/${target}`));
 
-  // If H.264, prioritize High Profile (6400..) over Baseline (4200.. / 42e0..)
   if (target === 'h264') {
-    matched.sort((a, b) => {
-      const aFmtp = (a.sdpFmtpLine ?? '').toLowerCase();
-      const bFmtp = (b.sdpFmtpLine ?? '').toLowerCase();
-      const aHigh = aFmtp.includes('profile-level-id=6400') ? 2 : 0;
-      const bHigh = bFmtp.includes('profile-level-id=6400') ? 2 : 0;
-      const aPacket = aFmtp.includes('packetization-mode=1') ? 1 : 0;
-      const bPacket = bFmtp.includes('packetization-mode=1') ? 1 : 0;
-      return bHigh + bPacket - (aHigh + aPacket);
-    });
+    const rank = (codec: RTCRtpCodec): number => {
+      const fmtp = (codec.sdpFmtpLine ?? '').toLowerCase();
+      return (isHighProfile(fmtp) ? 2 : 0) + (fmtp.includes('packetization-mode=1') ? 1 : 0);
+    };
+    matched.sort((a, b) => rank(b) - rank(a));
   }
 
   return [...matched, ...others];

@@ -305,11 +305,22 @@ and on Android the raised H.264 level with them.
 **Which H.264.** Asking for H.264 gets hardware encoding, which is what makes 60
 fps affordable; it does not say *which* H.264, and the profile a device offers
 first is Constrained Baseline — no CABAC, no 8×8 transform, and text visibly
-softer at the same bitrate. Both clients rank the offer before handing it to
-`setCodecPreferences`: `sortPreferredVideoCodecs` on the desktop and
-`ShareQuality.codecRank` on Android, both preferring High profile and
-`packetization-mode=1`. A rank and not a filter — a device with no High profile
-encoder gets whatever it does have rather than a failed share.
+softer at the same bitrate. Software fallback encoders are baseline-only, so
+negotiating baseline can also be what pushes a machine off its hardware encoder
+and into the CPU-overuse adaptation that shrinks a picture. Both clients rank
+the offer before handing it to `setCodecPreferences`: `sortPreferredVideoCodecs`
+on the desktop and `ShareQuality.codecRank` on Android, both preferring High
+profile and `packetization-mode=1`. A rank and not a filter — a device with no
+High profile encoder gets whatever it does have rather than a failed share.
+
+**`profile-level-id` is three bytes, and only the first is the profile.**
+profile_idc, then the constraint flags, then the level. Ranking on the
+four-character prefix `6400` reads the profile *and half the constraint flags*,
+so it accepts High (`6400··`) and rejects **Constrained High (`640c··`) — which
+is the profile Chromium actually offers**. Both clients had a version of this:
+the desktop's preference never fired at all and left baseline first, and
+Android's would have missed `640c1f` the same way. Both now read the profile
+byte alone.
 
 **Why a share went soft.** `qualityLimitationReason` on the outbound stream is
 the one reading that separates *the link cannot carry it* from *this machine
