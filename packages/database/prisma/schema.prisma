@@ -743,11 +743,32 @@ model ServerEmoji {
   @@map("server_emoji")
 }
 
+/// What a row in a conversation *is*.
+///
+/// `USER` is a message somebody wrote, and its body is ciphertext nothing here
+/// can read. `MEMBER_JOIN` is the conversation noting that somebody arrived -
+/// written by the server, addressed to nobody, and carrying no body at all.
+///
+/// The two are separated by a column rather than by a marker inside the body
+/// for the obvious reason: the server writes the second kind and cannot write
+/// the first, because it holds no key. A client reads the kind and draws the
+/// line itself, which is also why nothing about the phrasing is stored.
+enum MessageKind {
+  USER
+  MEMBER_JOIN
+}
+
 model Message {
   id          String    @id @default(uuid())
   channelId   String
   authorId    String
+  /// Which sort of row this is; see [MessageKind]. `USER` unless the server
+  /// wrote it, which keeps every row that existed before this column correct.
+  kind        MessageKind @default(USER)
   // Opaque to the server: clients store a serialised `EncryptedEnvelope` here.
+  /// Empty for every kind but `USER`: there is nothing to say that the kind and
+  /// the author do not already say, and an empty string is honest about that in
+  /// a way a server-written sentence in one language would not be.
   content     String
   createdAt   DateTime  @default(now())
   editedAt    DateTime?

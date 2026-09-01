@@ -593,6 +593,17 @@ data class MessageReaction(val emoji: String, val userIds: List<String>) {
 data class Message(
     val id: String,
     val channelId: String,
+    /**
+     * What this row *is*.
+     *
+     * "USER" is something somebody wrote and [content] is an envelope. Anything
+     * else was written by the server, carries an empty body, and is drawn from
+     * the kind and the author alone - so a client that has never heard of a
+     * kind draws nothing rather than the wrong thing, and an older server that
+     * sends no kind at all is read as "USER", which is what every row was
+     * before the column existed.
+     */
+    val kind: String = KIND_USER,
     /** The stored body: an encrypted envelope for anything written since E2EE. */
     val content: String,
     val author: UserSummary,
@@ -637,6 +648,12 @@ data class Message(
     val deleted: Boolean get() = deletedAt != null
     val pinned: Boolean get() = pinnedAt != null
 
+    /** Somebody joined the server. There is no body to open and none to draw. */
+    val isArrival: Boolean get() = kind == KIND_MEMBER_JOIN
+
+    /** Written by the server rather than by a person; see [kind]. */
+    val isSystem: Boolean get() = kind != KIND_USER
+
     /**
      * Whether the window closed while this copy was sitting on a screen.
      *
@@ -660,6 +677,7 @@ data class Message(
     fun toJson(): JSONObject = JSONObject()
         .put("id", id)
         .put("channelId", channelId)
+        .put("kind", kind)
         .put("content", content)
         .put("author", author.toJson())
         .put("createdAt", createdAt)
@@ -673,9 +691,16 @@ data class Message(
         .put("viewedBy", jsonArrayOf(viewedBy))
 
     companion object {
+        /** A message somebody wrote. What every row was before [kind] existed. */
+        const val KIND_USER = "USER"
+
+        /** The conversation noting that somebody joined the server. */
+        const val KIND_MEMBER_JOIN = "MEMBER_JOIN"
+
         fun from(json: JSONObject) = Message(
             id = json.getString("id"),
             channelId = json.optString("channelId"),
+            kind = json.optString("kind").ifBlank { KIND_USER },
             content = json.optString("content"),
             author = UserSummary.from(json.getJSONObject("author")),
             createdAt = json.optString("createdAt"),

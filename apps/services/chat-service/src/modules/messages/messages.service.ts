@@ -12,6 +12,7 @@ import {
   MAX_MESSAGE_CONTENT_LENGTH,
   type ClearChatsResponse,
   type Message,
+  type MessageKind,
   type MessageReactionSummary,
   type Paginated,
 } from '@betweenus/shared-types';
@@ -644,6 +645,8 @@ export class MessagesService {
 interface MessageRow {
   id: string;
   channelId: string;
+  /** Optional so a caller that selected before the column existed still fits. */
+  kind?: MessageKind;
   content: string;
   createdAt: Date;
   editedAt: Date | null;
@@ -671,6 +674,7 @@ export function toMessage(row: MessageRow): Message {
   return {
     id: row.id,
     channelId: row.channelId,
+    kind: row.kind ?? 'USER',
     content: row.content,
     author: {
       id: row.author.id,

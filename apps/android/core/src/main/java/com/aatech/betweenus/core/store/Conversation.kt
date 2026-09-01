@@ -870,6 +870,10 @@ object Conversation {
 
     private suspend fun read(message: Message): ReadableMessage {
         if (message.deleted) return ReadableMessage(message, MessageBody(""))
+        // The server wrote this one and it has no body to open - what it says
+        // is in its kind and its author. Handing an empty string to the channel
+        // key would only produce a padlock for a row nobody sealed.
+        if (message.isSystem) return ReadableMessage(message, MessageBody(""))
         val plaintext = E2ee.decryptForChannel(message.channelId, message.content)
         return ReadableMessage(message, MessageBody.decode(plaintext))
     }

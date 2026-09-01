@@ -229,6 +229,14 @@ erDiagram
 ```
 
 ### `Message`
+`kind` says what the row is. `USER` — the default, and what every row written
+before the column existed is — is a message somebody wrote. `MEMBER_JOIN` is
+the conversation noting that somebody joined the server: written by the
+server, carrying an empty `content`, drawn by each client from the kind and
+the author alone. The server cannot write a `USER` row, because it holds no
+key; separating the two by a column rather than by a marker inside the body is
+what makes that boundary readable.
+
 `content` is opaque to the server — a serialized `EncryptedEnvelope`
 ciphertext, or plain text before E2EE existed. `deletedAt` + emptied
 `content` is a soft-delete tombstone (the row stays so paging cursors that

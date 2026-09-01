@@ -612,6 +612,13 @@ fun ChatScreen(
                     ) {
                         DayDivider(readable.message.createdAt)
                     }
+                    // Somebody arrived. Not a bubble: the conversation is
+                    // talking rather than a person, so there is nothing here to
+                    // reply to, react to or long-press.
+                    if (readable.message.isArrival) {
+                        ArrivalRow(readable)
+                        return@items
+                    }
                     MessageRow(
                         readable = readable,
                         previous = previous,

@@ -1035,9 +1035,21 @@ export interface MessageAuthor {
   avatarUrl: string | null;
 }
 
+/**
+ * What a row in a conversation is.
+ *
+ * `USER` is something somebody wrote, and `content` is ciphertext. Anything
+ * else was written by the server, carries an empty `content`, and is drawn from
+ * the kind and the author alone - the wording belongs to the client, so it is
+ * in the reader's language rather than in whatever the service was written in.
+ */
+export type MessageKind = 'USER' | 'MEMBER_JOIN';
+
 export interface Message {
   id: string;
   channelId: string;
+  /** Absent on a message from a build older than the column; read it as `USER`. */
+  kind?: MessageKind;
   content: string;
   author: MessageAuthor;
   createdAt: string;

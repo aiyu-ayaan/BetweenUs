@@ -897,6 +897,10 @@ function setUnread(unread: Record<string, number>): void {
  */
 async function decrypt(message: Message): Promise<DecryptedMessage> {
   if (message.deletedAt) return { ...message, content: '', attachments: [] };
+  // The server wrote this one and it has no body to open - what it says is in
+  // its kind and its author. Handing an empty string to the channel key would
+  // only produce a padlock for a row nobody sealed.
+  if (message.kind && message.kind !== 'USER') return { ...message, content: '', attachments: [] };
   return toDecrypted(message, await decryptForChannel(message.channelId, message.content));
 }
 
@@ -917,6 +921,10 @@ function toDecrypted(message: Message, plaintext: string): DecryptedMessage {
 }
 
 function notificationText(message: DecryptedMessage): string | null {
+  // Somebody arriving is worth a line in the conversation and is not worth a
+  // notification: it is not addressed to anybody, and a server that gains ten
+  // members is otherwise ten buzzes.
+  if (message.kind && message.kind !== 'USER') return null;
   if (message.content === UNDECRYPTABLE) return null;
   if (message.content.trim()) return message.content;
   return message.attachments.length > 0 ? 'Sent an attachment' : null;

@@ -52,6 +52,7 @@ import {
   type Run as MarkupRun,
 } from '../../services/markup';
 import { emojiQueryAt } from './emoji-names';
+import { arrivalLine } from './arrival';
 import { clockTime, dayLabel, sameDay } from './day';
 import { nextFollow } from './follow';
 import { anchorReceipts, seenBy } from './receipts';
@@ -201,6 +202,42 @@ function PeerPresence({ userId }: { userId: string }): JSX.Element | null {
   if (!line) return null;
 
   return <p className="truncate text-xs text-slate-400">{line}</p>;
+}
+
+/**
+ * "VILEN is here."
+ *
+ * Somebody joined the server. It is the conversation talking rather than a
+ * person, so it is a line rather than a bubble: an arrow, a name, a few words
+ * and the time, the way Discord draws it - which reads as an event in the
+ * history instead of as a message somebody could reply to.
+ *
+ * The sentence comes from `arrival.ts`, which explains why it is picked rather
+ * than stored and why the Android client has to pick the same one.
+ */
+function ArrivalRow({ message }: { message: DecryptedMessage }): JSX.Element {
+  const line = arrivalLine(message.id);
+  const name = message.author.displayName || message.author.username;
+
+  return (
+    <li
+      id={`message-${message.id}`}
+      className="mt-3 flex items-baseline gap-2 px-3 text-sm text-slate-400"
+    >
+      <span aria-hidden="true" className="text-status-online">
+        &rarr;
+      </span>
+      <span className="min-w-0">
+        <AuthorHover author={message.author}>
+          <span className="cursor-pointer font-semibold text-slate-200 hover:underline">{name}</span>
+        </AuthorHover>{' '}
+        {line}
+      </span>
+      <time dateTime={message.createdAt} className="shrink-0 text-xs text-slate-500">
+        {clockTime(message.createdAt)}
+      </time>
+    </li>
+  );
 }
 
 /**
@@ -831,6 +868,19 @@ function MessageList({
           // two bubbles, and a run reading across it is a run of one person
           // talking that visibly is not.
           const newDay = !previous || !sameDay(previous.createdAt, message.createdAt);
+
+          // Somebody arrived. Not a bubble: it is the conversation talking
+          // rather than a person, so it is a single line with a mark, and it
+          // never groups with the message above it.
+          if (message.kind === 'MEMBER_JOIN') {
+            return (
+              <Fragment key={message.id}>
+                {newDay && <DayDivider iso={message.createdAt} />}
+                {dividerId === message.id && <NewMessagesDivider />}
+                <ArrivalRow message={message} />
+              </Fragment>
+            );
+          }
 
           const deleted = message.deletedAt !== null;
           const isSelf = message.author.id === me?.id;

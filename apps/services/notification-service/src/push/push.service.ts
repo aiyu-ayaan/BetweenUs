@@ -160,6 +160,12 @@ export class PushService implements OnModuleInit {
   }
 
   private async onMessage(message: Message): Promise<void> {
+    // The conversation noting that somebody arrived is worth a line in the
+    // history and is not worth waking a phone: it is addressed to nobody, and a
+    // server that gains ten members would otherwise be ten buzzes. There is
+    // also no body to put in the notification - the row carries none.
+    if (message.kind && message.kind !== 'USER') return;
+
     const audience = (await channelAudience(message.channelId)).filter(
       (userId) => userId !== message.author.id,
     );
