@@ -42,6 +42,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.aatech.betweenus.core.crypto.E2ee
 import com.aatech.betweenus.core.crypto.IdentityStatus
+import com.aatech.betweenus.core.data.BetweenUsApi
 import com.aatech.betweenus.core.data.ChannelType
 import com.aatech.betweenus.core.data.Connectivity
 import com.aatech.betweenus.core.data.PublicUser
@@ -475,14 +476,40 @@ fun Shell(user: PublicUser) {
                                 // The call button in a text channel means the voice
                                 // channel of the server it is in - a text channel
                                 // id is not something the call service will admit.
+                                //
+                                // A direct message is its own channel and the call
+                                // service admits it directly: `resolveChannelAccess`
+                                // grants both participants START_CALL, so there is
+                                // no voice channel to look for. It rings as well as
+                                // joins - a one-to-one call nobody is told about is
+                                // a call nobody answers - which is the difference
+                                // between this and joining a server's voice channel,
+                                // where the roster announcement does the telling.
                                 onStartCall = {
-                                    val voice = serverId
-                                        ?.let { Workspace.channelsOf(it) }
-                                        ?.firstOrNull { it.type == ChannelType.VOICE }
-                                    if (voice != null) {
-                                        voiceChannelId = voice.id
+                                    val direct = Workspace.directChannels.value
+                                        .firstOrNull { it.channelId == id }
+                                    if (direct != null) {
+                                        voiceChannelId = id
                                         joinOnArrival = true
                                         navigation.navigate(Route.Voice)
+                                        scope.launch {
+                                            // A ring that fails is not a call that
+                                            // failed: the cooldown refuses a second
+                                            // one within the window, and the call is
+                                            // already being joined either way.
+                                            runCatching {
+                                                BetweenUsApi.callRing(id, direct.participant.id)
+                                            }
+                                        }
+                                    } else {
+                                        val voice = serverId
+                                            ?.let { Workspace.channelsOf(it) }
+                                            ?.firstOrNull { it.type == ChannelType.VOICE }
+                                        if (voice != null) {
+                                            voiceChannelId = voice.id
+                                            joinOnArrival = true
+                                            navigation.navigate(Route.Voice)
+                                        }
                                     }
                                 },
                             )

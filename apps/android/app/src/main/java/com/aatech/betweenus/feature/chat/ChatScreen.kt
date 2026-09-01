@@ -517,12 +517,19 @@ fun ChatScreen(
                 }
             }
 
-            IconAction(BetweenUsIcons.Pin, "Pinned messages", { showPins = true })
-            IconAction(BetweenUsIcons.Users, "Members", onOpenMembers)
             // The one action here that starts something rather than showing
-            // something, so it is the one that is filled.
+            // something, so it is the one that is filled - and the only one
+            // left in the bar. Pins and members are in the overflow: four
+            // buttons beside an avatar left the name itself ellipsed to a
+            // single letter, which is the whole of what this bar is for.
             IconAction(BetweenUsIcons.Phone, "Start a call", onStartCall, prominent = true, compact = true)
-            ChannelMenu(channelId = channelId, title = title, isDirect = direct != null)
+            ChannelMenu(
+                channelId = channelId,
+                title = title,
+                isDirect = direct != null,
+                onOpenPins = { showPins = true },
+                onOpenMembers = onOpenMembers,
+            )
         }
 
         // Notification Permission Warning Banner (if user denied or turned off notifications)

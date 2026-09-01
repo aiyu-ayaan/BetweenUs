@@ -46,17 +46,22 @@ import kotlinx.coroutines.launch
 /**
  * The overflow menu at the end of the chat top bar.
  *
- * It exists so there is somewhere to put an action that is not worth a
- * permanent icon. The bar already carries three, and every one of them is
- * something people reach for constantly - pins, members, call. Clearing a
- * conversation is the opposite: rare, deliberate, and destructive-looking
- * enough that a button sitting in a phone top bar waiting to be brushed against
- * is the wrong shape for it.
+ * Everything the conversation can be asked to do except start a call. The bar
+ * used to carry pins, members, call and this, and on a phone four controls plus
+ * an avatar leave nothing for the name: it ellipsed to "A..." with "last..."
+ * under it. A name is what a chat header is for, so the bar keeps one button -
+ * the call, the only one that starts something - and the rest live here.
  *
  * The port of `apps/desktop/src/features/chat/ChannelMenu.tsx`.
  */
 @Composable
-fun ChannelMenu(channelId: String, title: String, isDirect: Boolean) {
+fun ChannelMenu(
+    channelId: String,
+    title: String,
+    isDirect: Boolean,
+    onOpenPins: () -> Unit,
+    onOpenMembers: () -> Unit,
+) {
     val scope = rememberCoroutineScope()
     var open by remember { mutableStateOf(false) }
     var confirming by remember { mutableStateOf(false) }
@@ -68,6 +73,31 @@ fun ChannelMenu(channelId: String, title: String, isDirect: Boolean) {
         IconAction(BetweenUsIcons.More, "More options", { open = true })
 
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            // Pins and members used to be permanent icons in the bar. Four
+            // controls beside a name left the name three characters wide -
+            // "A..." over "last..." - which is the one thing in that bar
+            // somebody actually reads. They are both "show me something"
+            // rather than "do something", so they moved in here and the bar
+            // kept the call button, which is the only one that starts
+            // anything.
+            DropdownMenuItem(
+                text = { Text("Pinned messages") },
+                leadingIcon = { BetweenUsIcon(BetweenUsIcons.Pin) },
+                onClick = {
+                    open = false
+                    onOpenPins()
+                },
+            )
+
+            DropdownMenuItem(
+                text = { Text(if (isDirect) "Profile" else "Members") },
+                leadingIcon = { BetweenUsIcon(BetweenUsIcons.Users) },
+                onClick = {
+                    open = false
+                    onOpenMembers()
+                },
+            )
+
             // Above "clear chat", because it is the same subject arrived at
             // from the other end: one draws a line once, the other keeps
             // drawing it. Both belong to the conversation somebody is looking

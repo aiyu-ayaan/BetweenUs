@@ -20,6 +20,7 @@ import { UNDECRYPTABLE } from '../../services/e2ee';
 import { api } from '../../services/api';
 import { useAuthStore } from '../../stores/auth';
 import { useFriendsStore } from '../../stores/friends';
+import { useVoiceStore } from '../../stores/voice';
 import { usePresenceStore, useLastSeenOf, useStatusOf } from '../../stores/presence';
 import { presenceLine } from '../../services/last-seen';
 import { useIsMobile } from '../../services/responsive';
@@ -82,6 +83,7 @@ import {
   MessageIcon,
   MicIcon,
   PaperclipIcon,
+  PhoneIcon,
   PinIcon,
   ReplyIcon,
   SearchIcon,
@@ -230,6 +232,43 @@ function PanelButton({
       }`}
     >
       {icon}
+    </button>
+  );
+}
+
+/**
+ * Call the person on the other side of a direct message.
+ *
+ * A one-to-one call has no voice channel to join: the DM *is* the channel the
+ * call service admits, and `resolveChannelAccess` grants both participants
+ * START_CALL there. So this joins that channel and rings them in the same
+ * breath - joining alone is a call sitting in an empty room, and ringing alone
+ * is a phone going off for a call nobody is in.
+ *
+ * Absent once the call is running, because the stage is on screen by then and
+ * a button that starts what is already started is a button that does nothing.
+ */
+function CallButton({ channelId, peerId }: { channelId: string; peerId: string }): JSX.Element | null {
+  const status = useVoiceStore((state) => state.status);
+  const callChannelId = useVoiceStore((state) => state.channelId);
+
+  if (status !== 'idle' && callChannelId === channelId) return null;
+
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        void useVoiceStore.getState().join(channelId);
+        // The ring is the half that can fail on its own - the cooldown refuses
+        // a second one inside the window - and a failed ring is not a failed
+        // call: the call is already being joined either way.
+        void api.callRing(channelId, peerId).catch(() => undefined);
+      }}
+      aria-label="Start a call"
+      title="Start a call"
+      className="flex h-9 w-9 min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 sm:h-8 sm:w-8 cursor-pointer items-center justify-center rounded-md p-1.5 text-slate-400 transition-colors duration-150 hover:bg-white/[0.07] hover:text-slate-100"
+    >
+      <PhoneIcon className="h-5 w-5" />
     </button>
   );
 }
@@ -410,6 +449,7 @@ export function ChatView({
         )}
 
         <div className="ml-auto flex items-center gap-0.5 sm:gap-1">
+          {isDirect && peer && <CallButton channelId={channel.id} peerId={peer.id} />}
           <PanelButton
             panel="pins"
             label="Pinned messages"

@@ -389,6 +389,19 @@ function Workbench(): JSX.Element {
   const activeChannelId = useChatStore((state) => state.activeChannelId);
   const channel = useChatStore((state) => state.activeChannel());
 
+  /**
+   * A one-to-one call has no voice channel to stand in for it.
+   *
+   * A direct message *is* the channel the call service admits, so the call
+   * happens on a channel whose type is DM - and the stage used to be chosen by
+   * that type alone, which meant a DM call played through the sidebar dock with
+   * the conversation still on screen and nowhere to see a camera or a shared
+   * screen. The call being in the channel that is open is the other thing that
+   * earns the stage.
+   */
+  const callChannelId = useVoiceStore((state) => state.channelId);
+  const callStatus = useVoiceStore((state) => state.status);
+
   const rightPanel = useChatStore((state) => state.rightPanel);
   const remoteSession = useRemoteStore((state) => state.session);
   const isMobile = useIsMobile();
@@ -493,7 +506,8 @@ function Workbench(): JSX.Element {
           <RemoteView onOpenMenu={() => setShowDrawer(true)} />
         ) : view === 'home' && homeScreen === 'friends' ? (
           <FriendsView onOpenMenu={() => setShowDrawer(true)} />
-        ) : channel?.type === 'VOICE' ? (
+        ) : channel?.type === 'VOICE' ||
+          (channel && callStatus !== 'idle' && callChannelId === channel.id) ? (
           <VoiceChannelView channel={channel} onOpenMenu={() => setShowDrawer(true)} />
         ) : (
           <>
