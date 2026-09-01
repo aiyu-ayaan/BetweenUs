@@ -161,9 +161,10 @@ export function ScreenSharePicker({ onClose }: { onClose: () => void }): JSX.Ele
           </ul>
         </div>
 
-        {/* Asked rather than guessed: a film wants frames kept and resolution
-            given up, a document wants exactly the reverse, and getting it wrong
-            is what "the quality is bad" usually turns out to be. */}
+        {/* Asked rather than guessed: a film is worth more bits and a
+            soundtrack, a document is worth neither. Neither answer spends the
+            resolution - that used to be what "video and motion" quietly meant,
+            and it is what a share dropping to 480p turned out to be. */}
         <div className="flex gap-2 border-t border-edge px-5 pt-4">
           <IntentCard
             active={intent === 'detail'}
@@ -175,7 +176,7 @@ export function ScreenSharePicker({ onClose }: { onClose: () => void }): JSX.Ele
             active={intent === 'motion'}
             onClick={() => setIntent('motion')}
             title="Video and motion"
-            hint="A film or a game. Ultra-smooth at 60 fps, full-quality sound."
+            hint="A film or a game. Full resolution at 60 fps, full-quality sound."
           />
         </div>
 

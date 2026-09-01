@@ -27,9 +27,12 @@
  * - **Do not buffer.** A receiver's jitter buffer is where a third of a second
  *   goes. `RTCRtpReceiver.playoutDelayHint` asks for a smaller one - near zero
  *   when somebody is driving, a couple of frames when they are watching.
- * - **Say what the content is.** A film and a text editor want opposite
- *   choices: one wants frames kept and resolution sacrificed, the other the
- *   reverse. Guessing gets it wrong half the time, so the picker asks.
+ * - **Never spend the resolution.** Parsec does not scale the picture down; it
+ *   holds the pixels and lets quantisation, and then the frame rate, take the
+ *   hit. Both profiles here do the same, because a quarter-size picture
+ *   stretched back up is the one failure a viewer cannot un-see. What the
+ *   content changes is the bitrate it is worth and the soundtrack it carries,
+ *   not whether the pixels survive.
  *
  * The pure part is here, with a self-check, because the arithmetic is what
  * decides whether a 4K share is sent through a 1080p-sized pipe.
@@ -75,8 +78,9 @@ export interface SharePublish {
 const MUSIC_BITRATE = 510_000;
 
 /**
- * What is on the screen. Not a quality slider - the two want opposite things,
- * and neither is "better".
+ * What is on the screen. Not a quality slider - it decides what the picture is
+ * worth in bits and whether the sound is a soundtrack, and neither answer is
+ * "better". Neither one gives up resolution; see `PROFILES`.
  */
 export type ShareIntent = 'detail' | 'motion';
 
@@ -151,12 +155,32 @@ const PROFILES: Record<ShareIntent, Profile> = {
     minBitrate: 8_000_000,
     maxBitrate: 50_000_000,
   },
-  // A film, a game, anything that moves. Pristine smoothness at 60 fps with
-  // uncompressed-feel high bitrate across direct P2P connections.
+  // A film, a game, anything that moves. High bitrate at 60 fps, and the
+  // resolution held.
+  //
+  // This was `maintain-framerate`, which reads as "keep it smooth" and spends
+  // pixels to do it: WebRTC scales the capture by 1.5, 2, 3, 4, so a 1440p
+  // share walks down to 480p within seconds of the estimate settling and stays
+  // there. Sixty frames a second of a quarter-size picture stretched back up is
+  // the opposite of what somebody is asking for when they pick "a film or a
+  // game", and it is the whole of "the share drops to 480p".
+  //
+  // Parsec holds the resolution and lets quantisation take the hit, and
+  // `maintain-resolution` is the nearest thing WebRTC has: the rate controller
+  // raises QP first in every mode, and only once QP is pinned does adaptation
+  // act - and under this preference what it gives up is frames, not pixels. So
+  // a struggling link goes soft, then choppy, at full size, rather than sharp
+  // and smooth at a quarter of it.
+  //
+  // ponytail: the content hint stays `motion`, which is what the rate
+  // controller wants for a film - it also means `is_screencast=false`, which
+  // arms the quality scaler, whose resolution half is exactly what this
+  // preference disables. If pixels are still seen to drop, the hint is the
+  // next lever.
   motion: {
     frameRate: 60,
     contentHint: 'motion',
-    degradation: 'maintain-framerate',
+    degradation: 'maintain-resolution',
     referenceBitrate: 35_000_000,
     minBitrate: 15_000_000,
     maxBitrate: 80_000_000,

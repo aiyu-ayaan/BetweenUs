@@ -35,6 +35,15 @@ assert.equal(bitrateFor('detail', { width: 320, height: 240 }), 8_000_000);
 assert.equal(bitrateFor('motion', { width: 320, height: 240 }), 15_000_000);
 assert.equal(bitrateFor('motion', { width: 7680, height: 4320 }), 80_000_000);
 for (const intent of ['detail', 'motion'] as const) {
+  // Whatever is on the screen, the pixels survive it. A profile that scales the
+  // picture down is a profile that ships 480p to somebody with room for 1080p.
+  assert.equal(
+    shareOptions(intent, QHD, false).publish.degradationPreference,
+    'maintain-resolution',
+    `${intent} is allowed to spend resolution`,
+  );
+  assert.equal(shareOptions(intent, QHD, false).publish.scaleResolutionDownBy, 1);
+
   let previous = 0;
   for (const size of [{ width: 1280, height: 720 }, HD, QHD, UHD]) {
     const rate = bitrateFor(intent, size);
@@ -51,7 +60,10 @@ assert.equal(bitrateFor('motion', UHD), 80_000_000);
 const movie = shareOptions('motion', QHD, { music: true });
 assert.deepEqual(movie.capture.video, { width: 2560, height: 1440, frameRate: 60 });
 assert.equal(movie.capture.contentHint, 'motion');
-assert.equal(movie.publish.degradationPreference, 'maintain-framerate');
+// Never `maintain-framerate`. It reads as "keep it smooth" and pays in pixels:
+// WebRTC scales by 1.5/2/3/4, so a 1440p film walks down to 480p and stays
+// there. No profile gives up resolution.
+assert.equal(movie.publish.degradationPreference, 'maintain-resolution');
 assert.equal(movie.publish.maxFramerate, 60);
 assert.equal(movie.publish.scaleResolutionDownBy, 1);
 assert.equal(movie.publish.priority, 'high');

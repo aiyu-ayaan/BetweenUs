@@ -322,6 +322,23 @@ the desktop's preference never fired at all and left baseline first, and
 Android's would have missed `640c1f` the same way. Both now read the profile
 byte alone.
 
+**No profile spends the resolution.** `degradationPreference` picks what a
+struggling link gives up, and `maintain-framerate` gives up pixels: WebRTC
+scales the capture by 1.5, 2, 3, 4, so a 1440p share walks down to 480p within
+seconds of the estimate settling and stays there. The `motion` profile used to
+ask for exactly that — it reads as "keep it smooth", and 60 fps of a quarter-size
+picture stretched back up is what it actually bought. That was the whole of "the
+share drops to 480p".
+
+Parsec holds the resolution and lets quantisation take the hit, and
+`maintain-resolution` is the nearest thing WebRTC has: the rate controller
+raises QP first in every mode, and only once QP is pinned does adaptation act —
+and under this preference what it gives up is frames. A struggling link now goes
+soft, then choppy, at full size, rather than sharp and smooth at a quarter of it.
+Both desktop profiles use it and Android has only ever used it. What the intent
+still changes is the bitrate the picture is worth, the content hint, and whether
+the sound is a soundtrack.
+
 **Why a share went soft.** `qualityLimitationReason` on the outbound stream is
 the one reading that separates *the link cannot carry it* from *this machine
 cannot encode it* from *nothing is holding it back and it still looks like
