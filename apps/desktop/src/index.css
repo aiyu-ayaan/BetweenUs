@@ -514,7 +514,15 @@
      * this and lets it show through the gutters between them.
      */
     @apply bg-ground text-slate-100 antialiased;
-    font-size: 16px;
+    /*
+     * `1rem`, not `16px`. They render identically at the default setting and
+     * are opposites at every other one: a pixel value pins the interface to 16
+     * and quietly overrides the browser's own font-size setting, which is the
+     * accessible way to ask for larger text and the one the density control
+     * deliberately refused to duplicate. Every size in the app is a Tailwind
+     * `rem`, so this one line is what carries the whole scale.
+     */
+    font-size: 1rem;
     line-height: 1.6;
     transition: background-color 150ms ease, color 150ms ease;
   }
@@ -625,5 +633,19 @@
   *::after {
     animation-duration: 0.01ms !important;
     transition-duration: 0.01ms !important;
+    /*
+     * Iteration counts as well as duration. An `animate-spin` at 0.01ms still
+     * spins - infinitely, and now far too fast to look at - which is the exact
+     * opposite of what somebody asking for less motion wanted. Capping the
+     * count is what actually stops it.
+     */
+    animation-iteration-count: 1 !important;
+    /*
+     * And the scrolling. `scroll-behavior: smooth` set in CSS is covered here;
+     * the scrolls this app starts from JavaScript pass `behavior` as an
+     * argument and ignore the media query entirely, which is why
+     * `services/motion.ts` exists.
+     */
+    scroll-behavior: auto !important;
   }
 }

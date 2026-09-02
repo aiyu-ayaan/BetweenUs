@@ -4,6 +4,7 @@ import { useFriendsStore } from '../../stores/friends';
 import { Avatar } from '../../components/Avatar';
 import { HashIcon, SearchIcon, SpeakerIcon } from '../../components/icons';
 import { ServerIcon } from '../../components/ServerIcon';
+import { useFocusTrap } from '../../services/focus-trap';
 
 interface Entry {
   key: string;
@@ -23,6 +24,7 @@ interface Entry {
  * top bar is the middle of the window rather than a search box in a corner.
  */
 export function QuickSwitcher({ onClose }: { onClose: () => void }): JSX.Element {
+  const trap = useFocusTrap<HTMLDivElement>();
   const servers = useChatStore((state) => state.servers);
   const channels = useChatStore((state) => state.channels);
   const view = useChatStore((state) => state.view);
@@ -115,6 +117,7 @@ export function QuickSwitcher({ onClose }: { onClose: () => void }): JSX.Element
 
   return (
     <div
+      ref={trap}
       role="dialog"
       aria-modal="true"
       aria-label="Go to"

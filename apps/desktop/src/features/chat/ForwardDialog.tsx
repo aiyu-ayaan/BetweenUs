@@ -30,6 +30,7 @@ import { api } from '../../services/api';
 import { Avatar } from '../../components/Avatar';
 import { ServerIcon } from '../../components/ServerIcon';
 import { HashIcon, SearchIcon } from '../../components/icons';
+import { useFocusTrap } from '../../services/focus-trap';
 
 /**
  * How many conversations the list shows before it stops.
@@ -52,6 +53,7 @@ export function ForwardDialog({
   onPick: (channelId: string, name: string) => void;
   onClose: () => void;
 }): JSX.Element {
+  const trap = useFocusTrap<HTMLDivElement>();
   const servers = useChatStore((state) => state.servers);
   const loadedChannels = useChatStore((state) => state.channels);
   const activeServerId = useChatStore((state) => state.activeServerId);
@@ -134,6 +136,7 @@ export function ForwardDialog({
 
   return (
     <div
+      ref={trap}
       role="dialog"
       aria-modal="true"
       aria-label="Forward message"

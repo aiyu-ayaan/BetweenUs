@@ -6,6 +6,7 @@ import { DisappearingPicker } from '../../components/DisappearingPicker';
 import { pruneExpired, useChatStore } from '../../stores/chat';
 import { useAuthStore } from '../../stores/auth';
 import { PERMISSIONS } from '@betweenus/permissions';
+import { useFocusTrap } from '../../services/focus-trap';
 
 /**
  * The overflow menu at the end of a channel header.
@@ -131,6 +132,7 @@ function DisappearingDialog({
   channel: Channel;
   onClose: () => void;
 }): JSX.Element {
+  const trap = useFocusTrap<HTMLDivElement>();
   const servers = useChatStore((state) => state.servers);
   const saveServer = useChatStore((state) => state.saveServer);
   const user = useAuthStore((state) => state.user);
@@ -199,6 +201,7 @@ function DisappearingDialog({
       }}
     >
       <div
+        ref={trap}
         role="dialog"
         aria-modal="true"
         aria-labelledby="disappearing-title"
@@ -291,6 +294,7 @@ function ClearChatDialog({
   channel: Channel;
   onClose: () => void;
 }): JSX.Element {
+  const trap = useFocusTrap<HTMLDivElement>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const isDirect = channel.type === 'DM';
@@ -326,6 +330,7 @@ function ClearChatDialog({
       }}
     >
       <div
+        ref={trap}
         role="dialog"
         aria-modal="true"
         aria-labelledby="clear-chat-title"

@@ -25,6 +25,7 @@ import {
   TrashIcon,
   XIcon,
 } from '../../components/icons';
+import { useFocusTrap } from '../../services/focus-trap';
 
 const IMAGE_EXT_RE = /\.(png|jpe?g|gif|webp|svg|bmp|ico|heic)$/i;
 const VIDEO_EXT_RE = /\.(mp4|webm|mov|m4v|ogg)$/i;
@@ -112,6 +113,7 @@ export function SendPreview({
   onSend: () => void;
   onClose: () => void;
 }): JSX.Element {
+  const trap = useFocusTrap<HTMLDivElement>();
   const [at, setAt] = useState(0);
   const [cropping, setCropping] = useState(false);
   // Clamped rather than reset: removing a file should keep you looking at the
@@ -129,6 +131,7 @@ export function SendPreview({
 
   return (
     <div
+      ref={trap}
       role="dialog"
       aria-modal="true"
       aria-label="Send files"

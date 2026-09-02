@@ -14,8 +14,10 @@ import { isDesktopRuntime } from '../../services/platform';
 import { useAudioSettings } from '../../stores/audioSettings';
 import type { ShareIntent } from '../../services/share-quality';
 import { ScreenShareIcon } from '../../components/icons';
+import { useFocusTrap } from '../../services/focus-trap';
 
 export function ScreenSharePicker({ onClose }: { onClose: () => void }): JSX.Element {
+  const trap = useFocusTrap<HTMLDivElement>();
   const shareScreen = useVoiceStore((state) => state.shareScreen);
 
   // A browser has no source list to show: Chromium puts its own chooser up when
@@ -88,6 +90,7 @@ export function ScreenSharePicker({ onClose }: { onClose: () => void }): JSX.Ele
   // ancestor's paint effects can ever own it again.
   return createPortal(
     <div
+      ref={trap}
       role="dialog"
       aria-modal="true"
       aria-label="Choose what to share"

@@ -9,6 +9,7 @@
 import { useEffect } from 'react';
 import { create } from 'zustand';
 import { absoluteUrl } from '../services/endpoint';
+import { useFocusTrap } from '../services/focus-trap';
 
 interface ProfileViewState {
   /** The person being looked at, or null when nothing is open. */
@@ -30,6 +31,7 @@ export function viewProfile(name: string, avatarUrl?: string | null): void {
 }
 
 export function ProfileView(): JSX.Element | null {
+  const trap = useFocusTrap<HTMLDivElement>();
   const shown = useProfileView((state) => state.shown);
   const notice = useProfileView((state) => state.notice);
   const close = (): void => useProfileView.setState({ shown: null });
@@ -60,6 +62,7 @@ export function ProfileView(): JSX.Element | null {
 
   return (
     <div
+      ref={trap}
       role="dialog"
       aria-modal="true"
       aria-label={`${shown.name}'s profile photo`}

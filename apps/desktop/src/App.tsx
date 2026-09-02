@@ -53,6 +53,7 @@ import { QuickSwitcher } from './features/shell/QuickSwitcher';
 import { useVoiceStore } from './stores/voice';
 import { BetweenUsLogoIcon } from './components/icons';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { closedPanelProps, useFocusTrap } from './services/focus-trap';
 
 /**
  * Both clients mount this: the Electron renderer and the browser bundle in
@@ -420,6 +421,7 @@ function Workbench(): JSX.Element {
     rightPanel === 'pins' ||
     rightPanel === 'search' ||
     (rightPanel === 'members' && view === 'server');
+  const rightSheet = useFocusTrap<HTMLDivElement>(isRightPanelOpen);
 
   const handleCloseRightPanel = () => {
     useChatStore.getState().showPanel('none');
@@ -569,7 +571,13 @@ function Workbench(): JSX.Element {
               isRightPanelOpen ? 'opacity-100' : 'pointer-events-none opacity-0'
             }`}
           />
+          {/* Mounted whether or not it is open, because it slides rather than
+              appears - so it has to be taken out of the keyboard and out of the
+              accessibility tree by hand while it is shut. `pointer-events-none`
+              below stops a mouse and does nothing to Tab. */}
           <div
+            ref={rightSheet}
+            {...closedPanelProps(isRightPanelOpen)}
             role="dialog"
             aria-label="Details panel"
             aria-modal="true"

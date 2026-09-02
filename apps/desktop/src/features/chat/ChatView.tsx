@@ -18,6 +18,7 @@ import type {
 import { pruneExpired, useChatStore, type DecryptedMessage } from '../../stores/chat';
 import { UNDECRYPTABLE } from '../../services/e2ee';
 import { api } from '../../services/api';
+import { scrollBehavior } from '../../services/motion';
 import { useAuthStore } from '../../stores/auth';
 import { useThemeStore } from '../../stores/theme';
 import { spacingFor } from '../../services/density';
@@ -703,7 +704,7 @@ function MessageList({
   useEffect(() => {
     const box = viewport.current;
     if (!box || !following.current) return;
-    box.scrollTo({ top: box.scrollHeight, behavior: 'smooth' });
+    box.scrollTo({ top: box.scrollHeight, behavior: scrollBehavior() });
   }, [newest]);
 
   /**
@@ -737,7 +738,7 @@ function MessageList({
   useEffect(() => {
     if (!jumpTo) return;
     const row = document.getElementById(`message-${jumpTo}`);
-    row?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    row?.scrollIntoView({ behavior: scrollBehavior(), block: 'center' });
     setHighlighted(jumpTo);
     clearJump();
     const timer = window.setTimeout(() => setHighlighted(null), 2000);
@@ -845,7 +846,7 @@ function MessageList({
           type="button"
           onClick={() => {
             const row = document.getElementById(`message-${dividerId}`);
-            row?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            row?.scrollIntoView({ behavior: scrollBehavior(), block: 'center' });
             setHighlighted(dividerId);
             window.setTimeout(() => setHighlighted(null), 2000);
           }}

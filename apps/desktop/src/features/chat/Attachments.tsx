@@ -28,6 +28,7 @@ import { holdMessage, releaseMessage, useChatStore } from '../../stores/chat';
 import { isDesktopRuntime } from '../../services/platform';
 import { DOWNLOAD_URL } from '../../services/downloads';
 import { VoiceMessage } from './VoiceMessage';
+import { useFocusTrap } from '../../services/focus-trap';
 
 /** Text small enough to read in the message list without opening anything. */
 const INLINE_TEXT_CHARS = 800;
@@ -624,6 +625,7 @@ function OneTimeAttachments({
  * refuse a screenshot, and there is not going to be one.
  */
 function WebOneTimeNotice({ onClose }: { onClose: () => void }): JSX.Element {
+  const trap = useFocusTrap<HTMLDivElement>();
   useEffect(() => {
     const escape = (event: KeyboardEvent): void => {
       if (event.key === 'Escape') onClose();
@@ -640,6 +642,7 @@ function WebOneTimeNotice({ onClose }: { onClose: () => void }): JSX.Element {
       }}
     >
       <div
+        ref={trap}
         role="dialog"
         aria-modal="true"
         aria-labelledby="one-time-web-title"
@@ -735,6 +738,7 @@ function OneTimeViewer({
   onSpend: () => Promise<void>;
   onClose: () => void;
 }): JSX.Element {
+  const trap = useFocusTrap<HTMLDivElement>();
   const [at, setAt] = useState(0);
   const index = Math.min(at, attachments.length - 1);
   const current = attachments[index];
@@ -823,6 +827,7 @@ function OneTimeViewer({
 
   return (
     <div
+      ref={trap}
       role="dialog"
       aria-modal="true"
       aria-label="One-time message"
@@ -991,6 +996,7 @@ function PreviewOverlay({
   onShow?: (attachment: MessageAttachment) => void;
   onClose: () => void;
 }): JSX.Element {
+  const trap = useFocusTrap<HTMLDivElement>();
   const isImage = attachment.contentType.startsWith('image/');
   const { url } = useDecrypted(channelId, isImage ? attachment : null);
   const [text, setText] = useState<string | null>(null);
@@ -1025,6 +1031,7 @@ function PreviewOverlay({
 
   return (
     <div
+      ref={trap}
       role="dialog"
       aria-modal="true"
       aria-label={attachment.name}

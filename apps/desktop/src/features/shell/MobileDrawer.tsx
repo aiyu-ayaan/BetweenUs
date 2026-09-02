@@ -3,6 +3,7 @@ import { useChatStore } from '../../stores/chat';
 import { ServerRail } from '../servers/ServerRail';
 import { ChannelSidebar } from '../channels/ChannelSidebar';
 import { HomeSidebar } from '../home/HomeSidebar';
+import { closedPanelProps, useFocusTrap } from '../../services/focus-trap';
 
 export interface MobileDrawerProps {
   open: boolean;
@@ -29,6 +30,7 @@ export function MobileDrawer({
   showingFriends,
   showingRemote,
 }: MobileDrawerProps): JSX.Element {
+  const drawer = useFocusTrap<HTMLDivElement>(open);
   const view = useChatStore((state) => state.view);
   const activeChannelId = useChatStore((state) => state.activeChannelId);
   const prevChannelRef = useRef(activeChannelId);
@@ -76,7 +78,13 @@ export function MobileDrawer({
       />
 
       {/* Sliding Sheet (Rail + Sidebar) */}
+      {/* Mounted whether or not it is open, because it slides rather than
+          appears - so the keyboard and the accessibility tree have to be told
+          by hand while it is shut. `pointer-events-none` below stops a mouse
+          and does nothing to Tab. */}
       <div
+        ref={drawer}
+        {...closedPanelProps(open)}
         role="dialog"
         aria-label="Navigation drawer"
         aria-modal="true"

@@ -4,6 +4,7 @@ import { useChatStore } from '../../stores/chat';
 import { useAuthStore } from '../../stores/auth';
 import { Avatar } from '../../components/Avatar';
 import { CheckIcon, HashIcon, LockIcon, SpeakerIcon } from '../../components/icons';
+import { useFocusTrap } from '../../services/focus-trap';
 
 /**
  * Name, kind, privacy and - when it is private - who is allowed in, all in one
@@ -17,6 +18,7 @@ export function CreateChannelDialog({
   type: ChannelType;
   onClose: () => void;
 }): JSX.Element {
+  const trap = useFocusTrap<HTMLDivElement>();
   const createChannel = useChatStore((state) => state.createChannel);
   const members = useChatStore((state) => state.members);
   const me = useAuthStore((state) => state.user);
@@ -58,6 +60,7 @@ export function CreateChannelDialog({
 
   return (
     <div
+      ref={trap}
       role="dialog"
       aria-modal="true"
       aria-label={type === 'VOICE' ? 'Create voice channel' : 'Create text channel'}

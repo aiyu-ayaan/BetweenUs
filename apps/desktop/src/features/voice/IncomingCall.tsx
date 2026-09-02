@@ -17,8 +17,10 @@ import { Avatar } from '../../components/Avatar';
 import { PhoneIcon, PhoneOffIcon } from '../../components/icons';
 import { absoluteUrl } from '../../services/endpoint';
 import { useRingStore } from '../../stores/ring';
+import { useFocusTrap } from '../../services/focus-trap';
 
 export function IncomingCall(): JSX.Element | null {
+  const trap = useFocusTrap<HTMLDivElement>();
   const incoming = useRingStore((state) => state.incoming);
   const answer = useRingStore((state) => state.answer);
   const decline = useRingStore((state) => state.decline);
@@ -39,6 +41,7 @@ export function IncomingCall(): JSX.Element | null {
 
   return createPortal(
     <div
+      ref={trap}
       role="dialog"
       aria-modal="true"
       aria-label={`${incoming.callerName} is calling`}

@@ -1,5 +1,6 @@
 import { useEffect, useMemo } from 'react';
 import { commandKey, shortcuts, type Shortcut } from '../services/shortcuts';
+import { useFocusTrap } from '../services/focus-trap';
 
 /**
  * What the keyboard can do, on `?`.
@@ -14,6 +15,7 @@ import { commandKey, shortcuts, type Shortcut } from '../services/shortcuts';
  * broken.
  */
 export function ShortcutSheet({ onClose }: { onClose: () => void }): JSX.Element {
+  const trap = useFocusTrap<HTMLDivElement>();
   const groups = useMemo(() => {
     const all = shortcuts(commandKey());
     const order: Shortcut['where'][] = ['Anywhere', 'In a conversation', 'In a call'];
@@ -32,6 +34,7 @@ export function ShortcutSheet({ onClose }: { onClose: () => void }): JSX.Element
 
   return (
     <div
+      ref={trap}
       role="dialog"
       aria-modal="true"
       aria-label="Keyboard shortcuts"

@@ -8,6 +8,7 @@ import {
 import { InviteDialog } from './InviteDialog';
 import { CompassIcon, MessageIcon, PlusIcon } from '../../components/icons';
 import { ServerIcon } from '../../components/ServerIcon';
+import { useFocusTrap } from '../../services/focus-trap';
 
 /**
  * The left rail: direct messages at the top, then one tile per server, and the
@@ -20,6 +21,7 @@ import { ServerIcon } from '../../components/ServerIcon';
  * horizontal space and it does not turn the tile into a different shape.
  */
 export function ServerRail({ className }: { className?: string } = {}): JSX.Element {
+  const trap = useFocusTrap<HTMLDivElement>();
   const { servers, view, activeServerId, selectServer, showHome, createServer } = useChatStore();
   const [dialog, setDialog] = useState<'none' | 'create' | 'join'>('none');
   const [value, setValue] = useState('');
@@ -129,6 +131,7 @@ export function ServerRail({ className }: { className?: string } = {}): JSX.Elem
 
       {dialog !== 'none' && (
         <div
+          ref={trap}
           role="dialog"
           aria-modal="true"
           aria-label={dialog === 'create' ? 'Create a server' : 'Join a server'}

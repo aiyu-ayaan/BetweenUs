@@ -45,6 +45,7 @@ import {
   SmileIcon,
   XIcon,
 } from '../../components/icons';
+import { useFocusTrap } from '../../services/focus-trap';
 
 const isMac = typeof window !== 'undefined' && window.betweenus?.platform === 'darwin';
 
@@ -65,6 +66,7 @@ const SECTIONS: Array<{ id: Section; label: string; icon: typeof UsersIcon }> = 
  * neither, and a settings page that lists things that do not exist is a lie.
  */
 export function ServerSettings({ onClose }: { onClose: () => void }): JSX.Element {
+  const trap = useFocusTrap<HTMLDivElement>();
   const [section, setSection] = useState<Section>('overview');
   const servers = useChatStore((state) => state.servers);
   const activeServerId = useChatStore((state) => state.activeServerId);
@@ -87,6 +89,7 @@ export function ServerSettings({ onClose }: { onClose: () => void }): JSX.Elemen
 
   return (
     <div
+      ref={trap}
       role="dialog"
       aria-modal="true"
       aria-label={`${server.name} settings`}
@@ -215,6 +218,7 @@ export function ServerSettings({ onClose }: { onClose: () => void }): JSX.Elemen
 }
 
 function DangerButton({ compact = false }: { compact?: boolean } = {}): JSX.Element {
+  const trap = useFocusTrap<HTMLDivElement>();
   const servers = useChatStore((state) => state.servers);
   const activeServerId = useChatStore((state) => state.activeServerId);
   const deleteServer = useChatStore((state) => state.deleteServer);
@@ -250,6 +254,7 @@ function DangerButton({ compact = false }: { compact?: boolean } = {}): JSX.Elem
 
       {confirming && (
         <div
+          ref={trap}
           role="dialog"
           aria-modal="true"
           aria-label={label}
@@ -1261,6 +1266,7 @@ function ChannelAccess({
   channel: Channel;
   onClose: () => void;
 }): JSX.Element {
+  const trap = useFocusTrap<HTMLDivElement>();
   const members = useChatStore((state) => state.members);
   const [allowed, setAllowed] = useState<string[] | null>(null);
   const [busy, setBusy] = useState(false);
@@ -1310,6 +1316,7 @@ function ChannelAccess({
 
   return (
     <div
+      ref={trap}
       role="dialog"
       aria-modal="true"
       aria-label={`Who is on ${channel.name}`}

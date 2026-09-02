@@ -72,6 +72,7 @@ import {
   THEMES,
   ACCENT_PRESETS,
 } from '../../stores/theme';
+import { useFocusTrap } from '../../services/focus-trap';
 
 const isMac = typeof window !== 'undefined' && window.betweenus?.platform === 'darwin';
 
@@ -106,6 +107,7 @@ const SECTIONS: Array<{ id: Section; label: string; icon: typeof UserIcon }> = [
  * chat you are still in invites you to keep half-reading it.
  */
 export function UserSettings({ onClose }: { onClose: () => void }): JSX.Element {
+  const trap = useFocusTrap<HTMLDivElement>();
   const [section, setSection] = useState<Section>('account');
   const logout = useAuthStore((state) => state.logout);
 
@@ -119,6 +121,7 @@ export function UserSettings({ onClose }: { onClose: () => void }): JSX.Element 
 
   return (
     <div
+      ref={trap}
       role="dialog"
       aria-modal="true"
       aria-label="User settings"

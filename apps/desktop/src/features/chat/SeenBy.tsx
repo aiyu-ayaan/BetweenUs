@@ -15,6 +15,7 @@ import { useEffect, useRef } from 'react';
 import type { ChannelReadReceipt } from '@betweenus/shared-types';
 import { absoluteUrl } from '../../services/endpoint';
 import { SEEN_BY_FACES, seenByLabel } from './receipts';
+import { useFocusTrap } from '../../services/focus-trap';
 
 /** One small round face. Its own markup: `Avatar` starts at 32px, twice this. */
 function Face({ receipt, size }: { receipt: ChannelReadReceipt; size: number }): JSX.Element {
@@ -89,6 +90,7 @@ export function SeenByDialog({
   receipts: ChannelReadReceipt[];
   onClose: () => void;
 }): JSX.Element {
+  const trap = useFocusTrap<HTMLDivElement>();
   const box = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -101,6 +103,7 @@ export function SeenByDialog({
 
   return (
     <div
+      ref={trap}
       role="dialog"
       aria-modal="true"
       aria-label="Message info"

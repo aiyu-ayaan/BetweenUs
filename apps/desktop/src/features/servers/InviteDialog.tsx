@@ -17,8 +17,10 @@ import type { InvitePreview } from '@betweenus/shared-types';
 import { api } from '../../services/api';
 import { useChatStore } from '../../stores/chat';
 import { ServerIcon } from '../../components/ServerIcon';
+import { useFocusTrap } from '../../services/focus-trap';
 
 export function InviteDialog({ code, onClose }: { code: string; onClose: () => void }): JSX.Element {
+  const trap = useFocusTrap<HTMLDivElement>();
   const [preview, setPreview] = useState<InvitePreview | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -60,6 +62,7 @@ export function InviteDialog({ code, onClose }: { code: string; onClose: () => v
 
   return (
     <div
+      ref={trap}
       role="dialog"
       aria-modal="true"
       aria-label="Invitation"
