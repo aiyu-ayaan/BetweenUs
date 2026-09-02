@@ -89,6 +89,17 @@ interface ChatState {
   history: Record<string, DecryptedMessage[]>;
   loadingMessages: boolean;
   /**
+   * True from opening a server until its channels and members have answered.
+   *
+   * Both columns are drawn from lists that start empty, so without this they
+   * cannot tell "this server has no voice channels" from "nobody has said yet"
+   * - and they were saying the first while the second was true. The channel
+   * sidebar has a cache to paint from and the member list has nothing at all,
+   * which is why the member column used to vanish entirely for the length of
+   * the fetch.
+   */
+  loadingServer: boolean;
+  /**
    * channelId -> the id to ask for the next page before, null once the channel
    * has been read back to its first message. A channel with no entry has not
    * been opened yet.
@@ -101,6 +112,8 @@ interface ChatState {
   rightPanel: 'members' | 'pins' | 'search' | 'none';
   /** Pinned messages of the open channel, newest pin first. */
   pins: DecryptedMessage[];
+  /** True while the pin list is being fetched and decrypted for this channel. */
+  loadingPins: boolean;
   /**
    * A message the pinned list or the search results asked to be shown. The
    * message list watches it, scrolls there and highlights it, then clears it.
@@ -233,11 +246,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
   divider: {},
   history: {},
   loadingMessages: false,
+  loadingServer: false,
   cursors: {},
   loadingOlder: false,
   error: null,
   rightPanel: 'none',
   pins: [],
+  loadingPins: false,
   jumpTo: null,
   receipts: {},
 
@@ -341,7 +356,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   selectServer: async (serverId) => {
-    set({ view: 'server', activeServerId: serverId, channels: [], members: [], messages: [] });
+    set({
+      view: 'server',
+      activeServerId: serverId,
+      channels: [],
+      members: [],
+      messages: [],
+      loadingServer: true,
+    });
 
     // The channel list this server had last time, painted while the fresh one
     // is fetched. A sidebar that appears instantly and corrects itself beats
@@ -356,11 +378,22 @@ export const useChatStore = create<ChatState>((set, get) => ({
     // than lazily when a shortcode first appears.
     void loadEmoji(serverId);
 
-    const [channels, members] = await Promise.all([
-      api.channels(serverId),
-      // Members carry the display names presence attaches status to.
-      api.members(serverId).catch(() => []),
-    ]);
+    let channels: Channel[];
+    let members: ServerMember[];
+    try {
+      [channels, members] = await Promise.all([
+        api.channels(serverId),
+        // Members carry the display names presence attaches status to.
+        api.members(serverId).catch(() => []),
+      ]);
+    } finally {
+      // In a `finally` because a channel list that failed to arrive must still
+      // stop the skeletons: a stuck flag is grey bars for the life of the
+      // window, which is a worse lie than the empty state this replaced. Only
+      // if this is still the server on screen - a faster switch away has its own
+      // fetch in flight and owns the flag now.
+      if (get().activeServerId === serverId) set({ loadingServer: false });
+    }
     set({ channels, members });
     void cache.putChannels(serverId, channels).catch(() => undefined);
 
@@ -704,12 +737,19 @@ export const useChatStore = create<ChatState>((set, get) => ({
   loadPins: async () => {
     const channelId = get().activeChannelId;
     if (!channelId) {
-      set({ pins: [] });
+      set({ pins: [], loadingPins: false });
       return;
     }
-    const rows = await api.pins(channelId).catch(() => []);
-    const pins = await Promise.all(rows.map((message) => decrypt(message)));
-    if (get().activeChannelId === channelId) set({ pins });
+    set({ loadingPins: true });
+    try {
+      const rows = await api.pins(channelId).catch(() => []);
+      const pins = await Promise.all(rows.map((message) => decrypt(message)));
+      if (get().activeChannelId === channelId) set({ pins });
+    } finally {
+      // A decryption that threw must still clear the flag, or the panel is grey
+      // bars until the channel is changed.
+      if (get().activeChannelId === channelId) set({ loadingPins: false });
+    }
   },
 
   showPanel: (panel) => {
@@ -833,9 +873,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
       activeChannelId: null,
       history: {},
       cursors: {},
+      loadingServer: false,
       loadingOlder: false,
       error: null,
       pins: [],
+      loadingPins: false,
       jumpTo: null,
       readMarkers: {},
       divider: {},

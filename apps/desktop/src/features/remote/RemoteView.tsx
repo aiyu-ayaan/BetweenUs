@@ -11,6 +11,8 @@ import { useAuthStore } from '../../stores/auth';
 import { api } from '../../services/api';
 import { Avatar } from '../../components/Avatar';
 import { MenuIcon, MonitorIcon, ShieldIcon, XIcon } from '../../components/icons';
+import { SkeletonRows } from '../../components/Skeleton';
+import { listState } from '../../services/list-state';
 
 /** Labels, and the order they read in: what you can see, then what you can do. */
 const PERMISSION_LABELS: Array<{ id: RemotePermission; label: string; hint: string }> = [
@@ -74,7 +76,14 @@ export function RemoteView({ onOpenMenu }: { onOpenMenu?: () => void } = {}): JS
           </p>
         )}
 
-        {machines.length === 0 && !loading && (
+        {/* The first list this screen draws is a fetch away, and it used to be
+            drawn as nothing at all - a blank panel with a Refresh button, which
+            reads as a screen that failed rather than one that is working. */}
+        {listState(machines.length, loading) === 'loading' && (
+          <SkeletonRows rows={3} label="Loading machines" className="mx-auto max-w-md pt-8" />
+        )}
+
+        {listState(machines.length, loading) === 'empty' && (
           <div className="mx-auto max-w-md pt-16 text-center">
             <MonitorIcon className="mx-auto h-10 w-10 text-slate-600" />
             <h2 className="mt-3 text-lg font-semibold text-slate-200">No machines yet</h2>

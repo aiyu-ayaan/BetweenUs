@@ -14,6 +14,8 @@ import {
 import { api } from '../../services/api';
 import { useVoiceStore } from '../../stores/voice';
 import { UsersIcon, XIcon } from '../../components/icons';
+import { EmptyState, SkeletonRows } from '../../components/Skeleton';
+import { listState } from '../../services/list-state';
 import { SafetyNumberDialog } from './SafetyNumberDialog';
 
 export interface MemberListProps {
@@ -42,6 +44,13 @@ export function MemberList({
   const [verifying, setVerifying] = useState<ServerMember | null>(null);
   const channelId = useChatStore((state) => state.activeChannelId);
 
+  // A server that has not answered yet has no members, and so does a server
+  // with nobody in it. This column used to draw the second while the first was
+  // true - and drew it as an empty column with a heading that said "Members —
+  // 0", which is a statement rather than a wait.
+  const loading = useChatStore((state) => state.loadingServer);
+  const state = listState(members.length, loading);
+
   const here = members.filter((member) => online.has(member.userId));
   const away = members.filter((member) => !online.has(member.userId));
 
@@ -56,7 +65,7 @@ export function MemberList({
       <header className="flex h-12 shrink-0 items-center gap-2 border-b border-edge px-3">
         <UsersIcon className="h-4 w-4 text-slate-400" />
         <h2 className="flex-1 text-sm font-semibold text-slate-100">
-          Members — {members.length}
+          {state === 'loading' ? 'Members' : `Members — ${members.length}`}
         </h2>
         {onClose && (
           <button
@@ -71,6 +80,15 @@ export function MemberList({
       </header>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-2 py-4">
+        {state === 'loading' && <SkeletonRows rows={6} label="Loading members" className="px-2" />}
+
+        {state === 'empty' && (
+          <EmptyState
+            title="Nobody here yet"
+            hint="Invite somebody from the server menu and they will show up in this column."
+          />
+        )}
+
         <Group label={`Admins — ${staff.length}`} members={staff} statusOf={statusOf} onOpen={setMenu} />
         <Group label={`Online — ${rest.length}`} members={rest} statusOf={statusOf} onOpen={setMenu} />
         <Group

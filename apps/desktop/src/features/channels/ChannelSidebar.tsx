@@ -16,6 +16,8 @@ import {
   SpeakerIcon,
   XIcon,
 } from '../../components/icons';
+import { Skeleton } from '../../components/Skeleton';
+import { listState } from '../../services/list-state';
 
 export function ChannelSidebar({
   onOpenUserSettings,
@@ -28,6 +30,10 @@ export function ChannelSidebar({
 }): JSX.Element {
   const { servers, channels, activeServerId, activeChannelId, unread, selectChannel } =
     useChatStore();
+  // The cache paints the list this server had last time, so most of the time
+  // there is nothing to wait for. The first visit to a server has no cache, and
+  // that is the visit that used to be told "No text channels yet."
+  const loadingServer = useChatStore((state) => state.loadingServer);
 
   const [creating, setCreating] = useState<ChannelType | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -37,6 +43,8 @@ export function ChannelSidebar({
 
   const textChannels = channels.filter((channel) => channel.type === 'TEXT');
   const voiceChannels = channels.filter((channel) => channel.type === 'VOICE');
+  const textState = listState(textChannels.length, loadingServer);
+  const voiceState = listState(voiceChannels.length, loadingServer);
 
   return (
     <aside className={`panel flex shrink-0 flex-col bg-surface-800 ${className}`}>
@@ -82,7 +90,8 @@ export function ChannelSidebar({
               ) : null}
             </button>
           ))}
-          {textChannels.length === 0 && (
+          {textState === 'loading' && <ChannelSkeleton rows={4} label="Loading channels" />}
+          {textState === 'empty' && (
             <p className="px-2 py-2 text-sm text-slate-500">No text channels yet.</p>
           )}
         </div>
@@ -97,7 +106,8 @@ export function ChannelSidebar({
           {voiceChannels.map((channel) => (
             <VoiceChannelRow key={channel.id} channel={channel} />
           ))}
-          {voiceChannels.length === 0 && (
+          {voiceState === 'loading' && <ChannelSkeleton rows={2} label="Loading voice channels" />}
+          {voiceState === 'empty' && (
             <p className="px-2 py-2 text-sm text-slate-500">No voice channels yet.</p>
           )}
           <VoiceError />
@@ -296,6 +306,24 @@ function VoiceError(): JSX.Element | null {
       >
         <XIcon className="h-3 w-3" />
       </button>
+    </div>
+  );
+}
+
+/**
+ * Channel rows, as bars. Its own shape rather than `SkeletonRows`: a channel is
+ * a glyph and a short name, not an avatar and a person's name, and a round grey
+ * circle in this column would stand for something that is never drawn there.
+ */
+function ChannelSkeleton({ rows, label }: { rows: number; label: string }): JSX.Element {
+  return (
+    <div role="status" aria-busy="true" aria-label={label} className="space-y-1.5 px-2 py-2">
+      {Array.from({ length: rows }, (_, row) => (
+        <div key={row} className="flex items-center gap-2">
+          <Skeleton className="h-3.5 w-3.5 shrink-0" />
+          <Skeleton className={`h-3 ${['w-24', 'w-16', 'w-20', 'w-28'][row % 4]}`} />
+        </div>
+      ))}
     </div>
   );
 }

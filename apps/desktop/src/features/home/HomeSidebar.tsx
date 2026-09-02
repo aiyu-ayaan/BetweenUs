@@ -6,6 +6,8 @@ import { UserPanel } from '../settings/UserPanel';
 import { VoicePanel } from '../voice/VoicePanel';
 import { Avatar } from '../../components/Avatar';
 import { MonitorIcon, UsersIcon, XIcon } from '../../components/icons';
+import { SkeletonRows } from '../../components/Skeleton';
+import { listState } from '../../services/list-state';
 
 /**
  * The home sidebar: the Friends screen at the top, then one row per open
@@ -28,6 +30,12 @@ export function HomeSidebar({
   className?: string;
 }): JSX.Element {
   const directChannels = useFriendsStore((state) => state.directChannels);
+  // Same fetch as the friends screen, and the same lie it used to tell: "No
+  // conversations yet. Add a friend and start one." to somebody with twelve.
+  const directsState = listState(
+    directChannels.length,
+    useFriendsStore((state) => state.loading),
+  );
   const openDirect = useFriendsStore((state) => state.openDirect);
   const activeChannelId = useChatStore((state) => state.activeChannelId);
   const unread = useChatStore((state) => state.unread);
@@ -93,7 +101,10 @@ export function HomeSidebar({
         </p>
 
         <div className="space-y-0.5">
-          {directChannels.length === 0 && (
+          {directsState === 'loading' && (
+            <SkeletonRows rows={4} label="Loading conversations" className="px-2 py-2" />
+          )}
+          {directsState === 'empty' && (
             <p className="px-2 py-2 text-sm text-slate-500">
               No conversations yet. Add a friend and start one.
             </p>

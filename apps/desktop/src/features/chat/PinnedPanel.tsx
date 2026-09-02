@@ -3,6 +3,8 @@ import { useChatStore, type DecryptedMessage } from '../../stores/chat';
 import { useAuthStore } from '../../stores/auth';
 import { PersonAvatar } from '../../components/Avatar';
 import { PinIcon, XIcon } from '../../components/icons';
+import { SkeletonRows } from '../../components/Skeleton';
+import { listState } from '../../services/list-state';
 
 export interface PinnedPanelProps {
   onClose?: () => void;
@@ -23,6 +25,7 @@ export function PinnedPanel({
 }: PinnedPanelProps = {}): JSX.Element {
   const me = useAuthStore((state) => state.user);
   const pins = useChatStore((state) => state.pins);
+  const loadingPins = useChatStore((state) => state.loadingPins);
   const loadPins = useChatStore((state) => state.loadPins);
   const jumpToMessage = useChatStore((state) => state.jumpToMessage);
   const showPanel = useChatStore((state) => state.showPanel);
@@ -55,7 +58,9 @@ export function PinnedPanel({
         </button>
       </header>
 
-      {pins.length === 0 ? (
+      {listState(pins.length, loadingPins) === 'loading' ? (
+        <SkeletonRows rows={3} label="Loading pinned messages" className="p-3" />
+      ) : listState(pins.length, loadingPins) === 'empty' ? (
         <p className="px-4 py-6 text-sm text-slate-400">
           Nothing pinned yet. Right-click a message and choose <em>Pin</em>.
         </p>

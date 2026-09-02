@@ -12,6 +12,8 @@ import {
   UsersIcon,
   XIcon,
 } from '../../components/icons';
+import { EmptyState, SkeletonRows } from '../../components/Skeleton';
+import { listState } from '../../services/list-state';
 
 type Tab = 'online' | 'all' | 'pending' | 'add';
 
@@ -25,6 +27,7 @@ const TABS: Array<{ id: Tab; label: string }> = [
 export function FriendsView({ onOpenMenu }: { onOpenMenu?: () => void } = {}): JSX.Element {
   const [tab, setTab] = useState<Tab>('online');
   const friends = useFriendsStore((state) => state.friends);
+  const loading = useFriendsStore((state) => state.loading);
   const isOnline = usePresenceStore((state) => state.online);
 
   const accepted = friends.filter((friend) => friend.status === 'ACCEPTED');
@@ -145,28 +148,56 @@ export function FriendsView({ onOpenMenu }: { onOpenMenu?: () => void } = {}): J
         </div>
       </header>
 
-      {tab === 'add' ? <AddFriend /> : <FriendList friends={shown} tab={tab} />}
+      {tab === 'add' ? <AddFriend /> : <FriendList friends={shown} tab={tab} loading={loading} />}
     </section>
   );
 }
 
-function FriendList({ friends, tab }: { friends: Friend[]; tab: Tab }): JSX.Element {
+function FriendList({
+  friends,
+  tab,
+  loading,
+}: {
+  friends: Friend[];
+  tab: Tab;
+  loading: boolean;
+}): JSX.Element {
   const statusOf = useStatusOf();
   const accept = useFriendsStore((state) => state.accept);
   const remove = useFriendsStore((state) => state.remove);
   const block = useFriendsStore((state) => state.block);
   const openDirect = useFriendsStore((state) => state.openDirect);
 
-  if (friends.length === 0) {
+  // The list is empty before the fetch answers *and* when there is genuinely
+  // nobody, and this screen used to say the second every time it opened - an
+  // account with forty friends was told "No friends yet. Add someone by their
+  // username." for as long as the round trip took.
+  const state = listState(friends.length, loading);
+
+  if (state === 'loading') {
+    return <SkeletonRows rows={6} label="Loading friends" className="flex-1 px-4 sm:px-6 py-4" />;
+  }
+
+  if (state === 'empty') {
     return (
       <div className="flex flex-1 items-center justify-center p-8">
-        <p className="text-center text-slate-400">
-          {tab === 'pending'
-            ? 'No pending requests. When someone asks, they will be here.'
-            : tab === 'online'
-              ? 'Nobody is around right now.'
-              : 'No friends yet. Add someone by their username.'}
-        </p>
+        <EmptyState
+          icon={<UsersIcon className="h-10 w-10" />}
+          title={
+            tab === 'pending'
+              ? 'No pending requests'
+              : tab === 'online'
+                ? 'Nobody is around right now'
+                : 'No friends yet'
+          }
+          hint={
+            tab === 'pending'
+              ? 'When someone asks, they will be here.'
+              : tab === 'online'
+                ? 'The All tab has everybody, online or not.'
+                : 'Add someone by their username on the Add friend tab.'
+          }
+        />
       </div>
     );
   }
