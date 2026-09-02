@@ -76,6 +76,20 @@ interface Stage {
   lastSpokeAt: number;
 }
 
+/**
+ * Full screen here is the app's own overlay, not the operating system's, so the
+ * window buttons stay where they are and anything drawn into that corner ends up
+ * underneath them. The overlay header keeps the same corner clear that
+ * {@link TopBar} does: Windows and Linux paint minimise/maximise/close on the
+ * right, macOS puts its traffic lights on the left. A browser tab has neither, so
+ * there the corner is the page's to use.
+ */
+const captionInset = !isDesktopRuntime()
+  ? ''
+  : window.betweenus?.platform === 'darwin'
+    ? 'ps-[86px]'
+    : 'pe-[146px]';
+
 export function VoiceChannelView({
   channel,
   onOpenMenu,
@@ -456,7 +470,9 @@ function Theatre({ share, tiles }: { share: VoiceShare; tiles: Stage[] }): JSX.E
       >
         {/* Fullscreen top header overlay (Auto-hiding) */}
         <div
-          className={`absolute inset-x-0 top-0 z-30 flex items-center justify-between bg-gradient-to-b from-black/90 via-black/50 to-transparent p-4 transition-all duration-300 ease-out ${
+          className={`absolute inset-x-0 top-0 z-30 flex items-center justify-between gap-3 bg-gradient-to-b from-black/90 via-black/50 to-transparent p-4 transition-all duration-300 ease-out ${
+            captionInset
+          } ${
             showControls
               ? 'opacity-100 translate-y-0 pointer-events-auto'
               : 'opacity-0 -translate-y-6 pointer-events-none'
