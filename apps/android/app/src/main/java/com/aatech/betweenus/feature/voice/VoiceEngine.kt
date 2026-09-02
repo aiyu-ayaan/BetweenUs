@@ -11,6 +11,7 @@ import com.aatech.betweenus.core.data.IceServer
 import com.aatech.betweenus.core.data.BetweenUsApi
 import com.aatech.betweenus.core.data.PresenceSocket
 import com.aatech.betweenus.core.data.Session
+import com.aatech.betweenus.core.store.Listen
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -550,6 +551,11 @@ class VoiceEngine(private val context: Context) {
                 detach = CallSocket.on { event -> scope.launch { onSignal(event) } }
                 Session.accessToken?.let { CallSocket.connect(it) }
                 CallSocket.join(channelId)
+                // The gateway sends the listening session on join, so the
+                // subscription has to exist before the join rather than after
+                // it - a listener attached a moment later misses the only state
+                // that is sent unprompted.
+                Listen.start()
 
                 // Being in a call and being *seen* to be in one are two
                 // different subscriptions. The roster under a voice channel in
@@ -584,6 +590,9 @@ class VoiceEngine(private val context: Context) {
         // The report goes with the goodbye, which is the only way the server can
         // ever know it: it is not in the media path and has nothing to count.
         CallSocket.leave(CallUsage.leaveEvent(usageReport()))
+        // Nothing is playing to anybody here any more. Left behind, the stage
+        // would still be drawn on the next call this client joins.
+        Listen.clear()
         retiredLinks.clear()
         channelId?.let { PresenceSocket.leaveVoice(it) }
         // The state goes first, and it matters. See `teardown`.

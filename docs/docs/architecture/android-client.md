@@ -207,6 +207,36 @@ Opening a result reuses the quoted-message jump already in `ChatScreen` — scro
 to the row, then flash it. A row that is only scrolled to is a row nobody can
 pick out, because the list moved underneath them to get there.
 
+## A seat at Listen Together
+
+`core/store/Listen.kt` and `feature/voice/ListenStage.kt`. The phone holds the
+session the gateway sends — the queue, which track, whether it is paused, and
+where the needle was — and draws it above the call's control dock, with pause,
+skip and remove. Those are requests to the gateway, never local changes: it is
+the only thing that can order two people pressing skip at the same instant, for
+the same reason it arbitrates the screen share.
+
+`listenPositionAt` exists twice, here and in `packages/shared-types`, and has to
+agree to the millisecond. It is the entire meaning of the
+`positionMs`/`atServerMs` pair: the gateway sends where the track *was*, and
+each client advances it off a clock they share — which is what stops a progress
+bar needing a message a second to move. The cases that separate two plausible
+implementations are the tested ones: a paused track does not advance however
+long ago the state was made, a clock reading earlier than the stamp does not run
+the track backwards, a known duration clamps, and an unknown duration (`0`,
+which is what every track carries until some player reports one) must *not* —
+reading it as a length is a track that is over before it starts.
+
+Any state carrying a revision the client has already seen is dropped, so a
+client's own echo cannot undo somebody else's later change. A null session is
+the exception and always applies: "nothing is playing" carries no revision, and
+refusing it would leave a dead track on screen for ever.
+
+**The phone does not play the audio**, and the stage says so where somebody can
+read it. That half is a WebView, the IFrame API and a sync loop, and it is not
+being half-built on purpose — partial sync is audio that drifts silently, which
+is the one failure a listening session cannot survive.
+
 ## Push to talk, with a thumb
 
 `PushToTalk.kt`. The gate answers "is somebody making a noise"; this answers

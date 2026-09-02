@@ -908,6 +908,20 @@ fun VoiceChannelScreen(
             }
         }
 
+        // What the call is listening to, when it is listening to anything.
+        //
+        // Above the control dock rather than over the tiles: it is a thing to
+        // glance at and occasionally press, not the subject of the call. Absent
+        // entirely when no session is running - `ListenStage` draws nothing -
+        // so a call with no queue looks exactly as it did.
+        if (!inPip) {
+            ListenStage(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(start = 12.dp, end = 12.dp, bottom = 96.dp),
+            )
+        }
+
         // Problem alert banner
         if (!inPip) problem?.let {
             Notice(

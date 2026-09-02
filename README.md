@@ -119,8 +119,8 @@ to be framed, so no browser tab can ever show it.
 | Picture-in-picture while minimised | ✅ | — | — |
 | Join and leave tones | ✅ | ✅ | ✅ |
 | **Listen together** | | | |
-| Shared queue in a call, in step, video on screen | ✅ | ✅ | — |
-| Add, skip, seek or pause for everybody | ✅ | ✅ | — |
+| Shared queue in a call, in step, video on screen | ✅ | ✅ | ⚠️ sees the queue, plays nothing |
+| Add, skip, seek or pause for everybody | ✅ | ✅ | ⚠️ skip, pause, remove |
 | Music ducks under whoever is talking | ✅ | ✅ | — |
 | Browse youtube.com in the app, signed in | ✅ | — | — |
 | Paste a link | ✅ | ✅ | — |
