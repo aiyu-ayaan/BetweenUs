@@ -94,8 +94,8 @@ to be framed, so no browser tab can ever show it.
 | Replies, edit, delete, reactions | ✅ | ✅ | ✅ |
 | Pinned messages | ✅ | ✅ | ✅ |
 | Custom emoji in messages | ✅ | ✅ | ✅ |
-| `:` emoji suggestion menu while typing | ✅ | ✅ | — |
-| Emoji picker | ✅ | ✅ | ⚠️ Unicode only |
+| `:` emoji suggestion menu while typing | ✅ | ✅ | ✅ a bar |
+| Emoji picker, including the server's own | ✅ | ✅ | ✅ |
 | Search within a channel | ✅ | ✅ | ✅ |
 | Quick switcher | ✅ Ctrl+K | ✅ Ctrl+K | ✅ drawer |
 | Attachments of any type, up to 100 MB | ✅ | ✅ | ✅ |
