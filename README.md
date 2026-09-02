@@ -114,7 +114,7 @@ to be framed, so no browser tab can ever show it.
 | Be driven while sharing your screen | ✅ | — | — |
 | Manual quality override | ✅ | ✅ | ⚠️ automatic |
 | Connection panel: bitrate, loss, round trip, frame size | ✅ | ✅ | ✅ |
-| Reconnects a dropped link, and ends a call it cannot recover | — | — | ✅ |
+| Reconnects a dropped link, and ends a call it cannot recover | ✅ | ✅ | ✅ |
 | Push to talk | ✅ a held key | ✅ a held key | ✅ a held button |
 | Picture-in-picture while minimised | ✅ | — | — |
 | Join and leave tones | ✅ | ✅ | ✅ |
