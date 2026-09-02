@@ -207,6 +207,39 @@ Opening a result reuses the quoted-message jump already in `ChatScreen` — scro
 to the row, then flash it. A row that is only scrolled to is a row nobody can
 pick out, because the list moved underneath them to get there.
 
+## Driving somebody's shared screen
+
+`feature/voice/ShareControl.kt` — the viewer half of the desktop's
+`shareControl.ts`, and only that half. A phone can ask for the mouse on a screen
+somebody is sharing in a call and then use it; it cannot be driven itself,
+because being driven means injecting synthetic mouse and keyboard events and
+Android has no such thing outside an accessibility service — a permission this
+app has no business asking for.
+
+The asymmetry is answered rather than ignored: an `ask` arriving at a phone is
+met with a `deny` carrying a reason, so somebody on a desktop learns why not
+instead of waiting on a dialog that will never appear. Input aimed at a phone is
+dropped, which is the whole of the correct behaviour when there is nothing to
+inject it into.
+
+No server is involved. The exchange rides the peers' own data channels, which
+have exactly two ends, and the only authority is the person sharing pressing
+yes — the right authority, since it is their machine and they are sitting at it.
+Who a message came from is decided by which connection carried it, never by
+anything inside it, and a `grant` is honoured only from the peer that was
+actually asked.
+
+**Driving is offered only while the share is pinned.** That is correctness, not
+layout: pinned, the tile is exactly the stage box, so a touch maps to a fraction
+of the picture with nothing to guess. In a grid it is one tile among several and
+the arithmetic would be a guess about somebody else's mouse. The bar says so and
+offers the pin rather than leaving a surface that does the wrong thing.
+
+The surface is absolute rather than a trackpad, because a phone driving a
+desktop is somebody pointing at a thing they can see. A cancelled gesture still
+sends the release: a press never lifted is a mouse held down on somebody else's
+machine.
+
 ## A chair at Play Together
 
 `core/store/Play.kt`, `feature/voice/GameBoards.kt` and

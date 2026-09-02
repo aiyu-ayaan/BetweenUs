@@ -916,6 +916,22 @@ fun VoiceChannelScreen(
         // glance at and occasionally press, not the subject of the call. Absent
         // entirely when no session is running - `ListenStage` draws nothing -
         // so a call with no queue looks exactly as it did.
+        // Driving somebody's shared screen. Under the dock and the stages in
+        // z-order on purpose: they are drawn after this, so their own taps
+        // still reach them and only the picture itself is a drive surface.
+        //
+        // Offered only while the share is pinned, and that is a correctness
+        // rule rather than a layout preference. Pinned, the tile is exactly
+        // this box, so a touch maps to a fraction of the picture with nothing
+        // to guess. In a grid it is one tile among several and the arithmetic
+        // would be a guess about somebody else's mouse.
+        if (!inPip && screenHolder != null && pinned == screenHolder) {
+            DriveSurface(
+                sharerPeerId = screenHolder!!,
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
+
         if (!inPip) {
             Column(
                 modifier = Modifier
@@ -923,6 +939,17 @@ fun VoiceChannelScreen(
                     .padding(start = 12.dp, end = 12.dp, bottom = 96.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
+                // Only when somebody else is sharing, and never when it is this
+                // phone: asking yourself for your own mouse is not a thing.
+                screenHolder?.takeIf { it != engine.selfPeerId() }?.let { holder ->
+                    ShareControlBar(
+                        sharerPeerId = holder,
+                        sharerName = participants.firstOrNull { it.peer.peerId == holder }
+                            ?.peer?.username ?: "They",
+                        pinned = pinned == holder,
+                        onPin = { pinned = holder },
+                    )
+                }
                 // Both draw nothing when their session is absent, so a call
                 // with neither running looks exactly as it did.
                 ListenStage()

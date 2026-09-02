@@ -446,6 +446,14 @@ class VoiceEngine(private val context: Context) {
     val problem: StateFlow<String?> = _problem.asStateFlow()
 
     private var selfPeerId: String? = null
+
+    /**
+     * This client's own peer id in the call, once the gateway has said.
+     *
+     * Read by the share-control bar to tell "somebody is sharing" from "I am
+     * sharing" - asking yourself for your own mouse is not a thing.
+     */
+    fun selfPeerId(): String? = selfPeerId
     private var channelId: String? = null
     private var channelKey: String = ""
     private var iceServers: List<PeerConnection.IceServer> = emptyList()
@@ -558,6 +566,11 @@ class VoiceEngine(private val context: Context) {
                 // that is sent unprompted.
                 Listen.start()
                 Play.start()
+                // One envelope to one peer: a grant is between two people, and
+                // broadcasting it would tell the whole call.
+                ShareControl.attach { peerId, envelope ->
+                    connections[peerId]?.sendData(envelope)
+                }
 
                 // Being in a call and being *seen* to be in one are two
                 // different subscriptions. The roster under a voice channel in
@@ -596,6 +609,7 @@ class VoiceEngine(private val context: Context) {
         // would still be drawn on the next call this client joins.
         Listen.clear()
         Play.clear()
+        ShareControl.detach()
         retiredLinks.clear()
         channelId?.let { PresenceSocket.leaveVoice(it) }
         // The state goes first, and it matters. See `teardown`.
@@ -1786,6 +1800,14 @@ class VoiceEngine(private val context: Context) {
         }
 
         private fun onData(payload: JSONObject) {
+            // Which connection carried it is who it came from. A peer cannot
+            // claim to be somebody else here: there is no third party in the
+            // middle to be fooled.
+            if (payload.optString("topic") == ShareControl.TOPIC) {
+                payload.optJSONObject("message")
+                    ?.let { ShareControl.receive(peer.peerId, it) }
+                return
+            }
             if (payload.optString("topic") != VOICE_STATE_TOPIC) return
             val media = payload.optJSONObject("media") ?: return
             if (!media.has(Slot.MIC.wire)) return
