@@ -195,6 +195,13 @@ Tailscale network first, as an ephemeral node tagged `tag:ci`, so a host
 behind a home router needs no forwarded SSH port — `DEPLOY_HOST` becomes its
 MagicDNS name. Leave them unset and the job connects directly, as before.
 
+:::tip Test the connection on its own
+The **Deploy** workflow (`.github/workflows/deploy.yml`) runs the same
+connection by hand. Mode `check` changes nothing: it reports what the runner
+can reach and prints the host's SSH keys in the form `DEPLOY_KNOWN_HOSTS`
+wants. Run that before trusting a release to it.
+:::
+
 A failed deploy does **not** trigger `rollback`. The host has already put
 itself back on the previous images; the release is fine, and deleting its
 tags over one host that would not take it throws away a good build.
