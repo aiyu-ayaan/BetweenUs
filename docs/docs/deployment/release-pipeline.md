@@ -204,6 +204,25 @@ P3009 until the row is removed by hand.
 carries both directions and the `DELETE` that clears it.
 :::
 
+:::warning Deploying a new image onto a database that has the old names
+The mirror image of the same problem, and the one that actually bit
+`192.168.1.115`: a database that applied `20260810100000_custom_roles` before
+the rename, met by a post-rename image, finds two migrations it has never
+applied and dies on the same `relation "server_custom_roles" already exists`.
+
+Both migrations are now written to re-apply as a no-op — `CREATE TABLE IF NOT
+EXISTS`, and constraints dropped before they are added — so a forward deploy
+heals itself. What it cannot clear is a failed row an earlier deploy already
+recorded:
+
+```sql
+DELETE FROM "_prisma_migrations"
+ WHERE migration_name = '20260816150000_custom_roles' AND finished_at IS NULL;
+```
+
+Run that, then the reconcile file, then redeploy.
+:::
+
 ## On failure
 
 `rollback` deletes the version's image tags, deletes any tag and Release

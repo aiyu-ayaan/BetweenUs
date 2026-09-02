@@ -20,6 +20,12 @@
 -- Idempotent: a database that never applied the old names updates nothing, and a
 -- database already reconciled updates nothing either.
 --
+-- Since the two migrations were rewritten to re-apply as a no-op, running this
+-- is no longer the only way forward: a post-rename image now applies both
+-- harmlessly against a database that already has the tables. Renaming the rows
+-- is still the tidier end state, because it leaves one row per migration instead
+-- of an orphan under each old name.
+--
 -- THIS IS A ONE-WAY DOOR, AND THAT WAS FOUND THE HARD WAY
 --
 -- An image built before the rename carries the old directory names. Pointed at a
