@@ -572,8 +572,19 @@ jobs:
       # channel tags a deployment actually follows are moved in `promote`, once
       # every artifact exists - pushing them here would mean a failed Android
       # build leaving `latest` pointing at a release nobody finished.
+      # `continue-on-error`, and a second attempt below. Eighteen jobs start at
+      # once and each asks public.ecr.aws for the same two base images, and that
+      # registry throttles unauthenticated reads per second per source IP:
+      #
+      #   ERROR: failed to solve: public.ecr.aws/docker/library/nginx:1.27-alpine:
+      #   429 Too Many Requests / toomanyrequests: Rate exceeded
+      #
+      # Three seconds in, before a layer is built. One image out of eighteen
+      # losing that race takes the release with it, and the fix is to ask again
+      # once the second has passed - not to move the build somewhere else.
       - uses: docker/build-push-action@v6
         id: build
+        continue-on-error: true
         env:
           # Eighteen builds means eighteen build-record artifacts nobody reads,
           # and they are downloaded by anything that asks for "all artifacts".
@@ -605,11 +616,38 @@ jobs:
           cache-from: type=gha,scope=betweenus-${{ matrix.arch }}
           cache-to: type=gha,mode=max,scope=betweenus-${{ matrix.arch }}
 
+      # Long enough for a per-second throttle to have forgotten us, short enough
+      # that a genuine build failure costs one repeat rather than a coffee break.
+      - name: Wait out the rate limit
+        if: steps.build.outcome == 'failure'
+        run: sleep 45
+
+      - uses: docker/build-push-action@v6
+        id: rebuild
+        if: steps.build.outcome == 'failure'
+        env:
+          DOCKER_BUILD_RECORD_UPLOAD: false
+        with:
+          context: .
+          file: infrastructure/docker/Dockerfile
+          target: ${{ matrix.target }}
+          platforms: linux/${{ matrix.arch }}
+          build-args: |
+            NODE_IMAGE=public.ecr.aws/docker/library/node:20-alpine
+            NGINX_IMAGE=public.ecr.aws/docker/library/nginx:1.27-alpine
+          outputs: type=image,name=${{ env.IMAGE_REPO }},push-by-digest=true,name-canonical=true,push=true
+          cache-from: type=gha,scope=betweenus-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=betweenus-${{ matrix.arch }}
+
       # An empty file named after the digest. `manifest` needs nothing else,
       # and a file name travels through the artifact API without quoting.
+      #
+      # Whichever attempt produced it: the first step's output is empty when it
+      # failed, and the `test -n` below is what turns "neither worked" into a
+      # failed job rather than an artifact named after nothing.
       - name: Record the digest
         env:
-          DIGEST: ${{ steps.build.outputs.digest }}
+          DIGEST: ${{ steps.build.outputs.digest || steps.rebuild.outputs.digest }}
         run: |
           test -n "$DIGEST"
           mkdir -p "/tmp/digests/${{ matrix.target }}"
