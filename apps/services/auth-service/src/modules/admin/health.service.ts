@@ -18,7 +18,7 @@ import { readdir, stat, statfs } from 'node:fs/promises';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import Redis from 'ioredis';
-import { envOr } from '@betweenus/config';
+import { envOr, isProduction } from '@betweenus/config';
 import { prisma } from '@betweenus/database';
 import { getStorage, isS3Configured } from '@betweenus/storage';
 import type {
@@ -242,33 +242,44 @@ async function probe(
   }
 }
 
-/** The sibling services this deployment expects to be able to reach. */
-const SIBLINGS: Array<{ id: string; label: string; envVar: string; fallback: string }> = [
-  {
-    id: 'chat-service',
-    label: 'Chat service',
-    envVar: 'CHAT_SERVICE_URL',
-    fallback: 'http://chat-service:3004',
-  },
+/**
+ * The sibling services this deployment expects to be able to reach.
+ *
+ * Two fallbacks, because there are two places this runs and they do not share a
+ * name for anything. In a container, `chat-service` is a hostname compose
+ * resolves. On a developer's machine, `pnpm dev:backend` puts the same service
+ * on localhost and that hostname resolves to nothing at all - so the page came
+ * up with four red cards, a `down` badge, and no relation to the deployment in
+ * front of it. A health page that is red on every machine it is developed on is
+ * a health page nobody looks at twice.
+ *
+ * `*_SERVICE_URL` still overrides both, for a deployment that puts them
+ * somewhere else again.
+ */
+const SIBLINGS: Array<{ id: string; label: string; envVar: string; host: string; port: number }> = [
+  { id: 'chat-service', label: 'Chat service', envVar: 'CHAT_SERVICE_URL', host: 'chat-service', port: 3004 },
   {
     id: 'presence-service',
     label: 'Presence service',
     envVar: 'PRESENCE_SERVICE_URL',
-    fallback: 'http://presence-service:3005',
+    host: 'presence-service',
+    port: 3005,
   },
-  {
-    id: 'call-service',
-    label: 'Call service',
-    envVar: 'CALL_SERVICE_URL',
-    fallback: 'http://call-service:3007',
-  },
+  { id: 'call-service', label: 'Call service', envVar: 'CALL_SERVICE_URL', host: 'call-service', port: 3007 },
   {
     id: 'remote-gateway',
     label: 'Remote gateway',
     envVar: 'REMOTE_GATEWAY_URL',
-    fallback: 'http://remote-gateway:3008',
+    host: 'remote-gateway',
+    port: 3008,
   },
 ];
+
+/** Where a sibling is, absent an explicit `*_SERVICE_URL`. */
+function siblingUrl(sibling: (typeof SIBLINGS)[number]): string {
+  const host = isProduction() ? sibling.host : '127.0.0.1';
+  return envOr(sibling.envVar, `http://${host}:${sibling.port}`);
+}
 
 /** Rows as `pg_stat_user_tables` hands them back, before they are trimmed. */
 interface TableSizeRow {
@@ -779,7 +790,7 @@ export class AdminHealthService {
         if (pong !== 'PONG') throw new Error(`Unexpected reply: ${pong}`);
       }),
       ...SIBLINGS.map((sibling) => {
-        const url = `${envOr(sibling.envVar, sibling.fallback).replace(/\/$/, '')}/health`;
+        const url = `${siblingUrl(sibling).replace(/\/$/, '')}/health`;
         // Redacted for the same reason the database URL is: a service URL with
         // basic-auth credentials in it is unusual but entirely legal.
         return probe(sibling.id, sibling.label, redactUrl(url), async () => {
