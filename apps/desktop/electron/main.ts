@@ -39,6 +39,7 @@ import {
   youTubeSearch,
   type ViewBounds,
 } from './youtube-view';
+import { NotificationRegistry } from './notification-registry';
 import { startYouTubeRelay, type Relay } from './youtube-relay';
 import {
   channelOf,
@@ -1246,6 +1247,16 @@ ipcMain.on('remote:stop', () => stopInputBackend());
 // is speaking); the main process owns the OS-level part: the notification
 // itself, the taskbar flash, and bringing the window back on a click.
 
+/**
+ * The notification standing for each channel, so it can be taken away again.
+ *
+ * The bookkeeping lives in `notification-registry.ts` with a check beside it:
+ * the rules are small and every one of them fails quietly - a map that grows
+ * for the life of the app, or a late close event evicting the notification that
+ * replaced it.
+ */
+const notifications = new NotificationRegistry();
+
 ipcMain.on(
   'notification:show',
   (
@@ -1282,9 +1293,29 @@ ipcMain.on(
       }
     });
 
+    // A run of messages in one channel is one notification, which is what the
+    // web half gets from `tag`. Held so it can be closed later, and dropped
+    // when the OS closes it so the map does not grow for the life of the app.
+    if (typeof payload.channelId === 'string') {
+      const channelId = payload.channelId;
+      notification.on('close', () => notifications.forget(channelId, notification));
+      notifications.post(channelId, notification);
+    }
+
     notification.show();
   },
 );
+
+/**
+ * Take a channel's notification away: it has been dealt with elsewhere.
+ *
+ * The renderer decides when - it is the side holding the socket that hears the
+ * read marker move - and the main process owns the notification, so it is the
+ * side that can close one.
+ */
+ipcMain.on('notification:dismiss', (_event, channelId: string) => {
+  if (typeof channelId === 'string') notifications.close(channelId);
+});
 
 // --- System tray ------------------------------------------------------------
 //

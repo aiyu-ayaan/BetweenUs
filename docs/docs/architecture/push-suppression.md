@@ -217,6 +217,34 @@ The reader's own device gets the push too and does nothing with it — it cleare
 its notification when the channel opened. Excluding it would mean the server
 knowing which device sent the marker, which it does not and has no reason to.
 
+### Desktop and web take the same marker off a socket
+
+They hold a live `/ws/chat` connection, so they need no push for this. The same
+`channel.read` event is already fanned out to the channel room by
+`chat.gateway.ts`, and `stores/chat.ts` was already receiving it and returning
+early on the account's own marker — correctly, since a read receipt is about who
+*else* has seen your message. That early return is where the dismissal hooks in.
+
+What was missing on both surfaces was a **handle** on the notification. The
+browser leaned on the `tag` option to collapse a run of messages into one toast,
+and the Electron main process leaned on the OS to do the same; collapsing is not
+dismissing, and neither side had kept anything it could close. Each now holds a
+per-channel map, and the main process's is `electron/notification-registry.ts`,
+which has a check beside it because every rule in it fails silently:
+
+- A new notification for a channel **closes the one it replaces**, or a
+  conversation ends up showing two.
+- A close event is matched **by identity** before it forgets an entry. The event
+  for a notification that has already been replaced arrives *after* its
+  replacement is registered, so forgetting by key alone evicts the live one and
+  leaves the app unable to dismiss what is on screen.
+- An entry the OS closed is **dropped**, or the map grows for the life of the
+  app.
+
+Like Android, the window that did the reading also handles its own marker and
+finds nothing standing. Paying for that no-op is cheaper than a rule about which
+device sent what.
+
 ---
 
 ## What is still decided on the client

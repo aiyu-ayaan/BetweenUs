@@ -16,6 +16,15 @@ const api = {
   notify: (title: string, body: string, channelId?: string, active = false): void => {
     ipcRenderer.send('notification:show', { title, body, channelId, active });
   },
+  /**
+   * Takes away the notification standing for a channel.
+   *
+   * Sent when this account reads that conversation somewhere else: a toast for
+   * something already answered is a toast asking to be checked twice.
+   */
+  dismissNotification: (channelId: string): void => {
+    ipcRenderer.send('notification:dismiss', channelId);
+  },
   /** Fires when a notification is clicked, with the channel it was about. */
   onNotificationActivate: (handler: (channelId: string) => void): (() => void) => {
     const listener = (_event: unknown, channelId: string): void => handler(channelId);

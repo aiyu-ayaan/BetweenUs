@@ -26,7 +26,12 @@ import {
   syncChannelKeys,
 } from '../services/e2ee';
 import { decodeBody, encodeBody } from '../services/message-body';
-import { notifyMessage, publishUnreadCount, windowIsFocused } from '../services/notifications';
+import {
+  dismissChannelNotification,
+  notifyMessage,
+  publishUnreadCount,
+  windowIsFocused,
+} from '../services/notifications';
 import { mentionsMe } from '../services/mentions';
 import { cache } from '../services/cache';
 import { forgetAttachments, openAttachment, uploadAttachment } from '../services/attachments';
@@ -1236,9 +1241,19 @@ chatSocket.on((event) => {
   // read past.
   if (event.type === 'channel.read') {
     const self = useAuthStore.getState().user;
-    // Your own marker, from another of your devices. It is not a receipt: the
-    // row is about who else has seen your message.
-    if (event.userId === self?.id) return;
+    // Your own marker, from another of your devices. It is not a receipt - the
+    // row is about who else has seen your message - but it is exactly the
+    // moment a notification standing for that conversation should go away:
+    // somebody has just answered it at a laptop, and a toast still asking to be
+    // looked at is asking twice.
+    //
+    // Also fires for the marker this window itself just posted, where there is
+    // nothing standing and nothing to do. That is the cheap case, and paying
+    // for it is better than a rule about which device sent what.
+    if (event.userId === self?.id) {
+      dismissChannelNotification(event.channelId);
+      return;
+    }
     const state = useChatStore.getState();
     const known = state.receipts[event.channelId];
     // A channel this client has never opened has no list to patch, and one

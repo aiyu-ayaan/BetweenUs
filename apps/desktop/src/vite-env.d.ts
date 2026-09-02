@@ -57,6 +57,7 @@ interface Window {
   betweenus?: {
     platform: string;
     notify: (title: string, body: string, channelId?: string, active?: boolean) => void;
+    dismissNotification: (channelId: string) => void;
     /** Returns an unsubscribe function. */
     onNotificationActivate: (handler: (channelId: string) => void) => () => void;
     /** Total unread, for the tray tooltip and the dock badge. */

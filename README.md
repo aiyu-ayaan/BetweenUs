@@ -147,7 +147,7 @@ to be framed, so no browser tab can ever show it.
 | Notifications for messages, mentions and calls | ✅ | ✅ | ✅ FCM, app dead or alive |
 | Per-channel and per-person mute, quiet hours | ✅ | ✅ | ✅ |
 | Not woken for a chat open on another of your devices | ✅ | ✅ | ✅ |
-| Notification clears when you read it on another device | — | — | ✅ |
+| Notification clears when you read it on another device | ✅ | ✅ | ✅ |
 | System tray, start with the system | ✅ | — | — |
 | Self-updates from GitHub Releases (alpha / beta / stable) | — | — | ✅ |
 | **Remote desktop** | | | |

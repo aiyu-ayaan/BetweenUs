@@ -275,6 +275,16 @@ function raise(title: string, body: string, channelId?: string, active = false):
   show(title, body, channelId);
 }
 
+/**
+ * The toast standing for each channel, in a browser tab.
+ *
+ * `tag` already collapses a run of messages into one toast, but it gives no
+ * handle on the toast it collapsed onto - and a handle is exactly what is
+ * needed to take one away again. Electron keeps the same map on its own side,
+ * for its own notifications.
+ */
+const standing = new Map<string, Notification>();
+
 /** The toast itself, once permission is known to be granted. */
 function show(title: string, body: string, channelId?: string): void {
   // `tag` collapses a run of messages in one channel into a single toast,
@@ -285,6 +295,36 @@ function show(title: string, body: string, channelId?: string): void {
     if (channelId) for (const handler of clickHandlers) handler(channelId);
     note.close();
   };
+  if (!channelId) return;
+  standing.set(channelId, note);
+  // A toast the person dismissed themselves is not one to hold a handle on.
+  note.onclose = () => {
+    if (standing.get(channelId) === note) standing.delete(channelId);
+  };
+}
+
+/**
+ * Take away the notification for a conversation that has been read elsewhere.
+ *
+ * The other half of push suppression, and the half that was missing here. Not
+ * being woken for a channel open on another device stops a *new* notification;
+ * this is what happens to one that is already standing when somebody answers it
+ * from a laptop. A notification for something already dealt with is a request
+ * to check the same thing twice.
+ *
+ * Safe to call for a channel with nothing showing, which is most calls: the
+ * read marker moves every time anybody reads anything.
+ */
+export function dismissChannelNotification(channelId: string): void {
+  const bridge = window.betweenus;
+  if (bridge) {
+    bridge.dismissNotification(channelId);
+    return;
+  }
+  const note = standing.get(channelId);
+  if (!note) return;
+  standing.delete(channelId);
+  note.close();
 }
 
 /** Runs `handler` when the user clicks a notification. */
