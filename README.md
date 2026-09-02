@@ -69,6 +69,7 @@ to be framed, so no browser tab can ever show it.
 | Username checked while you type, and unique | ✅ | ✅ | ✅ |
 | Forgotten password: emailed link, or an admin-opened reset | ✅ | ✅ | ✅ |
 | Encryption identity: unlock, backup secret | ✅ | ✅ | ✅ |
+| Told when this machine holds the only copy of your key | ✅ | ✅ | — |
 | Device list and revoking a device | ✅ | ✅ | — |
 | Point the client at another deployment | ✅ | ✅ | ✅ |
 | Adaptive layout: two panes on tablets and unfolded foldables | ✅ | ✅ | ✅ |

@@ -47,6 +47,7 @@ import { ClockNotice } from './components/ClockNotice';
 import { UpdateNotice } from './components/UpdateNotice';
 import { ConnectionNotice } from './components/ConnectionNotice';
 import { ShortcutSheet } from './components/ShortcutSheet';
+import { BackupNotice } from './components/BackupNotice';
 import { opensShortcutSheet } from './services/shortcuts';
 import { QuickSwitcher } from './features/shell/QuickSwitcher';
 import { useVoiceStore } from './stores/voice';
@@ -498,6 +499,10 @@ function Workbench(): JSX.Element {
         onToggleSidebar={() => setSidebarOpen((open) => !open)}
       />
       <ConnectionNotice />
+      {/* Almost never drawn: it fires only for an account whose key exists on
+          this machine and nowhere else, which is a provider sign-in that never
+          set a recovery passphrase. */}
+      <BackupNotice onOpenSettings={() => setSettings('user')} />
       <ClockNotice />
       <VersionNotice />
       <UpdateNotice />
