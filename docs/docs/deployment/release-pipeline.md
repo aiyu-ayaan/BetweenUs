@@ -190,6 +190,11 @@ The job checks out the release tag on the host and runs
 URL from outside — the only place a Cloudflare tunnel that did not come back
 up is visible.
 
+Set `TS_OAUTH_CLIENT_ID` and `TS_OAUTH_SECRET` and the job joins your
+Tailscale network first, as an ephemeral node tagged `tag:ci`, so a host
+behind a home router needs no forwarded SSH port — `DEPLOY_HOST` becomes its
+MagicDNS name. Leave them unset and the job connects directly, as before.
+
 A failed deploy does **not** trigger `rollback`. The host has already put
 itself back on the previous images; the release is fine, and deleting its
 tags over one host that would not take it throws away a good build.

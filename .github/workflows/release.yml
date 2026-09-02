@@ -996,7 +996,29 @@ jobs:
     environment:
       name: production
       url: ${{ vars.BETWEENUS_API_URL }}
+    # Read in the step `if` below, because the `secrets` context cannot be. Its
+    # presence is the switch: a tailnet deployment sets it, a host with a public
+    # SSH port does not, and neither has to be told about the other.
+    env:
+      TS_OAUTH_CLIENT_ID: ${{ secrets.TS_OAUTH_CLIENT_ID }}
     steps:
+      # A host behind a home router has no port to forward. The runner joins the
+      # tailnet as an ephemeral, tagged node - the OAuth client mints a one-use
+      # key at the start of the job and the node is gone when it ends, so there
+      # is no long-lived auth key in the repository and no machine accumulating
+      # in the admin console per release.
+      #
+      # `tag:ci` is what the ACL grants; the deployment answers to `tag:home-pi`
+      # and to nothing else on the tailnet. See RELEASING.md for the policy.
+      - name: Join the tailnet
+        if: env.TS_OAUTH_CLIENT_ID != ''
+        uses: tailscale/github-action@v3
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:ci
+          version: latest
+
       # The key never reaches the disk of a step that runs anything else, and
       # the host key is pinned: `StrictHostKeyChecking=no` on a deploy is an
       # invitation to hand the deployment's SSH session to whoever answers.
