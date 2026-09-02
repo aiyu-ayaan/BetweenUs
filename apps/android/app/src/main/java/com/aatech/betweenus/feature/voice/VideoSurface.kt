@@ -102,6 +102,14 @@ internal fun VideoSurface(
                 factory = { context ->
                     SurfaceViewRenderer(context).apply {
                         init(eglContext, watch)
+                        // Nobody taps the screen while they are watching one, so
+                        // the display timer ran out mid-call and mid-share. The
+                        // view flag rather than the window's: the window keeps
+                        // the screen on while *any* attached view asks for it,
+                        // which counts the tiles for us and lets go on its own
+                        // when the last one leaves. An audio-only call renders
+                        // no surface at all, so it still sleeps in a pocket.
+                        keepScreenOn = true
                         setScalingType(fit)
                         setEnableHardwareScaler(hardwareScaler)
                         setMirror(mirror)
