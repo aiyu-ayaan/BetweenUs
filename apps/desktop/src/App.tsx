@@ -46,6 +46,8 @@ import { VersionNotice } from './components/VersionNotice';
 import { ClockNotice } from './components/ClockNotice';
 import { UpdateNotice } from './components/UpdateNotice';
 import { ConnectionNotice } from './components/ConnectionNotice';
+import { ShortcutSheet } from './components/ShortcutSheet';
+import { opensShortcutSheet } from './services/shortcuts';
 import { QuickSwitcher } from './features/shell/QuickSwitcher';
 import { useVoiceStore } from './stores/voice';
 import { BetweenUsLogoIcon } from './components/icons';
@@ -410,6 +412,7 @@ function Workbench(): JSX.Element {
   const [homeScreen, setHomeScreen] = useState<'friends' | 'remote' | null>('friends');
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [switcher, setSwitcher] = useState(false);
+  const [shortcutSheet, setShortcutSheet] = useState(false);
   const [showDrawer, setShowDrawer] = useState(false);
 
   const isRightPanelOpen =
@@ -450,13 +453,31 @@ function Workbench(): JSX.Element {
     if (activeChannelId) setHomeScreen(null);
   }, [activeChannelId]);
 
-  // Ctrl+K anywhere. It is deliberately the one global shortcut in the app:
-  // everything else you can reach from it.
+  // The global bindings. `Ctrl+K` was for a long time the only one, on the
+  // reasoning that everything is reachable from it - which is right about
+  // navigation and was quietly taken to mean the whole keyboard.
+  //
+  // The list a person sees lives in `services/shortcuts.ts`, so adding a
+  // binding and telling anybody about it are one edit.
   useEffect(() => {
     const onKey = (event: KeyboardEvent): void => {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
         event.preventDefault();
         setSwitcher((open) => !open);
+        return;
+      }
+      // Search this conversation. `Ctrl+F` is what every application on the
+      // machine means by it, and the panel it opens has existed all along with
+      // no way to reach it from the keyboard.
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'f') {
+        if (!useChatStore.getState().activeChannelId) return;
+        event.preventDefault();
+        useChatStore.getState().showPanel('search');
+        return;
+      }
+      if (opensShortcutSheet(event)) {
+        event.preventDefault();
+        setShortcutSheet(true);
       }
     };
     window.addEventListener('keydown', onKey);
@@ -577,6 +598,7 @@ function Workbench(): JSX.Element {
       />
 
       {switcher && <QuickSwitcher onClose={() => setSwitcher(false)} />}
+      {shortcutSheet && <ShortcutSheet onClose={() => setShortcutSheet(false)} />}
 
       {/* A remote session covers the window wherever it was started from - the
           machine list, or the "Request control" button on somebody's screen

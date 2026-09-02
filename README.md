@@ -98,6 +98,8 @@ to be framed, so no browser tab can ever show it.
 | Emoji picker, including the server's own | ✅ | ✅ | ✅ |
 | Search within a channel | ✅ | ✅ | ✅ |
 | Quick switcher | ✅ Ctrl+K | ✅ Ctrl+K | ✅ drawer |
+| Search a conversation from the keyboard (Ctrl+F) | ✅ | ✅ | — |
+| Keyboard shortcut sheet (`?`) | ✅ | ✅ | — |
 | Attachments of any type, up to 100 MB | ✅ | ✅ | ✅ |
 | Sending survives leaving the screen | — | — | ✅ foreground service |
 | HEIC photos converted, photos re-encoded on the way out | ✅ | ✅ | ✅ |
