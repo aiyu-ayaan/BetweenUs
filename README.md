@@ -119,12 +119,12 @@ to be framed, so no browser tab can ever show it.
 | Picture-in-picture while minimised | ✅ | — | — |
 | Join and leave tones | ✅ | ✅ | ✅ |
 | **Listen together** | | | |
-| Shared queue in a call, in step, video on screen | ✅ | ✅ | ⚠️ sees the queue, plays nothing |
+| Shared queue in a call, in step, video on screen | ✅ | ✅ | ✅ |
 | Add, skip, seek or pause for everybody | ✅ | ✅ | ⚠️ skip, pause, remove |
-| Music ducks under whoever is talking | ✅ | ✅ | — |
+| Music ducks under whoever is talking | ✅ | ✅ | ✅ |
 | Browse youtube.com in the app, signed in | ✅ | — | — |
 | Paste a link | ✅ | ✅ | — |
-| Video on the stage, with a shared transport | ✅ | ✅ | — |
+| Video on the stage, with a shared transport | ✅ | ✅ | ✅ |
 | **Play together** | | | |
 | Six board games on the call stage | ✅ | ✅ | — |
 | One **Apps** button: listen together and play together behind it | ✅ | ✅ | — |

@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -16,36 +17,43 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.aatech.betweenus.core.data.ServerClock
 import com.aatech.betweenus.core.store.Listen
 import com.aatech.betweenus.core.store.ListenSession
 import com.aatech.betweenus.core.store.ListenTrack
+import com.aatech.betweenus.core.store.ListenSync
 import com.aatech.betweenus.core.store.listenPositionAt
 import com.aatech.betweenus.ui.components.BetweenUsIcon
 import com.aatech.betweenus.ui.components.BetweenUsIcons
 import com.aatech.betweenus.ui.components.IconAction
+import android.webkit.WebView
 import kotlinx.coroutines.delay
 
 /**
- * What the call is listening to, on the phone.
+ * What the call is listening to, on the phone, playing it.
  *
- * A seat at the table rather than a second sound system: the phone shows the
- * queue, says who added what and who last changed it, and can pause, skip and
- * drop a track. The audio is still coming out of the desktops in the call.
+ * The queue, who added what, the transport - and a [YouTubeFrame] kept in step
+ * with everybody else by [ListenSync]. The phone is a full participant in the
+ * session now rather than a remote control for one.
  *
- * **It does not play anything, and it says so.** A stage that looked like a
- * player and produced no sound would be read as broken; one that states what it
- * is is read as what it is. The player is the next item - a WebView, the IFrame
- * API and a sync loop - and half of it would be audio that drifts silently,
- * which is the one failure a listening session cannot survive.
+ * ## Every client streams for itself
+ *
+ * No audio crosses the call. The gateway holds a queue and a position; each
+ * client fetches the video from YouTube itself and seeks to where the call
+ * says it should be. That is why this can exist at all with no media server,
+ * and why the sync is arithmetic over a shared clock rather than a stream.
  */
 
 /** `4:07`, and `1:02:03` once an hour is involved. */
@@ -108,6 +116,16 @@ private fun ListenStageContent(session: ListenSession, modifier: Modifier = Modi
             .padding(14.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
+        if (current != null) {
+            ListenPlayer(
+                session = session,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(16f / 9f)
+                    .clip(MaterialTheme.shapes.medium),
+            )
+        }
+
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text(
@@ -168,16 +186,6 @@ private fun ListenStageContent(session: ListenSession, modifier: Modifier = Modi
             )
         }
 
-        // Said plainly rather than left to be discovered. Somebody looking at a
-        // queue on a phone and hearing nothing needs to know which of the two
-        // things is happening.
-        Text(
-            text = "Playing on the desktops in this call. This phone shows the queue and can " +
-                "change it; it does not play the track.",
-            style = MaterialTheme.typography.bodySmall,
-            color = scheme.onSurfaceVariant,
-        )
-
         if (session.queue.size > 1) {
             LazyColumn(
                 modifier = Modifier.heightIn(max = 180.dp),
@@ -219,3 +227,93 @@ private fun ListenStageContent(session: ListenSession, modifier: Modifier = Modi
         }
     }
 }
+
+/**
+ * The embed, and the loop that keeps it in step.
+ *
+ * Three jobs, and they are separated because they run on different clocks.
+ * **Loading** happens when the track changes. **Reconciling** happens every
+ * [ListenSync.DRIFT_CHECK_MS] and is the only thing that seeks. **Ducking**
+ * follows whoever is talking and touches nothing else.
+ *
+ * The player is asked for its own position rather than told what it should be:
+ * a correction computed from what this client last sent would be a client
+ * correcting itself towards its own opinion.
+ */
+@Composable
+private fun ListenPlayer(session: ListenSession, modifier: Modifier = Modifier) {
+    val context = LocalContext.current
+    val engine = VoiceEngine.live.collectAsStateWithLifecycle().value
+    val participants = engine?.participants?.collectAsStateWithLifecycle()?.value.orEmpty()
+
+    /** The last thing the embed said about itself. Null until it has loaded. */
+    var reported by remember { mutableStateOf<YouTubeFrame.PlayerState?>(null) }
+    /** Tracks this client has already described, so it says so once. */
+    val described = remember { mutableSetOf<String>() }
+    /** Tracks this client has already reported the end of. */
+    val finished = remember { mutableSetOf<String>() }
+
+    val web = remember { WebView(context) }
+    val frame = remember { YouTubeFrame(web) { reported = it } }
+
+    DisposableEffect(frame) {
+        frame.attach()
+        onDispose { frame.release() }
+    }
+
+    val current = session.current
+
+    // A track change is a fresh page. The frame decides whether it is really a
+    // change; asking twice for the same video does nothing.
+    LaunchedEffect(current?.ref) {
+        current?.ref?.let { frame.load(it) }
+    }
+
+    // --- the reconcile loop --------------------------------------------------
+    LaunchedEffect(session, current?.id) {
+        val track = current ?: return@LaunchedEffect
+        while (true) {
+            frame.poll()
+            val state = reported
+            if (state != null) {
+                // Play and pause first: a paused session whose player is still
+                // running would be corrected towards a moving target for ever.
+                if (session.paused && state.playing) frame.pause()
+                if (!session.paused && !state.playing && !state.ended) frame.play()
+
+                ListenSync.correction(session, ServerClock.nowMs(), state.positionMs)
+                    ?.let { frame.seek(it) }
+
+                // The title and length, once, for everybody without a player.
+                if (described.add(track.id) && (state.title.isNotBlank() || state.durationMs > 0)) {
+                    if (track.title.isBlank() || track.durationMs == 0L) {
+                        Listen.reportMeta(track.id, state.title, state.durationMs)
+                    }
+                }
+
+                // The end of a track advances the queue, and the gateway
+                // ignores a second report for one that is no longer current -
+                // which is what makes several clients finishing at once safe.
+                if (state.ended && finished.add(track.id)) Listen.reportEnded(track.id)
+            }
+            delay(ListenSync.DRIFT_CHECK_MS)
+        }
+    }
+
+    // --- ducking -------------------------------------------------------------
+    //
+    // The embed's own volume, not the phone's: turning the media stream down
+    // would duck every other sound on the device, and the call is on the voice
+    // stream and must not move at all.
+    val talking = participants.any { it.speaking }
+    LaunchedEffect(talking) {
+        frame.volume(if (talking) DUCKED_VOLUME else FULL_VOLUME)
+    }
+
+    AndroidView(factory = { web }, modifier = modifier)
+}
+
+/** A quarter, matching the desktop's `DUCK`: audible under a voice, not gone. */
+private const val DUCKED_VOLUME = 25
+
+private const val FULL_VOLUME = 100

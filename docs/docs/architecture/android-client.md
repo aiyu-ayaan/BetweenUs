@@ -232,10 +232,42 @@ client's own echo cannot undo somebody else's later change. A null session is
 the exception and always applies: "nothing is playing" carries no revision, and
 refusing it would leave a dead track on screen for ever.
 
-**The phone does not play the audio**, and the stage says so where somebody can
-read it. That half is a WebView, the IFrame API and a sync loop, and it is not
-being half-built on purpose — partial sync is audio that drifts silently, which
-is the one failure a listening session cannot survive.
+The phone plays the audio too. `YouTubeFrame.kt` is a `WebView` running
+YouTube's own IFrame API — the same player the desktop drives, and the only way
+to play a YouTube video that is neither against their terms nor a scraper that
+breaks every few months. No audio crosses the call: the gateway holds a queue
+and a position, and each client streams the video itself, which is what lets any
+of this exist with no media server.
+
+`ListenSync.kt` is the desktop's `listen-sync.ts` with its numbers intact, since
+two clients correcting on different tolerances are two clients that disagree
+about whether they are in step. A second and a half of drift is left alone;
+past it the player is pulled back in one jump, to where the call is at the
+moment of the decision rather than where it was when the drift was measured — a
+seek is not instant and the track keeps moving while it happens. A paused
+session gets a quarter second instead, because nothing is moving and two people
+staring at a stopped track that reads different numbers is the most obviously
+broken this can look.
+
+Three things about the embed were not optional:
+
+- `mediaPlaybackRequiresUserGesture = false`, or every track waits for each
+  person to tap the video — which in a synchronised session means everybody
+  starting out of step by however long their taps took.
+- `playsinline=1`, or Android hands the video to the system's full-screen
+  player: a second surface this app cannot pause, seek or duck.
+- A real base URL, because the IFrame API checks the origin it was loaded from
+  and refuses a document that has none.
+
+The phone now also fills in what a track is called. Nothing on the server may
+ask YouTube — that would be a backend service with an API key, an egress rule
+and an opinion about who is listening to what — so the first client whose player
+loads the video tells the session, and a session of nothing but phones is no
+longer a queue of eleven-character ids.
+
+Ducking is the embed's own volume, not the phone's media stream: turning the
+stream down would duck every other sound on the device, and the call itself is
+on the voice stream and must not move at all.
 
 ## Push to talk, with a thumb
 

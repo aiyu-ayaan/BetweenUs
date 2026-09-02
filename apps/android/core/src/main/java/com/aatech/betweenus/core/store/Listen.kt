@@ -202,4 +202,36 @@ object Listen {
     )
 
     fun stop() = CallSocket.send(JSONObject().put("type", "listen.stop"))
+
+    /**
+     * What a player learned about a track, for everybody who has not got one.
+     *
+     * Nothing on the server may ask YouTube what a video is called - that would
+     * be a backend service with an API key, an egress rule and an opinion about
+     * who is listening to what. So the first client whose player loads the
+     * video fills the title and length in for the session, and now a phone can
+     * be that client rather than only a desktop.
+     *
+     * Sent once per track by this client; the gateway ignores a second one for
+     * a track that already has both, and telling it twice would only make every
+     * other client re-read a state that did not change.
+     */
+    fun reportMeta(trackId: String, title: String?, durationMs: Long?) {
+        val event = JSONObject().put("type", "listen.meta").put("trackId", trackId)
+        title?.takeIf { it.isNotBlank() }?.let { event.put("title", it) }
+        durationMs?.takeIf { it > 0 }?.let { event.put("durationMs", it) }
+        CallSocket.send(event)
+    }
+
+    /**
+     * This player reached the end of a track.
+     *
+     * Named rather than implied, because several clients finish within a second
+     * of each other and the gateway has to advance the queue exactly once. It
+     * ignores an `ended` for a track that is no longer current, which is what
+     * makes the second and third reports harmless.
+     */
+    fun reportEnded(trackId: String) = CallSocket.send(
+        JSONObject().put("type", "listen.ended").put("trackId", trackId),
+    )
 }
