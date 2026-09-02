@@ -644,6 +644,7 @@ jobs:
       && !contains(needs.*.result, 'failure')
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
         with:
@@ -693,25 +694,22 @@ jobs:
           done
 
       # No images were built for this release, so this version's tags are a
-      # second name for the ones the last release built. `imagetools create`
-      # from an existing tag copies the manifest list whole, both architectures
-      # with it, and pulls nothing.
+      # second name for the ones the last release built, written straight onto
+      # the manifest list the last release pushed - both architectures with it,
+      # and nothing pulled.
       - name: Carry the last release's images into this version
         if: needs.images.result != 'success'
         env:
           VERSION: ${{ needs.merged.outputs.version }}
           CARRY: ${{ needs.merged.outputs.carry }}
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
         run: |
           if [ -z "$CARRY" ]; then
             echo "::error::Nothing to carry the images forward from."
             exit 1
           fi
-          for target in auth-service server-service chat-service presence-service \
-                        notification-service call-service remote-gateway web admin-web; do
-            docker buildx imagetools create \
-              --tag "${IMAGE_REPO}:${target}-${VERSION}" \
-              "${IMAGE_REPO}:${target}-${CARRY}"
-          done
+          sh .github/scripts/retag.sh "$CARRY" "$VERSION"
           echo "Images for v${VERSION} are v${CARRY}'s, re-tagged."
 
   desktop:
@@ -931,14 +929,12 @@ jobs:
       && !contains(needs.*.result, 'failure')
     runs-on: ubuntu-latest
     steps:
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - uses: actions/checkout@v4
 
-      # `imagetools create` re-points a tag at an existing manifest. No rebuild,
-      # no pull, and it keeps multi-arch manifests intact.
+      # `retag.sh` writes the manifest that is already in the repository under a
+      # second name: one read and one write a tag. This was `imagetools create`,
+      # which copies every child manifest instead and spent the account's Docker
+      # Hub pull limit doing it - see the script for what that cost.
       #
       # Two moving tags, not one. The channel tag says "the newest alpha" or
       # "the newest beta"; `latest` is what docker-compose.yml falls back to
@@ -955,18 +951,12 @@ jobs:
         env:
           VERSION: ${{ needs.merged.outputs.version }}
           CHANNEL: ${{ needs.merged.outputs.channel }}
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
         run: |
           tags="$CHANNEL"
           [ "$CHANNEL" = latest ] || tags="$tags latest"
-
-          for target in auth-service server-service chat-service presence-service \
-                        notification-service call-service remote-gateway web admin-web; do
-            for tag in $tags; do
-              docker buildx imagetools create \
-                --tag "${IMAGE_REPO}:${target}-${tag}" \
-                "${IMAGE_REPO}:${target}-${VERSION}"
-            done
-          done
+          sh .github/scripts/retag.sh "$VERSION" $tags
 
   # The last thing, after the tags a deployment follows have moved. Until this
   # existed the pipeline pushed nine images, moved three tags, and stopped -

@@ -36,7 +36,7 @@
     "prod:down": "docker compose --env-file .env -f infrastructure/docker/docker-compose.yml down",
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
-    "check": "node scripts/release-version.mjs --check && node scripts/release-notes.mjs --check && sh -n .github/scripts/decode-keystore.sh && sh .github/scripts/detect-check.sh && turbo run check",
+    "check": "node scripts/release-version.mjs --check && node scripts/release-notes.mjs --check && sh -n .github/scripts/decode-keystore.sh && sh -n .github/scripts/retag.sh && sh .github/scripts/detect-check.sh && turbo run check",
     "db:generate": "pnpm --filter @betweenus/database generate",
     "db:migrate": "pnpm --filter @betweenus/database migrate",
     "db:migrate:check": "pnpm --filter @betweenus/database migrate:check",

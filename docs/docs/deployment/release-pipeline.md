@@ -122,8 +122,9 @@ undo a release whose images and installers are already out.
 ## What a skipped platform gets
 
 Not left behind — carried forward. `<service>-<version>` image tags exist
-for every service every release, either freshly built or copied (by
-digest, `imagetools create`, no rebuild) from the last release's tag. The
+for every service every release, either freshly built or named a second
+time (`.github/scripts/retag.sh`, no rebuild and no pull) from the last
+release's tag. The
 Windows installer and Android APKs are likewise downloaded from the
 previous GitHub Release and re-attached under this version's release,
 keeping their own (older) filenames — which is the honest answer to "which
@@ -145,7 +146,8 @@ no new one.
 
 It skips the release PR entirely (a patch has no diff to show). The image
 tags are moved onto the new build, which leaves the images they named
-before untagged; the installers and APKs replace the assets of the same
+before untagged; the deploy that follows passes `--force-recreate`, because
+a deploy of the version already running is a replacement; the installers and APKs replace the assets of the same
 name on the Release that already exists; the tag, the CHANGELOG entry and
 the version in the manifests are untouched, because the version has not
 changed. A platform the scope leaves out carries forward from the release
