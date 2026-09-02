@@ -60,6 +60,16 @@ x-backup: &backup
     BACKUP_INTERVAL_HOURS: ${BACKUP_INTERVAL_HOURS:-168}
     BACKUP_KEEP: ${BACKUP_KEEP:-8}
     BACKUP_ON_MIGRATE: ${BACKUP_ON_MIGRATE:-1}
+    # Off the host. Empty bucket means off, and nothing else here is read - see
+    # backup.sh. A dump beside the database it came from covers a bad migration
+    # and not a dead disk.
+    BACKUP_S3_ENDPOINT: ${BACKUP_S3_ENDPOINT:-}
+    BACKUP_S3_BUCKET: ${BACKUP_S3_BUCKET:-}
+    BACKUP_S3_PREFIX: ${BACKUP_S3_PREFIX:-betweenus}
+    BACKUP_S3_REGION: ${BACKUP_S3_REGION:-us-east-1}
+    BACKUP_S3_ACCESS_KEY: ${BACKUP_S3_ACCESS_KEY:-}
+    BACKUP_S3_SECRET_KEY: ${BACKUP_S3_SECRET_KEY:-}
+    BACKUP_OFFSITE_REQUIRED: ${BACKUP_OFFSITE_REQUIRED:-0}
   entrypoint: ["/bin/sh", "/usr/local/bin/backup.sh"]
   volumes:
     - ./backup.sh:/usr/local/bin/backup.sh:ro

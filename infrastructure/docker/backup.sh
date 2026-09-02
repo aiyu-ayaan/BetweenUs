@@ -8,6 +8,35 @@
 # SQL rather than a custom-format archive because restoring it needs nothing but
 # psql, and the moment you need a restore is the wrong moment to discover the
 # tool version does not match.
+#
+# OFF THE HOST
+#
+# A dump sitting on the same disk as the database it came from covers a bad
+# migration and does not cover a dead disk, which is the failure people actually
+# lose data to. Set BACKUP_S3_BUCKET and every dump is also PUT to object
+# storage as it is written:
+#
+#   BACKUP_S3_ENDPOINT   https://s3.eu-central-1.amazonaws.com, or the MinIO /
+#                        R2 / B2 / Spaces endpoint. Path style - the bucket goes
+#                        after it, not in front of it
+#   BACKUP_S3_BUCKET     off, if empty. Nothing else here is read without it
+#   BACKUP_S3_PREFIX     key prefix inside the bucket, default betweenus
+#   BACKUP_S3_REGION     signing region, default us-east-1, which is what most
+#                        S3-compatible servers accept regardless
+#   BACKUP_S3_ACCESS_KEY / BACKUP_S3_SECRET_KEY
+#   BACKUP_OFFSITE_REQUIRED  1 makes a failed upload a failed backup, which in
+#                        `once` mode stops the migration. Default 0: the local
+#                        dump is what a bad migration needs, and refusing to
+#                        deploy because a bucket was unreachable is its own
+#                        outage
+#
+# Uploading is curl's `--aws-sigv4`, which is the whole of the S3 client here.
+# The postgres image has wget and not curl, so curl is added on the first upload
+# and not at all in a deployment that does not use this.
+#
+# ponytail: retention is local-only. Nothing prunes the bucket - set a lifecycle
+# rule there, which every S3 implementation has and none of them needs this
+# script's help with.
 set -eu
 
 MODE="${1:-loop}"
@@ -55,7 +84,53 @@ dump() {
   rm -f "$failed"
   mv "$scratch" "$target"
   log "wrote $(du -h "$target" | cut -f1) $target"
+  if ! upload "$target"; then
+    if [ "${BACKUP_OFFSITE_REQUIRED:-0}" = "1" ]; then
+      return 1
+    fi
+    log "the local dump stands; set BACKUP_OFFSITE_REQUIRED=1 to make this fatal"
+  fi
   prune
+}
+
+# PUT the dump to object storage. Returns 0 when there is nothing configured, so
+# a deployment that has not set a bucket is not a deployment reporting failures.
+upload() {
+  [ -n "${BACKUP_S3_BUCKET:-}" ] || return 0
+
+  endpoint="${BACKUP_S3_ENDPOINT:-}"
+  if [ -z "$endpoint" ]; then
+    log "FAILED: BACKUP_S3_BUCKET is set and BACKUP_S3_ENDPOINT is not"
+    return 1
+  fi
+  if [ -z "${BACKUP_S3_ACCESS_KEY:-}" ] || [ -z "${BACKUP_S3_SECRET_KEY:-}" ]; then
+    log "FAILED: BACKUP_S3_BUCKET is set without BACKUP_S3_ACCESS_KEY/BACKUP_S3_SECRET_KEY"
+    return 1
+  fi
+
+  # The image ships wget; --aws-sigv4 is curl's, and re-implementing SigV4 in
+  # POSIX sh is exactly the kind of thing that is wrong in a way you find out
+  # about during a restore.
+  if ! command -v curl >/dev/null 2>&1; then
+    log "installing curl for the upload"
+    if ! apk add --no-cache curl >/dev/null 2>&1; then
+      log "FAILED: could not install curl"
+      return 1
+    fi
+  fi
+
+  key="${BACKUP_S3_PREFIX:-betweenus}/$(basename "$1")"
+  url="${endpoint%/}/${BACKUP_S3_BUCKET}/${key}"
+  log "uploading to $url"
+
+  # --fail turns a 403 into a non-zero exit; without it curl reports success for
+  # having successfully received the refusal. The credentials go in --user and
+  # never into the log line above.
+  if ! curl --fail --silent --show-error        --aws-sigv4 "aws:amz:${BACKUP_S3_REGION:-us-east-1}:s3"        --user "${BACKUP_S3_ACCESS_KEY}:${BACKUP_S3_SECRET_KEY}"        --upload-file "$1" "$url"; then
+    log "FAILED: upload of $key"
+    return 1
+  fi
+  log "uploaded $key"
 }
 
 # Oldest first, everything past BACKUP_KEEP removed. Only files this script
