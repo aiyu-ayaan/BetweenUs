@@ -130,8 +130,17 @@ fi
 log "starting"
 if compose up -d --remove-orphans $recreate && healthy; then
   log "up on ${wanted:-latest}"
-  # Only now. An image the deployment might have to roll back to is not garbage.
-  docker image prune --force --filter "until=168h" >/dev/null 2>&1 || true
+  # Only now. An image the deployment might have to roll back to is not garbage,
+  # which is what the week is for: everything older than that is a release two
+  # or more behind, and it is on Docker Hub if it is ever wanted again.
+  #
+  # `-a` rather than dangling layers only, because nine tagged images a release
+  # is what actually fills a Pi's disk - and a host that fills up reaches for
+  # `docker system prune -a --volumes`, which is the command to stay away from
+  # here: it takes `backup-data` with it the moment the container that wrote the
+  # pre-migration dump has been cleaned up, and that dump is the whole answer to
+  # a migration that went wrong. Images are prunable. Volumes are not.
+  docker image prune --force --all --filter "until=168h" >/dev/null 2>&1 || true
   exit 0
 fi
 

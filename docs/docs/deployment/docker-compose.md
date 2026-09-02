@@ -131,6 +131,13 @@ deploy is — it adds `--force-recreate`, so every container comes down and
 comes back on the image just pulled rather than on compose's judgement about
 whether anything changed. `DEPLOY_RECREATE=1` asks for that on any deploy.
 
+On success it prunes images older than a week — nine tagged images a release
+is what fills a small disk — and it prunes **nothing else**. If you are used
+to clearing space with `docker system prune -a --volumes`, don't run it here:
+it removes `backup-data` as soon as the container that wrote the
+pre-migration dump has been cleaned up, and that dump is the answer to a
+migration that went wrong.
+
 If the rollback *also* fails it says so loudly. That usually means the
 migration ran and the previous images cannot read the new schema; the
 pre-migration dump in the backup volume is what that case is for, and
