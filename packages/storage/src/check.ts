@@ -10,6 +10,7 @@ import {
   assertPartNumber,
   assertSafeKey,
   buildKey,
+  detectPictureType,
   getStorage,
   isAllowedPicture,
   isInlineSafe,
@@ -127,6 +128,74 @@ async function main(): Promise<void> {
   assert.equal(isInlineSafe('image/png'), true);
   assert.equal(isInlineSafe('image/svg+xml'), false);
   assert.equal(isInlineSafe('application/pdf'), false);
+
+  // --- What a picture actually is.
+  //
+  // The header the client attached is not consulted any more, so everything
+  // below is about bytes. The four that are accepted, and then the ones that
+  // matter more: the shapes that used to get in by saying `image/png`.
+  const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0]);
+  const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0, 0]);
+  const gif87 = Buffer.from('GIF87a....', 'binary');
+  const gif89 = Buffer.from('GIF89a....', 'binary');
+  const webp = Buffer.concat([
+    Buffer.from('RIFF', 'binary'),
+    Buffer.from([0x24, 0x00, 0x00, 0x00]),
+    Buffer.from('WEBP', 'binary'),
+  ]);
+
+  assert.deepEqual(detectPictureType(png), { contentType: 'image/png', extension: '.png' });
+  assert.deepEqual(detectPictureType(jpeg), { contentType: 'image/jpeg', extension: '.jpg' });
+  assert.deepEqual(detectPictureType(gif87), { contentType: 'image/gif', extension: '.gif' });
+  assert.deepEqual(detectPictureType(gif89), { contentType: 'image/gif', extension: '.gif' });
+  assert.deepEqual(detectPictureType(webp), { contentType: 'image/webp', extension: '.webp' });
+
+  // Whatever the picture claims to be, its type comes out of its bytes - so the
+  // key's extension and the stored content type agree with each other and with
+  // the file, by construction rather than by a client's good manners.
+  assert.equal(detectPictureType(png)?.contentType, 'image/png');
+  assert.equal(detectPictureType(jpeg)?.extension, '.jpg');
+
+  // An SVG is the one the allowlist named and this refuses without naming: it
+  // has no binary signature, so it gets in only if somebody teaches this
+  // function to recognise it.
+  assert.equal(detectPictureType(Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"/>')), null);
+  assert.equal(detectPictureType(Buffer.from('<?xml version="1.0"?><svg/>')), null);
+
+  // An HTML file, which is the other thing worth serving to nobody.
+  assert.equal(detectPictureType(Buffer.from('<!doctype html><script>alert(1)</script>')), null);
+
+  // A Windows executable, and a zip - both of which the old check accepted the
+  // moment their uploader typed `image/png` into the form.
+  assert.equal(detectPictureType(Buffer.from([0x4d, 0x5a, 0x90, 0x00])), null);
+  assert.equal(detectPictureType(Buffer.from([0x50, 0x4b, 0x03, 0x04])), null);
+
+  // Nothing at all, and not-quite-enough. A signature check that reads past the
+  // end of a short buffer is a crash on an empty upload.
+  assert.equal(detectPictureType(Buffer.alloc(0)), null);
+  assert.equal(detectPictureType(Buffer.from([0x89, 0x50])), null);
+  assert.equal(detectPictureType(Buffer.from([0xff, 0xd8])), null);
+
+  // "RIFF" alone is a container, not a WebP - a WAV file starts the same way.
+  assert.equal(
+    detectPictureType(
+      Buffer.concat([
+        Buffer.from('RIFF', 'binary'),
+        Buffer.from([0x24, 0x00, 0x00, 0x00]),
+        Buffer.from('WAVE', 'binary'),
+      ]),
+    ),
+    null,
+  );
+
+  // A picture with something appended is still that picture. This is deliberate:
+  // the signature says what a renderer will do with the first bytes, and trailing
+  // junk is a corrupt file rather than a different type. Worth pinning so nobody
+  // "fixes" it into a whole-file parser.
+  assert.equal(
+    detectPictureType(Buffer.concat([png, Buffer.from('<script>alert(1)</script>')]))?.contentType,
+    'image/png',
+  );
 
   console.log('storage check ok');
 }

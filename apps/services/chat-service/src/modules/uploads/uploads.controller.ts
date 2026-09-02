@@ -53,7 +53,7 @@ import {
   assertSafeKey,
   buildKey,
   getStorage,
-  isAllowedPicture,
+  detectPictureType,
   isInlineSafe,
   type MultipartSession,
   type StoredObject,
@@ -94,15 +94,22 @@ export class UploadsController {
     if (!file) {
       throw new BadRequestException({ code: 'NO_FILE', message: 'No file was uploaded' });
     }
-    if (!isAllowedPicture(file.mimetype)) {
+    // The bytes, not the header. `file.mimetype` and `file.originalname` are
+    // both values the client chose, and this route used to write one into the
+    // stored content type and the other into the key's extension - so a file
+    // could claim to be a PNG and be anything, and the claim was what got served
+    // back. What it *is* now decides both, and the claim is not consulted at all:
+    // checking it as well would be two answers that can disagree.
+    const detected = detectPictureType(file.buffer);
+    if (!detected) {
       throw new BadRequestException({
         code: 'UNSUPPORTED_MEDIA_TYPE',
-        message: `Content type ${file.mimetype} is not allowed for a picture`,
+        message: 'That file is not a PNG, JPEG, GIF or WebP',
       });
     }
 
-    const key = buildKey(`pictures/${user.id}`, file.originalname);
-    return getStorage().put(key, file.buffer, file.mimetype.split(';')[0]!.trim());
+    const key = buildKey(`pictures/${user.id}`, `picture${detected.extension}`);
+    return getStorage().put(key, file.buffer, detected.contentType);
   }
 
   /** An encrypted attachment small enough to arrive in one request. */

@@ -1013,8 +1013,9 @@ ok('multipart scratch is not downloadable', scratch.status === 400, String(scrat
 
 // --- Pictures ---------------------------------------------------------------
 //
-// These are stored in the clear and served inline, so the type allowlist is
-// the whole of their safety.
+// These are stored in the clear and served inline, so what they are is the whole
+// of their safety - and what they are is read from their bytes, not from the
+// content type the uploader attached to them.
 
 const png = Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
@@ -1038,6 +1039,34 @@ try {
   scriptablePictureRejected = true;
 }
 ok('svg is refused as a picture', scriptablePictureRejected);
+
+// The case the allowlist could not see. Same declared type as the PNG above,
+// same extension on the filename, and bytes that are neither - which is exactly
+// what the header check accepted and stored under a `.png` key.
+let liarRejected = false;
+try {
+  await post(
+    `${CHAT}/api/v1/uploads/picture`,
+    form({ file: new File(['<script>alert(1)</script>'], 'me.png', { type: 'image/png' }) }),
+    authed,
+  );
+} catch {
+  liarRejected = true;
+}
+ok('a file claiming to be a PNG is refused when it is not one', liarRejected);
+
+// And the reverse: the bytes decide, so a real PNG mislabelled by its uploader
+// is stored - as a PNG, under a `.png` key, whatever the form said.
+const mislabelled = await post(
+  `${CHAT}/api/v1/uploads/picture`,
+  form({ file: new File([png], 'notes.txt', { type: 'text/plain' }) }),
+  authed,
+);
+ok(
+  'a real picture is stored by its bytes, not by its label',
+  mislabelled.contentType === 'image/png' && mislabelled.key.endsWith('.png'),
+  `${mislabelled.contentType} ${mislabelled.key}`,
+);
 
 const withAvatar = await json(`${AUTH}/api/v1/auth/account`, {
   method: 'PATCH',

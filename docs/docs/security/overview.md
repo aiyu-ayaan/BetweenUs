@@ -113,6 +113,29 @@ window — turning the endpoint that exists to stop resource exhaustion into a w
 of causing it. Trimming the oldest entries changes no answer, because the count
 is only compared against the budget and the cap is above it.
 
+## Uploads
+
+Attachments are ciphertext — encrypted under the channel key before upload, so
+the bytes are opaque, the type is always `application/octet-stream`, and there is
+nothing to allowlist. Pictures (avatars, icons, emoji) are stored in the clear,
+because a client rendering a member list has to fetch them without a channel key.
+
+**A picture's type comes from its bytes.** `detectPictureType` matches the
+signature — PNG, `RIFF….WEBP`, `GIF87a`/`GIF89a`, JPEG's start-of-image marker —
+and returns both the content type it is stored as and the extension its key gets.
+The `Content-Type` the uploader attached is not consulted at all, because
+checking it as well would be two answers that can disagree.
+
+SVG has no entry rather than being excluded by name: it has no binary signature,
+so it gets in only if somebody deliberately adds one.
+
+The check reads a prefix, not the whole file — a valid PNG with something
+appended is still a PNG, since the signature says what a renderer does with the
+first bytes — and it is not a decoder. The download route still derives the type
+from the key's extension, sends `nosniff`, and serves anything not inline-safe as
+an attachment; what changed is that the extension and the stored type now agree
+with the bytes by construction.
+
 ## Transport and headers
 
 TLS terminates at Cloudflare. The tunnel carries HTTP/WebSocket only — see
@@ -254,9 +277,6 @@ tokens, secrets, and FCM push tokens are never logged.
 
 - **The rate limiter fails open** when Redis is unreachable — locking
   everyone out of login is judged the worse outage.
-- **A picture's bytes aren't magic-byte inspected**, only its declared
-  content type — contained by the download route deriving its content type
-  from the key's extension and serving unknown types as attachments.
 - **A push wakes a phone a mute can't reach** — quiet hours and mentions are
   decided on-device, after the wake-up, because the server can't read the
   ciphertext or know a timezone.

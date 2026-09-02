@@ -528,9 +528,93 @@ const PICTURE_MIME = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/web
  * Content types accepted for an avatar or a server icon. SVG is deliberately
  * absent: it is a script container, and these are the only objects this server
  * ever serves inline.
+ *
+ * This answers what a *stored* picture may be. What arrives is decided by
+ * `detectPictureType`, which reads the bytes rather than believing the header -
+ * see there for why the two are not the same question.
  */
 export function isAllowedPicture(contentType: string): boolean {
   return PICTURE_MIME.has(contentType.split(';')[0]?.trim().toLowerCase() ?? '');
+}
+
+/** What a picture turned out to be, once somebody looked at it. */
+export interface PictureType {
+  /** The content type it is stored and served as. */
+  contentType: string;
+  /** The extension its key gets, including the dot. */
+  extension: string;
+}
+
+/**
+ * The signatures this server recognises, longest first so a prefix cannot win
+ * over a longer match. `null` in a pattern is a byte that may be anything.
+ */
+const PICTURE_SIGNATURES: Array<{ bytes: Array<number | null>; offset: number; type: PictureType }> = [
+  // \x89 P N G \r \n \x1a \n - eight bytes chosen by its authors to catch
+  // exactly the transfer mangling this kind of check is otherwise blind to.
+  {
+    offset: 0,
+    bytes: [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a],
+    type: { contentType: 'image/png', extension: '.png' },
+  },
+  // "RIFF" then four bytes of length then "WEBP". The length is skipped rather
+  // than checked: it is the container's business, and a wrong one is a corrupt
+  // file rather than a differently-typed one.
+  {
+    offset: 0,
+    bytes: [0x52, 0x49, 0x46, 0x46, null, null, null, null, 0x57, 0x45, 0x42, 0x50],
+    type: { contentType: 'image/webp', extension: '.webp' },
+  },
+  {
+    offset: 0,
+    bytes: [0x47, 0x49, 0x46, 0x38, 0x37, 0x61], // GIF87a
+    type: { contentType: 'image/gif', extension: '.gif' },
+  },
+  {
+    offset: 0,
+    bytes: [0x47, 0x49, 0x46, 0x38, 0x39, 0x61], // GIF89a
+    type: { contentType: 'image/gif', extension: '.gif' },
+  },
+  // JPEG has no single magic number, only a start-of-image marker followed by
+  // some marker or other. Three bytes is what every implementation uses.
+  {
+    offset: 0,
+    bytes: [0xff, 0xd8, 0xff],
+    type: { contentType: 'image/jpeg', extension: '.jpg' },
+  },
+];
+
+/**
+ * What these bytes actually are, or null if they are not a picture this server
+ * will store.
+ *
+ * The upload used to believe the `Content-Type` the client attached, which is a
+ * value the client chooses and the server then writes into a key, stores, and
+ * hands back with an `<img>`-shaped URL. It was contained rather than
+ * exploitable - the download route derives the type from the key's extension and
+ * sends `nosniff`, so a file claiming to be a PNG could not become a script by
+ * claiming harder - but "contained" is a property of three other decisions all
+ * staying as they are, and none of them was written down as load-bearing.
+ *
+ * Reading the bytes removes the client from the question. The declared type is
+ * not checked at all any more, because checking it *as well* would mean two
+ * answers that can disagree, and the interesting case - bytes that are not what
+ * the header says - is one this refuses whichever way the header points.
+ *
+ * SVG has no binary signature and therefore no entry here, which is a better
+ * outcome than the allowlist that excluded it by name: a format that is a script
+ * container gets in only if somebody deliberately teaches this function to
+ * recognise it.
+ */
+export function detectPictureType(bytes: Buffer): PictureType | null {
+  for (const signature of PICTURE_SIGNATURES) {
+    if (bytes.length < signature.offset + signature.bytes.length) continue;
+    const matches = signature.bytes.every(
+      (byte, index) => byte === null || bytes[signature.offset + index] === byte,
+    );
+    if (matches) return signature.type;
+  }
+  return null;
 }
 
 /** Content types safe to render inline; everything else downloads. */
