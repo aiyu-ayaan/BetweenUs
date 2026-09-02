@@ -59,7 +59,7 @@ const register = async (name) => {
 const setLastSeenVisibility = (session, lastSeenVisibility) =>
   json(`${AUTH}/api/v1/auth/account`, {
     method: 'PATCH',
-    headers: { Authorization: `Bearer ${session.tokens.accessToken}` },
+    headers: { Authorization: `Bearer ${session.accessToken}` },
     body: JSON.stringify({ lastSeenVisibility }),
   });
 

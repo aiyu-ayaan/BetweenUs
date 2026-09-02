@@ -157,6 +157,13 @@ export class NotificationsService {
             deletedAt: null,
             // Your own message is never unread.
             authorId: { not: userId },
+            // Nor is the conversation noting that somebody arrived. `onMessage`
+            // in push.service.ts already declines to wake a phone for one -
+            // addressed to nobody, and with no body to put in the notification -
+            // and a badge that says a channel has something new in it should
+            // agree with that rather than disagree per surface. A server that
+            // gains ten members is not ten things to read.
+            kind: 'USER',
           },
         });
 

@@ -154,6 +154,10 @@ await send(bobAuth, 'from someone else');
 
 const unreadForAlice = await json(`${NOTIFY}/api/v1/notifications/unread`, { headers: aliceAuth });
 const counted = unreadForAlice.find((entry) => entry.channelId === channel.id);
+// One, not two. Bob joining wrote a MEMBER_JOIN row into the same channel a
+// moment before he said anything, and it does not count - the same rule the
+// push fan-out already applied. This is what running the file found: the
+// assertion was written before the join notice existed and read 2.
 ok("someone else's message is unread", counted?.count === 1, JSON.stringify(counted));
 
 const unreadForBob = await json(`${NOTIFY}/api/v1/notifications/unread`, { headers: bobAuth });
