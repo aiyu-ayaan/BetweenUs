@@ -968,6 +968,98 @@ jobs:
             done
           done
 
+  # The last thing, after the tags a deployment follows have moved. Until this
+  # existed the pipeline pushed nine images, moved three tags, and stopped -
+  # every release since the first one reached its host because somebody typed
+  # `docker compose pull` there.
+  #
+  # Opt-in, and by a variable rather than a secret: a job-level `if` cannot read
+  # `secrets`, and a repository with no deployment must skip this rather than
+  # fail on a missing key. Set `vars.DEPLOY_HOST` to turn it on; without it,
+  # nothing here runs and the release is exactly what it was before.
+  #
+  # It runs `deploy.sh` out of the checkout that is already on the host, which is
+  # the same file the release bundle carries. What that script does with a
+  # release that does not come up healthy - put the previous one back, and say so
+  # if that fails too - is the part worth having, and it belongs next to the
+  # compose file rather than in fifty lines of YAML here.
+  #
+  # Deliberately absent from `rollback`'s `needs`. A deploy that fails has
+  # already put the host back on the previous images; the release itself is
+  # fine, and deleting its tags and its GitHub Release because one host would
+  # not take it would throw away a good build over a bad afternoon.
+  deploy:
+    name: Deploy v${{ needs.merged.outputs.version }} to ${{ vars.DEPLOY_HOST }}
+    needs: [merged, promote]
+    if: >-
+      !cancelled() && needs.merged.outputs.release == 'true'
+      && vars.DEPLOY_HOST != ''
+      && contains(needs.merged.outputs.targets, 'docker')
+      && !contains(needs.*.result, 'failure')
+    runs-on: ubuntu-latest
+    # One deploy at a time, and never the same host twice at once. The release
+    # concurrency group above is already serial, but a manually dispatched
+    # deployment must not overlap a release's own.
+    concurrency:
+      group: deploy-${{ vars.DEPLOY_HOST }}
+      cancel-in-progress: false
+    environment:
+      name: production
+      url: ${{ vars.BETWEENUS_API_URL }}
+    steps:
+      # The key never reaches the disk of a step that runs anything else, and
+      # the host key is pinned: `StrictHostKeyChecking=no` on a deploy is an
+      # invitation to hand the deployment's SSH session to whoever answers.
+      - name: Reach the host
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          if [ -z "$DEPLOY_SSH_KEY" ] || [ -z "$DEPLOY_KNOWN_HOSTS" ]; then
+            echo "::error::DEPLOY_HOST is set but DEPLOY_SSH_KEY/DEPLOY_KNOWN_HOSTS are not."
+            exit 1
+          fi
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Deploy
+        env:
+          VERSION: ${{ needs.merged.outputs.version }}
+          HOST: ${{ vars.DEPLOY_HOST }}
+          USER_NAME: ${{ vars.DEPLOY_USER || 'betweenus' }}
+          DIR: ${{ vars.DEPLOY_DIR || '~/betweenus' }}
+        run: |
+          # `git pull` first, because deploy.sh, the compose file and nginx.conf
+          # are read from the checkout on the host - a release whose compose
+          # shape changed and whose host still has the old one deploys the new
+          # images into the old topology, which is worse than not deploying.
+          ssh -i ~/.ssh/id_deploy -o BatchMode=yes "${USER_NAME}@${HOST}" \
+            "cd ${DIR} && git fetch --tags --quiet && git checkout --quiet v${VERSION} \
+             && sh infrastructure/docker/deploy.sh ${VERSION}"
+
+      # The deploy script has already checked the gateway from inside the host.
+      # This checks it from outside, which is the only place a Cloudflare tunnel
+      # that did not come back up is visible.
+      - name: And from outside
+        if: vars.BETWEENUS_API_URL != ''
+        env:
+          API: ${{ vars.BETWEENUS_API_URL }}
+        run: |
+          for attempt in 1 2 3 4 5 6 7 8 9 10; do
+            if curl --fail --silent --max-time 10 "${API%/}/health"; then
+              echo
+              echo "v${{ needs.merged.outputs.version }} is answering at ${API}"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "::error::${API%/}/health did not answer. The host reported a healthy gateway, so look at the tunnel."
+          exit 1
+
   publish:
     name: Publish v${{ needs.merged.outputs.version }}
     needs: [merged, images, manifest, desktop, android]
@@ -1044,7 +1136,10 @@ jobs:
               -e "s|\${BETWEENUS_VERSION:-latest}|\${BETWEENUS_VERSION:-${VERSION}}|g" \
               infrastructure/docker/docker-compose.yml > bundle/docker-compose.yml
           cp infrastructure/docker/backup.sh bundle/backup.sh
+          cp infrastructure/docker/deploy.sh bundle/deploy.sh
+          cp infrastructure/docker/docker-compose.secrets.yml bundle/docker-compose.secrets.yml
           cp infrastructure/nginx/nginx.conf bundle/nginx.conf
+          chmod +x bundle/deploy.sh
           grep -n 'image:' bundle/docker-compose.yml
 
       # The notes were written and reviewed in the release PR. Reading them back

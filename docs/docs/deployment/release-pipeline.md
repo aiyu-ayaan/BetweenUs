@@ -163,6 +163,47 @@ way back after a rollback, or after a merged release PR this workflow
 missed), or `mode: patch` (rebuild that version in place). `pr` and `patch`
 both read the `targets` input for what to build.
 
+## Getting it onto a host
+
+The pipeline used to push nine images, move three channel tags, and stop.
+`deploy` is the last job, after `promote`, and it is off unless
+`vars.DEPLOY_HOST` is set — a variable and not a secret, because a job-level
+`if` cannot read `secrets` and a repository with no deployment has to skip
+this rather than fail on a missing key.
+
+| Name | Kind | What it is |
+| --- | --- | --- |
+| `DEPLOY_HOST` | variable | The host. Setting it is what turns the job on |
+| `DEPLOY_USER` | variable | Defaults to `betweenus` |
+| `DEPLOY_DIR` | variable | The checkout on the host, defaults to `~/betweenus` |
+| `BETWEENUS_API_URL` | variable | Checked from outside afterwards, if set |
+| `DEPLOY_SSH_KEY` | secret | Private key for that user |
+| `DEPLOY_KNOWN_HOSTS` | secret | The host's public key, so the connection is pinned |
+
+The host key is pinned on purpose: `StrictHostKeyChecking=no` on a deploy
+job hands the deployment's SSH session to whoever answers on that address.
+
+The job checks out the release tag on the host and runs
+[`deploy.sh`](/deployment/docker-compose#deploysh), then checks the public
+URL from outside — the only place a Cloudflare tunnel that did not come back
+up is visible.
+
+A failed deploy does **not** trigger `rollback`. The host has already put
+itself back on the previous images; the release is fine, and deleting its
+tags over one host that would not take it throws away a good build.
+
+:::warning Rolling back past a migration rename
+An image published before the phase-35 migration rename carries the old
+migration directory names, so against a database migrated by a newer
+checkout it tries to apply two migrations that are already there and dies on
+`relation "server_custom_roles" already exists` — and leaves a *failed*
+migration behind, which makes every later `migrate deploy` refuse with
+P3009 until the row is removed by hand.
+
+`packages/database/prisma/reconcile/2026-09-02-rename-custom-roles-and-attachments.sql`
+carries both directions and the `DELETE` that clears it.
+:::
+
 ## On failure
 
 `rollback` deletes the version's image tags, deletes any tag and Release
