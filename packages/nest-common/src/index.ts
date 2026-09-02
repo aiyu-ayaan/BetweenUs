@@ -149,13 +149,43 @@ export class ApiExceptionFilter implements ExceptionFilter {
  * ponytail: fixed window, not a sliding one - a burst can straddle two windows
  * and get 2x the budget. Move to a sorted-set sliding window if that matters.
  */
-let rateLimitRedis: RedisClient | null = null;
+let shared: RedisClient | null = null;
 
-function redisForRateLimit(): RedisClient {
-  rateLimitRedis ??= new Redis(envOr('REDIS_URL', 'redis://localhost:6379'), {
+/**
+ * One Redis connection per process, for the small key-value work several parts
+ * of a service need - the rate-limit counters below, and the refresh-rotation
+ * grace in auth-service.
+ *
+ * Not the `EventBus` connections: those are a publisher and a subscriber, and a
+ * connection in subscriber mode refuses ordinary commands. This is the third
+ * one, and it is one rather than one per caller.
+ *
+ * `maxRetriesPerRequest: 1` on purpose. Everything reached through here has a
+ * correct answer for "Redis did not reply" - the rate limiter fails open, the
+ * rotation grace falls back to its in-process map - and all of those answers are
+ * worse the longer they take. A caller that hangs waiting for Redis has turned a
+ * degraded dependency into a degraded request.
+ */
+export function sharedRedis(): RedisClient {
+  shared ??= new Redis(envOr('REDIS_URL', 'redis://localhost:6379'), {
     maxRetriesPerRequest: 1,
   });
-  return rateLimitRedis;
+  return shared;
+}
+
+/**
+ * Closes it, for a process that wants to end.
+ *
+ * An open Redis connection holds the event loop open, so a self-check that
+ * touched this would print its last line and then sit there until something
+ * killed it - which is a green check that never returns, and `turbo run check`
+ * waiting forever on one package. A long-running service never needs this.
+ */
+export async function closeSharedRedis(): Promise<void> {
+  if (!shared) return;
+  const client = shared;
+  shared = null;
+  await client.quit().catch(() => client.disconnect());
 }
 
 /** Just the headers and peer address a client address can be derived from. */
@@ -278,8 +308,8 @@ export function rateLimit(options: RateLimitOptions): Type<CanActivate> {
       let exceeded = false;
       try {
         for (const bucket of buckets) {
-          const hits = await redisForRateLimit().incr(bucket.key);
-          if (hits === 1) await redisForRateLimit().expire(bucket.key, options.windowSeconds);
+          const hits = await sharedRedis().incr(bucket.key);
+          if (hits === 1) await sharedRedis().expire(bucket.key, options.windowSeconds);
           // Every bucket is incremented before any of them refuses: stopping at
           // the first one over budget would leave the others under-counting a
           // request that really was made.

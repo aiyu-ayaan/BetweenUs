@@ -17,7 +17,7 @@ process.env.JWT_REFRESH_TTL = '30d';
 process.env.DATABASE_URL ??= 'postgresql://check:check@127.0.0.1:5432/check';
 process.env.LOG_LEVEL = 'error';
 
-import { rateLimitBuckets } from '@betweenus/nest-common';
+import { closeSharedRedis, rateLimitBuckets } from '@betweenus/nest-common';
 import { hashToken as hashOf } from '@betweenus/auth';
 import { AuthService } from './modules/auth/auth.service';
 import type { AuthDb } from './modules/auth/auth.db';
@@ -688,7 +688,33 @@ async function main(): Promise<void> {
     'a replay in the window revokes nothing',
   );
 
-  // Outside it, the same replay is what it looks like: a leaked token.
+  // The window is read live, not captured when the entry was written. An entry
+  // stored while it was thirty seconds must stop being answered the moment the
+  // window is shortened - otherwise a configuration change quietly does not take
+  // effect for another thirty seconds, and the assertion below would pass for
+  // the wrong reason: on a machine with Redis running, the entry is still there.
+  process.env.REFRESH_REPLAY_GRACE_MS = '0';
+  await rejects(auth.refresh(loggedIn.refreshToken), 'REFRESH_TOKEN_REUSED');
+  process.env.REFRESH_REPLAY_GRACE_MS = '30000';
+
+  // What a *second instance* does with the same replay, which is the case the
+  // grace moved into Redis for: its in-process map is empty, so it either reads
+  // the entry from Redis and answers, or it has no Redis and reads the replay as
+  // theft. Both are correct and which one happens depends on the deployment, so
+  // what is pinned here is the half that holds either way - the second instance
+  // never invents a *new* pair. Handing out a third refresh token for one
+  // rotation is the failure neither answer may become.
+  const second = new AuthService(noEvents, fakeMail(false), usernames, db);
+  const fromSecond = await second
+    .refresh(loggedIn.refreshToken)
+    .then((tokens) => tokens.refreshToken)
+    .catch(() => null);
+  assert.ok(
+    fromSecond === null || fromSecond === rotated.refreshToken,
+    'a second instance answers with the pair the rotation produced, or not at all',
+  );
+
+  // Outside the window, the same replay is what it looks like: a leaked token.
   process.env.REFRESH_REPLAY_GRACE_MS = '0';
 
   // Reuse detection: replaying a spent token kills the chain it belongs to.
@@ -764,6 +790,11 @@ async function main(): Promise<void> {
   checkBloom();
   await checkPasswordReset();
   await checkUsernameAvailability();
+
+  // The refresh-rotation grace writes to Redis, and an open connection holds the
+  // event loop open - so without this the check prints its last line and then
+  // never returns, which `turbo run check` waits on forever.
+  await closeSharedRedis();
 
   console.log('auth-service check ok');
 }

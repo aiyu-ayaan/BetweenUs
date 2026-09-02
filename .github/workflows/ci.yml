@@ -97,6 +97,10 @@ jobs:
       - run: node apps/services/presence-service/smoke.mjs
       - run: node apps/services/notification-service/smoke.mjs
       - run: node apps/services/remote-gateway/smoke.mjs
+      # Needs the Redis this job already runs, and reads it directly: that the
+      # rotation grace is in shared storage rather than in one process's memory
+      # is exactly the claim the API cannot be asked about.
+      - run: node apps/services/auth-service/rotation-smoke.mjs
 
       - name: Service logs
         if: failure()

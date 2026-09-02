@@ -109,6 +109,25 @@ downgrading to anonymous, and caps its frame size — 64 KB for chat/presence,
 256 KB for call/remote (`ws`'s 100 MB default would buffer a full frame in
 the service's heap before any gateway code ran).
 
+### The interrupted rotation
+
+Rotation is not atomic across the network: the server revokes a token, mints its
+successor, and the response is lost. The client then presents the token it still
+has — the spent one — which without a grace window is indistinguishable from a
+stolen token, and signs every device out over a dropped packet.
+
+Inside `REFRESH_REPLAY_GRACE_MS` (30 s) the reply is the *same* pair rather than
+a new one, so a replay creates nothing. The answer lives in Redis under
+`auth:rotated:<jti>`, not in one process's memory — which is what lets more than
+one auth-service instance run behind the gateway.
+
+The entry carries the time it was written and the read compares it against the
+window as it is *now*; the key's TTL is the cleanup rather than the decision, so
+shortening the window takes effect immediately instead of after the old one
+elapses. An in-process map is still read first and still answers when Redis is
+unreachable, because a Redis outage turning every interrupted rotation into a
+sign-out would be worse than the per-process behaviour this replaced.
+
 ### A socket that stops when the account does
 
 A handshake is authenticated once, and everything after it is trusted because
@@ -217,8 +236,6 @@ tokens, secrets, and FCM push tokens are never logged.
   everyone out of login is judged the worse outage.
 - **Rate-limit windows are fixed, not sliding** — a burst straddling two
   windows briefly gets double budget.
-- **Refresh replay grace is per-process** — a replay landing on a different
-  instance is still read as theft.
 - **A picture's bytes aren't magic-byte inspected**, only its declared
   content type — contained by the download route deriving its content type
   from the key's extension and serving unknown types as attachments.

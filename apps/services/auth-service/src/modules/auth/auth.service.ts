@@ -21,6 +21,7 @@ import { AuthDatabase, type AuthDb } from './auth.db';
 import { EVENTS, EventBus, type EventPayloads } from '@betweenus/events';
 import { envOr } from '@betweenus/config';
 import { createLogger, type LogLevel } from '@betweenus/logger';
+import { sharedRedis } from '@betweenus/nest-common';
 import type {
   AuthResponse,
   AuthTokens,
@@ -68,6 +69,13 @@ const REFRESH_DAYS = Number(envOr('JWT_REFRESH_TTL', '90d').replace(/\D/g, '')) 
  */
 function replayGraceMs(): number {
   return Number(envOr('REFRESH_REPLAY_GRACE_MS', '30000')) || 0;
+}
+
+/** What is kept for one rotated token, in Redis and in the in-process map alike. */
+interface RotationEntry {
+  tokens: AuthTokens;
+  /** Milliseconds since the epoch, compared against the window as it is now. */
+  at: number;
 }
 
 /**
@@ -186,8 +194,8 @@ export class AuthService {
     // just happened and whose answer never arrived, which is what the grace
     // window above exists for.
     if (stored && stored.revokedAt !== null) {
-      const replayed = this.rotated.get(stored.id);
-      if (replayed && Date.now() - replayed.at < replayGraceMs()) return replayed.tokens;
+      const replayed = await this.rotationOf(stored.id);
+      if (replayed) return replayed;
 
       await this.revokeFamily(stored.familyId, stored.userId, 'reuse');
       throw new UnauthorizedException({
@@ -217,7 +225,7 @@ export class AuthService {
     });
 
     const tokens = await this.issueTokens(user, stored.familyId);
-    this.remember(stored.id, tokens);
+    await this.remember(stored.id, tokens);
     return tokens;
   }
 
@@ -225,19 +233,93 @@ export class AuthService {
    * What the token with this id was rotated into, for as long as a client that
    * missed the answer might ask again.
    *
-   * ponytail: per process, so a replay that lands on a *different*
-   * auth-service instance is still read as theft and signs the account out.
-   * Move this to Redis - which the service does not otherwise need - if more
-   * than one instance ever runs behind the gateway.
+   * In Redis, so a replay that lands on a *different* auth-service instance is
+   * answered rather than read as theft. Per process, that case signed the
+   * account out - every device of it - for the crime of a dropped response, and
+   * it was the reason a second instance could not be run behind the gateway.
+   *
+   * The key's TTL is the cleanup and the *read* is the decision. Both, and not
+   * either alone: a TTL with no timestamp means an entry written while the
+   * window was thirty seconds is still answered after the window is turned off,
+   * which is the auth-service check failing on the line that shortens it to
+   * zero - and in a deployment, a configuration change that quietly does not
+   * take effect for another thirty seconds. A timestamp with no TTL means keys
+   * that are never collected. So the entry carries when it was written, the read
+   * compares that against the window as it is *now*, and Redis sweeps up behind.
    */
-  private readonly rotated = new Map<string, { tokens: AuthTokens; at: number }>();
+  private rotationKey(jti: string): string {
+    return `auth:rotated:${jti}`;
+  }
 
-  private remember(jti: string, tokens: AuthTokens): void {
-    const cutoff = Date.now() - replayGraceMs();
+  /**
+   * The local half, kept deliberately.
+   *
+   * It is not a cache. It is what this falls back to when Redis does not answer,
+   * and the reason to keep it is that the failure it prevents is the one being
+   * fixed: without it, a Redis outage would turn every interrupted rotation into
+   * a full sign-out, which is strictly worse than the per-process behaviour this
+   * replaces. With it, an unreachable Redis degrades to exactly what the service
+   * did before - one instance answers its own replays - and nothing regresses.
+   *
+   * It is read first for the same reason, plus one: the common case is a client
+   * retrying within a second or two through the same connection, and that is
+   * already the instance holding the answer.
+   */
+  private readonly rotated = new Map<string, RotationEntry>();
+
+  /** The pair this token was rotated into, if the window is still open. */
+  private async rotationOf(jti: string): Promise<AuthTokens | null> {
+    const grace = replayGraceMs();
+    if (grace <= 0) return null;
+
+    const local = this.rotated.get(jti);
+    if (local && Date.now() - local.at < grace) return local.tokens;
+
+    try {
+      const raw = await sharedRedis().get(this.rotationKey(jti));
+      // No key is the ordinary answer, not an error: either the window closed or
+      // this token was never rotated, and both are a replay to be refused.
+      if (!raw) return null;
+      const entry = JSON.parse(raw) as RotationEntry;
+      return Date.now() - entry.at < grace ? entry.tokens : null;
+    } catch (error) {
+      // Fall back to what the local map said, which is "no". A Redis that cannot
+      // be reached must not be a reason to hand a session to a replayed token,
+      // and it is also not a reason to fail the request outright - the caller
+      // below will treat this as theft, which is the pre-existing behaviour.
+      logger.warn('Could not read a rotation grace entry', {
+        jti,
+        error: String(error),
+      });
+      return null;
+    }
+  }
+
+  private async remember(jti: string, tokens: AuthTokens): Promise<void> {
+    const grace = replayGraceMs();
+    const cutoff = Date.now() - grace;
     for (const [id, entry] of this.rotated) {
       if (entry.at < cutoff) this.rotated.delete(id);
     }
     this.rotated.set(jti, { tokens, at: Date.now() });
+
+    // Zero means the window is off - a test turning it off, or a deployment that
+    // wants replays read as theft immediately. `PX 0` is an error rather than an
+    // instant expiry, so there is nothing to write.
+    if (grace <= 0) return;
+
+    const entry: RotationEntry = { tokens, at: Date.now() };
+    try {
+      await sharedRedis().set(this.rotationKey(jti), JSON.stringify(entry), 'PX', grace);
+    } catch (error) {
+      // The local map already has it, so this instance still answers its own
+      // replays. What is lost is the cross-instance half, which is what this
+      // whole change is - so it is a warning and not a failed refresh.
+      logger.warn('Could not store a rotation grace entry', {
+        jti,
+        error: String(error),
+      });
+    }
   }
 
   async logout(refreshToken: string): Promise<void> {
