@@ -126,13 +126,13 @@ to be framed, so no browser tab can ever show it.
 | Paste a link | ✅ | ✅ | — |
 | Video on the stage, with a shared transport | ✅ | ✅ | ✅ |
 | **Play together** | | | |
-| Six board games on the call stage | ✅ | ✅ | — |
-| One **Apps** button: listen together and play together behind it | ✅ | ✅ | — |
+| Six board games on the call stage | ✅ | ✅ | ⚠️ three played, three watched |
+| One **Apps** button: listen together and play together behind it | ✅ | ✅ | ⚠️ a games button |
 | Fullscreen board | ✅ | ✅ | — |
 | Carrom: aim, power, and a simulated shot both ends replay | ✅ | ✅ | — |
 | Ludo: the die is the server's, the tumble is the animation | ✅ | ✅ | — |
-| Take a chair, stand up, play again | ✅ | ✅ | — |
-| Watch without playing, and see whose move it is | ✅ | ✅ | — |
+| Take a chair, stand up, play again | ✅ | ✅ | ✅ |
+| Watch without playing, and see whose move it is | ✅ | ✅ | ✅ |
 | Ongoing-call notification | tray | — | ✅ foreground service |
 | **Presence and profiles** | | | |
 | Online, idle, do not disturb, invisible | ✅ | ✅ | ✅ |

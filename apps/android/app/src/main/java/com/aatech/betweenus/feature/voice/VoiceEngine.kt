@@ -12,6 +12,7 @@ import com.aatech.betweenus.core.data.BetweenUsApi
 import com.aatech.betweenus.core.data.PresenceSocket
 import com.aatech.betweenus.core.data.Session
 import com.aatech.betweenus.core.store.Listen
+import com.aatech.betweenus.core.store.Play
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -556,6 +557,7 @@ class VoiceEngine(private val context: Context) {
                 // it - a listener attached a moment later misses the only state
                 // that is sent unprompted.
                 Listen.start()
+                Play.start()
 
                 // Being in a call and being *seen* to be in one are two
                 // different subscriptions. The roster under a voice channel in
@@ -593,6 +595,7 @@ class VoiceEngine(private val context: Context) {
         // Nothing is playing to anybody here any more. Left behind, the stage
         // would still be drawn on the next call this client joins.
         Listen.clear()
+        Play.clear()
         retiredLinks.clear()
         channelId?.let { PresenceSocket.leaveVoice(it) }
         // The state goes first, and it matters. See `teardown`.

@@ -207,6 +207,44 @@ Opening a result reuses the quoted-message jump already in `ChatScreen` — scro
 to the row, then flash it. A row that is only scrolled to is a row nobody can
 pick out, because the list moved underneath them to get there.
 
+## A chair at Play Together
+
+`core/store/Play.kt`, `feature/voice/GameBoards.kt` and
+`feature/voice/PlayStage.kt`. `call-service` is the referee: a client sends
+"column four" and gets a board back, and a board is never sent the other way —
+a client that could send twenty coin positions could send twenty coins in the
+pockets. So the phone's job is small by design: draw what arrived, send taps.
+
+**No game rules are implemented here.**
+`packages/shared-types/src/games/` is the only implementation in the repository,
+and a Kotlin copy would be a second one to disagree with it — the first
+disagreement being two people looking at different games. That decides which
+games a phone plays: the ones whose legality can be *read off the board*.
+
+| Game | On a phone | Why |
+| --- | --- | --- |
+| Tic-tac-toe | Played | A legal move is an empty square |
+| Connect Four | Played | A legal move is a column with room |
+| Dots and Boxes | Played | A legal move is a line not yet drawn |
+| Reversi | Watched | Legality is a walk in eight directions from every empty square |
+| Ludo | Watched | The board is token positions in `GameState.data` |
+| Carrom | Watched | The board is twenty coins at floating-point positions |
+
+Watching is not a consolation. The board, the chairs, whose turn it is and the
+score arrive for all six, so a phone in the call sees the whole table; what it
+declines to do is offer a tap it cannot honestly call a move, and the stage says
+so rather than leaving a board that does not respond. The library button starts
+any of the six, including the three this phone can only watch — a person on a
+phone in a call with two desktops is a reasonable person to start a game of
+Carrom.
+
+Each board is one `Canvas` rather than a composable per cell: Reversi is
+sixty-four cells and Dots and Boxes is forty lines plus sixteen squares plus
+twenty-five dots, and a composable each is a recomposition each on every move.
+Taps are accepted only when it is genuinely this person's turn — a board that
+takes them out of turn sends moves the referee refuses, which reads as a board
+that ignores you.
+
 ## A seat at Listen Together
 
 `core/store/Listen.kt` and `feature/voice/ListenStage.kt`. The phone holds the

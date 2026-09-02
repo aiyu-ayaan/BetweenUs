@@ -183,6 +183,8 @@ fun VoiceChannelScreen(
     // happens to other people.
     val selfSpeaking by engine.selfSpeaking.collectAsState()
     val talking by engine.talking.collectAsState()
+    /** The game library, which is the only way to start one from a phone. */
+    var showGames by remember { mutableStateOf(false) }
     /**
      * Read on composition rather than held: it is changed on the settings
      * screen, which this one is recomposed after returning from. Nothing about
@@ -915,11 +917,21 @@ fun VoiceChannelScreen(
         // entirely when no session is running - `ListenStage` draws nothing -
         // so a call with no queue looks exactly as it did.
         if (!inPip) {
-            ListenStage(
+            Column(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .padding(start = 12.dp, end = 12.dp, bottom = 96.dp),
-            )
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                // Both draw nothing when their session is absent, so a call
+                // with neither running looks exactly as it did.
+                ListenStage()
+                PlayStage(selfId = self.id)
+            }
+        }
+
+        if (showGames) {
+            GameLibrarySheet(onDismiss = { showGames = false })
         }
 
         // Problem alert banner
@@ -1043,6 +1055,16 @@ fun VoiceChannelScreen(
                     contentDescription = if (cameraOn) "Turn camera off" else "Turn camera on",
                     checked = cameraOn,
                     onCheckedChange = { if (cameraOn) engine.stopVideo() else camera.request() },
+                )
+
+                // The desktop keeps listening and playing behind one "Apps"
+                // button; the phone has room for one control and this is it,
+                // because a queue is added to from a desktop and a game is not.
+                CallToggle(
+                    icon = BetweenUsIcons.Activity,
+                    contentDescription = "Play together",
+                    checked = showGames,
+                    onCheckedChange = { showGames = it },
                 )
 
                 // Muted is the one toggle whose "on" is a problem rather than a
