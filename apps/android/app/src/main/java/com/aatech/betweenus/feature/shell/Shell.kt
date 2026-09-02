@@ -43,6 +43,7 @@ import androidx.navigation.compose.rememberNavController
 import com.aatech.betweenus.core.crypto.E2ee
 import com.aatech.betweenus.core.crypto.IdentityStatus
 import com.aatech.betweenus.core.data.BetweenUsApi
+import com.aatech.betweenus.core.data.Channel
 import com.aatech.betweenus.core.data.ChannelType
 import com.aatech.betweenus.core.data.Connectivity
 import com.aatech.betweenus.core.data.ServerClock
@@ -216,6 +217,13 @@ fun Shell(user: PublicUser) {
     val openMenu: (() -> Unit)? = if (twoPane) null else ({ scope.launch { drawer.open() } })
 
     val servers by Workspace.servers.collectAsState()
+    /** The quick switcher, which is over the shell rather than inside a screen. */
+    var switching by remember { mutableStateOf(false) }
+    // Every server's channels, not the open one's: `Workspace.refresh` loads
+    // them all because the socket has to be subscribed to all of them, so the
+    // switcher can reach a channel in a server that is not on screen.
+    val switcherChannels by Workspace.channels.collectAsState()
+    val switcherDirects by Workspace.directChannels.collectAsState()
     var serverId by rememberSaveable { mutableStateOf(LastPlace.serverId) }
     var channelId by rememberSaveable { mutableStateOf(LastPlace.channelId) }
 
@@ -267,6 +275,48 @@ fun Shell(user: PublicUser) {
             popUpTo(Route.Chat) { inclusive = true }
             launchSingleTop = true
         }
+    }
+
+    /**
+     * Opening a voice channel, which is not the same as opening a channel.
+     *
+     * A voice channel must never become "the channel": the chat route reads the
+     * same value, so leaving a call would land on a conversation that is empty
+     * by construction.
+     */
+    fun openVoice(id: String, server: String?, join: Boolean) {
+        voiceChannelId = id
+        serverId = server
+        joinOnArrival = join
+        scope.launch { drawer.close() }
+        navigation.navigate(Route.Voice)
+    }
+
+    /**
+     * Going to a channel of either kind, from wherever asked.
+     *
+     * Named rather than written inline in the drawer, because the quick switcher
+     * goes to exactly the same places and a second copy of this decision is a
+     * second place for the voice case to be forgotten.
+     */
+    fun goToChannel(channel: Channel) {
+        when (channel.type) {
+            ChannelType.VOICE -> openVoice(channel.id, channel.serverId, join = true)
+            else -> openChannel(channel.id, channel.serverId)
+        }
+    }
+
+    /**
+     * Picking a server opens the conversation in it, because that is what
+     * picking a server is for. Its first text channel - `#general` on a server
+     * nobody has renamed - is the one every client lands on.
+     */
+    fun goToServer(picked: String?) {
+        serverId = picked
+        val landing = picked
+            ?.let { Workspace.channelsOf(it) }
+            ?.firstOrNull { it.type == ChannelType.TEXT }
+        if (landing != null) openChannel(landing.id, picked)
     }
 
     /**
@@ -370,32 +420,9 @@ fun Shell(user: PublicUser) {
             servers = servers,
             selectedServerId = serverId,
             selectedChannelId = channelId,
-            // Picking a server opens the conversation in it, because that is
-            // what picking a server is for. Its first text channel - #general
-            // on a server nobody has renamed - is the one every client lands on.
-            onSelectServer = { picked ->
-                serverId = picked
-                val landing = picked
-                    ?.let { Workspace.channelsOf(it) }
-                    ?.firstOrNull { it.type == ChannelType.TEXT }
-                if (landing != null) openChannel(landing.id, picked)
-            },
-            onSelectChannel = { channel ->
-                when (channel.type) {
-                    // A voice channel does not become "the channel". It used
-                    // to, and since the chat route reads the same value,
-                    // leaving a call landed on a voice channel rendered as an
-                    // empty conversation.
-                    ChannelType.VOICE -> {
-                        voiceChannelId = channel.id
-                        serverId = channel.serverId
-                        joinOnArrival = true
-                        scope.launch { drawer.close() }
-                        navigation.navigate(Route.Voice)
-                    }
-                    else -> openChannel(channel.id, channel.serverId)
-                }
-            },
+            onSelectServer = ::goToServer,
+            onSelectChannel = ::goToChannel,
+            onOpenSwitcher = { switching = true },
             onHome = {
                 serverId = null
                 scope.launch { drawer.close() }
@@ -875,6 +902,32 @@ fun Shell(user: PublicUser) {
                 }
             },
             content = body,
+        )
+    }
+
+    // Over the shell rather than inside a screen, and outside the two layouts
+    // above: it goes to the same places from a phone and from an unfolded
+    // foldable, and a copy in each branch is one that gets fixed in one.
+    if (switching) {
+        QuickSwitcherSheet(
+            servers = servers,
+            channels = switcherChannels,
+            directs = switcherDirects,
+            onGo = { target ->
+                when (target.kind) {
+                    SwitchKind.DIRECT, SwitchKind.TEXT_CHANNEL ->
+                        openChannel(target.id, target.serverId)
+                    // Going to a voice channel is not joining one. The drawer
+                    // joins on arrival because tapping a voice channel there is
+                    // saying so; picking one out of a list of everywhere you
+                    // could go is not, and a switcher that opened a microphone
+                    // would be a switcher nobody uses twice.
+                    SwitchKind.VOICE_CHANNEL ->
+                        openVoice(target.id, target.serverId, join = false)
+                    SwitchKind.SERVER -> goToServer(target.id)
+                }
+            },
+            onDismiss = { switching = false },
         )
     }
 }

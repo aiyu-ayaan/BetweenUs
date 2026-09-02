@@ -207,6 +207,32 @@ Opening a result reuses the quoted-message jump already in `ChatScreen` — scro
 to the row, then flash it. A row that is only scrolled to is a row nobody can
 pick out, because the list moved underneath them to get there.
 
+## Getting anywhere from anywhere
+
+`QuickSwitcher.kt` — one field over conversations, channels and servers, opened
+from the search control in the drawer header. The desktop opens the same thing
+on Ctrl+K; a phone has no Ctrl and no K, and the drawer is where somebody who
+does not know where a thing is has already gone looking.
+
+It offers every server's channels, where the desktop offers only the open
+server's. That is a difference in what each client has already loaded rather
+than a difference of opinion: the desktop fetches a server's channels when that
+server is opened, while `Workspace.refresh` fetches them all up front because
+the socket has to be subscribed to every channel or nothing arrives to badge.
+Two channels with the same name are told apart by the hint, which carries the
+server's name.
+
+Going to a voice channel does not join it. Tapping one in the drawer does, and
+should — that tap is about that channel. Picking one out of a list of everywhere
+you could go is not consent to open a microphone.
+
+The sheet is drawn at the shell level, outside both layout branches, so the
+phone and the unfolded foldable share one copy. What picking a server means, and
+that a voice channel must never become "the channel", live in `goToServer` and
+`goToChannel` on the shell — the drawer and the switcher both route through
+them, because a second copy of the voice rule is a second place for it to be
+forgotten.
+
 ## One name, drawn once
 
 Every list of people draws a display name over an `@handle`. An account that

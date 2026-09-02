@@ -65,6 +65,7 @@ fun WorkspaceDrawer(
     selectedChannelId: String?,
     onSelectServer: (String?) -> Unit,
     onSelectChannel: (Channel) -> Unit,
+    onOpenSwitcher: () -> Unit,
     onHome: () -> Unit,
     onSettings: () -> Unit,
     onServerSettings: () -> Unit,
@@ -164,6 +165,15 @@ fun WorkspaceDrawer(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f),
+                )
+                // Always here, on the DM list as well as on a server: it is
+                // the one control in this drawer that reaches somewhere the
+                // drawer is not currently showing, which is the whole of what
+                // it is for.
+                IconAction(
+                    icon = BetweenUsIcons.Search,
+                    contentDescription = "Go to a conversation, channel or server",
+                    onClick = onOpenSwitcher,
                 )
                 // Invites used to live two screens away - the drawer, then
                 // account settings, then server settings - which is a long way

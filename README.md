@@ -97,7 +97,7 @@ to be framed, so no browser tab can ever show it.
 | `:` emoji suggestion menu while typing | ✅ | ✅ | — |
 | Emoji picker | ✅ | ✅ | ⚠️ Unicode only |
 | Search within a channel | ✅ | ✅ | ✅ |
-| Quick switcher (Ctrl+K) | ✅ | ✅ | — |
+| Quick switcher | ✅ Ctrl+K | ✅ Ctrl+K | ✅ drawer |
 | Attachments of any type, up to 100 MB | ✅ | ✅ | ✅ |
 | Sending survives leaving the screen | — | — | ✅ foreground service |
 | HEIC photos converted, photos re-encoded on the way out | ✅ | ✅ | ✅ |
