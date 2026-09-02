@@ -10,6 +10,7 @@
     "generate": "prisma generate",
     "migrate": "dotenv -e ../../.env -- prisma migrate dev",
     "migrate:deploy": "prisma migrate deploy",
+    "migrate:check": "dotenv -e ../../.env -- node prisma/migrate-check.mjs",
     "studio": "dotenv -e ../../.env -- prisma studio",
     "seed": "dotenv -e ../../.env -- tsx prisma/seed.ts",
     "admin:create": "dotenv -e ../../.env -- tsx prisma/create-admin.ts",

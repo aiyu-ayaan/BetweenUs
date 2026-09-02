@@ -39,6 +39,7 @@
     "check": "node scripts/release-version.mjs --check && node scripts/release-notes.mjs --check && sh -n .github/scripts/decode-keystore.sh && sh .github/scripts/detect-check.sh && turbo run check",
     "db:generate": "pnpm --filter @betweenus/database generate",
     "db:migrate": "pnpm --filter @betweenus/database migrate",
+    "db:migrate:check": "pnpm --filter @betweenus/database migrate:check",
     "db:seed": "pnpm --filter @betweenus/database seed",
     "admin:create": "pnpm --filter @betweenus/database admin:create",
     "db:studio": "pnpm --filter @betweenus/database studio"
