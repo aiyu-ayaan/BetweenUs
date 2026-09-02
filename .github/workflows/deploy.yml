@@ -1,0 +1,189 @@
+# Deploying a release onto the host, on its own, so that reaching the host can
+# be tested without cutting a release to find out.
+#
+#   Run workflow -> mode: check     connects and reports, changes nothing
+#   Run workflow -> mode: deploy    checks out the version and runs deploy.sh
+#
+# `check` is the one to run first, and the one to run when something is wrong.
+# It joins the tailnet, prints what it can see, and prints the host's SSH keys
+# in the exact form `DEPLOY_KNOWN_HOSTS` wants - so the answer to "where do I
+# get that value" is "run this and copy the block it prints".
+#
+# It is also `workflow_call`-able, which is how release.yml will eventually
+# reach the host: the deploy job there does the same three things this does,
+# and once this has been run against the Pi a few times, that job becomes a
+# `uses:` of this file and stops being a second copy.
+#
+# Everything here is off unless `vars.DEPLOY_HOST` is set, the same switch
+# release.yml uses.
+
+name: Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'check = connect and report; deploy = put a version on the host'
+        type: choice
+        options: [check, deploy]
+        default: check
+      version:
+        description: 'Version to deploy, e.g. 0.0.1-alpha.22. Empty deploys whatever channel .env follows'
+        type: string
+        default: ''
+  workflow_call:
+    inputs:
+      version:
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+# The same group release.yml's deploy job uses, so a manual run and a release
+# cannot be on the host at the same time.
+concurrency:
+  group: deploy-${{ vars.DEPLOY_HOST }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: ${{ inputs.mode || 'deploy' }} ${{ vars.DEPLOY_HOST }}
+    if: vars.DEPLOY_HOST != ''
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: ${{ vars.BETWEENUS_API_URL }}
+    # Read in the step `if` below, because the `secrets` context cannot be.
+    env:
+      TS_OAUTH_CLIENT_ID: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+      HOST: ${{ vars.DEPLOY_HOST }}
+      USER_NAME: ${{ vars.DEPLOY_USER || 'betweenus' }}
+      DIR: ${{ vars.DEPLOY_DIR || '~/betweenus' }}
+      MODE: ${{ inputs.mode || 'deploy' }}
+    steps:
+      # An ephemeral, tagged node: the OAuth client mints a one-use key at the
+      # start of the job and the node is gone when it ends.
+      - name: Join the tailnet
+        if: env.TS_OAUTH_CLIENT_ID != ''
+        uses: tailscale/github-action@v3
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:ci
+          version: latest
+
+      - name: What the runner can see
+        run: |
+          if [ -n "$TS_OAUTH_CLIENT_ID" ]; then
+            tailscale status || true
+            echo
+          fi
+          # Before SSH, and independent of it: a name that does not resolve and
+          # a port that does not answer are different problems, and the error
+          # from `ssh` alone does not always say which.
+          getent hosts "$HOST" || echo "::warning::${HOST} does not resolve"
+          nc -z -w 10 "$HOST" 22 \
+            && echo "${HOST}:22 answers" \
+            || echo "::warning::${HOST}:22 did not answer"
+
+      # The host key is what `DEPLOY_KNOWN_HOSTS` pins, and this is where the
+      # value comes from. `ssh-keyscan` needs no credentials - it asks the host
+      # which keys it has and prints them in known_hosts format, one line per
+      # key type, each beginning with the name it was asked for. That leading
+      # name is why the secret has to be redone when the host moves: an entry
+      # written for a LAN address does not match a MagicDNS one, and OpenSSH
+      # then reports an unknown host rather than a moved one.
+      - name: The host's SSH keys, as the secret wants them
+        id: keyscan
+        run: |
+          ssh-keyscan -T 15 "$HOST" > scanned 2>scan.err || true
+          if [ ! -s scanned ]; then
+            echo "::error::ssh-keyscan got nothing back from ${HOST}."
+            cat scan.err
+            exit 1
+          fi
+          echo "::group::Paste this into the DEPLOY_KNOWN_HOSTS secret"
+          cat scanned
+          echo "::endgroup::"
+
+      # Whether the secret matches what the host actually presents, said plainly.
+      # A pinned key that no longer matches is the failure worth diagnosing here
+      # rather than inside a deploy: it is either a reinstalled host or a name
+      # pointing somewhere new, and the deploy's error for both is the same.
+      - name: Reach the host
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          if [ -z "$DEPLOY_KNOWN_HOSTS" ]; then
+            echo "::error::DEPLOY_KNOWN_HOSTS is not set. The block printed above is its value."
+            exit 1
+          fi
+          if [ -z "$DEPLOY_SSH_KEY" ]; then
+            echo "::error::DEPLOY_SSH_KEY is not set."
+            exit 1
+          fi
+
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+          # Every key the host offered, checked against the pin, before anything
+          # tries to authenticate with it.
+          while read -r name type key; do
+            [ -n "${key:-}" ] || continue
+            if grep -qF " $type $key" ~/.ssh/known_hosts; then
+              echo "pinned:  $type"
+            else
+              echo "::warning::${type} presented by ${name} is not in DEPLOY_KNOWN_HOSTS"
+            fi
+          done < scanned
+
+      - name: Connect
+        run: |
+          ssh -i ~/.ssh/id_deploy -o BatchMode=yes -o ConnectTimeout=15 \
+            "${USER_NAME}@${HOST}" "
+              set -e
+              echo \"host:    \$(hostname)\"
+              echo \"user:    \$(id -un)\"
+              echo \"docker:  \$(docker version --format '{{.Server.Version}}' 2>&1 || echo 'not reachable as this user')\"
+              echo \"dir:     ${DIR}\"
+              cd ${DIR}
+              git log --oneline -1
+              echo \"version: \$(grep -E '^BETWEENUS_VERSION=' .env 2>/dev/null || echo 'unset - follows latest')\"
+              docker compose --env-file .env -f infrastructure/docker/docker-compose.yml ps --format '{{.Service}} {{.State}}' 2>/dev/null || true
+            "
+
+      # Everything above is read-only. Only this changes the host, and only when
+      # it was asked for - the whole point of `check` being the default.
+      - name: Deploy
+        if: env.MODE == 'deploy'
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          ssh -i ~/.ssh/id_deploy -o BatchMode=yes "${USER_NAME}@${HOST}" \
+            "cd ${DIR} && git fetch --tags --quiet \
+             && { [ -z '${VERSION}' ] || git checkout --quiet 'v${VERSION}'; } \
+             && sh infrastructure/docker/deploy.sh ${VERSION}"
+
+      # From outside the tailnet, which is the only place a Cloudflare tunnel
+      # that did not come back up is visible.
+      - name: And from outside
+        if: env.MODE == 'deploy' && vars.BETWEENUS_API_URL != ''
+        env:
+          API: ${{ vars.BETWEENUS_API_URL }}
+        run: |
+          for attempt in 1 2 3 4 5 6 7 8 9 10; do
+            if curl --fail --silent --max-time 10 "${API%/}/health"; then
+              echo
+              echo "answering at ${API}"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "::error::${API%/}/health did not answer. The host reported a healthy gateway, so look at the tunnel."
+          exit 1
