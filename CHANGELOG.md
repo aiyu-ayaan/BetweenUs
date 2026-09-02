@@ -1,5 +1,53 @@
 # Changelog
 
+## [0.0.1-alpha.22](https://github.com/aiyu-ayaan/BetweenUs/compare/v0.0.1-alpha.21...v0.0.1-alpha.22) (2026-09-02)
+
+### Features
+
+* The rate-limit window slides
+* The rotation grace moves to Redis, and a second instance becomes possible
+* A socket that stops when the account does
+* Something that actually deploys the images the pipeline pushes
+* A secret can come from a file, and a signing secret can be rotated
+* A backup that leaves the host
+* A migration check that replays the whole history, and the one-off the rename needs
+* Back leaves the call screen, and a dock stands in for it
+* A shared screen goes out with its sound
+* The conversation says when somebody joins
+* Let a new member be added with the chat history, and hide sealed rows
+* One-to-one calls on every client, and a header that shows the name
+* Add PACKAGE_VERSION fallback in AdminHealthService for app version retrieval
+* Enhance voice channel and share stage with fullscreen toggle and layout adjustments
+
+### Bug fixes
+
+* A picture's type comes from its bytes, not from its uploader
+* The health page, pointed at a deployment that is genuinely sick
+* The three smoke scripts have been run, and two of them failed
+* The two migrations that sorted backwards get a stamp that does not
+* A film share holds its resolution instead of walking down to 480p
+* The High profile preference that never once fired
+* A share stops asking for a bitrate floor and sitting at 480p
+* The call bar no longer leaves a status bar of empty space
+* The call dock appears for a call started after the shell
+* Coming back from picture-in-picture lands on the call
+* A share picked from the sheet reaches the preview
+
+### Other changes
+
+* Screen share audio, floating call dock, 1-to-1 direct calls, and sliding rate limiter
+* Point at the phase 35-38 proposal
+* What decides a share's picture is both clients, not one
+* Document release trigger conventions in Release-Commit.md and update CLAUDE.md
+
+### Artifacts
+
+| Platform | This release |
+| --- | --- |
+| Server images | Built here |
+| Desktop (Windows) | Built here |
+| Android | Built here |
+
 ## [0.0.1-alpha.21](https://github.com/aiyu-ayaan/BetweenUs/compare/v0.0.1-alpha.20...v0.0.1-alpha.21) (2026-08-31)
 
 ### Features
