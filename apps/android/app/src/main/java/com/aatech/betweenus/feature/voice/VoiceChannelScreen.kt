@@ -64,6 +64,10 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.layout.findRootCoordinates
 import androidx.compose.ui.layout.onPlaced
 import androidx.compose.ui.layout.positionInParent
@@ -178,6 +182,15 @@ fun VoiceChannelScreen(
     // Your own microphone, so the green ring is not something that only ever
     // happens to other people.
     val selfSpeaking by engine.selfSpeaking.collectAsState()
+    val talking by engine.talking.collectAsState()
+    /**
+     * Read on composition rather than held: it is changed on the settings
+     * screen, which this one is recomposed after returning from. Nothing about
+     * the audio depends on this value - the engine reads the preference itself
+     * every time it decides - so the worst this can be is a button that appears
+     * a frame late.
+     */
+    val pushToTalk = AudioPrefs.pushToTalk
     val linkStats by engine.stats.collectAsState()
     val signalling by engine.signalling.collectAsState()
     val problem by engine.problem.collectAsState()
@@ -201,6 +214,15 @@ fun VoiceChannelScreen(
             bars.hide(WindowInsetsCompat.Type.systemBars())
         }
         onDispose { bars?.show(WindowInsetsCompat.Type.systemBars()) }
+    }
+
+    // A talk control that is held while the screen goes away is a microphone
+    // nobody can close: the release never arrives, because the thing that would
+    // have reported it is gone. This is the phone's version of the desktop
+    // closing it on window blur, and it is the failure that makes people stop
+    // trusting push to talk.
+    DisposableEffect(engine) {
+        onDispose { engine.setTalking(false) }
     }
 
     // Coming back to the call after a phone call is the moment to ask for the
@@ -1019,6 +1041,17 @@ fun VoiceChannelScreen(
                     alarming = true,
                 )
 
+                // Only in that mode, and beside the mute button rather than
+                // instead of it: the two say different things. Mute is whether
+                // this client is in the call at all, and it outranks a held
+                // thumb - see [PushToTalk].
+                if (pushToTalk) {
+                    TalkButton(
+                        talking = talking,
+                        onTalking = engine::setTalking,
+                    )
+                }
+
                 CallToggle(
                     icon = BetweenUsIcons.ScreenShare,
                     contentDescription = when {
@@ -1110,6 +1143,50 @@ private fun CallToggle(
         ),
     ) {
         BetweenUsIcon(icon, size = 22.dp, contentDescription = contentDescription)
+    }
+}
+
+/**
+ * Hold to be heard.
+ *
+ * A press-and-hold rather than a toggle, which is the whole difference between
+ * push to talk and a mute button: releasing has to close it, and so does the
+ * system cancelling the gesture. `tryAwaitRelease` answers for both - it
+ * returns true on a real release and false on a cancel - and the microphone is
+ * closed either way, because the branch where it stays open is the one nobody
+ * notices until they have been overheard.
+ */
+@Composable
+private fun TalkButton(talking: Boolean, onTalking: (Boolean) -> Unit) {
+    val scheme = MaterialTheme.colorScheme
+    Box(
+        modifier = Modifier
+            .size(48.dp)
+            .clip(CircleShape)
+            .background(if (talking) scheme.primary else scheme.surfaceContainerHighest)
+            .pointerInput(Unit) {
+                detectTapGestures(
+                    onPress = {
+                        onTalking(true)
+                        tryAwaitRelease()
+                        onTalking(false)
+                    },
+                )
+            }
+            // Announced as a button with a label, because a Box carrying a
+            // pointer handler is announced as nothing at all.
+            .semantics {
+                contentDescription = "Hold to talk"
+                role = Role.Button
+            },
+        contentAlignment = Alignment.Center,
+    ) {
+        BetweenUsIcon(
+            icon = BetweenUsIcons.Mic,
+            size = 22.dp,
+            tint = if (talking) scheme.onPrimary else scheme.onSurfaceVariant,
+            contentDescription = null,
+        )
     }
 }
 

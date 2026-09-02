@@ -322,6 +322,18 @@ class VoiceEngine(private val context: Context) {
     val muted: StateFlow<Boolean> = _muted.asStateFlow()
 
     /**
+     * The push-to-talk control being held, which is not the same as unmuted.
+     *
+     * Only consulted when the mode is on - see [PushToTalk.shouldPassAudio],
+     * which is where the four-way decision lives and is tested. False whenever
+     * the call screen is not on top of a finger, because a microphone that
+     * opens and is never told to close is the whole failure this feature has to
+     * avoid.
+     */
+    private val _talking = MutableStateFlow(false)
+    val talking: StateFlow<Boolean> = _talking.asStateFlow()
+
+    /**
      * Whether this microphone is hearing a voice right now.
      *
      * The same fact [Participant.speaking] carries for everybody else, for the
@@ -899,8 +911,14 @@ class VoiceEngine(private val context: Context) {
     private fun applyMute() {
         // Held means muted whatever the button says, and the button is left
         // alone: coming back from a phone call must not unmute somebody who
-        // was muted before it rang.
-        val muted = _muted.value || _interruption.value == Interruption.HOLD
+        // was muted before it rang. Push to talk is the third input, and all
+        // four are decided in one tested place rather than here.
+        val muted = !PushToTalk.shouldPassAudio(
+            muted = _muted.value,
+            held = _interruption.value == Interruption.HOLD,
+            pushToTalk = AudioPrefs.pushToTalk,
+            talking = _talking.value,
+        )
 
         // Disabling the track stops everything it carries, and while a screen
         // is being shared it is carrying two things - see [ShareAudio]. Muting
@@ -955,6 +973,34 @@ class VoiceEngine(private val context: Context) {
      * end learns about it from the media state on the data channel, which is
      * the only thing that can distinguish "muted" from "silent room".
      */
+    /**
+     * The talk control went down or came up.
+     *
+     * Idempotent, because the gesture that drives it can report a release more
+     * than once - and because the screen closes it on the way out whether or
+     * not anything was held.
+     */
+    fun setTalking(talking: Boolean) {
+        if (_talking.value == talking) return
+        _talking.value = talking
+        applyMute()
+        publishMediaState()
+    }
+
+    /**
+     * The push-to-talk preference changed while a call was running.
+     *
+     * Turning the mode on has to close the microphone at once - otherwise it
+     * stays open until something else happens to re-decide, and somebody who
+     * just switched to push to talk is live without knowing it. Turning it off
+     * has the mirror duty: nothing else would reopen the microphone.
+     */
+    fun refreshTalkMode() {
+        _talking.value = false
+        applyMute()
+        publishMediaState()
+    }
+
     fun toggleMute() {
         _muted.update { !it }
         applyMute()
@@ -1178,7 +1224,18 @@ class VoiceEngine(private val context: Context) {
 
     private fun publishMediaState() {
         val media = JSONObject()
-            .put(Slot.MIC.wire, !_muted.value)
+            // What the capture is actually doing, not what the button says: a
+            // push-to-talk client between sentences is sending nothing, and a
+            // tile drawn live is a tile somebody waits on.
+            .put(
+                Slot.MIC.wire,
+                PushToTalk.shouldPassAudio(
+                    muted = _muted.value,
+                    held = _interruption.value == Interruption.HOLD,
+                    pushToTalk = AudioPrefs.pushToTalk,
+                    talking = _talking.value,
+                ),
+            )
             .put(Slot.CAMERA.wire, _cameraOn.value)
             .put(Slot.SCREEN.wire, _sharing.value)
             .put(Slot.SCREEN_AUDIO.wire, false)

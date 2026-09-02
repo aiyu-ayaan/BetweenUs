@@ -85,6 +85,18 @@ object AudioPrefs {
         set(value) = prefs.edit().putBoolean("aec", value).apply()
 
     /**
+     * Whether the microphone is open, or held open a sentence at a time.
+     *
+     * Off by default, and it has to be: turning this on for somebody who did
+     * not ask for it is a call in which they cannot be heard and nothing on
+     * screen says why. See [PushToTalk] for what it decides and why a phone
+     * holds a button where the desktop holds a key.
+     */
+    var pushToTalk: Boolean
+        get() = prefs.getBoolean("ptt", false)
+        set(value) = prefs.edit().putBoolean("ptt", value).apply()
+
+    /**
      * How hard the phone works to remove the room, in three steps rather than
      * two. The desktop's `NoiseSuppression`, and the two platforms have to mean
      * the same thing by each name or the setting is per-device folklore.

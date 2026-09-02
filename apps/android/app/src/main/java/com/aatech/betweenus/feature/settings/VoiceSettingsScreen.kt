@@ -72,6 +72,7 @@ fun VoiceSettingsScreen(
     var route by remember { mutableStateOf(AudioPrefs.route) }
     var input by remember { mutableStateOf(AudioPrefs.input) }
     var echoCancellation by remember { mutableStateOf(AudioPrefs.echoCancellation) }
+    var pushToTalk by remember { mutableStateOf(AudioPrefs.pushToTalk) }
     var noiseSuppression by remember { mutableStateOf(AudioPrefs.noiseSuppression) }
     var autoGainControl by remember { mutableStateOf(AudioPrefs.autoGainControl) }
     var sensitivity by remember { mutableStateOf(AudioPrefs.sensitivityDb) }
@@ -210,6 +211,29 @@ fun VoiceSettingsScreen(
                         }
                     }
                 }
+
+                ListRow(
+                    title = "Push to talk",
+                    subtitle = "The microphone stays closed until you hold the talk button " +
+                        "on the call screen. For a room the gate cannot help with",
+                    leading = { BetweenUsIcon(BetweenUsIcons.Mic) },
+                    trailing = {
+                        Switch(
+                            checked = pushToTalk,
+                            onCheckedChange = {
+                                pushToTalk = it
+                                AudioPrefs.pushToTalk = it
+                                // A call that is already running has to be told:
+                                // turning the mode on must close the microphone
+                                // now rather than whenever something next
+                                // happens to re-decide, and turning it off must
+                                // reopen it - nothing else would.
+                                VoiceEngine.live.value?.refreshTalkMode()
+                            },
+                            colors = SwitchDefaults.colors(),
+                        )
+                    },
+                )
 
                 ListRow(
                     title = "Echo cancellation",

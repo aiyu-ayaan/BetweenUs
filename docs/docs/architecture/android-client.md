@@ -207,6 +207,39 @@ Opening a result reuses the quoted-message jump already in `ChatScreen` — scro
 to the row, then flash it. A row that is only scrolled to is a row nobody can
 pick out, because the list moved underneath them to get there.
 
+## Push to talk, with a thumb
+
+`PushToTalk.kt`. The gate answers "is somebody making a noise"; this answers
+"do you mean to be heard", and no threshold gets there — a bus, a television and
+somebody else's conversation are all above any level that still passes a quiet
+voice. The desktop holds a key and listens on the window. A phone has no key, so
+the control is held with a thumb on the call toolbar, and the setting that turns
+the mode on lives beside the gate in voice settings.
+
+Four inputs decide whether the microphone passes audio, and they are four
+different questions, so they live in one tested function rather than spread
+through the engine:
+
+| Input | Question | Rank |
+| --- | --- | --- |
+| `muted` | Is this client in the call at all? | Outranks the control |
+| `held` | Did the system take the audio (a real phone call)? | Outranks everything |
+| `pushToTalk` | Is the mode on? | Decides whether the fourth is read |
+| `talking` | Is the control down? | Only in that mode |
+
+What the far end is told is the capture, not the button. A push-to-talk client
+between sentences is sending nothing, and a tile drawn live is a tile somebody
+waits on — so `publishMediaState` asks the same function. Publishing the button
+alone makes such a participant look permanently live while silent, which reads
+as a broken microphone rather than as a released key.
+
+Two ways it could stick open, both closed deliberately. The call screen going
+away while the control is held is this platform's version of the desktop losing
+window focus — the release never arrives — so leaving the screen closes it. And
+turning the mode on during a live call re-decides immediately, because otherwise
+the microphone stays open until something else happens to ask, and somebody who
+has just switched to push to talk is live without knowing it.
+
 ## Getting anywhere from anywhere
 
 `QuickSwitcher.kt` — one field over conversations, channels and servers, opened
