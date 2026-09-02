@@ -1,5 +1,46 @@
 # Changelog
 
+## [0.0.1-alpha.24](https://github.com/aiyu-ayaan/BetweenUs/compare/v0.0.1-alpha.23...v0.0.1-alpha.24) (2026-09-02)
+
+### Features
+
+* Make aria-modal true, and let the OS set the type size
+* Point the layout the other way, and a place for the words
+* One rule for a list with nothing in it
+* Tell an account when its key exists on one machine only
+* Cozy and compact, and a reason it is not a font size
+* A shortcut sheet on `?`, and Ctrl+F to search
+* A notification goes away when you read it somewhere else
+* Ask to drive a shared screen, and say no when asked
+* A chair at Play Together, and no second copy of the rules
+* Listen Together, in step and out loud
+* A seat at Listen Together, without a second sound system
+* Push to talk, held with a thumb
+* A quick switcher, and one place that decides where a tap goes
+* Search a conversation on the phone
+
+### Bug fixes
+
+* Stop the screen sleeping while there is video on it
+* Keep the window buttons' corner clear in full screen
+* Measure the sixteen ramps, and repair eleven of them
+
+### Other changes
+
+* Listen and Play Together on the phone, a shortcut sheet on the desktop, and sixteen themes that actually read
+* A tick-box that clears the host's images after a healthy deploy
+* Desktop and web reconnect a dropped call link too
+* Two Android emoji features that work, marked as missing
+* Point at the phases 39-42 proposal
+
+### Artifacts
+
+| Platform | This release |
+| --- | --- |
+| Server images | Built here |
+| Desktop (Windows) | Built here |
+| Android | Built here |
+
 ## [0.0.1-alpha.23](https://github.com/aiyu-ayaan/BetweenUs/compare/v0.0.1-alpha.22...v0.0.1-alpha.23) (2026-09-02)
 
 ### Features
