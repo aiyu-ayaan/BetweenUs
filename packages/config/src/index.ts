@@ -4,7 +4,7 @@
  * at boot instead of at the first request.
  */
 import { config as loadDotenv } from 'dotenv';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 let loaded = false;
@@ -28,16 +28,70 @@ export function loadEnv(): void {
   loadDotenv();
 }
 
+/**
+ * Secrets read from a file rather than from the environment.
+ *
+ * `.env` is where a secret goes when there is nowhere better, and it has the two
+ * problems every deployment eventually meets: it is one file holding every
+ * secret, and its contents are in the environment of every process the service
+ * spawns and in the output of `docker inspect`. `NAME_FILE=/run/secrets/name`
+ * points at a file instead, which is what Docker and Podman secrets, Kubernetes
+ * projected volumes, systemd credentials and a Vault Agent template all produce.
+ * Rotation becomes replacing a file and restarting, with no `.env` edit and no
+ * secret in a shell history.
+ *
+ * `NAME` wins if both are set, so an existing deployment is unaffected and an
+ * override for one boot is still a matter of exporting a variable.
+ *
+ * Read once per path. This sits under `requireEnv`, which is on the path of
+ * every request carrying a token, and a file read per verification is not.
+ */
+const fileValues = new Map<string, string>();
+
+function envFromFile(name: string): string | undefined {
+  const path = process.env[`${name}_FILE`];
+  if (path === undefined || path === '') return undefined;
+
+  const cached = fileValues.get(path);
+  if (cached !== undefined) return cached;
+
+  let contents: string;
+  try {
+    contents = readFileSync(path, 'utf8');
+  } catch (cause) {
+    // Loudly. A secret file that cannot be read looks exactly like a secret that
+    // was never set, and the second one has a much less obvious fix.
+    throw new Error(`${name}_FILE points at ${path}, which could not be read`, { cause });
+  }
+
+  // Trimmed, because `echo secret > file` and every editor leave a newline, and
+  // a signing key that differs from the one next door by a trailing byte fails
+  // as an invalid signature rather than as a configuration mistake.
+  const value = contents.trim();
+  if (value === '') {
+    throw new Error(`${name}_FILE points at ${path}, which is empty`);
+  }
+
+  fileValues.set(path, value);
+  return value;
+}
+
+/** Forgets what was read from disk, so a rotation test can change the file. */
+export function resetEnvFileCache(): void {
+  fileValues.clear();
+}
+
 export function env(name: string): string | undefined {
   loadEnv();
   const value = process.env[name];
-  return value === undefined || value === '' ? undefined : value;
+  if (value !== undefined && value !== '') return value;
+  return envFromFile(name);
 }
 
 export function requireEnv(name: string): string {
   const value = env(name);
   if (value === undefined) {
-    throw new Error(`Missing required environment variable: ${name}`);
+    throw new Error(`Missing required environment variable: ${name} (or ${name}_FILE)`);
   }
   return value;
 }

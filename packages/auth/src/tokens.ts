@@ -1,6 +1,6 @@
 import { randomUUID, createHash } from 'node:crypto';
 import jwt, { type SignOptions, type VerifyOptions } from 'jsonwebtoken';
-import { envOr, isProduction, requireEnv } from '@betweenus/config';
+import { env, envOr, isProduction, requireEnv } from '@betweenus/config';
 import type { JwtAccessPayload, JwtRefreshPayload, PublicUser } from '@betweenus/shared-types';
 
 /**
@@ -55,6 +55,41 @@ function signingSecret(name: string): string {
   if (cached !== undefined) return cached;
 
   const value = requireEnv(name);
+  validateSecret(name, value);
+  checked.set(name, value);
+  return value;
+}
+
+/**
+ * The secret this deployment signed with until the last rotation.
+ *
+ * Rotating a signing secret without one signs out everybody holding a token,
+ * which for `JWT_REFRESH_SECRET` and a 90-day refresh means every account on
+ * every device - so in practice the secret never gets rotated, which is the
+ * failure this exists to prevent. `JWT_SECRET_PREVIOUS` is accepted on the way
+ * in and never used to sign, so a rotation is: move the old value to
+ * `_PREVIOUS`, put the new one in `JWT_SECRET`, restart. Tokens signed with the
+ * old one keep verifying until it is removed, which should be one access-token
+ * lifetime later for `JWT_SECRET` and whenever the last refresh has expired or
+ * been spent for `JWT_REFRESH_SECRET`.
+ *
+ * Held to the same floor as the live one. A previous secret verifies real
+ * sessions, so a placeholder here forges them just as well as a placeholder
+ * there.
+ */
+function previousSigningSecret(name: string): string | undefined {
+  const key = `${name}_PREVIOUS`;
+  const cached = checked.get(key);
+  if (cached !== undefined) return cached;
+
+  const value = env(key);
+  if (value === undefined) return undefined;
+  validateSecret(key, value);
+  checked.set(key, value);
+  return value;
+}
+
+function validateSecret(name: string, value: string): void {
   if (PLACEHOLDER_SECRETS.has(value.toLowerCase())) {
     throw new Error(
       `${name} is still set to a placeholder. Generate one: node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"`,
@@ -63,9 +98,27 @@ function signingSecret(name: string): string {
   if (isProduction() && value.length < MIN_SECRET_LENGTH) {
     throw new Error(`${name} must be at least ${MIN_SECRET_LENGTH} characters in production`);
   }
+}
 
-  checked.set(name, value);
-  return value;
+/**
+ * Verify against the live secret, then against the one before it.
+ *
+ * The original error is what gets thrown when both fail, not the second
+ * attempt's: an expired token fails both ways, and "jwt expired" is the useful
+ * half of that pair.
+ */
+function verifyWithRotation(token: string, name: string, current: string): unknown {
+  try {
+    return jwt.verify(token, current, VERIFY);
+  } catch (error) {
+    const previous = previousSigningSecret(name);
+    if (previous === undefined) throw error;
+    try {
+      return jwt.verify(token, previous, VERIFY);
+    } catch {
+      throw error;
+    }
+  }
 }
 
 /** Forgets what was validated, so a test can change the environment. */
@@ -118,13 +171,13 @@ export function signRefreshToken(userId: string): { token: string; jti: string }
 }
 
 export function verifyAccessToken(token: string): JwtAccessPayload {
-  const decoded = jwt.verify(token, accessSecret(), VERIFY) as JwtAccessPayload;
+  const decoded = verifyWithRotation(token, 'JWT_SECRET', accessSecret()) as JwtAccessPayload;
   if (decoded.type !== 'access') throw new Error('Not an access token');
   return decoded;
 }
 
 export function verifyRefreshToken(token: string): JwtRefreshPayload {
-  const decoded = jwt.verify(token, refreshSecret(), VERIFY) as JwtRefreshPayload;
+  const decoded = verifyWithRotation(token, 'JWT_REFRESH_SECRET', refreshSecret()) as JwtRefreshPayload;
   if (decoded.type !== 'refresh') throw new Error('Not a refresh token');
   return decoded;
 }

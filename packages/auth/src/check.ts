@@ -89,6 +89,58 @@ async function main(): Promise<void> {
     assert.throws(() => signAccessToken({ id: 'u1', email: 'a@b.c', username: 'ayaan' }), /at least 32/);
   });
 
+  // Rotation. A token signed under the old secret keeps verifying while that
+  // secret is still named in `_PREVIOUS`, and stops the moment it is removed -
+  // which is the whole contract, because the only reason to rotate through a
+  // grace period is to be able to end it.
+  const beforeRotation = signAccessToken({ id: 'u1', email: 'a@b.c', username: 'ayaan' });
+  const oldRefresh = signRefreshToken('u1').token;
+  await withSecrets(
+    { JWT_SECRET: 'rotated-access-secret', JWT_SECRET_PREVIOUS: 'test-access-secret' },
+    () => {
+      assert.equal(verifyAccessToken(beforeRotation).sub, 'u1');
+      // And the new secret is what signing uses, not the previous one.
+      const after = signAccessToken({ id: 'u2', email: 'c@d.e', username: 'other' });
+      assert.equal(verifyAccessToken(after).sub, 'u2');
+    },
+  );
+  await withSecrets(
+    { JWT_REFRESH_SECRET: 'rotated-refresh-secret', JWT_REFRESH_SECRET_PREVIOUS: 'test-refresh-secret' },
+    () => {
+      assert.equal(verifyRefreshToken(oldRefresh).sub, 'u1');
+    },
+  );
+  await withSecrets({ JWT_SECRET: 'rotated-access-secret' }, () => {
+    assert.throws(() => verifyAccessToken(beforeRotation));
+  });
+
+  // A previous secret verifies real sessions, so it is held to the same floor as
+  // the live one - a placeholder there forges tokens just as well.
+  await withSecrets({ JWT_SECRET: 'rotated-access-secret', JWT_SECRET_PREVIOUS: 'replace-me' }, () => {
+    assert.throws(() => verifyAccessToken(beforeRotation), /placeholder/);
+  });
+
+  // The type check still stands across a rotation: a refresh token that verifies
+  // under the previous access secret is still not an access token.
+  await withSecrets(
+    { JWT_SECRET: 'rotated-access-secret', JWT_SECRET_PREVIOUS: 'test-refresh-secret' },
+    () => {
+      assert.throws(() => verifyAccessToken(oldRefresh), /Not an access token/);
+    },
+  );
+
+  // Sealed settings survive a rotation of the key that sealed them, and stop
+  // opening once the old key is gone.
+  await withSecrets(
+    { SETTINGS_SECRET: 'rotated-settings-secret', SETTINGS_SECRET_PREVIOUS: 'test-access-secret' },
+    () => {
+      assert.equal(openSecret(sealed), 'client-secret-value');
+    },
+  );
+  await withSecrets({ SETTINGS_SECRET: 'rotated-settings-secret' }, () => {
+    assert.equal(openSecret(sealed), null);
+  });
+
   console.log('auth check ok');
 }
 

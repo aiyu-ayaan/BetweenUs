@@ -13,13 +13,36 @@ x-service-env: &service-env
   LOG_LEVEL: ${LOG_LEVEL:-info}
   DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-betweenus}?schema=public
   REDIS_URL: redis://redis:6379
-  JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
-  JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?JWT_REFRESH_SECRET is required}
+  # A secret can arrive as a value or as the path of a file holding one. The
+  # `_FILE` form is what Docker and Podman secrets, Kubernetes projected volumes
+  # and systemd credentials all produce, and it keeps the secret out of
+  # `docker inspect` and out of the environment of every process a service
+  # spawns. docker-compose.secrets.yml is a ready override that mounts a
+  # directory of them; see .env.example.
+  #
+  # There is no `:?` here any more, because compose cannot say "this one or that
+  # one". The services refuse to boot on a missing or placeholder signing secret
+  # and name both forms when they do, which is the check that was doing the work
+  # regardless.
+  JWT_SECRET: ${JWT_SECRET:-}
+  JWT_SECRET_FILE: ${JWT_SECRET_FILE:-}
+  JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-}
+  JWT_REFRESH_SECRET_FILE: ${JWT_REFRESH_SECRET_FILE:-}
+  # The secrets from before the last rotation, accepted on the way in and never
+  # used to sign. Set for as long as a token signed with the old one can still
+  # be presented, then removed - removing them is what ends the rotation.
+  JWT_SECRET_PREVIOUS: ${JWT_SECRET_PREVIOUS:-}
+  JWT_SECRET_PREVIOUS_FILE: ${JWT_SECRET_PREVIOUS_FILE:-}
+  JWT_REFRESH_SECRET_PREVIOUS: ${JWT_REFRESH_SECRET_PREVIOUS:-}
+  JWT_REFRESH_SECRET_PREVIOUS_FILE: ${JWT_REFRESH_SECRET_PREVIOUS_FILE:-}
   # Grace for a refresh interrupted between the server rotating and the client
   # storing the result; see .env.example.
   REFRESH_REPLAY_GRACE_MS: ${REFRESH_REPLAY_GRACE_MS:-30000}
   # Seals OAuth client secrets at rest; falls back to JWT_SECRET when unset.
   SETTINGS_SECRET: ${SETTINGS_SECRET:-}
+  SETTINGS_SECRET_FILE: ${SETTINGS_SECRET_FILE:-}
+  SETTINGS_SECRET_PREVIOUS: ${SETTINGS_SECRET_PREVIOUS:-}
+  SETTINGS_SECRET_PREVIOUS_FILE: ${SETTINGS_SECRET_PREVIOUS_FILE:-}
   # Where a browser reaches this deployment - the OAuth callback is built from it.
   PUBLIC_API_URL: ${PUBLIC_API_URL:-http://localhost:8080}
   CORS_ORIGIN: ${CORS_ORIGIN:-*}
