@@ -74,6 +74,20 @@ wanted="${1:-$previous}"
 
 log "currently ${previous:-latest}, deploying ${wanted:-latest}"
 
+# A `!patch` rebuilds the artifacts of a version that is already deployed, so
+# the version does not change and the tag does not move - only what it resolves
+# to does. `up -d` compares the running container against the image the tag
+# names *now*, which is the new one, so it does recreate; but nothing here
+# should depend on that comparison being made for us. A deploy of the version
+# already running is a replacement, and it is stated rather than inferred:
+# every container comes down and comes back on the image just pulled.
+if [ "${DEPLOY_RECREATE:-}" = 1 ] || [ "$wanted" = "$previous" ]; then
+  recreate=--force-recreate
+  log "same version: replacing the running containers rather than leaving them"
+else
+  recreate=
+fi
+
 # Written into .env rather than exported, because the next person to run
 # `docker compose up -d` by hand has to get the same version this did. A
 # deployment whose running images disagree with its .env is one restart away
@@ -114,7 +128,7 @@ if ! compose pull; then
 fi
 
 log "starting"
-if compose up -d --remove-orphans && healthy; then
+if compose up -d --remove-orphans $recreate && healthy; then
   log "up on ${wanted:-latest}"
   # Only now. An image the deployment might have to roll back to is not garbage.
   docker image prune --force --filter "until=168h" >/dev/null 2>&1 || true

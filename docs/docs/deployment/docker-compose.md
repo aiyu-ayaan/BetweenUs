@@ -126,6 +126,11 @@ And if the gateway does not come back healthy it restores the version that
 was running and exits non-zero — which is the whole difference between a
 deploy step and two commands in a README.
 
+Asked for the version that is already running — which is what a `!patch`
+deploy is — it adds `--force-recreate`, so every container comes down and
+comes back on the image just pulled rather than on compose's judgement about
+whether anything changed. `DEPLOY_RECREATE=1` asks for that on any deploy.
+
 If the rollback *also* fails it says so loudly. That usually means the
 migration ran and the previous images cannot read the new schema; the
 pre-migration dump in the backup volume is what that case is for, and
