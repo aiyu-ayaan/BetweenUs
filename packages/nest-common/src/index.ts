@@ -140,14 +140,25 @@ export class ApiExceptionFilter implements ExceptionFilter {
 }
 
 /**
- * Fixed-window rate limit, counted in Redis so every instance shares one budget.
+ * Sliding-window rate limit, counted in Redis so every instance shares one
+ * budget.
  *
  * Nginx already limits by IP at the edge; this is the service-level backstop for
  * traffic that reaches a service another way (another container, a port-forward,
  * a future gateway). Credentials endpoints are the ones that matter.
  *
- * ponytail: fixed window, not a sliding one - a burst can straddle two windows
- * and get 2x the budget. Move to a sorted-set sliding window if that matters.
+ * It used to be a fixed window - one `INCR` on a key carrying `floor(now / w)` -
+ * which is smaller and has a hole in it: the budget refills all at once, at a
+ * boundary an attacker can compute as easily as the server can. Twenty attempts
+ * in the last second of one minute and twenty in the first second of the next is
+ * forty attempts in two seconds, from a limit that reads "20 per minute". The
+ * limit was never wrong about the average; it was wrong about the burst, which
+ * is the only thing a credential-stuffing run cares about.
+ *
+ * A sorted set per bucket, scored by arrival time, is the standard answer: prune
+ * what has aged out, add this request, count what is left. There is no boundary
+ * to straddle, because the window is measured from now rather than from a clock
+ * everybody shares.
  */
 let shared: RedisClient | null = null;
 
@@ -259,18 +270,39 @@ export interface RateLimitBucket {
 }
 
 /**
+ * How many entries a bucket may hold, as a multiple of its budget.
+ *
+ * A sorted set holds one member per request rather than one integer, so an
+ * address being hammered grows a key without bound for a whole window - ten
+ * thousand requests a second against a sixty-second window is six hundred
+ * thousand members, and doing that to a handful of addresses is a way to spend a
+ * service's memory using the endpoint that exists to stop exactly that.
+ *
+ * Trimming to the newest `limit * this` costs one command and changes no answer.
+ * The count is only ever compared against `limit`, and the cap is above it, so a
+ * bucket that is over budget stays over budget. What is dropped is the *oldest*
+ * entries, which are the ones that would have aged out first - so if it moves
+ * the moment a client is let back in at all, it moves it later.
+ */
+const BUCKET_CAP_FACTOR = 2;
+
+/**
  * Which counters a request falls into. Pure, so the interesting part - that a
  * subject is normalised and that one request is counted in two places - is
  * checkable without a Redis or an HTTP server.
+ *
+ * Time is not an input. It used to be: the key carried `floor(now / window)`, so
+ * the key itself was what expired, and the boundary where it changed was the
+ * hole. A sliding window measures from now, and the key it measures in is the
+ * same key forever.
  */
 export function rateLimitBuckets(
   options: RateLimitOptions,
   request: { path: string; address: string; body: unknown },
-  window: number,
 ): RateLimitBucket[] {
   const name = options.name ?? request.path;
   const buckets: RateLimitBucket[] = [
-    { key: `ratelimit:${name}:addr:${request.address}:${window}`, limit: options.limit },
+    { key: `ratelimit:${name}:addr:${request.address}`, limit: options.limit },
   ];
 
   if (!options.subject) return buckets;
@@ -287,10 +319,46 @@ export function rateLimitBuckets(
   if (subject.length === 0) return buckets;
 
   buckets.push({
-    key: `ratelimit:${name}:subject:${subject}:${window}`,
+    key: `ratelimit:${name}:subject:${subject}`,
     limit: options.subjectLimit ?? options.limit,
   });
   return buckets;
+}
+
+/**
+ * Counts one request against one bucket and answers whether it is over budget.
+ *
+ * One round trip. `multi` rather than five awaits because the five commands are
+ * one decision: two requests interleaving between the prune and the count would
+ * each read a number that was never true.
+ *
+ * The request is added before it is judged, which is what the fixed-window
+ * `INCR` did too - a refused request is still a request that was made, and not
+ * counting it is how a client learns that hammering is free.
+ */
+async function countRequest(bucket: RateLimitBucket, now: number, windowMs: number): Promise<number> {
+  const results = await sharedRedis()
+    .multi()
+    // Everything that has aged out of the window. Inclusive of the cutoff, so an
+    // entry exactly `windowMs` old is outside a window that means "the last
+    // windowMs".
+    .zremrangebyscore(bucket.key, 0, now - windowMs)
+    // A uuid, because the member has to be unique or the set silently dedupes
+    // two requests that arrived in the same millisecond into one.
+    .zadd(bucket.key, now, randomUUID())
+    // Keep the newest `limit * BUCKET_CAP_FACTOR`; `-(n + 1)` is "all but the
+    // last n", and is a no-op while the set is smaller than that.
+    .zremrangebyrank(bucket.key, 0, -(bucket.limit * BUCKET_CAP_FACTOR + 1))
+    .zcard(bucket.key)
+    // Belt and braces with the prune above: a bucket nobody touches again is
+    // collected instead of sitting in memory until the next restart.
+    .pexpire(bucket.key, windowMs)
+    .exec();
+
+  if (!results) throw new Error('rate-limit transaction was not applied');
+  const [error, value] = results[3] ?? [new Error('rate-limit count is missing'), null];
+  if (error) throw error;
+  return typeof value === 'number' ? value : Number(value);
 }
 
 export function rateLimit(options: RateLimitOptions): Type<CanActivate> {
@@ -298,22 +366,22 @@ export function rateLimit(options: RateLimitOptions): Type<CanActivate> {
   class RateLimitGuard implements CanActivate {
     async canActivate(context: ExecutionContext): Promise<boolean> {
       const request = context.switchToHttp().getRequest<Request>();
-      const window = Math.floor(Date.now() / (options.windowSeconds * 1000));
-      const buckets = rateLimitBuckets(
-        options,
-        { path: request.path, address: clientAddress(request), body: request.body },
-        window,
-      );
+      const now = Date.now();
+      const windowMs = options.windowSeconds * 1000;
+      const buckets = rateLimitBuckets(options, {
+        path: request.path,
+        address: clientAddress(request),
+        body: request.body,
+      });
 
       let exceeded = false;
       try {
         for (const bucket of buckets) {
-          const hits = await sharedRedis().incr(bucket.key);
-          if (hits === 1) await sharedRedis().expire(bucket.key, options.windowSeconds);
-          // Every bucket is incremented before any of them refuses: stopping at
-          // the first one over budget would leave the others under-counting a
+          const count = await countRequest(bucket, now, windowMs);
+          // Every bucket is counted before any of them refuses: stopping at the
+          // first one over budget would leave the others under-counting a
           // request that really was made.
-          if (hits > bucket.limit) exceeded = true;
+          if (count > bucket.limit) exceeded = true;
         }
       } catch {
         // Redis down: fail open. Locking everyone out of login is the worse outage.

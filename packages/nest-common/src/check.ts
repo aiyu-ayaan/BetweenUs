@@ -35,16 +35,33 @@ function main(): void {
 
   // One login attempt is counted twice: against the address, and against the
   // account being guessed at.
-  const buckets = rateLimitBuckets(
-    { limit: 20, windowSeconds: 60, name: 'auth', subject: (body) => String(body.email), subjectLimit: 10 },
-    { path: '/auth/login', address: '203.0.113.7', body: { email: ' Alice@Example.com ' } },
-    5,
-  );
+  const options = {
+    limit: 20,
+    windowSeconds: 60,
+    name: 'auth',
+    subject: (body: Record<string, unknown>) => String(body.email),
+    subjectLimit: 10,
+  };
+  const buckets = rateLimitBuckets(options, {
+    path: '/auth/login',
+    address: '203.0.113.7',
+    body: { email: ' Alice@Example.com ' },
+  });
   assert.equal(buckets.length, 2);
   assert.equal(buckets[0]?.limit, 20);
   // Normalised, or a bucket per spelling is no bucket at all.
-  assert.equal(buckets[1]?.key, 'ratelimit:auth:subject:alice@example.com:5');
+  assert.equal(buckets[1]?.key, 'ratelimit:auth:subject:alice@example.com');
   assert.equal(buckets[1]?.limit, 10);
+
+  // No time in the key, which is the whole of the sliding window at this level.
+  // The fixed one put `floor(now / window)` in here, so the key changed at a
+  // boundary the whole world shares and the budget refilled all at once there -
+  // twenty attempts either side of one second is forty attempts, from a limit
+  // that reads "20 per minute". A key that never changes has no boundary to
+  // straddle; what expires is each entry inside it, measured from now.
+  for (const bucket of buckets) {
+    assert.ok(!/:\d+$/.test(bucket.key), `no window in ${bucket.key}`);
+  }
 
   console.log('nest-common check ok');
 }

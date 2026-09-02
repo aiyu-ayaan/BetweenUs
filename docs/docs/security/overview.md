@@ -93,6 +93,26 @@ over many addresses defeats an address-only budget aimed at one password.
 the first entry is whatever the caller wrote); `X-Real-IP`, set with
 `proxy_set_header` and therefore unspoofable, is preferred.
 
+### The window slides
+
+It used to be fixed — one `INCR` on a key carrying `floor(now / window)` — which
+refills the whole budget at a boundary an attacker can compute as easily as the
+server can. Twenty attempts in the last second of one minute and twenty in the
+first second of the next is forty attempts in two seconds, from a limit that
+reads "20 per minute". The average was never the problem; the burst is.
+
+Each bucket is a sorted set scored by arrival time, and one `MULTI` per bucket
+prunes what has aged out, adds this request, trims, counts and re-arms the TTL —
+one round trip, atomic, and with no window in the key, so there is no boundary to
+straddle.
+
+A request is counted before it is judged, so hammering is never free. And a
+bucket is capped at twice its budget: a sorted set holds a member per request, so
+an address being hammered would otherwise grow a key without bound for a whole
+window — turning the endpoint that exists to stop resource exhaustion into a way
+of causing it. Trimming the oldest entries changes no answer, because the count
+is only compared against the budget and the cap is above it.
+
 ## Transport and headers
 
 TLS terminates at Cloudflare. The tunnel carries HTTP/WebSocket only — see
@@ -234,8 +254,6 @@ tokens, secrets, and FCM push tokens are never logged.
 
 - **The rate limiter fails open** when Redis is unreachable — locking
   everyone out of login is judged the worse outage.
-- **Rate-limit windows are fixed, not sliding** — a burst straddling two
-  windows briefly gets double budget.
 - **A picture's bytes aren't magic-byte inspected**, only its declared
   content type — contained by the download route deriving its content type
   from the key's extension and serving unknown types as attachments.

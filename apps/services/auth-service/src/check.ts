@@ -89,7 +89,7 @@ function checkPagination(): void {
  */
 function checkLoginBuckets(): void {
   const at = (address: string, body: unknown) =>
-    rateLimitBuckets(LOGIN_RATE_LIMIT, { path: '/auth/login', address, body }, 42);
+    rateLimitBuckets(LOGIN_RATE_LIMIT, { path: '/auth/login', address, body });
 
   const first = at('203.0.113.9', { email: 'Ayaan@BetweenUs.local', password: 'x' });
   assert.equal(first.length, 2, 'a login with an email is counted twice');
@@ -114,23 +114,24 @@ function checkLoginBuckets(): void {
 
   // Register keeps the address budget and grows no second bucket: an account
   // that does not exist yet is not a thing to be attacked.
-  const registering = rateLimitBuckets(
-    CREDENTIALS_RATE_LIMIT,
-    { path: '/auth/register', address: '203.0.113.9', body: { email: 'ayaan@betweenus.local' } },
-    42,
-  );
+  const registering = rateLimitBuckets(CREDENTIALS_RATE_LIMIT, {
+    path: '/auth/register',
+    address: '203.0.113.9',
+    body: { email: 'ayaan@betweenus.local' },
+  });
   assert.equal(registering.length, 1);
   // ...and it is the same address bucket login uses, so alternating between the
   // two endpoints buys no extra attempts.
   assert.equal(registering[0]!.key, first[0]!.key);
 
-  // A window boundary is a new key, which is what makes the budget refill.
-  const nextWindow = rateLimitBuckets(
-    LOGIN_RATE_LIMIT,
-    { path: '/auth/login', address: '203.0.113.9', body: { email: 'ayaan@betweenus.local' } },
-    43,
-  );
-  assert.notEqual(nextWindow[1]!.key, first[1]!.key);
+  // The budget no longer refills at a boundary, because there is no longer a
+  // boundary: the key does not carry a window, so the same request an hour later
+  // is the same bucket and what expires is each entry inside it. This assertion
+  // used to be its opposite - that a later window was a *different* key - which
+  // was the fixed window's refill and also its hole.
+  const later = at('203.0.113.9', { email: 'ayaan@betweenus.local', password: 'x' });
+  assert.equal(later[0]!.key, first[0]!.key);
+  assert.equal(later[1]!.key, first[1]!.key);
 }
 
 interface UserRow {

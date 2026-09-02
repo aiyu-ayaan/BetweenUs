@@ -101,6 +101,10 @@ jobs:
       # rotation grace is in shared storage rather than in one process's memory
       # is exactly the claim the API cannot be asked about.
       - run: node apps/services/auth-service/rotation-smoke.mjs
+      # Seeds a rate-limit bucket at a chosen age rather than sleeping through
+      # a window, which is the only fast way to show the burst a fixed window
+      # let through.
+      - run: node apps/services/auth-service/rate-limit-smoke.mjs
 
       - name: Service logs
         if: failure()
