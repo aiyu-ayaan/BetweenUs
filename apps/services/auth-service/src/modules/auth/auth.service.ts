@@ -18,7 +18,7 @@ import {
 } from '@betweenus/auth';
 import { type User } from '@betweenus/database';
 import { AuthDatabase, type AuthDb } from './auth.db';
-import { EVENTS, EventBus } from '@betweenus/events';
+import { EVENTS, EventBus, type EventPayloads } from '@betweenus/events';
 import { envOr } from '@betweenus/config';
 import { createLogger, type LogLevel } from '@betweenus/logger';
 import type {
@@ -173,7 +173,7 @@ export class AuthService {
     // A forgery carrying a real jti is theft with no innocent explanation, so it
     // is fatal whatever else is true of the row.
     if (stored && stored.tokenHash !== hashToken(refreshToken)) {
-      await this.revokeFamily(stored.familyId, 'forgery');
+      await this.revokeFamily(stored.familyId, stored.userId, 'forgery');
       throw new UnauthorizedException({
         code: 'REFRESH_TOKEN_REUSED',
         message: 'Refresh token was already used; all sessions have been signed out',
@@ -189,7 +189,7 @@ export class AuthService {
       const replayed = this.rotated.get(stored.id);
       if (replayed && Date.now() - replayed.at < replayGraceMs()) return replayed.tokens;
 
-      await this.revokeFamily(stored.familyId, 'reuse');
+      await this.revokeFamily(stored.familyId, stored.userId, 'reuse');
       throw new UnauthorizedException({
         code: 'REFRESH_TOKEN_REUSED',
         message: 'Refresh token was already used; all sessions have been signed out',
@@ -288,6 +288,16 @@ export class AuthService {
       },
     });
     await this.revokeEverySession(userId, 'password-change');
+    // The open sockets as well, which is the case this feature is really for:
+    // changing a password because somebody else is in the account. Their chat
+    // socket was authenticated before this line and goes; the pair minted below
+    // is dated after it and stays, so the person doing it keeps their session.
+    //
+    // Their own *existing* sockets go too - there is no way for a gateway to
+    // tell one of an account's sockets from another - so the client reconnects
+    // with the new token. A moment's reconnect on the device that just changed
+    // its own password is the price of the intruder's socket closing at all.
+    await this.revokeSockets(userId, 'password-changed');
 
     // Every session died, including this one - hand back a fresh pair so the
     // caller who just proved they know the password stays signed in.
@@ -508,13 +518,22 @@ export class AuthService {
    * A stolen token is still contained: the thief and the victim share one
    * family, so both halves of the contested chain die together.
    */
-  private async revokeFamily(familyId: string, reason: string): Promise<void> {
+  private async revokeFamily(familyId: string, userId: string, reason: string): Promise<void> {
     const { count } = await this.db.refreshToken.updateMany({
       where: { familyId, revokedAt: null },
       data: { revokedAt: new Date() },
     });
     // Audit trail: a reuse warning is the signal that a token was stolen.
     logger.warn('Refresh token family revoked', { familyId, reason, revoked: count });
+
+    // A family is one chain on one device, but the token was stolen and nobody
+    // knows which end is holding it - so the sockets go too, both ends of the
+    // contested chain, the same way the refresh tokens do.
+    //
+    // `userId` is passed rather than looked up: both callers are holding the row
+    // this family was found through, and a second query to re-read a column they
+    // already have is a query for nothing.
+    await this.revokeSockets(userId, 'token-reuse');
   }
 
   /** Signs out every device of an account. The password changing is the case. */
@@ -524,6 +543,40 @@ export class AuthService {
       data: { revokedAt: new Date() },
     });
     logger.warn('Refresh tokens revoked', { userId, reason, revoked: count });
+  }
+
+  /**
+   * Tells the gateways to drop this account's open sockets.
+   *
+   * Revoking refresh tokens stops a session being *renewed*, which is fifteen
+   * minutes late for an access token and forever for a socket - a handshake is
+   * authenticated once and then trusted until it disconnects. This is the other
+   * half, and it is a published event rather than a call because the sockets are
+   * spread across four services and however many instances of each.
+   *
+   * The line is drawn at the current second, so anything minted from now on
+   * survives it. That is what lets `changePassword` use the same call as
+   * `disable`: the person changing their own password is handed a new pair in
+   * the same response, and it is newer than the line.
+   *
+   * Failure is logged and swallowed. A revocation that cannot reach Redis must
+   * not turn "your account is disabled" into a 500 that leaves the account
+   * enabled - the refresh tokens are already dead in Postgres, which is the
+   * durable half, and the socket is the fifteen-minute half.
+   */
+  private async revokeSockets(
+    userId: string,
+    reason: EventPayloads[typeof EVENTS.SESSION_REVOKED]['reason'],
+  ): Promise<void> {
+    try {
+      await this.events.publish(EVENTS.SESSION_REVOKED, {
+        userId,
+        notBefore: Math.floor(Date.now() / 1000),
+        reason,
+      });
+    } catch (error) {
+      logger.warn('Could not publish a session revocation', { userId, reason, error: String(error) });
+    }
   }
 
   /** Same session minting the password path uses; OAuth sign-in needs it too. */

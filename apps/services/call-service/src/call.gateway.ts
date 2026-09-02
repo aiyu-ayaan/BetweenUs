@@ -29,7 +29,11 @@ import { resolveChannelAccess } from '@betweenus/database';
 import { EVENTS, EventBus } from '@betweenus/events';
 import { Logger } from '@betweenus/logger';
 import { PERMISSIONS } from '@betweenus/permissions';
-import { SIGNAL_MAX_PAYLOAD, authenticateHandshake } from '@betweenus/websocket';
+import {
+  SIGNAL_MAX_PAYLOAD,
+  authenticateHandshake,
+  dropRevokedSockets,
+} from '@betweenus/websocket';
 import type {
   CallPeer,
   ClientCallEvent,
@@ -108,6 +112,8 @@ function sanitiseParams(params: unknown): number[] | undefined {
 interface SocketState extends CallPeer {
   channelId: string | null;
   alive: boolean;
+  /** `iat` of the token that opened this socket. See `dropRevokedSockets`. */
+  issuedAt: number;
   /** The open row in this person's call log, while they are in a call. */
   sessionId: string | null;
   /** Everybody else who has been in the call since this socket joined it. */
@@ -227,7 +233,34 @@ export class CallGateway implements OnModuleDestroy {
       });
   }
 
+  /**
+   * Every socket this instance holds for one account.
+   *
+   * Scanned rather than looked up in a room: the four gateways keep different
+   * bookkeeping and `clients` is the one thing all of them have. A revocation is
+   * rare, and a scan of one instance's sockets is nothing.
+   */
+  private socketsOf(userId: string): WebSocket[] {
+    return [...(this.server?.clients ?? [])].filter(
+      (socket) => this.state.get(socket)?.userId === userId,
+    );
+  }
+
   attach(httpServer: HttpServer): void {
+    // The socket this matters most for, and the reason the fix is a revocation
+    // event and not a shorter socket lifetime: closing a call socket ends a
+    // call, so it must happen when somebody says so and never on a timer.
+    // `close` runs the same teardown a dropped connection does - the roster is
+    // re-announced and the call log row is closed - so the other people in the
+    // call see them leave rather than freeze.
+    void dropRevokedSockets(
+      this.events,
+      (userId) => this.socketsOf(userId),
+      (socket) => this.state.get(socket)?.issuedAt,
+      (socket, code, reason) => socket.close(code, reason),
+      (userId, count, reason) => this.logger.info('Sockets revoked', { userId, count, reason }),
+    );
+
     this.server = new WebSocketServer({
       server: httpServer,
       path: '/ws/call',
@@ -252,6 +285,7 @@ export class CallGateway implements OnModuleDestroy {
         username: user.username,
         channelId: null,
         alive: true,
+        issuedAt: user.issuedAt,
         sessionId: null,
         metUserIds: new Set<string>(),
         usage: noUsage(),

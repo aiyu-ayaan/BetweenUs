@@ -16,6 +16,7 @@ import {
   RoomRegistry,
   authenticateHandshake,
   channelRoom,
+  dropRevokedSockets,
   serverRoom,
   userRoom,
 } from '@betweenus/websocket';
@@ -29,6 +30,8 @@ interface SocketState {
   userId: string;
   username: string;
   alive: boolean;
+  /** `iat` of the token that opened this socket. See `dropRevokedSockets`. */
+  issuedAt: number;
 }
 
 @Injectable()
@@ -43,6 +46,19 @@ export class ChatGateway implements OnModuleDestroy {
     private readonly events: EventBus,
     private readonly logger: Logger,
   ) {}
+
+  /**
+   * Every socket this instance holds for one account.
+   *
+   * Scanned rather than looked up in a room, because the four gateways keep
+   * different bookkeeping and `clients` is the one thing all of them have. A
+   * revocation is rare; a scan of the sockets on one instance is nothing.
+   */
+  private socketsOf(userId: string): WebSocket[] {
+    return [...(this.server?.clients ?? [])].filter(
+      (socket) => this.state.get(socket)?.userId === userId,
+    );
+  }
 
   /** Called from main.ts once Nest owns a listening HTTP server. */
   async attach(httpServer: HttpServer): Promise<void> {
@@ -60,7 +76,12 @@ export class ChatGateway implements OnModuleDestroy {
         return;
       }
 
-      this.state.set(socket, { userId: user.id, username: user.username, alive: true });
+      this.state.set(socket, {
+        userId: user.id,
+        username: user.username,
+        alive: true,
+        issuedAt: user.issuedAt,
+      });
       // Everything addressed at a person rather than a place - a friend
       // request, an acceptance, being added to a server - is delivered here.
       this.rooms.join(userRoom(user.id), socket);
@@ -100,6 +121,18 @@ export class ChatGateway implements OnModuleDestroy {
         socket.ping();
       }
     }, HEARTBEAT_INTERVAL_MS);
+
+    // An account whose authority was withdrawn loses the sockets it already
+    // had, which is the half of a revocation that was missing: a handshake is
+    // checked once and then trusted until it happens to disconnect.
+    await dropRevokedSockets(
+      this.events,
+      (userId) => this.socketsOf(userId),
+      (socket) => this.state.get(socket)?.issuedAt,
+      (socket, code, reason) => socket.close(code, reason),
+      (userId, count, reason) =>
+        this.logger.info('Sockets revoked', { userId, count, reason }),
+    );
 
     await this.events.subscribe(EVENTS.MESSAGE_CREATED, (envelope) => {
       const { message } = envelope.payload;

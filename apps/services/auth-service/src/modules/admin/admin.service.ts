@@ -3,6 +3,8 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { sealSecret } from '@betweenus/auth';
 import { envOr } from '@betweenus/config';
 import { Prisma, prisma } from '@betweenus/database';
+import { EVENTS, EventBus } from '@betweenus/events';
+import { createLogger, type LogLevel } from '@betweenus/logger';
 import type {
   AdminAuditEntry,
   AdminAuditPage,
@@ -18,6 +20,8 @@ import { MailService } from '../mail/mail.service';
 import { toVisibility } from '../auth/auth.service';
 import { PROVIDERS, type ProviderName, callbackUrl } from './oauth-providers';
 import type { AdminOAuthProviderDto, AdminSmtpDto, AdminUserUpdateDto } from './dto';
+
+const logger = createLogger('auth-service', envOr('LOG_LEVEL', 'info') as LogLevel);
 
 /** Page size cap, so a directory of any size cannot be pulled in one request. */
 const MAX_TAKE = 100;
@@ -146,7 +150,41 @@ const RESET_WINDOW_HOURS = Number(envOr('PASSWORD_RESET_WINDOW_HOURS', '24')) ||
 
 @Injectable()
 export class AdminService {
-  constructor(private readonly mail: MailService) {}
+  constructor(
+    private readonly mail: MailService,
+    private readonly events: EventBus,
+  ) {}
+
+  /**
+   * Tells the gateways to drop an account's open sockets.
+   *
+   * Revoking refresh tokens stops a session being renewed; it does nothing to a
+   * socket, which is authenticated once at the handshake and then trusted until
+   * it disconnects. Disabling an account without this left every chat, presence,
+   * call and remote socket it already had delivering as if nothing had happened.
+   *
+   * Swallowed on failure: an unreachable Redis must not turn "this account is
+   * disabled" into a 500 that leaves it enabled. The refresh tokens are already
+   * dead in Postgres, which is the durable half.
+   */
+  private async revokeSockets(
+    userId: string,
+    reason: 'disabled' | 'deleted',
+  ): Promise<void> {
+    try {
+      await this.events.publish(EVENTS.SESSION_REVOKED, {
+        userId,
+        notBefore: Math.floor(Date.now() / 1000),
+        reason,
+      });
+    } catch (error) {
+      logger.warn('Could not publish a session revocation', {
+        userId,
+        reason,
+        error: String(error),
+      });
+    }
+  }
 
   /** Public: the panel uses it to explain `pnpm admin:create` when nobody exists. */
   async status(): Promise<AdminStatus> {
@@ -249,6 +287,9 @@ export class AdminService {
         where: { userId, revokedAt: null },
         data: { revokedAt: new Date() },
       });
+      // And the sockets that are already open, which the row above cannot
+      // reach. Without this, disabling somebody mid-call left them in the call.
+      await this.revokeSockets(userId, 'disabled');
     }
 
     // One row per thing that actually changed, not one per request: "who made
@@ -304,6 +345,10 @@ export class AdminService {
     await record(actorId, 'user.deleted', userId, `@${user.username}`, { email: user.email });
     // Cascades take the memberships, keys, identities and tokens with it.
     await prisma.user.delete({ where: { id: userId } });
+    // The sockets do not cascade. A deleted account holding an open socket is
+    // worse than a disabled one holding it: every row the gateway reads for it
+    // is gone, so what it delivers is whatever a missing row happens to mean.
+    await this.revokeSockets(userId, 'deleted');
   }
 
   async oauthProviders(): Promise<AdminOAuthProvider[]> {

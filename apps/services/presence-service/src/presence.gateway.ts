@@ -13,7 +13,11 @@ import { EVENTS, EventBus } from '@betweenus/events';
 import { resolveChannelAccess } from '@betweenus/database';
 import { PERMISSIONS } from '@betweenus/permissions';
 import { Logger } from '@betweenus/logger';
-import { CONTROL_MAX_PAYLOAD, authenticateHandshake } from '@betweenus/websocket';
+import {
+  CONTROL_MAX_PAYLOAD,
+  authenticateHandshake,
+  dropRevokedSockets,
+} from '@betweenus/websocket';
 import type { ClientPresenceEvent, ServerPresenceEvent } from '@betweenus/shared-types';
 import { PresenceStore, isActiveStatus } from './presence.store';
 import { audienceOfChannel, audienceOfUser } from './audience';
@@ -35,6 +39,8 @@ interface SocketState {
   userId: string;
   username: string;
   alive: boolean;
+  /** `iat` of the token that opened this socket. See `dropRevokedSockets`. */
+  issuedAt: number;
   /**
    * The channel this window has on screen, or null. One at a time: a window
    * shows one conversation, and a second focus replaces the first rather than
@@ -73,6 +79,7 @@ export class PresenceGateway implements OnModuleDestroy {
         userId: user.id,
         username: user.username,
         alive: true,
+        issuedAt: user.issuedAt,
         focused: null,
       });
       void this.onConnect(socket, user.id);
@@ -121,6 +128,17 @@ export class PresenceGateway implements OnModuleDestroy {
     // share a server or a friendship with whoever changed; anything about a
     // channel reaches the people who can see that channel. Nothing goes to
     // every connected socket any more.
+    // An account whose authority was withdrawn loses the sockets it already
+    // had, which is the half of a revocation that was missing: a handshake is
+    // checked once and then trusted until it happens to disconnect.
+    await dropRevokedSockets(
+      this.events,
+      (userId) => this.socketsOf(userId),
+      (socket) => this.state.get(socket)?.issuedAt,
+      (socket, code, reason) => socket.close(code, reason),
+      (userId, count, reason) => this.logger.info('Sockets revoked', { userId, count, reason }),
+    );
+
     await this.events.subscribe(EVENTS.PRESENCE_CHANGED, (envelope) => {
       const { user } = envelope.payload;
       void this.broadcastTo(audienceOfUser(user.userId), { type: 'presence.changed', user });
@@ -308,6 +326,19 @@ export class PresenceGateway implements OnModuleDestroy {
       if (state?.userId === userId && state.focused === channelId) return true;
     }
     return false;
+  }
+
+  /**
+   * Every socket this instance holds for one account.
+   *
+   * Scanned rather than looked up in a room: the four gateways keep different
+   * bookkeeping and `clients` is the one thing all of them have. A revocation is
+   * rare, and a scan of one instance's sockets is nothing.
+   */
+  private socketsOf(userId: string): WebSocket[] {
+    return [...(this.server?.clients ?? [])].filter(
+      (socket) => this.state.get(socket)?.userId === userId,
+    );
   }
 
   /** Is this user connected through some socket other than `except`? */

@@ -109,6 +109,40 @@ downgrading to anonymous, and caps its frame size — 64 KB for chat/presence,
 256 KB for call/remote (`ws`'s 100 MB default would buffer a full frame in
 the service's heap before any gateway code ran).
 
+### A socket that stops when the account does
+
+A handshake is authenticated once, and everything after it is trusted because
+the socket is still open. Disabling an account therefore used to stop new
+sessions and leave every socket it already had delivering until it happened
+to disconnect — which for a call socket is "until the call ends".
+
+Expiring sockets at the access token's expiry is the wrong fix: a call socket
+closing *is* a call ending. Instead a `session.revoked` event on Redis reaches
+every gateway. Nothing happens on a healthy deployment.
+
+The event carries a **timestamp, not a flag**. A socket goes if the token that
+opened it was issued strictly before `notBefore`, and stays otherwise — which
+makes "sign every session out" and "sign every *other* session out" the same
+event with the line drawn in a different place:
+
+| What happened | Where the line is drawn |
+| --- | --- |
+| An administrator disabled or deleted the account | `now` — nothing survives |
+| The password changed | `now`, and the pair that request hands back is dated *at* the line, so the person changing it stays signed in and anyone else is dropped |
+| A refresh token was replayed or forged | `now` |
+
+A plain sign-out publishes nothing: it ends one device's chain, and a gateway
+cannot tell one of an account's sockets from another.
+
+The close code is **4403**, distinct from 4401 (never authenticated). A client
+that retried 4403 with the same token would succeed — it is still signed and
+unexpired — and would undo the revocation, so 4403 means "your session is over",
+not "get a new token".
+
+Agent sockets on `remote-gateway` are exempt: they are authenticated by the
+machine's own token rather than anybody's session. The controller socket is the
+one that goes, ending the session the way an ordinary disconnect would.
+
 ## What one account may learn about another
 
 Presence is scoped, never broadcast to everybody connected: `audience.ts` answers
@@ -179,9 +213,6 @@ tokens, secrets, and FCM push tokens are never logged.
 
 ## Known gaps (decisions, not oversights)
 
-- **A live socket outlives the token that opened it.** Disabling an account
-  stops new sessions, but an already-open chat/presence socket keeps
-  delivering until it disconnects on its own.
 - **The rate limiter fails open** when Redis is unreachable — locking
   everyone out of login is judged the worse outage.
 - **Rate-limit windows are fixed, not sliding** — a burst straddling two

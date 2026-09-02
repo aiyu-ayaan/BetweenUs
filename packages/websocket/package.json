@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@betweenus/auth": "workspace:*",
+    "@betweenus/events": "workspace:*",
     "@betweenus/shared-types": "workspace:*"
   },
   "devDependencies": {

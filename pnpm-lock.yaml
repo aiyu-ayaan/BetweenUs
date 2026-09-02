@@ -902,6 +902,9 @@ importers:
       '@betweenus/auth':
         specifier: workspace:*
         version: link:../auth
+      '@betweenus/events':
+        specifier: workspace:*
+        version: link:../events
       '@betweenus/shared-types':
         specifier: workspace:*
         version: link:../shared-types

@@ -102,6 +102,24 @@ export const EVENTS = {
    * tables that belong to another service.
    */
   REMOTE_SESSION: 'remote.session',
+  /**
+   * An account's authority has been withdrawn, and every socket already holding
+   * it has to go.
+   *
+   * The gap this closes: disabling an account stops new sessions and stops a
+   * refresh being spent, so a stolen access token is useless within fifteen
+   * minutes - but a chat, presence, call or remote socket that was *already
+   * open* is authenticated once at the handshake and never again. It kept
+   * delivering until it happened to disconnect, which for a call socket is
+   * "until the call ends".
+   *
+   * Expiring sockets at the access token's expiry was the obvious fix and is
+   * the wrong one: a call socket closing is a call ending, and doing that to
+   * everybody every fifteen minutes is worse than the gap. This is the other
+   * shape - nothing happens on a healthy deployment, and the sockets go the
+   * moment somebody says they should.
+   */
+  SESSION_REVOKED: 'session.revoked',
 } as const;
 
 export interface EventPayloads {
@@ -194,6 +212,29 @@ export interface EventPayloads {
     userIds: string[];
     actorId?: string;
     kind?: 'requested' | 'accepted' | 'removed';
+  };
+  [EVENTS.SESSION_REVOKED]: {
+    userId: string;
+    /**
+     * Seconds since the epoch. A socket goes if the access token that opened it
+     * was issued strictly before this, and stays if it was issued at or after
+     * it.
+     *
+     * A timestamp rather than a flag, because "sign every session out" and
+     * "sign every *other* session out" are the same event with a different line
+     * drawn through it. Changing a password revokes every refresh token but
+     * mints a new pair for the person doing it, so their own token is newer
+     * than the line and their call survives while whoever else was holding the
+     * account is dropped mid-sentence. Disabling an account sets the line at
+     * `now` and nothing survives it.
+     *
+     * Seconds, not milliseconds, because that is the unit a JWT's `iat` is in
+     * and comparing the two in different units is a bug that only shows up as
+     * "revocation does nothing".
+     */
+    notBefore: number;
+    /** For the log line. Never sent to a client. */
+    reason: 'disabled' | 'deleted' | 'password-changed' | 'token-reuse' | 'signed-out';
   };
 }
 

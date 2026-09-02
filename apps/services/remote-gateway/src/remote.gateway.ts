@@ -29,9 +29,14 @@ import type { IncomingMessage, Server as HttpServer } from 'node:http';
 import { WebSocket, WebSocketServer } from 'ws';
 import { envOr } from '@betweenus/config';
 import { asRemotePermissions, prisma, recordRemoteAudit } from '@betweenus/database';
+import { EventBus } from '@betweenus/events';
 import { Logger } from '@betweenus/logger';
 import { PERMISSIONS, type RemotePermission } from '@betweenus/permissions';
-import { SIGNAL_MAX_PAYLOAD, authenticateHandshake } from '@betweenus/websocket';
+import {
+  SIGNAL_MAX_PAYLOAD,
+  authenticateHandshake,
+  dropRevokedSockets,
+} from '@betweenus/websocket';
 import {
   REMOTE_TRANSFER_MAX_BYTES,
   type AgentRemoteEvent,
@@ -67,6 +72,8 @@ interface ControllerSocket {
   machineId: string;
   userId: string;
   username: string;
+  /** `iat` of the token that opened this socket. See `dropRevokedSockets`. */
+  issuedAt: number;
   /**
    * Mutable, unlike the row it started from: the machine can lend control
    * mid-session and take it back. Every change is written to the session row
@@ -96,8 +103,25 @@ export class RemoteGateway implements OnModuleDestroy {
 
   constructor(
     private readonly remote: RemoteService,
+    private readonly events: EventBus,
     private readonly logger: Logger,
   ) {}
+
+  /**
+   * The controller sockets this instance holds for one account.
+   *
+   * Controllers only. An agent socket is authenticated by the machine's own
+   * token rather than by anybody's session, so a session revocation has nothing
+   * to say about it - and dropping it would take a machine offline every time
+   * its owner changed their password, which is a different feature with a
+   * different answer.
+   */
+  private socketsOf(userId: string): WebSocket[] {
+    return [...(this.server?.clients ?? [])].filter((socket) => {
+      const state = this.state.get(socket);
+      return state?.kind === 'controller' && state.userId === userId;
+    });
+  }
 
   attach(httpServer: HttpServer): void {
     this.remote.setPresence({
@@ -110,6 +134,21 @@ export class RemoteGateway implements OnModuleDestroy {
     };
 
     void this.relay.start((message) => this.deliverLocal(message.target, message.event, message.close));
+
+    // A remote session belonging to an account that has just been disabled is
+    // the socket it matters most to close: it is a live hand on somebody's
+    // desktop. Dropping the controller ends the session through the same path
+    // an ordinary disconnect does.
+    void dropRevokedSockets(
+      this.events,
+      (userId) => this.socketsOf(userId),
+      (socket) => {
+        const state = this.state.get(socket);
+        return state?.kind === 'controller' ? state.issuedAt : undefined;
+      },
+      (socket, code, reason) => socket.close(code, reason),
+      (userId, count, reason) => this.logger.info('Sockets revoked', { userId, count, reason }),
+    );
 
     this.server = new WebSocketServer({
       server: httpServer,
@@ -426,6 +465,7 @@ export class RemoteGateway implements OnModuleDestroy {
       machineId: session.machineId,
       userId: user.id,
       username: user.username,
+      issuedAt: user.issuedAt,
       permissions,
       alive: true,
     });
