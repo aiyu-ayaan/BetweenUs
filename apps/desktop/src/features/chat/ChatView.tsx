@@ -19,6 +19,8 @@ import { pruneExpired, useChatStore, type DecryptedMessage } from '../../stores/
 import { UNDECRYPTABLE } from '../../services/e2ee';
 import { api } from '../../services/api';
 import { useAuthStore } from '../../stores/auth';
+import { useThemeStore } from '../../stores/theme';
+import { spacingFor } from '../../services/density';
 import { useFriendsStore } from '../../stores/friends';
 import { useVoiceStore } from '../../stores/voice';
 import { usePresenceStore, useLastSeenOf, useStatusOf } from '../../stores/presence';
@@ -588,6 +590,9 @@ function MessageList({
    */
   const anchor = useRef<number | null>(null);
   const me = useAuthStore((state) => state.user);
+  // Cozy or compact. Read here rather than threaded down as a prop: the list is
+  // the only thing that spaces messages, so it is the only thing that asks.
+  const spacing = spacingFor(useThemeStore((state) => state.settings.density));
   // Own messages anywhere; anyone else's only with the moderator permission,
   // which no direct message ever carries.
   const canModerate = useChatStore((state) => state.canModerateMessages());
@@ -904,9 +909,9 @@ function MessageList({
               {dividerId === message.id && <NewMessagesDivider />}
               <li
                 id={`message-${message.id}`}
-                className={`flex items-start gap-2 px-2 ${grouped ? 'mt-0.5' : 'mt-3'} ${
-                  isSelf ? 'justify-end' : 'justify-start'
-                }`}
+                className={`flex items-start ${spacing.gutter} ${spacing.inset} ${
+                  grouped ? spacing.grouped : spacing.separate
+                } ${isSelf ? 'justify-end' : 'justify-start'}`}
               >
                 {showAvatar &&
                   (grouped ? (

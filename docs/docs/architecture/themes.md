@@ -120,3 +120,35 @@ Note that gamma is why this is a function rather than a comparison of hex
 values: sRGB is stored gamma-encoded, so the stored numbers are not proportional
 to the light coming off the screen, and a naive average gets the answer wrong in
 the middle of the range — which is precisely where hint text lives.
+
+## Density
+
+`density.ts`, and it is a separate axis from the theme: a theme decides what
+colour things are, density decides how much space they get. Cozy is the default
+and compact is every step tighter — the gap above a message continuing a run,
+the gap above one starting a run, the gutter beside the avatar column, and the
+list's own inset.
+
+Both spacing sets live in one table so the two values for a measurement sit next
+to each other. A check asserts that every measurement differs between the modes,
+which is what catches somebody adding a fifth measurement and setting only one
+of its values, and that none of them collapses to zero — a run with no gap at
+all stops reading as several messages and starts reading as one long one with
+odd line breaks, a different failure from being cramped.
+
+Two things it deliberately is not:
+
+- **Not a font-size control.** The OS already has one, it is the accessible way
+  to ask for larger text, and a second control inside the app that disagreed
+  with it would be worse than none. Density changes the space *around*
+  messages, which is the thing the OS cannot know about because it is about how
+  many messages somebody wants on screen at once.
+- **Not the grouping rule.** Consecutive messages from one author within five
+  minutes already collapse into a run on every client, broken by a day divider.
+  That is untouched: density decides how much air a run gets, not what counts as
+  one.
+
+The choice is stored in `ThemeSettings` alongside the theme and the accent, so
+it is per machine rather than per account — it is about this screen at this
+sitting distance, and the same person on a laptop and a large monitor
+reasonably wants different answers.

@@ -65,6 +65,7 @@ import {
 } from '../../components/icons';
 import { useUpdateStore } from '../../stores/updates';
 import { ReleaseNotes } from '../../components/ReleaseNotes';
+import { DENSITIES, DENSITY_LABELS } from '../../services/density';
 import {
   useThemeStore,
   THEMES,
@@ -2026,6 +2027,8 @@ function AppearanceSection(): JSX.Element {
   const setTheme = useThemeStore((state) => state.setTheme);
   const setFollowSystem = useThemeStore((state) => state.setFollowSystem);
   const setCustomAccent = useThemeStore((state) => state.setCustomAccent);
+  const density = useThemeStore((state) => state.settings.density);
+  const setDensity = useThemeStore((state) => state.setDensity);
 
   const themeList = Object.values(THEMES);
   const activeDef = THEMES[resolvedTheme] ?? THEMES.dark;
@@ -2253,6 +2256,39 @@ function AppearanceSection(): JSX.Element {
                   )}
                 </span>
                 <span>{preset.label}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Density */}
+      <div className="mt-8 border-t border-edge pt-7">
+        <h2 className="text-xs font-bold uppercase tracking-wide text-slate-400">
+          Message density
+        </h2>
+        <p className="mt-1 text-sm text-slate-400">
+          How much space a conversation gets. This is spacing, not text size — the
+          system font scale is the accessible way to ask for larger text, and a
+          second control here that disagreed with it would be worse than none.
+        </p>
+        <div className="mt-3.5 flex flex-wrap gap-2">
+          {DENSITIES.map((option) => {
+            const active = density === option;
+            return (
+              <button
+                key={option}
+                type="button"
+                onClick={() => setDensity(option)}
+                aria-pressed={active}
+                className={`flex min-w-[180px] flex-1 cursor-pointer flex-col items-start gap-0.5 rounded-lg border px-3 py-2.5 text-left transition-colors duration-150 ${
+                  active
+                    ? 'border-accent bg-accent/15 text-slate-100'
+                    : 'border-edge bg-surface-800 text-slate-300 hover:bg-white/[0.04]'
+                }`}
+              >
+                <span className="text-sm font-medium">{DENSITY_LABELS[option].label}</span>
+                <span className="text-xs text-slate-400">{DENSITY_LABELS[option].hint}</span>
               </button>
             );
           })}

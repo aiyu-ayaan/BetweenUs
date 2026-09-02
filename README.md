@@ -100,6 +100,7 @@ to be framed, so no browser tab can ever show it.
 | Quick switcher | ✅ Ctrl+K | ✅ Ctrl+K | ✅ drawer |
 | Search a conversation from the keyboard (Ctrl+F) | ✅ | ✅ | — |
 | Keyboard shortcut sheet (`?`) | ✅ | ✅ | — |
+| Message density: cozy or compact | ✅ | ✅ | — |
 | Attachments of any type, up to 100 MB | ✅ | ✅ | ✅ |
 | Sending survives leaving the screen | — | — | ✅ foreground service |
 | HEIC photos converted, photos re-encoded on the way out | ✅ | ✅ | ✅ |

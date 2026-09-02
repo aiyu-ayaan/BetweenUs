@@ -5,6 +5,7 @@
  * Also synchronizes early before React mounts to avoid any flash of unstyled theme.
  */
 import { create } from 'zustand';
+import { asDensity, type Density } from '../services/density';
 
 export type ThemeId =
   | 'dark'
@@ -793,12 +794,19 @@ export interface ThemeSettings {
   selectedTheme: ThemeId;
   followSystem: boolean;
   customAccentId: string;
+  /**
+   * How tightly the conversation is packed. Appearance, so it lives with the
+   * theme rather than in a store of its own - and is persisted the same way,
+   * per machine, because it is about this screen at this sitting distance.
+   */
+  density: Density;
 }
 
 const DEFAULT_SETTINGS: ThemeSettings = {
   selectedTheme: 'dark',
   followSystem: false,
   customAccentId: 'default',
+  density: 'cozy',
 };
 
 function getSystemPrefersDark(): boolean {
@@ -858,6 +866,7 @@ function loadSettings(): ThemeSettings {
       selectedTheme: parsed.selectedTheme && THEMES[parsed.selectedTheme] ? parsed.selectedTheme : 'dark',
       followSystem: Boolean(parsed.followSystem),
       customAccentId: parsed.customAccentId ?? 'default',
+      density: asDensity(parsed.density),
     };
   } catch {
     return DEFAULT_SETTINGS;
@@ -870,6 +879,7 @@ interface ThemeState {
   setTheme: (themeId: ThemeId) => void;
   setFollowSystem: (follow: boolean) => void;
   setCustomAccent: (accentId: string) => void;
+  setDensity: (density: Density) => void;
 }
 
 export const useThemeStore = create<ThemeState>((set, get) => ({
@@ -913,6 +923,19 @@ export const useThemeStore = create<ThemeState>((set, get) => ({
       localStorage.setItem(STORAGE_KEY, JSON.stringify(nextSettings));
     } catch {}
     applyThemeToDocument(get().resolvedTheme, nextSettings.customAccentId);
+  },
+
+  /**
+   * Cozy or compact. Nothing about the document changes - density is spacing
+   * inside the message list rather than a variable on `:root` - so this only
+   * stores the choice and lets the list re-render.
+   */
+  setDensity: (density: Density) => {
+    const nextSettings: ThemeSettings = { ...get().settings, density };
+    set({ settings: nextSettings });
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(nextSettings));
+    } catch {}
   },
 }));
 
