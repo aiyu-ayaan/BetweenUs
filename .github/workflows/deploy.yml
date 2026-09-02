@@ -31,6 +31,10 @@ on:
         description: 'Version to deploy, e.g. 0.0.1-alpha.22. Empty deploys whatever channel .env follows'
         type: string
         default: ''
+      prune:
+        description: 'Reclaim disk after a healthy deploy: docker system prune -a --volumes. Deletes every volume no running container holds - read the step before ticking this'
+        type: boolean
+        default: false
   workflow_call:
     inputs:
       version:
@@ -196,3 +200,30 @@ jobs:
           done
           echo "::error::${API%/}/health did not answer. The host reported a healthy gateway, so look at the tunnel."
           exit 1
+
+      # Last, and only when it was asked for. `deploy.sh` already drops images a
+      # week old on its own; this is the bigger hammer for a host that has
+      # actually run out of disk, and it is the command that comment in
+      # `deploy.sh` says to stay away from as a routine step:
+      #
+      # - `-a` takes every image no *running* container is using, so the
+      #   previous release goes too and a rollback becomes a pull rather than a
+      #   restart.
+      # - `--volumes` takes every volume no running container holds. `backup-data`
+      #   is written by a one-shot container that is not running by the time this
+      #   step runs, so the pre-migration dump is inside the blast radius - which
+      #   is the whole reason this is a tick-box and not part of every deploy.
+      #
+      # After the health checks on purpose: a stack that did not come up needs
+      # its old images to go back to, and this job stops before here when it did
+      # not. Failure to prune is not failure to deploy.
+      - name: Reclaim disk
+        if: env.MODE == 'deploy' && inputs.prune
+        run: |
+          ssh -i ~/.ssh/id_deploy -o BatchMode=yes "${USER_NAME}@${HOST}" "
+            set -e
+            df -h ${DIR} | tail -1
+            docker system prune -a --volumes -f
+            docker volume ls
+            df -h ${DIR} | tail -1
+          " || echo "::warning::prune did not finish cleanly. The deploy is up regardless."
