@@ -143,6 +143,8 @@ fun ChatScreen(
     /** A quoted message that has just been jumped to, flashed so it is findable. */
     var highlighted by remember { mutableStateOf<String?>(null) }
     var showPins by remember { mutableStateOf(false) }
+    /** The search sheet over this conversation, closed until asked for. */
+    var showSearch by remember(channelId) { mutableStateOf(false) }
     /** The message whose "forward to" sheet is open, if any. */
     var forwarding by remember { mutableStateOf<ReadableMessage?>(null) }
     /**
@@ -559,6 +561,7 @@ fun ChatScreen(
                 isDirect = direct != null,
                 onOpenPins = { showPins = true },
                 onOpenMembers = onOpenMembers,
+                onOpenSearch = { showSearch = true },
             )
         }
 
@@ -985,6 +988,23 @@ fun ChatScreen(
                         }
                 }
             },
+        )
+    }
+
+    if (showSearch) {
+        SearchSheet(
+            messages = messages,
+            // The same move the quoted-message jump makes, for the same reason:
+            // the flash is what makes the row findable once the list has moved
+            // under it.
+            onJump = { id ->
+                val at = messages.indexOfFirst { it.id == id }
+                if (at >= 0) {
+                    scope.launch { listState.animateScrollToItem(at) }
+                    highlighted = id
+                }
+            },
+            onDismiss = { showSearch = false },
         )
     }
 

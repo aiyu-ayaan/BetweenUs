@@ -61,6 +61,7 @@ fun ChannelMenu(
     isDirect: Boolean,
     onOpenPins: () -> Unit,
     onOpenMembers: () -> Unit,
+    onOpenSearch: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
     var open by remember { mutableStateOf(false) }
@@ -80,6 +81,17 @@ fun ChannelMenu(
             // rather than "do something", so they moved in here and the bar
             // kept the call button, which is the only one that starts
             // anything.
+            // First, because it is the one thing here somebody opens the menu
+            // already knowing they want. Pins and members are browsing.
+            DropdownMenuItem(
+                text = { Text("Search") },
+                leadingIcon = { BetweenUsIcon(BetweenUsIcons.Search) },
+                onClick = {
+                    open = false
+                    onOpenSearch()
+                },
+            )
+
             DropdownMenuItem(
                 text = { Text("Pinned messages") },
                 leadingIcon = { BetweenUsIcon(BetweenUsIcons.Pin) },

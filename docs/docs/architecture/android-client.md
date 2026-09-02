@@ -183,6 +183,30 @@ side of midnight have a divider between them, and a run of bubbles reading
 across it visibly is not one run. The desktop's message search labels its
 results the same way rather than printing a bare date.
 
+## Searching a conversation
+
+`ChannelSearch.kt` — a sheet from the channel overflow menu, where the desktop
+has a right-hand panel. A phone has one column, so a panel there would be the
+whole screen anyway.
+
+It searches the history this process has already decrypted, and it has to:
+`content` on the wire is an envelope, so the server cannot match a word in one
+without being handed the channel key, which is the thing the design will not do.
+The reach is therefore whatever has been paged in, and the footer says so with
+the count in it — a search that quietly stops at a fortnight ago is worse than
+one that says where it stopped, because only the second can be widened on
+purpose by scrolling further back.
+
+The rules are the desktop's `SearchPanel`, and `ChannelSearchTest` pins the four
+that fail silently rather than loudly: a two-character floor, deleted rows
+skipped, the newest hundred matches first, and a snippet taken from around the
+term instead of from the front of the body. Every one of those still returns
+results when it is wrong.
+
+Opening a result reuses the quoted-message jump already in `ChatScreen` — scroll
+to the row, then flash it. A row that is only scrolled to is a row nobody can
+pick out, because the list moved underneath them to get there.
+
 ## One name, drawn once
 
 Every list of people draws a display name over an `@handle`. An account that

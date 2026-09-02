@@ -96,7 +96,7 @@ to be framed, so no browser tab can ever show it.
 | Custom emoji in messages | ✅ | ✅ | ✅ |
 | `:` emoji suggestion menu while typing | ✅ | ✅ | — |
 | Emoji picker | ✅ | ✅ | ⚠️ Unicode only |
-| Search within a channel | ✅ | ✅ | — |
+| Search within a channel | ✅ | ✅ | ✅ |
 | Quick switcher (Ctrl+K) | ✅ | ✅ | — |
 | Attachments of any type, up to 100 MB | ✅ | ✅ | ✅ |
 | Sending survives leaving the screen | — | — | ✅ foreground service |
