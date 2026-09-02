@@ -1,4 +1,4 @@
-<!doctype html><html lang=en dir=ltr class="docs-wrapper plugin-docs plugin-id-default docs-version-current docs-doc-page docs-doc-id-architecture/android-client" data-has-hydrated=false><head><meta charset=UTF-8><meta name=generator content="Docusaurus v3.10.2"><title data-rh=true>Android Client | BetweenUs</title><meta data-rh=true name=viewport content="width=device-width, initial-scale=1.0"/><meta data-rh=true name=twitter:card content=summary_large_image /><meta data-rh=true property=og:image content=https://aiyu-ayaan.github.io/BetweenUs/img/home.png /><meta data-rh=true name=twitter:image content=https://aiyu-ayaan.github.io/BetweenUs/img/home.png /><meta data-rh=true property=og:url content=https://aiyu-ayaan.github.io/BetweenUs/architecture/android-client /><meta data-rh=true property=og:locale content=en /><meta data-rh=true name=docusaurus_locale content=en /><meta data-rh=true name=docsearch:language content=en /><meta data-rh=true name=docusaurus_version content=current /><meta data-rh=true name=docusaurus_tag content=docs-default-current /><meta data-rh=true name=docsearch:version content=current /><meta data-rh=true name=docsearch:docusaurus_tag content=docs-default-current /><meta data-rh=true property=og:title content="Android Client | BetweenUs"/><meta data-rh=true name=description content="apps/android — native Kotlin + Jetpack Compose, three Gradle modules. It"/><meta data-rh=true property=og:description content="apps/android — native Kotlin + Jetpack Compose, three Gradle modules. It"/><link data-rh=true rel=icon href=/BetweenUs/img/icon.svg /><link data-rh=true rel=canonical href=https://aiyu-ayaan.github.io/BetweenUs/architecture/android-client /><link data-rh=true rel=alternate href=https://aiyu-ayaan.github.io/BetweenUs/architecture/android-client hreflang=en /><link data-rh=true rel=alternate href=https://aiyu-ayaan.github.io/BetweenUs/architecture/android-client hreflang=x-default /><script data-rh=true type=application/ld+json>{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","item":"https://aiyu-ayaan.github.io/BetweenUs/category/architecture","name":"Architecture","position":1},{"@type":"ListItem","item":"https://aiyu-ayaan.github.io/BetweenUs/architecture/android-client","name":"Android Client","position":2}]}</script><link rel=stylesheet href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" type=text/css><link rel=stylesheet href=/BetweenUs/assets/css/styles.fbef1d2c.css /><script src=/BetweenUs/assets/js/runtime~main.06542287.js defer></script><script src=/BetweenUs/assets/js/main.bc7c5465.js defer></script></head><body><svg style="display: none;"><defs>
+<!doctype html><html lang=en dir=ltr class="docs-wrapper plugin-docs plugin-id-default docs-version-current docs-doc-page docs-doc-id-architecture/android-client" data-has-hydrated=false><head><meta charset=UTF-8><meta name=generator content="Docusaurus v3.10.2"><title data-rh=true>Android Client | BetweenUs</title><meta data-rh=true name=viewport content="width=device-width, initial-scale=1.0"/><meta data-rh=true name=twitter:card content=summary_large_image /><meta data-rh=true property=og:image content=https://aiyu-ayaan.github.io/BetweenUs/img/home.png /><meta data-rh=true name=twitter:image content=https://aiyu-ayaan.github.io/BetweenUs/img/home.png /><meta data-rh=true property=og:url content=https://aiyu-ayaan.github.io/BetweenUs/architecture/android-client /><meta data-rh=true property=og:locale content=en /><meta data-rh=true name=docusaurus_locale content=en /><meta data-rh=true name=docsearch:language content=en /><meta data-rh=true name=docusaurus_version content=current /><meta data-rh=true name=docusaurus_tag content=docs-default-current /><meta data-rh=true name=docsearch:version content=current /><meta data-rh=true name=docsearch:docusaurus_tag content=docs-default-current /><meta data-rh=true property=og:title content="Android Client | BetweenUs"/><meta data-rh=true name=description content="apps/android — native Kotlin + Jetpack Compose, three Gradle modules. It"/><meta data-rh=true property=og:description content="apps/android — native Kotlin + Jetpack Compose, three Gradle modules. It"/><link data-rh=true rel=icon href=/BetweenUs/img/icon.svg /><link data-rh=true rel=canonical href=https://aiyu-ayaan.github.io/BetweenUs/architecture/android-client /><link data-rh=true rel=alternate href=https://aiyu-ayaan.github.io/BetweenUs/architecture/android-client hreflang=en /><link data-rh=true rel=alternate href=https://aiyu-ayaan.github.io/BetweenUs/architecture/android-client hreflang=x-default /><script data-rh=true type=application/ld+json>{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","item":"https://aiyu-ayaan.github.io/BetweenUs/category/architecture","name":"Architecture","position":1},{"@type":"ListItem","item":"https://aiyu-ayaan.github.io/BetweenUs/architecture/android-client","name":"Android Client","position":2}]}</script><link rel=stylesheet href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" type=text/css><link rel=stylesheet href=/BetweenUs/assets/css/styles.fbef1d2c.css /><script src=/BetweenUs/assets/js/runtime~main.95660dd2.js defer></script><script src=/BetweenUs/assets/js/main.bc7c5465.js defer></script></head><body><svg style="display: none;"><defs>
 <symbol id=theme-svg-external-link viewBox="0 0 24 24"><path fill=currentColor d="M21 13v10h-21v-19h12v2h-10v15h17v-8h2zm3-12h-10.988l4.035 4-6.977 7.07 2.828 2.828 6.977-7.07 4.125 4.172v-11z"/></symbol>
 </defs></svg>
 <script>!function(){var t;document.documentElement.setAttribute("data-theme",t||"dark"),document.documentElement.setAttribute("data-theme-choice",t||"dark")}(),function(){try{for(var[t,e]of new URLSearchParams(window.location.search).entries())if(t.startsWith("docusaurus-data-")){var a=t.replace("docusaurus-data-","data-");document.documentElement.setAttribute(a,e)}}catch(t){}}()</script><div id=__docusaurus><link rel=preload as=image href=/BetweenUs/img/logo.svg /><link rel=preload as=image href=/BetweenUs/img/home-android.jpeg /><div role=region aria-label="Skip to main content"><a class=skipToContent_fXgn href=#__docusaurus_skipToContent_fallback>Skip to main content</a></div><nav aria-label=Main class="theme-layout-navbar navbar navbar--fixed-top"><div class=navbar__inner><div class="theme-layout-navbar-left navbar__items"><button aria-label="Toggle navigation bar" aria-expanded=false class="navbar__toggle clean-btn" type=button><svg width=30 height=30 viewBox="0 0 30 30" aria-hidden=true><path stroke=currentColor stroke-linecap=round stroke-miterlimit=10 stroke-width=2 d="M4 7h22M4 15h22M4 23h22"/></svg></button><a class=navbar__brand href=/BetweenUs/><div class=navbar__logo><img src=/BetweenUs/img/logo.svg alt="BetweenUs Logo" class="themedComponent_mlkZ themedComponent--light_NVdE"/><img src=/BetweenUs/img/logo.svg alt="BetweenUs Logo" class="themedComponent_mlkZ themedComponent--dark_xIcU"/></div><b class="navbar__title text--truncate">BetweenUs</b></a><a aria-current=page class="navbar__item navbar__link navbar__link--active" href=/BetweenUs/intro>Docs</a><a class="navbar__item navbar__link" href=/BetweenUs/architecture/overview>Architecture</a><a class="navbar__item navbar__link" href=/BetweenUs/services/overview>Services</a><a class="navbar__item navbar__link" href=/BetweenUs/security/overview>Security</a><a class="navbar__item navbar__link" href=/BetweenUs/deployment/docker-compose>Deploy</a><a href=https://github.com/aiyu-ayaan/BetweenUs/releases target=_blank rel="noopener noreferrer" class="navbar__item navbar__link">Download<svg width=13.5 height=13.5 aria-label="(opens in new tab)" class=iconExternalLink_nPIU><use href=#theme-svg-external-link /></svg></a></div><div class="theme-layout-navbar-right navbar__items navbar__items--right"><a class="navbar__item navbar__link" href=/BetweenUs/changelog>Changelog</a><a href=https://github.com/aiyu-ayaan/BetweenUs target=_blank rel="noopener noreferrer" class="navbar__item navbar__link">GitHub<svg width=13.5 height=13.5 aria-label="(opens in new tab)" class=iconExternalLink_nPIU><use href=#theme-svg-external-link /></svg></a><div class=navbarSearchContainer_Bca1><div class="navbar__search searchBarContainer_NW3z" dir=ltr><svg aria-hidden=true class=searchIcon_T3tP focusable=false viewBox="0 0 16 16"><path fill=currentColor d="M6.02945 10.20327a4.17382 4.17382 0 1 1 4.17382-4.17382 4.15609 4.15609 0 0 1-4.17382 4.17382Zm9.69195 4.2199-4.8225-4.82338A5.88021 5.88021 0 0 0 12.058 6.02856 6.00467 6.00467 0 1 0 9.59979 10.8989l4.82338 4.82338a.89729.89729 0 0 0 1.29912 0 .89749.89749 0 0 0-.00087-1.29909Z"/></svg><input placeholder=Search aria-label=Search class="navbar__search-input searchInput_YFbd" value="" /><div class="loadingRing_RJI3 searchBarLoadingRing_YnHq"><div></div><div></div><div></div><div></div></div></div></div></div></div><div role=presentation class=navbar-sidebar__backdrop></div></nav><div id=__docusaurus_skipToContent_fallback class="theme-layout-main main-wrapper mainWrapper_z2l0"><div class=docsWrapper_hBAB><button aria-label="Scroll back to top" class="clean-btn theme-back-to-top-button backToTopButton_sjWU" type=button></button><div class=docRoot_UBD9><aside class="theme-doc-sidebar-container docSidebarContainer_YfHR"><div class=sidebarViewport_aRkj><div class=sidebar_njMd><nav aria-label="Docs sidebar" class="menu thin-scrollbar menu_SIkG"><ul class="theme-doc-sidebar-menu menu__list"><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-1 menu__list-item"><a class=menu__link href=/BetweenUs/intro><span class=linkLabel_WmDU>BetweenUs</span></a><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item"><div class=menu__list-item-collapsible><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--active" href=/BetweenUs/category/architecture><span class=categoryLinkLabel_W154>Architecture</span></a><button aria-label="Collapse sidebar category 'Architecture'" aria-expanded=true type=button class="clean-btn menu__caret"></button></div><ul class=menu__list><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class=menu__link tabindex=0 href=/BetweenUs/architecture/overview><span class=linkLabel_WmDU>Architecture Overview</span></a><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class=menu__link tabindex=0 href=/BetweenUs/architecture/microservices><span class=linkLabel_WmDU>Microservices</span></a><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class=menu__link tabindex=0 href=/BetweenUs/architecture/media><span class=linkLabel_WmDU>Peer-to-Peer Media</span></a><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class=menu__link tabindex=0 href=/BetweenUs/architecture/remote-desktop><span class=linkLabel_WmDU>Remote Desktop</span></a><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link menu__link--active" aria-current=page tabindex=0 href=/BetweenUs/architecture/android-client><span class=linkLabel_WmDU>Android Client</span></a><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class=menu__link tabindex=0 href=/BetweenUs/architecture/notifications><span class=linkLabel_WmDU>Notifications</span></a><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class=menu__link tabindex=0 href=/BetweenUs/architecture/themes><span class=linkLabel_WmDU>Multi-Theme Architecture & Design System</span></a><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class=menu__link tabindex=0 href=/BetweenUs/architecture/listen-together><span class=linkLabel_WmDU>Listen Together</span></a><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class=menu__link tabindex=0 href=/BetweenUs/architecture/push-suppression><span class=linkLabel_WmDU>Push Suppression</span></a><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class=menu__link tabindex=0 href=/BetweenUs/architecture/play-together><span class=linkLabel_WmDU>Play Together</span></a></ul><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item menu__list-item--collapsed"><div class=menu__list-item-collapsible><a class="categoryLink_byQd menu__link menu__link--sublist" href=/BetweenUs/category/system-design><span class=categoryLinkLabel_W154>System Design</span></a><button aria-label="Expand sidebar category 'System Design'" aria-expanded=false type=button class="clean-btn menu__caret"></button></div><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item menu__list-item--collapsed"><div class=menu__list-item-collapsible><a class="categoryLink_byQd menu__link menu__link--sublist" href=/BetweenUs/category/database><span class=categoryLinkLabel_W154>Database</span></a><button aria-label="Expand sidebar category 'Database'" aria-expanded=false type=button class="clean-btn menu__caret"></button></div><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item menu__list-item--collapsed"><div class=menu__list-item-collapsible><a class="categoryLink_byQd menu__link menu__link--sublist" href=/BetweenUs/category/services><span class=categoryLinkLabel_W154>Services</span></a><button aria-label="Expand sidebar category 'Services'" aria-expanded=false type=button class="clean-btn menu__caret"></button></div><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item menu__list-item--collapsed"><div class=menu__list-item-collapsible><a class="categoryLink_byQd menu__link menu__link--sublist" href=/BetweenUs/category/deployment--cicd><span class=categoryLinkLabel_W154>Deployment & CI/CD</span></a><button aria-label="Expand sidebar category 'Deployment & CI/CD'" aria-expanded=false type=button class="clean-btn menu__caret"></button></div><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item menu__list-item--collapsed"><div class=menu__list-item-collapsible><a class="categoryLink_byQd menu__link menu__link--sublist" href=/BetweenUs/category/security><span class=categoryLinkLabel_W154>Security</span></a><button aria-label="Expand sidebar category 'Security'" aria-expanded=false type=button class="clean-btn menu__caret"></button></div><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-1 menu__list-item"><a class=menu__link href=/BetweenUs/running-locally><span class=linkLabel_WmDU>Running Locally</span></a><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-1 menu__list-item"><a class=menu__link href=/BetweenUs/testing><span class=linkLabel_WmDU>Testing</span></a><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-1 menu__list-item"><a class=menu__link href=/BetweenUs/changelog><span class=linkLabel_WmDU>Changelog</span></a></ul></nav></div></div></aside><main class=docMainContainer_TBSr><div class="container padding-top--md padding-bottom--lg"><div class=row><div class="col docItemCol_VOVn"><div class=docItemContainer_Djhp><article><nav class="theme-doc-breadcrumbs breadcrumbsContainer_Z_bl" aria-label=Breadcrumbs><ul class=breadcrumbs><li class=breadcrumbs__item><a aria-label="Home page" class=breadcrumbs__link href=/BetweenUs/><svg viewBox="0 0 24 24" class=breadcrumbHomeIcon_YNFT><path d="M10 19v-5h4v5c0 .55.45 1 1 1h3c.55 0 1-.45 1-1v-7h1.7c.46 0 .68-.57.33-.87L12.67 3.6c-.38-.34-.96-.34-1.34 0l-8.36 7.53c-.34.3-.13.87.33.87H5v7c0 .55.45 1 1 1h3c.55 0 1-.45 1-1z" fill=currentColor /></svg></a><li class=breadcrumbs__item><a class=breadcrumbs__link href=/BetweenUs/category/architecture><span>Architecture</span></a><li class="breadcrumbs__item breadcrumbs__item--active"><span class=breadcrumbs__link>Android Client</span></ul></nav><div class="tocCollapsible_ETCw theme-doc-toc-mobile tocMobile_ITEo"><button type=button class="clean-btn tocCollapsibleButton_TO0P">On this page</button></div><div class="theme-doc-markdown markdown"><header><h1>Android Client</h1></header>
@@ -109,6 +109,174 @@ boundary also breaks the author grouping - two messages a minute apart either
 side of midnight have a divider between them, and a run of bubbles reading
 across it visibly is not one run. The desktop's message search labels its
 results the same way rather than printing a bare date.</p>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id=searching-a-conversation>Searching a conversation<a href=#searching-a-conversation class=hash-link aria-label="Direct link to Searching a conversation" title="Direct link to Searching a conversation" translate=no>​</a></h2>
+<p><code>ChannelSearch.kt</code> — a sheet from the channel overflow menu, where the desktop
+has a right-hand panel. A phone has one column, so a panel there would be the
+whole screen anyway.</p>
+<p>It searches the history this process has already decrypted, and it has to:
+<code>content</code> on the wire is an envelope, so the server cannot match a word in one
+without being handed the channel key, which is the thing the design will not do.
+The reach is therefore whatever has been paged in, and the footer says so with
+the count in it — a search that quietly stops at a fortnight ago is worse than
+one that says where it stopped, because only the second can be widened on
+purpose by scrolling further back.</p>
+<p>The rules are the desktop's <code>SearchPanel</code>, and <code>ChannelSearchTest</code> pins the four
+that fail silently rather than loudly: a two-character floor, deleted rows
+skipped, the newest hundred matches first, and a snippet taken from around the
+term instead of from the front of the body. Every one of those still returns
+results when it is wrong.</p>
+<p>Opening a result reuses the quoted-message jump already in <code>ChatScreen</code> — scroll
+to the row, then flash it. A row that is only scrolled to is a row nobody can
+pick out, because the list moved underneath them to get there.</p>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id=driving-somebodys-shared-screen>Driving somebody's shared screen<a href=#driving-somebodys-shared-screen class=hash-link aria-label="Direct link to Driving somebody's shared screen" title="Direct link to Driving somebody's shared screen" translate=no>​</a></h2>
+<p><code>feature/voice/ShareControl.kt</code> — the viewer half of the desktop's
+<code>shareControl.ts</code>, and only that half. A phone can ask for the mouse on a screen
+somebody is sharing in a call and then use it; it cannot be driven itself,
+because being driven means injecting synthetic mouse and keyboard events and
+Android has no such thing outside an accessibility service — a permission this
+app has no business asking for.</p>
+<p>The asymmetry is answered rather than ignored: an <code>ask</code> arriving at a phone is
+met with a <code>deny</code> carrying a reason, so somebody on a desktop learns why not
+instead of waiting on a dialog that will never appear. Input aimed at a phone is
+dropped, which is the whole of the correct behaviour when there is nothing to
+inject it into.</p>
+<p>No server is involved. The exchange rides the peers' own data channels, which
+have exactly two ends, and the only authority is the person sharing pressing
+yes — the right authority, since it is their machine and they are sitting at it.
+Who a message came from is decided by which connection carried it, never by
+anything inside it, and a <code>grant</code> is honoured only from the peer that was
+actually asked.</p>
+<p><strong>Driving is offered only while the share is pinned.</strong> That is correctness, not
+layout: pinned, the tile is exactly the stage box, so a touch maps to a fraction
+of the picture with nothing to guess. In a grid it is one tile among several and
+the arithmetic would be a guess about somebody else's mouse. The bar says so and
+offers the pin rather than leaving a surface that does the wrong thing.</p>
+<p>The surface is absolute rather than a trackpad, because a phone driving a
+desktop is somebody pointing at a thing they can see. A cancelled gesture still
+sends the release: a press never lifted is a mouse held down on somebody else's
+machine.</p>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id=a-chair-at-play-together>A chair at Play Together<a href=#a-chair-at-play-together class=hash-link aria-label="Direct link to A chair at Play Together" title="Direct link to A chair at Play Together" translate=no>​</a></h2>
+<p><code>core/store/Play.kt</code>, <code>feature/voice/GameBoards.kt</code> and
+<code>feature/voice/PlayStage.kt</code>. <code>call-service</code> is the referee: a client sends
+"column four" and gets a board back, and a board is never sent the other way —
+a client that could send twenty coin positions could send twenty coins in the
+pockets. So the phone's job is small by design: draw what arrived, send taps.</p>
+<p><strong>No game rules are implemented here.</strong>
+<code>packages/shared-types/src/games/</code> is the only implementation in the repository,
+and a Kotlin copy would be a second one to disagree with it — the first
+disagreement being two people looking at different games. That decides which
+games a phone plays: the ones whose legality can be <em>read off the board</em>.</p>
+<table><thead><tr><th>Game<th>On a phone<th>Why<tbody><tr><td>Tic-tac-toe<td>Played<td>A legal move is an empty square<tr><td>Connect Four<td>Played<td>A legal move is a column with room<tr><td>Dots and Boxes<td>Played<td>A legal move is a line not yet drawn<tr><td>Reversi<td>Watched<td>Legality is a walk in eight directions from every empty square<tr><td>Ludo<td>Watched<td>The board is token positions in <code>GameState.data</code><tr><td>Carrom<td>Watched<td>The board is twenty coins at floating-point positions</table>
+<p>Watching is not a consolation. The board, the chairs, whose turn it is and the
+score arrive for all six, so a phone in the call sees the whole table; what it
+declines to do is offer a tap it cannot honestly call a move, and the stage says
+so rather than leaving a board that does not respond. The library button starts
+any of the six, including the three this phone can only watch — a person on a
+phone in a call with two desktops is a reasonable person to start a game of
+Carrom.</p>
+<p>Each board is one <code>Canvas</code> rather than a composable per cell: Reversi is
+sixty-four cells and Dots and Boxes is forty lines plus sixteen squares plus
+twenty-five dots, and a composable each is a recomposition each on every move.
+Taps are accepted only when it is genuinely this person's turn — a board that
+takes them out of turn sends moves the referee refuses, which reads as a board
+that ignores you.</p>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id=a-seat-at-listen-together>A seat at Listen Together<a href=#a-seat-at-listen-together class=hash-link aria-label="Direct link to A seat at Listen Together" title="Direct link to A seat at Listen Together" translate=no>​</a></h2>
+<p><code>core/store/Listen.kt</code> and <code>feature/voice/ListenStage.kt</code>. The phone holds the
+session the gateway sends — the queue, which track, whether it is paused, and
+where the needle was — and draws it above the call's control dock, with pause,
+skip and remove. Those are requests to the gateway, never local changes: it is
+the only thing that can order two people pressing skip at the same instant, for
+the same reason it arbitrates the screen share.</p>
+<p><code>listenPositionAt</code> exists twice, here and in <code>packages/shared-types</code>, and has to
+agree to the millisecond. It is the entire meaning of the
+<code>positionMs</code>/<code>atServerMs</code> pair: the gateway sends where the track <em>was</em>, and
+each client advances it off a clock they share — which is what stops a progress
+bar needing a message a second to move. The cases that separate two plausible
+implementations are the tested ones: a paused track does not advance however
+long ago the state was made, a clock reading earlier than the stamp does not run
+the track backwards, a known duration clamps, and an unknown duration (<code>0</code>,
+which is what every track carries until some player reports one) must <em>not</em> —
+reading it as a length is a track that is over before it starts.</p>
+<p>Any state carrying a revision the client has already seen is dropped, so a
+client's own echo cannot undo somebody else's later change. A null session is
+the exception and always applies: "nothing is playing" carries no revision, and
+refusing it would leave a dead track on screen for ever.</p>
+<p>The phone plays the audio too. <code>YouTubeFrame.kt</code> is a <code>WebView</code> running
+YouTube's own IFrame API — the same player the desktop drives, and the only way
+to play a YouTube video that is neither against their terms nor a scraper that
+breaks every few months. No audio crosses the call: the gateway holds a queue
+and a position, and each client streams the video itself, which is what lets any
+of this exist with no media server.</p>
+<p><code>ListenSync.kt</code> is the desktop's <code>listen-sync.ts</code> with its numbers intact, since
+two clients correcting on different tolerances are two clients that disagree
+about whether they are in step. A second and a half of drift is left alone;
+past it the player is pulled back in one jump, to where the call is at the
+moment of the decision rather than where it was when the drift was measured — a
+seek is not instant and the track keeps moving while it happens. A paused
+session gets a quarter second instead, because nothing is moving and two people
+staring at a stopped track that reads different numbers is the most obviously
+broken this can look.</p>
+<p>Three things about the embed were not optional:</p>
+<ul>
+<li class=""><code>mediaPlaybackRequiresUserGesture = false</code>, or every track waits for each
+person to tap the video — which in a synchronised session means everybody
+starting out of step by however long their taps took.</li>
+<li class=""><code>playsinline=1</code>, or Android hands the video to the system's full-screen
+player: a second surface this app cannot pause, seek or duck.</li>
+<li class="">A real base URL, because the IFrame API checks the origin it was loaded from
+and refuses a document that has none.</li>
+</ul>
+<p>The phone now also fills in what a track is called. Nothing on the server may
+ask YouTube — that would be a backend service with an API key, an egress rule
+and an opinion about who is listening to what — so the first client whose player
+loads the video tells the session, and a session of nothing but phones is no
+longer a queue of eleven-character ids.</p>
+<p>Ducking is the embed's own volume, not the phone's media stream: turning the
+stream down would duck every other sound on the device, and the call itself is
+on the voice stream and must not move at all.</p>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id=push-to-talk-with-a-thumb>Push to talk, with a thumb<a href=#push-to-talk-with-a-thumb class=hash-link aria-label="Direct link to Push to talk, with a thumb" title="Direct link to Push to talk, with a thumb" translate=no>​</a></h2>
+<p><code>PushToTalk.kt</code>. The gate answers "is somebody making a noise"; this answers
+"do you mean to be heard", and no threshold gets there — a bus, a television and
+somebody else's conversation are all above any level that still passes a quiet
+voice. The desktop holds a key and listens on the window. A phone has no key, so
+the control is held with a thumb on the call toolbar, and the setting that turns
+the mode on lives beside the gate in voice settings.</p>
+<p>Four inputs decide whether the microphone passes audio, and they are four
+different questions, so they live in one tested function rather than spread
+through the engine:</p>
+<table><thead><tr><th>Input<th>Question<th>Rank<tbody><tr><td><code>muted</code><td>Is this client in the call at all?<td>Outranks the control<tr><td><code>held</code><td>Did the system take the audio (a real phone call)?<td>Outranks everything<tr><td><code>pushToTalk</code><td>Is the mode on?<td>Decides whether the fourth is read<tr><td><code>talking</code><td>Is the control down?<td>Only in that mode</table>
+<p>What the far end is told is the capture, not the button. A push-to-talk client
+between sentences is sending nothing, and a tile drawn live is a tile somebody
+waits on — so <code>publishMediaState</code> asks the same function. Publishing the button
+alone makes such a participant look permanently live while silent, which reads
+as a broken microphone rather than as a released key.</p>
+<p>Two ways it could stick open, both closed deliberately. The call screen going
+away while the control is held is this platform's version of the desktop losing
+window focus — the release never arrives — so leaving the screen closes it. And
+turning the mode on during a live call re-decides immediately, because otherwise
+the microphone stays open until something else happens to ask, and somebody who
+has just switched to push to talk is live without knowing it.</p>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id=getting-anywhere-from-anywhere>Getting anywhere from anywhere<a href=#getting-anywhere-from-anywhere class=hash-link aria-label="Direct link to Getting anywhere from anywhere" title="Direct link to Getting anywhere from anywhere" translate=no>​</a></h2>
+<p><code>QuickSwitcher.kt</code> — one field over conversations, channels and servers, opened
+from the search control in the drawer header. The desktop opens the same thing
+on Ctrl+K; a phone has no Ctrl and no K, and the drawer is where somebody who
+does not know where a thing is has already gone looking.</p>
+<p>It offers every server's channels, where the desktop offers only the open
+server's. That is a difference in what each client has already loaded rather
+than a difference of opinion: the desktop fetches a server's channels when that
+server is opened, while <code>Workspace.refresh</code> fetches them all up front because
+the socket has to be subscribed to every channel or nothing arrives to badge.
+Two channels with the same name are told apart by the hint, which carries the
+server's name.</p>
+<p>Going to a voice channel does not join it. Tapping one in the drawer does, and
+should — that tap is about that channel. Picking one out of a list of everywhere
+you could go is not consent to open a microphone.</p>
+<p>The sheet is drawn at the shell level, outside both layout branches, so the
+phone and the unfolded foldable share one copy. What picking a server means, and
+that a voice channel must never become "the channel", live in <code>goToServer</code> and
+<code>goToChannel</code> on the shell — the drawer and the switcher both route through
+them, because a second copy of the voice rule is a second place for it to be
+forgotten.</p>
 <h2 class="anchor anchorTargetStickyNavbar_Vzrq" id=one-name-drawn-once>One name, drawn once<a href=#one-name-drawn-once class=hash-link aria-label="Direct link to One name, drawn once" title="Direct link to One name, drawn once" translate=no>​</a></h2>
 <p>Every list of people draws a display name over an <code>@handle</code>. An account that
 never set a display name has the two be the same string, and the row then reads
@@ -317,6 +485,59 @@ exactly when somebody is trying to find the threshold that stops it doing that.
 The meter only moves during a call — Android does not reliably allow a second
 capture of one microphone, so the row says so rather than showing a bar that is
 dead for a reason nobody can see.</p>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id=backing-out-of-a-call>Backing out of a call<a href=#backing-out-of-a-call class=hash-link aria-label="Direct link to Backing out of a call" title="Direct link to Backing out of a call" translate=no>​</a></h2>
+<p>Back leaves the call <strong>screen</strong>, not the call. It used to shrink the whole
+activity into system picture-in-picture, which answered "I want to leave this
+screen" with "then leave the app" — the wrong shape for the thing people
+actually do mid-call, which is read the conversation the call is about. There is
+no channel list inside a hundred-point window, and coming back out of one landed
+on the drawer rather than on the call.</p>
+<p>What stands in for the screen is the call dock:</p>
+<ul>
+<li class="">A <strong>bar</strong> along the top, beside the connection and clock banners: who you are
+talking to, how long it has been, mute, hang up. Tapping it returns to the
+call. It pushes the screen down rather than covering it. On an audio call this
+is the whole of it — a floating black rectangle showing nothing earns none of
+the screen it would take from the conversation underneath.</li>
+<li class="">A <strong>floating window</strong>, only when the call has a picture in it. Small,
+draggable, tap to return. It stays where it is put: the only thing that knows
+what it is in the way of is the person reading.</li>
+</ul>
+<p>The duration is measured from an elapsed-realtime stamp taken when the call
+became live, not when it started connecting, and a reconnection inside one call
+does not restart it. Elapsed realtime because a wall-clock duration jumps
+whenever the network hands the phone a corrected time; from "live" because the
+seconds spent waiting to connect are not seconds of a call.</p>
+<p>Picture-in-picture is still here, and it is now what <strong>leaving the app</strong> does —
+and only for a call with a picture in it. So the two shapes match what is
+actually in the call: audio follows you out as a notification and a bar, video
+follows you out as a window.</p>
+<p>Two rules keep the drawer honest alongside this. A drawer open on a screen that
+has no way to open it closes itself — stated that way rather than as a list of
+screens, so the next screen added does not have to be remembered twice. And an
+open drawer is always closable, whatever it ended up over; the switch is about
+whether a swipe may <em>open</em> it, and Material wires the scrim's tap to the same
+flag. The channel list is reachable from a call, because being in a call is not
+a reason to be unable to reach a conversation.</p>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id=the-sound-of-a-shared-screen>The sound of a shared screen<a href=#the-sound-of-a-shared-screen class=hash-link aria-label="Direct link to The sound of a shared screen" title="Direct link to The sound of a shared screen" translate=no>​</a></h2>
+<p>A share used to be silent. It carries sound now, captured with
+<code>AudioPlaybackCaptureConfiguration</code> (Android 10 and later) off the <strong>same</strong>
+<code>MediaProjection</code> the frames come from — one consent, not two, because the
+system spends the token the first time it is used. The app's own audio is
+excluded from the capture, or the call feeds itself back into the share.</p>
+<p>That sound is <strong>mixed into the microphone buffer</strong> rather than sent on the
+call's screen-audio slot, and that is a constraint of the library rather than a
+choice: libwebrtc on Android has one audio device module per factory, it reads
+the microphone, and there is no public way to hand arbitrary audio to a second
+track. The far end plays what arrives on the microphone slot, so nothing on the
+desktop had to change.</p>
+<p>Two things follow. Muting yourself cannot disable the track, because the track
+is carrying two things — so mute closes the microphone at the device module
+instead, which is where it genuinely happened all along: the buffer arrives
+already zeroed, and the screen's sound is added to that silence. And the mixed
+signal goes through the call's echo canceller and noise suppressor, which were
+tuned for a voice in a room, so music through them is thinner than music
+through a path built for it.</p>
 <h2 class="anchor anchorTargetStickyNavbar_Vzrq" id=push-notifications>Push notifications<a href=#push-notifications class=hash-link aria-label="Direct link to Push notifications" title="Direct link to Push notifications" translate=no>​</a></h2>
 <p>Firebase Cloud Messaging, data-only payloads — the server can't read a
 message body to put words in a push, so the notification is written on the
@@ -340,4 +561,4 @@ local one build identically. <code>android:run</code> additionally needs an Andr
 and <code>adb</code> on <code>PATH</code>. <code>local.properties</code> (git-ignored) sets
 <code>betweenus.serverUrl</code>, a default only — the login screen's server picker can
 point the app anywhere at runtime. See <a class="" href=/BetweenUs/running-locally#android>Running Locally</a> and
-<a class="" href=/BetweenUs/deployment/ci#android>CI</a> for what runs on every pull request.</div><footer class="theme-doc-footer docusaurus-mt-lg"><div class="row margin-top--sm theme-doc-footer-edit-meta-row"><div class="col noPrint_WFHX"><a href=https://github.com/aiyu-ayaan/BetweenUs/tree/master/docs/docs/architecture/android-client.md target=_blank rel="noopener noreferrer" class=theme-edit-this-page><svg fill=currentColor height=20 width=20 viewBox="0 0 40 40" class=iconEdit_Z9Sw aria-hidden=true><g><path d="m34.5 11.7l-3 3.1-6.3-6.3 3.1-3q0.5-0.5 1.2-0.5t1.1 0.5l3.9 3.9q0.5 0.4 0.5 1.1t-0.5 1.2z m-29.5 17.1l18.4-18.5 6.3 6.3-18.4 18.4h-6.3v-6.2z"/></g></svg>Edit this page</a></div><div class="col lastUpdated_JAkA"></div></div></footer></article><nav class="docusaurus-mt-lg pagination-nav" aria-label="Docs pages"><a class="pagination-nav__link pagination-nav__link--prev" href=/BetweenUs/architecture/remote-desktop><div class=pagination-nav__sublabel>Previous</div><div class=pagination-nav__label>Remote Desktop</div></a><a class="pagination-nav__link pagination-nav__link--next" href=/BetweenUs/architecture/notifications><div class=pagination-nav__sublabel>Next</div><div class=pagination-nav__label>Notifications</div></a></nav></div></div><div class="col col--3"><div class="tableOfContents_bqdL thin-scrollbar theme-doc-toc-desktop"><ul class="table-of-contents table-of-contents__left-border"><li><a href=#status class="table-of-contents__link toc-highlight">Status</a><li><a href=#modules class="table-of-contents__link toc-highlight">Modules</a><ul><li><a href=#core class="table-of-contents__link toc-highlight"><code>core</code></a><li><a href=#app--features class="table-of-contents__link toc-highlight"><code>app</code> — features</a></ul><li><a href=#which-day-a-message-was-sent class="table-of-contents__link toc-highlight">Which day a message was sent</a><li><a href=#one-name-drawn-once class="table-of-contents__link toc-highlight">One name, drawn once</a><li><a href=#one-shell-two-shapes class="table-of-contents__link toc-highlight">One shell, two shapes</a><ul><li><a href=#ui-common class="table-of-contents__link toc-highlight"><code>ui-common</code></a></ul><li><a href=#end-to-end-encryption-on-android class="table-of-contents__link toc-highlight">End-to-end encryption on Android</a><li><a href=#sign-in-from-a-phone class="table-of-contents__link toc-highlight">Sign-in from a phone</a><li><a href=#blocking-clearing-and-getting-back-in class="table-of-contents__link toc-highlight">Blocking, clearing, and getting back in</a><li><a href=#messages-that-stop-existing class="table-of-contents__link toc-highlight">Messages that stop existing</a><li><a href=#who-cancels-the-echo-and-when-the-setting-takes-effect class="table-of-contents__link toc-highlight">Who cancels the echo, and when the setting takes effect</a><li><a href=#input-sensitivity-and-the-hook-that-makes-it-possible class="table-of-contents__link toc-highlight">Input sensitivity, and the hook that makes it possible</a><li><a href=#push-notifications class="table-of-contents__link toc-highlight">Push notifications</a><li><a href=#building-it class="table-of-contents__link toc-highlight">Building it</a></ul></div></div></div></div></main></div></div></div><footer class="theme-layout-footer footer footer--dark"><div class="container container-fluid"><div class="row footer__links"><div class="theme-layout-footer-column col footer__col"><div class=footer__title>Docs</div><ul class="footer__items clean-list"><li class=footer__item><a class=footer__link-item href=/BetweenUs/architecture/overview>Architecture</a><li class=footer__item><a class=footer__link-item href=/BetweenUs/running-locally>Running Locally</a><li class=footer__item><a class=footer__link-item href=/BetweenUs/database/schema>Database Schema</a></ul></div><div class="theme-layout-footer-column col footer__col"><div class=footer__title>Project</div><ul class="footer__items clean-list"><li class=footer__item><a href=https://github.com/aiyu-ayaan/BetweenUs/releases target=_blank rel="noopener noreferrer" class=footer__link-item>Download App<svg width=13.5 height=13.5 aria-label="(opens in new tab)" class=iconExternalLink_nPIU><use href=#theme-svg-external-link /></svg></a><li class=footer__item><a href=https://github.com/aiyu-ayaan/BetweenUs target=_blank rel="noopener noreferrer" class=footer__link-item>GitHub<svg width=13.5 height=13.5 aria-label="(opens in new tab)" class=iconExternalLink_nPIU><use href=#theme-svg-external-link /></svg></a><li class=footer__item><a class=footer__link-item href=/BetweenUs/changelog>Changelog</a></ul></div></div><div class="footer__bottom text--center"><div class=footer__copyright>Copyright © 2026 BetweenUs. Built with Docusaurus.</div></div></div></footer></div></body>
+<a class="" href=/BetweenUs/deployment/ci#android>CI</a> for what runs on every pull request.</div><footer class="theme-doc-footer docusaurus-mt-lg"><div class="row margin-top--sm theme-doc-footer-edit-meta-row"><div class="col noPrint_WFHX"><a href=https://github.com/aiyu-ayaan/BetweenUs/tree/master/docs/docs/architecture/android-client.md target=_blank rel="noopener noreferrer" class=theme-edit-this-page><svg fill=currentColor height=20 width=20 viewBox="0 0 40 40" class=iconEdit_Z9Sw aria-hidden=true><g><path d="m34.5 11.7l-3 3.1-6.3-6.3 3.1-3q0.5-0.5 1.2-0.5t1.1 0.5l3.9 3.9q0.5 0.4 0.5 1.1t-0.5 1.2z m-29.5 17.1l18.4-18.5 6.3 6.3-18.4 18.4h-6.3v-6.2z"/></g></svg>Edit this page</a></div><div class="col lastUpdated_JAkA"></div></div></footer></article><nav class="docusaurus-mt-lg pagination-nav" aria-label="Docs pages"><a class="pagination-nav__link pagination-nav__link--prev" href=/BetweenUs/architecture/remote-desktop><div class=pagination-nav__sublabel>Previous</div><div class=pagination-nav__label>Remote Desktop</div></a><a class="pagination-nav__link pagination-nav__link--next" href=/BetweenUs/architecture/notifications><div class=pagination-nav__sublabel>Next</div><div class=pagination-nav__label>Notifications</div></a></nav></div></div><div class="col col--3"><div class="tableOfContents_bqdL thin-scrollbar theme-doc-toc-desktop"><ul class="table-of-contents table-of-contents__left-border"><li><a href=#status class="table-of-contents__link toc-highlight">Status</a><li><a href=#modules class="table-of-contents__link toc-highlight">Modules</a><ul><li><a href=#core class="table-of-contents__link toc-highlight"><code>core</code></a><li><a href=#app--features class="table-of-contents__link toc-highlight"><code>app</code> — features</a></ul><li><a href=#which-day-a-message-was-sent class="table-of-contents__link toc-highlight">Which day a message was sent</a><li><a href=#searching-a-conversation class="table-of-contents__link toc-highlight">Searching a conversation</a><li><a href=#driving-somebodys-shared-screen class="table-of-contents__link toc-highlight">Driving somebody's shared screen</a><li><a href=#a-chair-at-play-together class="table-of-contents__link toc-highlight">A chair at Play Together</a><li><a href=#a-seat-at-listen-together class="table-of-contents__link toc-highlight">A seat at Listen Together</a><li><a href=#push-to-talk-with-a-thumb class="table-of-contents__link toc-highlight">Push to talk, with a thumb</a><li><a href=#getting-anywhere-from-anywhere class="table-of-contents__link toc-highlight">Getting anywhere from anywhere</a><li><a href=#one-name-drawn-once class="table-of-contents__link toc-highlight">One name, drawn once</a><li><a href=#one-shell-two-shapes class="table-of-contents__link toc-highlight">One shell, two shapes</a><ul><li><a href=#ui-common class="table-of-contents__link toc-highlight"><code>ui-common</code></a></ul><li><a href=#end-to-end-encryption-on-android class="table-of-contents__link toc-highlight">End-to-end encryption on Android</a><li><a href=#sign-in-from-a-phone class="table-of-contents__link toc-highlight">Sign-in from a phone</a><li><a href=#blocking-clearing-and-getting-back-in class="table-of-contents__link toc-highlight">Blocking, clearing, and getting back in</a><li><a href=#messages-that-stop-existing class="table-of-contents__link toc-highlight">Messages that stop existing</a><li><a href=#who-cancels-the-echo-and-when-the-setting-takes-effect class="table-of-contents__link toc-highlight">Who cancels the echo, and when the setting takes effect</a><li><a href=#input-sensitivity-and-the-hook-that-makes-it-possible class="table-of-contents__link toc-highlight">Input sensitivity, and the hook that makes it possible</a><li><a href=#backing-out-of-a-call class="table-of-contents__link toc-highlight">Backing out of a call</a><li><a href=#the-sound-of-a-shared-screen class="table-of-contents__link toc-highlight">The sound of a shared screen</a><li><a href=#push-notifications class="table-of-contents__link toc-highlight">Push notifications</a><li><a href=#building-it class="table-of-contents__link toc-highlight">Building it</a></ul></div></div></div></div></main></div></div></div><footer class="theme-layout-footer footer footer--dark"><div class="container container-fluid"><div class="row footer__links"><div class="theme-layout-footer-column col footer__col"><div class=footer__title>Docs</div><ul class="footer__items clean-list"><li class=footer__item><a class=footer__link-item href=/BetweenUs/architecture/overview>Architecture</a><li class=footer__item><a class=footer__link-item href=/BetweenUs/running-locally>Running Locally</a><li class=footer__item><a class=footer__link-item href=/BetweenUs/database/schema>Database Schema</a></ul></div><div class="theme-layout-footer-column col footer__col"><div class=footer__title>Project</div><ul class="footer__items clean-list"><li class=footer__item><a href=https://github.com/aiyu-ayaan/BetweenUs/releases target=_blank rel="noopener noreferrer" class=footer__link-item>Download App<svg width=13.5 height=13.5 aria-label="(opens in new tab)" class=iconExternalLink_nPIU><use href=#theme-svg-external-link /></svg></a><li class=footer__item><a href=https://github.com/aiyu-ayaan/BetweenUs target=_blank rel="noopener noreferrer" class=footer__link-item>GitHub<svg width=13.5 height=13.5 aria-label="(opens in new tab)" class=iconExternalLink_nPIU><use href=#theme-svg-external-link /></svg></a><li class=footer__item><a class=footer__link-item href=/BetweenUs/changelog>Changelog</a></ul></div></div><div class="footer__bottom text--center"><div class=footer__copyright>Copyright © 2026 BetweenUs. Built with Docusaurus.</div></div></div></footer></div></body>
