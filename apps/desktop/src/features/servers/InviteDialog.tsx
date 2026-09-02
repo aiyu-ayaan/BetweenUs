@@ -67,7 +67,7 @@ export function InviteDialog({ code, onClose }: { code: string; onClose: () => v
       onClick={onClose}
     >
       <div
-        className="w-full max-w-sm animate-pop overflow-hidden rounded-xl border border-edge bg-surface-900 text-left shadow-pop"
+        className="w-full max-w-sm animate-pop overflow-hidden rounded-xl border border-edge bg-surface-900 text-start shadow-pop"
         onClick={(event) => event.stopPropagation()}
       >
         <div className="flex flex-col items-center gap-3 px-6 pb-6 pt-8 text-center">

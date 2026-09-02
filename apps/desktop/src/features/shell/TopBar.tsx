@@ -47,7 +47,7 @@ export function TopBar({
       {/* Each toggle sits on the side it acts on. Both of them together in one
           corner is what the layout controls in most apps look like, and it
           leaves you guessing which button hides which column. */}
-      <div className={`flex w-36 shrink-0 items-center gap-1.5 ${isMac ? 'pl-[72px]' : 'pl-1'}`}>
+      <div className={`flex w-36 shrink-0 items-center gap-1.5 ${isMac ? 'ps-[72px]' : 'ps-1'}`}>
         <BetweenUsLogoIcon className="h-[18px] w-[18px] shrink-0 text-accent" aria-hidden="true" />
         <span className="truncate text-[13px] font-semibold tracking-tight text-slate-300">
           BetweenUs
@@ -69,7 +69,7 @@ export function TopBar({
         >
           <SearchIcon className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
           <span className="min-w-0 truncate">{here}</span>
-          <kbd className="ml-auto hidden shrink-0 rounded border border-edge px-1.5 py-px font-sans text-[11px] text-slate-500 sm:block">
+          <kbd className="ms-auto hidden shrink-0 rounded border border-edge px-1.5 py-px font-sans text-[11px] text-slate-500 sm:block">
             Ctrl K
           </kbd>
         </button>

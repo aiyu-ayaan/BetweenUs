@@ -164,7 +164,7 @@ export function SendPreview({
             disabled={sending}
             aria-label="Discard files"
             title="Discard"
-            className="ml-auto cursor-pointer rounded-md p-1.5 text-slate-400 transition-colors duration-150 hover:bg-white/[0.07] hover:text-slate-100 disabled:cursor-not-allowed"
+            className="ms-auto cursor-pointer rounded-md p-1.5 text-slate-400 transition-colors duration-150 hover:bg-white/[0.07] hover:text-slate-100 disabled:cursor-not-allowed"
           >
             <XIcon className="h-4 w-4" />
           </button>

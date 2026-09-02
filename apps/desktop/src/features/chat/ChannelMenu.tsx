@@ -63,7 +63,7 @@ export function ChannelMenu({ channel }: { channel: Channel }): JSX.Element {
         <div
           role="menu"
           aria-label="Channel options"
-          className="absolute right-0 top-full z-50 mt-1 w-56 animate-pop overflow-hidden rounded-xl border border-edge bg-surface-900 py-1 shadow-pop"
+          className="absolute end-0 top-full z-50 mt-1 w-56 animate-pop overflow-hidden rounded-xl border border-edge bg-surface-900 py-1 shadow-pop"
         >
           {/* Above "clear chat", because it is the same subject arrived at
               from the other end: one draws a line once, the other keeps
@@ -76,7 +76,7 @@ export function ChannelMenu({ channel }: { channel: Channel }): JSX.Element {
               setOpen(false);
               setWindows(true);
             }}
-            className="flex w-full cursor-pointer items-center gap-2 px-3 py-1.5 text-left text-sm text-slate-200 transition-colors duration-150 hover:bg-white/[0.07]"
+            className="flex w-full cursor-pointer items-center gap-2 px-3 py-1.5 text-start text-sm text-slate-200 transition-colors duration-150 hover:bg-white/[0.07]"
           >
             <ClockIcon className="h-4 w-4" />
             Disappearing messages
@@ -89,7 +89,7 @@ export function ChannelMenu({ channel }: { channel: Channel }): JSX.Element {
               setOpen(false);
               setConfirming(true);
             }}
-            className="flex w-full cursor-pointer items-center gap-2 px-3 py-1.5 text-left text-sm text-danger transition-colors duration-150 hover:bg-danger hover:text-white"
+            className="flex w-full cursor-pointer items-center gap-2 px-3 py-1.5 text-start text-sm text-danger transition-colors duration-150 hover:bg-danger hover:text-white"
           >
             <TrashIcon className="h-4 w-4" />
             Clear chat

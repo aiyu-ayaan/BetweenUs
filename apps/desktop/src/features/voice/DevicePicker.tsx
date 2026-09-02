@@ -39,7 +39,7 @@ export function DevicePicker({ onClose }: { onClose: () => void }): JSX.Element 
   return (
     <div
       ref={panel}
-      className="absolute bottom-full left-0 z-30 mb-2 w-72 space-y-4 rounded-lg bg-surface-800 p-4 shadow-lg"
+      className="absolute bottom-full start-0 z-30 mb-2 w-72 space-y-4 rounded-lg bg-surface-800 p-4 shadow-lg"
     >
       <DeviceSelect
         label="Input device"

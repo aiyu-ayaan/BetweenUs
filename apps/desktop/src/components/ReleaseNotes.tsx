@@ -73,7 +73,7 @@ function List({ items }: { items: Block[] }): JSX.Element {
     <Tag className="space-y-0.5">
       {items.map((item, index) => (
         <li key={index} className="flex gap-2">
-          <span aria-hidden="true" className="w-4 shrink-0 text-right text-slate-500">
+          <span aria-hidden="true" className="w-4 shrink-0 text-end text-slate-500">
             {numbered ? `${item.ordinal}.` : '•'}
           </span>
           <span className="min-w-0 flex-1">
@@ -115,7 +115,7 @@ function Piece({ block }: { block: Block }): JSX.Element {
 
   if (block.kind === 'quote') {
     return (
-      <blockquote className="whitespace-pre-wrap break-words border-l-[3px] border-edge pl-2.5 text-slate-400">
+      <blockquote className="whitespace-pre-wrap break-words border-s-[3px] border-edge ps-2.5 text-slate-400">
         <Inline block={block} />
       </blockquote>
     );

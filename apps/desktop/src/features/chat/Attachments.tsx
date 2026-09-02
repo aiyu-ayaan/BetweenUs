@@ -386,7 +386,7 @@ function MediaAttachment({
             <span className="truncate text-xs text-slate-400">
               {attachment.name} · {formatBytes(attachment.size)}
             </span>
-            <div className="ml-auto">
+            <div className="ms-auto">
               <IconButton
                 label="Download"
                 onClick={() => void saveAttachment(channelId, attachment)}
@@ -442,7 +442,7 @@ function TextAttachment({
           {attachment.overflow ? 'Message too long, sent as a file' : attachment.name} ·{' '}
           {formatBytes(attachment.size)}
         </span>
-        <div className="ml-auto flex gap-1">
+        <div className="ms-auto flex gap-1">
           {truncated && <IconButton label="Expand" onClick={onOpen} icon={<EyeIcon className="h-4 w-4" />} />}
           <IconButton
             label="Download"
@@ -574,7 +574,7 @@ function OneTimeAttachments({
               holdMessage(messageId);
               setOpen(true);
             }}
-            className={`flex min-w-0 flex-1 items-center gap-3 rounded-lg border px-3 py-2.5 text-left transition-colors duration-200 ${
+            className={`flex min-w-0 flex-1 items-center gap-3 rounded-lg border px-3 py-2.5 text-start transition-colors duration-200 ${
               canOpen
                 ? 'cursor-pointer border-accent/40 bg-accent/[0.06] hover:bg-accent/[0.12]'
                 : 'cursor-not-allowed border-edge bg-surface-850'
@@ -1045,7 +1045,7 @@ function PreviewOverlay({
           {!isImage && (
             <span className="text-xs text-slate-400">{formatBytes(attachment.size)}</span>
           )}
-          <div className="ml-auto flex gap-1">
+          <div className="ms-auto flex gap-1">
             {at >= 0 && siblings.length > 1 && (
               <>
                 <IconButton label="Previous" onClick={() => step(-1)} icon={<span aria-hidden>‹</span>} />

@@ -127,7 +127,7 @@ export function ServerPicker({ onClose }: { onClose: () => void }): JSX.Element 
                         setAddress(url);
                         setNote(null);
                       }}
-                      className="min-w-0 flex-1 cursor-pointer truncate rounded-md bg-surface-800 px-3 py-1.5 text-left text-sm text-slate-300 transition-colors duration-150 hover:bg-white/[0.06] hover:text-slate-100 disabled:opacity-60"
+                      className="min-w-0 flex-1 cursor-pointer truncate rounded-md bg-surface-800 px-3 py-1.5 text-start text-sm text-slate-300 transition-colors duration-150 hover:bg-white/[0.06] hover:text-slate-100 disabled:opacity-60"
                     >
                       {url}
                     </button>

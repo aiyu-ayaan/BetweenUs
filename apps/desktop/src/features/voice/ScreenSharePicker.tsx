@@ -102,7 +102,7 @@ export function ScreenSharePicker({ onClose }: { onClose: () => void }): JSX.Ele
           <ScreenShareIcon className="h-5 w-5 text-slate-400" />
           <h2 className="font-semibold text-slate-100">Screen share</h2>
           {native && (
-            <div className="ml-auto flex gap-1 rounded-md bg-surface-900 p-1">
+            <div className="ms-auto flex gap-1 rounded-md bg-surface-900 p-1">
               <TabButton active={tab === 'screen'} onClick={() => setTab('screen')}>
                 Screens
               </TabButton>
@@ -140,7 +140,7 @@ export function ScreenSharePicker({ onClose }: { onClose: () => void }): JSX.Ele
                   onClick={() => setSelected(source.id)}
                   onDoubleClick={start}
                   aria-pressed={selected === source.id}
-                  className={`w-full cursor-pointer overflow-hidden rounded-lg border-2 bg-surface-900 text-left transition-colors duration-200 ${
+                  className={`w-full cursor-pointer overflow-hidden rounded-lg border-2 bg-surface-900 text-start transition-colors duration-200 ${
                     selected === source.id
                       ? 'border-accent'
                       : 'border-transparent hover:border-surface-700'
@@ -219,7 +219,7 @@ export function ScreenSharePicker({ onClose }: { onClose: () => void }): JSX.Ele
           <button
             type="button"
             onClick={onClose}
-            className="ml-auto cursor-pointer rounded-md px-4 py-2 text-sm text-slate-300 transition-colors duration-200 hover:bg-white/[0.06]"
+            className="ms-auto cursor-pointer rounded-md px-4 py-2 text-sm text-slate-300 transition-colors duration-200 hover:bg-white/[0.06]"
           >
             Cancel
           </button>
@@ -254,7 +254,7 @@ function IntentCard({
       type="button"
       onClick={onClick}
       aria-pressed={active}
-      className={`flex-1 cursor-pointer rounded-lg border-2 px-3 py-2 text-left transition-colors duration-200 ${
+      className={`flex-1 cursor-pointer rounded-lg border-2 px-3 py-2 text-start transition-colors duration-200 ${
         active ? 'border-accent bg-accent/10' : 'border-surface-700 hover:border-surface-600'
       }`}
     >

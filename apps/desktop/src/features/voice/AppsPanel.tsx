@@ -46,7 +46,7 @@ export function AppsPanel(): JSX.Element {
           onClick={() => useAppsStore.getState().setOpen(false)}
           aria-label="Close apps"
           title="Back to the call"
-          className="ml-auto cursor-pointer rounded p-1 text-slate-400 transition-colors hover:bg-white/[0.06] hover:text-slate-200"
+          className="ms-auto cursor-pointer rounded p-1 text-slate-400 transition-colors hover:bg-white/[0.06] hover:text-slate-200"
         >
           <XIcon className="h-4 w-4" />
         </button>
@@ -112,7 +112,7 @@ function AppCard({
     <button
       type="button"
       onClick={onClick}
-      className={`flex cursor-pointer flex-col gap-2 rounded-xl border p-4 text-left transition-colors ${
+      className={`flex cursor-pointer flex-col gap-2 rounded-xl border p-4 text-start transition-colors ${
         status ? ring : 'border-white/10 hover:border-white/20'
       } bg-surface-900 hover:bg-white/[0.04]`}
     >
@@ -130,7 +130,7 @@ function AppCard({
             on
           </span>
         )}
-        <ChevronRightIcon className="ml-auto h-4 w-4 text-slate-600" />
+        <ChevronRightIcon className="ms-auto h-4 w-4 text-slate-600" />
       </span>
 
       {status && (

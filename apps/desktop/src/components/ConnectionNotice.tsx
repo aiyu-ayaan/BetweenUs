@@ -5,6 +5,7 @@ import {
   retryConnection,
   type ConnectionState,
 } from '../services/socket';
+import { t } from '../services/i18n';
 
 /**
  * What the realtime connection is doing, when it is not simply working.
@@ -14,6 +15,11 @@ import {
  * arrive either way - and that silence was the thing people read as the app
  * being broken. It is a bar rather than a modal: the history on screen is still
  * readable, and reading it is most of what somebody does while waiting.
+ *
+ * The worked example for `services/i18n.ts`: every string here goes through
+ * `t(key, english)`, which is what the rest of the client's screens will look
+ * like once each is extracted. Nothing else in the app does yet - the
+ * extraction is per-screen and this is one screen.
  */
 export function ConnectionNotice(): JSX.Element | null {
   const [state, setState] = useState<ConnectionState>(connectionState);
@@ -33,14 +39,16 @@ export function ConnectionNotice(): JSX.Element | null {
       }`}
     >
       {reconnecting && <Spinner />}
-      <span>{reconnecting ? 'Reconnecting…' : 'Disconnected'}</span>
+      <span>{reconnecting
+          ? t('connection.reconnecting', 'Reconnecting…')
+          : t('connection.offline', 'Disconnected')}</span>
       {!reconnecting && (
         <button
           type="button"
           onClick={retryConnection}
           className="rounded-md bg-red-500/20 px-2 py-0.5 font-medium hover:bg-red-500/30"
         >
-          Try again
+          {t('connection.retry', 'Try again')}
         </button>
       )}
     </div>

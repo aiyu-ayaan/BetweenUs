@@ -60,7 +60,7 @@ export function UserPanel({ onOpenSettings }: { onOpenSettings: () => void }): J
           target="_blank"
           rel="noreferrer noopener"
           title="Voice calls, screen sharing and one-time messages all work in the app"
-          className="flex shrink-0 cursor-pointer items-center gap-2 border-t border-edge bg-accent/[0.06] px-3 py-2 text-left transition-colors duration-200 hover:bg-accent/[0.12]"
+          className="flex shrink-0 cursor-pointer items-center gap-2 border-t border-edge bg-accent/[0.06] px-3 py-2 text-start transition-colors duration-200 hover:bg-accent/[0.12]"
         >
           <AppDownloadIcon className="h-4 w-4 shrink-0 text-accent" />
           <span className="min-w-0 flex-1">
@@ -79,7 +79,7 @@ export function UserPanel({ onOpenSettings }: { onOpenSettings: () => void }): J
         <div
           role="menu"
           aria-label="Set status"
-          className="absolute bottom-full left-2 z-40 mb-2 w-60 animate-pop overflow-hidden rounded-xl border border-edge bg-surface-950 py-1.5 shadow-pop"
+          className="absolute bottom-full start-2 z-40 mb-2 w-60 animate-pop overflow-hidden rounded-xl border border-edge bg-surface-950 py-1.5 shadow-pop"
         >
           {STATUS_CHOICES.map((choice) => (
             <button
@@ -91,7 +91,7 @@ export function UserPanel({ onOpenSettings }: { onOpenSettings: () => void }): J
                 setStatus(choice.value);
                 setOpen(false);
               }}
-              className="flex w-full cursor-pointer items-start gap-2.5 px-3 py-2 text-left hover:bg-white/[0.06]"
+              className="flex w-full cursor-pointer items-start gap-2.5 px-3 py-2 text-start hover:bg-white/[0.06]"
             >
               <span
                 aria-hidden="true"
@@ -116,7 +116,7 @@ export function UserPanel({ onOpenSettings }: { onOpenSettings: () => void }): J
         aria-haspopup="menu"
         aria-expanded={open}
         aria-label="Set your status"
-        className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 rounded px-1 py-1 text-left transition-colors duration-200 hover:bg-white/[0.06]"
+        className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 rounded px-1 py-1 text-start transition-colors duration-200 hover:bg-white/[0.06]"
       >
         <Avatar
           name={user?.displayName ?? '?'}

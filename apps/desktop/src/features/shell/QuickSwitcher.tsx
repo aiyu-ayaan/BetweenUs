@@ -161,7 +161,7 @@ export function QuickSwitcher({ onClose }: { onClose: () => void }): JSX.Element
                 type="button"
                 onMouseEnter={() => setCursor(index)}
                 onClick={() => run(entry)}
-                className={`flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2.5 sm:py-2 text-left min-h-[44px] sm:min-h-0 transition-colors duration-100 ${
+                className={`flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2.5 sm:py-2 text-start min-h-[44px] sm:min-h-0 transition-colors duration-100 ${
                   index === cursor ? 'bg-accent/20 text-slate-50' : 'text-slate-300'
                 }`}
               >

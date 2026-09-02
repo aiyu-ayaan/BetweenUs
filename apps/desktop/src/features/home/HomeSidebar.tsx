@@ -57,7 +57,7 @@ export function HomeSidebar({
           type="button"
           onClick={onShowFriends}
           aria-current={showingFriends ? 'page' : undefined}
-          className={`flex w-full cursor-pointer items-center gap-3 rounded-md px-2 py-2 text-left transition-colors duration-200 ${
+          className={`flex w-full cursor-pointer items-center gap-3 rounded-md px-2 py-2 text-start transition-colors duration-200 ${
             showingFriends
               ? 'row-active'
               : 'row-idle'
@@ -85,7 +85,7 @@ export function HomeSidebar({
             type="button"
             onClick={onShowRemote}
             aria-current={showingRemote ? 'page' : undefined}
-            className={`mt-0.5 flex w-full cursor-pointer items-center gap-3 rounded-md px-2 py-2 text-left transition-colors duration-200 ${
+            className={`mt-0.5 flex w-full cursor-pointer items-center gap-3 rounded-md px-2 py-2 text-start transition-colors duration-200 ${
               showingRemote
                 ? 'row-active'
                 : 'row-idle'
@@ -118,7 +118,7 @@ export function HomeSidebar({
                 type="button"
                 onClick={() => void openDirect(direct.participant.id)}
                 aria-current={active ? 'page' : undefined}
-                className={`group flex w-full cursor-pointer items-center gap-3 rounded-md px-2 py-1.5 text-left transition-colors duration-200 ${
+                className={`group flex w-full cursor-pointer items-center gap-3 rounded-md px-2 py-1.5 text-start transition-colors duration-200 ${
                   active
                     ? 'row-active'
                     : 'row-idle'

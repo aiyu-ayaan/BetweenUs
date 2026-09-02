@@ -573,7 +573,7 @@ function Workbench(): JSX.Element {
             role="dialog"
             aria-label="Details panel"
             aria-modal="true"
-            className={`fixed inset-y-0 right-0 z-50 flex w-[320px] max-w-[85vw] flex-col bg-surface-900 border-l border-edge shadow-2xl transition-transform duration-300 ease-out ${
+            className={`fixed inset-y-0 end-0 z-50 flex w-[320px] max-w-[85vw] flex-col bg-surface-900 border-s border-edge shadow-2xl transition-transform duration-300 ease-out ${
               isRightPanelOpen ? 'translate-x-0' : 'translate-x-full pointer-events-none'
             }`}
           >

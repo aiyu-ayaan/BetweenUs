@@ -124,7 +124,7 @@ export function MessageMenu({
           }}
           aria-label="More emoji"
           title="More emoji"
-          className="ml-auto cursor-pointer rounded p-1 text-slate-300 transition-colors duration-150 hover:bg-white/[0.07] hover:text-slate-100"
+          className="ms-auto cursor-pointer rounded p-1 text-slate-300 transition-colors duration-150 hover:bg-white/[0.07] hover:text-slate-100"
         >
           <SmileIcon className="h-4 w-4" />
         </button>
@@ -223,7 +223,7 @@ function Item({
       onClick={onClick}
       disabled={disabled}
       title={hint}
-      className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm transition-colors duration-150 ${
+      className={`flex w-full items-center gap-2 px-3 py-1.5 text-start text-sm transition-colors duration-150 ${
         disabled
           ? 'cursor-not-allowed text-slate-500'
           : danger

@@ -72,7 +72,7 @@ export function ChannelSidebar({
               type="button"
               onClick={() => void selectChannel(channel.id)}
               aria-current={channel.id === activeChannelId ? 'page' : undefined}
-              className={`group flex w-full cursor-pointer items-center gap-1.5 rounded-md px-2 py-1.5 text-left text-[15px] transition-colors duration-200 ${
+              className={`group flex w-full cursor-pointer items-center gap-1.5 rounded-md px-2 py-1.5 text-start text-[15px] transition-colors duration-200 ${
                 channel.id === activeChannelId
                   ? 'row-active'
                   : 'row-idle'
@@ -83,7 +83,7 @@ export function ChannelSidebar({
                 {channel.name}
               </span>
               {unread[channel.id] ? (
-                <span className="ml-auto rounded-full bg-danger px-1.5 text-xs font-bold text-white">
+                <span className="ms-auto rounded-full bg-danger px-1.5 text-xs font-bold text-white">
                   {unread[channel.id]}
                   <span className="sr-only"> unread messages</span>
                 </span>
@@ -131,7 +131,7 @@ function ChannelGlyph({ channel }: { channel: Channel }): JSX.Element {
     <span className="relative flex h-5 w-5 shrink-0 items-center justify-center">
       <Glyph className="h-5 w-5" />
       {channel.isPrivate && (
-        <LockIcon className="absolute -bottom-0.5 -right-1 h-3 w-3 rounded-full bg-surface-800 text-slate-400" />
+        <LockIcon className="absolute -bottom-0.5 -end-1 h-3 w-3 rounded-full bg-surface-800 text-slate-400" />
       )}
     </span>
   );
@@ -161,7 +161,7 @@ function ServerHeader({
         onClick={onToggle}
         aria-haspopup="menu"
         aria-expanded={open}
-        className="flex h-12 w-full cursor-pointer items-center gap-2 border-b border-edge px-4 text-left transition-colors duration-200 hover:bg-white/[0.05]"
+        className="flex h-12 w-full cursor-pointer items-center gap-2 border-b border-edge px-4 text-start transition-colors duration-200 hover:bg-white/[0.05]"
       >
         <h2 className="min-w-0 flex-1 truncate font-semibold text-slate-50">{name}</h2>
         {open ? (
@@ -256,7 +256,7 @@ function VoiceChannelRow({ channel }: { channel: Channel }): JSX.Element {
         type="button"
         onClick={open}
         aria-current={viewing ? 'page' : undefined}
-        className={`flex w-full cursor-pointer items-center gap-1.5 rounded-md px-2 py-1.5 text-left text-[15px] transition-colors duration-200 ${
+        className={`flex w-full cursor-pointer items-center gap-1.5 rounded-md px-2 py-1.5 text-start text-[15px] transition-colors duration-200 ${
           here || connectingHere || viewing
             ? 'row-active'
             : 'row-idle'
@@ -268,11 +268,11 @@ function VoiceChannelRow({ channel }: { channel: Channel }): JSX.Element {
           <span className="animate-pulse text-xs text-status-online">connecting…</span>
         )}
         {occupants.length > 0 && (
-          <span className="ml-auto text-xs text-slate-500">{occupants.length}</span>
+          <span className="ms-auto text-xs text-slate-500">{occupants.length}</span>
         )}
       </button>
 
-      <ul className="space-y-0.5 pl-8">
+      <ul className="space-y-0.5 ps-8">
         {occupants.map((userId) => {
           const member = members.find((item) => item.userId === userId);
           return (

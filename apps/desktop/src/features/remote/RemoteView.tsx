@@ -63,7 +63,7 @@ export function RemoteView({ onOpenMenu }: { onOpenMenu?: () => void } = {}): JS
         <button
           type="button"
           onClick={() => void load()}
-          className="ml-auto cursor-pointer rounded px-3 py-1.5 text-sm text-slate-300 transition-colors duration-200 hover:bg-white/[0.1] min-h-[36px]"
+          className="ms-auto cursor-pointer rounded px-3 py-1.5 text-sm text-slate-300 transition-colors duration-200 hover:bg-white/[0.1] min-h-[36px]"
         >
           Refresh
         </button>
@@ -281,12 +281,12 @@ function AccessDialog({
                       <button
                         type="button"
                         onClick={() => void save(user.id, ['REMOTE_VIEW'], null)}
-                        className="flex w-full cursor-pointer items-center gap-3 rounded-md px-2 py-2 text-left transition-colors duration-200 hover:bg-white/[0.06]"
+                        className="flex w-full cursor-pointer items-center gap-3 rounded-md px-2 py-2 text-start transition-colors duration-200 hover:bg-white/[0.06]"
                       >
                         <Avatar name={user.displayName} avatarUrl={user.avatarUrl} size="sm" />
                         <span className="min-w-0 flex-1 truncate text-sm text-slate-100">
                           {user.displayName}
-                          <span className="ml-1 text-slate-500">@{user.username}</span>
+                          <span className="ms-1 text-slate-500">@{user.username}</span>
                         </span>
                         <span className="text-xs text-slate-400">Add as viewer</span>
                       </button>
@@ -315,7 +315,7 @@ function AccessDialog({
                   {entry.actorUsername && (
                     <span className="text-slate-400"> · {entry.actorUsername}</span>
                   )}
-                  <span className="ml-2 text-xs text-slate-500">{formatWhen(entry.createdAt)}</span>
+                  <span className="ms-2 text-xs text-slate-500">{formatWhen(entry.createdAt)}</span>
                   {entry.detail && (
                     <pre className="mt-1 overflow-x-auto text-xs text-slate-500">
                       {JSON.stringify(entry.detail)}

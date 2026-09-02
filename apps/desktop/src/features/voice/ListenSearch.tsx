@@ -129,7 +129,7 @@ export function ListenSearch(): JSX.Element {
           </p>
         </div>
       ) : (
-        <ul className="grid min-h-0 flex-1 auto-rows-min grid-cols-2 gap-2 overflow-y-auto pr-1 sm:grid-cols-3">
+        <ul className="grid min-h-0 flex-1 auto-rows-min grid-cols-2 gap-2 overflow-y-auto pe-1 sm:grid-cols-3">
           {results.map((result) => (
             <li key={result.videoId}>
               <div className="group relative overflow-hidden rounded-lg bg-surface-800">
@@ -137,7 +137,7 @@ export function ListenSearch(): JSX.Element {
                   type="button"
                   onClick={() => play(result.videoId)}
                   title={`Play ${result.title} for everyone`}
-                  className="block w-full cursor-pointer text-left transition-colors hover:bg-white/[0.06]"
+                  className="block w-full cursor-pointer text-start transition-colors hover:bg-white/[0.06]"
                 >
                   <div className="aspect-video w-full bg-black">
                     {result.thumbnail && (
@@ -163,7 +163,7 @@ export function ListenSearch(): JSX.Element {
                   onClick={() => queue(result.videoId)}
                   aria-label={`Add ${result.title} to the queue`}
                   title="Add to the queue"
-                  className="absolute right-1.5 top-1.5 flex cursor-pointer items-center gap-1 rounded bg-black/70 px-1.5 py-1 text-[10px] font-medium text-amber-200 opacity-0 transition-opacity hover:bg-black/90 focus-visible:opacity-100 group-hover:opacity-100"
+                  className="absolute end-1.5 top-1.5 flex cursor-pointer items-center gap-1 rounded bg-black/70 px-1.5 py-1 text-[10px] font-medium text-amber-200 opacity-0 transition-opacity hover:bg-black/90 focus-visible:opacity-100 group-hover:opacity-100"
                 >
                   <PlusIcon className="h-3 w-3" />
                   {added === result.videoId ? 'Added' : 'Queue'}

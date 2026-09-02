@@ -66,6 +66,7 @@ import {
 import { useUpdateStore } from '../../stores/updates';
 import { ReleaseNotes } from '../../components/ReleaseNotes';
 import { DENSITIES, DENSITY_LABELS } from '../../services/density';
+import { LOCALES } from '../../services/i18n';
 import {
   useThemeStore,
   THEMES,
@@ -172,7 +173,7 @@ export function UserSettings({ onClose }: { onClose: () => void }): JSX.Element 
 
       {/* Desktop Top Bar / Window Controls Header */}
       <header className="drag-region hidden md:flex h-10 shrink-0 items-center justify-between px-2.5">
-        <div className={`flex items-center gap-1.5 ${isMac ? 'pl-[72px]' : 'pl-1'}`}>
+        <div className={`flex items-center gap-1.5 ${isMac ? 'ps-[72px]' : 'ps-1'}`}>
           <BetweenUsLogoIcon className="h-[18px] w-[18px] shrink-0 text-accent" aria-hidden="true" />
           <span className="truncate text-[13px] font-semibold tracking-tight text-slate-300">
             BetweenUs
@@ -187,7 +188,7 @@ export function UserSettings({ onClose }: { onClose: () => void }): JSX.Element 
       <div className="flex min-h-0 flex-1 gap-0 md:gap-1.5 p-0 md:px-1.5 md:pb-1.5">
         <nav
           aria-label="Settings sections"
-          className="panel hidden md:flex w-[232px] shrink-0 flex-col items-end overflow-y-auto bg-surface-800 py-8 pr-2"
+          className="panel hidden md:flex w-[232px] shrink-0 flex-col items-end overflow-y-auto bg-surface-800 py-8 pe-2"
         >
         <div className="w-[192px]">
           <p className="px-2.5 pb-1 text-xs font-bold uppercase tracking-wide text-slate-400">
@@ -199,7 +200,7 @@ export function UserSettings({ onClose }: { onClose: () => void }): JSX.Element 
               type="button"
               onClick={() => setSection(entry.id)}
               aria-current={section === entry.id ? 'page' : undefined}
-              className={`mt-0.5 flex w-full cursor-pointer items-center gap-2 rounded px-2.5 py-1.5 text-left text-[15px] transition-colors duration-200 ${
+              className={`mt-0.5 flex w-full cursor-pointer items-center gap-2 rounded px-2.5 py-1.5 text-start text-[15px] transition-colors duration-200 ${
                 section === entry.id
                   ? 'row-active'
                   : 'text-slate-300 hover:bg-white/[0.05]'
@@ -215,7 +216,7 @@ export function UserSettings({ onClose }: { onClose: () => void }): JSX.Element 
           <button
             type="button"
             onClick={() => void logout()}
-            className="flex w-full cursor-pointer items-center justify-between rounded px-2.5 py-1.5 text-left text-[15px] text-slate-300 transition-colors duration-200 hover:bg-danger hover:text-white"
+            className="flex w-full cursor-pointer items-center justify-between rounded px-2.5 py-1.5 text-start text-[15px] text-slate-300 transition-colors duration-200 hover:bg-danger hover:text-white"
           >
             Log out
             <LogOutIcon className="h-4 w-4" />
@@ -236,7 +237,7 @@ export function UserSettings({ onClose }: { onClose: () => void }): JSX.Element 
         </div>
 
         {/* Desktop Close ESC button */}
-        <div className="fixed top-14 right-8 md:right-10 z-50 hidden md:block no-drag">
+        <div className="fixed top-14 end-8 md:end-10 z-50 hidden md:block no-drag">
           <button
             type="button"
             onClick={onClose}
@@ -940,7 +941,7 @@ function DeviceList(): JSX.Element {
               <p className="truncate text-sm text-slate-100">
                 {device.label ?? 'Unnamed machine'}
                 {device.deviceId === mine && (
-                  <span className="ml-2 text-xs text-accent">this one</span>
+                  <span className="ms-2 text-xs text-accent">this one</span>
                 )}
               </p>
               <p className="truncate text-xs text-slate-500">
@@ -1909,7 +1910,7 @@ function UpdatesSection(): JSX.Element {
                 type="button"
                 onClick={() => void setChannel(entry.id)}
                 aria-pressed={info?.channel === entry.id}
-                className={`flex-1 cursor-pointer rounded-lg px-3 py-2 text-left transition-colors duration-200 ${
+                className={`flex-1 cursor-pointer rounded-lg px-3 py-2 text-start transition-colors duration-200 ${
                   info?.channel === entry.id
                     ? 'bg-surface-700 ring-2 ring-accent'
                     : 'bg-surface-800 hover:bg-surface-700'
@@ -1970,7 +1971,7 @@ function UpdatesSection(): JSX.Element {
                 {offer.asset.size > 0 && ` · ${Math.round(offer.asset.size / 1_000_000)} MB`}
               </p>
               {offer.notes && (
-                <div className="mt-3 max-h-64 overflow-y-auto pr-1">
+                <div className="mt-3 max-h-64 overflow-y-auto pe-1">
                   <ReleaseNotes text={offer.notes} />
                 </div>
               )}
@@ -2028,6 +2029,8 @@ function AppearanceSection(): JSX.Element {
   const setFollowSystem = useThemeStore((state) => state.setFollowSystem);
   const setCustomAccent = useThemeStore((state) => state.setCustomAccent);
   const density = useThemeStore((state) => state.settings.density);
+  const uiLocale = useThemeStore((state) => state.settings.locale);
+  const setInterfaceLocale = useThemeStore((state) => state.setInterfaceLocale);
   const setDensity = useThemeStore((state) => state.setDensity);
 
   const themeList = Object.values(THEMES);
@@ -2075,7 +2078,7 @@ function AppearanceSection(): JSX.Element {
           </div>
           <span className="text-xs text-slate-400">
             Active: <span className="font-semibold text-slate-100">{activeDef.name}</span>
-            {settings.followSystem && <span className="ml-1 text-accent">(Auto)</span>}
+            {settings.followSystem && <span className="ms-1 text-accent">(Auto)</span>}
           </span>
         </div>
 
@@ -2112,7 +2115,7 @@ function AppearanceSection(): JSX.Element {
                 type="button"
                 onClick={() => setTheme(theme.id)}
                 aria-pressed={isSelected}
-                className={`group relative flex flex-col text-left cursor-pointer overflow-hidden rounded-xl border transition-all duration-200 focus:outline-none ${
+                className={`group relative flex flex-col text-start cursor-pointer overflow-hidden rounded-xl border transition-all duration-200 focus:outline-none ${
                   isSelected
                     ? 'border-accent bg-surface-800 ring-2 ring-accent/30 shadow-md scale-[1.01]'
                     : 'border-edge bg-surface-850 hover:border-slate-500/30 hover:bg-surface-800 active:scale-[0.99]'
@@ -2157,8 +2160,8 @@ function AppearanceSection(): JSX.Element {
                         />
                         <div className="h-1 w-6 rounded bg-white/40" />
                       </div>
-                      <div className="h-1.5 w-8 rounded bg-white/15 ml-1" />
-                      <div className="h-1.5 w-6 rounded bg-white/15 ml-1" />
+                      <div className="h-1.5 w-8 rounded bg-white/15 ms-1" />
+                      <div className="h-1.5 w-6 rounded bg-white/15 ms-1" />
                     </div>
 
                     {/* Main Surface mock */}
@@ -2174,7 +2177,7 @@ function AppearanceSection(): JSX.Element {
                           />
                           <div className="h-1.5 w-12 rounded bg-white/40" />
                         </div>
-                        <div className="h-1 w-16 rounded bg-white/20 ml-3.5" />
+                        <div className="h-1 w-16 rounded bg-white/20 ms-3.5" />
                       </div>
 
                       {/* Mock chat bubble */}
@@ -2189,7 +2192,7 @@ function AppearanceSection(): JSX.Element {
 
                   {/* Active Indicator Checkmark */}
                   {isSelected && (
-                    <div className="absolute top-2.5 right-2.5 flex h-5 w-5 items-center justify-center rounded-full bg-accent text-white shadow-sm ring-2 ring-surface-900">
+                    <div className="absolute top-2.5 end-2.5 flex h-5 w-5 items-center justify-center rounded-full bg-accent text-white shadow-sm ring-2 ring-surface-900">
                       <CheckIcon className="h-3.5 w-3.5 stroke-[3]" />
                     </div>
                   )}
@@ -2281,7 +2284,7 @@ function AppearanceSection(): JSX.Element {
                 type="button"
                 onClick={() => setDensity(option)}
                 aria-pressed={active}
-                className={`flex min-w-[180px] flex-1 cursor-pointer flex-col items-start gap-0.5 rounded-lg border px-3 py-2.5 text-left transition-colors duration-150 ${
+                className={`flex min-w-[180px] flex-1 cursor-pointer flex-col items-start gap-0.5 rounded-lg border px-3 py-2.5 text-start transition-colors duration-150 ${
                   active
                     ? 'border-accent bg-accent/15 text-slate-100'
                     : 'border-edge bg-surface-800 text-slate-300 hover:bg-white/[0.04]'
@@ -2289,6 +2292,38 @@ function AppearanceSection(): JSX.Element {
               >
                 <span className="text-sm font-medium">{DENSITY_LABELS[option].label}</span>
                 <span className="text-xs text-slate-400">{DENSITY_LABELS[option].hint}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Language, which today is a direction */}
+      <div className="mt-8 border-t border-edge pt-7">
+        <h2 className="text-xs font-bold uppercase tracking-wide text-slate-400">Language</h2>
+        <p className="mt-1 text-sm text-slate-400">
+          BetweenUs is not translated yet, so every one of these still reads in English.
+          What changes today is the direction the layout runs in — pick Arabic or Hebrew and
+          the sidebars, menus and message rows move to the other side of the screen.
+        </p>
+        <div className="mt-3.5 flex flex-wrap gap-2">
+          {LOCALES.map((option) => {
+            const active = uiLocale === option.id;
+            return (
+              <button
+                key={option.id}
+                type="button"
+                onClick={() => setInterfaceLocale(option.id)}
+                aria-pressed={active}
+                lang={option.id}
+                className={`flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors duration-150 ${
+                  active
+                    ? 'border-accent bg-accent/15 text-slate-100'
+                    : 'border-edge bg-surface-800 text-slate-300 hover:bg-white/[0.04]'
+                }`}
+              >
+                <span>{option.label}</span>
+                <span className="text-xs uppercase text-slate-400">{option.direction}</span>
               </button>
             );
           })}
@@ -2310,7 +2345,7 @@ function AppearanceSection(): JSX.Element {
               <div className="row-active flex items-center gap-2 rounded px-2 py-1.5 text-xs font-medium cursor-pointer">
                 <span className="text-accent font-bold">#</span>
                 <span>general</span>
-                <span className="ml-auto flex h-2 w-2 rounded-full bg-status-online" />
+                <span className="ms-auto flex h-2 w-2 rounded-full bg-status-online" />
               </div>
               <div className="row-idle flex items-center gap-2 rounded px-2 py-1.5 text-xs font-medium cursor-pointer">
                 <span className="text-slate-500 font-bold">#</span>

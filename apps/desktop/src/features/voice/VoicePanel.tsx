@@ -51,7 +51,7 @@ export function VoicePanel(): JSX.Element | null {
         )}
         {/* Pushed to the end, so the channel name can be as long as it likes
             without the clock moving around under it. */}
-        <span className="ml-auto">
+        <span className="ms-auto">
           <CallDuration />
         </span>
       </p>
@@ -133,7 +133,7 @@ function Participant({ tile }: { tile: VoiceTile }): JSX.Element {
           {tile.isLocal && ' (you)'}
         </span>
 
-        {!tile.micEnabled && <MicOffIcon className="ml-auto h-3.5 w-3.5 shrink-0 text-danger" />}
+        {!tile.micEnabled && <MicOffIcon className="ms-auto h-3.5 w-3.5 shrink-0 text-danger" />}
 
         {/* Your own volume is the one thing this cannot change: you hear
             yourself through the room, not through the call. */}
@@ -144,7 +144,7 @@ function Participant({ tile }: { tile: VoiceTile }): JSX.Element {
             aria-expanded={open}
             aria-label={`Volume for ${tile.name}`}
             title={setting.muted ? `${tile.name} is silenced for you` : `Volume for ${tile.name}`}
-            className={`${tile.micEnabled ? 'ml-auto' : ''} cursor-pointer rounded p-1 transition-colors duration-150 hover:bg-white/[0.07] ${
+            className={`${tile.micEnabled ? 'ms-auto' : ''} cursor-pointer rounded p-1 transition-colors duration-150 hover:bg-white/[0.07] ${
               adjusted ? 'text-accent' : 'text-slate-500 hover:text-slate-200'
             }`}
           >
@@ -158,7 +158,7 @@ function Participant({ tile }: { tile: VoiceTile }): JSX.Element {
       </div>
 
       {open && !tile.isLocal && (
-        <div className="mt-1 flex items-center gap-2 pl-8 pr-1">
+        <div className="mt-1 flex items-center gap-2 ps-8 pe-1">
           <button
             type="button"
             onClick={() => toggleMuted(tile.userId)}
@@ -176,7 +176,7 @@ function Participant({ tile }: { tile: VoiceTile }): JSX.Element {
             aria-label={`How loud ${tile.name} is`}
             className="h-1 flex-1 cursor-pointer accent-accent disabled:opacity-40"
           />
-          <span className="w-8 shrink-0 text-right text-xs tabular-nums text-slate-500">
+          <span className="w-8 shrink-0 text-end text-xs tabular-nums text-slate-500">
             {Math.round(setting.volume * 100)}
           </span>
         </div>

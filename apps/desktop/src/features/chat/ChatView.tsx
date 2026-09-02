@@ -487,7 +487,7 @@ export function ChatView({
           </div>
         )}
 
-        <div className="ml-auto flex items-center gap-0.5 sm:gap-1">
+        <div className="ms-auto flex items-center gap-0.5 sm:gap-1">
           {isDirect && peer && <CallButton channelId={channel.id} peerId={peer.id} />}
           <PanelButton
             panel="pins"
@@ -849,14 +849,14 @@ function MessageList({
             setHighlighted(dividerId);
             window.setTimeout(() => setHighlighted(null), 2000);
           }}
-          className="sticky top-0 z-10 mb-2 flex w-full cursor-pointer items-center gap-2 rounded-md bg-danger/90 px-3 py-1.5 text-left text-xs font-medium text-white transition-colors duration-150 hover:bg-danger"
+          className="sticky top-0 z-10 mb-2 flex w-full cursor-pointer items-center gap-2 rounded-md bg-danger/90 px-3 py-1.5 text-start text-xs font-medium text-white transition-colors duration-150 hover:bg-danger"
         >
           <span>
             {unreadCount > 0
               ? `${unreadCount} new message${unreadCount === 1 ? '' : 's'}`
               : 'New messages'}
           </span>
-          <span className="ml-auto underline underline-offset-2">Jump to the first</span>
+          <span className="ms-auto underline underline-offset-2">Jump to the first</span>
         </button>
       )}
 
@@ -900,8 +900,8 @@ function MessageList({
           const bubbleRadius = grouped
             ? 'rounded-2xl'
             : isSelf
-              ? 'rounded-2xl rounded-tr-md'
-              : 'rounded-2xl rounded-tl-md';
+              ? 'rounded-2xl rounded-se-md'
+              : 'rounded-2xl rounded-ss-md';
 
           return (
             <Fragment key={message.id}>
@@ -1272,7 +1272,7 @@ function MessageEditor({
       />
       <p className="mt-1 text-xs text-slate-500">
         Enter to save · Escape to cancel
-        {failure && <span className="ml-2 text-danger">{failure}</span>}
+        {failure && <span className="ms-2 text-danger">{failure}</span>}
       </p>
     </div>
   );
@@ -1370,7 +1370,7 @@ function QuotedMessage({ reply }: { reply: MessageReply }): JSX.Element {
       type="button"
       onClick={() => jumpToMessage(reply.id)}
       title={`Go to ${reply.author}'s message`}
-      className="mb-0.5 flex w-full min-w-0 cursor-pointer items-center gap-1.5 rounded border-l-2 border-accent/50 bg-white/[0.02] py-0.5 pl-2 pr-1 text-left transition-colors duration-150 hover:bg-white/[0.05]"
+      className="mb-0.5 flex w-full min-w-0 cursor-pointer items-center gap-1.5 rounded border-s-2 border-accent/50 bg-white/[0.02] py-0.5 ps-2 pe-1 text-start transition-colors duration-150 hover:bg-white/[0.05]"
     >
       <ReplyIcon className="h-3 w-3 shrink-0 text-slate-500" />
       <span className="shrink-0 text-xs font-medium text-accent">{reply.author}</span>
@@ -1482,7 +1482,7 @@ function MarkupList({
     <Tag className="my-0.5 space-y-0.5">
       {items.map((item, index) => (
         <li key={index} className="flex gap-2">
-          <span aria-hidden="true" className="w-5 shrink-0 text-right text-slate-400">
+          <span aria-hidden="true" className="w-5 shrink-0 text-end text-slate-400">
             {numbered ? `${item.ordinal}.` : '•'}
           </span>
           <span className="min-w-0 flex-1">
@@ -1511,7 +1511,7 @@ function MarkupBlock({
 
   if (block.kind === 'quote') {
     return (
-      <blockquote className="my-1 whitespace-pre-wrap break-words border-l-[3px] border-edge pl-2.5 text-slate-400">
+      <blockquote className="my-1 whitespace-pre-wrap break-words border-s-[3px] border-edge ps-2.5 text-slate-400">
         <MarkupInline block={block} emoji={emoji} />
       </blockquote>
     );
@@ -1624,9 +1624,9 @@ function LinkPreviewCard({ url }: { url: string }): JSX.Element | null {
   }
 
   return (
-    <div className="mt-2.5 max-w-lg rounded-r-lg border border-edge border-l-4 border-l-accent bg-surface-900/90 p-3 shadow-md transition-all hover:bg-surface-850">
+    <div className="mt-2.5 max-w-lg rounded-e-lg border border-edge border-s-4 border-s-accent bg-surface-900/90 p-3 shadow-md transition-all hover:bg-surface-850">
       {/* Site Name & Favicon */}
-      <div className="flex items-center space-x-1.5 text-xs font-semibold text-slate-400">
+      <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-400">
         {preview.favicon && (
           <img
             src={preview.favicon}
@@ -2174,7 +2174,7 @@ function MessageComposer({
               onClick={() => setReplyTo(null)}
               aria-label="Cancel reply"
               title="Cancel reply"
-              className="ml-auto flex h-8 w-8 min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 sm:h-auto sm:w-auto cursor-pointer items-center justify-center text-slate-400 transition-colors duration-200 hover:text-danger"
+              className="ms-auto flex h-8 w-8 min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 sm:h-auto sm:w-auto cursor-pointer items-center justify-center text-slate-400 transition-colors duration-200 hover:text-danger"
             >
               <XIcon className="h-3.5 w-3.5" />
             </button>

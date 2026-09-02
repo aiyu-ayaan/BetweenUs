@@ -145,7 +145,7 @@ export function ShareStage({ share }: { share: VoiceShare }): JSX.Element {
           }}
         >
           <CursorMark />
-          <span className="ml-3 rounded bg-accent px-1.5 py-0.5 text-[11px] font-medium text-white shadow">
+          <span className="ms-3 rounded bg-accent px-1.5 py-0.5 text-[11px] font-medium text-white shadow">
             {pointer.name}
           </span>
         </span>

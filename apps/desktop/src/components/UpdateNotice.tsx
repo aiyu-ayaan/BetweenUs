@@ -42,7 +42,7 @@ export function UpdateNotice(): JSX.Element | null {
         {reloadReady
           ? 'A newer version of BetweenUs has been deployed. Reload to pick it up.'
           : `BetweenUs ${offer?.version ?? ''} is available.`}
-        {error ? <span className="ml-2 text-amber-200">{error}</span> : null}
+        {error ? <span className="ms-2 text-amber-200">{error}</span> : null}
       </span>
 
       {stage === 'downloading' ? (

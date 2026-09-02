@@ -94,7 +94,7 @@ export function FriendsView({ onOpenMenu }: { onOpenMenu?: () => void } = {}): J
           >
             {entry.label}
             {entry.id === 'pending' && pending.length > 0 && (
-              <span className="ml-1.5 rounded-full bg-danger px-1.5 py-0.2 text-[10px] font-bold text-white">
+              <span className="ms-1.5 rounded-full bg-danger px-1.5 py-0.2 text-[10px] font-bold text-white">
                 {pending.length}
               </span>
             )}
@@ -126,7 +126,7 @@ export function FriendsView({ onOpenMenu }: { onOpenMenu?: () => void } = {}): J
             >
               {entry.label}
               {entry.id === 'pending' && pending.length > 0 && (
-                <span className="ml-1.5 rounded-full bg-danger px-1.5 text-xs font-bold text-white">
+                <span className="ms-1.5 rounded-full bg-danger px-1.5 text-xs font-bold text-white">
                   {pending.length}
                 </span>
               )}
@@ -137,7 +137,7 @@ export function FriendsView({ onOpenMenu }: { onOpenMenu?: () => void } = {}): J
             role="tab"
             aria-selected={tab === 'add'}
             onClick={() => setTab('add')}
-            className={`ml-1 cursor-pointer whitespace-nowrap rounded px-2.5 py-1 text-sm font-medium transition-colors duration-200 shrink-0 ${
+            className={`ms-1 cursor-pointer whitespace-nowrap rounded px-2.5 py-1 text-sm font-medium transition-colors duration-200 shrink-0 ${
               tab === 'add'
                 ? 'bg-surface-700 text-status-online'
                 : 'bg-status-online text-white hover:opacity-90'

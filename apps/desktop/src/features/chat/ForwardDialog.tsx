@@ -199,7 +199,7 @@ export function ForwardDialog({
                   <button
                     type="button"
                     onClick={() => setAllDirects(true)}
-                    className="w-full cursor-pointer rounded-lg px-3 py-1.5 text-left text-xs font-medium text-slate-400 transition-colors duration-150 hover:bg-white/[0.05] hover:text-slate-200"
+                    className="w-full cursor-pointer rounded-lg px-3 py-1.5 text-start text-xs font-medium text-slate-400 transition-colors duration-150 hover:bg-white/[0.05] hover:text-slate-200"
                   >
                     Show {hidden} more conversation{hidden === 1 ? '' : 's'}
                   </button>
@@ -266,7 +266,7 @@ function Row({
       <button
         type="button"
         onClick={onClick}
-        className="flex w-full cursor-pointer items-center gap-3 rounded-lg px-3 py-2 text-left transition-colors duration-150 hover:bg-white/[0.05]"
+        className="flex w-full cursor-pointer items-center gap-3 rounded-lg px-3 py-2 text-start transition-colors duration-150 hover:bg-white/[0.05]"
       >
         {icon}
         <span className="min-w-0 flex-1 truncate text-sm text-slate-100">{name}</span>

@@ -136,7 +136,7 @@ export function ServerRail({ className }: { className?: string } = {}): JSX.Elem
           onClick={() => setDialog('none')}
         >
           <div
-            className="w-full max-w-md animate-pop overflow-hidden rounded-xl border border-edge bg-surface-900 p-6 text-left shadow-pop"
+            className="w-full max-w-md animate-pop overflow-hidden rounded-xl border border-edge bg-surface-900 p-6 text-start shadow-pop"
             onClick={(event) => event.stopPropagation()}
           >
             <h2 className="text-xl font-semibold text-slate-50">
@@ -220,7 +220,7 @@ function RailButton({
           same object at two lengths. */}
       <span
         aria-hidden="true"
-        className={`absolute -left-0.5 top-1/2 w-[3px] -translate-y-1/2 rounded-full bg-accent transition-[height,opacity] duration-200 ease-out ${
+        className={`absolute -start-0.5 top-1/2 w-[3px] -translate-y-1/2 rounded-full bg-accent transition-[height,opacity] duration-200 ease-out ${
           active ? 'h-5 opacity-100' : 'h-2 opacity-0 group-hover:opacity-60'
         }`}
       />

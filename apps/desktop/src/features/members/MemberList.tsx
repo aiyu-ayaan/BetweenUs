@@ -376,7 +376,7 @@ function Item({
       disabled={disabled}
       onClick={onClick}
       title={hint}
-      className={`block w-full px-3 py-1.5 text-left text-sm transition-colors duration-150 ${
+      className={`block w-full px-3 py-1.5 text-start text-sm transition-colors duration-150 ${
         disabled
           ? 'cursor-not-allowed text-slate-500'
           : 'cursor-pointer text-slate-200 hover:bg-white/[0.07] hover:text-slate-100'

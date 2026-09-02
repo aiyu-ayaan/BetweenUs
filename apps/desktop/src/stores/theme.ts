@@ -6,6 +6,7 @@
  */
 import { create } from 'zustand';
 import { asDensity, type Density } from '../services/density';
+import { asLocale, preferredLocale, setLocale, type Locale } from '../services/i18n';
 
 export type ThemeId =
   | 'dark'
@@ -800,6 +801,19 @@ export interface ThemeSettings {
    * per machine, because it is about this screen at this sitting distance.
    */
   density: Density;
+  /**
+   * The language, and with it which way the layout runs.
+   *
+   * Here rather than on the account for the same reason density is: it is about
+   * the machine in front of somebody, and the person who reads English at work
+   * and Arabic at home should not have to change one to change the other.
+   *
+   * Nothing is translated yet. What this changes today is `lang` and `dir` on
+   * the document, which is the half that had to exist before any string was
+   * worth extracting - and the half that is worth nothing if a component was
+   * written with a physical margin, which is what `i18n.check.ts` holds.
+   */
+  locale: Locale;
 }
 
 const DEFAULT_SETTINGS: ThemeSettings = {
@@ -807,6 +821,10 @@ const DEFAULT_SETTINGS: ThemeSettings = {
   followSystem: false,
   customAccentId: 'default',
   density: 'cozy',
+  // The machine's own language, not `en`. Somebody whose system is set to
+  // Arabic gets a right-to-left layout on first launch without being asked,
+  // which is what every other application on their machine does.
+  locale: typeof navigator === 'undefined' ? 'en' : preferredLocale(navigator.languages ?? []),
 };
 
 function getSystemPrefersDark(): boolean {
@@ -867,6 +885,7 @@ function loadSettings(): ThemeSettings {
       followSystem: Boolean(parsed.followSystem),
       customAccentId: parsed.customAccentId ?? 'default',
       density: asDensity(parsed.density),
+      locale: parsed.locale === undefined ? DEFAULT_SETTINGS.locale : asLocale(parsed.locale),
     };
   } catch {
     return DEFAULT_SETTINGS;
@@ -880,6 +899,8 @@ interface ThemeState {
   setFollowSystem: (follow: boolean) => void;
   setCustomAccent: (accentId: string) => void;
   setDensity: (density: Density) => void;
+  /** The language, and the direction that comes with it. */
+  setInterfaceLocale: (locale: Locale) => void;
 }
 
 export const useThemeStore = create<ThemeState>((set, get) => ({
@@ -937,6 +958,18 @@ export const useThemeStore = create<ThemeState>((set, get) => ({
       localStorage.setItem(STORAGE_KEY, JSON.stringify(nextSettings));
     } catch {}
   },
+
+  setInterfaceLocale: (locale: Locale) => {
+    const nextSettings: ThemeSettings = { ...get().settings, locale };
+    set({ settings: nextSettings });
+    // The document is pointed here rather than by an effect somewhere, so that
+    // the one call that changes the setting is the one call that changes the
+    // screen - the same shape `setTheme` uses.
+    setLocale(locale);
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(nextSettings));
+    } catch {}
+  },
 }));
 
 /**
@@ -946,6 +979,10 @@ export function initTheme(): () => void {
   const initial = loadSettings();
   const resolved = resolveEffectiveTheme(initial);
   applyThemeToDocument(resolved, initial.customAccentId);
+  // Before React mounts, for the same reason the theme is: a document that
+  // starts left-to-right and turns over once the app has painted is a visible
+  // flip rather than a layout.
+  setLocale(initial.locale);
 
   if (typeof window === 'undefined' || !window.matchMedia) return () => {};
 

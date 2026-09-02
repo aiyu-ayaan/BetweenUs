@@ -155,7 +155,7 @@ export function CallUsageSection(): JSX.Element {
               type="button"
               onClick={() => setOpen(open === entry.id ? null : entry.id)}
               aria-expanded={open === entry.id}
-              className="w-full px-4 py-3 text-left transition hover:bg-surface-700/60"
+              className="w-full px-4 py-3 text-start transition hover:bg-surface-700/60"
             >
               <div className="flex items-baseline justify-between gap-3">
                 <p className="truncate text-sm font-medium text-slate-100">
@@ -210,22 +210,22 @@ function CallDetail({ entry }: { entry: CallHistoryEntry }): JSX.Element {
           app was killed in - or one from an older build - has none.
         </p>
       ) : (
-        <table className="mt-3 w-full text-left text-xs">
+        <table className="mt-3 w-full text-start text-xs">
           <thead className="text-slate-500">
             <tr>
               <th className="py-1 font-medium">Connection</th>
               <th className="py-1 font-medium">Path</th>
-              <th className="py-1 text-right font-medium">Up</th>
-              <th className="py-1 text-right font-medium">Down</th>
-              <th className="py-1 text-right font-medium">Ping</th>
-              <th className="py-1 text-right font-medium">Loss</th>
+              <th className="py-1 text-end font-medium">Up</th>
+              <th className="py-1 text-end font-medium">Down</th>
+              <th className="py-1 text-end font-medium">Ping</th>
+              <th className="py-1 text-end font-medium">Loss</th>
             </tr>
           </thead>
           <tbody className="text-slate-300">
             {entry.links.map((link) => (
               <tr key={`${link.userId}-${link.username}`} className="border-t border-white/5">
-                <td className="py-1.5 pr-2 truncate">{link.username || link.userId}</td>
-                <td className="py-1.5 pr-2">
+                <td className="py-1.5 pe-2 truncate">{link.username || link.userId}</td>
+                <td className="py-1.5 pe-2">
                   <span className={link.transport === 'relay' ? 'text-amber-300' : 'text-slate-400'}>
                     {link.transport === 'relay'
                       ? 'relayed'
@@ -234,12 +234,12 @@ function CallDetail({ entry }: { entry: CallHistoryEntry }): JSX.Element {
                         : 'unknown'}
                   </span>
                 </td>
-                <td className="py-1.5 text-right tabular-nums">{formatBytes(link.bytesSent)}</td>
-                <td className="py-1.5 text-right tabular-nums">{formatBytes(link.bytesReceived)}</td>
-                <td className="py-1.5 text-right tabular-nums">
+                <td className="py-1.5 text-end tabular-nums">{formatBytes(link.bytesSent)}</td>
+                <td className="py-1.5 text-end tabular-nums">{formatBytes(link.bytesReceived)}</td>
+                <td className="py-1.5 text-end tabular-nums">
                   {link.roundTripMs === null ? '—' : `${link.roundTripMs} ms`}
                 </td>
-                <td className="py-1.5 text-right tabular-nums">{describeLoss(link)}</td>
+                <td className="py-1.5 text-end tabular-nums">{describeLoss(link)}</td>
               </tr>
             ))}
           </tbody>

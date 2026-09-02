@@ -91,14 +91,14 @@ export function ListenPanel(): JSX.Element {
           }}
           aria-label="Back to apps"
           title="Apps"
-          className="-ml-1 cursor-pointer rounded p-1 text-slate-400 transition-colors hover:bg-white/[0.06] hover:text-slate-200"
+          className="-ms-1 cursor-pointer rounded p-1 text-slate-400 transition-colors hover:bg-white/[0.06] hover:text-slate-200"
         >
           <ChevronLeftIcon className="h-4 w-4" />
         </button>
         <MusicIcon className="h-4 w-4 shrink-0 text-amber-300" />
         <span className="text-sm font-medium text-slate-200">Listen together</span>
 
-        <div className="ml-2 flex items-center gap-0.5 rounded-md bg-surface-900 p-0.5">
+        <div className="ms-2 flex items-center gap-0.5 rounded-md bg-surface-900 p-0.5">
           <Tab active={tab === 'browse'} onClick={() => useListenStore.getState().setTab('browse')}>
             <CompassIcon className="h-3.5 w-3.5" />
             Browse
@@ -118,7 +118,7 @@ export function ListenPanel(): JSX.Element {
           onClick={() => useListenStore.getState().setOpen(false)}
           aria-label="Close listen together"
           title="Close - the music keeps playing"
-          className="ml-auto cursor-pointer rounded p-1 text-slate-400 transition-colors hover:bg-white/[0.06] hover:text-slate-200"
+          className="ms-auto cursor-pointer rounded p-1 text-slate-400 transition-colors hover:bg-white/[0.06] hover:text-slate-200"
         >
           <XIcon className="h-4 w-4" />
         </button>
@@ -267,7 +267,7 @@ function Queue(): JSX.Element {
               <button
                 type="button"
                 onClick={() => useListenStore.getState().playIndex(index)}
-                className="min-w-0 flex-1 cursor-pointer text-left"
+                className="min-w-0 flex-1 cursor-pointer text-start"
               >
                 <span
                   className={`block truncate text-[11px] ${
@@ -429,13 +429,13 @@ export function Transport({ compact = false }: { compact?: boolean }): JSX.Eleme
         <SkipForwardIcon className="h-4 w-4" />
       </button>
 
-      <div className="ml-1 flex min-w-0 flex-1 flex-col gap-0.5">
+      <div className="ms-1 flex min-w-0 flex-1 flex-col gap-0.5">
         <div className="flex items-center gap-2">
           {!open ? (
             <button
               type="button"
               onClick={() => useListenStore.getState().setOpen(true)}
-              className="truncate text-left text-xs font-medium text-slate-200 transition-colors hover:text-amber-200 cursor-pointer"
+              className="truncate text-start text-xs font-medium text-slate-200 transition-colors hover:text-amber-200 cursor-pointer"
               title={`${track.title || track.ref} · Click to open Listen Together`}
             >
               {track.title || 'Loading…'}
@@ -464,7 +464,7 @@ export function Transport({ compact = false }: { compact?: boolean }): JSX.Eleme
           )}
         </div>
         <div className="flex items-center gap-2">
-          <span className="w-9 shrink-0 text-right text-[10px] tabular-nums text-slate-500">
+          <span className="w-9 shrink-0 text-end text-[10px] tabular-nums text-slate-500">
             {formatPosition(shown)}
           </span>
           <input
@@ -496,7 +496,7 @@ export function Transport({ compact = false }: { compact?: boolean }): JSX.Eleme
         <>
           {/* The only local control here: what is playing is a thing the room
               agrees on, how loud it is in one person's headphones is not. */}
-          <SpeakerIcon className="ml-1 h-4 w-4 shrink-0 text-slate-500" />
+          <SpeakerIcon className="ms-1 h-4 w-4 shrink-0 text-slate-500" />
           <input
             type="range"
             min={0}

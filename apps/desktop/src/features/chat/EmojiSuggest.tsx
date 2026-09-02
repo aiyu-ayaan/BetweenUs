@@ -121,7 +121,7 @@ export function EmojiSuggest({
     <div
       role="listbox"
       aria-label="Emoji suggestions"
-      className="absolute bottom-full left-3.5 right-3.5 z-30 mb-2 overflow-hidden rounded-xl border border-edge bg-surface-900 py-1 shadow-pop"
+      className="absolute bottom-full inset-x-3.5 z-30 mb-2 overflow-hidden rounded-xl border border-edge bg-surface-900 py-1 shadow-pop"
     >
       <p className="px-3 pb-1 text-[11px] uppercase tracking-wide text-slate-500">
         Emoji matching :{term}
@@ -139,7 +139,7 @@ export function EmojiSuggest({
               onMouseDown={(event) => event.preventDefault()}
               onMouseEnter={() => setActive(index)}
               onClick={() => onPick(textFor(match))}
-              className={`flex w-full items-center gap-3 px-3 py-1.5 text-left transition-colors duration-100 ${
+              className={`flex w-full items-center gap-3 px-3 py-1.5 text-start transition-colors duration-100 ${
                 index === active ? 'bg-white/[0.07]' : ''
               }`}
             >
@@ -151,7 +151,7 @@ export function EmojiSuggest({
                     className="h-[22px] w-[22px] object-contain"
                   />
                   <span className="text-sm text-slate-200">:{match.emoji.name}:</span>
-                  <span className="ml-auto text-xs text-slate-500">
+                  <span className="ms-auto text-xs text-slate-500">
                     {match.emoji.animated ? 'this server · animated' : 'this server'}
                   </span>
                 </>
@@ -160,7 +160,7 @@ export function EmojiSuggest({
                   <span className="text-lg leading-none">{match.entry.emoji}</span>
                   <span className="text-sm text-slate-200">:{match.entry.names[0]}:</span>
                   {match.entry.names.length > 1 && (
-                    <span className="ml-auto truncate text-xs text-slate-500">
+                    <span className="ms-auto truncate text-xs text-slate-500">
                       {match.entry.names.slice(1).map((alias) => `:${alias}:`).join(' ')}
                     </span>
                   )}

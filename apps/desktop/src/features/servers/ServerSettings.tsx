@@ -136,7 +136,7 @@ export function ServerSettings({ onClose }: { onClose: () => void }): JSX.Elemen
 
       {/* Desktop Top Bar / Window Controls Header */}
       <header className="drag-region hidden md:flex h-10 shrink-0 items-center justify-between px-2.5">
-        <div className={`flex items-center gap-1.5 ${isMac ? 'pl-[72px]' : 'pl-1'}`}>
+        <div className={`flex items-center gap-1.5 ${isMac ? 'ps-[72px]' : 'ps-1'}`}>
           <BetweenUsLogoIcon className="h-[18px] w-[18px] shrink-0 text-accent" aria-hidden="true" />
           <span className="truncate text-[13px] font-semibold tracking-tight text-slate-300">
             BetweenUs
@@ -153,7 +153,7 @@ export function ServerSettings({ onClose }: { onClose: () => void }): JSX.Elemen
       <div className="flex min-h-0 flex-1 gap-0 md:gap-1.5 p-0 md:px-1.5 md:pb-1.5">
         <nav
           aria-label="Server settings sections"
-          className="panel hidden md:flex w-[232px] shrink-0 flex-col items-end overflow-y-auto bg-surface-800 py-8 pr-2"
+          className="panel hidden md:flex w-[232px] shrink-0 flex-col items-end overflow-y-auto bg-surface-800 py-8 pe-2"
         >
         <div className="w-[192px]">
           <p className="truncate px-2.5 pb-1 text-xs font-bold uppercase tracking-wide text-slate-400">
@@ -165,7 +165,7 @@ export function ServerSettings({ onClose }: { onClose: () => void }): JSX.Elemen
               type="button"
               onClick={() => setSection(entry.id)}
               aria-current={section === entry.id ? 'page' : undefined}
-              className={`mt-0.5 flex w-full cursor-pointer items-center gap-2 rounded px-2.5 py-1.5 text-left text-[15px] transition-colors duration-200 ${
+              className={`mt-0.5 flex w-full cursor-pointer items-center gap-2 rounded px-2.5 py-1.5 text-start text-[15px] transition-colors duration-200 ${
                 section === entry.id
                   ? 'row-active'
                   : 'text-slate-300 hover:bg-white/[0.05]'
@@ -192,7 +192,7 @@ export function ServerSettings({ onClose }: { onClose: () => void }): JSX.Elemen
         </div>
 
         {/* Desktop Close ESC button */}
-        <div className="fixed top-14 right-8 md:right-10 z-50 hidden md:block no-drag">
+        <div className="fixed top-14 end-8 md:end-10 z-50 hidden md:block no-drag">
           <button
             type="button"
             onClick={onClose}
@@ -241,7 +241,7 @@ function DangerButton({ compact = false }: { compact?: boolean } = {}): JSX.Elem
         <button
           type="button"
           onClick={() => setConfirming(true)}
-          className="flex w-full cursor-pointer items-center justify-between rounded px-2.5 py-1.5 text-left text-[15px] text-danger transition-colors duration-200 hover:bg-danger hover:text-white"
+          className="flex w-full cursor-pointer items-center justify-between rounded px-2.5 py-1.5 text-start text-[15px] text-danger transition-colors duration-200 hover:bg-danger hover:text-white"
         >
           {label}
           <TrashIcon className="h-4 w-4" />
@@ -510,7 +510,7 @@ function Roles(): JSX.Element {
                 type="button"
                 onClick={() => setSelectedId(member.userId)}
                 aria-current={member.userId === selected.userId ? 'true' : undefined}
-                className={`flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors duration-200 ${
+                className={`flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-start transition-colors duration-200 ${
                   member.userId === selected.userId
                     ? 'row-active'
                     : 'text-slate-300 hover:bg-white/[0.05]'
@@ -801,7 +801,7 @@ function CustomRoles({
               <button
                 type="button"
                 onClick={() => void remove()}
-                className="ml-auto cursor-pointer rounded border border-danger px-3 py-1.5 text-sm text-danger transition-colors duration-200 hover:bg-danger hover:text-white"
+                className="ms-auto cursor-pointer rounded border border-danger px-3 py-1.5 text-sm text-danger transition-colors duration-200 hover:bg-danger hover:text-white"
               >
                 Delete role
               </button>
@@ -1339,7 +1339,7 @@ function ChannelAccess({
                     className="h-4 w-4 cursor-pointer accent-accent"
                   />
                   <span className="truncate text-slate-100">{member.displayName}</span>
-                  <span className="ml-auto shrink-0 text-xs text-slate-500">{member.role}</span>
+                  <span className="ms-auto shrink-0 text-xs text-slate-500">{member.role}</span>
                 </label>
               </li>
             ))}

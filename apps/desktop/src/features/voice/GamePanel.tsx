@@ -85,7 +85,7 @@ function Board(): JSX.Element {
             }}
             aria-label="Back to apps"
             title="Apps"
-            className="-ml-1 cursor-pointer rounded p-1 text-slate-400 transition-colors hover:bg-white/[0.06] hover:text-slate-200"
+            className="-ms-1 cursor-pointer rounded p-1 text-slate-400 transition-colors hover:bg-white/[0.06] hover:text-slate-200"
           >
             <ChevronLeftIcon className="h-4 w-4" />
           </button>
@@ -104,7 +104,7 @@ function Board(): JSX.Element {
           <button
             type="button"
             onClick={() => setChoosing((open) => !open)}
-            className="ml-2 cursor-pointer rounded px-2 py-1 text-[11px] text-slate-400 transition-colors hover:bg-white/[0.06] hover:text-slate-200"
+            className="ms-2 cursor-pointer rounded px-2 py-1 text-[11px] text-slate-400 transition-colors hover:bg-white/[0.06] hover:text-slate-200"
           >
             {choosing ? 'Back to the board' : 'Change game'}
           </button>
@@ -118,7 +118,7 @@ function Board(): JSX.Element {
           onClick={() => useGameStore.getState().setFullscreen(!fullscreen)}
           aria-label={fullscreen ? 'Leave fullscreen' : 'Fullscreen'}
           title={fullscreen ? 'Leave fullscreen - Esc' : 'Fullscreen'}
-          className="ml-auto cursor-pointer rounded p-1 text-slate-400 transition-colors hover:bg-white/[0.06] hover:text-slate-200"
+          className="ms-auto cursor-pointer rounded p-1 text-slate-400 transition-colors hover:bg-white/[0.06] hover:text-slate-200"
         >
           {fullscreen ? (
             <MinimizeIcon className="h-4 w-4" />
@@ -195,7 +195,7 @@ function Library({ onPick }: { onPick: (gameId: GameId) => void }): JSX.Element 
               key={gameId}
               type="button"
               onClick={() => onPick(gameId)}
-              className="flex cursor-pointer flex-col gap-2 rounded-lg border border-white/10 bg-surface-900 p-3 text-left transition-colors hover:border-white/20 hover:bg-white/[0.04]"
+              className="flex cursor-pointer flex-col gap-2 rounded-lg border border-white/10 bg-surface-900 p-3 text-start transition-colors hover:border-white/20 hover:bg-white/[0.04]"
             >
               <div className="flex items-center gap-1.5">
                 {seatColours.map((colour) => (
@@ -205,7 +205,7 @@ function Library({ onPick }: { onPick: (gameId: GameId) => void }): JSX.Element 
                     style={{ background: colour }}
                   />
                 ))}
-                <span className="ml-auto text-[10px] uppercase tracking-wide text-slate-600">
+                <span className="ms-auto text-[10px] uppercase tracking-wide text-slate-600">
                   {seats} players · {length}
                 </span>
               </div>
@@ -344,7 +344,7 @@ function Table({ session }: { session: GameSession }): JSX.Element {
                 {who ? who.username : 'Empty chair'}
               </span>
               {session.wins[index]! > 0 && (
-                <span className="ml-auto flex shrink-0 items-center gap-1 text-[10px] text-amber-300">
+                <span className="ms-auto flex shrink-0 items-center gap-1 text-[10px] text-amber-300">
                   <TrophyIcon className="h-3 w-3" />
                   {session.wins[index]}
                 </span>
@@ -361,7 +361,7 @@ function Table({ session }: { session: GameSession }): JSX.Element {
                 <button
                   type="button"
                   onClick={() => useGameStore.getState().sit(index)}
-                  className="ml-auto flex cursor-pointer items-center gap-1 rounded bg-emerald-500/15 px-2 py-0.5 text-[10px] font-medium text-emerald-200 transition-colors hover:bg-emerald-500/25"
+                  className="ms-auto flex cursor-pointer items-center gap-1 rounded bg-emerald-500/15 px-2 py-0.5 text-[10px] font-medium text-emerald-200 transition-colors hover:bg-emerald-500/25"
                 >
                   <UserIcon className="h-3 w-3" />
                   Sit here
@@ -371,7 +371,7 @@ function Table({ session }: { session: GameSession }): JSX.Element {
                 <button
                   type="button"
                   onClick={() => useGameStore.getState().stand()}
-                  className="ml-auto cursor-pointer rounded px-2 py-0.5 text-[10px] text-slate-500 transition-colors hover:bg-white/[0.06] hover:text-slate-300"
+                  className="ms-auto cursor-pointer rounded px-2 py-0.5 text-[10px] text-slate-500 transition-colors hover:bg-white/[0.06] hover:text-slate-300"
                 >
                   Stand up
                 </button>
@@ -416,7 +416,7 @@ function Status({ session }: { session: GameSession }): JSX.Element {
         <button
           type="button"
           onClick={() => useGameStore.getState().rematch()}
-          className="ml-auto flex cursor-pointer items-center gap-1.5 rounded-md bg-emerald-500/15 px-2.5 py-1 text-[11px] font-medium text-emerald-200 transition-colors hover:bg-emerald-500/25"
+          className="ms-auto flex cursor-pointer items-center gap-1.5 rounded-md bg-emerald-500/15 px-2.5 py-1 text-[11px] font-medium text-emerald-200 transition-colors hover:bg-emerald-500/25"
         >
           <RotateIcon className="h-3.5 w-3.5" />
           Play again
@@ -427,7 +427,7 @@ function Status({ session }: { session: GameSession }): JSX.Element {
         type="button"
         onClick={() => useGameStore.getState().close()}
         title="Take the board away for everybody"
-        className={`${over && seat !== -1 ? '' : 'ml-auto'} shrink-0 cursor-pointer rounded px-2 py-1 text-[11px] text-slate-400 transition-colors hover:bg-white/[0.06] hover:text-slate-200`}
+        className={`${over && seat !== -1 ? '' : 'ms-auto'} shrink-0 cursor-pointer rounded px-2 py-1 text-[11px] text-slate-400 transition-colors hover:bg-white/[0.06] hover:text-slate-200`}
       >
         End game
       </button>
@@ -452,7 +452,7 @@ export function GameBar(): JSX.Element | null {
     <button
       type="button"
       onClick={() => useGameStore.getState().setOpen(true)}
-      className={`flex shrink-0 cursor-pointer items-center gap-2 rounded-lg px-3 py-2 text-left transition-colors ${
+      className={`flex shrink-0 cursor-pointer items-center gap-2 rounded-lg px-3 py-2 text-start transition-colors ${
         yours && gameReady(session)
           ? 'bg-emerald-500/15 hover:bg-emerald-500/25'
           : 'bg-surface-900 hover:bg-white/[0.06]'
@@ -463,7 +463,7 @@ export function GameBar(): JSX.Element | null {
         {GAMES[session.gameId].definition.name}
       </span>
       <span className="truncate text-[11px] text-slate-400">{turnLine(session)}</span>
-      <span className="ml-auto shrink-0 text-[11px] text-slate-500">Open</span>
+      <span className="ms-auto shrink-0 text-[11px] text-slate-500">Open</span>
     </button>
   );
 }

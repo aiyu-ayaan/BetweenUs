@@ -64,7 +64,7 @@ export function SeenByRow({
         className="flex cursor-pointer items-center gap-1 rounded-full px-1 py-0.5 transition-colors duration-150 hover:bg-white/[0.06]"
       >
         {/* Overlapped, so four faces cost the width of two and a half. */}
-        <span className="flex -space-x-1.5">
+        <span className="flex -space-x-1.5 rtl:space-x-reverse">
           {shown.map((receipt) => (
             <Face key={receipt.user.id} receipt={receipt} size={16} />
           ))}

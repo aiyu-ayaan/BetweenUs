@@ -140,7 +140,7 @@ export function Avatar({
       {status && (
         <span
           title={DOT_LABELS[status]}
-          className={`absolute -bottom-0.5 -right-0.5 rounded-full border-solid ${DOT_SIZES[size]} ${DOT_COLOURS[status]} ${ringColour}`}
+          className={`absolute -bottom-0.5 -end-0.5 rounded-full border-solid ${DOT_SIZES[size]} ${DOT_COLOURS[status]} ${ringColour}`}
         >
           <span className="sr-only">{DOT_LABELS[status]}</span>
         </span>

@@ -88,7 +88,7 @@ export function SearchPanel({
               <button
                 type="button"
                 onClick={() => jumpToMessage(message.id)}
-                className="w-full cursor-pointer rounded-lg bg-surface-800 p-2.5 text-left transition-colors duration-200 hover:bg-white/[0.06]"
+                className="w-full cursor-pointer rounded-lg bg-surface-800 p-2.5 text-start transition-colors duration-200 hover:bg-white/[0.06]"
               >
                 <span className="flex items-center gap-2">
                   <PersonAvatar

@@ -182,7 +182,7 @@ export function VoiceControls({ size = 'sm' }: { size?: 'sm' | 'lg' }): JSX.Elem
           {(listening || playing) && !appsOpen && (
             <span
               aria-hidden
-              className={`absolute -right-1 -top-1 h-1.5 w-1.5 rounded-full ${
+              className={`absolute -end-1 -top-1 h-1.5 w-1.5 rounded-full ${
                 playing ? 'bg-emerald-300' : 'bg-amber-300'
               }`}
             />
@@ -222,7 +222,7 @@ export function VoiceControls({ size = 'sm' }: { size?: 'sm' | 'lg' }): JSX.Elem
         onClick={() => void leave()}
         aria-label="Disconnect from voice"
         title="Disconnect"
-        className={`${size === 'lg' ? '' : 'ml-auto'} flex items-center justify-center cursor-pointer rounded-md bg-red-600 ${pad} text-white transition-colors duration-200 hover:bg-red-500 active:bg-red-700`}
+        className={`${size === 'lg' ? '' : 'ms-auto'} flex items-center justify-center cursor-pointer rounded-md bg-red-600 ${pad} text-white transition-colors duration-200 hover:bg-red-500 active:bg-red-700`}
       >
         <PhoneOffIcon className={icon} />
       </button>

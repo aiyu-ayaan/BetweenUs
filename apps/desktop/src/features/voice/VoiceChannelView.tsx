@@ -153,7 +153,7 @@ export function VoiceChannelView({
             else's call, in a channel being looked at from outside it, would be
             a number with no meaning to whoever is reading it. */}
         {connected && (
-          <span className="ml-auto text-xs">
+          <span className="ms-auto text-xs">
             <CallDuration />
           </span>
         )}
@@ -178,7 +178,7 @@ export function VoiceChannelView({
               void useChatStore.getState().selectChannel(textChannel.id);
             }
           }}
-          className={`${connected ? 'ml-2' : 'ml-auto'} flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-slate-300 transition-colors hover:bg-white/[0.08] hover:text-white min-h-[36px] cursor-pointer`}
+          className={`${connected ? 'ms-2' : 'ms-auto'} flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-slate-300 transition-colors hover:bg-white/[0.08] hover:text-white min-h-[36px] cursor-pointer`}
           title="Back to text channel"
         >
           <HashIcon className="h-3.5 w-3.5 text-slate-400" />
@@ -359,7 +359,7 @@ function ShareBanners({
           <button
             type="button"
             onClick={() => watch(share.identity)}
-            className="ml-auto shrink-0 cursor-pointer rounded-md bg-accent px-3 py-1 text-xs font-semibold text-white transition-colors duration-200 hover:brightness-110"
+            className="ms-auto shrink-0 cursor-pointer rounded-md bg-accent px-3 py-1 text-xs font-semibold text-white transition-colors duration-200 hover:brightness-110"
           >
             {share.isLocal ? 'Preview' : 'Join stream'}
           </button>
@@ -456,7 +456,7 @@ function Theatre({ share, tiles }: { share: VoiceShare; tiles: Stage[] }): JSX.E
       >
         {/* Fullscreen top header overlay (Auto-hiding) */}
         <div
-          className={`absolute left-0 right-0 top-0 z-30 flex items-center justify-between bg-gradient-to-b from-black/90 via-black/50 to-transparent p-4 transition-all duration-300 ease-out ${
+          className={`absolute inset-x-0 top-0 z-30 flex items-center justify-between bg-gradient-to-b from-black/90 via-black/50 to-transparent p-4 transition-all duration-300 ease-out ${
             showControls
               ? 'opacity-100 translate-y-0 pointer-events-auto'
               : 'opacity-0 -translate-y-6 pointer-events-none'
@@ -553,7 +553,7 @@ function Theatre({ share, tiles }: { share: VoiceShare; tiles: Stage[] }): JSX.E
               type="button"
               onClick={() => setShowParticipants(true)}
               title="Show cameras alongside stream"
-              className={`absolute left-4 top-20 z-20 flex items-center gap-1.5 rounded-full border border-white/10 bg-black/70 px-3.5 py-1.5 text-xs font-semibold text-slate-200 backdrop-blur-md shadow-xl transition-all duration-300 hover:bg-white/20 hover:text-white active:scale-95 ${
+              className={`absolute start-4 top-20 z-20 flex items-center gap-1.5 rounded-full border border-white/10 bg-black/70 px-3.5 py-1.5 text-xs font-semibold text-slate-200 backdrop-blur-md shadow-xl transition-all duration-300 hover:bg-white/20 hover:text-white active:scale-95 ${
                 showControls ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-4 pointer-events-none'
               }`}
             >
@@ -594,7 +594,7 @@ function Theatre({ share, tiles }: { share: VoiceShare; tiles: Stage[] }): JSX.E
         </div>
 
         {/* Fullscreen Bottom Overlay: Floating Voice Controls (Auto-Hiding) & optional Bottom filmstrip */}
-        <div className="absolute left-0 right-0 bottom-0 z-30 flex flex-col items-center gap-3 bg-gradient-to-t from-black/95 via-black/60 to-transparent px-6 pb-5 pt-8 pointer-events-none">
+        <div className="absolute inset-x-0 bottom-0 z-30 flex flex-col items-center gap-3 bg-gradient-to-t from-black/95 via-black/60 to-transparent px-6 pb-5 pt-8 pointer-events-none">
           {layout === 'bottom' && showParticipants && (
             <ul className="flex shrink-0 justify-center gap-2.5 overflow-x-auto max-w-full pb-1 pointer-events-auto">
               {tiles.map((tile) => (
@@ -636,7 +636,7 @@ function Theatre({ share, tiles }: { share: VoiceShare; tiles: Stage[] }): JSX.E
             </p>
           )}
 
-          <p className="pointer-events-none absolute left-2 top-2 rounded bg-black/70 px-2 py-1 text-xs text-slate-200">
+          <p className="pointer-events-none absolute start-2 top-2 rounded bg-black/70 px-2 py-1 text-xs text-slate-200">
             {share.isLocal ? 'Your screen' : `${share.name}'s screen`}
           </p>
 
@@ -646,14 +646,14 @@ function Theatre({ share, tiles }: { share: VoiceShare; tiles: Stage[] }): JSX.E
               type="button"
               onClick={() => setShowParticipants(true)}
               title="Show cameras alongside stream"
-              className="absolute left-2 top-10 z-10 flex items-center gap-1.5 rounded-full border border-white/10 bg-black/70 px-3 py-1 text-xs font-medium text-slate-200 backdrop-blur-md shadow-lg transition-all duration-200 hover:bg-white/20 hover:text-white"
+              className="absolute start-2 top-10 z-10 flex items-center gap-1.5 rounded-full border border-white/10 bg-black/70 px-3 py-1 text-xs font-medium text-slate-200 backdrop-blur-md shadow-lg transition-all duration-200 hover:bg-white/20 hover:text-white"
             >
               <UsersIcon className="h-3.5 w-3.5" />
               <span>Show cameras ({tiles.length})</span>
             </button>
           )}
 
-          <div className="absolute right-2 top-2 flex gap-2">
+          <div className="absolute end-2 top-2 flex gap-2">
             {!share.isLocal && <ControlButtons share={share} />}
             {share.isLocal && (
               <button
@@ -776,7 +776,7 @@ function SideGallery({
           </button>
         </div>
       )}
-      <ul className="flex flex-col gap-2.5 overflow-y-auto max-h-full pr-0.5">
+      <ul className="flex flex-col gap-2.5 overflow-y-auto max-h-full pe-0.5">
         {tiles.map((tile) => (
           <li key={tile.key} className="w-full shrink-0">
             <StageTile tile={tile} />
@@ -1010,7 +1010,7 @@ function SelfPip({
   onTogglePin: (key: string) => void;
 }): JSX.Element {
   return (
-    <div className="pointer-events-auto absolute bottom-3 right-3 z-30 w-32 sm:w-44 md:w-52 aspect-video drop-shadow-2xl">
+    <div className="pointer-events-auto absolute bottom-3 end-3 z-30 w-32 sm:w-44 md:w-52 aspect-video drop-shadow-2xl">
       <StageTile tile={tile} compact onTogglePin={onTogglePin} />
     </div>
   );
@@ -1055,7 +1055,7 @@ function StageTile({
           aria-pressed={pinned}
           aria-label={pinned ? `Unpin ${tile.name}` : `Pin ${tile.name}`}
           title={pinned ? 'Unpin' : 'Pin to the stage'}
-          className={`absolute left-2 top-2 z-30 flex cursor-pointer items-center gap-1 rounded-lg border border-white/10 px-2 py-1 text-[11px] font-semibold backdrop-blur-md transition-all duration-200 focus-visible:opacity-100 active:scale-95 ${
+          className={`absolute start-2 top-2 z-30 flex cursor-pointer items-center gap-1 rounded-lg border border-white/10 px-2 py-1 text-[11px] font-semibold backdrop-blur-md transition-all duration-200 focus-visible:opacity-100 active:scale-95 ${
             pinned
               ? 'bg-accent text-white opacity-100'
               : 'bg-black/65 text-slate-200 opacity-0 hover:bg-black/80 hover:text-white group-hover:opacity-100'
@@ -1099,7 +1099,7 @@ function StageTile({
       )}
 
       {/* Bottom User info pill badge */}
-      <div className="absolute bottom-2 left-2 sm:bottom-3 sm:left-3 z-20 flex items-center gap-1.5 rounded-lg sm:rounded-xl bg-black/65 px-2 py-0.5 sm:px-2.5 sm:py-1 text-xs font-medium text-slate-200 backdrop-blur-md border border-white/10 shadow-md">
+      <div className="absolute bottom-2 start-2 sm:bottom-3 sm:start-3 z-20 flex items-center gap-1.5 rounded-lg sm:rounded-xl bg-black/65 px-2 py-0.5 sm:px-2.5 sm:py-1 text-xs font-medium text-slate-200 backdrop-blur-md border border-white/10 shadow-md">
         {!tile.micEnabled && <MicOffIcon className="h-3.5 w-3.5 text-red-400 shrink-0" />}
         <span className="truncate max-w-[140px]">
           {tile.name}
@@ -1112,7 +1112,7 @@ function StageTile({
 
       {/* Speaking status indicator */}
       {tile.speaking && (
-        <div className="absolute right-3 top-3 z-20 flex items-center gap-1.5 rounded-full bg-black/60 px-2 py-0.5 backdrop-blur-md border border-emerald-500/30">
+        <div className="absolute end-3 top-3 z-20 flex items-center gap-1.5 rounded-full bg-black/60 px-2 py-0.5 backdrop-blur-md border border-emerald-500/30">
           <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
           {!compact && (
             <span className="text-[10px] font-semibold text-emerald-300 uppercase tracking-wider">

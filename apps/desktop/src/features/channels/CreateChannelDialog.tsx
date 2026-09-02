@@ -141,7 +141,7 @@ export function CreateChannelDialog({
                         type="button"
                         onClick={() => toggle(member.userId)}
                         aria-pressed={selected}
-                        className="flex w-full cursor-pointer items-center gap-2.5 rounded-md px-2 py-1.5 text-left hover:bg-white/[0.06]"
+                        className="flex w-full cursor-pointer items-center gap-2.5 rounded-md px-2 py-1.5 text-start hover:bg-white/[0.06]"
                       >
                         <Avatar
                           name={member.displayName}
