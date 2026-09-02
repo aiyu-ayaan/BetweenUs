@@ -73,10 +73,19 @@ jobs:
           tags: tag:ci
           version: latest
 
+      # `tailscale/github-action` retries `tailscale up` five times and then
+      # exits 0 whether or not any attempt worked, so its green tick means "the
+      # step ran", not "the runner is on the tailnet". Everything after it then
+      # fails at name resolution, which reads like a DNS problem and is not one.
+      # `tailscale status` without `--json` exits non-zero when the node is not
+      # up, which is the assertion the action does not make.
       - name: What the runner can see
         run: |
           if [ -n "$TS_OAUTH_CLIENT_ID" ]; then
-            tailscale status || true
+            if ! tailscale status; then
+              echo "::error::The runner is not on the tailnet - read the join step's log, it fails quietly. Usually TS_OAUTH_SECRET: it must be the OAuth client secret (it begins tskey-client-), from a client that has the auth_keys write scope and owns tag:ci."
+              exit 1
+            fi
             echo
           fi
           # Before SSH, and independent of it: a name that does not resolve and

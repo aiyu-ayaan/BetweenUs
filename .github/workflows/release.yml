@@ -1019,6 +1019,18 @@ jobs:
           tags: tag:ci
           version: latest
 
+      # The action retries `tailscale up` and then exits 0 whether or not any
+      # attempt worked, so its green tick means "the step ran". Without this the
+      # deploy fails at name resolution instead, which reads like a DNS problem
+      # and is not one. `tailscale status` exits non-zero when the node is down.
+      - name: The tailnet took
+        if: env.TS_OAUTH_CLIENT_ID != ''
+        run: |
+          tailscale status || {
+            echo "::error::The runner is not on the tailnet. Check TS_OAUTH_SECRET: the OAuth client secret (it begins tskey-client-), from a client with the auth_keys write scope that owns tag:ci."
+            exit 1
+          }
+
       # The key never reaches the disk of a step that runs anything else, and
       # the host key is pinned: `StrictHostKeyChecking=no` on a deploy is an
       # invitation to hand the deployment's SSH session to whoever answers.
