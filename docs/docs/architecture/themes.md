@@ -78,3 +78,45 @@ Users can optionally override the theme's default brand accent with personalized
 - Accessible via `Route.Themes` in [`ThemesScreen.kt`](file:///D:/VS-Code/AI%20Expermients/Betweenus/apps/android/app/src/main/java/com/aatech/betweenus/feature/settings/ThemesScreen.kt).
 - Features a **Live Preview Sandbox**, **System Sync toggle**, **Dynamic Theming (Material You) toggle**, **Animated Category Filter Pills** (`AnimatedContent`), and **2-Column Interactive Theme Cards**.
 - Forward and backward transitions use Material 3 Expressive spring physics (`slideInHorizontally(travel) { it } + fadeIn(fade)` and `popExitTransition = { slideOutHorizontally(travel) { it } + fadeOut(fade) }`).
+
+## Contrast, measured
+
+Sixteen themes, every one with a hand-written tonal ramp, and none of them had
+ever been measured. "It looks fine on my monitor" is exactly what contrast
+ratios exist to replace: a hint line at 3:1 looks fine to somebody with good
+sight on a good screen in a dark room, and is unreadable on a phone in daylight
+or to anybody whose contrast sensitivity is not perfect.
+
+So the ratios are computed from the palettes themselves.
+[`contrast.ts`](file:///D:/VS-Code/AI%20Expermients/Betweenus/apps/desktop/src/services/contrast.ts)
+implements WCAG 2.1 relative luminance and the contrast ratio, and
+`contrast.check.ts` — part of `pnpm check` — runs six pairs against every
+shipped theme:
+
+| Pair | Bar |
+| --- | --- |
+| Body text on the main panel, the sidebar, and the ground | 4.5:1 (AA normal text) |
+| Hint text on the main panel and the sidebar | 4.5:1 |
+| The accent on the main panel | 3:1 (AA large text / UI component) |
+
+Six rather than every colour against every other colour, deliberately: a hundred
+assertions about combinations nothing renders is a check that gets relaxed the
+first time one fails.
+
+**The first run found eighteen failures across eleven of the sixteen themes.**
+Body text was never the problem — 5.6:1 at worst. Every failure but one was the
+`slate-400` hint ramp, which is the shade chosen to recede, and receding has a
+floor: Tokyo Night at 2.76:1, Monokai Pro at 2.88:1, Solarized in both
+directions near 2.9:1, Dracula at 3.03:1. The exception was Rosé Pine Dawn's
+accent at 2.74:1 against a 3:1 bar.
+
+Each was corrected by the **minimum** nudge toward whichever of black or white
+raises contrast against that theme's own surface — computed, not chosen, because
+the smallest change that clears the bar is the one least likely to undo what the
+theme was meant to look like. The check now holds the line for any theme added
+or edited later.
+
+Note that gamma is why this is a function rather than a comparison of hex
+values: sRGB is stored gamma-encoded, so the stored numbers are not proportional
+to the light coming off the screen, and a naive average gets the answer wrong in
+the middle of the range — which is precisely where hint text lives.
