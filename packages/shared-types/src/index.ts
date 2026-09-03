@@ -1242,9 +1242,15 @@ export const STATUS_CAPTION_MAX_LENGTH = 700;
 export const STATUS_PHOTO_MS = 5000;
 
 /**
- * The longest video accepted, in milliseconds. Anything longer is a video to
- * send, not a status - and the client trims to this rather than refusing, so
- * picking a long clip still posts something.
+ * How much of a video a status plays, in milliseconds.
+ *
+ * A cap on playback rather than on the file: the clip is stored whole and the
+ * viewer stops after this, which is what the progress bar is timed against.
+ * Re-encoding in the client to cut the file down would mean a video encoder in
+ * every client to save a few megabytes on a post that is deleted within a day.
+ *
+ * Thirty seconds is the length every app with this feature settled on, and
+ * long enough that almost nothing is cut.
  */
 export const STATUS_VIDEO_MAX_MS = 30_000;
 

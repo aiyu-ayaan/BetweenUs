@@ -1,7 +1,11 @@
 import type { PresenceStatus } from '@betweenus/shared-types';
 import { absoluteUrl } from '../services/endpoint';
 import { usePresenceStore } from '../stores/presence';
+import { useAuthStore } from '../stores/auth';
+import { runOf, useStatusStore } from '../stores/status';
 import { viewProfile } from './ProfileView';
+import { askAvatarChoice } from './AvatarChoice';
+import { StatusRing } from './StatusRing';
 
 const SIZES = {
   sm: 'h-8 w-8 text-xs',
@@ -61,6 +65,7 @@ export function PersonAvatar({
   const status = usePresenceStore((state) => state.statuses.get(userId) ?? 'offline');
   return (
     <Avatar
+      userId={userId}
       name={name}
       avatarUrl={avatarUrl}
       status={status}
@@ -75,6 +80,7 @@ export function PersonAvatar({
  * is how every list in this app identifies a person.
  */
 export function Avatar({
+  userId,
   name,
   avatarUrl,
   status,
@@ -82,6 +88,13 @@ export function Avatar({
   ringColour = 'border-surface-800',
   viewable = true,
 }: {
+  /**
+   * Who this is, where the caller knows. Optional because plenty of these
+   * circles stand for a place, a webhook or a control rather than a person -
+   * and it is what the status ring and the tap-to-choose need, so an avatar
+   * without it behaves exactly as it did before statuses existed.
+   */
+  userId?: string;
   name: string;
   avatarUrl?: string | null;
   /**
@@ -103,6 +116,25 @@ export function Avatar({
    */
   viewable?: boolean;
 }): JSX.Element {
+  // The ring, and what a tap does, both come from here. Every list in the app
+  // draws people through this component, so putting it here is what makes a
+  // ring appear in the sidebar, the member list and a conversation header at
+  // once - rather than in whichever three of them somebody remembered.
+  const selfId = useAuthStore((state) => state.user?.id ?? null);
+  const own = useStatusStore((state) => state.mine);
+  const run = useStatusStore((state) => (userId && userId !== selfId ? runOf(state, userId) : null));
+  const posts = userId && userId === selfId ? own : (run?.statuses ?? []);
+  const unseen = run?.unseen ?? false;
+
+  const tapped = (): void => {
+    // Two things behind one circle: ask which. See `AvatarChoice`.
+    if (posts.length > 0 && userId) {
+      askAvatarChoice({ userId, name, avatarUrl: avatarUrl ?? null, count: posts.length });
+      return;
+    }
+    viewProfile(name, avatarUrl);
+  };
+
   return (
     <div
       // A div and not a button: most of these sit inside a row that is itself
@@ -113,13 +145,21 @@ export function Avatar({
           ? (event) => {
               event.preventDefault();
               event.stopPropagation();
-              viewProfile(name, avatarUrl);
+              tapped();
             }
           : undefined
       }
-      title={viewable ? `View ${name}'s profile photo` : undefined}
+      title={
+        viewable
+          ? posts.length > 0
+            ? `View ${name}'s profile photo or status`
+            : `View ${name}'s profile photo`
+          : undefined
+      }
       className={`relative shrink-0 ${SIZES[size]} ${viewable ? 'cursor-pointer' : ''}`}
     >
+      {posts.length > 0 && <StatusRing count={posts.length} unseen={unseen} />}
+
       {avatarUrl ? (
         <img
           // Stored pictures come back rooted at /api/v1/uploads; resolve them

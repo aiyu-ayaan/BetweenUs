@@ -11,8 +11,10 @@ export interface MobileDrawerProps {
   onOpenUserSettings: () => void;
   onOpenServerSettings: () => void;
   onShowFriends: () => void;
+  onShowStatus: () => void;
   onShowRemote: () => void;
   showingFriends: boolean;
+  showingStatus: boolean;
   showingRemote: boolean;
 }
 
@@ -26,8 +28,10 @@ export function MobileDrawer({
   onOpenUserSettings,
   onOpenServerSettings,
   onShowFriends,
+  onShowStatus,
   onShowRemote,
   showingFriends,
+  showingStatus,
   showingRemote,
 }: MobileDrawerProps): JSX.Element {
   const drawer = useFocusTrap<HTMLDivElement>(open);
@@ -103,6 +107,11 @@ export function MobileDrawer({
                 showingFriends={showingFriends}
                 onShowFriends={() => {
                   onShowFriends();
+                  onClose();
+                }}
+                showingStatus={showingStatus}
+                onShowStatus={() => {
+                  onShowStatus();
                   onClose();
                 }}
                 showingRemote={showingRemote}

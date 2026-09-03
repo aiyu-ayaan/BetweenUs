@@ -1,11 +1,12 @@
 import { useChatStore } from '../../stores/chat';
 import { useFriendsStore } from '../../stores/friends';
 import { useStatusOf } from '../../stores/presence';
+import { runsOf, useStatusStore } from '../../stores/status';
 import { isDesktopRuntime } from '../../services/platform';
 import { UserPanel } from '../settings/UserPanel';
 import { VoicePanel } from '../voice/VoicePanel';
 import { Avatar } from '../../components/Avatar';
-import { MonitorIcon, UsersIcon, XIcon } from '../../components/icons';
+import { ActivityIcon, MonitorIcon, UsersIcon, XIcon } from '../../components/icons';
 import { SkeletonRows } from '../../components/Skeleton';
 import { listState } from '../../services/list-state';
 
@@ -17,6 +18,8 @@ import { listState } from '../../services/list-state';
 export function HomeSidebar({
   showingFriends,
   onShowFriends,
+  showingStatus,
+  onShowStatus,
   showingRemote,
   onShowRemote,
   onOpenUserSettings,
@@ -24,6 +27,8 @@ export function HomeSidebar({
 }: {
   showingFriends: boolean;
   onShowFriends: () => void;
+  showingStatus: boolean;
+  onShowStatus: () => void;
   showingRemote: boolean;
   onShowRemote: () => void;
   onOpenUserSettings: () => void;
@@ -43,6 +48,10 @@ export function HomeSidebar({
   const pending = useFriendsStore((state) =>
     state.friends.filter((friend) => friend.direction === 'incoming').length,
   );
+  // How many people have something unwatched. The same number the ring says,
+  // counted per person rather than per post: what the badge is answering is
+  // "is there anybody to catch up on", not "how many pictures are there".
+  const unwatched = useStatusStore((state) => runsOf(state).filter((run) => run.unseen).length);
 
   return (
     <aside className={`panel flex shrink-0 flex-col bg-surface-800 ${className}`}>
@@ -69,6 +78,27 @@ export function HomeSidebar({
             <span className="rounded-full bg-danger px-1.5 text-xs font-bold text-white">
               {pending}
               <span className="sr-only"> pending requests</span>
+            </span>
+          )}
+        </button>
+
+        {/* Statuses sit under Friends rather than in the conversation list:
+            they are a place to go, not a conversation, and a row that came and
+            went as people posted would move the list under somebody's cursor. */}
+        <button
+          type="button"
+          onClick={onShowStatus}
+          aria-current={showingStatus ? 'page' : undefined}
+          className={`mt-0.5 flex w-full cursor-pointer items-center gap-3 rounded-md px-2 py-2 text-start transition-colors duration-200 ${
+            showingStatus ? 'row-active' : 'row-idle'
+          }`}
+        >
+          <ActivityIcon className="h-5 w-5 shrink-0" />
+          <span className="flex-1 font-medium">Status</span>
+          {unwatched > 0 && (
+            <span className="rounded-full bg-status-online px-1.5 text-xs font-bold text-surface-900">
+              {unwatched}
+              <span className="sr-only"> people with new updates</span>
             </span>
           )}
         </button>

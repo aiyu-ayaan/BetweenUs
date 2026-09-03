@@ -4,6 +4,8 @@ import { useChatStore } from './stores/chat';
 import { captureInviteFromUrl } from './services/invite-link';
 import { startChannelFocus } from './services/channel-focus';
 import { useFriendsStore } from './stores/friends';
+import { useStatusStore } from './stores/status';
+import { releaseAllStatusMedia } from './services/status-media';
 import { usePresenceStore } from './stores/presence';
 import {
   loadNotificationPreferences,
@@ -26,6 +28,9 @@ import { ServerSettings } from './features/servers/ServerSettings';
 import { ChannelSidebar } from './features/channels/ChannelSidebar';
 import { HomeSidebar } from './features/home/HomeSidebar';
 import { FriendsView } from './features/home/FriendsView';
+import { StatusScreen } from './features/status/StatusScreen';
+import { StatusViewer } from './features/status/StatusViewer';
+import { StatusComposer } from './features/status/StatusComposer';
 import { RemoteView } from './features/remote/RemoteView';
 import { RemoteConsent } from './features/remote/RemoteConsent';
 import { RemoteSessionView } from './features/remote/RemoteSessionView';
@@ -39,6 +44,7 @@ import { CallAudio } from './features/voice/CallAudio';
 import { ShareControlConsent } from './features/voice/ShareControlConsent';
 import { IncomingCall } from './features/voice/IncomingCall';
 import { ProfileView } from './components/ProfileView';
+import { AvatarChoice } from './components/AvatarChoice';
 import { ProfileScreen } from './components/ProfileScreen';
 import { TopBar } from './features/shell/TopBar';
 import { MobileDrawer } from './features/shell/MobileDrawer';
@@ -76,6 +82,7 @@ function Session(): JSX.Element {
   const loadServers = useChatStore((state) => state.loadServers);
   const loadDirects = useChatStore((state) => state.loadDirects);
   const loadFriends = useFriendsStore((state) => state.load);
+  const loadStatuses = useStatusStore((state) => state.load);
   const loadUnread = useChatStore((state) => state.loadUnread);
   const reset = useChatStore((state) => state.reset);
   const resetFriends = useFriendsStore((state) => state.reset);
@@ -329,6 +336,7 @@ function Session(): JSX.Element {
       void loadServers();
       void loadDirects();
       void loadFriends();
+      void loadStatuses();
       // The agent only offers this machine while somebody is signed in on it:
       // enrolment belongs to an account, and so does the audit trail. A browser
       // tab is not a machine anyone can be given control of, so it never enrols.
@@ -349,6 +357,8 @@ function Session(): JSX.Element {
     reset();
     resetFriends();
     resetPresence();
+    useStatusStore.getState().reset();
+    releaseAllStatusMedia();
     resetNotificationPreferences();
     useRemoteStore.getState().reset();
     void stopAgent();
@@ -357,6 +367,7 @@ function Session(): JSX.Element {
     loadServers,
     loadDirects,
     loadFriends,
+    loadStatuses,
     loadUnread,
     reset,
     resetFriends,
@@ -412,7 +423,7 @@ function Workbench(): JSX.Element {
   const isMobile = useIsMobile();
 
   const [settings, setSettings] = useState<'none' | 'user' | 'server'>('none');
-  const [homeScreen, setHomeScreen] = useState<'friends' | 'remote' | null>('friends');
+  const [homeScreen, setHomeScreen] = useState<'friends' | 'status' | 'remote' | null>('friends');
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [switcher, setSwitcher] = useState(false);
   const [shortcutSheet, setShortcutSheet] = useState(false);
@@ -518,6 +529,8 @@ function Workbench(): JSX.Element {
             <HomeSidebar
               showingFriends={homeScreen === 'friends'}
               onShowFriends={() => setHomeScreen('friends')}
+              showingStatus={homeScreen === 'status'}
+              onShowStatus={() => setHomeScreen('status')}
               showingRemote={homeScreen === 'remote'}
               onShowRemote={() => setHomeScreen('remote')}
               onOpenUserSettings={() => setSettings('user')}
@@ -533,6 +546,8 @@ function Workbench(): JSX.Element {
 
         {view === 'home' && homeScreen === 'remote' ? (
           <RemoteView onOpenMenu={() => setShowDrawer(true)} />
+        ) : view === 'home' && homeScreen === 'status' ? (
+          <StatusScreen onOpenMenu={() => setShowDrawer(true)} />
         ) : view === 'home' && homeScreen === 'friends' ? (
           <FriendsView onOpenMenu={() => setShowDrawer(true)} />
         ) : channel?.type === 'VOICE' ||
@@ -606,8 +621,10 @@ function Workbench(): JSX.Element {
         onOpenUserSettings={() => setSettings('user')}
         onOpenServerSettings={() => setSettings('server')}
         onShowFriends={() => setHomeScreen('friends')}
+        onShowStatus={() => setHomeScreen('status')}
         onShowRemote={() => setHomeScreen('remote')}
         showingFriends={homeScreen === 'friends'}
+        showingStatus={homeScreen === 'status'}
         showingRemote={homeScreen === 'remote'}
       />
 
@@ -643,6 +660,14 @@ function Workbench(): JSX.Element {
           somebody has not set one. */}
       <ProfileView />
       <ProfileScreen />
+      {/* A tap on an avatar with a ring around it has two answers; this is
+          where it asks which. Above the profile overlays it opens. */}
+      <AvatarChoice />
+      {/* The story player and the composer, at the root for the same reason
+          the profile overlays are: a ring in a sidebar, a row in the tray and
+          an avatar in a conversation all open the same one. */}
+      <StatusViewer />
+      <StatusComposer />
 
       {settings === 'user' && <UserSettings onClose={() => setSettings('none')} />}
       {settings === 'server' && <ServerSettings onClose={() => setSettings('none')} />}

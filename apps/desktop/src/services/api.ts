@@ -53,6 +53,10 @@ import type {
   ServerInvite,
   ServerWithRole,
   StartMultipartResponse,
+  StatusEntry,
+  StatusFeed,
+  StatusViewer,
+  CreateStatusRequest,
   UploadedObject,
   UploadedPart,
   UpdateAccountRequest,
@@ -576,6 +580,60 @@ export const api = {
     }
     return new Uint8Array(await response.arrayBuffer());
   },
+
+  /**
+   * Fetches a stored object as a blob, keeping the type the server sent.
+   *
+   * Separate from `fetchObject` because the two want different things: an
+   * attachment is ciphertext and its bytes go straight into the decryptor,
+   * while a status is stored in the clear and goes into an `<img>` or a
+   * `<video>` - which needs a type on the blob or the element will not decode
+   * it. Neither can be a plain `src`: both routes want an Authorization header,
+   * and no element sends one.
+   */
+  fetchBlob: async (url: string): Promise<Blob> => {
+    const token = await bearer();
+    const response = await fetch(absoluteUrl(url), {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!response.ok) {
+      throw new ApiError('OBJECT_NOT_FOUND', 'That file is no longer available', response.status);
+    }
+    return response.blob();
+  },
+
+  // --- Statuses ---
+  //
+  // A post that expires after a day. Unlike a message, it is not encrypted -
+  // its audience is whoever is a friend when each viewer opens it, which is a
+  // set that changes after the post is written. See the note in shared-types.
+
+  statusFeed: (): Promise<StatusFeed> => request('/api/v1/statuses'),
+
+  /**
+   * Posts one. The media, where there is any, travels with the caption in the
+   * same request: a status is one file and one button, and a two-step upload
+   * leaves an orphaned blob every time somebody changes their mind between the
+   * two steps.
+   */
+  postStatus: (draft: CreateStatusRequest, media?: Blob): Promise<StatusEntry> => {
+    const form = new FormData();
+    form.append('kind', draft.kind);
+    if (draft.caption) form.append('caption', draft.caption);
+    if (draft.background) form.append('background', draft.background);
+    if (draft.durationMs !== undefined) form.append('durationMs', String(draft.durationMs));
+    if (media) form.append('file', media, 'status');
+    return upload('/api/v1/statuses', form);
+  },
+
+  markStatusSeen: (statusId: string): Promise<void> =>
+    request(`/api/v1/statuses/${statusId}/view`, { method: 'POST' }),
+
+  statusViewers: (statusId: string): Promise<StatusViewer[]> =>
+    request(`/api/v1/statuses/${statusId}/views`),
+
+  deleteStatus: (statusId: string): Promise<void> =>
+    request(`/api/v1/statuses/${statusId}`, { method: 'DELETE' }),
 
   // --- Friends and direct messages ---
 

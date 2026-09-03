@@ -296,10 +296,13 @@ export class UploadsController {
       return;
     }
 
-    // Only a picture is ever rendered in the app origin, and only because its
-    // type was checked on the way in. An attachment is ciphertext: it is served
-    // as bytes, and the client decrypts it in memory.
-    const contentType = key.startsWith('pictures/') ? contentTypeFor(key) : OPAQUE;
+    // A picture and a status carry their real type, and in both cases only
+    // because the bytes were checked on the way in - the key's extension is
+    // written from what the file turned out to be, never from what it claimed.
+    // An attachment is ciphertext and has no type to tell the truth about: it
+    // is served as bytes, and the client decrypts it in memory.
+    const typed = key.startsWith('pictures/') || key.startsWith('status/');
+    const contentType = typed ? contentTypeFor(key) : OPAQUE;
     response.setHeader('Content-Type', contentType);
     response.setHeader('Cache-Control', 'private, max-age=86400');
     response.setHeader(
@@ -374,6 +377,11 @@ const EXTENSION_TYPES: Record<string, string> = {
   '.jpeg': 'image/jpeg',
   '.gif': 'image/gif',
   '.webp': 'image/webp',
+  // Status videos. `isInlineSafe` still says no to both, so they are sent as a
+  // download and never rendered in this origin - the client fetches the bytes
+  // and plays them from a blob URL of its own.
+  '.mp4': 'video/mp4',
+  '.webm': 'video/webm',
 };
 
 function contentTypeFor(key: string): string {

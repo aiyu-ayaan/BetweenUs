@@ -316,7 +316,7 @@ const JPEG = 'image/jpeg';
  * that no browser engine can draw one, so an unconverted HEIC is a broken
  * image on every client except the phone it came from.
  */
-async function shrinkImage(
+export async function shrinkImage(
   file: File,
 ): Promise<{ blob: Blob; width: number; height: number } | null> {
   const type = file.type.toLowerCase();
