@@ -309,6 +309,15 @@ function Bar({
   const started = useRef<number>(Date.now());
   const spent = useRef(0);
 
+  // `onDone` is a new function on every render of the player, and the player
+  // re-renders whenever the store moves - which the view marker does, a moment
+  // after a post opens. Left in the dependency list it would clear and restart
+  // the timer each time, so a post could outstay its five seconds for as long
+  // as anything kept changing. The ref is what makes the effect depend on the
+  // post rather than on the identity of a callback.
+  const done = useRef(onDone);
+  done.current = onDone;
+
   useEffect(() => {
     if (state !== 'playing') return;
     if (paused) {
@@ -324,12 +333,12 @@ function Bar({
     // the transition to 100% means anything, and one frame is not always
     // enough for the element that has just been mounted.
     const raf = requestAnimationFrame(() => requestAnimationFrame(() => setWidth(100)));
-    const timer = window.setTimeout(onDone, left);
+    const timer = window.setTimeout(() => done.current(), left);
     return () => {
       cancelAnimationFrame(raf);
       window.clearTimeout(timer);
     };
-  }, [state, paused, durationMs, onDone]);
+  }, [state, paused, durationMs]);
 
   const filled = state === 'done' ? 100 : state === 'todo' ? 0 : width;
   const seconds = state === 'playing' && !paused ? Math.max(durationMs - spent.current, 0) : 0;
