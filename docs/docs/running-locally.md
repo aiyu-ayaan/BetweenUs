@@ -134,3 +134,43 @@ npm run serve      # serve the production build locally
 
 See [Docs Deployment](/deployment/docs-deployment) for how a `!docs` commit
 publishes this to GitHub Pages.
+
+
+## `pnpm db:migrate` can reset your database, and what stops it
+
+`db:migrate` runs `prisma migrate dev`. That command verifies the **whole**
+migration history before it applies anything, and the only remedy it offers for
+a history it cannot reconcile is to drop the database and replay from empty. On
+a developer's machine that prompt arrives at the end of a wall of output and is
+easy to answer yes to, because it reads as being about the migration you just
+wrote.
+
+The usual way to get there is a **renamed migration directory**. Your database
+holds a `_prisma_migrations` row naming a directory that is no longer on disk,
+`migrate dev` calls that a diverged history, and offers the reset. It has
+happened here once already — see
+`packages/database/prisma/reconcile/2026-09-02-rename-custom-roles-and-attachments.sql`.
+
+`pnpm db:migrate` now runs `prisma/preflight.mjs` first, which:
+
+- renames the rows for any directory listed in its `RENAMED` map, so a known
+  rename repairs itself and the migration carries on;
+- **stops** with a non-zero exit for any other applied-but-missing migration,
+  naming it, before `migrate dev` gets the chance to offer a reset.
+
+It only ever updates `_prisma_migrations.migration_name`. It never drops,
+truncates or alters anything else.
+
+**If you rename a migration directory, add the old and new names to `RENAMED` in
+the same commit.** A rename with no entry there is the bug this exists for.
+
+Two other habits worth having:
+
+```bash
+pnpm db:migrate:check   # does the migration history still replay to schema.prisma?
+pnpm db:backup          # a dump, before anything that touches the schema
+```
+
+`db:migrate:check` catches a hand-written migration that disagrees with
+`schema.prisma` — which is the *other* way to arrive at a drift prompt. Neither
+of these is run for you by `db:migrate`, and `db:backup` needs Docker.

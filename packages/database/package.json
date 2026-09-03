@@ -8,7 +8,7 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "generate": "prisma generate",
-    "migrate": "dotenv -e ../../.env -- prisma migrate dev",
+    "migrate": "dotenv -e ../../.env -- node prisma/preflight.mjs && dotenv -e ../../.env -- prisma migrate dev",
     "migrate:deploy": "prisma migrate deploy",
     "migrate:check": "dotenv -e ../../.env -- node prisma/migrate-check.mjs",
     "studio": "dotenv -e ../../.env -- prisma studio",
