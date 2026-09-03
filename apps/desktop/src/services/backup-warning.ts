@@ -32,28 +32,60 @@ export interface IdentityLike {
 
 export function shouldWarnAboutBackup(
   identity: IdentityLike,
-  dismissedThisSession: boolean,
+  /**
+   * When the last dismissal runs out, in epoch milliseconds, or null for "never
+   * dismissed". See `SNOOZE_MS`.
+   */
+  dismissedUntil: number | null,
+  now: number = Date.now(),
 ): boolean {
   // Nothing to lose yet, or nothing this notice can help with. `absent` is a
   // client that has not unlocked an identity - it has its own screen - and
   // `revoked` is a machine that has been shut out deliberately.
   if (identity.status !== 'ready') return false;
   if (identity.backedUp) return false;
-  return !dismissedThisSession;
+  // A stamp in the future is a dismissal that has not run out. A stamp in the
+  // past, or none, is a notice that is due.
+  return dismissedUntil === null || now >= dismissedUntil;
 }
 
 /**
- * Why the dismissal is remembered for the session and not for ever.
+ * How long "Not now" lasts.
  *
- * A permanently dismissible warning about unrecoverable data loss is one
- * somebody clicks away on their first day and never sees again, while the risk
- * it described stays exactly as it was. A non-dismissible one is a nag, and a
- * nag gets ignored in place, which is worse - it is still on screen and no
- * longer read.
+ * This used to be one session, and the reasoning was sound in one direction
+ * only: a permanently dismissible warning about unrecoverable data loss is one
+ * somebody clicks away on their first day while the risk stays exactly as it
+ * was. What that missed is that a warning returning on every single launch is a
+ * nag, and a nag gets ignored *in place* - still on screen, no longer read - so
+ * per-session dismissal produced the failure it was trying to avoid, and made
+ * the app feel broken while doing it.
  *
- * Per session is the honest middle: it goes away when asked, comes back the
- * next time the app starts because the account is still unrecoverable, and
- * stops for good the moment a backup exists - which is the only thing that
- * actually changes the fact.
+ * Thirty days is the honest middle. It goes away properly when asked, it comes
+ * back long enough later that it reads as a fresh warning rather than as the
+ * same one again, and it stops for good the moment a backup exists - which is
+ * the only thing that actually changes the fact it is describing.
+ *
+ * Nothing here overrides that last part: `backedUp` short-circuits above the
+ * snooze, so setting up recovery removes the notice immediately whatever is
+ * stored.
  */
-export const DISMISSAL_IS_PER_SESSION = true;
+export const SNOOZE_MS = 30 * 24 * 60 * 60 * 1000;
+
+/** Where the stamp lives. Per machine, because the risk is about this machine. */
+export const SNOOZE_KEY = 'betweenus.backupNotice.dismissedUntil';
+
+/**
+ * Reads the stored stamp. Never throws: storage can be unavailable or hold
+ * junk, and neither is a reason to fail to draw a warning - an unreadable
+ * value reads as "never dismissed", which errs towards showing it.
+ */
+export function readDismissedUntil(store: Pick<Storage, 'getItem'>): number | null {
+  try {
+    const raw = store.getItem(SNOOZE_KEY);
+    if (raw === null) return null;
+    const parsed = Number(raw);
+    return Number.isFinite(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}

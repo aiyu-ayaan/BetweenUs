@@ -1,6 +1,11 @@
 import { useState } from 'react';
 import { useIdentityStore } from '../stores/identity';
-import { shouldWarnAboutBackup } from '../services/backup-warning';
+import {
+  readDismissedUntil,
+  shouldWarnAboutBackup,
+  SNOOZE_KEY,
+  SNOOZE_MS,
+} from '../services/backup-warning';
 
 /**
  * The one notice that says an account cannot be recovered.
@@ -23,12 +28,29 @@ import { shouldWarnAboutBackup } from '../services/backup-warning';
  */
 export function BackupNotice({ onOpenSettings }: { onOpenSettings: () => void }): JSX.Element | null {
   const identity = useIdentityStore((state) => state.identity);
-  // In memory rather than on disk, on purpose - see `backup-warning.ts`. A
-  // permanently dismissible warning about unrecoverable loss is one somebody
-  // clicks away on their first day while the risk stays exactly as it was.
-  const [dismissed, setDismissed] = useState(false);
+  // On disk now, and for thirty days - see `SNOOZE_MS`. It used to be per
+  // session, which meant this returned on every single launch; a warning that
+  // comes back that often is a nag, and a nag gets ignored in place, which is
+  // the failure the per-session rule was written to avoid.
+  //
+  // Read once, lazily, rather than on every render: the stamp only changes when
+  // this component writes it.
+  const [dismissedUntil, setDismissedUntil] = useState<number | null>(() =>
+    typeof window === 'undefined' ? null : readDismissedUntil(window.localStorage),
+  );
 
-  if (!shouldWarnAboutBackup(identity, dismissed)) return null;
+  const snooze = (): void => {
+    const until = Date.now() + SNOOZE_MS;
+    try {
+      window.localStorage.setItem(SNOOZE_KEY, String(until));
+    } catch {
+      // Storage can be unavailable. Hiding it for this session is still the
+      // right answer to the button somebody just pressed.
+    }
+    setDismissedUntil(until);
+  };
+
+  if (!shouldWarnAboutBackup(identity, dismissedUntil)) return null;
 
   return (
     <div
@@ -50,8 +72,9 @@ export function BackupNotice({ onOpenSettings }: { onOpenSettings: () => void })
         </button>
         <button
           type="button"
-          onClick={() => setDismissed(true)}
-          aria-label="Hide until next time"
+          onClick={snooze}
+          aria-label="Hide this for 30 days"
+          title="Hidden for 30 days. It disappears for good once recovery is set up."
           className="rounded-md px-2 py-0.5 font-medium text-amber-200/80 hover:bg-amber-500/15 hover:text-amber-100"
         >
           Not now

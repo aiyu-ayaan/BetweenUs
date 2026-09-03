@@ -7,7 +7,7 @@ import {
   type FormEvent,
   type KeyboardEvent,
 } from 'react';
-import { MAX_ATTACHMENTS_PER_MESSAGE } from '@betweenus/shared-types';
+import { MAX_ATTACHMENTS_PER_MESSAGE, hasBody } from '@betweenus/shared-types';
 import type {
   Channel,
   LinkPreview,
@@ -153,6 +153,43 @@ function MuteButton({ channelId }: { channelId: string }): JSX.Element {
  * about line rather than no card, because the half of it that comes from
  * presence is the half worth resting on a name for.
  */
+/** How long a gap may be before a run of messages is two runs. */
+export const GROUP_WITHIN_MS = 5 * 60 * 1000;
+
+/**
+ * Whether `message` continues the run `previous` started - which is what
+ * decides whether it draws a name and a face of its own.
+ *
+ * Pure and exported so `ChatView.check.ts` can pin it. The case that made that
+ * worth doing: an arrival line ("mobile is here.") sits in the same list as the
+ * bubbles and carries the arriving person as its author, so the message they
+ * sent immediately afterwards matched on author id, grouped with the arrival,
+ * and drew neither a name nor a picture. On screen that is a message from
+ * nobody, directly under a line naming them.
+ */
+export function groupsWith(
+  previous: DecryptedMessage | undefined,
+  message: DecryptedMessage,
+): boolean {
+  if (!previous) return false;
+  // Only a bubble can be grouped with. An arrival is the conversation talking
+  // rather than a person, and it is drawn as a line rather than a bubble.
+  if (!hasBody(previous.kind) || !hasBody(message.kind)) return false;
+  if (previous.author.id !== message.author.id) return false;
+  // A webhook posts as the account that opened it, so two different robots -
+  // and a robot and the person who set it up - all share an author id. Grouping
+  // on that alone stacked a build notification under somebody's sentence and
+  // drew one name over both.
+  if ((previous.webhook?.id ?? null) !== (message.webhook?.id ?? null)) return false;
+  // A day boundary always breaks the run: a divider sits between the two
+  // bubbles, and a run reading across it visibly is not one.
+  if (!sameDay(previous.createdAt, message.createdAt)) return false;
+  return (
+    new Date(message.createdAt).getTime() - new Date(previous.createdAt).getTime() <
+    GROUP_WITHIN_MS
+  );
+}
+
 function AuthorHover({
   author,
   children,
@@ -869,16 +906,7 @@ function MessageList({
         {messages.map((message, index) => {
           // Consecutive messages from one author collapse into a group.
           const previous = messages[index - 1];
-          const grouped =
-            previous?.author.id === message.author.id &&
-            // A webhook posts as the account that opened it, so two different
-            // robots - and a robot and the person who set it up - all share an
-            // author id. Grouping on that alone stacked a build notification
-            // under somebody's sentence and drew one name over both.
-            previous?.webhook?.id === message.webhook?.id &&
-            sameDay(previous.createdAt, message.createdAt) &&
-            new Date(message.createdAt).getTime() - new Date(previous.createdAt).getTime() <
-              5 * 60 * 1000;
+          const grouped = groupsWith(previous, message);
           // A day boundary always breaks the run: a divider sits between the
           // two bubbles, and a run reading across it is a run of one person
           // talking that visibly is not.

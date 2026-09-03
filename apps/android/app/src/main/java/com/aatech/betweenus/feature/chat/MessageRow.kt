@@ -204,6 +204,12 @@ fun MessageRow(
         Workspace.directChannel(channelId) == null
     }
     val grouped = previous != null &&
+        // An arrival line is not a bubble and is not part of anybody's run, so
+        // the message under it starts a new one. Without this, "mobile is here."
+        // was the `previous` for mobile's next message, the author ids matched,
+        // and that message lost its name and its face - which reads as a
+        // message from nobody.
+        previous.message.hasBody &&
         previous.message.author.id == message.author.id &&
         // Two different robots - and a robot and the person who set it up - all
         // share an author id. Grouping on that alone stacked a build
