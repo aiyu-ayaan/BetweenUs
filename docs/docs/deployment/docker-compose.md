@@ -126,6 +126,15 @@ And if the gateway does not come back healthy it restores the version that
 was running and exits non-zero — which is the whole difference between a
 deploy step and two commands in a README.
 
+It reloads the gateway on every deploy. `infrastructure/nginx/nginx.conf`
+is a bind mount rather than part of the nginx image, so compose sees nothing
+to recreate when only that file changed and the container keeps serving the
+config it read at its last start. A route added this release would then have
+no `location` of its own, fall through to the catch-all that proxies the web
+container, and answer a JSON call with the SPA's `index.html` — a 200 the
+client can only report as a broken response. A config that fails `nginx -t`
+fails the deploy instead of being reloaded into the running gateway.
+
 Asked for the version that is already running — which is what a `!patch`
 deploy is — it adds `--force-recreate`, so every container comes down and
 comes back on the image just pulled rather than on compose's judgement about
