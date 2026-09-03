@@ -8,6 +8,7 @@ import com.aatech.betweenus.core.data.StatusEntry
 import com.aatech.betweenus.core.data.StatusKind
 import com.aatech.betweenus.core.data.StatusRun
 import com.aatech.betweenus.core.data.StatusViewer
+import com.aatech.betweenus.core.crypto.E2ee
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -97,8 +98,13 @@ object Statuses {
         _loading.value = true
         runCatching { BetweenUsApi.statusFeed() }
             .onSuccess { feed ->
-                _mine.value = feed.mine
-                _received = feed.others
+                // Captions are opened once, here, rather than where each is
+                // drawn: decryption suspends and the tray, the player and the
+                // content descriptions do not. A post this phone holds no key
+                // for keeps the padlock and is drawn like any other, because a
+                // friendship younger than the post is not an error.
+                _mine.value = feed.mine.map { open(it) }
+                _received = feed.others.map { run -> run.copy(statuses = run.statuses.map { open(it) }) }
                 _error.value = null
             }
             // A deployment that has not been migrated yet answers 404 here, and
@@ -121,9 +127,30 @@ object Statuses {
         media: ByteArray? = null,
         mediaContentType: String? = null,
     ) {
-        val entry = BetweenUsApi.postStatus(kind, caption, background, durationMs, media, mediaContentType)
-        _mine.update { it + entry }
+        // The directory is read now rather than held: this list is the
+        // audience, as it stands at the moment of posting, which is what makes
+        // a friendship made afterwards not a way into what was posted before
+        // it. See `E2ee.sealStatus`.
+        val sealed = E2ee.sealStatus(caption, media, BetweenUsApi.statusAudience())
+        val entry = BetweenUsApi.postStatus(
+            kind = kind,
+            caption = sealed.caption,
+            background = background,
+            durationMs = durationMs,
+            media = sealed.media?.ciphertext,
+            mediaIv = sealed.media?.iv,
+            mediaType = mediaContentType,
+            senderDeviceId = sealed.senderDeviceId,
+            keys = sealed.keys,
+        )
+        // With the caption that was typed, not the envelope that came back:
+        // this phone has the words already.
+        _mine.update { it + entry.copy(caption = caption) }
     }
+
+    /** One post with its caption opened. See the note in [refresh]. */
+    private suspend fun open(post: StatusEntry): StatusEntry =
+        post.copy(caption = E2ee.openStatusCaption(post))
 
     /**
      * Records a look, here and on the server.

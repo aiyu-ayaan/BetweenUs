@@ -401,12 +401,11 @@ private fun Slide(post: StatusEntry, paused: Boolean, modifier: Modifier = Modif
         return
     }
 
-    val mediaUrl = post.mediaUrl
-    if (mediaUrl == null) return
+    if (post.mediaUrl == null) return
 
     if (post.kind == StatusKind.VIDEO) {
         var uri by remember(post.id) { mutableStateOf<android.net.Uri?>(null) }
-        LaunchedEffect(post.id) { uri = StatusMedia.video(context, post.id, mediaUrl) }
+        LaunchedEffect(post.id) { uri = StatusMedia.video(context, post) }
         val target = uri
         if (target == null) {
             Box(modifier, contentAlignment = Alignment.Center) { CircularProgressIndicator() }
@@ -431,7 +430,7 @@ private fun Slide(post: StatusEntry, paused: Boolean, modifier: Modifier = Modif
     }
 
     var bitmap by remember(post.id) { mutableStateOf<android.graphics.Bitmap?>(null) }
-    LaunchedEffect(post.id) { bitmap = StatusMedia.photo(post.id, mediaUrl) }
+    LaunchedEffect(post.id) { bitmap = StatusMedia.photo(post) }
     val picture = bitmap
     if (picture == null) {
         Box(modifier, contentAlignment = Alignment.Center) { CircularProgressIndicator() }

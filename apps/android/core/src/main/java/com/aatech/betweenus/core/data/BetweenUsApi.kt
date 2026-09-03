@@ -642,13 +642,25 @@ object BetweenUsApi {
 
     // --- statuses ---
     //
-    // A post that expires after a day. Not encrypted, unlike a message: its
-    // audience is whoever is a friend when each viewer opens it. See the note
-    // in Models.kt.
+    // A post that expires after a day, sealed the way a message is. What
+    // differs is where the audience comes from: a channel has members, a status
+    // has the friend list as it stood when it was written. See the note in
+    // Models.kt.
 
     /** Your own run, and one entry per friend who has posted. */
     suspend fun statusFeed(): StatusFeed = io {
         StatusFeed.from(authed("GET", "/api/v1/statuses"))
+    }
+
+    /**
+     * Every device a post may be sealed for: this account's own, and every
+     * friend's.
+     *
+     * Read immediately before posting rather than cached - this list is the
+     * audience, and a friend added a minute ago belongs in it.
+     */
+    suspend fun statusAudience(): List<DeviceKey> = io {
+        authedArray("GET", "/api/v1/statuses/audience").map { DeviceKey.from(it) }
     }
 
     /**
@@ -658,6 +670,10 @@ object BetweenUsApi {
      * attachment, which is uploaded first and claimed by a message later. A
      * status is one file and one button, and a two-step version leaves an
      * orphaned blob every time somebody changes their mind in between.
+     *
+     * Everything here is already sealed by the caller: `caption` is an
+     * envelope, `media` is ciphertext, and `keys` is the bundle of wraps that
+     * decides who can open either.
      */
     suspend fun postStatus(
         kind: StatusKind,
@@ -665,19 +681,26 @@ object BetweenUsApi {
         background: String? = null,
         durationMs: Long? = null,
         media: ByteArray? = null,
-        mediaContentType: String? = null,
+        mediaIv: String? = null,
+        mediaType: String? = null,
+        senderDeviceId: String,
+        keys: List<StatusKeyEntry>,
     ): StatusEntry = io {
         val form = MultipartBody.Builder().setType(MultipartBody.FORM)
             .addFormDataPart("kind", kind.name)
         caption?.takeIf { it.isNotBlank() }?.let { form.addFormDataPart("caption", it) }
         background?.let { form.addFormDataPart("background", it) }
         durationMs?.let { form.addFormDataPart("durationMs", it.toString()) }
+        mediaIv?.let { form.addFormDataPart("mediaIv", it) }
+        mediaType?.let { form.addFormDataPart("mediaType", it) }
+        form.addFormDataPart("senderDeviceId", senderDeviceId)
+        // Multipart has no arrays, so the bundle travels as JSON in one field
+        // and is parsed back by the DTO on the other side.
+        form.addFormDataPart("keys", JSONArray(keys.map { it.toJson() }).toString())
         if (media != null) {
-            form.addFormDataPart(
-                "file",
-                "status",
-                media.toRequestBody(mediaContentType?.toMediaTypeOrNull() ?: OPAQUE),
-            )
+            // Ciphertext, so the part is opaque whatever the picture used to
+            // be. What it is once opened travels as `mediaType`.
+            form.addFormDataPart("file", "status", media.toRequestBody(OPAQUE))
         }
         StatusEntry.from(authedForm("/api/v1/statuses", form.build()))
     }

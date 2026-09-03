@@ -6,6 +6,8 @@ import com.aatech.betweenus.core.data.ChannelKeyEntry
 import com.aatech.betweenus.core.data.ChannelKeys
 import com.aatech.betweenus.core.data.DeviceKey
 import com.aatech.betweenus.core.data.IdentityBackup
+import com.aatech.betweenus.core.data.StatusEntry
+import com.aatech.betweenus.core.data.StatusKeyEntry
 import com.aatech.betweenus.core.data.BetweenUsApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -449,6 +451,122 @@ object E2ee {
         if (refresh) forgetKeys(channelId)
         val state = ensureChannelKey(channelId)
         return state.keys[state.epoch] ?: throw MissingChannelKeyError()
+    }
+
+
+    // --- statuses ---
+    //
+    // A status has no channel, so it has no epoch and nothing to rotate: one
+    // key per post, wrapped once per device that may read it, and gone in a
+    // day. None of the channel machinery above applies - there is no state to
+    // load, no gap to fill and no rekey.
+    //
+    // The wrap list is the audience, built from the directory at the moment of
+    // posting. A friendship made afterwards adds nothing to a post already
+    // written, which is why a new friend does not see yesterday's moment.
+
+    /** A post, sealed and ready to send. */
+    class SealedStatus(
+        val caption: String?,
+        val media: Crypto.Sealed?,
+        val keys: List<StatusKeyEntry>,
+        val senderDeviceId: String,
+    )
+
+    /**
+     * Seals one post for one audience.
+     *
+     * This phone may not be in the directory yet - one that signed in a moment
+     * ago has not been listed - so we always wrap for ourselves. Posting
+     * something we cannot open is the one failure with no way back.
+     */
+    suspend fun sealStatus(
+        caption: String?,
+        media: ByteArray?,
+        devices: List<DeviceKey>,
+    ): SealedStatus {
+        val self = currentIdentity()
+        val key = Crypto.generateChannelKey()
+        val mine = DeviceIdentity.id()
+        val recipients = if (devices.any { it.userId == userId && it.deviceId == mine }) {
+            devices
+        } else {
+            devices + DeviceKey(userId.orEmpty(), mine, self.publicKey)
+        }
+
+        val keys = recipients.mapNotNull { device ->
+            runCatching {
+                val wrapped = Crypto.wrapChannelKey(key, self.privateKey, device.publicKey)
+                StatusKeyEntry(
+                    recipientUserId = device.userId,
+                    recipientDeviceId = device.deviceId,
+                    senderPublicKey = self.publicKey,
+                    wrappedKey = wrapped.wrappedKey,
+                    iv = wrapped.iv,
+                )
+            }.getOrNull()
+            // A directory row with a malformed public key must not stop the
+            // post being sealed for everybody else.
+        }
+
+        // Epoch 0 in the envelope: a status has no generations, and the field
+        // is there because the shape is shared with messages.
+        val sealedCaption = caption?.takeIf { it.isNotBlank() }?.let {
+            val sealed = Crypto.encrypt(it, key)
+            JSONObject()
+                .put("v", 1)
+                .put("epoch", 0)
+                .put("iv", sealed.iv)
+                .put("ct", Crypto.base64(sealed.ciphertext))
+                .toString()
+        }
+        return SealedStatus(
+            caption = sealedCaption,
+            media = media?.let { Crypto.encryptBytes(it, key) },
+            keys = keys,
+            senderDeviceId = mine,
+        )
+    }
+
+    /**
+     * The key to one post, from whichever wrap this phone's private half opens.
+     *
+     * Null rather than a throw for the ordinary cases: a post written before
+     * this device existed, or before the friendship did, carries no wrap for
+     * us. Both happen, and neither is an error.
+     */
+    suspend fun statusKey(post: StatusEntry): String? {
+        if (post.keys.isEmpty()) return null
+        val self = currentIdentity()
+        for (wrap in post.keys) {
+            val opened = runCatching {
+                Crypto.unwrapChannelKey(
+                    Crypto.Wrapped(wrap.wrappedKey, wrap.iv),
+                    self.privateKey,
+                    wrap.senderPublicKey,
+                )
+            }.getOrNull()
+            if (opened != null) return opened
+        }
+        return null
+    }
+
+    /** A post's caption in the clear, or the placeholder. Never throws. */
+    suspend fun openStatusCaption(post: StatusEntry): String? {
+        val caption = post.caption ?: return null
+        // Written before statuses were sealed. It expires within the day.
+        val envelope = parseEnvelope(caption) ?: return caption
+        val key = statusKey(post) ?: return UNDECRYPTABLE
+        return runCatching { Crypto.decrypt(envelope.ct, envelope.iv, key) }
+            .getOrDefault(UNDECRYPTABLE)
+    }
+
+    /** A post's media in the clear. Null when this device holds no key for it. */
+    suspend fun openStatusMedia(post: StatusEntry, ciphertext: ByteArray): ByteArray? {
+        // No IV means it was stored in the clear, before this. Hand it back.
+        val iv = post.mediaIv ?: return ciphertext
+        val key = statusKey(post) ?: return null
+        return runCatching { Crypto.decryptBytes(ciphertext, iv, key) }.getOrNull()
     }
 
     private class Envelope(val epoch: Int, val iv: String, val ct: String)

@@ -1658,10 +1658,12 @@ data class RemoteScreen(
 // A post that expires after 24 hours and is read by accepted friends. Mirrors
 // the "Status" section of `packages/shared-types/src/index.ts`.
 //
-// Deliberately **not** end-to-end encrypted, unlike a message: its audience is
-// whoever is a friend at the moment each viewer opens it, which is a set that
-// changes after the post is written. The bytes are stored opaque and gated
-// server-side by the same friendship check the tray uses.
+// End-to-end encrypted, like a message, and sealed the only way a post with no
+// channel can be: the audience is frozen when it is written. The author mints
+// one key per post, seals the caption and the file under it, and wraps that key
+// once per device of every friend it had at that moment - `keys` below is the
+// reader's copy of that wrap. Somebody who becomes a friend tomorrow gets no
+// wrap for what was written today, and so does not see it.
 
 enum class StatusKind {
     PHOTO,
@@ -1707,6 +1709,15 @@ data class StatusEntry(
      * put in a bare image URL.
      */
     val mediaUrl: String?,
+    /** The IV the media was sealed with. Null for a text post. */
+    val mediaIv: String?,
+    /**
+     * What the bytes are once opened - `image/jpeg`, `video/mp4`. Sent by the
+     * author and stored in the clear: the server holds ciphertext and cannot
+     * tell, and a player needs a type.
+     */
+    val mediaType: String?,
+    /** The sealed caption - an envelope, not the words. Opened by the client. */
     val caption: String?,
     /** The colour a text status is drawn on. Null for media. */
     val background: String?,
@@ -1718,6 +1729,17 @@ data class StatusEntry(
     val seen: Boolean,
     /** How many people opened it. Filled in only on your own posts. */
     val viewCount: Int?,
+    /**
+     * This post's key, wrapped for this account's own devices - one per machine
+     * it had when the author posted.
+     *
+     * A list because the server cannot tell which machine is asking without
+     * trusting a device id it was handed, so it sends every copy addressed to
+     * the account and this device keeps whichever its private half opens.
+     * Empty means nothing was addressed here: the friendship is newer than the
+     * post, or this phone is.
+     */
+    val keys: List<StatusKeyEntry> = emptyList(),
 ) {
     /** How long this post holds the screen, bounded by the video cap. */
     val holdMs: Long
@@ -1733,6 +1755,8 @@ data class StatusEntry(
             authorId = json.optString("authorId"),
             kind = StatusKind.of(json.optString("kind")),
             mediaUrl = json.stringOrNull("mediaUrl"),
+            mediaIv = json.stringOrNull("mediaIv"),
+            mediaType = json.stringOrNull("mediaType"),
             caption = json.stringOrNull("caption"),
             background = json.stringOrNull("background"),
             durationMs = if (json.isNull("durationMs")) null else json.optLong("durationMs"),
@@ -1740,6 +1764,39 @@ data class StatusEntry(
             expiresAt = json.optString("expiresAt"),
             seen = json.optBoolean("seen"),
             viewCount = if (json.isNull("viewCount")) null else json.optInt("viewCount"),
+            keys = json.optJSONArray("keys")?.map { StatusKeyEntry.from(it) }.orEmpty(),
+        )
+    }
+}
+
+/**
+ * One post's key, sealed for one device.
+ *
+ * The same shape as a [ChannelKeyEntry] minus the epoch: a status is written
+ * once and gone in a day, so there is nothing to rotate.
+ */
+data class StatusKeyEntry(
+    val recipientUserId: String,
+    val recipientDeviceId: String,
+    /** The author's public key. The recipient derives the shared secret against it. */
+    val senderPublicKey: String,
+    val wrappedKey: String,
+    val iv: String,
+) {
+    fun toJson(): JSONObject = JSONObject()
+        .put("recipientUserId", recipientUserId)
+        .put("recipientDeviceId", recipientDeviceId)
+        .put("senderPublicKey", senderPublicKey)
+        .put("wrappedKey", wrappedKey)
+        .put("iv", iv)
+
+    companion object {
+        fun from(json: JSONObject) = StatusKeyEntry(
+            recipientUserId = json.optString("recipientUserId"),
+            recipientDeviceId = json.optString("recipientDeviceId"),
+            senderPublicKey = json.optString("senderPublicKey"),
+            wrappedKey = json.optString("wrappedKey"),
+            iv = json.optString("iv"),
         )
     }
 }
