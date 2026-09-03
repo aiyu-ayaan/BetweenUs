@@ -6,7 +6,12 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia.ImageOnly
+import androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia.VideoOnly
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -22,6 +27,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -54,8 +60,8 @@ import com.aatech.betweenus.core.data.STATUS_CAPTION_MAX_LENGTH
 import com.aatech.betweenus.core.data.STATUS_VIDEO_MAX_MS
 import com.aatech.betweenus.core.data.StatusKind
 import com.aatech.betweenus.core.store.Statuses
+import com.aatech.betweenus.ui.components.BetweenUsIcon
 import com.aatech.betweenus.ui.components.BetweenUsIcons
-import com.aatech.betweenus.ui.components.Chip
 import com.aatech.betweenus.ui.components.IconAction
 import com.aatech.betweenus.ui.components.Notice
 import com.aatech.betweenus.ui.components.StatusComposerDoor
@@ -266,9 +272,12 @@ private fun StatusComposerScreen(onClose: () -> Unit) {
                 },
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
             )
-            Box(Modifier.fillMaxWidth().padding(bottom = 12.dp), contentAlignment = Alignment.Center) {
-                Chip(text = "Choose something else", onClick = { picked = null })
-            }
+            KindSwitcher(
+                selected = pickedKind,
+                onPhoto = { photo.launch(PickVisualMediaRequest(ImageOnly)) },
+                onVideo = { video.launch(PickVisualMediaRequest(VideoOnly)) },
+                onText = { picked = null },
+            )
         } else {
             // The palette, then the three kinds. A fixed set of colours rather
             // than a picker: every one of these is legible under white text, and
@@ -293,32 +302,93 @@ private fun StatusComposerScreen(onClose: () -> Unit) {
                     )
                 }
             }
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(bottom = 20.dp),
-                horizontalArrangement = Arrangement.Center,
-            ) {
-                Chip(
-                    text = "Photo",
-                    onClick = {
-                        photo.launch(
-                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
-                        )
-                    },
-                )
-                Spacer(Modifier.size(10.dp))
-                Chip(
-                    text = "Video",
-                    onClick = {
-                        video.launch(
-                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.VideoOnly),
-                        )
-                    },
-                )
-                Spacer(Modifier.size(10.dp))
-                Chip(text = "Text", selected = true)
-            }
+            KindSwitcher(
+                selected = StatusKind.TEXT,
+                onPhoto = { photo.launch(PickVisualMediaRequest(ImageOnly)) },
+                onVideo = { video.launch(PickVisualMediaRequest(VideoOnly)) },
+                onText = {},
+            )
         }
         Spacer(Modifier.height(4.dp))
+    }
+}
+
+/**
+ * Which of the three kinds is being posted, as a row of cards under the
+ * preview.
+ *
+ * A switcher rather than three buttons that each did something different. It
+ * used to be three chips - two that opened a picker and one that was merely
+ * lit - so "Text" looked like a button that did nothing, and after picking a
+ * photo the only way back to words was a "Choose something else" chip that said
+ * neither what you were choosing nor what you would get. One row, three cards,
+ * one of them selected: the selection *is* the mode, and tapping the one you
+ * are already in re-opens its picker, which is what a person reaching for it
+ * again wants.
+ *
+ * Icon over label rather than a segmented bar of words, because the three read
+ * at a glance at the bottom of a photo, where a bar of small text does not. The
+ * selected card is filled and the others are outlined, so it survives being
+ * drawn on top of a picture of anything.
+ */
+@Composable
+private fun KindSwitcher(
+    selected: StatusKind,
+    onPhoto: () -> Unit,
+    onVideo: () -> Unit,
+    onText: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState())
+            .padding(horizontal = 16.dp)
+            .padding(bottom = 20.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        KindCard(BetweenUsIcons.Image, "Photo", selected == StatusKind.PHOTO, onPhoto)
+        KindCard(BetweenUsIcons.Video, "Video", selected == StatusKind.VIDEO, onVideo)
+        KindCard(BetweenUsIcons.Pencil, "Text", selected == StatusKind.TEXT, onText)
+    }
+}
+
+/** One card in [KindSwitcher]. */
+@Composable
+private fun KindCard(
+    icon: Int,
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    // Animated rather than switched, so the row reads as one control moving
+    // between three positions instead of three that light independently.
+    val background by animateColorAsState(
+        targetValue = if (selected) Color.White.copy(alpha = 0.22f) else Color.White.copy(alpha = 0.06f),
+        label = "kind-background",
+    )
+    val edge by animateColorAsState(
+        targetValue = if (selected) Color.White else Color.White.copy(alpha = 0.25f),
+        label = "kind-edge",
+    )
+    val shape = RoundedCornerShape(16.dp)
+
+    Column(
+        modifier = Modifier
+            .widthIn(min = 96.dp)
+            .clip(shape)
+            .background(background)
+            .border(width = if (selected) 2.dp else 1.dp, color = edge, shape = shape)
+            .clickable(onClick = onClick)
+            .padding(vertical = 12.dp, horizontal = 16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        BetweenUsIcon(icon, tint = Color.White, size = 22.dp)
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelLarge,
+            color = if (selected) Color.White else Color.White.copy(alpha = 0.75f),
+        )
     }
 }
 

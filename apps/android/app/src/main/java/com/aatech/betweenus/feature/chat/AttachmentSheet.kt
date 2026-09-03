@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -167,9 +166,13 @@ fun AttachmentSheet(
             )
         },
     ) {
+        // Full height, not "as tall as the content happens to be". A picker
+        // whose whole job is showing photos opened at half the screen because
+        // the grid inside it was capped, which put four thumbnails on screen
+        // and the rest behind a scroll nobody could see the start of.
         Column(
             Modifier
-                .fillMaxWidth()
+                .fillMaxSize()
                 .navigationBarsPadding()
                 .padding(bottom = 12.dp),
         ) {
@@ -242,7 +245,10 @@ fun AttachmentSheet(
 
             Spacer(Modifier.height(6.dp))
 
-            Box(Modifier.heightIn(max = 280.dp)) {
+            // Everything the actions, the heading and the send button do not
+            // take. The grid scrolls inside it, so the row of actions stays put
+            // at the top and the send button stays reachable at the bottom.
+            Box(Modifier.weight(1f).fillMaxWidth()) {
                 when {
                     allowed && media.isNotEmpty() -> LazyVerticalGrid(
                         columns = GridCells.Fixed(3),
