@@ -40,6 +40,7 @@ import com.aatech.betweenus.core.data.PublicUser
 import com.aatech.betweenus.core.data.ServerWithRole
 import com.aatech.betweenus.core.data.PresenceStatus
 import com.aatech.betweenus.core.store.Presence
+import com.aatech.betweenus.core.store.Statuses
 import com.aatech.betweenus.core.store.Workspace
 import com.aatech.betweenus.feature.servers.CreateChannelSheet
 import com.aatech.betweenus.feature.servers.JoinOrCreateServerSheet
@@ -69,6 +70,7 @@ fun WorkspaceDrawer(
     onHome: () -> Unit,
     onSettings: () -> Unit,
     onServerSettings: () -> Unit,
+    onStatus: () -> Unit,
     onRemote: () -> Unit,
 ) {
     var addingServer by remember { mutableStateOf(false) }
@@ -77,6 +79,7 @@ fun WorkspaceDrawer(
     val channels by Workspace.channels.collectAsState()
     val unread by Workspace.unread.collectAsState()
     val self by Presence.self.collectAsState()
+    val statusRuns by Statuses.runs.collectAsState()
 
     // Collected, not read: `Presence.voiceMembers()` returns the value at the
     // moment it is called, so a room that fills up after this drawer was drawn
@@ -138,6 +141,22 @@ fun WorkspaceDrawer(
                 contentDescription = "Add a server",
                 onClick = { addingServer = true },
             )
+            // Statuses sit on the rail rather than in the conversation list:
+            // they are a place to go, not a conversation, and a row that came
+            // and went as people posted would move the list under a thumb. The
+            // dot is the same count the rings say - how many people have
+            // something unwatched, not how many pictures there are.
+            Box {
+                IconAction(
+                    icon = BetweenUsIcons.Activity,
+                    contentDescription = "Status updates",
+                    onClick = onStatus,
+                )
+                val unwatched = statusRuns.count { it.unseen }
+                if (unwatched > 0) {
+                    Badge(count = unwatched, modifier = Modifier.align(Alignment.TopEnd))
+                }
+            }
             IconAction(
                 icon = BetweenUsIcons.Monitor,
                 contentDescription = "Remote machines",

@@ -8,6 +8,7 @@ import com.aatech.betweenus.core.crypto.E2ee
 import com.aatech.betweenus.core.store.Cache
 import com.aatech.betweenus.core.store.Conversation
 import com.aatech.betweenus.core.store.Presence
+import com.aatech.betweenus.core.store.Statuses
 import com.aatech.betweenus.core.store.Workspace
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
@@ -163,6 +164,7 @@ object Session {
         Presence.start()
         Conversation.start()
         Workspace.start()
+        Statuses.start()
         scope.launch { runCatching { E2ee.initIdentity(user.id, secret) } }
         // The push registration belongs to the account, not to the app: it is
         // made here on every sign-in and every restore, so a token that rotated
@@ -435,6 +437,7 @@ object Session {
         RemoteSocket.disconnect()
         E2ee.reset()
         Workspace.stop()
+        Statuses.stop()
         Conversation.stop()
         Presence.stop()
         _state.value = AuthPhase.SignedOut()

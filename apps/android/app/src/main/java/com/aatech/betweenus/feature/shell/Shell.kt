@@ -54,6 +54,7 @@ import com.aatech.betweenus.feature.chat.ChatScreen
 import com.aatech.betweenus.feature.home.AddFriendScreen
 import com.aatech.betweenus.feature.home.FriendsScreen
 import com.aatech.betweenus.feature.members.MembersScreen
+import com.aatech.betweenus.feature.status.StatusScreen
 import com.aatech.betweenus.feature.remote.RemoteMachinesScreen
 import com.aatech.betweenus.feature.remote.RemoteSessionScreen
 import com.aatech.betweenus.core.store.PendingChannel
@@ -436,6 +437,10 @@ fun Shell(user: PublicUser) {
                 scope.launch { drawer.close() }
                 navigation.navigate(Route.ServerSettings)
             },
+            onStatus = {
+                scope.launch { drawer.close() }
+                navigation.navigate(Route.Status)
+            },
             onRemote = {
                 scope.launch { drawer.close() }
                 navigation.navigate(Route.Remote)
@@ -782,6 +787,9 @@ fun Shell(user: PublicUser) {
                             onBack = { navigation.popBackStack() },
                         )
                     }
+                    composable(Route.Status) {
+                        StatusScreen(onBack = { navigation.popBackStack() })
+                    }
                     composable(Route.Remote) {
                         RemoteMachinesScreen(
                             onBack = { navigation.popBackStack() },
@@ -950,6 +958,7 @@ object Route {
     const val PermissionDetail = "permission-detail"
     const val AutoUpdate = "auto-update"
     const val CallUsage = "call-usage"
+    const val Status = "status"
     const val Remote = "remote"
     const val RemoteSession = "remote-session"
 }

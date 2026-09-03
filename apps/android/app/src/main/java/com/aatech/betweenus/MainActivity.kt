@@ -40,6 +40,9 @@ import com.aatech.betweenus.feature.voice.CallPip
 import com.aatech.betweenus.feature.voice.VoiceEngine
 import com.aatech.betweenus.ui.components.BetweenUsLogoTile
 import com.aatech.betweenus.feature.members.FullProfileHost
+import com.aatech.betweenus.feature.status.StatusComposerHost
+import com.aatech.betweenus.feature.status.StatusStoryHost
+import com.aatech.betweenus.ui.components.AvatarChoiceHost
 import com.aatech.betweenus.ui.components.ProfileDialogHost
 import com.aatech.betweenus.ui.theme.Ground
 import com.aatech.betweenus.ui.theme.BetweenUsTheme
@@ -234,6 +237,13 @@ private fun BetweenUsRoot() {
     // Above whatever is on screen: any avatar anywhere can ask for it.
     ProfileDialogHost()
     FullProfileHost()
+    // A tap on a ringed avatar has two answers, and this is where it asks
+    // which. The player and the composer sit beside it for the same reason the
+    // profile hosts do: a ring in a list, a row in the tray and an avatar in a
+    // conversation all open the same one.
+    AvatarChoiceHost()
+    StatusStoryHost()
+    StatusComposerHost()
 
     when (val current = phase) {
         // Nothing but the mark: this lasts one refresh round-trip and a splash

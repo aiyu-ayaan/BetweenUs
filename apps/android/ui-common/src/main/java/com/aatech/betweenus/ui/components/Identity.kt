@@ -16,7 +16,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -31,6 +33,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import com.aatech.betweenus.core.store.Statuses
 import com.aatech.betweenus.ui.theme.BetweenUsMotion
 import com.aatech.betweenus.ui.theme.StatusDnd
 import com.aatech.betweenus.ui.theme.StatusIdle
@@ -68,16 +71,51 @@ fun Avatar(
     onDoubleTap: (() -> Unit)? = null,
 ) {
     val context = LocalContext.current
-    val showPhoto = {
-        if (url != null) {
-            ProfileViewer.open(label, url)
-        } else {
-            Toast.makeText(context, "Profile photo not available", Toast.LENGTH_SHORT).show()
+    // Both the ring and what a tap does come from here, because every list in
+    // the app draws people through this one composable - which is what makes a
+    // ring appear in the drawer, the member list and a conversation header at
+    // once rather than in whichever three of them somebody remembered.
+    //
+    // Collected rather than read: a run that arrives while a row is on screen
+    // has to draw itself, and `ringFor` on its own is the value at the moment
+    // it was called.
+    val mine by Statuses.mine.collectAsState()
+    val runs by Statuses.runs.collectAsState()
+    val posted = remember(id, mine, runs) { if (viewable) Statuses.ringFor(id) else 0 to false }
+    val postCount = posted.first
+    val unseen = posted.second
+
+    val tapped = {
+        when {
+            // Two things behind one circle: ask which. See `AvatarChoice`.
+            postCount > 0 -> AvatarChoice.ask(
+                AvatarChoice.Asking(userId = id, name = label, avatarUrl = url, count = postCount),
+            )
+            url != null -> ProfileViewer.open(label, url)
+            else ->
+                Toast.makeText(context, "Profile photo not available", Toast.LENGTH_SHORT).show()
         }
     }
+    // A ring takes the outer edge and the picture is inset inside it, rather
+    // than the ring being drawn outside the avatar's own box. Growing the box
+    // would move everything laid out around it - a presence dot most visibly -
+    // the moment somebody posted, so a list would twitch as statuses arrive.
+    val ringed = postCount > 0
+    val inner = if (ringed) size - RING_INSET * 2 else size
+
+    Box(modifier = modifier.size(size), contentAlignment = Alignment.Center) {
+        if (ringed) {
+            StatusRing(
+                count = postCount,
+                unseen = unseen,
+                size = size,
+                modifier = Modifier.size(size),
+            )
+        }
+
     Box(
-        modifier = modifier
-            .size(size)
+        modifier = Modifier
+            .size(inner)
             .clip(shape)
             .background(if (url == null) tintFor(id) else Surface700)
             // Tapping a face shows the face, and a second tap asks who it
@@ -87,13 +125,13 @@ fun Avatar(
             .then(
                 when {
                     !viewable -> Modifier
-                    onDoubleTap == null -> Modifier.clickable { showPhoto() }
+                    onDoubleTap == null -> Modifier.clickable { tapped() }
                     // `combinedClickable` rather than two modifiers: a single
                     // tap has to wait out the double-tap window before it can
                     // know it was single, and only one gesture detector can be
                     // the thing that waits.
                     else -> Modifier.combinedClickable(
-                        onClick = showPhoto,
+                        onClick = tapped,
                         onDoubleClick = onDoubleTap,
                     )
                 }
@@ -105,7 +143,7 @@ fun Avatar(
                 model = url,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
-                modifier = Modifier.size(size).clip(shape),
+                modifier = Modifier.size(inner).clip(shape),
             )
         } else {
             Text(
@@ -131,7 +169,11 @@ fun Avatar(
             )
         }
     }
+    }
 }
+
+/** How much the ring takes off the edge of a ringed avatar: stroke plus air. */
+private val RING_INSET = 3.5.dp
 
 /** Avatar with the presence dot the other clients hang off the bottom-right. */
 @Composable

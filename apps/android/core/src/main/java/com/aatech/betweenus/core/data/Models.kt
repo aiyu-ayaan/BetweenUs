@@ -1652,3 +1652,143 @@ data class RemoteScreen(
         )
     }
 }
+
+// --- statuses ---
+//
+// A post that expires after 24 hours and is read by accepted friends. Mirrors
+// the "Status" section of `packages/shared-types/src/index.ts`.
+//
+// Deliberately **not** end-to-end encrypted, unlike a message: its audience is
+// whoever is a friend at the moment each viewer opens it, which is a set that
+// changes after the post is written. The bytes are stored opaque and gated
+// server-side by the same friendship check the tray uses.
+
+enum class StatusKind {
+    PHOTO,
+    VIDEO,
+    TEXT,
+    ;
+
+    companion object {
+        fun of(value: String?): StatusKind = when (value?.uppercase()) {
+            "PHOTO" -> PHOTO
+            "VIDEO" -> VIDEO
+            else -> TEXT
+        }
+    }
+}
+
+/** How long a photo or a text status holds the screen. A video runs its own length. */
+const val STATUS_PHOTO_MS = 5_000L
+
+/** How much of a video a status plays. The file is stored whole; playback stops here. */
+const val STATUS_VIDEO_MAX_MS = 30_000L
+
+/** The caption under a photo, or the whole of a text status. */
+const val STATUS_CAPTION_MAX_LENGTH = 700
+
+/**
+ * The colours a text status can be drawn on - the same eight every client
+ * offers, so a post written on one is drawn identically on the others.
+ */
+val STATUS_BACKGROUNDS = listOf(
+    "#075E54", "#128C7E", "#1F6FEB", "#6D28D9",
+    "#BE185D", "#B45309", "#334155", "#0F172A",
+)
+
+/** One post, as everybody who can see it reads it. */
+data class StatusEntry(
+    val id: String,
+    val authorId: String,
+    val kind: StatusKind,
+    /**
+     * Where the photo or video is, or null for a text status. It needs the
+     * caller's token like an attachment does - it is fetched as bytes, never
+     * put in a bare image URL.
+     */
+    val mediaUrl: String?,
+    val caption: String?,
+    /** The colour a text status is drawn on. Null for media. */
+    val background: String?,
+    /** A video's length in milliseconds; null for a photo or text. */
+    val durationMs: Long?,
+    val createdAt: String,
+    val expiresAt: String,
+    /** Whether the reader has opened it. Always true for your own. */
+    val seen: Boolean,
+    /** How many people opened it. Filled in only on your own posts. */
+    val viewCount: Int?,
+) {
+    /** How long this post holds the screen, bounded by the video cap. */
+    val holdMs: Long
+        get() = if (kind == StatusKind.VIDEO && durationMs != null) {
+            durationMs.coerceIn(1, STATUS_VIDEO_MAX_MS)
+        } else {
+            STATUS_PHOTO_MS
+        }
+
+    companion object {
+        fun from(json: JSONObject) = StatusEntry(
+            id = json.optString("id"),
+            authorId = json.optString("authorId"),
+            kind = StatusKind.of(json.optString("kind")),
+            mediaUrl = json.stringOrNull("mediaUrl"),
+            caption = json.stringOrNull("caption"),
+            background = json.stringOrNull("background"),
+            durationMs = if (json.isNull("durationMs")) null else json.optLong("durationMs"),
+            createdAt = json.optString("createdAt"),
+            expiresAt = json.optString("expiresAt"),
+            seen = json.optBoolean("seen"),
+            viewCount = if (json.isNull("viewCount")) null else json.optInt("viewCount"),
+        )
+    }
+}
+
+/**
+ * One person's live posts, which is the unit every screen draws: a ring is per
+ * person, a tap opens their whole run, and the count under a name is the size
+ * of this list.
+ */
+data class StatusRun(
+    val author: UserSummary,
+    val statuses: List<StatusEntry>,
+    val latestAt: String,
+    val unseen: Boolean,
+) {
+    companion object {
+        fun from(json: JSONObject) = StatusRun(
+            author = UserSummary.from(json.getJSONObject("author")),
+            statuses = json.optJSONArray("statuses")?.map { StatusEntry.from(it) }.orEmpty(),
+            latestAt = json.optString("latestAt"),
+            unseen = json.optBoolean("unseen"),
+        )
+    }
+}
+
+/** The whole tray: your own run, and everybody else's. */
+data class StatusFeed(
+    val mine: List<StatusEntry>,
+    val others: List<StatusRun>,
+) {
+    companion object {
+        val empty = StatusFeed(emptyList(), emptyList())
+
+        fun from(json: JSONObject) = StatusFeed(
+            mine = json.optJSONArray("mine")?.map { StatusEntry.from(it) }.orEmpty(),
+            others = json.optJSONArray("others")?.map { StatusRun.from(it) }.orEmpty(),
+        )
+    }
+}
+
+/** Somebody who opened your post. */
+data class StatusViewer(
+    val user: UserSummary,
+    val viewedAt: String,
+) {
+    companion object {
+        fun from(json: JSONObject) = StatusViewer(
+            user = UserSummary.from(json.getJSONObject("user")),
+            viewedAt = json.optString("viewedAt"),
+        )
+    }
+}

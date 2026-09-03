@@ -640,6 +640,62 @@ object BetweenUsApi {
         DirectChannel.from(authed("POST", "/api/v1/dm", obj("userId" to userId)))
     }
 
+    // --- statuses ---
+    //
+    // A post that expires after a day. Not encrypted, unlike a message: its
+    // audience is whoever is a friend when each viewer opens it. See the note
+    // in Models.kt.
+
+    /** Your own run, and one entry per friend who has posted. */
+    suspend fun statusFeed(): StatusFeed = io {
+        StatusFeed.from(authed("GET", "/api/v1/statuses"))
+    }
+
+    /**
+     * Posts one.
+     *
+     * The media travels with the caption in the same request, unlike an
+     * attachment, which is uploaded first and claimed by a message later. A
+     * status is one file and one button, and a two-step version leaves an
+     * orphaned blob every time somebody changes their mind in between.
+     */
+    suspend fun postStatus(
+        kind: StatusKind,
+        caption: String? = null,
+        background: String? = null,
+        durationMs: Long? = null,
+        media: ByteArray? = null,
+        mediaContentType: String? = null,
+    ): StatusEntry = io {
+        val form = MultipartBody.Builder().setType(MultipartBody.FORM)
+            .addFormDataPart("kind", kind.name)
+        caption?.takeIf { it.isNotBlank() }?.let { form.addFormDataPart("caption", it) }
+        background?.let { form.addFormDataPart("background", it) }
+        durationMs?.let { form.addFormDataPart("durationMs", it.toString()) }
+        if (media != null) {
+            form.addFormDataPart(
+                "file",
+                "status",
+                media.toRequestBody(mediaContentType?.toMediaTypeOrNull() ?: OPAQUE),
+            )
+        }
+        StatusEntry.from(authedForm("/api/v1/statuses", form.build()))
+    }
+
+    /** Records that this account opened one. Idempotent on the server. */
+    suspend fun markStatusSeen(statusId: String): Unit = io {
+        authed("POST", "/api/v1/statuses/$statusId/view")
+    }
+
+    /** Who opened one of yours. Refused to everybody but its author. */
+    suspend fun statusViewers(statusId: String): List<StatusViewer> = io {
+        authedArray("GET", "/api/v1/statuses/$statusId/views").map { StatusViewer.from(it) }
+    }
+
+    suspend fun deleteStatus(statusId: String): Unit = io {
+        authed("DELETE", "/api/v1/statuses/$statusId")
+    }
+
     // --- blocking ---
 
     /** Everyone this account has blocked, most recent first. */
