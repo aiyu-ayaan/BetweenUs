@@ -21,6 +21,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.aatech.betweenus.core.data.Endpoint
 import com.aatech.betweenus.core.data.PresenceStatus
@@ -29,6 +30,8 @@ import com.aatech.betweenus.core.store.LastSeen
 import com.aatech.betweenus.core.store.Presence
 import com.aatech.betweenus.core.store.Workspace
 import com.aatech.betweenus.ui.components.AvatarWithStatus
+import com.aatech.betweenus.ui.components.BetweenUsButton
+import com.aatech.betweenus.ui.components.ProfileCover
 import com.aatech.betweenus.ui.theme.Slate200
 import com.aatech.betweenus.ui.theme.Slate400
 import com.aatech.betweenus.ui.theme.Slate500
@@ -94,8 +97,14 @@ fun ProfileSheet(
             }
             friends.forEach { if (it.user.id == personArg.id) yield(it.user) }
             directs.forEach { if (it.participant.id == personArg.id) yield(it.participant) }
-        }
-        candidates.firstOrNull { it.about.isNotBlank() } ?: personArg
+        }.toList()
+        // Merged rather than "the first copy that has an about line": the cover
+        // and the about line are carried by different lists - a member row has
+        // both, a friend row has neither - so picking one winning copy loses
+        // whichever field that copy happens to be missing.
+        (candidates.firstOrNull { it.about.isNotBlank() } ?: personArg).copy(
+            coverUrl = candidates.firstNotNullOfOrNull { it.coverUrl } ?: personArg.coverUrl,
+        )
     }
 
     // A `presence.sync` carries only the people who are here, so the one case
@@ -112,12 +121,17 @@ fun ProfileSheet(
     val line = LastSeen.profile(status, lastSeen[person.id])
 
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheet) {
+        // A short band rather than the full one the screen below draws: this is
+        // a sheet, and a picture tall enough to be looked at properly is the
+        // reason that screen exists.
+        ProfileCover(coverUrl = person.coverUrl?.let { Endpoint.absolute(it) }, height = 72.dp)
+
         Column(
             Modifier
                 .fillMaxWidth()
                 .navigationBarsPadding()
                 .padding(horizontal = 20.dp)
-                .padding(bottom = 24.dp),
+                .padding(top = 16.dp, bottom = 24.dp),
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -165,9 +179,28 @@ fun ProfileSheet(
                     text = person.about,
                     style = MaterialTheme.typography.bodyMedium,
                     color = Slate200,
+                    // Clamped here and nowhere else: a sheet that grows past a
+                    // few lines starts covering the conversation it was opened
+                    // from. The whole line is one tap away, below.
+                    maxLines = 4,
+                    overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.padding(top = 6.dp),
                 )
             }
+
+            Spacer(Modifier.height(18.dp))
+            BetweenUsButton(
+                text = "View full profile",
+                onClick = {
+                    // Closed first: two things at this depth on screen at once
+                    // leaves the sheet visible behind a full-screen dialog, and
+                    // dismissing that one would reveal a sheet nobody asked to
+                    // still be open.
+                    onDismiss()
+                    FullProfile.open(person)
+                },
+                modifier = Modifier.fillMaxWidth(),
+            )
         }
     }
 }

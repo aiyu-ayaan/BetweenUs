@@ -39,6 +39,7 @@ import com.aatech.betweenus.feature.shell.Shell
 import com.aatech.betweenus.feature.voice.CallPip
 import com.aatech.betweenus.feature.voice.VoiceEngine
 import com.aatech.betweenus.ui.components.BetweenUsLogoTile
+import com.aatech.betweenus.feature.members.FullProfileHost
 import com.aatech.betweenus.ui.components.ProfileDialogHost
 import com.aatech.betweenus.ui.theme.Ground
 import com.aatech.betweenus.ui.theme.BetweenUsTheme
@@ -232,6 +233,7 @@ private fun BetweenUsRoot() {
 
     // Above whatever is on screen: any avatar anywhere can ask for it.
     ProfileDialogHost()
+    FullProfileHost()
 
     when (val current = phase) {
         // Nothing but the mark: this lasts one refresh round-trip and a splash

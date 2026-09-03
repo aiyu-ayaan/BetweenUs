@@ -117,6 +117,15 @@ data class UserSummary(
     val username: String,
     val displayName: String,
     val avatarUrl: String?,
+    /**
+     * The wide picture behind the name at the top of a profile, or null for the
+     * accent band drawn before there was one.
+     *
+     * Not derivable from [avatarUrl] and therefore carried beside it: an avatar
+     * is a square read at 32.dp in a member list, a cover is a 4:1 band read at
+     * the full width of the screen.
+     */
+    val coverUrl: String? = null,
     /** The line under the name on a profile card. Blank draws nothing at all. */
     val about: String = "",
 ) {
@@ -138,6 +147,7 @@ data class UserSummary(
         .put("username", username)
         .put("displayName", displayName)
         .put("avatarUrl", avatarUrl)
+        .put("coverUrl", coverUrl)
         .put("about", about)
 
     companion object {
@@ -146,6 +156,7 @@ data class UserSummary(
             username = json.optString("username"),
             displayName = json.optString("displayName"),
             avatarUrl = json.stringOrNull("avatarUrl"),
+            coverUrl = json.stringOrNull("coverUrl"),
             about = json.optString("about"),
         )
     }
@@ -328,11 +339,14 @@ data class ServerMember(
     val roleIds: List<String>,
     /** The line under the name on this member's profile card. */
     val about: String = "",
+    /** The band behind the name when this member's full profile is opened. */
+    val coverUrl: String? = null,
 ) {
     val label: String get() = displayName.ifBlank { username }
 
     /** The same person, as the shape a profile sheet and a DM header take. */
-    val summary: UserSummary get() = UserSummary(userId, username, displayName, avatarUrl, about)
+    val summary: UserSummary
+        get() = UserSummary(userId, username, displayName, avatarUrl, coverUrl, about)
 
     /**
      * The "@name" line drawn under [label], or null when it would only repeat
@@ -356,6 +370,7 @@ data class ServerMember(
         .put("deniedPermissions", jsonArrayOf(deniedPermissions))
         .put("roleIds", jsonArrayOf(roleIds))
         .put("about", about)
+        .put("coverUrl", coverUrl)
 
     companion object {
         fun from(json: JSONObject) = ServerMember(
@@ -369,6 +384,7 @@ data class ServerMember(
             deniedPermissions = json.strings("deniedPermissions"),
             roleIds = json.strings("roleIds"),
             about = json.optString("about"),
+            coverUrl = json.stringOrNull("coverUrl"),
         )
     }
 }

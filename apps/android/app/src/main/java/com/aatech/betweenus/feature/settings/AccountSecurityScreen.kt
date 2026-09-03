@@ -39,6 +39,7 @@ import com.aatech.betweenus.core.data.DEFAULT_ABOUT
 import com.aatech.betweenus.core.data.BetweenUsApi
 import com.aatech.betweenus.core.data.LastSeenVisibility
 import com.aatech.betweenus.core.data.Endpoint
+import com.aatech.betweenus.core.data.Pictures
 import com.aatech.betweenus.core.data.PublicUser
 import com.aatech.betweenus.core.data.Session
 import com.aatech.betweenus.core.store.Presence
@@ -50,6 +51,7 @@ import com.aatech.betweenus.ui.components.BetweenUsIcons
 import com.aatech.betweenus.ui.components.IconAction
 import com.aatech.betweenus.ui.components.ListRow
 import com.aatech.betweenus.ui.components.Notice
+import com.aatech.betweenus.ui.components.ProfileCover
 import com.aatech.betweenus.ui.components.SectionLabel
 import kotlinx.coroutines.launch
 
@@ -116,6 +118,16 @@ fun AccountSecurityScreen(
         }
 
         Column(Modifier.verticalScroll(rememberScrollState()).padding(bottom = 40.dp)) {
+            // --- Cover band ---
+            //
+            // The picture and the preview at once: what is below it is the row
+            // that edits everything else about the profile, so the band reads
+            // as the top of that card rather than as decoration above it.
+            ProfileCover(
+                coverUrl = user.coverUrl?.let { Endpoint.absolute(it) },
+                height = 120.dp,
+            )
+
             // --- Profile Header ---
             Row(
                 modifier = Modifier.fillMaxWidth().padding(16.dp),
@@ -163,6 +175,17 @@ fun AccountSecurityScreen(
                 canClear = user.avatarUrl != null,
                 onPicked = { url -> Session.updateUser(BetweenUsApi.setAvatar(url)) },
                 onClear = { Session.updateUser(BetweenUsApi.setAvatar(null)) },
+            )
+
+            Spacer(Modifier.height(12.dp))
+
+            PicturePicker(
+                label = "cover",
+                canClear = user.coverUrl != null,
+                aspect = Pictures.COVER_ASPECT,
+                maxWidth = Pictures.COVER_WIDTH,
+                onPicked = { url -> Session.updateUser(BetweenUsApi.setCover(url)) },
+                onClear = { Session.updateUser(BetweenUsApi.setCover(null)) },
             )
 
             SectionLabel("Last seen")

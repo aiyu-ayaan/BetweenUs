@@ -57,6 +57,17 @@ fun PicturePicker(
     onClear: suspend () -> Unit,
     /** Drawn beside the buttons. Empty where the screen already shows one. */
     preview: @Composable () -> Unit = {},
+    /**
+     * Width over height of the frame the picture is cropped to. 1 for an avatar
+     * or a server icon, [Pictures.COVER_ASPECT] for the band behind a name.
+     *
+     * The same number reaches the framing dialog and the stored output, because
+     * somebody who moves a photograph inside a square frame and then gets a
+     * wide crop of it has been shown a lie about what they were choosing.
+     */
+    aspect: Float = 1f,
+    /** The widest the stored picture is kept. See [Pictures.COVER_WIDTH]. */
+    maxWidth: Int = Pictures.PICTURE_EDGE,
 ) {
     val scope = rememberCoroutineScope()
     val context = androidx.compose.ui.platform.LocalContext.current
@@ -83,8 +94,8 @@ fun PicturePicker(
         ImageEditorDialog(
             source = source,
             title = "Frame your $label",
-            aspect = 1f,
-            maxOutputEdge = Pictures.PICTURE_EDGE * 2,
+            aspect = aspect,
+            maxOutputEdge = maxOf(Pictures.PICTURE_EDGE * 2, maxWidth),
             onCancel = { editing = null },
             onDone = { framed ->
                 editing = null
@@ -92,15 +103,17 @@ fun PicturePicker(
                     busy = true
                     failure = runCatching {
                         val picked = readPicked(context, framed)
-                        // Still squared here: the editor's frame was square, so
-                        // this is a scale to the stored size rather than a
-                        // second crop.
-                        val square = Pictures.square(
+                        // The editor already framed it to `aspect`, so this is
+                        // a scale to the stored size rather than a second crop -
+                        // which is why the same aspect has to reach both.
+                        val framedBytes = Pictures.framed(
                             bytes = picked.bytes,
-                            edge = Pictures.PICTURE_EDGE,
+                            maxWidth = maxWidth,
+                            aspect = aspect,
                             format = Bitmap.CompressFormat.WEBP,
                         ) ?: error("That file could not be read as a picture")
-                        val stored = BetweenUsApi.uploadPicture(square, "picture.webp", "image/webp")
+                        val stored =
+                            BetweenUsApi.uploadPicture(framedBytes, "picture.webp", "image/webp")
                         onPicked(stored.url)
                     }.exceptionOrNull()?.message
                     busy = false
@@ -109,12 +122,15 @@ fun PicturePicker(
         )
     }
 
+    // A square preview sits beside its buttons; a 4:1 band cannot, so a cover
+    // stacks instead of trying to share a row with them.
+    val wide = aspect != 1f
     Row(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        preview()
+        if (!wide) preview()
 
         Column {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -151,8 +167,13 @@ fun PicturePicker(
             if (failure == null) {
                 Spacer(Modifier.height(6.dp))
                 Text(
-                    text = "Squared and stored at ${Pictures.PICTURE_EDGE}px. Not encrypted: " +
-                        "a $label is drawn for people who hold no key.",
+                    text = if (wide) {
+                        "Framed to ${aspect.toInt()}:1 and stored ${maxWidth}px wide. " +
+                            "Not encrypted: a $label is drawn for people who hold no key."
+                    } else {
+                        "Squared and stored at ${maxWidth}px. Not encrypted: " +
+                            "a $label is drawn for people who hold no key."
+                    },
                     style = MaterialTheme.typography.bodySmall,
                     color = Slate500,
                 )

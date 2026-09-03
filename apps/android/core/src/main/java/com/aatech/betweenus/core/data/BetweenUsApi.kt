@@ -20,6 +20,8 @@ data class PublicUser(
     val username: String,
     val displayName: String,
     val avatarUrl: String?,
+    /** The wide band behind the name on a profile. See [UserSummary.coverUrl]. */
+    val coverUrl: String? = null,
     /** The line under the name on a profile card. See `ABOUT_MAX_LENGTH`. */
     val about: String = "",
     /** Who may read this account's last-seen time. Reciprocal at NOBODY. */
@@ -36,7 +38,8 @@ data class PublicUser(
     val messageTtlSeconds: Int? = null,
 ) {
     val label: String get() = displayName.ifBlank { username }
-    val summary: UserSummary get() = UserSummary(id, username, displayName, avatarUrl, about)
+    val summary: UserSummary
+        get() = UserSummary(id, username, displayName, avatarUrl, coverUrl, about)
 
     /** The "@name" line, or null when it would only repeat [label]. */
     val handle: String? get() = summary.handle
@@ -48,6 +51,7 @@ data class PublicUser(
             username = json.optString("username"),
             displayName = json.optString("displayName"),
             avatarUrl = json.stringOrNull("avatarUrl"),
+            coverUrl = json.stringOrNull("coverUrl"),
             about = json.optString("about"),
             lastSeenVisibility = LastSeenVisibility.of(json.optString("lastSeenVisibility")),
             role = json.optString("role", "USER"),
@@ -163,6 +167,12 @@ object BetweenUsApi {
      */
     suspend fun setAvatar(url: String?): PublicUser = io {
         val body = JSONObject().put("avatarUrl", url ?: JSONObject.NULL)
+        PublicUser.from(authed("PATCH", "/api/v1/auth/account", body))
+    }
+
+    /** Sets or clears the wide band behind the name. Null clears, as in [setAvatar]. */
+    suspend fun setCover(url: String?): PublicUser = io {
+        val body = JSONObject().put("coverUrl", url ?: JSONObject.NULL)
         PublicUser.from(authed("PATCH", "/api/v1/auth/account", body))
     }
 
