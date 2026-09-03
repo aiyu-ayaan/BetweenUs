@@ -3,7 +3,7 @@
   margin: 1.5rem 0 3rem;
 }
 
-/* Mobile Tab Switcher */
+/* Mobile Viewport Tab Switcher */
 .mobileNavSwitch {
   display: none;
   gap: 0.5rem;
@@ -19,7 +19,7 @@
 
 .mobileTabBtn {
   flex: 1;
-  padding: 0.55rem 0.9rem;
+  padding: 0.6rem 0.9rem;
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid rgba(255, 255, 255, 0.12);
@@ -41,7 +41,7 @@
 /* Main IDE Split Layout */
 .ideLayout {
   display: grid;
-  grid-template-columns: 330px 1fr;
+  grid-template-columns: 340px 1fr;
   gap: 1.5rem;
   align-items: flex-start;
   width: 100%;
@@ -49,7 +49,7 @@
 
 @media screen and (min-width: 1400px) {
   .ideLayout {
-    grid-template-columns: 360px 1fr;
+    grid-template-columns: 380px 1fr;
     gap: 1.75rem;
   }
 }
@@ -68,6 +68,20 @@
    LEFT PANE: VS CODE-STYLE FILE TREE
    ========================================= */
 .treeSidebar {
+  width: 100%;
+  position: sticky;
+  top: 80px;
+  max-height: calc(100vh - 100px);
+}
+
+@media screen and (max-width: 960px) {
+  .treeSidebar {
+    position: static;
+    max-height: none;
+  }
+}
+
+.treeContainer {
   background: #0d0f18;
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 12px;
@@ -75,15 +89,12 @@
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
   display: flex;
   flex-direction: column;
-  position: sticky;
-  top: 80px;
-  max-height: calc(100vh - 100px);
-  width: 100%;
+  height: calc(100vh - 100px);
 }
 
 @media screen and (max-width: 960px) {
-  .treeSidebar {
-    position: static;
+  .treeContainer {
+    height: auto;
     max-height: none;
   }
 }
@@ -145,7 +156,7 @@
   border-color: rgba(124, 92, 255, 0.5);
 }
 
-/* Tree Quick Filter Input */
+/* Quick File Filter */
 .treeSearchBox {
   position: relative;
   display: flex;
@@ -189,7 +200,7 @@
   font-size: 0.75rem;
 }
 
-/* Tree Body (Scrollable) */
+/* Tree Body */
 .treeBody {
   flex: 1;
   overflow-y: auto;
@@ -211,7 +222,7 @@
   padding: 0.35rem 0.6rem;
   cursor: pointer;
   color: #cbd5e1;
-  transition: background 0.1s ease;
+  transition: background 0.05s ease;
 }
 
 .folderRow:hover {
@@ -223,17 +234,16 @@
   font-size: 0.75rem;
   color: #64748b;
   display: inline-block;
-  transition: transform 0.15s ease;
   width: 14px;
   text-align: center;
   flex-shrink: 0;
 }
 
-.chevronExpanded {
+.chevronOpen {
   transform: rotate(0deg);
 }
 
-.chevronCollapsed {
+.chevronClosed {
   transform: rotate(-90deg);
 }
 
@@ -270,7 +280,7 @@
   padding: 0.32rem 0.6rem;
   cursor: pointer;
   color: #94a3b8;
-  transition: all 0.1s ease;
+  transition: background 0.05s ease;
 }
 
 .fileRow:hover {
@@ -278,7 +288,6 @@
   color: #f1f5f9;
 }
 
-/* Active File Row Selection (Matches VS Code purple highlight) */
 .fileRowSelected {
   background: rgba(124, 92, 255, 0.85) !important;
   color: #ffffff !important;
@@ -340,6 +349,18 @@
   font-size: 0.58rem;
 }
 
+.iconYaml {
+  background: #cb171e;
+  color: #fff;
+  font-size: 0.58rem;
+}
+
+.iconMd {
+  background: #0284c7;
+  color: #fff;
+  font-size: 0.58rem;
+}
+
 .iconDefault {
   font-size: 0.8rem;
 }
@@ -359,6 +380,10 @@
    ========================================= */
 .codeMainArea {
   min-width: 0;
+  width: 100%;
+}
+
+.codeViewerRoot {
   width: 100%;
 }
 
@@ -472,37 +497,7 @@
   background: var(--betweenus-iris);
 }
 
-.fileDescBanner {
-  background: #121422;
-  border-left: 1px solid rgba(255, 255, 255, 0.12);
-  border-right: 1px solid rgba(255, 255, 255, 0.12);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  padding: 0.65rem 1.1rem;
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  flex-wrap: wrap;
-}
-
-.pkgTag {
-  font-size: 0.72rem;
-  font-weight: 700;
-  padding: 0.15rem 0.5rem;
-  background: rgba(124, 92, 255, 0.2);
-  border: 1px solid rgba(124, 92, 255, 0.4);
-  color: #c4b5fd;
-  border-radius: 4px;
-  font-family: var(--ifm-font-family-monospace);
-}
-
-.descText {
-  font-size: 0.85rem;
-  color: var(--ifm-color-emphasis-700);
-  line-height: 1.4;
-  flex: 1;
-}
-
-/* Toolbar: Search + Mode Switcher */
+/* Toolbar: Search symbols */
 .codeToolbar {
   background: #0f111a;
   border-left: 1px solid rgba(255, 255, 255, 0.12);
@@ -510,18 +505,15 @@
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   padding: 0.65rem 1.1rem;
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 0.75rem;
-  flex-wrap: wrap;
+  flex-direction: column;
+  gap: 0.5rem;
 }
 
 .symbolSearchBox {
   position: relative;
   display: flex;
   align-items: center;
-  flex: 1;
-  min-width: 220px;
+  width: 100%;
 }
 
 .searchIcon {
@@ -556,56 +548,12 @@
   font-size: 0.8rem;
 }
 
-.modeSwitcher {
-  display: inline-flex;
-  gap: 0.2rem;
-  background: rgba(0, 0, 0, 0.35);
-  padding: 0.2rem;
-  border-radius: 6px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.modeTab {
-  padding: 0.3rem 0.65rem;
-  border: none;
-  background: transparent;
-  color: #94a3b8;
-  font-size: 0.76rem;
-  font-weight: 600;
-  border-radius: 4px;
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-.modeTab:hover {
-  color: #fff;
-}
-
-.modeTabActive {
-  background: rgba(255, 255, 255, 0.12);
-  color: #ffffff;
-}
-
 /* Symbol Jump Chips */
 .symbolsStrip {
-  background: #0b0d14;
-  border-left: 1px solid rgba(255, 255, 255, 0.12);
-  border-right: 1px solid rgba(255, 255, 255, 0.12);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  padding: 0.6rem 1.1rem;
   display: flex;
   align-items: flex-start;
   gap: 0.5rem;
   flex-wrap: wrap;
-}
-
-.symbolsLabel {
-  font-size: 0.72rem;
-  font-weight: 700;
-  color: #64748b;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  padding-top: 0.15rem;
 }
 
 .symbolsList {
@@ -650,7 +598,7 @@
   align-self: center;
 }
 
-/* Code Viewport */
+/* Code Viewport: UNTRUNCATED FULL SOURCE */
 .codeViewport {
   border-left: 1px solid rgba(255, 255, 255, 0.12);
   border-right: 1px solid rgba(255, 255, 255, 0.12);
@@ -662,8 +610,7 @@
 
 .codeViewport :global(pre) {
   margin-bottom: 0 !important;
-  max-height: 850px;
-  overflow-y: auto;
+  /* NO max-height restriction so full code is displayed */
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
 }
