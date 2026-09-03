@@ -36,6 +36,7 @@ import { Avatar } from '../../components/Avatar';
 import {
   BetweenUsLogoIcon,
   ChevronLeftIcon,
+  GlobeIcon,
   HashIcon,
   LockIcon,
   ShieldIcon,
@@ -46,10 +47,11 @@ import {
   XIcon,
 } from '../../components/icons';
 import { useFocusTrap } from '../../services/focus-trap';
+import { Webhooks } from './Webhooks';
 
 const isMac = typeof window !== 'undefined' && window.betweenus?.platform === 'darwin';
 
-type Section = 'overview' | 'roles' | 'members' | 'channels' | 'invites' | 'emoji';
+type Section = 'overview' | 'roles' | 'members' | 'channels' | 'invites' | 'emoji' | 'webhooks';
 
 const SECTIONS: Array<{ id: Section; label: string; icon: typeof UsersIcon }> = [
   { id: 'overview', label: 'Overview', icon: ShieldIcon },
@@ -58,6 +60,9 @@ const SECTIONS: Array<{ id: Section; label: string; icon: typeof UsersIcon }> = 
   { id: 'channels', label: 'Channels', icon: HashIcon },
   { id: 'invites', label: 'Invites', icon: UsersIcon },
   { id: 'emoji', label: 'Emoji', icon: SmileIcon },
+  // A globe: a webhook is the one thing in this list that reaches in from
+  // outside the deployment.
+  { id: 'webhooks', label: 'Webhooks', icon: GlobeIcon },
 ];
 
 /**
@@ -192,6 +197,7 @@ export function ServerSettings({ onClose }: { onClose: () => void }): JSX.Elemen
           {section === 'channels' && <Channels />}
           {section === 'invites' && <Invites />}
           {section === 'emoji' && <EmojiSection />}
+          {section === 'webhooks' && <Webhooks />}
         </div>
 
         {/* Desktop Close ESC button */}

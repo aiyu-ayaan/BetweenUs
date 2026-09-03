@@ -45,6 +45,10 @@ import type {
   RemoteSessionResponse,
   CreateServerRoleRequest,
   ServerCustomRole,
+  CreateWebhookRequest,
+  UpdateWebhookRequest,
+  WebhookSummary,
+  WebhookWithToken,
   ServerMember,
   ServerInvite,
   ServerWithRole,
@@ -418,6 +422,28 @@ export const api = {
 
   deleteServerRole: (serverId: string, roleId: string): Promise<void> =>
     request(`/api/v1/servers/${serverId}/roles/${roleId}`, { method: 'DELETE' }),
+
+  // --- Webhooks ---
+  //
+  // A URL an outside system posts into a channel with. Every call here needs
+  // MANAGE_WEBHOOK on the channel's server; the URL itself is returned exactly
+  // twice in a webhook's life - when it is made and when it is rotated -
+  // because the server keeps only a hash of the token.
+
+  webhooks: (channelId: string): Promise<WebhookSummary[]> =>
+    request(`/api/v1/webhooks?channelId=${encodeURIComponent(channelId)}`),
+
+  createWebhook: (body: CreateWebhookRequest): Promise<WebhookWithToken> =>
+    request('/api/v1/webhooks', { method: 'POST', body: JSON.stringify(body) }),
+
+  updateWebhook: (webhookId: string, body: UpdateWebhookRequest): Promise<WebhookSummary> =>
+    request(`/api/v1/webhooks/${webhookId}`, { method: 'PATCH', body: JSON.stringify(body) }),
+
+  rotateWebhook: (webhookId: string): Promise<WebhookWithToken> =>
+    request(`/api/v1/webhooks/${webhookId}/rotate`, { method: 'POST' }),
+
+  deleteWebhook: (webhookId: string): Promise<void> =>
+    request(`/api/v1/webhooks/${webhookId}`, { method: 'DELETE' }),
 
   channels: (serverId: string): Promise<Channel[]> =>
     request(`/api/v1/channels?serverId=${encodeURIComponent(serverId)}`),

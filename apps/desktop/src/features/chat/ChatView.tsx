@@ -871,6 +871,11 @@ function MessageList({
           const previous = messages[index - 1];
           const grouped =
             previous?.author.id === message.author.id &&
+            // A webhook posts as the account that opened it, so two different
+            // robots - and a robot and the person who set it up - all share an
+            // author id. Grouping on that alone stacked a build notification
+            // under somebody's sentence and drew one name over both.
+            previous?.webhook?.id === message.webhook?.id &&
             sameDay(previous.createdAt, message.createdAt) &&
             new Date(message.createdAt).getTime() - new Date(previous.createdAt).getTime() <
               5 * 60 * 1000;
@@ -893,7 +898,11 @@ function MessageList({
           }
 
           const deleted = message.deletedAt !== null;
-          const isSelf = message.author.id === me?.id;
+          // A webhook message is never "yours", whoever created the webhook: it
+          // is not something this person said, so it does not get their side of
+          // the screen or their bubble colour.
+          const hook = message.webhook ?? null;
+          const isSelf = hook === null && message.author.id === me?.id;
           // The avatar is for someone else's face in a channel - never your
           // own (the side of the screen already says that), and never in a
           // direct message, where there are only ever two people in it.
@@ -922,14 +931,26 @@ function MessageList({
                   (grouped ? (
                     <div aria-hidden="true" className="h-10 w-10 shrink-0" />
                   ) : (
-                    <AuthorHover author={message.author}>
-                      <PersonAvatar
-                        userId={message.author.id}
-                        name={message.author.displayName}
-                        avatarUrl={message.author.avatarUrl}
+                    // A webhook has no profile to open, so its picture is not
+                    // a hover target - resting on it would offer a card about
+                    // the person who created it, which is not who said this.
+                    hook ? (
+                      <Avatar
+                        name={hook.name}
+                        avatarUrl={hook.avatarUrl}
+                        size="md"
                         ringColour="border-surface-900"
                       />
-                    </AuthorHover>
+                    ) : (
+                      <AuthorHover author={message.author}>
+                        <PersonAvatar
+                          userId={message.author.id}
+                          name={message.author.displayName}
+                          avatarUrl={message.author.avatarUrl}
+                          ringColour="border-surface-900"
+                        />
+                      </AuthorHover>
+                    )
                   ))}
 
                 <div className={`flex min-w-0 max-w-[78%] flex-col ${isSelf ? 'items-end' : 'items-start'}`}>
@@ -973,12 +994,32 @@ function MessageList({
                     {/* Who is speaking, once per run and never for you - the
                         side of the screen your bubble is on already said
                         that. */}
-                    {!isSelf && !grouped && (
+                    {!isSelf && !grouped && !hook && (
                       <AuthorHover author={message.author}>
                         <p className="mb-0.5 truncate text-sm font-semibold text-accent">
                           {message.author.displayName}
                         </p>
                       </AuthorHover>
+                    )}
+
+                    {/* A robot's name, and the one thing anybody reading this
+                        channel is owed: this message was not encrypted. The
+                        badge is on every message rather than once per run,
+                        because a run scrolled halfway off the top of the
+                        screen would otherwise be an unencrypted message with
+                        nothing saying so. */}
+                    {!grouped && hook && (
+                      <p className="mb-0.5 flex items-center gap-1.5">
+                        <span className="truncate text-sm font-semibold text-accent">
+                          {hook.name}
+                        </span>
+                        <span
+                          title="Posted by a webhook. Unlike everything else here, its text was not end-to-end encrypted - the sender holds no key."
+                          className="shrink-0 rounded bg-surface-700 px-1.5 py-px text-[10px] font-bold uppercase tracking-wide text-slate-400"
+                        >
+                          Webhook · not encrypted
+                        </span>
+                      </p>
                     )}
 
                     {/* Above the quote and above the words: the first thing
