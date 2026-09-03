@@ -18,6 +18,7 @@ import { Avatar } from '../../components/Avatar';
 import { MenuIcon, PlusIcon } from '../../components/icons';
 import { SkeletonRows } from '../../components/Skeleton';
 import { statusAge } from './age';
+import { UpdatesEmptyArt } from './UpdatesEmptyArt';
 import { openStatus } from './StatusViewer';
 import { openStatusComposer } from './StatusComposer';
 
@@ -53,7 +54,7 @@ export function StatusScreen({ onOpenMenu }: { onOpenMenu?: () => void }): JSX.E
             <MenuIcon className="h-5 w-5" />
           </button>
         )}
-        <h1 className="text-sm font-semibold text-slate-200">Status</h1>
+        <h1 className="text-sm font-semibold text-slate-200">Updates</h1>
         <p className="ms-auto text-xs text-slate-500">Posts disappear after 24 hours</p>
       </header>
 
@@ -80,10 +81,10 @@ export function StatusScreen({ onOpenMenu }: { onOpenMenu?: () => void }): JSX.E
             )}
           </span>
           <span className="min-w-0 flex-1">
-            <span className="block truncate font-medium text-slate-100">My status</span>
+            <span className="block truncate font-medium text-slate-100">My updates</span>
             <span className="block truncate text-xs text-slate-500">
               {mine.length === 0
-                ? 'Tap to add a status update'
+                ? 'Tap to add an update'
                 : `${countLabel(mine.length)} · ${statusAge(mine[mine.length - 1]!.createdAt)}`}
             </span>
           </span>
@@ -98,7 +99,7 @@ export function StatusScreen({ onOpenMenu }: { onOpenMenu?: () => void }): JSX.E
               }}
               role="button"
               tabIndex={0}
-              aria-label="Add to my status"
+              aria-label="Add an update"
               onKeyDown={(event) => {
                 if (event.key === 'Enter' || event.key === ' ') {
                   event.preventDefault();
@@ -119,13 +120,17 @@ export function StatusScreen({ onOpenMenu }: { onOpenMenu?: () => void }): JSX.E
         )}
 
         {state === 'loading' && (
-          <SkeletonRows rows={3} label="Loading statuses" className="px-2 py-2" />
+          <SkeletonRows rows={3} label="Loading updates" className="px-2 py-2" />
         )}
 
         {state === 'empty' && !error && (
-          <p className="px-2 py-6 text-sm text-slate-500">
-            Nobody you are friends with has posted anything yet.
-          </p>
+          <div className="flex flex-col items-center px-6 py-10 text-center">
+            <UpdatesEmptyArt className="h-28 w-36 text-slate-500" />
+            <p className="mt-4 text-sm font-semibold text-slate-200">No updates yet</p>
+            <p className="mt-1.5 max-w-xs text-sm text-slate-400">
+              Updates from your friends appear here, and disappear a day later.
+            </p>
+          </div>
         )}
 
         {recent.length > 0 && <Heading>Recent updates</Heading>}

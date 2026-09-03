@@ -128,7 +128,7 @@ function Composer(): JSX.Element {
       ref={trap}
       role="dialog"
       aria-modal="true"
-      aria-label="Add to status"
+      aria-label="Add an update"
       className="fixed inset-0 z-[70] flex animate-fade flex-col bg-black/95"
     >
       <header className="flex items-center gap-3 px-4 py-3 text-white">
@@ -141,7 +141,7 @@ function Composer(): JSX.Element {
         >
           <XIcon className="h-5 w-5" />
         </button>
-        <h1 className="flex-1 text-sm font-semibold">Add to status</h1>
+        <h1 className="flex-1 text-sm font-semibold">Add an update</h1>
         <button
           type="button"
           onClick={() => void submit()}
@@ -198,8 +198,8 @@ function Composer(): JSX.Element {
                 value={text}
                 onChange={(event) => setText(event.target.value)}
                 maxLength={STATUS_CAPTION_MAX_LENGTH}
-                placeholder="Type a status"
-                aria-label="Status text"
+                placeholder="Type an update"
+                aria-label="Update text"
                 className="h-full w-full resize-none bg-transparent text-center text-2xl font-semibold leading-snug text-white placeholder:text-white/50 focus:outline-none"
               />
             </div>

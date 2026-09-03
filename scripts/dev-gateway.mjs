@@ -17,6 +17,7 @@
  * Production is Nginx in a container behind a Cloudflare Tunnel; this file is
  * never part of that.
  */
+import { readFileSync } from 'node:fs';
 import http from 'node:http';
 import net from 'node:net';
 import { networkInterfaces } from 'node:os';
@@ -49,6 +50,8 @@ const ROUTES = [
   ['/api/v1/users', CHAT],
   ['/api/v1/dm', CHAT],
   ['/api/v1/uploads', CHAT],
+  ['/api/v1/statuses', CHAT],
+  ['/api/v1/webhooks', CHAT],
   ['/api/v1/e2ee', CHAT],
   ['/api/v1/calls', CALL],
   ['/api/v1/notifications', NOTIFICATION],
@@ -64,6 +67,31 @@ const upstreamFor = (url) => {
   const match = ROUTES.find(([prefix]) => path === prefix || path.startsWith(`${prefix}/`));
   return match?.[1] ?? null;
 };
+
+/**
+ * `node scripts/dev-gateway.mjs --check`: every prefix Nginx routes is routed
+ * here too.
+ *
+ * This file is a copy of a route table, and a copy drifts. It drifted once
+ * already - `/api/v1/statuses` was added to Nginx and not here, so the feature
+ * worked on the desktop, whose proxy is a third copy, and answered "No route"
+ * on every Android device. One assertion in `pnpm check` is cheaper than
+ * finding that out on a phone.
+ */
+if (process.argv.includes('--check')) {
+  const conf = readFileSync(new URL('../infrastructure/nginx/nginx.conf', import.meta.url), 'utf8');
+  const routed = new Set(ROUTES.map(([prefix]) => prefix));
+  const missing = [...conf.matchAll(/^\s*location\s+(\/(?:api\/v1|ws)\/[^\s{]+)/gm)]
+    .map((match) => match[1].replace(/\/$/, ''))
+    .filter((prefix) => !routed.has(prefix));
+
+  if (missing.length > 0) {
+    console.error('dev-gateway is missing routes Nginx has: %s', [...new Set(missing)].join(' '));
+    process.exit(1);
+  }
+  console.log('dev-gateway routes match nginx.conf');
+  process.exit(0);
+}
 
 const server = http.createServer((request, response) => {
   const upstream = upstreamFor(request.url ?? '/');

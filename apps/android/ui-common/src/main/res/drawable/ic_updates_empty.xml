@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The empty updates tray, the same drawing as
+     apps/desktop/src/features/status/UpdatesEmptyArt.tsx: a segmented ring -
+     one arc per post, like the one an avatar wears - around a picture. A
+     48-unit viewport rather than the icon set's 24, because it is drawn at
+     36dp inside an empty state and the picture inside the ring needs the room.
+     Tinted, so it is right in both themes without a second asset. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp"
+    android:height="48dp"
+    android:viewportWidth="48"
+    android:viewportHeight="48">
+    <path
+        android:pathData="M26.19 6.13A18 18 0 0 1 41.87 21.81 M41.87 26.19A18 18 0 0 1 26.19 41.87 M21.81 41.87A18 18 0 0 1 6.13 26.19 M6.13 21.81A18 18 0 0 1 21.81 6.13"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="3"
+        android:strokeLineCap="round" />
+    <path
+        android:pathData="M16 15h16a2 2 0 0 1 2 2v14a2 2 0 0 1 -2 2h-16a2 2 0 0 1 -2 -2v-14a2 2 0 0 1 2 -2z"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeAlpha="0.55"
+        android:strokeWidth="2.5"
+        android:strokeLineJoin="round" />
+    <path
+        android:pathData="M19.5 20.5m-1.8 0a1.8 1.8 0 1 0 3.6 0a1.8 1.8 0 1 0 -3.6 0"
+        android:fillColor="#FFFFFFFF"
+        android:fillAlpha="0.55" />
+    <path
+        android:pathData="M15 30l5.5 -6 3.5 3.5 3 -2.5 5 5"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeAlpha="0.55"
+        android:strokeWidth="2.5"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+</vector>

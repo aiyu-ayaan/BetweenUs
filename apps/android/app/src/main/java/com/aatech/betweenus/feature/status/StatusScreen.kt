@@ -77,7 +77,7 @@ fun StatusScreen(onBack: () -> Unit) {
             )
             Column(Modifier.weight(1f).padding(start = 8.dp)) {
                 Text(
-                    text = "Status",
+                    text = "Updates",
                     style = MaterialTheme.typography.titleLargeEmphasized,
                     color = MaterialTheme.colorScheme.onSurface,
                 )
@@ -89,7 +89,7 @@ fun StatusScreen(onBack: () -> Unit) {
             }
             IconAction(
                 icon = BetweenUsIcons.Plus,
-                contentDescription = "Add to my status",
+                contentDescription = "Add an update",
                 onClick = { StatusComposerDoor.show() },
                 prominent = true,
             )
@@ -109,9 +109,9 @@ fun StatusScreen(onBack: () -> Unit) {
                 // back to what you have already posted, which is why the plus
                 // sits on the avatar rather than being a second row.
                 ListRow(
-                    title = "My status",
+                    title = "My updates",
                     subtitle = if (mine.isEmpty()) {
-                        "Tap to add a status update"
+                        "Tap to add an update"
                     } else {
                         "${countLabel(mine.size)} · ${statusAge(mine.last().createdAt)}"
                     },
@@ -155,9 +155,9 @@ fun StatusScreen(onBack: () -> Unit) {
             if (loaded && runs.isEmpty()) {
                 item {
                     EmptyState(
-                        icon = BetweenUsIcons.Activity,
-                        title = "No updates",
-                        detail = "Nobody you are friends with has posted anything yet.",
+                        icon = BetweenUsIcons.UpdatesEmpty,
+                        title = "No updates yet",
+                        detail = "Updates from your friends appear here, and disappear a day later.",
                     )
                 }
             }

@@ -93,7 +93,7 @@ export function AvatarChoice(): JSX.Element | null {
         />
         <Choice
           icon={<EyeIcon className="h-5 w-5" />}
-          label="View status"
+          label="View updates"
           hint={asking.count === 1 ? '1 update' : `${asking.count} updates`}
           onClick={() => {
             close();

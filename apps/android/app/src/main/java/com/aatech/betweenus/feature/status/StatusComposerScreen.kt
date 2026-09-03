@@ -148,7 +148,7 @@ private fun StatusComposerScreen(onClose: () -> Unit) {
                 tint = Color.White,
             )
             Text(
-                text = "Add to status",
+                text = "Add an update",
                 style = MaterialTheme.typography.titleMedium,
                 color = Color.White,
                 modifier = Modifier.weight(1f).padding(start = 8.dp),
@@ -222,7 +222,7 @@ private fun StatusComposerScreen(onClose: () -> Unit) {
                         Box(contentAlignment = Alignment.Center) {
                             if (text.isEmpty()) {
                                 Text(
-                                    text = "Type a status",
+                                    text = "Type an update",
                                     style = MaterialTheme.typography.headlineSmall,
                                     color = Color.White.copy(alpha = 0.6f),
                                     textAlign = TextAlign.Center,
