@@ -1,141 +1,152 @@
 import type {ReactNode} from 'react';
 import clsx from 'clsx';
+import Link from '@docusaurus/Link';
+import useBaseUrl from '@docusaurus/useBaseUrl';
 import styles from './styles.module.css';
 
 type FeatureItem = {
   title: string;
+  badge: string;
+  image: string;
+  link: string;
   description: ReactNode;
-  icon: ReactNode;
 };
-
-const MusicIcon = (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-    <path d="M9 18V5l12-2v13" strokeLinecap="round" strokeLinejoin="round" />
-    <circle cx="6" cy="18" r="3" strokeLinecap="round" strokeLinejoin="round" />
-    <circle cx="18" cy="16" r="3" strokeLinecap="round" strokeLinejoin="round" />
-  </svg>
-);
-
-const ChatIcon = (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-    <path d="M21 12a8 8 0 1 1-3.35-6.5" strokeLinecap="round" />
-    <path d="M21 5v5h-5" strokeLinecap="round" strokeLinejoin="round" />
-    <path d="M8 11h6M8 14h4" strokeLinecap="round" />
-  </svg>
-);
-
-const VideoIcon = (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-    <rect x="2" y="4" width="14" height="16" rx="2" strokeLinecap="round" strokeLinejoin="round" />
-    <path d="M16 9l6-4v14l-6-4" strokeLinecap="round" strokeLinejoin="round" />
-  </svg>
-);
-
-const ShieldIcon = (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-    <path
-      d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6l7-3z"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-    <path d="M9 12l2 2 4-4" strokeLinecap="round" strokeLinejoin="round" />
-  </svg>
-);
-
-const LayersIcon = (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-    <path
-      d="M12 3l9 5-9 5-9-5 9-5z"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-    <path d="M3 13l9 5 9-5" strokeLinecap="round" strokeLinejoin="round" />
-  </svg>
-);
-
-const DevicesIcon = (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-    <rect x="2" y="3" width="13" height="12" rx="2" strokeLinecap="round" strokeLinejoin="round" />
-    <rect x="15" y="8" width="7" height="13" rx="2" strokeLinecap="round" strokeLinejoin="round" />
-    <path d="M6 19h5" strokeLinecap="round" strokeLinejoin="round" />
-  </svg>
-);
 
 const FeatureList: FeatureItem[] = [
   {
-    title: 'Listen Together',
-    icon: MusicIcon,
-    description: (
-      <>
-        Synchronised YouTube listening inside voice calls with zero media uplink.
-        Browse YouTube in-app, click any thumbnail to play instantly for the call,
-        enjoy automatic voice ducking when talking, and shared queue controls with no host bottleneck.
-      </>
-    ),
-  },
-  {
     title: 'E2EE Chat & Rich Markdown',
-    icon: ChatIcon,
+    badge: 'AES-256-GCM',
+    image: 'img/feature-chat.png',
+    link: '/features#1-end-to-end-encrypted-messaging',
     description: (
       <>
-        End-to-end encrypted messaging with AES-256-GCM. Live markdown preview
-        in the composer, bulleted/numbered lists, inline code & quotes, custom emoji,
-        reactions, replies, and encrypted attachments up to 100 MB.
+        Zero-knowledge encrypted messaging and file attachments up to 100 MB.
+        Live markdown preview, emoji reactions, threaded replies, and message pinning.
       </>
     ),
   },
   {
-    title: 'P2P Voice, Video & Screen Control',
-    icon: VideoIcon,
+    title: 'P2P Voice, Video & Screen Sharing',
+    badge: 'WebRTC Mesh',
+    image: 'img/feature-voice.png',
+    link: '/features#2-peer-to-peer-voice-and-video-calls',
     description: (
       <>
-        Voice and video channels over direct WebRTC mesh without expensive media servers.
-        Includes interactive screen sharing where participants can request and take control
-        with named multi-user cursor overlays.
+        Autonomous mesh calls with zero media server overhead. Includes noise suppression,
+        mic calibration, and low-latency 4K / 60 FPS screen sharing.
       </>
     ),
   },
   {
-    title: 'Remote Desktop, Done Safely',
-    icon: ShieldIcon,
+    title: 'Listen & Play Together',
+    badge: 'Synchronized Media & Games',
+    image: 'img/feature-listen.png',
+    link: '/features#3-listen-together-synchronized-youtube',
     description: (
       <>
-        Secure remote machine access with screen viewing, keyboard/mouse control,
-        multi-monitor selection, and clipboard sync — gated by granular per-machine,
-        per-user permission grants and a non-repudiable audit trail.
+        Synchronized YouTube player with zero host uplink and dynamic voice ducking,
+        plus 6 multiplayer games including deterministic 2D Carrom physics.
       </>
     ),
   },
   {
-    title: 'Microservices & Ingress',
-    icon: LayersIcon,
+    title: '16-Theme Customization Engine',
+    badge: '16 Themes + 8 Accents',
+    image: 'img/feature-themes.png',
+    link: '/features#5-multi-theme-customization-engine',
     description: (
       <>
-        Independently deployable NestJS microservices backed by PostgreSQL and Redis.
-        Public traffic enters via Cloudflare Tunnel into an Nginx API Gateway with zero
-        inbound open ports required.
+        Dark (Iris), AMOLED Midnight, Nord Frost, Tokyo Night, Catppuccin, Cyberpunk Neon,
+        and Daylight with customizable accent tints and OS synchronization.
+      </>
+    ),
+  },
+  {
+    title: 'Secure Remote Desktop Access',
+    badge: 'Permissioned Access',
+    image: 'img/feature-remote.png',
+    link: '/features#6-secure-remote-desktop-access',
+    description: (
+      <>
+        Low-latency remote machine control with multi-monitor streaming, clipboard sync,
+        and granular per-device permission tiers with instant revocation.
+      </>
+    ),
+  },
+  {
+    title: '24-Hour Ephemeral Moments',
+    badge: 'Auto-Purging Stories',
+    image: 'img/feature-moments.png',
+    link: '/features#7-24-hour-ephemeral-moments',
+    description: (
+      <>
+        Share photos and status updates that automatically disappear after 24 hours.
+        Configurable friends-only privacy boundaries and dedicated moments feed.
+      </>
+    ),
+  },
+  {
+    title: 'Security & Zero-Knowledge Backup',
+    badge: 'Identity Registry',
+    image: 'img/feature-e2ee.png',
+    link: '/features#8-security-key-backup-and-identity',
+    description: (
+      <>
+        Client-generated cryptographic identity keys, encrypted passphrase backups, and
+        active machine directory with one-click device revocation.
+      </>
+    ),
+  },
+  {
+    title: 'Granular Server Governance & RBAC',
+    badge: 'Discord-Grade Roles',
+    image: 'img/feature-roles.png',
+    link: '/features#9-granular-server-governance-and-rbac',
+    description: (
+      <>
+        Hierarchical role management with color pickers, hoisted display groups, channel-level
+        permission overrides, and comprehensive audit logs.
       </>
     ),
   },
   {
     title: 'Desktop, Web & Native Android',
-    icon: DevicesIcon,
+    badge: 'Cross-Platform Parity',
+    image: 'img/home-android.jpeg',
+    link: '/architecture/android-client',
     description: (
       <>
-        Modern Electron desktop client with tray integration, identical web client mounted via Vite,
-        and native Kotlin/Jetpack Compose Android app with FCM push notifications and background survivability.
+        Cross-platform suite spanning Electron desktop on Windows/macOS/Linux, Web PWA via Vite,
+        and native Kotlin/Jetpack Compose Android client with FCM background push.
       </>
     ),
   },
 ];
 
-function Feature({title, description, icon}: FeatureItem) {
+function Feature({title, badge, image, link, description}: FeatureItem) {
+  const imageUrl = useBaseUrl(image);
   return (
     <div className={clsx('col col--4', 'margin-bottom--lg')}>
       <div className={styles.featureCard}>
-        <div className={styles.featureIcon}>{icon}</div>
-        <h3 className={styles.featureTitle}>{title}</h3>
-        <p className={styles.featureDescription}>{description}</p>
+        <Link to={link} className={styles.featureImageLink} aria-label={title}>
+          <div className={styles.featureImageWrapper}>
+            <img src={imageUrl} alt={title} className={styles.featureImage} loading="lazy" />
+            <span className={styles.featureBadge}>{badge}</span>
+          </div>
+        </Link>
+        <div className={styles.featureContent}>
+          <h3 className={styles.featureTitle}>
+            <Link to={link} className={styles.featureTitleLink}>
+              {title}
+            </Link>
+          </h3>
+          <p className={styles.featureDescription}>{description}</p>
+          <div className={styles.featureFooter}>
+            <Link to={link} className={styles.featureActionLink}>
+              Explore details →
+            </Link>
+          </div>
+        </div>
       </div>
     </div>
   );

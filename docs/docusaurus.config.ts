@@ -15,6 +15,9 @@ const config: Config = {
 
   markdown: {
     mermaid: true,
+    hooks: {
+      onBrokenMarkdownLinks: 'warn',
+    },
   },
   themes: [
     '@docusaurus/theme-mermaid',
@@ -41,7 +44,6 @@ const config: Config = {
   projectName: 'BetweenUs',
 
   onBrokenLinks: 'warn',
-  onBrokenMarkdownLinks: 'warn',
 
   // The desktop client's own fonts (tailwind.theme.mjs): Inter for text,
   // JetBrains Mono for code. Neither ships as a system font, so they're
@@ -97,6 +99,11 @@ const config: Config = {
           sidebarId: 'docsSidebar',
           position: 'left',
           label: 'Docs',
+        },
+        {
+          to: '/features',
+          label: 'Features',
+          position: 'left',
         },
         {
           to: '/architecture/overview',

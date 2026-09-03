@@ -36,8 +36,8 @@ function HomepageHeader() {
               'button button--lg',
               styles.primaryButton,
             )}
-            href="https://github.com/aiyu-ayaan/BetweenUs/releases">
-            Download App
+            to="/features">
+            Explore Features
           </Link>
           <Link
             className="button button--secondary button--lg"
@@ -46,8 +46,8 @@ function HomepageHeader() {
           </Link>
           <Link
             className="button button--secondary button--lg"
-            href="https://github.com/aiyu-ayaan/BetweenUs">
-            View on GitHub
+            href="https://github.com/aiyu-ayaan/BetweenUs/releases">
+            Download App
           </Link>
         </div>
         <div className={styles.stack}>
@@ -87,8 +87,8 @@ function ClosingCta() {
           to="/architecture/overview">
           Explore the architecture
         </Link>
-        <Link className="button button--secondary button--lg" to="/running-locally">
-          Run it locally
+        <Link className="button button--secondary button--lg" to="/features">
+          View all features
         </Link>
       </div>
     </div>
@@ -105,9 +105,9 @@ export default function Home(): ReactNode {
       <main>
         <section className={styles.section}>
           <div className="container">
-            <p className={styles.sectionHeading}>What it is</p>
+            <p className={styles.sectionHeading}>Core Capabilities</p>
             <h2 className={styles.sectionTitle}>
-              A full communication platform, deployed as microservices
+              Engineered for Privacy, Real-Time Media & Remote Control
             </h2>
             <HomepageFeatures />
           </div>
