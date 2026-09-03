@@ -51,8 +51,9 @@
 .heroBadgesWrapper {
   display: flex;
   justify-content: center;
-  margin: 1.25rem auto 1.75rem;
-  max-width: 980px;
+  margin: 2.25rem auto 1.5rem;
+  max-width: 920px;
+  width: 100%;
 }
 
 .heroTitle {

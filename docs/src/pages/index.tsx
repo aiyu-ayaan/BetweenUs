@@ -32,12 +32,10 @@ function HomepageHeader() {
         <h1 className={styles.heroTitle}>{siteConfig.title}</h1>
         <p className={styles.heroSubtitle}>{siteConfig.tagline}</p>
 
-        {/* Live Engineering Badges: LOC, Code Health, E2EE, Microservices */}
-        <div className={styles.heroBadgesWrapper}>
-          <EngineeringBadges />
-        </div>
-
+        {/* Hero Interactive App Mockup */}
         <HeroAppShowcase />
+
+        {/* Primary CTA Buttons */}
         <div className={styles.buttons}>
           <Link
             className={clsx(
@@ -58,6 +56,13 @@ function HomepageHeader() {
             Download App
           </Link>
         </div>
+
+        {/* Centered Engineering & Code Health Badges */}
+        <div className={styles.heroBadgesWrapper}>
+          <EngineeringBadges />
+        </div>
+
+        {/* Tech Stack Pills */}
         <div className={styles.stack}>
           {STACK.map((tech) => (
             <span key={tech} className={styles.stackPill}>

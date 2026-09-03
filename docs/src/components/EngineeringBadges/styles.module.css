@@ -2,8 +2,10 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
+  justify-content: center;
   gap: 0.65rem;
-  margin: 1.25rem 0;
+  margin: 1rem auto;
+  max-width: 860px;
   width: 100%;
 }
 

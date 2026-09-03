@@ -50,22 +50,13 @@ const DEFAULT_BADGES: BadgeItem[] = [
     tooltip: 'NestJS domain services orchestrated with Turborepo',
   },
   {
-    id: 'android',
-    label: 'Android',
-    value: 'Jetpack Compose',
+    id: 'platforms',
+    label: 'Platforms',
+    value: 'Android & Desktop',
     icon: '📱',
-    variant: 'emerald',
-    link: '/architecture/android-client',
-    tooltip: 'Native Android 15 (API 35) with StrongBox KeyStore',
-  },
-  {
-    id: 'webrtc',
-    label: 'Voice & Video',
-    value: 'P2P WebRTC',
-    icon: '🔊',
     variant: 'blue',
-    link: '/architecture/media',
-    tooltip: 'Decentralized media mesh with zero server transcoding relays',
+    link: '/architecture/android-client',
+    tooltip: 'Native Android 15 (API 35 Compose) + Electron Desktop',
   },
   {
     id: 'themes',
@@ -88,7 +79,11 @@ export default function EngineeringBadges({
   className = '',
 }: Props): React.ReactElement {
   return (
-    <div className={`${styles.badgeStrip} ${className}`} role="list" aria-label="Repository metrics & engineering badges">
+    <div
+      className={`${styles.badgeStrip} ${className}`}
+      role="list"
+      aria-label="Repository metrics & engineering badges"
+    >
       {badges.map((b) => {
         const content = (
           <div className={`${styles.badgeCard} ${styles[`variant_${b.variant || 'iris'}`]}`}>
