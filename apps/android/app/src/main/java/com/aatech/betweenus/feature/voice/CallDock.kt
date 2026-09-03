@@ -328,7 +328,7 @@ fun FloatingCall(
  * second to show a number that changes once is a frame budget spent on nothing.
  */
 @Composable
-private fun rememberElapsed(liveSince: Long?): String {
+internal fun rememberElapsed(liveSince: Long?): String {
     var now by remember(liveSince) { mutableStateOf(android.os.SystemClock.elapsedRealtime()) }
     LaunchedEffect(liveSince) {
         if (liveSince == null) return@LaunchedEffect

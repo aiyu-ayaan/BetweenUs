@@ -7,7 +7,10 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -19,7 +22,6 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.aatech.betweenus.ui.components.BetweenUsButton
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -238,20 +240,26 @@ object ShareControl {
     }
 }
 
-// --- the screen half ---------------------------------------------------------
+// --- the screen half -----------------------------------------------
 
 /**
  * The bar that asks, waits, and says what came of it.
  *
- * Above the control dock beside the listening and playing stages, because it is
- * the same kind of thing: a line about the call that is usually not there.
+ * Drawn under the share itself, which is the only place on a phone where it is
+ * about something the person can see. It used to sit on the call stage, above
+ * the dock - where it was unreachable in practice, because a share took the
+ * whole screen the instant it started and this bar was on the screen it
+ * replaced.
+ *
+ * The button is deliberately *not* [com.aatech.betweenus.ui.components.BetweenUsButton]:
+ * that one fills its width, which in a `Row` measures before the weighted text
+ * and left the label with nothing. A bar whose caption is one ellipsis is the
+ * "buttons are not properly raised" bug.
  */
 @Composable
 fun ShareControlBar(
     sharerPeerId: String,
     sharerName: String,
-    pinned: Boolean,
-    onPin: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val scheme = MaterialTheme.colorScheme
@@ -266,35 +274,52 @@ fun ShareControlBar(
         modifier = modifier
             .fillMaxWidth()
             .clip(MaterialTheme.shapes.large)
-            .background(scheme.surfaceContainerHigh)
-            .padding(horizontal = 12.dp, vertical = 8.dp),
+            .background(
+                if (amDriving) scheme.primaryContainer else scheme.surfaceContainerHigh,
+            )
+            .padding(start = 14.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Text(
             text = when {
-                amDriving && !pinned -> "Pin the share to drive it"
-                amDriving -> "You are driving $sharerName's screen"
+                // Said here rather than discovered by pinching and having
+                // nothing happen: while this phone is the mouse, a drag is a
+                // drag on their machine and cannot also be a zoom on this one.
+                amDriving -> "Driving $sharerName's screen - tap and drag to use it"
                 amAsking -> "Asked $sharerName for the mouse…"
                 refusal != null -> refusal.orEmpty()
-                else -> "$sharerName is sharing a screen"
+                else -> "Ask $sharerName for the mouse to use their screen"
             },
             style = MaterialTheme.typography.bodySmall,
-            color = scheme.onSurfaceVariant,
+            color = if (amDriving) scheme.onPrimaryContainer else scheme.onSurfaceVariant,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
+            // `weight` and nothing else: the button sizes to its own words and
+            // the caption takes what is left, which is the way round that keeps
+            // both readable on a 320dp phone.
             modifier = Modifier.weight(1f),
         )
 
-        when {
-            // The pin is the thing standing between them and a usable mouse, so
-            // it is the button rather than an instruction to go and find one.
-            amDriving && !pinned -> BetweenUsButton(text = "Pin", onClick = onPin)
-            amDriving -> BetweenUsButton(text = "Stop", onClick = { ShareControl.release() })
-            amAsking -> BetweenUsButton(text = "Cancel", onClick = { ShareControl.release() })
-            else -> BetweenUsButton(
-                text = "Ask to drive",
-                onClick = { ShareControl.ask(sharerPeerId) },
+        Button(
+            onClick = {
+                when {
+                    amDriving || amAsking -> ShareControl.release()
+                    else -> ShareControl.ask(sharerPeerId)
+                }
+            },
+            shapes = ButtonDefaults.shapes(),
+            contentPadding = ButtonDefaults.ContentPadding,
+            modifier = Modifier.heightIn(min = 40.dp),
+        ) {
+            Text(
+                text = when {
+                    amDriving -> "Stop"
+                    amAsking -> "Cancel"
+                    else -> "Ask to drive"
+                },
+                style = MaterialTheme.typography.labelLarge,
+                maxLines = 1,
             )
         }
     }
@@ -303,9 +328,10 @@ fun ShareControlBar(
 /**
  * The picture, while this phone is driving it.
  *
- * Touches become fractions of this box, which is exactly the pinned tile - see
- * why that is required at the call site. A drag is a press, a run of moves and
- * a release, which is what a mouse does and what the far end injects.
+ * Touches become fractions of this box, so the box has to *be* the picture -
+ * see the call site in [ShareStage], which sizes it to the letterboxed frame
+ * rather than to the black around it. A drag is a press, a run of moves and a
+ * release, which is what a mouse does and what the far end injects.
  *
  * Not a trackpad. A phone driving a desktop is somebody pointing at a thing on
  * a screen they can see, and an absolute surface is the one that matches what

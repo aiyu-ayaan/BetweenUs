@@ -6,49 +6,58 @@ import android.media.projection.MediaProjectionManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.VectorConverter
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.systemBarsIgnoringVisibility
-import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.FilledIconToggleButton
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.FloatingToolbarDefaults
 import androidx.compose.material3.HorizontalFloatingToolbar
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -60,35 +69,35 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.findRootCoordinates
+import androidx.compose.ui.layout.onPlaced
+import androidx.compose.ui.layout.positionInParent
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.layout.findRootCoordinates
-import androidx.compose.ui.layout.onPlaced
-import androidx.compose.ui.layout.positionInParent
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.toSize
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
-import androidx.compose.ui.unit.sp
 import com.aatech.betweenus.core.data.PublicUser
 import com.aatech.betweenus.core.store.Workspace
 import com.aatech.betweenus.feature.settings.BetweenUsPermissions
@@ -99,29 +108,31 @@ import com.aatech.betweenus.ui.components.BetweenUsButton
 import com.aatech.betweenus.ui.components.BetweenUsIcon
 import com.aatech.betweenus.ui.components.BetweenUsIcons
 import com.aatech.betweenus.ui.components.EmptyState
+import com.aatech.betweenus.ui.components.ListRow
 import com.aatech.betweenus.ui.components.Notice
+import com.aatech.betweenus.ui.components.SectionLabel
 import com.aatech.betweenus.ui.theme.Accent
 import com.aatech.betweenus.ui.theme.Amber200
+import com.aatech.betweenus.ui.theme.BetweenUsMotion
 import com.aatech.betweenus.ui.theme.Danger
 import com.aatech.betweenus.ui.theme.Edge
 import com.aatech.betweenus.ui.theme.Ground
+import com.aatech.betweenus.ui.theme.Neutral99
+import com.aatech.betweenus.ui.theme.Red60
 import com.aatech.betweenus.ui.theme.Slate100
 import com.aatech.betweenus.ui.theme.Slate300
 import com.aatech.betweenus.ui.theme.Slate400
 import com.aatech.betweenus.ui.theme.Slate50
 import com.aatech.betweenus.ui.theme.Slate500
-import com.aatech.betweenus.ui.theme.BetweenUsMotion
-import com.aatech.betweenus.ui.theme.Neutral99
-import com.aatech.betweenus.ui.theme.Red60
 import com.aatech.betweenus.ui.theme.StatusOnline
 import com.aatech.betweenus.ui.theme.Surface800
 import com.aatech.betweenus.ui.theme.Surface900
 import com.aatech.betweenus.ui.theme.Surface950
+import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.webrtc.RendererCommon
 import org.webrtc.VideoTrack
-import kotlin.math.roundToInt
 
 /**
  * How long the header and the control dock stay up with nothing happening.
@@ -138,6 +149,17 @@ private const val CHROME_IDLE_MS = 4_000L
  * own to be pinnable by the same one piece of state as everybody else.
  */
 private const val SELF_PIN = "self"
+
+/**
+ * How much room the floating dock takes at the bottom of the stage.
+ *
+ * Said once because four things have to agree about it: the caption on a
+ * full-stage tile, the pin beside it, the strip of share/listen/play bars
+ * above the dock, and the corner the self-view settles into. They were four
+ * different numbers, which is how a caption ends up either under the dock or
+ * floating in the middle of somebody's chest.
+ */
+private val DOCK_CLEARANCE = 92.dp
 
 /**
  * A WhatsApp/modern-style voice & video call screen.
@@ -185,6 +207,8 @@ fun VoiceChannelScreen(
     val talking by engine.talking.collectAsState()
     /** The game library, which is the only way to start one from a phone. */
     var showGames by remember { mutableStateOf(false) }
+    /** The rest of the controls, folded away so the dock fits a phone. */
+    var showMore by remember { mutableStateOf(false) }
     /**
      * Read on composition rather than held: it is changed on the settings
      * screen, which this one is recomposed after returning from. Nothing about
@@ -193,6 +217,7 @@ fun VoiceChannelScreen(
      * a frame late.
      */
     val pushToTalk = AudioPrefs.pushToTalk
+    val liveSince by engine.liveSince.collectAsState()
     val linkStats by engine.stats.collectAsState()
     val signalling by engine.signalling.collectAsState()
     val problem by engine.problem.collectAsState()
@@ -282,8 +307,18 @@ fun VoiceChannelScreen(
     val pinnedPeer = participants.firstOrNull { it.peer.peerId == pinned }
     val selfPinned = pinned == SELF_PIN
 
-    val watching = participants.firstOrNull { it.visibleScreen != null }
-    var dismissed by remember { mutableStateOf<String?>(null) }
+    // A share never takes the screen on its own.
+    //
+    // It used to: the moment a track arrived this screen was replaced by the
+    // share stage, mid-sentence, with no way back other than a button that
+    // then suppressed the share for good. The desktop has always asked first
+    // - see `ShareBanners` in `VoiceChannelView.tsx` - and this is the same
+    // bargain: a line at the bottom of the call saying who is presenting, with
+    // a way in, and nothing moves until it is pressed.
+    val sharer = participants.firstOrNull { it.visibleScreen != null }
+    var watchingShare by remember { mutableStateOf<String?>(null) }
+    /** The share this person actually asked to watch, or null - see above. */
+    val watched = sharer?.takeIf { it.peer.peerId == watchingShare }
     var pickingDevices by remember { mutableStateOf(false) }
     var showingConnection by remember { mutableStateOf(false) }
     // "Who else should be here" is a thought somebody has while looking at a
@@ -304,8 +339,10 @@ fun VoiceChannelScreen(
     // without opening anything.
     val linkHealth = CallStats.healthWarning(linkStats)
 
-    LaunchedEffect(watching?.peer?.peerId) {
-        if (watching == null) dismissed = null
+    // A share that stops, or a sharer who leaves, puts the call back on screen
+    // rather than leaving a stage with nothing on it.
+    LaunchedEffect(sharer?.peer?.peerId) {
+        if (sharer == null || sharer.peer.peerId != watchingShare) watchingShare = null
     }
 
     // Anything the user might be reading or reaching for pins the chrome open:
@@ -314,9 +351,11 @@ fun VoiceChannelScreen(
     // countdown without every button having to say so.
     LaunchedEffect(
         chrome, woken, inCallNow, pickingDevices, showingConnection, inviting, problem,
-        muted, cameraOn, sharing,
+        showMore, muted, cameraOn, sharing,
     ) {
-        if (!inCallNow || pickingDevices || showingConnection || inviting || problem != null) {
+        if (!inCallNow || pickingDevices || showingConnection || inviting || showMore ||
+            problem != null
+        ) {
             chrome = true
             return@LaunchedEffect
         }
@@ -352,11 +391,12 @@ fun VoiceChannelScreen(
         }
     }
 
-    if (watching != null && watching.peer.peerId != dismissed) {
+    if (watched != null) {
         ShareStage(
-            label = watching.peer.username,
-            track = watching.visibleScreen!!,
-            participants = participants.filterNot { it.peer.peerId == watching.peer.peerId },
+            label = watched.peer.username,
+            sharerPeerId = watched.peer.peerId,
+            track = watched.visibleScreen!!,
+            participants = participants.filterNot { it.peer.peerId == watched.peer.peerId },
             self = self.label,
             selfId = self.id,
             eglContext = engine.eglBase.eglBaseContext,
@@ -380,7 +420,9 @@ fun VoiceChannelScreen(
             },
             onAudioDevices = { pickingDevices = true },
             onLeave = { engine.leave(); onBack() },
-            onClose = { dismissed = watching.peer.peerId },
+            // Back to the call, not "never show me this again". The banner is
+            // still there and the share can be rejoined.
+            onClose = { watchingShare = null },
         )
         if (pickingDevices) CallDeviceSheet(onDismiss = { pickingDevices = false })
         if (showingConnection) ConnectionSheet(linkStats) { showingConnection = false }
@@ -398,6 +440,13 @@ fun VoiceChannelScreen(
     }
 
     val isInCall = inCallNow
+
+    // Whether there is a picture in this call at all - anybody's camera,
+    // anybody's screen, including this phone's own. It decides between the
+    // video layouts and [AudioCallStage], and it is deliberately a fact about
+    // the call rather than about this device: one person turning a camera on
+    // gives everybody something to look at.
+    val anyVideo = localVideo != null || participants.any { it.video != null }
 
     Box(
         modifier = Modifier
@@ -534,6 +583,32 @@ fun VoiceChannelScreen(
                             }
                         }
 
+                        // Nobody in this call has a camera or a screen on.
+                        //
+                        // Which is most calls, and it used to be drawn as a
+                        // video layout with the video missing: a full-bleed
+                        // black tile, a 72dp avatar stranded in the middle of
+                        // it, a name in a pill down in the corner, and a
+                        // 108x154 floating window showing a second copy of
+                        // your own initials. Nothing there was wrong, and all
+                        // of it was scenery for a picture that never arrived.
+                        //
+                        // An audio call is a face, a name and a clock, centred.
+                        // See [AudioCallStage].
+                        !anyVideo -> {
+                            AudioCallStage(
+                                selfLabel = self.label,
+                                selfId = self.id,
+                                selfSpeaking = selfSpeaking,
+                                muted = muted,
+                                participants = participants,
+                                liveSince = liveSince,
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(top = 72.dp, bottom = DOCK_CLEARANCE + 24.dp),
+                            )
+                        }
+
                         // 0 remote participants (Waiting for others)
                         participants.isEmpty() -> {
                             Box(
@@ -556,7 +631,7 @@ fun VoiceChannelScreen(
                                     fit = RendererCommon.ScalingType.SCALE_ASPECT_FILL,
                                     // Clear of the dock, which is drawn over
                                     // the bottom of this tile.
-                                    labelBottomPadding = if (chrome) 92.dp else 12.dp,
+                                    labelBottomPadding = if (chrome) DOCK_CLEARANCE else 12.dp,
                                     modifier = Modifier.fillMaxSize(),
                                 )
                                 // Below the tile's centre, not on it. Both were
@@ -600,12 +675,15 @@ fun VoiceChannelScreen(
                                 // the name floated in the middle of somebody's
                                 // chest instead of sitting where a caption
                                 // sits.
-                                labelBottomPadding = if (chrome) 92.dp else 12.dp,
+                                labelBottomPadding = if (chrome) DOCK_CLEARANCE else 12.dp,
                                 modifier = Modifier.fillMaxSize(),
                             )
 
-                            // Floating PiP for self (top-right)
-                            FloatingPipTile(
+                            // Floating PiP for self (top-right), and only
+                            // when there is something in it. An empty card
+                            // holding your own initials over somebody's face
+                            // is a sticker, not a self-view.
+                            if (localVideo != null) FloatingPipTile(
                                 label = "${self.label} (you)",
                                 id = self.id,
                                 track = localVideo,
@@ -660,7 +738,7 @@ fun VoiceChannelScreen(
                                 )
                             }
 
-                            FloatingPipTile(
+                            if (localVideo != null) FloatingPipTile(
                                 label = "${self.label} (you)",
                                 id = self.id,
                                 track = localVideo,
@@ -706,7 +784,7 @@ fun VoiceChannelScreen(
                                         muted = muted,
                                         isLocal = true,
                                         fit = RendererCommon.ScalingType.SCALE_ASPECT_FILL,
-                                        labelBottomPadding = if (chrome) 92.dp else 12.dp,
+                                        labelBottomPadding = if (chrome) DOCK_CLEARANCE else 12.dp,
                                         pinned = selfPinned,
                                         onPin = { pinned = if (selfPinned) null else SELF_PIN },
                                         modifier = Modifier.fillMaxSize(),
@@ -721,7 +799,7 @@ fun VoiceChannelScreen(
                                         speaking = hero.speaking,
                                         connected = hero.connected,
                                         status = statusOf(hero),
-                                        labelBottomPadding = if (chrome) 92.dp else 12.dp,
+                                        labelBottomPadding = if (chrome) DOCK_CLEARANCE else 12.dp,
                                         pinned = pinnedPeer != null,
                                         onPin = {
                                             pinned = if (pinnedPeer != null) null else hero.peer.peerId
@@ -767,7 +845,7 @@ fun VoiceChannelScreen(
                                 // Local self in PiP - unless it is already on
                                 // the stage, where a second copy of your own
                                 // face is the last thing anybody needs.
-                                if (!selfPinned) {
+                                if (!selfPinned && localVideo != null) {
                                     FloatingPipTile(
                                         label = "${self.label} (you)",
                                         id = self.id,
@@ -910,48 +988,31 @@ fun VoiceChannelScreen(
             }
         }
 
-        // What the call is listening to, when it is listening to anything.
+        // The strip of things happening alongside the call: who is presenting,
+        // what is playing, what is being played. Above the control dock rather
+        // than over the tiles - these are things to glance at and occasionally
+        // press, not the subject of the call - and each draws nothing at all
+        // when its session is absent, so a plain call looks exactly as it did.
         //
-        // Above the control dock rather than over the tiles: it is a thing to
-        // glance at and occasionally press, not the subject of the call. Absent
-        // entirely when no session is running - `ListenStage` draws nothing -
-        // so a call with no queue looks exactly as it did.
-        // Driving somebody's shared screen. Under the dock and the stages in
-        // z-order on purpose: they are drawn after this, so their own taps
-        // still reach them and only the picture itself is a drive surface.
-        //
-        // Offered only while the share is pinned, and that is a correctness
-        // rule rather than a layout preference. Pinned, the tile is exactly
-        // this box, so a touch maps to a fraction of the picture with nothing
-        // to guess. In a grid it is one tile among several and the arithmetic
-        // would be a guess about somebody else's mouse.
-        if (!inPip && screenHolder != null && pinned == screenHolder) {
-            DriveSurface(
-                sharerPeerId = screenHolder!!,
-                modifier = Modifier.fillMaxSize(),
-            )
-        }
-
+        // Driving a shared screen is no longer here. It was unreachable: a
+        // share replaced this entire screen the instant it arrived, taking the
+        // bar that asked for the mouse with it. It now lives on the share
+        // stage, over the picture it is about - see `ShareControlBar`.
         if (!inPip) {
             Column(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
-                    .padding(start = 12.dp, end = 12.dp, bottom = 96.dp),
+                    .padding(start = 12.dp, end = 12.dp, bottom = DOCK_CLEARANCE),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                // Only when somebody else is sharing, and never when it is this
-                // phone: asking yourself for your own mouse is not a thing.
-                screenHolder?.takeIf { it != engine.selfPeerId() }?.let { holder ->
-                    ShareControlBar(
-                        sharerPeerId = holder,
-                        sharerName = participants.firstOrNull { it.peer.peerId == holder }
-                            ?.peer?.username ?: "They",
-                        pinned = pinned == holder,
-                        onPin = { pinned = holder },
+                // Somebody else's share, offered rather than imposed. Never
+                // this phone's own: watching yourself present is a mirror.
+                sharer?.takeIf { it.peer.peerId != engine.selfPeerId() }?.let { presenter ->
+                    ShareInvite(
+                        sharerName = presenter.peer.username,
+                        onJoin = { watchingShare = presenter.peer.peerId },
                     )
                 }
-                // Both draw nothing when their session is absent, so a call
-                // with neither running looks exactly as it did.
                 ListenStage()
                 PlayStage(selfId = self.id)
             }
@@ -1019,10 +1080,18 @@ fun VoiceChannelScreen(
         // - filled when on, quiet when off, each squaring off under a finger -
         // and the one that ends the call is a red FAB outside it.
         //
-        // It also solves the old arithmetic problem honestly. Six fixed buttons
-        // and fixed gaps came to about 400dp, wider than the phone, so the bar
-        // ran off the right-hand edge and took the hang-up button with it; the
-        // toolbar measures itself.
+        // The arithmetic is the other half, and it is not solved by the
+        // component. `HorizontalFloatingToolbar` is a `Row`: it measures its
+        // children at whatever they ask for and does not wrap, shrink or
+        // scroll. Six toggles at 48dp, the gaps between them, the container's
+        // own padding and a 56dp hang-up button came to more than a 360dp
+        // phone has, so the dock ran off the right-hand edge - and the button
+        // it took with it was the one that ends the call.
+        //
+        // So the count is capped rather than hoped about. Four toggles and the
+        // hang-up button, plus the talk key in push-to-talk mode: five slots at
+        // the widest, which is about 300dp and fits the narrowest phone anyone
+        // still ships. Everything else is behind `More`.
         AnimatedVisibility(
             visible = isInCall && !inPip && chrome,
             // Down and away, not squeezed in from the sides. The toolbar's
@@ -1071,27 +1140,16 @@ fun VoiceChannelScreen(
                     }
                 },
             ) {
-                // Flipping the camera is not here: it is on the self tile,
-                // which is the thing being flipped, and is the only place it
-                // means anything at all while the camera is off. Seven buttons
-                // in a row on a phone is how each of them ends up too small and
-                // too close to the next.
+                // Five things, at most, and never more - see [DOCK_CLEARANCE]
+                // and the note above. Flipping the camera is not one of them:
+                // it is on the self tile, which is the thing being flipped, and
+                // is the only place it means anything while the camera is off.
 
                 CallToggle(
                     icon = if (cameraOn) BetweenUsIcons.Video else BetweenUsIcons.VideoOff,
                     contentDescription = if (cameraOn) "Turn camera off" else "Turn camera on",
                     checked = cameraOn,
                     onCheckedChange = { if (cameraOn) engine.stopVideo() else camera.request() },
-                )
-
-                // The desktop keeps listening and playing behind one "Apps"
-                // button; the phone has room for one control and this is it,
-                // because a queue is added to from a desktop and a game is not.
-                CallToggle(
-                    icon = BetweenUsIcons.Activity,
-                    contentDescription = "Play together",
-                    checked = showGames,
-                    onCheckedChange = { showGames = it },
                 )
 
                 // Muted is the one toggle whose "on" is a problem rather than a
@@ -1134,32 +1192,34 @@ fun VoiceChannelScreen(
                     },
                 )
 
-                // Add somebody to the call. The roster announcement tells the
-                // channel a call is happening and rings nobody; this is the
-                // aimed half, and the only way to reach it from a phone that is
-                // showing a call rather than a member list.
+                // Everything else. It turns the error colour when one of the
+                // things behind it wants attention, so folding a struggling
+                // link away does not also hide that it is struggling.
                 CallToggle(
-                    icon = BetweenUsIcons.UserPlus,
-                    contentDescription = "Add someone to the call",
-                    checked = inviting,
-                    onCheckedChange = { inviting = true },
-                )
-
-                // What the link is doing, in numbers. The one thing a phone in
-                // a bad call has no other way to find out, since there is no
-                // webrtc-internals to open - so an unhappy link says so here,
-                // in the error colour, before anybody thinks to look.
-                CallToggle(
-                    icon = BetweenUsIcons.Activity,
-                    contentDescription = "Connection",
-                    checked = showingConnection,
-                    onCheckedChange = { showingConnection = true },
-                    alarming = linkHealth != null,
+                    icon = BetweenUsIcons.More,
+                    contentDescription = if (linkHealth != null) {
+                        "More call controls - the connection needs attention"
+                    } else {
+                        "More call controls"
+                    },
+                    checked = showMore,
+                    onCheckedChange = { showMore = true },
+                    warn = linkHealth != null,
                 )
             }
         }
     }
 
+    if (showMore) {
+        CallMoreSheet(
+            linkHealth = linkHealth,
+            onDismiss = { showMore = false },
+            onGames = { showMore = false; showGames = true },
+            onInvite = { showMore = false; inviting = true },
+            onAudioDevices = { showMore = false; pickingDevices = true },
+            onConnection = { showMore = false; showingConnection = true },
+        )
+    }
     if (pickingDevices) CallDeviceSheet(onDismiss = { pickingDevices = false })
     if (showingConnection) ConnectionSheet(linkStats) { showingConnection = false }
     if (inviting && channelId != null) {
@@ -1182,8 +1242,14 @@ fun VoiceChannelScreen(
  * reason people mute themselves twice. Checked fills it; unchecked leaves it
  * quiet; the shape set squares it off under a finger and springs it back.
  *
- * [alarming] is for the two states that are bad news rather than good - muted,
- * and a link that is struggling - and swaps the fill for the error colour.
+ * [alarming] is for a state whose "on" is bad news rather than good - muted -
+ * and swaps the fill for the error colour once it is on.
+ *
+ * [warn] is the other half of that, and they are genuinely different things: it
+ * colours the control while it is *off*, for a button that is not itself the
+ * problem but leads to one. Folding the connection reading behind `More` would
+ * otherwise hide the one thing it was there to shout about. Mute cannot use it -
+ * an unmuted microphone drawn in red is an alarm about nothing.
  */
 @Composable
 private fun CallToggle(
@@ -1192,6 +1258,7 @@ private fun CallToggle(
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit,
     alarming: Boolean = false,
+    warn: Boolean = false,
 ) {
     val scheme = MaterialTheme.colorScheme
     FilledIconToggleButton(
@@ -1200,9 +1267,13 @@ private fun CallToggle(
         shapes = IconButtonDefaults.toggleableShapes(),
         colors = IconButtonDefaults.filledIconToggleButtonColors(
             containerColor = Color.Transparent,
-            contentColor = if (alarming && checked) scheme.error else scheme.onSurfaceVariant,
-            checkedContainerColor = if (alarming) scheme.errorContainer else scheme.primary,
-            checkedContentColor = if (alarming) scheme.onErrorContainer else scheme.onPrimary,
+            contentColor = when {
+                warn -> scheme.error
+                alarming && checked -> scheme.error
+                else -> scheme.onSurfaceVariant
+            },
+            checkedContainerColor = if (alarming || warn) scheme.errorContainer else scheme.primary,
+            checkedContentColor = if (alarming || warn) scheme.onErrorContainer else scheme.onPrimary,
         ),
     ) {
         BetweenUsIcon(icon, size = 22.dp, contentDescription = contentDescription)
@@ -1709,5 +1780,323 @@ private fun PinButton(
             tint = if (pinned) Neutral99 else Color(0xFFF1F5F9),
             size = if (compact) 11.dp else 15.dp,
         )
+    }
+}
+
+/**
+ * A call with no picture in it, drawn as what it is.
+ *
+ * The rule is that an audio call is a *person*, not an empty video tile: one
+ * face big enough to be a face, the name under it, and a clock. Three or more
+ * and the faces wrap into a centred block, because a filmstrip of avatars along
+ * the bottom of an empty stage is a video layout again with the video still
+ * missing.
+ *
+ * Your own face is not on it. You are not in the call to look at yourself, and
+ * the one thing about you that matters here - whether you are muted - is a lit
+ * red button on the dock, an inch from your thumb.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun AudioCallStage(
+    selfLabel: String,
+    selfId: String,
+    selfSpeaking: Boolean,
+    muted: Boolean,
+    participants: List<VoiceEngine.Participant>,
+    liveSince: Long?,
+    modifier: Modifier = Modifier,
+) {
+    val elapsed = rememberElapsed(liveSince)
+
+    Column(
+        modifier = modifier.padding(horizontal = 24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        when {
+            // Alone. Your own face is the only one there is, so this is the one
+            // place on the stage it belongs.
+            participants.isEmpty() -> {
+                AudioFace(
+                    id = selfId,
+                    label = selfLabel,
+                    size = 132.dp,
+                    speaking = selfSpeaking,
+                    muted = muted,
+                )
+                Spacer(Modifier.height(24.dp))
+                Text(
+                    text = selfLabel,
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Slate50,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    text = "Waiting for others to join…",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Slate400,
+                )
+            }
+
+            participants.size == 1 -> {
+                val other = participants.first()
+                val trouble = statusOf(other)
+                AudioFace(
+                    id = other.peer.userId,
+                    label = other.peer.username,
+                    size = 132.dp,
+                    speaking = other.speaking,
+                    muted = !other.micEnabled,
+                )
+                Spacer(Modifier.height(24.dp))
+                Text(
+                    text = other.peer.username,
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Slate50,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    textAlign = TextAlign.Center,
+                )
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    // A link in trouble says so instead of the clock. A number
+                    // that keeps counting up while nothing is arriving is the
+                    // most reassuring thing on a screen that should not be.
+                    text = trouble ?: elapsed.ifBlank { "Connecting…" },
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = if (trouble != null) Amber200 else Slate400,
+                )
+            }
+
+            else -> {
+                // Smaller as the room fills, so six people are six faces rather
+                // than four faces and two off the bottom of the screen.
+                val face = if (participants.size <= 4) 92.dp else 72.dp
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(
+                        space = 20.dp,
+                        alignment = Alignment.CenterHorizontally,
+                    ),
+                    verticalArrangement = Arrangement.spacedBy(18.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    participants.forEach { participant ->
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            AudioFace(
+                                id = participant.peer.userId,
+                                label = participant.peer.username,
+                                size = face,
+                                speaking = participant.speaking,
+                                muted = !participant.micEnabled,
+                            )
+                            Spacer(Modifier.height(8.dp))
+                            Text(
+                                text = participant.peer.username,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (participant.connected) Slate100 else Slate400,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.width(face + 18.dp),
+                            )
+                        }
+                    }
+                }
+                Spacer(Modifier.height(24.dp))
+                Text(
+                    text = listOfNotNull(
+                        "${participants.size + 1} in call",
+                        elapsed.ifBlank { null },
+                    ).joinToString(" · "),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Slate400,
+                )
+            }
+        }
+
+        Spacer(Modifier.height(28.dp))
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            BetweenUsIcon(BetweenUsIcons.Lock, tint = Slate500, size = 13.dp)
+            Text(
+                text = "End-to-end encrypted",
+                style = MaterialTheme.typography.labelSmall,
+                color = Slate500,
+            )
+        }
+    }
+}
+
+/**
+ * One person on the audio stage: their face, ringed while they are talking.
+ *
+ * The ring is the only thing that moves on this screen, which is why it is
+ * sprung rather than switched - a hard border blinking on every syllable is the
+ * reason people turn indicators off.
+ */
+@Composable
+private fun AudioFace(
+    id: String,
+    label: String,
+    size: Dp,
+    speaking: Boolean,
+    muted: Boolean,
+) {
+    val ring by animateDpAsState(
+        targetValue = if (speaking) 3.dp else 1.dp,
+        animationSpec = BetweenUsMotion.spatialFast(),
+        label = "audio-face-ring",
+    )
+    val ringColor by animateColorAsState(
+        targetValue = if (speaking) StatusOnline else Color.White.copy(alpha = 0.14f),
+        animationSpec = BetweenUsMotion.effect(),
+        label = "audio-face-ring-colour",
+    )
+
+    Box(contentAlignment = Alignment.Center) {
+        Box(
+            modifier = Modifier
+                .size(size + 18.dp)
+                .clip(CircleShape)
+                .background(Surface900)
+                .border(ring, ringColor, CircleShape),
+            contentAlignment = Alignment.Center,
+        ) {
+            Avatar(id = id, label = label, url = null, size = size, viewable = false)
+        }
+
+        if (muted) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .size(28.dp)
+                    .clip(CircleShape)
+                    .background(Surface950)
+                    .border(1.dp, Edge, CircleShape),
+                contentAlignment = Alignment.Center,
+            ) {
+                BetweenUsIcon(BetweenUsIcons.MicOff, tint = Danger, size = 14.dp)
+            }
+        }
+    }
+}
+
+/**
+ * "bob is sharing a screen", with a way in.
+ *
+ * The Android half of the desktop's `ShareBanners`. A share is offered here and
+ * taken up by pressing something; it does not arrive by replacing the call.
+ */
+@Composable
+private fun ShareInvite(
+    sharerName: String,
+    onJoin: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val scheme = MaterialTheme.colorScheme
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(MaterialTheme.shapes.large)
+            .background(scheme.surfaceContainerHigh)
+            .border(1.dp, Accent.copy(alpha = 0.45f), MaterialTheme.shapes.large)
+            .padding(start = 14.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        BetweenUsIcon(BetweenUsIcons.ScreenShare, tint = Accent, size = 18.dp)
+        Text(
+            text = "$sharerName is sharing a screen",
+            style = MaterialTheme.typography.bodySmall,
+            color = scheme.onSurfaceVariant,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            // Weighted, and the button is not: the button sizes to its own
+            // words and the caption takes what is left. The other way round is
+            // a full-width button with a one-character caption beside it.
+            modifier = Modifier.weight(1f),
+        )
+        Button(
+            onClick = onJoin,
+            shapes = ButtonDefaults.shapes(),
+            contentPadding = ButtonDefaults.ContentPadding,
+            modifier = Modifier.heightIn(min = 40.dp),
+        ) {
+            Text(
+                text = "Join stream",
+                style = MaterialTheme.typography.labelLarge,
+                maxLines = 1,
+            )
+        }
+    }
+}
+
+/**
+ * Everything the dock has no room for.
+ *
+ * A sheet rather than a second row of buttons, because these are all things
+ * somebody does once in a call - start a game, pull somebody in, change where
+ * the sound comes out, find out why it is crackling - and a control used once
+ * does not deserve a permanent seat next to mute.
+ */
+@Composable
+private fun CallMoreSheet(
+    linkHealth: String?,
+    onDismiss: () -> Unit,
+    onGames: () -> Unit,
+    onInvite: () -> Unit,
+    onAudioDevices: () -> Unit,
+    onConnection: () -> Unit,
+) {
+    val sheet = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheet) {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .padding(bottom = 12.dp),
+        ) {
+            SectionLabel("In this call")
+            ListRow(
+                title = "Play together",
+                subtitle = "A game everybody in the call can see",
+                leading = { BetweenUsIcon(BetweenUsIcons.Activity, tint = Accent) },
+                onClick = onGames,
+            )
+            ListRow(
+                title = "Add someone",
+                subtitle = "Ring another member into this call",
+                leading = { BetweenUsIcon(BetweenUsIcons.UserPlus, tint = Slate400) },
+                onClick = onInvite,
+            )
+
+            SectionLabel("Sound and connection")
+            ListRow(
+                title = "Audio output",
+                subtitle = "Where the call plays, and what it listens to",
+                leading = { BetweenUsIcon(BetweenUsIcons.Speaker, tint = Slate400) },
+                onClick = onAudioDevices,
+            )
+            ListRow(
+                title = "Connection",
+                // The warning itself, not the promise of one behind another tap.
+                subtitle = linkHealth ?: "Bitrate, packet loss and round trip",
+                titleColor = if (linkHealth != null) Danger else Color.Unspecified,
+                leading = {
+                    BetweenUsIcon(
+                        BetweenUsIcons.Activity,
+                        tint = if (linkHealth != null) Danger else Slate400,
+                    )
+                },
+                onClick = onConnection,
+            )
+        }
     }
 }

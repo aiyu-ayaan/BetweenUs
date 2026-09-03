@@ -17,9 +17,10 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
@@ -50,10 +51,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.aatech.betweenus.ui.components.Avatar
-import com.aatech.betweenus.ui.components.IconAction
 import com.aatech.betweenus.ui.components.BetweenUsIcon
 import com.aatech.betweenus.ui.components.BetweenUsIcons
+import com.aatech.betweenus.ui.components.IconAction
 import com.aatech.betweenus.ui.components.findActivity
 import com.aatech.betweenus.ui.theme.Accent
 import com.aatech.betweenus.ui.theme.Danger
@@ -61,11 +63,11 @@ import com.aatech.betweenus.ui.theme.Slate100
 import com.aatech.betweenus.ui.theme.Slate400
 import com.aatech.betweenus.ui.theme.StatusOnline
 import com.aatech.betweenus.ui.theme.Surface900
+import kotlin.math.max
+import kotlin.math.min
 import org.webrtc.EglBase
 import org.webrtc.RendererCommon
 import org.webrtc.VideoTrack
-import kotlin.math.max
-import kotlin.math.min
 
 /**
  * Somebody else's screen, laid out the way a meeting client lays one out.
@@ -98,6 +100,13 @@ import kotlin.math.min
 @Composable
 fun ShareStage(
     label: String,
+    /**
+     * Whose screen this is, on the wire.
+     *
+     * Not cosmetic: it is the address every drive message is sent to, and the
+     * only reason asking for the mouse can happen from this screen at all.
+     */
+    sharerPeerId: String,
     track: VideoTrack,
     participants: List<VoiceEngine.Participant>,
     self: String,
@@ -119,7 +128,14 @@ fun ShareStage(
 ) {
     val activity = LocalContext.current.findActivity()
     var orientation by rememberSaveable { mutableStateOf(StageOrientation.FOLLOW_PHONE) }
-    var chrome by rememberSaveable { mutableStateOf(true) }
+    var chromeWanted by rememberSaveable { mutableStateOf(true) }
+
+    // While this phone is the mouse, every touch on the picture is a click on
+    // somebody else's machine - so the tap that hides the chrome is gone, and
+    // hiding it anyway would leave no way to stop driving. Pinned open.
+    val driving by ShareControl.driving.collectAsStateWithLifecycle()
+    val amDriving = driving == sharerPeerId
+    val chrome = chromeWanted || amDriving
 
     var scale by remember { mutableFloatStateOf(1f) }
     var offsetX by remember { mutableFloatStateOf(0f) }
@@ -153,22 +169,34 @@ fun ShareStage(
             scale = scale,
             offsetX = offsetX,
             offsetY = offsetY,
-            modifier = Modifier.fillMaxSize().transformable(transform),
-        )
+            // Pinch and pan are off while driving. `transformable` claims a
+            // one-finger drag, which is the same gesture as dragging a mouse:
+            // leaving both on means the picture slides *and* the far end gets
+            // half a drag, and neither does what was intended.
+            modifier = Modifier.fillMaxSize().transformable(transform, enabled = !amDriving),
+        ) { picture ->
+            // Sized and offset to the letterboxed frame itself rather than to
+            // the black around it, because the far end is sent fractions of
+            // this box and only the picture has fractions worth sending.
+            DriveSurface(sharerPeerId = sharerPeerId, modifier = picture)
+        }
 
-        // Above the renderer, so a tap anywhere brings the chrome back.
-        Box(
-            Modifier.fillMaxSize().pointerInput(Unit) {
-                detectTapGestures(
-                    onTap = { chrome = !chrome },
-                    onDoubleTap = {
-                        scale = 1f
-                        offsetX = 0f
-                        offsetY = 0f
-                    },
-                )
-            },
-        )
+        // Above the renderer, so a tap anywhere brings the chrome back. Not
+        // while driving: the drive surface is the thing taps belong to then.
+        if (!amDriving) {
+            Box(
+                Modifier.fillMaxSize().pointerInput(Unit) {
+                    detectTapGestures(
+                        onTap = { chromeWanted = !chromeWanted },
+                        onDoubleTap = {
+                            scale = 1f
+                            offsetX = 0f
+                            offsetY = 0f
+                        },
+                    )
+                },
+            )
+        }
 
         AnimatedVisibility(
             visible = chrome,
@@ -240,8 +268,18 @@ fun ShareStage(
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(Color.Black.copy(alpha = 0.65f))
-                    .systemBarsPadding(),
+                    .navigationBarsPadding(),
             ) {
+                // Asking for the mouse belongs *here*, over the picture it is
+                // about - not on the call stage, which a share replaces the
+                // instant it starts. Full width and above the filmstrip so a
+                // long refusal has room to be read.
+                ShareControlBar(
+                    sharerPeerId = sharerPeerId,
+                    sharerName = label,
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+                )
+
                 // The people, small, along the bottom: a share without the room
                 // it is being shown to is a video, not a meeting.
                 val hasTilesToShow = participants.isNotEmpty() || cameraOn || selfSpeaking
@@ -351,6 +389,12 @@ private fun ProjectedVideo(
     offsetX: Float,
     offsetY: Float,
     modifier: Modifier = Modifier,
+    /**
+     * Drawn over the picture, handed the modifier that *is* the picture: the
+     * fitted, zoomed, panned rectangle and not the box around it. The one
+     * caller uses it for the drive surface, which is meaningless anywhere else.
+     */
+    overlay: @Composable (Modifier) -> Unit = {},
 ) {
     // 16:9 until the first frame says otherwise, which is one frame away.
     var aspect by remember { mutableFloatStateOf(16f / 9f) }
@@ -389,6 +433,15 @@ private fun ProjectedVideo(
         val slackX = with(density) { ((width - maxWidth).coerceAtLeast(0.dp)).toPx() / 2f }
         val slackY = with(density) { ((height - maxHeight).coerceAtLeast(0.dp)).toPx() / 2f }
 
+        val placement = Modifier
+            .size(width, height)
+            .offset {
+                IntOffset(
+                    offsetX.coerceIn(-slackX, slackX).toInt(),
+                    offsetY.coerceIn(-slackY, slackY).toInt(),
+                )
+            }
+
         VideoSurface(
             track = track,
             eglContext = eglContext,
@@ -397,15 +450,10 @@ private fun ProjectedVideo(
             // the share down to the size of a phone.
             hardwareScaler = false,
             events = events,
-            modifier = Modifier
-                .size(width, height)
-                .offset {
-                    IntOffset(
-                        offsetX.coerceIn(-slackX, slackX).toInt(),
-                        offsetY.coerceIn(-slackY, slackY).toInt(),
-                    )
-                },
+            modifier = placement,
         )
+
+        overlay(placement)
     }
 }
 
