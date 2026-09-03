@@ -85,10 +85,16 @@ negotiates its own WebRTC path directly between peers (see
 - **Carried in full** — a chat message is delivered as the whole `Message`
   DTO, because the client has to render it without a round trip.
 - **Announced, then re-fetched** — `friends.changed`, `server.members.changed`
-  tell a client "something changed, re-read the list." A `Friend` DTO is
-  written from the reader's own side (who requested, which direction), so
-  one payload can't serve both parties of the same friendship without being
-  composed twice — a refetch is cheaper and harder to get subtly wrong.
+  and `status.changed` tell a client "something changed, re-read the list." A
+  `Friend` DTO is written from the reader's own side (who requested, which
+  direction), so one payload can't serve both parties of the same friendship
+  without being composed twice — a refetch is cheaper and harder to get subtly
+  wrong. `status.changed` is the same shape of problem: `seen` and `viewCount`
+  are answers *about the reader*, so it carries only `authorId` and the tray is
+  re-read. Its audience — the author's friends, plus the author's own other
+  devices — is worked out where the row was written, because that is where the
+  friend list already was; the gateway holds sockets and knows nothing about
+  friendships.
 
 `user.updated` and `server.updated` are carried rather than announced, and the
 reason is the opposite of the friendship one: the same four fields are drawn in

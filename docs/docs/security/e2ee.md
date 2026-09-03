@@ -124,7 +124,7 @@ device has been sealed.
 Without it, the default stands: a newcomer mints the next epoch, reads from
 the moment they arrive, and everything before that stays a padlock.
 
-## The one body the server can read: webhooks
+## The two bodies the server can read: webhooks, and statuses
 
 Everything above assumes every author holds a channel key. One kind of author
 does not and cannot: a webhook — a URL a build server, an alerting stack or a
@@ -135,8 +135,8 @@ without this project shipping its crypto to every language anybody writes a
 deploy script in.
 
 So a webhook's message is stored and delivered **in the clear**, and this is the
-single documented exception to the sealed-envelope rule. It is made visible
-rather than hidden:
+first of two documented exceptions to the sealed-envelope rule. It is made
+visible rather than hidden:
 
 - `Message.kind` is `WEBHOOK`, which is a column the server sets and every
   client reads.
@@ -150,6 +150,37 @@ robots say", and the clients say exactly that instead of implying more. Nothing
 about it weakens a person's message: `POST /api/v1/messages` still takes a
 sealed envelope and chat-service still cannot open one. See
 [Webhooks](../services/webhooks.md).
+
+### The second exception: status media
+
+A status — a post that expires after 24 hours — is read by the author's
+accepted friends, and **its media is stored in the clear** for a different
+reason than a webhook's.
+
+A message is sealed for a channel whose members are known at the moment it is
+sent. A status goes to whoever is a friend *when each viewer opens it*, and that
+set changes after the post is written. Sealing it would mean one of two things:
+re-wrapping a key for every friendship made while the post is alive, or freezing
+the audience at post time — which quietly hides a status from somebody who
+became a friend an hour later, with nothing on screen to explain it. The honest
+version is the one an avatar already uses: opaque bytes, gated server-side.
+
+What guards it is therefore the gate, and the gate is small enough to state
+whole:
+
+- Media lands under `status/<authorId>/`, and that prefix is what the download
+  route reads to know the object is gated by friendship rather than by channel
+  access.
+- The audience — accepted friends minus blocks in **either** direction — is one
+  function with three callers: the tray, the single-post gate, and the media
+  download. Three copies of an authorization rule are three chances to get it
+  wrong once.
+- The viewer list is readable by the author and nobody else. Everyone else can
+  only ever learn whether *they* opened something.
+
+What has **not** changed: nothing about a status weakens a message. A status is
+not a message, it has no channel, and `POST /api/v1/messages` still takes a
+sealed envelope that chat-service cannot open.
 
 This joins the two smaller things already outside the envelope — reaction
 emoji, and the `viewOnce` flag on a one-time message — for the same underlying

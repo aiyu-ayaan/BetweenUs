@@ -292,6 +292,42 @@ back intact. Search, the friend-request endpoint and the DM list all answer
 `USER_NOT_FOUND` whichever way the block runs, so neither the block nor its
 direction is something the far side can test for.
 
+## `/api/v1/statuses`
+
+| Method | Path | What it does |
+| --- | --- | --- |
+| GET | `/` | The tray: your own run, and one entry per friend who has posted |
+| POST | `/` | Post one — multipart: `kind`, `caption`, `background`, `durationMs`, `file` |
+| POST | `/:statusId/view` | Record that this account opened one (idempotent) |
+| GET | `/:statusId/views` | Who opened one of yours — author only |
+| DELETE | `/:statusId` | Take one of your own down early |
+
+A status is a post that expires after 24 hours. It is deliberately **not** a
+message: it has no channel, no conversation to belong to, and an audience that
+is a set — accepted friends, minus blocks in either direction — rather than a
+room. Modelling it as a message in a hidden channel would have meant a channel
+per account and a membership row per friend kept in step with the friend list.
+
+The media and the caption travel in **one** request, unlike an attachment,
+which is uploaded first and claimed by a message later. Two steps exist there
+because a message can carry several files and is composed over time; a status is
+one file and one button, and a two-step version leaves an orphaned blob every
+time somebody changes their mind in between.
+
+**Status media is not end-to-end encrypted**, and that is the second and last
+deliberate exception after webhook bodies — see [E2EE](/security/e2ee). The
+bytes land under `status/<authorId>/`, and that prefix is what the download
+route reads to gate the object by friendship rather than by channel access. The
+audience rule itself is one function with three callers (the tray, the
+single-post gate, the media download), so it cannot answer differently in one
+of them.
+
+`expiresAt` is stamped at write time and filtered at read time, so a post is
+invisible the moment it is due whether or not the sweep has run; `StatusSweeper`
+only recovers disk. Deleting a post, posting one, or having one expire announces
+`status.changed` to the author's friends, which carries only `authorId` — `seen`
+and `viewCount` differ per reader, so the tray is re-read rather than patched.
+
 ## `/api/v1/e2ee`
 
 | Method | Path | What it does |
@@ -315,7 +351,7 @@ direction is something the far side can test for.
 | POST | `/multipart/part` | Upload one part |
 | POST | `/multipart/complete` | Finish and assemble |
 | DELETE | `/multipart` | Abort a session |
-| GET | `/:key(*)` | Download (always `application/octet-stream`, session-checked) |
+| GET | `/:key(*)` | Download (session-checked; opaque bytes, except a picture or a status, whose type was verified on the way in) |
 
 Attachments are encrypted client-side before upload and served only as
 opaque downloads — see [`E2EE.md`](/security/e2ee).

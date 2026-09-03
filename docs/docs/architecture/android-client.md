@@ -28,7 +28,9 @@ two-device**, which is what a mesh needs to prove anything, along with push
 notifications on a real phone, the local cache offline, and the APK
 self-updater. Blocking, clearing your own history, password recovery and the
 live username check landed since and compile and unit-test green, but have not
-been on a device yet. So has the adaptive shell — two panes on tablets and
+been on a device yet. So have statuses - the tray, the story player and the
+composer - which compile and unit-test green and have not been watched on a
+handset. So has the adaptive shell — two panes on tablets and
 unfolded foldables — which has not been on one of those either. Full status, phase by phase:
 [`development/ANDROID_TODO.md`](https://github.com/aiyu-ayaan/BetweenUs/blob/master/development/ANDROID_TODO.md).
 
@@ -102,8 +104,16 @@ over a slow connection.
 ```text
 feature/auth       feature/chat        feature/home        feature/members
 feature/servers      feature/settings     feature/shell        feature/notifications
-feature/remote          feature/update        feature/voice
+feature/remote          feature/status        feature/update        feature/voice
 ```
+
+- **`status`** — posts that expire after 24 hours. The tray is a route
+  (`Route.Status`, reached from the rail), and the player and the composer are
+  full-screen dialogs mounted at the root beside `ProfileDialogHost`, so a ring
+  in a list, a row in the tray and an avatar in a conversation all open the same
+  one. `core/store/Statuses.kt` holds the feed and is started and stopped with
+  the session, like `Workspace`. The segmented ring lives inside `Avatar` in
+  `ui-common`, which is why every list grew one at the same moment.
 
 - **`remote`** — a remote-desktop *viewer* only. The phone can watch and
   control an enrolled machine; it can't itself be enrolled as a target,

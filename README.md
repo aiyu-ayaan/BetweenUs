@@ -45,6 +45,7 @@ Messages, attachments, and call media are end-to-end encrypted: the server store
 | Android Client | Native Jetpack Compose + Material 3 app with E2EE messaging, WhatsApp-style media picker and composer, media viewers, and public gallery saving (`Pictures/BetweenUs`, `Movies/BetweenUs`) |
 | Presence | Online / idle / do not disturb / invisible, last seen with a three-tier privacy setting, typing indicators, voice rosters |
 | Profiles | An avatar and a wide cover picture on every account, an about line, a card - hovered on desktop and web, double-tapped on Android - carrying the picture, whether they are here, when they were last here and what their line says, and a full profile screen behind it for the whole line at a size worth reading |
+| Status | Photo, video and text posts that disappear after 24 hours, seen by the people you are friends with - a full-screen player with a bar per post, tap to move, hold to pause, a segmented ring around an avatar counting what is unwatched, and a list of who has seen yours. **Status media is not end-to-end encrypted**: its audience changes after the post is written, so it is stored opaque and gated by the same friendship check the tray uses - the same bargain an avatar makes |
 | Webhooks | A URL you give another system so it can post into a channel - a build server, an alerting stack, a `curl` in a deploy script. Discord's request shape, so an integration already pointed at Discord works by changing only the URL. **These messages are the one thing here that is not end-to-end encrypted, and every client says so on every one of them** |
 | Notifications | Desktop notifications, system tray, start with the system, per-channel and per-person mute, quiet hours, persisted unread with a line that survives a restart |
 | Remote desktop | A machine offers itself from Settings, dials out to the gateway, and is viewed and driven from another client; per-machine permissions with expiry, and an audit trail |
@@ -152,6 +153,13 @@ to be framed, so no browser tab can ever show it.
 | The profile card: picture, presence, last seen, about | ✅ hover | ✅ hover | ✅ double tap |
 | A status dot on every face in a conversation | ✅ | ✅ | ✅ |
 | Typing indicators, voice rosters | ✅ | ✅ | ✅ |
+| **Status** | | | |
+| Post a photo, a video or text on a colour | ✅ | ✅ | ✅ |
+| Full-screen player: a bar per post, tap to move, hold to pause | ✅ | ✅ | ✅ |
+| A segmented ring on every avatar, one arc per post | ✅ | ✅ | ✅ |
+| Tap a ringed avatar: profile photo, or status | ✅ | ✅ | ✅ |
+| Who has seen yours, and delete one early | ✅ | ✅ | ✅ |
+| Everything gone after 24 hours | ✅ | ✅ | ✅ |
 | **Notifications** | | | |
 | Unread counts and the unread line | ✅ | ✅ | ✅ |
 | Notifications for messages, mentions and calls | ✅ | ✅ | ✅ FCM, app dead or alive |

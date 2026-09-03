@@ -12,7 +12,7 @@ its owning service's code paths.
 
 ## Entity relationship diagram
 
-One diagram for all 20 models reads as a wall of boxes — every field zooms
+One diagram for all 22 models reads as a wall of boxes — every field zooms
 to unreadable no matter how far you pan out. Split by domain instead, each
 diagram placed next to the section it belongs to.
 
@@ -335,6 +335,45 @@ immediate purge could not reach — storage that was down, a process that died
 mid-delete, a row orphaned by somebody else's cascade. It used to be the only
 path, and "I deleted that photo" meaning "some time in the next six hours" is
 why it is not any more.
+
+## Statuses
+
+```mermaid
+erDiagram
+    User ||--o{ Status : posts
+    Status ||--o{ StatusView : "was opened by"
+    User ||--o{ StatusView : opens
+```
+
+### `Status`
+A post that expires after 24 hours, read by the author's accepted friends.
+`kind` is `PHOTO`, `VIDEO` or `TEXT`; `mediaKey` is the storage key of the
+photo or video (rooted at `status/<authorId>/`, null for `TEXT`), and
+`caption`, `background` and `durationMs` are what the clients draw it with.
+
+Deliberately **not** a [`Message`](#message): it has no channel, no
+conversation to belong to, and an audience that is a set rather than a room.
+Modelling it as a message in a hidden channel would have meant a channel per
+account, a membership row per friend kept in step with the friend list, and a
+message table where half the rows are not messages.
+
+`expiresAt` is `createdAt + 24h`, stamped at write time — the same trick
+`Message.expiresAt` uses. The read path filters on it, so a post is invisible
+the moment it is due whether or not the sweep has run; the sweep only recovers
+disk.
+
+**Status media is not end-to-end encrypted.** The audience changes after the
+post is written, so sealing it would mean re-wrapping a key per new friendship
+or freezing the audience at post time. The bytes are opaque and gated
+server-side by the same friendship check the tray uses — see
+[E2EE](../security/e2ee.md), which names this exception.
+
+### `StatusView`
+One person's look at one status, unique on `(statusId, viewerId)`. "Seen" is a
+fact, not a counter: re-opening a story writes no second row and does not move
+the time on the first, so what the author is shown is when somebody first
+looked. The author reads these as the viewer list; every other account can only
+ever read its own.
 
 ## Notifications & devices
 
