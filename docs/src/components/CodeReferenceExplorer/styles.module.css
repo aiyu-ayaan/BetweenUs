@@ -10,7 +10,7 @@
   margin-bottom: 1rem;
 }
 
-@media screen and (max-width: 900px) {
+@media screen and (max-width: 960px) {
   .mobileNavSwitch {
     display: flex;
     justify-content: center;
@@ -28,6 +28,7 @@
   font-weight: 600;
   cursor: pointer;
   transition: all 0.15s ease;
+  text-align: center;
 }
 
 .mobileTabActive {
@@ -37,16 +38,16 @@
   box-shadow: 0 2px 10px rgba(124, 92, 255, 0.4);
 }
 
-/* Main IDE Layout: 2-Column Grid */
+/* Main IDE Split Layout */
 .ideLayout {
   display: grid;
-  grid-template-columns: 290px 1fr;
+  grid-template-columns: 310px 1fr;
   gap: 1.25rem;
   align-items: flex-start;
   width: 100%;
 }
 
-@media screen and (max-width: 900px) {
+@media screen and (max-width: 960px) {
   .ideLayout {
     grid-template-columns: 1fr;
   }
@@ -70,6 +71,14 @@
   position: sticky;
   top: 80px;
   max-height: calc(100vh - 100px);
+  width: 100%;
+}
+
+@media screen and (max-width: 960px) {
+  .treeSidebar {
+    position: static;
+    max-height: none;
+  }
 }
 
 .treeHeader {
@@ -106,37 +115,50 @@
 
 .treeHeaderActions {
   display: flex;
-  gap: 0.25rem;
+  gap: 0.35rem;
 }
 
 .headerActionBtn {
-  background: transparent;
-  border: none;
-  color: #64748b;
-  font-size: 0.9rem;
-  padding: 0.15rem 0.35rem;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #94a3b8;
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 0.2rem 0.45rem;
   border-radius: 4px;
   cursor: pointer;
   line-height: 1;
   transition: all 0.15s ease;
+  white-space: nowrap;
 }
 
 .headerActionBtn:hover {
   color: #fff;
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(124, 92, 255, 0.25);
+  border-color: rgba(124, 92, 255, 0.5);
 }
 
 /* Tree Quick Filter Input */
 .treeSearchBox {
   position: relative;
-  padding: 0.4rem 0.6rem;
-  background: rgba(0, 0, 0, 0.25);
+  display: flex;
+  align-items: center;
+  padding: 0.45rem 0.65rem;
+  background: rgba(0, 0, 0, 0.3);
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.treeSearchIcon {
+  position: absolute;
+  left: 1.1rem;
+  font-size: 0.75rem;
+  opacity: 0.5;
+  pointer-events: none;
 }
 
 .treeSearchInput {
   width: 100%;
-  padding: 0.3rem 1.6rem 0.3rem 0.5rem;
+  padding: 0.35rem 1.6rem 0.35rem 1.8rem;
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 6px;
@@ -147,13 +169,12 @@
 
 .treeSearchInput:focus {
   border-color: var(--betweenus-iris);
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .treeSearchClear {
   position: absolute;
-  right: 0.9rem;
-  top: 50%;
-  transform: translateY(-50%);
+  right: 1.1rem;
   background: none;
   border: none;
   color: #64748b;
@@ -187,7 +208,7 @@
 }
 
 .folderRow:hover {
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(255, 255, 255, 0.06);
   color: #ffffff;
 }
 
@@ -196,8 +217,13 @@
   color: #64748b;
   display: inline-block;
   transition: transform 0.15s ease;
-  width: 12px;
+  width: 14px;
   text-align: center;
+  flex-shrink: 0;
+}
+
+.chevronExpanded {
+  transform: rotate(0deg);
 }
 
 .chevronCollapsed {
@@ -205,8 +231,9 @@
 }
 
 .folderIcon {
-  font-size: 0.9rem;
+  font-size: 0.85rem;
   line-height: 1;
+  flex-shrink: 0;
 }
 
 .folderName {
@@ -214,7 +241,14 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  font-size: 0.8rem;
+  font-size: 0.78rem;
+  color: #e2e8f0;
+}
+
+.folderCount {
+  font-size: 0.68rem;
+  color: #64748b;
+  margin-left: 0.2rem;
 }
 
 .treeChildren {
@@ -257,14 +291,15 @@
   color: rgba(255, 255, 255, 0.5);
   padding-right: 0.4rem;
   font-weight: 500;
+  flex-shrink: 0;
 }
 
 .iconBadge {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 17px;
-  height: 17px;
+  width: 18px;
+  height: 18px;
   border-radius: 3px;
   font-size: 0.62rem;
   font-weight: 700;
@@ -318,6 +353,41 @@
 .codeMainArea {
   min-width: 0;
   width: 100%;
+}
+
+/* Mobile Back to Tree Banner */
+.mobileBackBanner {
+  display: none;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.75rem;
+  padding: 0.4rem 0.6rem;
+  background: rgba(124, 92, 255, 0.12);
+  border: 1px solid rgba(124, 92, 255, 0.3);
+  border-radius: 8px;
+}
+
+@media screen and (max-width: 960px) {
+  .mobileBackBanner {
+    display: flex;
+  }
+}
+
+.backToTreeBtn {
+  background: var(--betweenus-iris);
+  border: none;
+  color: #ffffff;
+  padding: 0.3rem 0.65rem;
+  border-radius: 6px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.mobileCurrentFile {
+  font-size: 0.78rem;
+  font-family: var(--ifm-font-family-monospace);
+  color: #cbd5e1;
 }
 
 .codeHeaderBar {
@@ -444,7 +514,7 @@
   display: flex;
   align-items: center;
   flex: 1;
-  min-width: 240px;
+  min-width: 220px;
 }
 
 .searchIcon {
@@ -587,4 +657,6 @@
   margin-bottom: 0 !important;
   max-height: 850px;
   overflow-y: auto;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }

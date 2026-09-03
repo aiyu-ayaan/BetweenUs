@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * build-code-reference.mjs
- * Extracts real codebase source files, builds a hierarchical VS Code-style file tree,
+ * Extracts real codebase source files, builds a clean compact hierarchical file tree,
  * and extracts symbols and doc comments into a structured JSON for the docs.
  */
 
@@ -189,10 +189,45 @@ const INDEXED_FILES = [
   },
 ];
 
+/**
+ * Compacts empty single-child directories (like VS Code does with compactFolders)
+ * and simplifies deep package paths to prevent long cascades.
+ */
+function compactTree(node) {
+  if (!node.children || node.children.length === 0) {
+    return node;
+  }
+
+  node.children = node.children.map(compactTree);
+
+  // Preserve key top-level roots: root, "apps", "packages", "scripts"
+  const preserveExactRoots = new Set(['', 'apps', 'packages', 'scripts']);
+
+  while (
+    !preserveExactRoots.has(node.path) &&
+    node.children &&
+    node.children.length === 1 &&
+    node.children[0].type === 'directory'
+  ) {
+    const singleChild = node.children[0];
+    node.name = node.name + '/' + singleChild.name;
+    node.path = singleChild.path;
+    node.children = singleChild.children;
+  }
+
+  // Clean and simplify verbose package segments for readable display
+  node.name = node.name
+    .replace(/core\/src\/main\/java\/com\/aatech\/betweenus\/core\//g, 'core/')
+    .replace(/\/src\/modules\//g, '/')
+    .replace(/\/src\b/g, '');
+
+  return node;
+}
+
 function buildFileTree(files) {
   const root = {
     name: 'Betweenus',
-    path: '',
+    path: 'Betweenus',
     type: 'directory',
     children: [],
   };
@@ -204,7 +239,7 @@ function buildFileTree(files) {
     for (let i = 0; i < segments.length; i++) {
       const seg = segments[i];
       const isFile = i === segments.length - 1;
-      const subPath = segments.slice(0, i + 1).join('/');
+      const subPath = 'Betweenus/' + segments.slice(0, i + 1).join('/');
 
       let existing = current.children.find((c) => c.name === seg);
       if (!existing) {
@@ -243,7 +278,7 @@ function buildFileTree(files) {
   }
 
   sortNode(root);
-  return root;
+  return compactTree(root);
 }
 
 export function buildCodeReference() {
@@ -349,7 +384,7 @@ export function buildCodeReference() {
 
   const outPath = resolve(outDir, 'codeReferenceData.json');
   writeFileSync(outPath, JSON.stringify(payload, null, 2), 'utf8');
-  console.log(`[code-reference] Successfully indexed ${filesResult.length} files (${payload.totalLines} lines) with full tree -> ${outPath}`);
+  console.log(`[code-reference] Successfully indexed ${filesResult.length} files (${payload.totalLines} lines) with compact tree -> ${outPath}`);
 }
 
 buildCodeReference();

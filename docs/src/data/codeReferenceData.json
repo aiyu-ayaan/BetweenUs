@@ -1,287 +1,175 @@
 {
-  "generatedAt": "2026-09-03T21:31:54.848Z",
+  "generatedAt": "2026-09-03T21:35:31.344Z",
   "totalFiles": 25,
   "totalLines": 13051,
   "fileTree": {
     "name": "Betweenus",
-    "path": "",
+    "path": "Betweenus",
     "type": "directory",
     "children": [
       {
         "name": "apps",
-        "path": "apps",
+        "path": "Betweenus/apps",
         "type": "directory",
         "children": [
           {
-            "name": "android",
-            "path": "apps/android",
+            "name": "android/core/crypto",
+            "path": "Betweenus/apps/android/core/src/main/java/com/aatech/betweenus/core/crypto",
             "type": "directory",
             "children": [
               {
-                "name": "core",
-                "path": "apps/android/core",
-                "type": "directory",
-                "children": [
-                  {
-                    "name": "src",
-                    "path": "apps/android/core/src",
-                    "type": "directory",
-                    "children": [
-                      {
-                        "name": "main",
-                        "path": "apps/android/core/src/main",
-                        "type": "directory",
-                        "children": [
-                          {
-                            "name": "java",
-                            "path": "apps/android/core/src/main/java",
-                            "type": "directory",
-                            "children": [
-                              {
-                                "name": "com",
-                                "path": "apps/android/core/src/main/java/com",
-                                "type": "directory",
-                                "children": [
-                                  {
-                                    "name": "aatech",
-                                    "path": "apps/android/core/src/main/java/com/aatech",
-                                    "type": "directory",
-                                    "children": [
-                                      {
-                                        "name": "betweenus",
-                                        "path": "apps/android/core/src/main/java/com/aatech/betweenus",
-                                        "type": "directory",
-                                        "children": [
-                                          {
-                                            "name": "core",
-                                            "path": "apps/android/core/src/main/java/com/aatech/betweenus/core",
-                                            "type": "directory",
-                                            "children": [
-                                              {
-                                                "name": "crypto",
-                                                "path": "apps/android/core/src/main/java/com/aatech/betweenus/core/crypto",
-                                                "type": "directory",
-                                                "children": [
-                                                  {
-                                                    "name": "E2ee.kt",
-                                                    "path": "apps/android/core/src/main/java/com/aatech/betweenus/core/crypto/E2ee.kt",
-                                                    "type": "file",
-                                                    "fileId": "apps-android-core-src-main-java-com-aatech-betweenus-core-crypto-E2ee-kt",
-                                                    "language": "kotlin",
-                                                    "lineCount": 865,
-                                                    "byteSize": 38702
-                                                  },
-                                                  {
-                                                    "name": "SecureStore.kt",
-                                                    "path": "apps/android/core/src/main/java/com/aatech/betweenus/core/crypto/SecureStore.kt",
-                                                    "type": "file",
-                                                    "fileId": "apps-android-core-src-main-java-com-aatech-betweenus-core-crypto-SecureStore-kt",
-                                                    "language": "kotlin",
-                                                    "lineCount": 100,
-                                                    "byteSize": 4303
-                                                  }
-                                                ]
-                                              }
-                                            ]
-                                          }
-                                        ]
-                                      }
-                                    ]
-                                  }
-                                ]
-                              }
-                            ]
-                          }
-                        ]
-                      }
-                    ]
-                  }
-                ]
+                "name": "E2ee.kt",
+                "path": "Betweenus/apps/android/core/src/main/java/com/aatech/betweenus/core/crypto/E2ee.kt",
+                "type": "file",
+                "fileId": "apps-android-core-src-main-java-com-aatech-betweenus-core-crypto-E2ee-kt",
+                "language": "kotlin",
+                "lineCount": 865,
+                "byteSize": 38702
+              },
+              {
+                "name": "SecureStore.kt",
+                "path": "Betweenus/apps/android/core/src/main/java/com/aatech/betweenus/core/crypto/SecureStore.kt",
+                "type": "file",
+                "fileId": "apps-android-core-src-main-java-com-aatech-betweenus-core-crypto-SecureStore-kt",
+                "language": "kotlin",
+                "lineCount": 100,
+                "byteSize": 4303
               }
             ]
           },
           {
-            "name": "desktop",
-            "path": "apps/desktop",
+            "name": "desktop/electron",
+            "path": "Betweenus/apps/desktop/electron",
             "type": "directory",
             "children": [
               {
-                "name": "electron",
-                "path": "apps/desktop/electron",
-                "type": "directory",
-                "children": [
-                  {
-                    "name": "main.ts",
-                    "path": "apps/desktop/electron/main.ts",
-                    "type": "file",
-                    "fileId": "apps-desktop-electron-main-ts",
-                    "language": "typescript",
-                    "lineCount": 1732,
-                    "byteSize": 66783
-                  }
-                ]
+                "name": "main.ts",
+                "path": "Betweenus/apps/desktop/electron/main.ts",
+                "type": "file",
+                "fileId": "apps-desktop-electron-main-ts",
+                "language": "typescript",
+                "lineCount": 1732,
+                "byteSize": 66783
               }
             ]
           },
           {
             "name": "services",
-            "path": "apps/services",
+            "path": "Betweenus/apps/services",
             "type": "directory",
             "children": [
               {
-                "name": "auth-service",
-                "path": "apps/services/auth-service",
+                "name": "auth-service/auth",
+                "path": "Betweenus/apps/services/auth-service/src/modules/auth",
                 "type": "directory",
                 "children": [
                   {
-                    "name": "src",
-                    "path": "apps/services/auth-service/src",
-                    "type": "directory",
-                    "children": [
-                      {
-                        "name": "modules",
-                        "path": "apps/services/auth-service/src/modules",
-                        "type": "directory",
-                        "children": [
-                          {
-                            "name": "auth",
-                            "path": "apps/services/auth-service/src/modules/auth",
-                            "type": "directory",
-                            "children": [
-                              {
-                                "name": "auth.controller.ts",
-                                "path": "apps/services/auth-service/src/modules/auth/auth.controller.ts",
-                                "type": "file",
-                                "fileId": "apps-services-auth-service-src-modules-auth-auth-controller-ts",
-                                "language": "typescript",
-                                "lineCount": 116,
-                                "byteSize": 3520
-                              },
-                              {
-                                "name": "auth.service.ts",
-                                "path": "apps/services/auth-service/src/modules/auth/auth.service.ts",
-                                "type": "file",
-                                "fileId": "apps-services-auth-service-src-modules-auth-auth-service-ts",
-                                "language": "typescript",
-                                "lineCount": 756,
-                                "byteSize": 31277
-                              }
-                            ]
-                          }
-                        ]
-                      }
-                    ]
+                    "name": "auth.controller.ts",
+                    "path": "Betweenus/apps/services/auth-service/src/modules/auth/auth.controller.ts",
+                    "type": "file",
+                    "fileId": "apps-services-auth-service-src-modules-auth-auth-controller-ts",
+                    "language": "typescript",
+                    "lineCount": 116,
+                    "byteSize": 3520
+                  },
+                  {
+                    "name": "auth.service.ts",
+                    "path": "Betweenus/apps/services/auth-service/src/modules/auth/auth.service.ts",
+                    "type": "file",
+                    "fileId": "apps-services-auth-service-src-modules-auth-auth-service-ts",
+                    "language": "typescript",
+                    "lineCount": 756,
+                    "byteSize": 31277
                   }
                 ]
               },
               {
                 "name": "call-service",
-                "path": "apps/services/call-service",
+                "path": "Betweenus/apps/services/call-service/src",
                 "type": "directory",
                 "children": [
                   {
-                    "name": "src",
-                    "path": "apps/services/call-service/src",
+                    "name": "modules/calls",
+                    "path": "Betweenus/apps/services/call-service/src/modules/calls",
                     "type": "directory",
                     "children": [
                       {
-                        "name": "modules",
-                        "path": "apps/services/call-service/src/modules",
-                        "type": "directory",
-                        "children": [
-                          {
-                            "name": "calls",
-                            "path": "apps/services/call-service/src/modules/calls",
-                            "type": "directory",
-                            "children": [
-                              {
-                                "name": "calls.controller.ts",
-                                "path": "apps/services/call-service/src/modules/calls/calls.controller.ts",
-                                "type": "file",
-                                "fileId": "apps-services-call-service-src-modules-calls-calls-controller-ts",
-                                "language": "typescript",
-                                "lineCount": 69,
-                                "byteSize": 2529
-                              }
-                            ]
-                          }
-                        ]
-                      },
-                      {
-                        "name": "call.gateway.ts",
-                        "path": "apps/services/call-service/src/call.gateway.ts",
+                        "name": "calls.controller.ts",
+                        "path": "Betweenus/apps/services/call-service/src/modules/calls/calls.controller.ts",
                         "type": "file",
-                        "fileId": "apps-services-call-service-src-call-gateway-ts",
+                        "fileId": "apps-services-call-service-src-modules-calls-calls-controller-ts",
                         "language": "typescript",
-                        "lineCount": 913,
-                        "byteSize": 36798
+                        "lineCount": 69,
+                        "byteSize": 2529
                       }
                     ]
+                  },
+                  {
+                    "name": "call.gateway.ts",
+                    "path": "Betweenus/apps/services/call-service/src/call.gateway.ts",
+                    "type": "file",
+                    "fileId": "apps-services-call-service-src-call-gateway-ts",
+                    "language": "typescript",
+                    "lineCount": 913,
+                    "byteSize": 36798
                   }
                 ]
               },
               {
                 "name": "chat-service",
-                "path": "apps/services/chat-service",
+                "path": "Betweenus/apps/services/chat-service/src",
                 "type": "directory",
                 "children": [
                   {
-                    "name": "src",
-                    "path": "apps/services/chat-service/src",
+                    "name": "gateways",
+                    "path": "Betweenus/apps/services/chat-service/src/gateways",
                     "type": "directory",
                     "children": [
                       {
-                        "name": "gateways",
-                        "path": "apps/services/chat-service/src/gateways",
+                        "name": "chat.gateway.ts",
+                        "path": "Betweenus/apps/services/chat-service/src/gateways/chat.gateway.ts",
+                        "type": "file",
+                        "fileId": "apps-services-chat-service-src-gateways-chat-gateway-ts",
+                        "language": "typescript",
+                        "lineCount": 343,
+                        "byteSize": 13167
+                      }
+                    ]
+                  },
+                  {
+                    "name": "modules",
+                    "path": "Betweenus/apps/services/chat-service/src/modules",
+                    "type": "directory",
+                    "children": [
+                      {
+                        "name": "e2ee",
+                        "path": "Betweenus/apps/services/chat-service/src/modules/e2ee",
                         "type": "directory",
                         "children": [
                           {
-                            "name": "chat.gateway.ts",
-                            "path": "apps/services/chat-service/src/gateways/chat.gateway.ts",
+                            "name": "e2ee.controller.ts",
+                            "path": "Betweenus/apps/services/chat-service/src/modules/e2ee/e2ee.controller.ts",
                             "type": "file",
-                            "fileId": "apps-services-chat-service-src-gateways-chat-gateway-ts",
+                            "fileId": "apps-services-chat-service-src-modules-e2ee-e2ee-controller-ts",
                             "language": "typescript",
-                            "lineCount": 343,
-                            "byteSize": 13167
+                            "lineCount": 116,
+                            "byteSize": 3550
                           }
                         ]
                       },
                       {
-                        "name": "modules",
-                        "path": "apps/services/chat-service/src/modules",
+                        "name": "messages",
+                        "path": "Betweenus/apps/services/chat-service/src/modules/messages",
                         "type": "directory",
                         "children": [
                           {
-                            "name": "e2ee",
-                            "path": "apps/services/chat-service/src/modules/e2ee",
-                            "type": "directory",
-                            "children": [
-                              {
-                                "name": "e2ee.controller.ts",
-                                "path": "apps/services/chat-service/src/modules/e2ee/e2ee.controller.ts",
-                                "type": "file",
-                                "fileId": "apps-services-chat-service-src-modules-e2ee-e2ee-controller-ts",
-                                "language": "typescript",
-                                "lineCount": 116,
-                                "byteSize": 3550
-                              }
-                            ]
-                          },
-                          {
-                            "name": "messages",
-                            "path": "apps/services/chat-service/src/modules/messages",
-                            "type": "directory",
-                            "children": [
-                              {
-                                "name": "messages.controller.ts",
-                                "path": "apps/services/chat-service/src/modules/messages/messages.controller.ts",
-                                "type": "file",
-                                "fileId": "apps-services-chat-service-src-modules-messages-messages-controller-ts",
-                                "language": "typescript",
-                                "lineCount": 152,
-                                "byteSize": 4374
-                              }
-                            ]
+                            "name": "messages.controller.ts",
+                            "path": "Betweenus/apps/services/chat-service/src/modules/messages/messages.controller.ts",
+                            "type": "file",
+                            "fileId": "apps-services-chat-service-src-modules-messages-messages-controller-ts",
+                            "language": "typescript",
+                            "lineCount": 152,
+                            "byteSize": 4374
                           }
                         ]
                       }
@@ -290,154 +178,91 @@
                 ]
               },
               {
-                "name": "notification-service",
-                "path": "apps/services/notification-service",
+                "name": "notification-service/notifications",
+                "path": "Betweenus/apps/services/notification-service/src/modules/notifications",
                 "type": "directory",
                 "children": [
                   {
-                    "name": "src",
-                    "path": "apps/services/notification-service/src",
-                    "type": "directory",
-                    "children": [
-                      {
-                        "name": "modules",
-                        "path": "apps/services/notification-service/src/modules",
-                        "type": "directory",
-                        "children": [
-                          {
-                            "name": "notifications",
-                            "path": "apps/services/notification-service/src/modules/notifications",
-                            "type": "directory",
-                            "children": [
-                              {
-                                "name": "notifications.controller.ts",
-                                "path": "apps/services/notification-service/src/modules/notifications/notifications.controller.ts",
-                                "type": "file",
-                                "fileId": "apps-services-notification-service-src-modules-notifications-notifications-controller-ts",
-                                "language": "typescript",
-                                "lineCount": 51,
-                                "byteSize": 1651
-                              }
-                            ]
-                          }
-                        ]
-                      }
-                    ]
+                    "name": "notifications.controller.ts",
+                    "path": "Betweenus/apps/services/notification-service/src/modules/notifications/notifications.controller.ts",
+                    "type": "file",
+                    "fileId": "apps-services-notification-service-src-modules-notifications-notifications-controller-ts",
+                    "language": "typescript",
+                    "lineCount": 51,
+                    "byteSize": 1651
                   }
                 ]
               },
               {
                 "name": "presence-service",
-                "path": "apps/services/presence-service",
+                "path": "Betweenus/apps/services/presence-service/src",
                 "type": "directory",
                 "children": [
                   {
-                    "name": "src",
-                    "path": "apps/services/presence-service/src",
-                    "type": "directory",
-                    "children": [
-                      {
-                        "name": "presence.controller.ts",
-                        "path": "apps/services/presence-service/src/presence.controller.ts",
-                        "type": "file",
-                        "fileId": "apps-services-presence-service-src-presence-controller-ts",
-                        "language": "typescript",
-                        "lineCount": 54,
-                        "byteSize": 2287
-                      },
-                      {
-                        "name": "presence.gateway.ts",
-                        "path": "apps/services/presence-service/src/presence.gateway.ts",
-                        "type": "file",
-                        "fileId": "apps-services-presence-service-src-presence-gateway-ts",
-                        "language": "typescript",
-                        "lineCount": 559,
-                        "byteSize": 22648
-                      }
-                    ]
+                    "name": "presence.controller.ts",
+                    "path": "Betweenus/apps/services/presence-service/src/presence.controller.ts",
+                    "type": "file",
+                    "fileId": "apps-services-presence-service-src-presence-controller-ts",
+                    "language": "typescript",
+                    "lineCount": 54,
+                    "byteSize": 2287
+                  },
+                  {
+                    "name": "presence.gateway.ts",
+                    "path": "Betweenus/apps/services/presence-service/src/presence.gateway.ts",
+                    "type": "file",
+                    "fileId": "apps-services-presence-service-src-presence-gateway-ts",
+                    "language": "typescript",
+                    "lineCount": 559,
+                    "byteSize": 22648
                   }
                 ]
               },
               {
                 "name": "remote-gateway",
-                "path": "apps/services/remote-gateway",
+                "path": "Betweenus/apps/services/remote-gateway/src",
                 "type": "directory",
                 "children": [
                   {
-                    "name": "src",
-                    "path": "apps/services/remote-gateway/src",
+                    "name": "modules/remote",
+                    "path": "Betweenus/apps/services/remote-gateway/src/modules/remote",
                     "type": "directory",
                     "children": [
                       {
-                        "name": "modules",
-                        "path": "apps/services/remote-gateway/src/modules",
-                        "type": "directory",
-                        "children": [
-                          {
-                            "name": "remote",
-                            "path": "apps/services/remote-gateway/src/modules/remote",
-                            "type": "directory",
-                            "children": [
-                              {
-                                "name": "remote.controller.ts",
-                                "path": "apps/services/remote-gateway/src/modules/remote/remote.controller.ts",
-                                "type": "file",
-                                "fileId": "apps-services-remote-gateway-src-modules-remote-remote-controller-ts",
-                                "language": "typescript",
-                                "lineCount": 132,
-                                "byteSize": 4020
-                              }
-                            ]
-                          }
-                        ]
-                      },
-                      {
-                        "name": "remote.gateway.ts",
-                        "path": "apps/services/remote-gateway/src/remote.gateway.ts",
+                        "name": "remote.controller.ts",
+                        "path": "Betweenus/apps/services/remote-gateway/src/modules/remote/remote.controller.ts",
                         "type": "file",
-                        "fileId": "apps-services-remote-gateway-src-remote-gateway-ts",
+                        "fileId": "apps-services-remote-gateway-src-modules-remote-remote-controller-ts",
                         "language": "typescript",
-                        "lineCount": 824,
-                        "byteSize": 29958
+                        "lineCount": 132,
+                        "byteSize": 4020
                       }
                     ]
+                  },
+                  {
+                    "name": "remote.gateway.ts",
+                    "path": "Betweenus/apps/services/remote-gateway/src/remote.gateway.ts",
+                    "type": "file",
+                    "fileId": "apps-services-remote-gateway-src-remote-gateway-ts",
+                    "language": "typescript",
+                    "lineCount": 824,
+                    "byteSize": 29958
                   }
                 ]
               },
               {
-                "name": "server-service",
-                "path": "apps/services/server-service",
+                "name": "server-service/servers",
+                "path": "Betweenus/apps/services/server-service/src/modules/servers",
                 "type": "directory",
                 "children": [
                   {
-                    "name": "src",
-                    "path": "apps/services/server-service/src",
-                    "type": "directory",
-                    "children": [
-                      {
-                        "name": "modules",
-                        "path": "apps/services/server-service/src/modules",
-                        "type": "directory",
-                        "children": [
-                          {
-                            "name": "servers",
-                            "path": "apps/services/server-service/src/modules/servers",
-                            "type": "directory",
-                            "children": [
-                              {
-                                "name": "servers.controller.ts",
-                                "path": "apps/services/server-service/src/modules/servers/servers.controller.ts",
-                                "type": "file",
-                                "fileId": "apps-services-server-service-src-modules-servers-servers-controller-ts",
-                                "language": "typescript",
-                                "lineCount": 307,
-                                "byteSize": 9015
-                              }
-                            ]
-                          }
-                        ]
-                      }
-                    ]
+                    "name": "servers.controller.ts",
+                    "path": "Betweenus/apps/services/server-service/src/modules/servers/servers.controller.ts",
+                    "type": "file",
+                    "fileId": "apps-services-server-service-src-modules-servers-servers-controller-ts",
+                    "language": "typescript",
+                    "lineCount": 307,
+                    "byteSize": 9015
                   }
                 ]
               }
@@ -447,95 +272,81 @@
       },
       {
         "name": "packages",
-        "path": "packages",
+        "path": "Betweenus/packages",
         "type": "directory",
         "children": [
           {
-            "name": "database",
-            "path": "packages/database",
+            "name": "database/prisma",
+            "path": "Betweenus/packages/database/prisma",
             "type": "directory",
             "children": [
               {
-                "name": "prisma",
-                "path": "packages/database/prisma",
-                "type": "directory",
-                "children": [
-                  {
-                    "name": "schema.prisma",
-                    "path": "packages/database/prisma/schema.prisma",
-                    "type": "file",
-                    "fileId": "packages-database-prisma-schema-prisma",
-                    "language": "prisma",
-                    "lineCount": 1271,
-                    "byteSize": 55529
-                  }
-                ]
+                "name": "schema.prisma",
+                "path": "Betweenus/packages/database/prisma/schema.prisma",
+                "type": "file",
+                "fileId": "packages-database-prisma-schema-prisma",
+                "language": "prisma",
+                "lineCount": 1271,
+                "byteSize": 55529
               }
             ]
           },
           {
             "name": "shared-types",
-            "path": "packages/shared-types",
+            "path": "Betweenus/packages/shared-types/src",
             "type": "directory",
             "children": [
               {
-                "name": "src",
-                "path": "packages/shared-types/src",
+                "name": "games",
+                "path": "Betweenus/packages/shared-types/src/games",
                 "type": "directory",
                 "children": [
                   {
-                    "name": "games",
-                    "path": "packages/shared-types/src/games",
-                    "type": "directory",
-                    "children": [
-                      {
-                        "name": "carrom-physics.ts",
-                        "path": "packages/shared-types/src/games/carrom-physics.ts",
-                        "type": "file",
-                        "fileId": "packages-shared-types-src-games-carrom-physics-ts",
-                        "language": "typescript",
-                        "lineCount": 271,
-                        "byteSize": 10291
-                      },
-                      {
-                        "name": "carrom.ts",
-                        "path": "packages/shared-types/src/games/carrom.ts",
-                        "type": "file",
-                        "fileId": "packages-shared-types-src-games-carrom-ts",
-                        "language": "typescript",
-                        "lineCount": 432,
-                        "byteSize": 15484
-                      },
-                      {
-                        "name": "connect-four.ts",
-                        "path": "packages/shared-types/src/games/connect-four.ts",
-                        "type": "file",
-                        "fileId": "packages-shared-types-src-games-connect-four-ts",
-                        "language": "typescript",
-                        "lineCount": 122,
-                        "byteSize": 3592
-                      },
-                      {
-                        "name": "ludo.ts",
-                        "path": "packages/shared-types/src/games/ludo.ts",
-                        "type": "file",
-                        "fileId": "packages-shared-types-src-games-ludo-ts",
-                        "language": "typescript",
-                        "lineCount": 304,
-                        "byteSize": 10507
-                      }
-                    ]
+                    "name": "carrom-physics.ts",
+                    "path": "Betweenus/packages/shared-types/src/games/carrom-physics.ts",
+                    "type": "file",
+                    "fileId": "packages-shared-types-src-games-carrom-physics-ts",
+                    "language": "typescript",
+                    "lineCount": 271,
+                    "byteSize": 10291
                   },
                   {
-                    "name": "index.ts",
-                    "path": "packages/shared-types/src/index.ts",
+                    "name": "carrom.ts",
+                    "path": "Betweenus/packages/shared-types/src/games/carrom.ts",
                     "type": "file",
-                    "fileId": "packages-shared-types-src-index-ts",
+                    "fileId": "packages-shared-types-src-games-carrom-ts",
                     "language": "typescript",
-                    "lineCount": 3291,
-                    "byteSize": 121791
+                    "lineCount": 432,
+                    "byteSize": 15484
+                  },
+                  {
+                    "name": "connect-four.ts",
+                    "path": "Betweenus/packages/shared-types/src/games/connect-four.ts",
+                    "type": "file",
+                    "fileId": "packages-shared-types-src-games-connect-four-ts",
+                    "language": "typescript",
+                    "lineCount": 122,
+                    "byteSize": 3592
+                  },
+                  {
+                    "name": "ludo.ts",
+                    "path": "Betweenus/packages/shared-types/src/games/ludo.ts",
+                    "type": "file",
+                    "fileId": "packages-shared-types-src-games-ludo-ts",
+                    "language": "typescript",
+                    "lineCount": 304,
+                    "byteSize": 10507
                   }
                 ]
+              },
+              {
+                "name": "index.ts",
+                "path": "Betweenus/packages/shared-types/src/index.ts",
+                "type": "file",
+                "fileId": "packages-shared-types-src-index-ts",
+                "language": "typescript",
+                "lineCount": 3291,
+                "byteSize": 121791
               }
             ]
           }
@@ -543,12 +354,12 @@
       },
       {
         "name": "scripts",
-        "path": "scripts",
+        "path": "Betweenus/scripts",
         "type": "directory",
         "children": [
           {
             "name": "dev-gateway.mjs",
-            "path": "scripts/dev-gateway.mjs",
+            "path": "Betweenus/scripts/dev-gateway.mjs",
             "type": "file",
             "fileId": "scripts-dev-gateway-mjs",
             "language": "javascript",
@@ -559,7 +370,7 @@
       },
       {
         "name": "package.json",
-        "path": "package.json",
+        "path": "Betweenus/package.json",
         "type": "file",
         "fileId": "package-json",
         "language": "json",
@@ -568,7 +379,7 @@
       },
       {
         "name": "turbo.json",
-        "path": "turbo.json",
+        "path": "Betweenus/turbo.json",
         "type": "file",
         "fileId": "turbo-json",
         "language": "json",

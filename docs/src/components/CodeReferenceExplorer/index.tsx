@@ -52,15 +52,15 @@ export default function CodeReferenceExplorer(): React.ReactElement {
   const [symbolSearch, setSymbolSearch] = useState<string>('');
   const [filterMode, setFilterMode] = useState<'all' | 'comments' | 'symbols'>('all');
   const [copied, setCopied] = useState<boolean>(false);
-  const [mobileTab, setMobileTab] = useState<'tree' | 'code'>('code');
+  const [mobileTab, setMobileTab] = useState<'tree' | 'code'>('tree');
 
-  // Set of collapsed folder paths
-  const [collapsedDirs, setCollapsedDirs] = useState<Set<string>>(
-    new Set(['Betweenus/apps/desktop/electron', 'Betweenus/packages/shared-types/src/games'])
+  // BY DEFAULT: All folders are CLOSED. Only the root "Betweenus" is open!
+  const [expandedDirs, setExpandedDirs] = useState<Set<string>>(
+    () => new Set(['Betweenus'])
   );
 
   const toggleFolder = (folderPath: string) => {
-    setCollapsedDirs((prev) => {
+    setExpandedDirs((prev) => {
       const next = new Set(prev);
       if (next.has(folderPath)) {
         next.delete(folderPath);
@@ -71,8 +71,12 @@ export default function CodeReferenceExplorer(): React.ReactElement {
     });
   };
 
-  const expandAll = () => setCollapsedDirs(new Set());
   const collapseAll = () => {
+    // Closes all folders; keeps only root Betweenus
+    setExpandedDirs(new Set(['Betweenus']));
+  };
+
+  const expandAll = () => {
     const allDirs = new Set<string>();
     function collect(node: TreeNode) {
       if (node.type === 'directory' && node.path) {
@@ -81,14 +85,14 @@ export default function CodeReferenceExplorer(): React.ReactElement {
       node.children?.forEach(collect);
     }
     collect(data.fileTree);
-    setCollapsedDirs(allDirs);
+    setExpandedDirs(allDirs);
   };
 
   const activeFile = useMemo(() => {
     return FILES.find((f) => f.id === selectedFileId) || FILES[0];
   }, [selectedFileId]);
 
-  // Filter symbols
+  // Filter symbols in current file
   const filteredSymbols = useMemo(() => {
     if (!activeFile?.symbols) return [];
     if (!symbolSearch.trim()) return activeFile.symbols;
@@ -145,7 +149,13 @@ export default function CodeReferenceExplorer(): React.ReactElement {
       const result: string[] = [];
       for (const line of lines) {
         for (const s of filteredSymbols) {
-          if (line.includes(s.name) && (line.includes('export ') || line.includes('model ') || line.includes('class ') || line.includes('interface '))) {
+          if (
+            line.includes(s.name) &&
+            (line.includes('export ') ||
+              line.includes('model ') ||
+              line.includes('class ') ||
+              line.includes('interface '))
+          ) {
             result.push(`// Line ${s.lineNumber}: ${s.kind} ${s.name}`);
             result.push(line);
             result.push('');
@@ -166,7 +176,7 @@ export default function CodeReferenceExplorer(): React.ReactElement {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  // Get file icon based on file extension / language
+  // Icon badge based on file extension
   const getFileIcon = (fileName: string, lang?: string) => {
     if (fileName.endsWith('.ts') || fileName.endsWith('.tsx')) {
       return <span className={`${styles.iconBadge} ${styles.iconTs}`}>TS</span>;
@@ -189,10 +199,12 @@ export default function CodeReferenceExplorer(): React.ReactElement {
   // Recursive Tree Node Renderer
   const renderTreeNode = (node: TreeNode, depth: number = 0): React.ReactNode => {
     const isDir = node.type === 'directory';
-    const isCollapsed = collapsedDirs.has(node.path);
 
-    // Apply tree search filter if active
-    if (treeSearch.trim()) {
+    // If searching, auto-expand matching paths; otherwise check expandedDirs
+    const isSearching = treeSearch.trim().length > 0;
+    const isExpanded = isSearching || expandedDirs.has(node.path);
+
+    if (isSearching) {
       const q = treeSearch.toLowerCase();
       const matchesSelf = node.name.toLowerCase().includes(q);
       const matchesChild = node.children?.some((c) => {
@@ -209,17 +221,28 @@ export default function CodeReferenceExplorer(): React.ReactElement {
         <div key={node.path || node.name} className={styles.treeGroup}>
           <div
             className={styles.folderRow}
-            style={{ paddingLeft: `${Math.max(depth * 14, 8)}px` }}
+            style={{ paddingLeft: `${Math.max(depth * 10 + 6, 6)}px` }}
             onClick={() => toggleFolder(node.path)}
           >
-            <span className={`${styles.chevron} ${isCollapsed ? styles.chevronCollapsed : ''}`}>
+            <span
+              className={`${styles.chevron} ${
+                isExpanded ? styles.chevronExpanded : styles.chevronCollapsed
+              }`}
+            >
               ▾
             </span>
-            <span className={styles.folderIcon}>{isCollapsed ? '📁' : '📂'}</span>
-            <span className={styles.folderName}>{node.name}</span>
+            <span className={styles.folderIcon}>{isExpanded ? '📂' : '📁'}</span>
+            <span className={styles.folderName} title={node.path}>
+              {node.name}
+            </span>
+            {node.children && (
+              <span className={styles.folderCount}>
+                ({node.children.length})
+              </span>
+            )}
           </div>
 
-          {!isCollapsed && node.children && (
+          {isExpanded && node.children && (
             <div className={styles.treeChildren}>
               {node.children.map((child) => renderTreeNode(child, depth + 1))}
             </div>
@@ -234,17 +257,20 @@ export default function CodeReferenceExplorer(): React.ReactElement {
       <div
         key={node.path}
         className={`${styles.fileRow} ${isSelected ? styles.fileRowSelected : ''}`}
-        style={{ paddingLeft: `${Math.max(depth * 14 + 18, 24)}px` }}
+        style={{ paddingLeft: `${Math.max(depth * 10 + 20, 20)}px` }}
         onClick={() => {
           if (node.fileId) {
             setSelectedFileId(node.fileId);
             setSymbolSearch('');
+            // On mobile devices, automatically switch to code viewer on tap
             setMobileTab('code');
           }
         }}
       >
         {getFileIcon(node.name, node.language)}
-        <span className={styles.fileName}>{node.name}</span>
+        <span className={styles.fileName} title={node.name}>
+          {node.name}
+        </span>
         {node.lineCount && (
           <span className={styles.fileLineCount}>{node.lineCount}L</span>
         )}
@@ -254,30 +280,37 @@ export default function CodeReferenceExplorer(): React.ReactElement {
 
   return (
     <div className={styles.codeExplorerContainer}>
-      {/* Mobile Tab Switcher */}
-      <div className={styles.mobileNavSwitch}>
+      {/* Mobile-Only Segmented Viewport Switcher */}
+      <div className={styles.mobileNavSwitch} role="group" aria-label="Mobile navigation">
         <button
           type="button"
           onClick={() => setMobileTab('tree')}
-          className={`${styles.mobileTabBtn} ${mobileTab === 'tree' ? styles.mobileTabActive : ''}`}
+          className={`${styles.mobileTabBtn} ${
+            mobileTab === 'tree' ? styles.mobileTabActive : ''
+          }`}
         >
-          📁 File Tree ({FILES.length})
+          📁 Browse File Tree ({FILES.length})
         </button>
         <button
           type="button"
           onClick={() => setMobileTab('code')}
-          className={`${styles.mobileTabBtn} ${mobileTab === 'code' ? styles.mobileTabActive : ''}`}
+          className={`${styles.mobileTabBtn} ${
+            mobileTab === 'code' ? styles.mobileTabActive : ''
+          }`}
         >
-          📄 Code Viewer ({activeFile?.path.split('/').pop()})
+          📄 View Source ({activeFile?.path.split('/').pop()})
         </button>
       </div>
 
-      {/* Main Two-Column Layout */}
+      {/* Main IDE Split Layout */}
       <div className={styles.ideLayout}>
         {/* LEFT COLUMN: VS Code-Style Interactive File Tree */}
         <aside
-          className={`${styles.treeSidebar} ${mobileTab === 'code' ? styles.hideOnMobile : ''}`}
+          className={`${styles.treeSidebar} ${
+            mobileTab === 'code' ? styles.hideOnMobile : ''
+          }`}
         >
+          {/* Header with Title & Collapse/Expand actions */}
           <div className={styles.treeHeader}>
             <div className={styles.treeHeaderTitle}>
               <span className={styles.workspaceIcon}>⚡</span>
@@ -290,7 +323,7 @@ export default function CodeReferenceExplorer(): React.ReactElement {
                 className={styles.headerActionBtn}
                 title="Collapse All Folders"
               >
-                ⊟
+                ⊟ Close All
               </button>
               <button
                 type="button"
@@ -298,16 +331,17 @@ export default function CodeReferenceExplorer(): React.ReactElement {
                 className={styles.headerActionBtn}
                 title="Expand All Folders"
               >
-                ⊞
+                ⊞ Open All
               </button>
             </div>
           </div>
 
           {/* Quick File Filter */}
           <div className={styles.treeSearchBox}>
+            <span className={styles.treeSearchIcon}>🔍</span>
             <input
               type="text"
-              placeholder="Filter files..."
+              placeholder="Filter files in repository..."
               value={treeSearch}
               onChange={(e) => setTreeSearch(e.target.value)}
               className={styles.treeSearchInput}
@@ -323,23 +357,39 @@ export default function CodeReferenceExplorer(): React.ReactElement {
             )}
           </div>
 
-          {/* Hierarchical Tree Body */}
+          {/* Hierarchical Compact Tree Body */}
           <div className={styles.treeBody}>
             {renderTreeNode(data.fileTree, 0)}
           </div>
 
-          {/* Tree Footer Stats */}
+          {/* Tree Footer Summary */}
           <div className={styles.treeFooter}>
-            <span>{data.totalFiles} indexed files</span>
+            <span>{data.totalFiles} indexed source files</span>
             <span>{data.totalLines.toLocaleString()} lines of code</span>
           </div>
         </aside>
 
         {/* RIGHT COLUMN: Code Viewport & Metadata */}
         <main
-          className={`${styles.codeMainArea} ${mobileTab === 'tree' ? styles.hideOnMobile : ''}`}
+          className={`${styles.codeMainArea} ${
+            mobileTab === 'tree' ? styles.hideOnMobile : ''
+          }`}
         >
-          {/* File Header & Breadcrumb Bar */}
+          {/* Mobile Back Button */}
+          <div className={styles.mobileBackBanner}>
+            <button
+              type="button"
+              onClick={() => setMobileTab('tree')}
+              className={styles.backToTreeBtn}
+            >
+              ← Back to File Tree
+            </button>
+            <span className={styles.mobileCurrentFile}>
+              {activeFile.path.split('/').pop()}
+            </span>
+          </div>
+
+          {/* Header & Breadcrumb Bar */}
           <div className={styles.codeHeaderBar}>
             <div className={styles.breadcrumbStrip}>
               <span className={styles.breadcrumbRoot}>BetweenUs</span>
@@ -376,13 +426,13 @@ export default function CodeReferenceExplorer(): React.ReactElement {
             </div>
           </div>
 
-          {/* File Description */}
+          {/* File Description Banner */}
           <div className={styles.fileDescBanner}>
             <span className={styles.pkgTag}>{activeFile.pkg}</span>
             <span className={styles.descText}>{activeFile.description}</span>
           </div>
 
-          {/* Toolbar: Symbol Search + Display Mode Switcher */}
+          {/* Toolbar: Search + Mode Switcher */}
           <div className={styles.codeToolbar}>
             <div className={styles.symbolSearchBox}>
               <span className={styles.searchIcon}>🔍</span>
@@ -408,21 +458,27 @@ export default function CodeReferenceExplorer(): React.ReactElement {
               <button
                 type="button"
                 onClick={() => setFilterMode('all')}
-                className={`${styles.modeTab} ${filterMode === 'all' ? styles.modeTabActive : ''}`}
+                className={`${styles.modeTab} ${
+                  filterMode === 'all' ? styles.modeTabActive : ''
+                }`}
               >
                 Full Source
               </button>
               <button
                 type="button"
                 onClick={() => setFilterMode('comments')}
-                className={`${styles.modeTab} ${filterMode === 'comments' ? styles.modeTabActive : ''}`}
+                className={`${styles.modeTab} ${
+                  filterMode === 'comments' ? styles.modeTabActive : ''
+                }`}
               >
                 Doc Comments Only
               </button>
               <button
                 type="button"
                 onClick={() => setFilterMode('symbols')}
-                className={`${styles.modeTab} ${filterMode === 'symbols' ? styles.modeTabActive : ''}`}
+                className={`${styles.modeTab} ${
+                  filterMode === 'symbols' ? styles.modeTabActive : ''
+                }`}
               >
                 Symbol Definitions
               </button>
