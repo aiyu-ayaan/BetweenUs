@@ -107,7 +107,8 @@ feature/servers      feature/settings     feature/shell        feature/notificat
 feature/remote          feature/status        feature/update        feature/voice
 ```
 
-- **`status`** — posts that expire after 24 hours. The tray is a route
+- **`status`** — Moments: posts that expire after 24 hours, sealed for the
+  friends the author had when they posted (`E2ee.sealStatus`). The tray is a route
   (`Route.Status`, reached from the rail), and the player and the composer are
   full-screen dialogs mounted at the root beside `ProfileDialogHost`, so a ring
   in a list, a row in the tray and an avatar in a conversation all open the same

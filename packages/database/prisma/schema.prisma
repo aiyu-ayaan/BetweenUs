@@ -1158,13 +1158,13 @@ model CallSession {
 // kept in step with the friend list, and a message table where half the rows
 // are not messages.
 //
-// **Not end-to-end encrypted, and that is a deliberate exception.** A status
-// goes to whoever is a friend at the moment each viewer opens it, which is a
-// set that changes after the post is written - so sealing it would mean either
-// re-wrapping a key for every new friendship or freezing the audience at post
-// time. The bytes are stored opaque and gated server-side by the same
-// friendship check the feed uses, the same way an avatar is. `docs/docs/
-// security/e2ee.md` names this exception; do not quietly widen it.
+// **End-to-end encrypted, with the audience frozen at post time.** Sealing a
+// post with no channel means choosing between re-wrapping a key for every new
+// friendship and freezing the audience when it is written; freezing is the
+// choice, and it is also the behaviour that was wanted - somebody who becomes
+// your friend tomorrow does not see what you posted today. `status_keys` holds
+// one wrap per recipient device and *is* the audience: no row, no key, nothing
+// to read. See `docs/docs/security/e2ee.md`.
 
 /// What a status is made of.
 enum StatusKind {

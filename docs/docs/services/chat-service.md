@@ -297,13 +297,14 @@ direction is something the far side can test for.
 | Method | Path | What it does |
 | --- | --- | --- |
 | GET | `/` | The tray: your own run, and one entry per friend who has posted |
-| POST | `/` | Post one — multipart: `kind`, `caption`, `background`, `durationMs`, `file` |
+| GET | `/audience` | Every device a post may be sealed for: your friends' and your own |
+| POST | `/` | Post one — multipart: `kind`, `caption` (sealed), `background`, `durationMs`, `mediaIv`, `mediaType`, `senderDeviceId`, `keys` (JSON), `file` (ciphertext) |
 | POST | `/:statusId/view` | Record that this account opened one (idempotent) |
 | GET | `/:statusId/views` | Who opened one of yours — author only |
 | DELETE | `/:statusId` | Take one of your own down early |
 
-A status is a post that expires after 24 hours. It is deliberately **not** a
-message: it has no channel, no conversation to belong to, and an audience that
+A status — a **moment**, in every client — is a post that expires after 24
+hours. It is deliberately **not** a message: it has no channel, no conversation to belong to, and an audience that
 is a set — accepted friends, minus blocks in either direction — rather than a
 room. Modelling it as a message in a hidden channel would have meant a channel
 per account and a membership row per friend kept in step with the friend list.
@@ -314,13 +315,23 @@ because a message can carry several files and is composed over time; a status is
 one file and one button, and a two-step version leaves an orphaned blob every
 time somebody changes their mind in between.
 
-**Status media is not end-to-end encrypted**, and that is the second and last
-deliberate exception after webhook bodies — see [E2EE](/security/e2ee). The
-bytes land under `status/<authorId>/`, and that prefix is what the download
-route reads to gate the object by friendship rather than by channel access. The
-audience rule itself is one function with three callers (the tray, the
-single-post gate, the media download), so it cannot answer differently in one
-of them.
+**A moment is end-to-end encrypted, and its audience is frozen when it is
+posted** — see [E2EE](/security/e2ee). The caption is an envelope, the file is
+ciphertext, and the post carries one wrap of its key per recipient *device*,
+written to `status_keys`. That table is the audience: a friendship made after
+the post adds no wrap to it, so a new friend does not see what came before.
+
+Two gates, answering different questions. The wrap says who can open a post;
+the friend rule — accepted friends minus blocks in either direction, one
+function with three callers (the tray, the single-post gate, the media
+download) — says whose posts may still be listed at all, because unfriending
+does not delete a wrap. The bytes land under `status/<authorId>/`, which is what
+the download route reads to gate the object by a status key rather than by
+channel access.
+
+Nothing in this route inspects the file: a magic-number check on ciphertext
+refuses every real post. What the bytes are once opened travels as `mediaType`
+and is stored exactly as sent.
 
 `expiresAt` is stamped at write time and filtered at read time, so a post is
 invisible the moment it is due whether or not the sweep has run; `StatusSweeper`
@@ -351,7 +362,7 @@ and `viewCount` differ per reader, so the tray is re-read rather than patched.
 | POST | `/multipart/part` | Upload one part |
 | POST | `/multipart/complete` | Finish and assemble |
 | DELETE | `/multipart` | Abort a session |
-| GET | `/:key(*)` | Download (session-checked; opaque bytes, except a picture or a status, whose type was verified on the way in) |
+| GET | `/:key(*)` | Download (session-checked; opaque bytes, except a picture, whose type was verified on the way in) |
 
 Attachments are encrypted client-side before upload and served only as
 opaque downloads — see [`E2EE.md`](/security/e2ee).

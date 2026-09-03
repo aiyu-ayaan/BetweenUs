@@ -336,20 +336,26 @@ mid-delete, a row orphaned by somebody else's cascade. It used to be the only
 path, and "I deleted that photo" meaning "some time in the next six hours" is
 why it is not any more.
 
-## Statuses
+## Moments (statuses)
+
+The clients call these **Moments**; the tables, routes and identifiers say
+`status`, because renaming them would be a migration for a word.
 
 ```mermaid
 erDiagram
     User ||--o{ Status : posts
     Status ||--o{ StatusView : "was opened by"
+    Status ||--o{ StatusKey : "is sealed for"
     User ||--o{ StatusView : opens
 ```
 
 ### `Status`
 A post that expires after 24 hours, read by the author's accepted friends.
 `kind` is `PHOTO`, `VIDEO` or `TEXT`; `mediaKey` is the storage key of the
-photo or video (rooted at `status/<authorId>/`, null for `TEXT`), and
-`caption`, `background` and `durationMs` are what the clients draw it with.
+sealed photo or video (rooted at `status/<authorId>/`, null for `TEXT`),
+`mediaIv` is the IV it was sealed with, and `mediaType` says what the bytes are
+once opened. `caption` is an `EncryptedEnvelope` as JSON — never the words —
+while `background` and `durationMs` are metadata the clients draw it with.
 
 Deliberately **not** a [`Message`](#message): it has no channel, no
 conversation to belong to, and an audience that is a set rather than a room.
@@ -362,11 +368,28 @@ message table where half the rows are not messages.
 the moment it is due whether or not the sweep has run; the sweep only recovers
 disk.
 
-**Status media is not end-to-end encrypted.** The audience changes after the
-post is written, so sealing it would mean re-wrapping a key per new friendship
-or freezing the audience at post time. The bytes are opaque and gated
-server-side by the same friendship check the tray uses — see
-[E2EE](../security/e2ee.md), which names this exception.
+**A moment is end-to-end encrypted, and its audience is frozen when it is
+posted.** The author mints one key for the post, seals the caption and the file
+under it, and wraps that key once per *device* of every friend the post has at
+that moment. Sealing something with no channel means choosing between
+re-wrapping a key for every new friendship and freezing the audience; freezing
+is the choice, and it is also the behaviour wanted — a friend added tomorrow
+does not see today's post. See [E2EE](../security/e2ee.md).
+
+### `StatusKey`
+One wrap of one post's key, for one device: `recipientUserId`,
+`recipientDeviceId`, `senderPublicKey`, `wrappedKey` and `iv`, unique on
+`(statusId, recipientDeviceId)` and cascading with the post.
+
+This table **is** the audience. No row means no key, and no key means the post
+cannot be read however the friend list looks afterwards. There is no `epoch`,
+unlike [`ChannelKey`](#channelkey): a moment is written once and gone in a day,
+so there is nothing to rotate.
+
+The server still checks the friend list on every read, because it answers a
+different question — unfriending or blocking does not delete a wrap that was
+already written, and a post from somebody you have since blocked must leave the
+tray.
 
 ### `StatusView`
 One person's look at one status, unique on `(statusId, viewerId)`. "Seen" is a

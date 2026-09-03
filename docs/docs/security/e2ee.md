@@ -124,7 +124,7 @@ device has been sealed.
 Without it, the default stands: a newcomer mints the next epoch, reads from
 the moment they arrive, and everything before that stays a padlock.
 
-## The two bodies the server can read: webhooks, and statuses
+## The one body the server can read: webhooks
 
 Everything above assumes every author holds a channel key. One kind of author
 does not and cannot: a webhook — a URL a build server, an alerting stack or a
@@ -134,9 +134,9 @@ everyone who can read that script, permanently), and it could not use one
 without this project shipping its crypto to every language anybody writes a
 deploy script in.
 
-So a webhook's message is stored and delivered **in the clear**, and this is the
-first of two documented exceptions to the sealed-envelope rule. It is made
-visible rather than hidden:
+So a webhook's message is stored and delivered **in the clear**, and it is the
+one documented exception to the sealed-envelope rule. It is made visible rather
+than hidden:
 
 - `Message.kind` is `WEBHOOK`, which is a column the server sets and every
   client reads.
@@ -151,41 +151,62 @@ about it weakens a person's message: `POST /api/v1/messages` still takes a
 sealed envelope and chat-service still cannot open one. See
 [Webhooks](../services/webhooks.md).
 
-### The second exception: status media
+## Moments: sealed, with the audience frozen
 
-A status — a post that expires after 24 hours — is read by the author's
-accepted friends, and **its media is stored in the clear** for a different
-reason than a webhook's.
+A moment — a post that expires after 24 hours, called a status in the code — is
+end-to-end encrypted like a message. What differs is where its audience comes
+from, and that difference is the whole design.
 
-A message is sealed for a channel whose members are known at the moment it is
-sent. A status goes to whoever is a friend *when each viewer opens it*, and that
-set changes after the post is written. Sealing it would mean one of two things:
-re-wrapping a key for every friendship made while the post is alive, or freezing
-the audience at post time — which quietly hides a status from somebody who
-became a friend an hour later, with nothing on screen to explain it. The honest
-version is the one an avatar already uses: opaque bytes, gated server-side.
+A message is sealed for a channel, whose members are known when it is sent. A
+moment has no channel: its audience is a friend list, and a friend list changes
+after the post is written. Sealing it therefore means choosing between
+re-wrapping a key for every friendship made while the post is alive and freezing
+the audience at the moment of posting. **Freezing is the choice** — and it is
+not a compromise, it is the behaviour every app with this feature has: somebody
+who becomes your friend tomorrow does not get shown what you posted today.
 
-What guards it is therefore the gate, and the gate is small enough to state
-whole:
+How it works, whole:
 
-- Media lands under `status/<authorId>/`, and that prefix is what the download
-  route reads to know the object is gated by friendship rather than by channel
-  access.
-- The audience — accepted friends minus blocks in **either** direction — is one
-  function with three callers: the tray, the single-post gate, and the media
-  download. Three copies of an authorization rule are three chances to get it
-  wrong once.
+1. Before posting, the client reads `GET /api/v1/statuses/audience` — every
+   device of every friend it may post to right now, plus its own, with revoked
+   machines already filtered out.
+2. It mints one AES-256-GCM key for the post, seals the caption as an
+   `EncryptedEnvelope` and the file as ciphertext under it.
+3. It wraps that key once per device, by the same ECDH → HKDF → AES-GCM wrap a
+   channel key uses, and posts the bundle with the ciphertext.
+4. The server writes one `status_keys` row per wrap. That table **is** the
+   audience: no row, no key, nothing to read.
+
+There is no epoch and no rekey. A moment is written once and gone within a day,
+so there is nothing to rotate — and nothing to hand a newcomer either.
+
+The server still checks the friend list on every read, because it answers a
+question the wrap does not: unfriending or blocking does not delete a wrap
+already written, and a post from somebody you have since blocked has to leave
+the tray. It also refuses to write a wrap addressed to somebody the author may
+not post to, which closes the gap between the client reading the directory and
+the post landing.
+
+What this costs, said plainly:
+
+- A machine that signs in after a post was written cannot open it. Its key was
+  wrapped for the machines you had at the time, and there is no gap-filling for
+  moments the way there is for channel epochs — the post expires before the
+  repair would be worth having.
+- Whether somebody posted, when, how long a video runs and what colour a text
+  post is drawn on stay in the clear: the server times the sweep with them, and
+  the clients draw the tray with them.
+- `mediaType` is in the clear too. The server cannot sniff ciphertext and a
+  player will not decode a blob with no type, so the author sends what the bytes
+  are once opened — stored exactly as sent, and never treated as a fact about
+  the object on disk.
 - The viewer list is readable by the author and nobody else. Everyone else can
   only ever learn whether *they* opened something.
 
-What has **not** changed: nothing about a status weakens a message. A status is
-not a message, it has no channel, and `POST /api/v1/messages` still takes a
-sealed envelope that chat-service cannot open.
-
-This joins the two smaller things already outside the envelope — reaction
-emoji, and the `viewOnce` flag on a one-time message — for the same underlying
-reason in each case: the server has to act on it, and a server that cannot read
-the body cannot be told by the body.
+The two smaller things outside the envelope are unchanged and unrelated:
+reaction emoji, and the `viewOnce` flag on a one-time message — in each case
+because the server has to act on it, and a server that cannot read the body
+cannot be told by the body.
 
 ## Revocation
 
