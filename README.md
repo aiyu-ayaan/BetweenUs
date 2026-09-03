@@ -114,7 +114,7 @@ to be framed, so no browser tab can ever show it.
 | Camera | ✅ | ✅ | ✅ |
 | Screen share | ✅ | ✅ | ✅ |
 | Tiles shaped to the picture (portrait and landscape) | ✅ | ✅ | ✅ |
-| Ask to drive somebody's shared screen | ✅ | ✅ | ✅ pin the share |
+| Ask to drive somebody's shared screen | ✅ | ✅ | ✅ on the share stage |
 | Be driven while sharing your screen | ✅ | — | — |
 | Manual quality override | ✅ | ✅ | ⚠️ automatic |
 | Connection panel: bitrate, loss, round trip, frame size | ✅ | ✅ | ✅ |

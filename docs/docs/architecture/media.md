@@ -515,7 +515,18 @@ trying to read it. `stage-order.check.ts` pins them down, because the fault is
 invisible in a screenshot and obvious in a call.
 
 A screen share never rearranges anything by itself either: it is announced by a
-banner and joined on purpose, and it never replaces the sharer's own tile.
+banner and joined on purpose, and it never replaces the sharer's own tile. That
+is `ShareBanners` on the web and desktop and `ShareInvite` on Android, and it is
+the same bargain on all three — a line at the bottom of the call saying who is
+presenting, with a button, and nothing moves until it is pressed. Leaving the
+share puts the banner back rather than suppressing the share.
+
+Asking for the mouse (`ShareControlBar`) lives on the share itself for the same
+reason it has to: the far end is sent *fractions* of the picture, so the surface
+a touch is measured against must be the picture and not the box around it. On
+Android that is the share stage, where the letterboxed frame's own rectangle is
+the drive surface; pinch-zoom is suspended while driving, because a one-finger
+drag cannot be both a pan here and a mouse drag there.
 
 ## Live streaming: deliberately out of scope
 
