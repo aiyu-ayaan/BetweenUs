@@ -1,0 +1,47 @@
+.fullWidthWrapper {
+  width: 100%;
+  max-width: 1840px;
+  margin: 0 auto;
+  padding: 1.5rem 2.25rem 3.5rem;
+  box-sizing: border-box;
+}
+
+.headerSection {
+  margin-bottom: 1.75rem;
+}
+
+.pageTitle {
+  font-size: 2.35rem;
+  font-weight: 800;
+  margin-bottom: 0.5rem;
+  letter-spacing: -0.02em;
+  color: #ffffff;
+}
+
+.pageSubtitle {
+  font-size: 1.05rem;
+  color: var(--ifm-color-emphasis-700);
+  max-width: 880px;
+  line-height: 1.55;
+  margin-bottom: 0;
+}
+
+@media screen and (max-width: 1280px) {
+  .fullWidthWrapper {
+    padding: 1.25rem 1.5rem 2.5rem;
+  }
+}
+
+@media screen and (max-width: 768px) {
+  .fullWidthWrapper {
+    padding: 1rem 0.75rem 2rem;
+  }
+
+  .pageTitle {
+    font-size: 1.75rem;
+  }
+
+  .pageSubtitle {
+    font-size: 0.92rem;
+  }
+}

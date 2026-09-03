@@ -2,6 +2,7 @@
 sidebar_position: 1
 title: Interactive Code Explorer
 description: Live interactive code reference and source explorer for BetweenUs — inspect full code files with verbatim documentation comments and symbols.
+displayed_sidebar: null
 ---
 
 import CodeReferenceExplorer from '@site/src/components/CodeReferenceExplorer';

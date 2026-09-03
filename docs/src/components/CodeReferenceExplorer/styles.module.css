@@ -41,10 +41,17 @@
 /* Main IDE Split Layout */
 .ideLayout {
   display: grid;
-  grid-template-columns: 310px 1fr;
-  gap: 1.25rem;
+  grid-template-columns: 330px 1fr;
+  gap: 1.5rem;
   align-items: flex-start;
   width: 100%;
+}
+
+@media screen and (min-width: 1400px) {
+  .ideLayout {
+    grid-template-columns: 360px 1fr;
+    gap: 1.75rem;
+  }
 }
 
 @media screen and (max-width: 960px) {
