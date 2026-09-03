@@ -6,7 +6,7 @@ import useBaseUrl from '@docusaurus/useBaseUrl';
 import Layout from '@theme/Layout';
 import HomepageFeatures from '@site/src/components/HomepageFeatures';
 import HomepageSetup from '@site/src/components/HomepageSetup';
-import Hero3DLogo from '@site/src/components/Hero3DLogo';
+import HeroAppShowcase from '@site/src/components/HeroAppShowcase';
 
 import styles from './index.module.css';
 
@@ -29,7 +29,7 @@ function HomepageHeader() {
         <span className={styles.heroBadge}>Discord-like · E2EE · self-hosted</span>
         <h1 className={styles.heroTitle}>{siteConfig.title}</h1>
         <p className={styles.heroSubtitle}>{siteConfig.tagline}</p>
-        <Hero3DLogo />
+        <HeroAppShowcase />
         <div className={styles.buttons}>
           <Link
             className={clsx(
@@ -59,17 +59,6 @@ function HomepageHeader() {
         </div>
       </div>
     </header>
-  );
-}
-
-function Screenshot() {
-  const src = useBaseUrl('img/home.png');
-  return (
-    <div className={styles.screenshotWrap}>
-      <div className={styles.screenshotFrame}>
-        <img src={src} alt="BetweenUs desktop client" className={styles.screenshot} />
-      </div>
-    </div>
   );
 }
 
@@ -123,7 +112,6 @@ export default function Home(): ReactNode {
           </div>
         </section>
 
-        <Screenshot />
         <ClosingCta />
       </main>
     </Layout>
