@@ -105,6 +105,25 @@ set_version() {
   fi
 }
 
+# The gateway's config is a bind mount, not part of its image, so `up -d`
+# never recreates nginx when only nginx.conf changed: the container keeps
+# serving whatever it read at its last start. A route added this release then
+# has no `location` of its own, falls through to the catch-all that proxies the
+# web container, and answers a JSON call with the SPA's index.html - a 200 the
+# client can only report as a broken response. So reload every deploy.
+#
+# A config that does not parse is a failure worth stopping for; an `exec` that
+# could not run is not, because the health check below is the real verdict on
+# whether the gateway is serving.
+reload_gateway() {
+  if ! compose exec -T nginx nginx -t >/dev/null 2>&1; then
+    log "FAILED: the gateway config does not parse. Nothing was reloaded."
+    return 1
+  fi
+  compose exec -T nginx nginx -s reload >/dev/null 2>&1 || log "warning: could not reload the gateway"
+  return 0
+}
+
 healthy() {
   waited=0
   while [ "$waited" -lt "$HEALTH_TIMEOUT" ]; do
@@ -128,7 +147,7 @@ if ! compose pull; then
 fi
 
 log "starting"
-if compose up -d --remove-orphans $recreate && healthy; then
+if compose up -d --remove-orphans $recreate && reload_gateway && healthy; then
   log "up on ${wanted:-latest}"
   # Only now. An image the deployment might have to roll back to is not garbage,
   # which is what the week is for: everything older than that is a release two
@@ -150,7 +169,7 @@ compose logs --tail 40 migrate || true
 
 log "rolling back to ${previous:-latest}"
 set_version "$previous"
-if compose up -d --remove-orphans && healthy; then
+if compose up -d --remove-orphans && reload_gateway && healthy; then
   log "rolled back to ${previous:-latest}"
 else
   # The bad case, and the one worth being loud about: the deployment is down and
