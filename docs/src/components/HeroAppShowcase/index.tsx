@@ -75,6 +75,7 @@ const TABS: FeatureTab[] = [
 export default function HeroAppShowcase(): React.ReactElement {
   const [activeTabId, setActiveTabId] = useState<string>('chat');
   const [hoveredTarget, setHoveredTarget] = useState<'desktop' | 'android' | null>(null);
+  const [deviceView, setDeviceView] = useState<'all' | 'android' | 'desktop'>('all');
 
   const activeTab = TABS.find((t) => t.id === activeTabId) || TABS[0];
   const desktopSrc = useBaseUrl(activeTab.desktopImage);
@@ -115,13 +116,38 @@ export default function HeroAppShowcase(): React.ReactElement {
         </Link>
       </p>
 
-      {/* Device Duo Stage: Desktop Window + Overlapping Android Phone */}
+      {/* Mobile-Only Device Selector (Android / Desktop / Duo) */}
+      <div className={styles.mobileDeviceSwitcher} role="group" aria-label="Device view switcher">
+        <button
+          type="button"
+          onClick={() => setDeviceView('android')}
+          className={`${styles.mobileSwitchBtn} ${deviceView === 'android' ? styles.mobileSwitchBtnActive : ''}`}
+        >
+          📱 Android
+        </button>
+        <button
+          type="button"
+          onClick={() => setDeviceView('desktop')}
+          className={`${styles.mobileSwitchBtn} ${deviceView === 'desktop' ? styles.mobileSwitchBtnActive : ''}`}
+        >
+          🖥️ Desktop
+        </button>
+        <button
+          type="button"
+          onClick={() => setDeviceView('all')}
+          className={`${styles.mobileSwitchBtn} ${deviceView === 'all' ? styles.mobileSwitchBtnActive : ''}`}
+        >
+          📱+🖥️ Both
+        </button>
+      </div>
+
+      {/* Device Stage: Desktop Window + Overlapping Android Phone */}
       <div className={styles.stageContainer}>
         {/* 1. DESKTOP WINDOW MOCKUP */}
         <div
           className={`${styles.desktopWindow} ${
-            hoveredTarget === 'desktop' ? styles.desktopWindowFocused : ''
-          }`}
+            deviceView === 'android' ? styles.hideOnMobile : ''
+          } ${hoveredTarget === 'desktop' ? styles.desktopWindowFocused : ''}`}
           onMouseEnter={() => setHoveredTarget('desktop')}
           onMouseLeave={() => setHoveredTarget(null)}
         >
@@ -145,10 +171,14 @@ export default function HeroAppShowcase(): React.ReactElement {
                 <rect width="18" height="11" x="3" y="11" rx="2" ry="2" />
                 <path d="M7 11V7a5 5 0 0 1 10 0v4" />
               </svg>
-              <span>BetweenUs — #general (E2EE)</span>
+              <span className={styles.windowTitleText}>BetweenUs — #general</span>
+              <span className={styles.windowTitleTag}>E2EE</span>
             </div>
             <div className={styles.desktopPlatformTag}>
-              <span className={styles.platformBadge}>🖥️ Desktop (Windows / macOS / Linux)</span>
+              <span className={styles.platformBadge}>
+                <span className={styles.platformBadgeFull}>🖥️ Desktop (Windows / macOS / Linux)</span>
+                <span className={styles.platformBadgeShort}>🖥️ Desktop</span>
+              </span>
             </div>
           </div>
 
@@ -167,11 +197,16 @@ export default function HeroAppShowcase(): React.ReactElement {
         {/* 2. NATIVE ANDROID PHONE MOCKUP */}
         <div
           className={`${styles.phoneMockup} ${
-            hoveredTarget === 'android' ? styles.phoneMockupFocused : ''
-          }`}
+            deviceView === 'desktop' ? styles.hideOnMobile : ''
+          } ${hoveredTarget === 'android' ? styles.phoneMockupFocused : ''}`}
           onMouseEnter={() => setHoveredTarget('android')}
           onMouseLeave={() => setHoveredTarget(null)}
         >
+          {/* Floating Mobile Badge (Always anchors cleanly to phone mockup) */}
+          <div className={styles.phoneFloatingBadge}>
+            <span className={styles.phoneBadgeText}>📱 Native Android (Compose)</span>
+          </div>
+
           {/* Phone Speaker Slit & Dynamic Punch Hole */}
           <div className={styles.phoneHardwareTop}>
             <div className={styles.phoneSpeaker} />
@@ -191,11 +226,6 @@ export default function HeroAppShowcase(): React.ReactElement {
           {/* Phone Bottom Home Indicator */}
           <div className={styles.phoneHardwareBottom}>
             <div className={styles.homeIndicator} />
-          </div>
-
-          {/* Floating Mobile Badge */}
-          <div className={styles.phoneFloatingBadge}>
-            <span className={styles.phoneBadgeText}>📱 Native Android (Compose)</span>
           </div>
         </div>
       </div>

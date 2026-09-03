@@ -89,7 +89,7 @@
   font-size: 0.95rem;
   color: var(--ifm-color-emphasis-700);
   max-width: 680px;
-  margin: 0 auto 1.75rem;
+  margin: 0 auto 1.25rem;
   line-height: 1.5;
 }
 
@@ -104,6 +104,11 @@
 .tabLearnMore:hover {
   color: var(--betweenus-iris-hover);
   text-decoration: underline;
+}
+
+/* Mobile-Only Device Switcher Segmented Control */
+.mobileDeviceSwitcher {
+  display: none;
 }
 
 /* Device Stage Container */
@@ -149,13 +154,15 @@
   padding: 0.65rem 1rem;
   background: linear-gradient(180deg, #181b26 0%, #12141d 100%);
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  gap: 0.5rem;
 }
 
 .trafficLights {
   display: flex;
   align-items: center;
   gap: 7px;
-  width: 60px;
+  width: 54px;
+  flex-shrink: 0;
 }
 
 .dotClose,
@@ -165,6 +172,7 @@
   height: 11px;
   border-radius: 50%;
   display: inline-block;
+  flex-shrink: 0;
 }
 
 .dotClose {
@@ -190,15 +198,36 @@
   font-weight: 600;
   color: #94a3b8;
   letter-spacing: 0.01em;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.windowTitleText {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.windowTitleTag {
+  font-size: 0.68rem;
+  font-weight: 700;
+  padding: 0.1rem 0.35rem;
+  background: rgba(124, 92, 255, 0.2);
+  border: 1px solid rgba(124, 92, 255, 0.35);
+  border-radius: 4px;
+  color: #c4b5fd;
+  flex-shrink: 0;
 }
 
 .lockIcon {
   color: var(--betweenus-iris);
+  flex-shrink: 0;
 }
 
 .desktopPlatformTag {
   display: flex;
   justify-content: flex-end;
+  flex-shrink: 0;
 }
 
 .platformBadge {
@@ -209,6 +238,11 @@
   background: rgba(255, 255, 255, 0.06);
   border: 1px solid rgba(255, 255, 255, 0.1);
   color: #cbd5e1;
+  white-space: nowrap;
+}
+
+.platformBadgeShort {
+  display: none;
 }
 
 .desktopScreen {
@@ -328,12 +362,15 @@
 .phoneFloatingBadge {
   position: absolute;
   top: -14px;
-  right: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 5;
+  white-space: nowrap;
 }
 
 .phoneBadgeText {
   display: inline-block;
-  padding: 0.25rem 0.6rem;
+  padding: 0.25rem 0.65rem;
   background: var(--betweenus-iris);
   border-radius: 999px;
   font-size: 0.72rem;
@@ -344,7 +381,7 @@
   white-space: nowrap;
 }
 
-/* RESPONSIVE DESIGN */
+/* RESPONSIVE DESIGN FOR TABLETS AND MOBILE */
 @media screen and (max-width: 960px) {
   .desktopWindow {
     width: 82%;
@@ -357,30 +394,123 @@
 }
 
 @media screen and (max-width: 768px) {
+  .showcaseRoot {
+    padding: 0 0.5rem;
+    margin: 1rem auto 2rem;
+  }
+
+  /* Segmented device switcher enabled on mobile */
+  .mobileDeviceSwitcher {
+    display: flex;
+    justify-content: center;
+    gap: 0.35rem;
+    margin-bottom: 1.25rem;
+    padding: 0.25rem;
+    background: rgba(15, 17, 26, 0.85);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 999px;
+    backdrop-filter: blur(16px);
+    width: fit-content;
+    margin-left: auto;
+    margin-right: auto;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  }
+
+  .mobileSwitchBtn {
+    padding: 0.35rem 0.85rem;
+    border-radius: 999px;
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--ifm-color-emphasis-600);
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .mobileSwitchBtnActive {
+    background: var(--betweenus-iris);
+    color: #ffffff;
+    box-shadow: 0 2px 8px rgba(124, 92, 255, 0.4);
+  }
+
+  .hideOnMobile {
+    display: none !important;
+  }
+
   .stageContainer {
     flex-direction: column;
     align-items: center;
-    gap: 1.5rem;
+    gap: 1.75rem;
     padding-bottom: 0;
   }
 
   .desktopWindow {
     width: 100%;
+    border-radius: 10px;
   }
 
   .phoneMockup {
-    position: static;
+    position: relative !important;
+    right: auto;
+    bottom: auto;
     width: 240px;
-    margin: 0 auto;
+    max-width: 85vw;
+    margin: 1.25rem auto 0;
   }
 
   .phoneFloatingBadge {
     top: -12px;
-    right: 50%;
-    transform: translateX(50%);
+    left: 50%;
+    transform: translateX(-50%);
   }
 
   .desktopFloatingTag {
     display: none;
+  }
+
+  .windowTitlebar {
+    padding: 0.45rem 0.65rem;
+  }
+
+  .trafficLights {
+    width: 44px;
+    gap: 5px;
+  }
+
+  .dotClose,
+  .dotMinimize,
+  .dotMaximize {
+    width: 9px;
+    height: 9px;
+  }
+
+  .windowTitle {
+    font-size: 0.72rem;
+  }
+
+  .platformBadgeFull {
+    display: none;
+  }
+
+  .platformBadgeShort {
+    display: inline;
+    font-size: 0.68rem;
+    padding: 0.15rem 0.4rem;
+  }
+}
+
+@media screen and (max-width: 480px) {
+  .tabButton {
+    padding: 0.35rem 0.65rem;
+    font-size: 0.76rem;
+  }
+
+  .tabDescription {
+    font-size: 0.85rem;
+  }
+
+  .phoneMockup {
+    width: 220px;
   }
 }
