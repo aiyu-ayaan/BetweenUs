@@ -260,7 +260,7 @@ fun AttachmentSheet(
                         verticalArrangement = Arrangement.spacedBy(4.dp),
                     ) {
                         items(media, key = { it.uri }) { item ->
-                            Thumbnail(
+                            MediaThumbnail(
                                 item = item,
                                 position = selected.indexOf(item.uri),
                                 onClick = {
@@ -356,9 +356,15 @@ private fun AttachmentActionItem(
     }
 }
 
-/** One photo/video in the grid, with selection badge. */
+/**
+ * One photo/video in the grid, with its selection badge.
+ *
+ * Internal rather than private because the status composer draws the same
+ * grid over the same [recentMedia] - one thumbnail, so a selection looks the
+ * same wherever the phone'''s roll is shown.
+ */
 @Composable
-private fun Thumbnail(item: MediaItem, position: Int, onClick: () -> Unit) {
+internal fun MediaThumbnail(item: MediaItem, position: Int, onClick: () -> Unit) {
     val chosen = position >= 0
     Box(
         modifier = Modifier
