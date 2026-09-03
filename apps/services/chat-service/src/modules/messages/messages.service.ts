@@ -89,6 +89,10 @@ const MESSAGE_INCLUDE = {
   deletedBy: true,
   reactions: { select: { userId: true, emoji: true } },
   views: { select: { userId: true } },
+  // Only the three fields a client draws. `select` rather than `true`, because
+  // the row also carries the token hash and every history page would otherwise
+  // read it out of the database for no reason.
+  webhook: { select: { id: true, name: true, avatarUrl: true } },
 } as const;
 
 @Injectable()
@@ -668,6 +672,16 @@ interface MessageRow {
     avatarUrl: string | null;
   } | null;
   reactions?: Array<{ userId: string; emoji: string }>;
+  /**
+   * The webhook that posted this, where one did. Optional so a caller that
+   * selected before the column existed still fits this shape.
+   *
+   * `null` on the relation and a name on the row are different things: the
+   * relation is `SetNull`, so a deleted webhook leaves its messages behind
+   * carrying nothing but a name - see `webhookNameOf`.
+   */
+  webhookId?: string | null;
+  webhook?: { id: string; name: string; avatarUrl: string | null } | null;
 }
 
 export function toMessage(row: MessageRow): Message {
@@ -698,6 +712,18 @@ export function toMessage(row: MessageRow): Message {
     expiresAt: row.expiresAt ? row.expiresAt.toISOString() : null,
     viewOnce: row.viewOnce ?? false,
     viewedBy: (row.views ?? []).map((view) => view.userId),
+    ...(row.kind === 'WEBHOOK'
+      ? {
+          webhook: {
+            // Null once the webhook has been deleted. The message stays - the
+            // relation is `SetNull` on purpose - so the client draws the name
+            // and falls back to an initial for the picture.
+            id: row.webhook?.id ?? null,
+            name: row.webhook?.name ?? 'Webhook',
+            avatarUrl: row.webhook?.avatarUrl ?? null,
+          },
+        }
+      : {}),
   };
 }
 

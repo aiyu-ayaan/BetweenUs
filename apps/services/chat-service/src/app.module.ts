@@ -21,6 +21,11 @@ import {
   UserSearchController,
 } from './modules/friends/friends.controller';
 import { FriendsService } from './modules/friends/friends.service';
+import {
+  WebhookExecuteController,
+  WebhooksController,
+} from './modules/webhooks/webhooks.controller';
+import { WebhooksService } from './modules/webhooks/webhooks.service';
 import { ChatGateway } from './gateways/chat.gateway';
 
 const SERVICE_NAME = 'chat-service';
@@ -34,6 +39,10 @@ const SERVICE_NAME = 'chat-service';
     FriendsController,
     BlocksController,
     DirectChannelsController,
+    WebhooksController,
+    // Registered after WebhooksController so `/webhooks/:id/rotate` is matched
+    // by the guarded route before `/webhooks/:id/:token` can swallow it.
+    WebhookExecuteController,
     createHealthController(SERVICE_NAME, pingDatabase),
   ],
   providers: [
@@ -42,6 +51,7 @@ const SERVICE_NAME = 'chat-service';
     ArrivalsService,
     E2eeService,
     FriendsService,
+    WebhooksService,
     ChatGateway,
     ScratchSweeper,
     AttachmentSweeper,

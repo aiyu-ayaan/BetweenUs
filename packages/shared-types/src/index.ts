@@ -1065,9 +1065,12 @@ export interface ExecuteWebhookRequest {
   /** The message. Required unless `embeds` carries the whole thing. */
   content?: string;
   /**
-   * Overrides the webhook's own name for this one message. Discord allows this
-   * and a great many integrations send it, so ignoring it would silently
-   * mislabel their messages.
+   * Accepted and **ignored**, and the response says so.
+   *
+   * Discord lets one URL post under several names. Carrying that would mean a
+   * column on every message to hold the name, where making a second webhook is
+   * a button - so the trade is one row of UI against a schema change, and the
+   * button wins. The message posts under the webhook's own name.
    */
   username?: string;
   /**
