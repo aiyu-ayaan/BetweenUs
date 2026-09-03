@@ -22,7 +22,7 @@ gateway class handling frames itself.
 | `message.created` / `message.updated` | server → client | New message, or an edit/delete/pin/reaction on an existing one |
 | `friends.changed` | server → client | Re-fetch the friends list |
 | `server.members.changed` | server → client | Re-fetch a server's member list |
-| `user.updated` | server → client | A changed profile, carried: `{ id, username, displayName, avatarUrl }` |
+| `user.updated` | server → client | A changed profile, carried: `{ id, username, displayName, avatarUrl, coverUrl, about }` |
 | `server.updated` | server → client | A renamed server or a new icon, carried |
 | `channel.read` | server → client | Somebody's read marker moved |
 
@@ -335,3 +335,27 @@ Messages support full client-side markdown parsing:
 - **Inline marks**: Bold (`**`), italic (`*`), strikethrough (`~~`), inline code (`` ` ``).
 - **Blocks**: Fenced code blocks with language highlighting and block quotes (`> `).
 - **Composer behavior**: Auto-growing height up to a max cap, text wrapping without horizontal scrolls, and live markup previews.
+
+
+## Webhooks
+
+`chat-service` also serves `/api/v1/webhooks` — both managing them and the one
+unauthenticated route in this service that executes one. Managing a webhook is a
+channel operation and would fit `server-service`; executing one writes a message
+and has to broadcast it, which only this service can do, and splitting the two
+would put one URL prefix across two upstreams in the gateway.
+
+A webhook message is written with `kind = WEBHOOK` and a `webhookId`, then
+published on the Redis bus as `message.created` exactly like any other message —
+so it reaches clients over `/ws/chat` with no special path.
+
+**Its `content` is plaintext.** That is the single documented exception to this
+product's end-to-end encryption, because the sender holds no channel key and
+cannot be given one. Clients read `kind` to draw the badge that says so.
+
+Note that `kind` alone does not answer "does this row carry a body". That is
+asked against the allowlist `{ USER, WEBHOOK }`, so a client that has never
+heard of a future kind draws nothing rather than the wrong thing. Testing
+`kind !== 'USER'` is the bug the allowlist exists to prevent.
+
+Full guide, including the fields accepted and ignored: [Webhooks](webhooks.md).

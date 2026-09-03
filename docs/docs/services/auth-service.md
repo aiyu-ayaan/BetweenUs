@@ -222,3 +222,22 @@ both opening and cancelling are written to `AdminAudit`.
 The **first** administrator is never created through this API — `pnpm
 admin:create` runs where the database already is, the one place that proves
 the operator owns the deployment.
+
+
+## Profile pictures
+
+`PATCH /api/v1/auth/account` carries both `avatarUrl` and `coverUrl`. For each,
+`null` is a value — it clears the picture back to the default — and an absent key
+means "leave it alone", so a client that only wants to change a display name
+does not have to resend the pictures it is not touching.
+
+Both must match `UPLOADED_PICTURE_URL`: a picture stored by this deployment.
+They are drawn by every client that can see the account, so an arbitrary URL
+would be a beacon reporting who looked at whom.
+
+They are separate columns rather than one picture scaled two ways. An avatar is a
+square read at 32px in a member list; a cover is a 4:1 band read at several
+hundred, and cropping one out of the other gives a blurred crop of somebody's
+face as a backdrop. The clients frame them to `COVER_ASPECT` (4) and
+`COVER_MAX_WIDTH` (1600) before uploading, so what reaches the server is exactly
+what everybody fetches.

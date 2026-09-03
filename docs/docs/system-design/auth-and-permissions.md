@@ -121,9 +121,19 @@ copies.
 ```text
 VIEW_CHANNEL        SEND_MESSAGE       DELETE_MESSAGE     MANAGE_CHANNEL
 MANAGE_MEMBER        MANAGE_ROLE         MANAGE_MESSAGE     START_CALL
-MANAGE_CALL           REMOTE_VIEW          REMOTE_CONTROL     REMOTE_FILE_TRANSFER
-REMOTE_CLIPBOARD       REMOTE_AUDIO          REMOTE_ADMIN
+MANAGE_CALL           MANAGE_EMOJI         MANAGE_WEBHOOK     REMOTE_VIEW
+REMOTE_CONTROL         REMOTE_FILE_TRANSFER  REMOTE_CLIPBOARD   REMOTE_AUDIO
+REMOTE_ADMIN
 ```
+
+Two of those are split out of the obvious neighbour on purpose.
+`MANAGE_EMOJI` is not a corner of `MANAGE_SERVER` because the people a server
+wants uploading pictures are rarely the people it wants renaming it.
+`MANAGE_WEBHOOK` is not a corner of `MANAGE_CHANNEL` for a sharper reason:
+holding it is strictly more dangerous than renaming a channel. A webhook is a
+URL that posts into that channel forever, with no account behind it and — see
+[Webhooks](../services/webhooks.md) — no sealed body. Who may hand one out
+should be a decision somebody makes on purpose. Both default to Admin and above.
 
 Authorization is always enforced server-side. The desktop UI disables
 buttons for permissions a member lacks, but that's a courtesy, never the

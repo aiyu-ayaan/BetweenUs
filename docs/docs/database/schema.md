@@ -55,6 +55,17 @@ is not returned to this account on any of its devices, and every other
 participant's copy is untouched. `Server.messageTtlSeconds` outranks it,
 because that one deletes the row rather than hiding it.
 
+`coverUrl` is the wide band behind the name at the top of a profile, stored
+beside `avatarUrl` rather than derived from it. They are not the same picture:
+an avatar is a square read at 32px in a member list, a cover is a 4:1 band read
+at several hundred, and scaling one into the other gives a blurred crop of
+somebody's face as a backdrop. Nullable, and null means every client draws the
+flat accent band it drew before the column existed — so an account older than
+this looks chosen rather than broken. `COVER_ASPECT` (4) and `COVER_MAX_WIDTH`
+(1600) are shared constants, because three clients crop to them and a profile
+whose band is 4:1 on a laptop and 3:1 on a phone is a picture composed for
+neither.
+
 Two fields describe the account to other people rather than to itself. `about`
 is the line under the name on a profile card — stored in the clear beside
 `displayName` and `avatarUrl`, because it is a caption on a name and not a
@@ -237,6 +248,16 @@ the author alone. The server cannot write a `USER` row, because it holds no
 key; separating the two by a column rather than by a marker inside the body is
 what makes that boundary readable.
 
+`WEBHOOK` is the third kind and the one that carries a body the server *can*
+read. `webhookId` points at the [`Webhook`](#webhook) that posted it, and
+`content` is **plaintext** — the poster holds no channel key and cannot be given
+one. Clients read the kind to draw the "not encrypted" badge, which is what
+makes the exception visible rather than silent. Note that `kind` alone no longer
+answers "does this row have a body": that question is asked against an
+allowlist (`USER`, `WEBHOOK`), so a client that has never heard of a future kind
+still draws nothing for it. Testing `kind != USER` is the bug that allowlist
+exists to prevent, and both clients had it.
+
 `content` is opaque to the server — a serialized `EncryptedEnvelope`
 ciphertext, or plain text before E2EE existed. `deletedAt` + emptied
 `content` is a soft-delete tombstone (the row stays so paging cursors that
@@ -276,6 +297,29 @@ given — one look between them, and a race to it.
 
 The message is destroyed once these rows cover the channel's audience minus the
 author, who is not a viewer: re-reading what you sent spends nobody's look.
+
+### `Webhook`
+A URL an outside system POSTs to in order to say something in a channel;
+Discord's shape, so an integration already pointed at Discord works by changing
+only the URL. See [Webhooks](../services/webhooks.md) for the full guide.
+
+`tokenHash` is a SHA-256 of the token half of the URL, unique so a delivery is
+one indexed lookup rather than a scan. The token itself is shown once, at
+creation, and is otherwise rotated rather than re-read — the same rule
+`RemoteMachine.agentTokenHash` and `PasswordReset.tokenHash` already follow.
+Discord keeps its webhook URLs re-readable; a token a database can be asked for
+is a token a database dump hands over.
+
+`createdById` exists because `Message.authorId` is not nullable: a webhook
+message is attributed in the database to whoever opened the door, and no client
+draws that — they all draw the webhook's own `name` over the top. `lastUsedAt`
+is null until something has actually posted, which is the first thing anybody
+asks about a webhook that "isn't working".
+
+`Message.webhookId` is `ON DELETE SET NULL`, not `CASCADE`: deleting a webhook
+must not delete what it already said. Those rows stay and fall back to the name
+frozen onto them. Deleting a webhook closes a door; it does not retract what
+came through it.
 
 ### `Attachment`
 Links a stored blob (`key`, the storage key) to the message that claims it.

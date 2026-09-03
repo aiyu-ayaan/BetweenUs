@@ -36,7 +36,7 @@ Messages, attachments, and call media are end-to-end encrypted: the server store
 | Area | State |
 | --- | --- |
 | Accounts | Register, login, refresh-token rotation with reuse detection, Google and GitHub sign-in, admin panel |
-| Servers | Servers, custom roles with colours, per-member permission overrides, invite links that expire and can be revoked, custom emoji, server settings |
+| Servers | Servers, custom roles with colours, per-member permission overrides, invite links that expire and can be revoked, custom emoji, incoming webhooks, server settings |
 | Channels | Public and private text channels, private channels as an allowlist, direct messages between friends |
 | Messages & Chat | End-to-end encrypted, realtime over WebSocket, history paging in both directions, replies, `:` emoji search, per-server custom emoji including animated, reactions with who-reacted names, drag-and-drop and a preview before sending, full-screen zoomable image viewer, integrated video player, and local media album saving |
 | Voice and video | Peer-to-peer voice channels, camera, one screen share at a time with takeover, join and leave tones, manual quality override, end-to-end encrypted media, no media server |
@@ -44,7 +44,8 @@ Messages, attachments, and call media are end-to-end encrypted: the server store
 | Play together | Six board games inside a voice call - Tic-tac-toe, Connect Four, Reversi, Dots and Boxes, Ludo, and Carrom with a real physics simulation. One board everybody sees, two chairs anybody can take, and a rematch button. `call-service` referees the moves, so a move is a number on the wire rather than somebody's screen being streamed |
 | Android Client | Native Jetpack Compose + Material 3 app with E2EE messaging, WhatsApp-style media picker and composer, media viewers, and public gallery saving (`Pictures/BetweenUs`, `Movies/BetweenUs`) |
 | Presence | Online / idle / do not disturb / invisible, last seen with a three-tier privacy setting, typing indicators, voice rosters |
-| Profiles | An about line on every account, and a card - hovered on desktop and web, double-tapped on Android - carrying the picture, whether they are here, when they were last here, and what their line says |
+| Profiles | An avatar and a wide cover picture on every account, an about line, a card - hovered on desktop and web, double-tapped on Android - carrying the picture, whether they are here, when they were last here and what their line says, and a full profile screen behind it for the whole line at a size worth reading |
+| Webhooks | A URL you give another system so it can post into a channel - a build server, an alerting stack, a `curl` in a deploy script. Discord's request shape, so an integration already pointed at Discord works by changing only the URL. **These messages are the one thing here that is not end-to-end encrypted, and every client says so on every one of them** |
 | Notifications | Desktop notifications, system tray, start with the system, per-channel and per-person mute, quiet hours, persisted unread with a line that survives a restart |
 | Remote desktop | A machine offers itself from Settings, dials out to the gateway, and is viewed and driven from another client; per-machine permissions with expiry, and an audit trail |
 
@@ -66,6 +67,9 @@ to be framed, so no browser tab can ever show it.
 | Register, sign in, refresh-token rotation | ✅ | ✅ | ✅ |
 | Google and GitHub sign-in | ✅ | ✅ | ✅ |
 | Display name, avatar, change password | ✅ | ✅ | ✅ |
+| Cover picture behind your name | ✅ | ✅ | ✅ |
+| Full profile screen, from the card or the sheet | ✅ | ✅ | ✅ |
+| Settings grouped: Account, Preferences, This Device, Deployment | ✅ | ✅ | ✅ |
 | Username checked while you type, and unique | ✅ | ✅ | ✅ |
 | Forgotten password: emailed link, or an admin-opened reset | ✅ | ✅ | ✅ |
 | Encryption identity: unlock, backup secret | ✅ | ✅ | ✅ |
@@ -78,6 +82,8 @@ to be framed, so no browser tab can ever show it.
 | Create a server, join one, leave or delete | ✅ | ✅ | ✅ |
 | Invite links: create, expiry, use limit, revoke | ✅ | ✅ | ✅ |
 | Invite preview card before joining | ✅ | ✅ | ✅ |
+| Webhooks: create, rotate the URL, delete | ✅ | ✅ | ✅ |
+| Webhook messages badged as not encrypted | ✅ | ✅ | ✅ |
 | Server icon | ✅ | ✅ | ✅ |
 | Custom roles: create, colour, permissions, delete | ✅ | ✅ | ✅ |
 | Per-member permission overrides | ✅ | ✅ | ✅ |
@@ -1104,6 +1110,27 @@ All three clients have all of it.
 - **A key per machine, not per account.** The device directory is a list now,
   a channel key is wrapped once per device, and revoking one deletes its wraps
   and re-keys every channel it could read.
+
+### Webhooks
+
+- **A URL, and nothing else.** `curl -X POST "$URL" -d '{"content":"deploy done"}'`
+  and it is in the channel. No account, no OAuth, no SDK — which is the point,
+  because the thing calling it is one line of a deploy script.
+- **Discord's request shape on purpose.** If you already have something pointing
+  at a Discord webhook, change the URL and stop. `embeds` are accepted and
+  rendered to Markdown; `username` and `avatar_url` are accepted and ignored,
+  and the response tells you which fields it ignored so you are not left
+  debugging your own code.
+- **The one thing here that is not end-to-end encrypted, said out loud.** A
+  build server holds no channel key and cannot be given one — handing a channel
+  key to a shell script hands away the channel. So these messages are stored in
+  the clear, every client badges them `WEBHOOK · NOT ENCRYPTED`, and the panel
+  that creates one says so before the button rather than after. Do not send
+  secrets through one, and do not put one on a channel where the encryption is
+  the point.
+- **The URL is shown once**, because only a hash of it is kept — the same rule
+  every other token here follows. Rotate is the way back from a leak, and from a
+  URL nobody wrote down.
 
 ### Chat
 

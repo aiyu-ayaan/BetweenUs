@@ -124,6 +124,38 @@ device has been sealed.
 Without it, the default stands: a newcomer mints the next epoch, reads from
 the moment they arrive, and everything before that stays a padlock.
 
+## The one body the server can read: webhooks
+
+Everything above assumes every author holds a channel key. One kind of author
+does not and cannot: a webhook — a URL a build server, an alerting stack or a
+`curl` in a deploy script posts into a channel with. It holds no key, it cannot
+be given one (handing a channel key to a shell script hands away the channel to
+everyone who can read that script, permanently), and it could not use one
+without this project shipping its crypto to every language anybody writes a
+deploy script in.
+
+So a webhook's message is stored and delivered **in the clear**, and this is the
+single documented exception to the sealed-envelope rule. It is made visible
+rather than hidden:
+
+- `Message.kind` is `WEBHOOK`, which is a column the server sets and every
+  client reads.
+- Every client draws those messages with a `WEBHOOK · NOT ENCRYPTED` badge, on
+  every message rather than once per group — a group scrolled half off the top
+  of the screen would otherwise be unencrypted with nothing saying so.
+- The settings panel that creates one says so *before* the button.
+
+A channel with a webhook on it has a guarantee of "everything except what the
+robots say", and the clients say exactly that instead of implying more. Nothing
+about it weakens a person's message: `POST /api/v1/messages` still takes a
+sealed envelope and chat-service still cannot open one. See
+[Webhooks](../services/webhooks.md).
+
+This joins the two smaller things already outside the envelope — reaction
+emoji, and the `viewOnce` flag on a one-time message — for the same underlying
+reason in each case: the server has to act on it, and a server that cannot read
+the body cannot be told by the body.
+
 ## Revocation
 
 Deletes the wraps addressed to that device and refuses to seal for it
