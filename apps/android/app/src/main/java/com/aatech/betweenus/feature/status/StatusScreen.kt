@@ -41,7 +41,7 @@ import com.aatech.betweenus.ui.components.StatusStory
 /**
  * The status tray: your own run at the top, then everybody else's.
  *
- * Split into "Recent updates" and "Viewed updates" rather than one list sorted
+ * Split into "Recent moments" and "Viewed moments" rather than one list sorted
  * by time, for the same reason the ring has two colours - the useful question
  * is not when somebody posted, it is whether there is anything left to watch.
  * One list buries the unwatched run under four that were finished an hour ago.
@@ -77,7 +77,7 @@ fun StatusScreen(onBack: () -> Unit) {
             )
             Column(Modifier.weight(1f).padding(start = 8.dp)) {
                 Text(
-                    text = "Updates",
+                    text = "Moments",
                     style = MaterialTheme.typography.titleLargeEmphasized,
                     color = MaterialTheme.colorScheme.onSurface,
                 )
@@ -89,7 +89,7 @@ fun StatusScreen(onBack: () -> Unit) {
             }
             IconAction(
                 icon = BetweenUsIcons.Plus,
-                contentDescription = "Add an update",
+                contentDescription = "Add a moment",
                 onClick = { StatusComposerDoor.show() },
                 prominent = true,
             )
@@ -109,9 +109,9 @@ fun StatusScreen(onBack: () -> Unit) {
                 // back to what you have already posted, which is why the plus
                 // sits on the avatar rather than being a second row.
                 ListRow(
-                    title = "My updates",
+                    title = "My moments",
                     subtitle = if (mine.isEmpty()) {
-                        "Tap to add an update"
+                        "Tap to add a moment"
                     } else {
                         "${countLabel(mine.size)} · ${statusAge(mine.last().createdAt)}"
                     },
@@ -155,15 +155,15 @@ fun StatusScreen(onBack: () -> Unit) {
             if (loaded && runs.isEmpty()) {
                 item {
                     EmptyState(
-                        icon = BetweenUsIcons.UpdatesEmpty,
-                        title = "No updates yet",
-                        detail = "Updates from your friends appear here, and disappear a day later.",
+                        icon = BetweenUsIcons.MomentsEmpty,
+                        title = "No moments yet",
+                        detail = "Moments from your friends appear here, and disappear a day later.",
                     )
                 }
             }
 
             if (recent.isNotEmpty()) {
-                item { SectionLabel("Recent updates") }
+                item { SectionLabel("Recent moments") }
                 items(recent, key = { it.author.id }) { run ->
                     ListRow(
                         title = run.author.label,
@@ -185,7 +185,7 @@ fun StatusScreen(onBack: () -> Unit) {
             }
 
             if (viewed.isNotEmpty()) {
-                item { SectionLabel("Viewed updates") }
+                item { SectionLabel("Viewed moments") }
                 items(viewed, key = { it.author.id }) { run ->
                     ListRow(
                         title = run.author.label,
@@ -206,4 +206,4 @@ fun StatusScreen(onBack: () -> Unit) {
     }
 }
 
-private fun countLabel(count: Int): String = if (count == 1) "1 update" else "$count updates"
+private fun countLabel(count: Int): String = if (count == 1) "1 moment" else "$count moments"

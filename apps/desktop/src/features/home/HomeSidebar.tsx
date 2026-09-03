@@ -94,7 +94,7 @@ export function HomeSidebar({
           }`}
         >
           <ActivityIcon className="h-5 w-5 shrink-0" />
-          <span className="flex-1 font-medium">Updates</span>
+          <span className="flex-1 font-medium">Moments</span>
           {unwatched > 0 && (
             <span className="rounded-full bg-status-online px-1.5 text-xs font-bold text-surface-900">
               {unwatched}

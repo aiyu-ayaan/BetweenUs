@@ -149,7 +149,7 @@ fun WorkspaceDrawer(
             Box {
                 IconAction(
                     icon = BetweenUsIcons.Activity,
-                    contentDescription = "Updates",
+                    contentDescription = "Moments",
                     onClick = onStatus,
                 )
                 val unwatched = statusRuns.count { it.unseen }

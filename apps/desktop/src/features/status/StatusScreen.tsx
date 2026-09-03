@@ -1,7 +1,7 @@
 /**
  * The status tray: your own run at the top, then everybody else's.
  *
- * Split into "Recent updates" and "Viewed updates" rather than one list sorted
+ * Split into "Recent moments" and "Viewed moments" rather than one list sorted
  * by time, for the same reason the ring has two colours - the useful question
  * is not when somebody posted, it is whether there is anything left to watch.
  * A single list buries the one unwatched run under four you finished an hour
@@ -18,7 +18,7 @@ import { Avatar } from '../../components/Avatar';
 import { MenuIcon, PlusIcon } from '../../components/icons';
 import { SkeletonRows } from '../../components/Skeleton';
 import { statusAge } from './age';
-import { UpdatesEmptyArt } from './UpdatesEmptyArt';
+import { MomentsEmptyArt } from './MomentsEmptyArt';
 import { openStatus } from './StatusViewer';
 import { openStatusComposer } from './StatusComposer';
 
@@ -54,7 +54,7 @@ export function StatusScreen({ onOpenMenu }: { onOpenMenu?: () => void }): JSX.E
             <MenuIcon className="h-5 w-5" />
           </button>
         )}
-        <h1 className="text-sm font-semibold text-slate-200">Updates</h1>
+        <h1 className="text-sm font-semibold text-slate-200">Moments</h1>
         <p className="ms-auto text-xs text-slate-500">Posts disappear after 24 hours</p>
       </header>
 
@@ -81,10 +81,10 @@ export function StatusScreen({ onOpenMenu }: { onOpenMenu?: () => void }): JSX.E
             )}
           </span>
           <span className="min-w-0 flex-1">
-            <span className="block truncate font-medium text-slate-100">My updates</span>
+            <span className="block truncate font-medium text-slate-100">My moments</span>
             <span className="block truncate text-xs text-slate-500">
               {mine.length === 0
-                ? 'Tap to add an update'
+                ? 'Tap to add a moment'
                 : `${countLabel(mine.length)} · ${statusAge(mine[mine.length - 1]!.createdAt)}`}
             </span>
           </span>
@@ -99,7 +99,7 @@ export function StatusScreen({ onOpenMenu }: { onOpenMenu?: () => void }): JSX.E
               }}
               role="button"
               tabIndex={0}
-              aria-label="Add an update"
+              aria-label="Add a moment"
               onKeyDown={(event) => {
                 if (event.key === 'Enter' || event.key === ' ') {
                   event.preventDefault();
@@ -120,25 +120,25 @@ export function StatusScreen({ onOpenMenu }: { onOpenMenu?: () => void }): JSX.E
         )}
 
         {state === 'loading' && (
-          <SkeletonRows rows={3} label="Loading updates" className="px-2 py-2" />
+          <SkeletonRows rows={3} label="Loading moments" className="px-2 py-2" />
         )}
 
         {state === 'empty' && !error && (
           <div className="flex flex-col items-center px-6 py-10 text-center">
-            <UpdatesEmptyArt className="h-28 w-36 text-slate-500" />
-            <p className="mt-4 text-sm font-semibold text-slate-200">No updates yet</p>
+            <MomentsEmptyArt className="h-28 w-36 text-slate-500" />
+            <p className="mt-4 text-sm font-semibold text-slate-200">No moments yet</p>
             <p className="mt-1.5 max-w-xs text-sm text-slate-400">
-              Updates from your friends appear here, and disappear a day later.
+              Moments from your friends appear here, and disappear a day later.
             </p>
           </div>
         )}
 
-        {recent.length > 0 && <Heading>Recent updates</Heading>}
+        {recent.length > 0 && <Heading>Recent moments</Heading>}
         {recent.map((run) => (
           <Row key={run.author.id} run={run} />
         ))}
 
-        {viewed.length > 0 && <Heading>Viewed updates</Heading>}
+        {viewed.length > 0 && <Heading>Viewed moments</Heading>}
         {viewed.map((run) => (
           <Row key={run.author.id} run={run} />
         ))}
@@ -188,5 +188,5 @@ function Row({
 }
 
 function countLabel(count: number): string {
-  return count === 1 ? '1 update' : `${count} updates`;
+  return count === 1 ? '1 moment' : `${count} moments`;
 }

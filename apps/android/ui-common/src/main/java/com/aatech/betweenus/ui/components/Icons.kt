@@ -55,6 +55,8 @@ object BetweenUsIcons {
     val MicOff = R.drawable.ic_mic_off
     val Minimize = R.drawable.ic_minimize
     val Monitor = R.drawable.ic_monitor
+    /** The empty moments tray. Not a 24-unit icon: see the drawable. */
+    val MomentsEmpty = R.drawable.ic_moments_empty
     val More = R.drawable.ic_more_vertical
     val OneTime = R.drawable.ic_one_time
     val Palette = R.drawable.ic_palette
@@ -80,8 +82,6 @@ object BetweenUsIcons {
     val User = R.drawable.ic_user
     val UserPlus = R.drawable.ic_user_plus
     val Users = R.drawable.ic_users
-    /** The empty updates tray. Not a 24-unit icon: see the drawable. */
-    val UpdatesEmpty = R.drawable.ic_updates_empty
     val Video = R.drawable.ic_video
     val VideoOff = R.drawable.ic_video_off
     val X = R.drawable.ic_x

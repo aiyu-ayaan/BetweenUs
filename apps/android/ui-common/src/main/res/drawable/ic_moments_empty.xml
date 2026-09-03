@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- The empty updates tray, the same drawing as
-     apps/desktop/src/features/status/UpdatesEmptyArt.tsx: a segmented ring -
+<!-- The empty moments tray, the same drawing as
+     apps/desktop/src/features/status/MomentsEmptyArt.tsx: a segmented ring -
      one arc per post, like the one an avatar wears - around a picture. A
      48-unit viewport rather than the icon set's 24, because it is drawn at
      36dp inside an empty state and the picture inside the ring needs the room.

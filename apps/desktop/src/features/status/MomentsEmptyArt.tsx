@@ -8,10 +8,10 @@
  * asset.
  *
  * The ring is segmented like the one an avatar wears when there is something
- * to watch, which is what says "this is where updates appear" without a
+ * to watch, which is what says "this is where moments appear" without a
  * caption doing it.
  */
-export function UpdatesEmptyArt({ className = '' }: { className?: string }): JSX.Element {
+export function MomentsEmptyArt({ className = '' }: { className?: string }): JSX.Element {
   return (
     <svg
       viewBox="0 0 160 120"

@@ -200,7 +200,7 @@ private fun StatusStoryScreen(authorId: String, onClose: () -> Unit) {
                 )
                 Column(Modifier.weight(1f).padding(start = 10.dp)) {
                     Text(
-                        text = if (isSelf) "My updates" else author.label,
+                        text = if (isSelf) "My moments" else author.label,
                         style = MaterialTheme.typography.titleSmall,
                         color = Color.White,
                         maxLines = 1,
@@ -214,7 +214,7 @@ private fun StatusStoryScreen(authorId: String, onClose: () -> Unit) {
                 }
                 IconAction(
                     icon = BetweenUsIcons.X,
-                    contentDescription = "Close updates",
+                    contentDescription = "Close moments",
                     onClick = onClose,
                 )
             }
@@ -439,7 +439,7 @@ private fun Slide(post: StatusEntry, paused: Boolean, modifier: Modifier = Modif
     }
     Image(
         bitmap = picture.asImageBitmap(),
-        contentDescription = post.caption ?: "Update",
+        contentDescription = post.caption ?: "Moment",
         contentScale = ContentScale.Fit,
         modifier = modifier,
     )
