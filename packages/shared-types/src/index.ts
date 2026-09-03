@@ -162,6 +162,16 @@ export interface PublicUser {
   username: string;
   displayName: string;
   avatarUrl: string | null;
+  /**
+   * The wide picture behind the name at the top of a profile, or null for the
+   * flat accent band drawn before there was one.
+   *
+   * Not derivable from `avatarUrl` and therefore stored beside it: an avatar is
+   * a square read at 32px in a member list, a cover is a 4:1 band read at
+   * several hundred, and scaling one into the other gives a blurred crop of
+   * somebody's face as a backdrop. See `COVER_ASPECT`.
+   */
+  coverUrl: string | null;
   /** Platform role, not server membership. ADMIN unlocks the admin panel. */
   role: GlobalRole;
   /** True for an account issued a generated password; it can do nothing else. */
@@ -264,6 +274,13 @@ export interface UpdateAccountRequest {
   /** Storage URL of an uploaded picture; null clears it back to the initial. */
   avatarUrl?: string | null;
   /**
+   * Storage URL of an uploaded cover picture; null clears it back to the flat
+   * accent band. Must be one of ours for the same reason `avatarUrl` must: a
+   * profile picture renders for everybody who can see the account, so an
+   * arbitrary URL would be a beacon reporting who looked.
+   */
+  coverUrl?: string | null;
+  /**
    * The line under the name on a profile card. Trimmed, and no longer than
    * `ABOUT_MAX_LENGTH`. An empty string is allowed and means the card draws no
    * line at all - which is different from never having changed it, where the
@@ -282,6 +299,28 @@ export interface UpdateAccountRequest {
    */
   messageTtlSeconds?: number | null;
 }
+
+/**
+ * The shape a cover picture is framed and stored at: width over height.
+ *
+ * One number, here, because three clients crop to it and a profile whose band
+ * is 4:1 on a laptop and 3:1 on a phone is a picture that is composed for
+ * neither. 4:1 is the band that survives being 660px wide on a settings page
+ * and 360dp wide on a phone without the subject of the photograph leaving it -
+ * a taller band eats the conversation below it on a phone, a flatter one stops
+ * being a picture and becomes a stripe.
+ */
+export const COVER_ASPECT = 4;
+
+/**
+ * The widest a stored cover is kept, in pixels.
+ *
+ * Larger than an avatar's 512 because it is read wide rather than small, and
+ * capped rather than unbounded because it is fetched by every client that
+ * opens the profile and is not worth a megabyte. 1600x400 is a retina-sharp
+ * band at every width any of the three clients draw one at.
+ */
+export const COVER_MAX_WIDTH = 1600;
 
 /**
  * What a new account's about line says until its owner changes it.
@@ -832,6 +871,8 @@ export interface ServerMember {
   colour: string | null;
   /** The line under the name on this member's profile card. See `UserSummary`. */
   about: string;
+  /** The band behind the name when this member's full profile is opened. */
+  coverUrl: string | null;
   joinedAt: string;
 }
 
@@ -943,6 +984,137 @@ export interface SetChannelMembersRequest {
   userIds: string[];
 }
 
+// --- Webhooks ---
+//
+// A URL an outside system POSTs to in order to say something in a channel:
+// Discord's shape, because it is the one every CI runner, alerting stack and
+// "send to chat" integration already speaks. One opaque URL carrying its own
+// authority, a JSON body with a `content` field, and no account or bot
+// framework anywhere near it - a webhook that needed a client library would not
+// be reachable from the `curl` in somebody's deploy script, which is the whole
+// reason to have one.
+//
+// **A webhook body is stored and delivered in the clear.** It is the single
+// documented exception to this app's sealed-envelope rule, and it is made
+// visible rather than hidden: `Message.kind` is `'WEBHOOK'`, every client draws
+// the row with a badge saying so, and the channel says a webhook is attached.
+// The alternative was handing a channel key to a shell script, which is handing
+// away the channel. See `Webhook` in the Prisma schema, and
+// `docs/docs/services/webhooks.md`.
+
+/** How a webhook is drawn on a message it posted. */
+export interface MessageWebhook {
+  /** Null once the webhook has been deleted; the messages it sent stay. */
+  id: string | null;
+  /**
+   * The name to draw over the author's.
+   *
+   * Frozen onto the message rather than only read through the relation, so a
+   * deleted webhook's history still says who said it instead of collapsing on
+   * to the account that happened to create it.
+   */
+  name: string;
+  avatarUrl: string | null;
+}
+
+/** A webhook as its channel's settings list it. Never carries the token. */
+export interface WebhookSummary {
+  id: string;
+  channelId: string;
+  name: string;
+  avatarUrl: string | null;
+  /** Who opened it. Shown so a list of robots still has a person beside each. */
+  createdBy: UserSummary;
+  /** Null until something has posted through it - the first thing anybody asks. */
+  lastUsedAt: string | null;
+  createdAt: string;
+}
+
+/**
+ * A webhook plus the one thing that is never shown again.
+ *
+ * The token is stored as a SHA-256 hash, so this response and the one from
+ * rotating are the only two moments it exists in readable form. Discord keeps
+ * its webhook URLs re-readable; a token a database can be asked for is a token
+ * a database dump hands over, and losing this one costs a rotation rather than
+ * an account.
+ */
+export interface WebhookWithToken extends WebhookSummary {
+  /** The full URL to hand to the other system. Shown once. */
+  url: string;
+}
+
+export interface CreateWebhookRequest {
+  channelId: string;
+  /** 1-80 characters. A label on a robot, not a username: it need not be unique. */
+  name: string;
+  /** An uploaded picture, or omitted for the initial drawn from `name`. */
+  avatarUrl?: string | null;
+}
+
+export interface UpdateWebhookRequest {
+  name?: string;
+  avatarUrl?: string | null;
+}
+
+/**
+ * What an outside system POSTs. Discord's field names, deliberately, so an
+ * integration already pointed at Discord works by changing only the URL.
+ */
+export interface ExecuteWebhookRequest {
+  /** The message. Required unless `embeds` carries the whole thing. */
+  content?: string;
+  /**
+   * Overrides the webhook's own name for this one message. Discord allows this
+   * and a great many integrations send it, so ignoring it would silently
+   * mislabel their messages.
+   */
+  username?: string;
+  /**
+   * Accepted and **ignored**, and the response says so.
+   *
+   * Discord fetches whatever URL is given here. Doing that would make every
+   * client fetch an arbitrary host when it draws a message - a beacon
+   * reporting who read the channel - and would make this service fetch it too.
+   * The webhook's own stored picture is used instead.
+   */
+  avatar_url?: string;
+  /**
+   * Discord's embed objects, rendered as the subset this app has a use for:
+   * a title, a description, a colour bar, a URL and fields. Anything else in
+   * the object is ignored rather than refused, because integrations send a lot
+   * of Discord-specific furniture and refusing it would break them wholesale.
+   */
+  embeds?: WebhookEmbed[];
+}
+
+/** The part of a Discord embed this app draws. */
+export interface WebhookEmbed {
+  title?: string;
+  description?: string;
+  url?: string;
+  /** Discord sends a decimal integer, e.g. `5814783` for `#58b9ff`. */
+  color?: number;
+  fields?: Array<{ name: string; value: string; inline?: boolean }>;
+  footer?: { text: string };
+  timestamp?: string;
+}
+
+/** How long a webhook name may be. Discord's limit, for the same reason. */
+export const WEBHOOK_NAME_MAX_LENGTH = 80;
+
+/**
+ * The longest body a webhook may post, in characters.
+ *
+ * The same ceiling a person's message has before the client turns it into a
+ * text file. A webhook has no client to do that for it, so this is a refusal
+ * rather than a conversion, and the error says which limit was hit.
+ */
+export const WEBHOOK_CONTENT_MAX_LENGTH = 2000;
+
+/** How many embeds one webhook message may carry. Discord's number. */
+export const WEBHOOK_EMBED_MAX = 10;
+
 // --- Friends and direct messages ---
 
 /** The public face of an account: what a search result or a DM header shows. */
@@ -951,6 +1123,16 @@ export interface UserSummary {
   username: string;
   displayName: string;
   avatarUrl: string | null;
+  /**
+   * The wide picture behind the name at the top of a profile, or null for the
+   * flat accent band drawn before there was one.
+   *
+   * Not derivable from `avatarUrl` and therefore stored beside it: an avatar is
+   * a square read at 32px in a member list, a cover is a 4:1 band read at
+   * several hundred, and scaling one into the other gives a blurred crop of
+   * somebody's face as a backdrop. See `COVER_ASPECT`.
+   */
+  coverUrl: string | null;
   /**
    * The line under the name on a profile card.
    *
@@ -1043,7 +1225,7 @@ export interface MessageAuthor {
  * the kind and the author alone - the wording belongs to the client, so it is
  * in the reader's language rather than in whatever the service was written in.
  */
-export type MessageKind = 'USER' | 'MEMBER_JOIN';
+export type MessageKind = 'USER' | 'MEMBER_JOIN' | 'WEBHOOK';
 
 export interface Message {
   id: string;
@@ -1052,6 +1234,17 @@ export interface Message {
   kind?: MessageKind;
   content: string;
   author: MessageAuthor;
+  /**
+   * Present exactly when `kind` is `'WEBHOOK'`. What the client draws the name
+   * and picture from - `author` is the account that created the webhook, which
+   * is not who the row is from, and drawing that would attribute a build
+   * server's output to a person.
+   *
+   * Its presence is also what turns on the "not encrypted" badge: a webhook
+   * body is plaintext because the poster holds no channel key. See
+   * `WebhookSummary`.
+   */
+  webhook?: MessageWebhook;
   createdAt: string;
   editedAt: string | null;
   /**

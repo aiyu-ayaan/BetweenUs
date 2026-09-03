@@ -61,6 +61,15 @@ model User {
   displayName        String
   passwordHash       String
   avatarUrl          String?
+  /// The wide picture behind the name at the top of a profile.
+  ///
+  /// Separate from `avatarUrl` and not derivable from it: an avatar is cropped
+  /// square and read at 32px in a member list, a cover is a 4:1 band read at
+  /// several hundred. Scaling one into the other gives a blurred crop of
+  /// somebody's face as a backdrop, which is why every app that has both
+  /// stores both. Null means the client draws the accent colour it drew before
+  /// this column existed.
+  coverUrl           String?
   /// A line about yourself, shown on the profile card everywhere the app draws
   /// one. Not encrypted and not private: it is a caption on a name, the same
   /// way an avatar is, and every client that can see the name renders it.
@@ -148,6 +157,8 @@ model User {
   /// People this account has blocked, and the blocks pointed back at it.
   blocksMade      UserBlock[]          @relation("BlockAuthor")
   blocksAgainst   UserBlock[]          @relation("BlockTarget")
+  /// Webhooks this account opened. See Webhook.
+  webhooks        Webhook[]            @relation("WebhookCreatedBy")
 
   @@map("users")
 }
@@ -668,9 +679,66 @@ model Channel {
   messages Message[]
   keys     ChannelKey[]
   reads    ChannelRead[]
+  webhooks Webhook[]
 
   @@unique([serverId, name])
   @@map("channels")
+}
+
+/// A URL an outside system can POST to in order to say something in a channel.
+///
+/// Discord's shape, because it is the one every CI runner, alerting stack and
+/// "send to chat" integration already speaks: one opaque URL carrying its own
+/// authority, a JSON body with a `content` field, and no account, OAuth flow
+/// or bot framework anywhere near it. A webhook that needed its own client
+/// library would not be reachable from the `curl` in somebody's deploy script,
+/// which is the entire point of having one.
+///
+/// **This is the one place a message body is stored in the clear, and it is a
+/// deliberate, visible exception rather than a hole.** The sealed-envelope
+/// design assumes every author holds the channel key; a build server does not,
+/// cannot be given one (handing a channel key to a script is handing away the
+/// channel), and could not use one without shipping this project's crypto to
+/// every language anybody writes a deploy script in. So the trade is made
+/// explicitly and shown to people rather than hidden: `Message.kind` is
+/// `WEBHOOK`, and every client draws the row with a badge saying it was not
+/// encrypted. A channel with a webhook on it is a channel whose E2EE guarantee
+/// is now "everything except what the robots say", and the clients say exactly
+/// that instead of implying more.
+///
+/// The token is stored as a SHA-256 hash and shown once, at creation - the same
+/// rule as `RemoteMachine.agentTokenHash` and `PasswordReset.tokenHash`.
+/// Discord shows its webhook URLs again on demand, which requires keeping them
+/// reversible; a token that can be re-read out of a database is a token a
+/// database dump hands over. Losing it is recoverable by rotating it, which is
+/// what the endpoint exists for.
+model Webhook {
+  id          String    @id @default(uuid())
+  channelId   String
+  /// SHA-256 of the token half of the URL. Unique, so a delivery is one indexed
+  /// lookup rather than a scan of every webhook on the deployment.
+  tokenHash   String    @unique
+  /// What the messages are signed with. Not a username and not unique: it is a
+  /// label on a robot, and two servers may both have one called "deploys".
+  name        String
+  /// An uploaded picture, or null for the initial drawn from `name`.
+  avatarUrl   String?
+  /// Who made it. Kept for the audit trail and for `Message.authorId`, which is
+  /// not nullable - a webhook row is attributed to the person who opened the
+  /// door, and the clients draw the webhook's name over the top.
+  createdById String
+  /// Null until something has actually posted through it. The first thing
+  /// anybody wants to know about a webhook that "isn't working".
+  lastUsedAt  DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  channel   Channel   @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  createdBy User      @relation("WebhookCreatedBy", fields: [createdById], references: [id], onDelete: Cascade)
+  messages  Message[]
+
+  @@index([channelId])
+  @@map("webhooks")
 }
 
 /// One row per user allowed into a private channel. Rows on a public channel
@@ -756,6 +824,10 @@ model ServerEmoji {
 enum MessageKind {
   USER
   MEMBER_JOIN
+  /// Posted by an outside system through a `Webhook`. Unlike `USER`, `content`
+  /// is **plaintext**: the sender holds no channel key and cannot seal it. See
+  /// the `Webhook` model for why that is a deliberate, visible exception.
+  WEBHOOK
 }
 
 model Message {
@@ -796,11 +868,19 @@ model Message {
   /// stamp a backstop expiry is measured from, so a one-time message nobody
   /// finishes opening still leaves eventually.
   viewedAt    DateTime?
+  /// Which webhook posted this, when one did. Set exactly when `kind` is
+  /// `WEBHOOK`, and what a client reads the name and picture off - `author` is
+  /// the account that created the webhook, which is not who the row is from.
+  webhookId   String?
 
   channel     Channel           @relation(fields: [channelId], references: [id], onDelete: Cascade)
   author      User              @relation(fields: [authorId], references: [id], onDelete: Cascade)
   deletedBy   User?             @relation("MessageDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull)
   pinnedBy    User?             @relation("MessagePinnedBy", fields: [pinnedById], references: [id], onDelete: SetNull)
+  /// `SetNull` rather than `Cascade`: deleting a webhook must not delete what
+  /// it has already said. The rows stay and fall back to the name frozen into
+  /// their own body.
+  webhook     Webhook?          @relation(fields: [webhookId], references: [id], onDelete: SetNull)
   reactions   MessageReaction[]
   attachments Attachment[]
   views       MessageView[]
