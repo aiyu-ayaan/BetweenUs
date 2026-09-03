@@ -1,5 +1,55 @@
 # Changelog
 
+## [0.0.1-alpha.25](https://github.com/aiyu-ayaan/BetweenUs/compare/v0.0.1-alpha.24...v0.0.1-alpha.25) (2026-09-03)
+
+### Features
+
+* Show the moment, not the face, in the tray rows
+* Open the roll first, and post several moments at once
+* One picker for photos and clips, several at a time
+* A switcher for the three kinds, and a picker that opens whole
+* Seal a moment before it is posted, and open it on the way in
+* Seal statuses, and freeze the audience when they are posted
+* Status tray, story player and composer
+* Status tray, story viewer and composer
+* Statuses that expire after a day, seen by friends
+* Webhooks on the phone, and a body-carrying test that was wrong
+* Webhooks on the server settings screen, badged in the channel
+* Discord-shaped webhooks, and the exception they cost
+* The cover band, and a profile screen behind the sheet
+* A cover photo behind a name, and a profile worth opening
+* Cover pictures on an account, and webhooks on a channel
+
+### Bug fixes
+
+* A moment's wraps are DTOs, not plain objects
+* The story feature is called Updates, and Android can reach it
+* A status bar that restarted whenever the store moved
+* A shared screen is not on screen until Join is pressed
+* A message under an arrival line is not part of anybody's run
+* Stop `db:migrate` resetting a database over a renamed directory
+* A call screen that fits the phone it is on
+
+### Other changes
+
+* Encrypted Moments stories, profile cover banners, webhooks, and call stage overhaul
+* Bump the dev-docs pointer for the moments composer notes
+* The sealed moment, and the word for it
+* The day-long posts are called Moments
+* The status feature, and the submodule pointer
+* A webhooks guide written for whoever is holding the curl
+* Settings in named groups, the way the phone has them
+* Where a share is joined, and where its mouse is asked for
+* !docs : Updating docs
+
+### Artifacts
+
+| Platform | This release |
+| --- | --- |
+| Server images | Built here |
+| Desktop (Windows) | Built here |
+| Android | Built here |
+
 ## [0.0.1-alpha.24](https://github.com/aiyu-ayaan/BetweenUs/compare/v0.0.1-alpha.23...v0.0.1-alpha.24) (2026-09-02)
 
 ### Features
