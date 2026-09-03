@@ -1217,20 +1217,35 @@ export interface BlockUserRequest {
 // message: no channel, no conversation, and an audience that is a set rather
 // than a room. See `model Status` in the Prisma schema.
 //
-// Deliberately **not** end-to-end encrypted, unlike everything under
-// "Messages" above. A status goes to whoever is a friend at the moment each
-// viewer opens it - a set that changes after the post is written - so sealing
-// it would mean re-wrapping a key per new friendship, or freezing the audience
-// at post time. The bytes are stored opaque and gated server-side, the way an
-// avatar is. Every client draws the "not encrypted" note that goes with that.
+// End-to-end encrypted, like everything under "Messages" above, and sealed the
+// only way a post with no channel can be: the audience is frozen at post time.
+// The author mints one key per post, seals the caption and the media under it,
+// and wraps that key once per *device* of every friend it had when it posted.
+//
+// That is not a compromise, it is the rule the feature wanted. Somebody who
+// becomes your friend tomorrow does not get yesterday's post - the same thing
+// every app with this feature does, and the same thing a channel does when
+// somebody joins it. The server holds ciphertext and a table of wraps it
+// cannot open, and "who may read this" stops being a question it answers.
 
 export type StatusKind = 'PHOTO' | 'VIDEO' | 'TEXT';
 
 /** How long a post lives. Twenty-four hours, which is what the word means. */
 export const STATUS_TTL_MS = 24 * 60 * 60 * 1000;
 
-/** The caption under a photo, or the whole of a TEXT status. */
+/** The caption under a photo, or the whole of a TEXT status, as typed. */
 export const STATUS_CAPTION_MAX_LENGTH = 700;
+
+/**
+ * What the server will take for a caption, which is the sealed envelope rather
+ * than the words.
+ *
+ * Base64 of AES-GCM over 700 UTF-8 characters, plus the envelope's own keys,
+ * lands under 4 KB in the worst case. The server cannot count characters in a
+ * ciphertext, so this is the only cap it can enforce - the readable one above
+ * is enforced by the composer, where the words still exist.
+ */
+export const STATUS_CAPTION_SEALED_MAX_LENGTH = 4096;
 
 /**
  * How long a photo or a text status is held on screen before the viewer moves
@@ -1284,6 +1299,15 @@ export interface StatusEntry {
    * fetched as bytes and turned into an object URL, never put in a bare `src`.
    */
   mediaUrl: string | null;
+  /** The IV the media was sealed with. Null for TEXT, and for nothing else. */
+  mediaIv: string | null;
+  /**
+   * What the bytes are once opened - `image/jpeg`, `video/mp4`. Sent by the
+   * author and stored in the clear: the server holds ciphertext and cannot
+   * sniff it, and a `<video>` will not decode a blob with no type on it.
+   */
+  mediaType: string | null;
+  /** The sealed caption, as an `EncryptedEnvelope`. Opened by the client. */
   caption: string | null;
   /** The colour a TEXT status is drawn on. Null for media. */
   background: string | null;
@@ -1295,6 +1319,35 @@ export interface StatusEntry {
   seen: boolean;
   /** How many people opened it. Only filled in on your own posts; else null. */
   viewCount: number | null;
+  /**
+   * This post's key, wrapped for the reader's own devices - one entry per
+   * machine they had signed in when the author posted.
+   *
+   * A list rather than one entry, and for the same reason `ChannelKeysResponse`
+   * is: the server cannot tell which of somebody's machines is asking without
+   * trusting a device id it was handed, so it sends every copy addressed to the
+   * account and the client keeps whichever its private half opens.
+   *
+   * Empty means nothing was addressed to this account: the friendship is newer
+   * than the post, or the device is. Both draw as a post that cannot be opened
+   * rather than as an error, because neither is one.
+   */
+  keys: StatusKeyEntry[];
+}
+
+/**
+ * One post's key, sealed for one device.
+ *
+ * The same shape as a `ChannelKeyEntry` minus the epoch - a status has exactly
+ * one key and never rotates, because it is gone in a day.
+ */
+export interface StatusKeyEntry {
+  recipientUserId: string;
+  recipientDeviceId: string;
+  /** The author's ECDH public key (JWK): the recipient derives against it. */
+  senderPublicKey: string;
+  wrappedKey: string;
+  iv: string;
 }
 
 /**
@@ -1331,9 +1384,22 @@ export interface StatusFeed {
  */
 export interface CreateStatusRequest {
   kind: StatusKind;
+  /** The sealed caption - an `EncryptedEnvelope`, not the words. */
   caption?: string;
   background?: string;
   durationMs?: number;
+  /** The IV the media was sealed with. Required with a file, refused without. */
+  mediaIv?: string;
+  /** What the sealed bytes are once opened. Stored in the clear; see `StatusEntry`. */
+  mediaType?: string;
+  /** Which device did the sealing. Every wrap in the bundle came from it. */
+  senderDeviceId: string;
+  /**
+   * The post's key, wrapped once per device that may read it - every device of
+   * every friend at this moment, and the author's own. This list *is* the
+   * audience: a friendship made after it was written adds nothing to it.
+   */
+  keys: StatusKeyEntry[];
 }
 
 /** Somebody who opened your post, newest first. */

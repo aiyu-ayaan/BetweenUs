@@ -12,6 +12,15 @@
  * Expiry is stamped at write time and filtered at read time, so a sweep that
  * is late never shows a stale post: the row outliving its stamp is invisible
  * before it is collected. See `status-sweeper.ts` for the collection half.
+ *
+ * The content is end-to-end encrypted and the audience is frozen when it is
+ * posted - the author wraps the post's key once per device of every friend it
+ * had at that moment, and `status_keys` holds those wraps. So there are now two
+ * gates rather than one, and they answer different questions: the friend rule
+ * below still decides whom a post may be *addressed* to, and the wrap decides
+ * who can actually open it. A friendship made after the post passes the first
+ * and fails the second, which is the whole of "a new friend does not see
+ * yesterday's update".
  */
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { blockedIdsAround, friendIdsOf, prisma } from '@betweenus/database';
@@ -21,12 +30,15 @@ import { getStorage } from '@betweenus/storage';
 import {
   STATUS_TTL_MS,
   type CreateStatusRequest,
+  type DeviceKey,
   type StatusEntry,
   type StatusFeed,
   type StatusFeedEntry,
+  type StatusKeyEntry,
   type StatusViewer,
   type UserSummary,
 } from '@betweenus/shared-types';
+import { toDeviceKey } from '../e2ee/e2ee.service';
 
 interface UserRow {
   id: string;
@@ -65,6 +77,12 @@ export class StatusService {
       where: {
         expiresAt: { gt: now },
         authorId: { in: [userId, ...audience] },
+        // And a wrap addressed to this account, which is what makes the tray
+        // agree with what the reader can actually open. Their own posts are
+        // exempt from the condition rather than from the wrap: the author
+        // seals for their own devices too, and a post they cannot open on
+        // this machine is still theirs and still deletable.
+        OR: [{ authorId: userId }, { keys: { some: { recipientUserId: userId } } }],
       },
       orderBy: { createdAt: 'asc' },
       include: {
@@ -74,6 +92,10 @@ export class StatusService {
         // - how many people have.
         views: { where: { viewerId: userId }, select: { id: true } },
         _count: { select: { views: true } },
+        // Every copy addressed to this account, one per machine they had when
+        // the post was written. The client keeps whichever its private half
+        // opens - see the note on `StatusEntry.keys`.
+        keys: { where: { recipientUserId: userId } },
       },
     });
 
@@ -111,18 +133,47 @@ export class StatusService {
     mediaKey: string | null,
   ): Promise<StatusEntry> {
     const now = new Date();
+    // Only for people who may be addressed *now*: the client built its bundle
+    // from the directory a moment ago, and somebody who has since blocked the
+    // author must not get a wrap out of that gap. The author's own devices are
+    // always allowed - they are sealing for themselves.
+    const allowed = new Set([userId, ...(await this.audienceOf(userId))]);
+    const entries = keysForAudience(dto.keys, allowed);
+
     let row: Status;
     try {
-      row = await prisma.status.create({
-        data: {
-          authorId: userId,
-          kind: dto.kind as PrismaStatusKind,
-          mediaKey,
-          caption: dto.caption?.trim() || null,
-          background: dto.background ?? null,
-          durationMs: dto.durationMs ?? null,
-          expiresAt: new Date(now.getTime() + STATUS_TTL_MS),
-        },
+      // One transaction: a status whose keys failed to write is a post nobody
+      // can ever open, including its author, and it would sit in the tray for
+      // a day looking like a bug.
+      row = await prisma.$transaction(async (tx) => {
+        const created = await tx.status.create({
+          data: {
+            authorId: userId,
+            kind: dto.kind as PrismaStatusKind,
+            mediaKey,
+            mediaIv: dto.mediaIv ?? null,
+            mediaType: dto.mediaType ?? null,
+            caption: dto.caption?.trim() || null,
+            background: dto.background ?? null,
+            durationMs: dto.durationMs ?? null,
+            expiresAt: new Date(now.getTime() + STATUS_TTL_MS),
+          },
+        });
+        if (entries.length > 0) {
+          await tx.statusKey.createMany({
+            data: entries.map((entry) => ({
+              statusId: created.id,
+              recipientUserId: entry.recipientUserId,
+              recipientDeviceId: entry.recipientDeviceId,
+              senderDeviceId: dto.senderDeviceId,
+              senderPublicKey: entry.senderPublicKey,
+              wrappedKey: entry.wrappedKey,
+              iv: entry.iv,
+            })),
+            skipDuplicates: true,
+          });
+        }
+        return created;
       });
     } catch (error) {
       if (mediaKey) await getStorage().delete(mediaKey).catch(() => undefined);
@@ -130,7 +181,18 @@ export class StatusService {
     }
 
     await this.announce(userId);
-    return toEntry({ ...row, views: [], _count: { views: 0 } }, { seen: true, viewCount: 0 });
+    return toEntry(
+      {
+        ...row,
+        views: [],
+        _count: { views: 0 },
+        // What goes back to the author is only their own copies: this response
+        // is read by the machine that posted, which already holds the key it
+        // just minted, and nobody else's wrap is any of its business.
+        keys: entries.filter((entry) => entry.recipientUserId === userId),
+      },
+      { seen: true, viewCount: 0 },
+    );
   }
 
   /**
@@ -221,7 +283,10 @@ export class StatusService {
     if (row.authorId === userId) return row;
 
     const audience = await this.audienceOf(userId);
-    if (!audience.includes(row.authorId)) {
+    // Both gates. A wrap addressed to this account is what "may open it"
+    // means; the friend list is what "may still see it" means, because
+    // unfriending does not delete a wrap that was already written.
+    if (!audience.includes(row.authorId) || !(await hasKey(userId, statusId))) {
       throw new ForbiddenException({
         code: 'FORBIDDEN',
         message: 'This status is not yours to see',
@@ -245,6 +310,25 @@ export class StatusService {
       blockedIdsAround(userId),
     ]);
     return statusAudience(friends, blocked);
+  }
+
+  /**
+   * Every device a post written now may be sealed for: the author's own, and
+   * every friend's, minus the revoked ones.
+   *
+   * The same answer `devicesForChannel` gives for a channel, from the same
+   * directory - a status simply has a friend list where a channel has a
+   * membership. Revoked machines are filtered here rather than left to the
+   * client for the same reason they are there: "never seal for that laptop
+   * again" has to be enforced where the answer is produced.
+   */
+  async audienceDevices(userId: string): Promise<DeviceKey[]> {
+    const audience = await this.audienceOf(userId);
+    const rows = await prisma.deviceKey.findMany({
+      where: { userId: { in: [userId, ...audience] }, revokedAt: null },
+      orderBy: { createdAt: 'asc' },
+    });
+    return rows.map(toDeviceKey);
   }
 
   /**
@@ -275,16 +359,29 @@ export class StatusService {
 export async function mayReadStatusMedia(userId: string, key: string): Promise<boolean> {
   const row = await prisma.status.findFirst({
     where: { mediaKey: key, expiresAt: { gt: new Date() } },
-    select: { authorId: true },
+    select: { id: true, authorId: true },
   });
   if (!row) return false;
   if (row.authorId === userId) return true;
 
-  const [friends, blocked] = await Promise.all([
+  const [friends, blocked, keyed] = await Promise.all([
     friendIdsOf(userId),
     blockedIdsAround(userId),
+    hasKey(userId, row.id),
   ]);
-  return statusAudience(friends, blocked).includes(row.authorId);
+  // The bytes are ciphertext, so this gate is not what keeps them secret - the
+  // wrap is. It is still the same two questions the tray asks, and asking them
+  // here stops anybody hoarding blobs they hold no key for.
+  return keyed && statusAudience(friends, blocked).includes(row.authorId);
+}
+
+/** Whether a wrap of this post's key was addressed to any of an account's devices. */
+async function hasKey(userId: string, statusId: string): Promise<boolean> {
+  const row = await prisma.statusKey.findFirst({
+    where: { statusId, recipientUserId: userId },
+    select: { id: true },
+  });
+  return row !== null;
 }
 
 /**
@@ -299,6 +396,22 @@ export async function mayReadStatusMedia(userId: string, key: string): Promise<b
  */
 export function statusAudience(friendIds: string[], blocked: Set<string>): string[] {
   return friendIds.filter((id) => !blocked.has(id));
+}
+
+/**
+ * The wraps a bundle may actually contain: the ones addressed to somebody the
+ * author may post to.
+ *
+ * The client assembles the bundle from a directory it read a moment earlier,
+ * so this is not a formality - it is the gap between that read and this write,
+ * and the person who blocked the author inside it. Sealing is done by the
+ * author and cannot be checked here; who may be *addressed* can be, and is.
+ */
+export function keysForAudience(
+  entries: StatusKeyEntry[],
+  allowed: Set<string>,
+): StatusKeyEntry[] {
+  return entries.filter((entry) => allowed.has(entry.recipientUserId));
 }
 
 /**
@@ -332,6 +445,8 @@ export function orderRuns(
 type StatusRow = Status & {
   views?: Array<{ id: string }>;
   _count?: { views: number };
+  /** The wraps addressed to the reader - see `StatusEntry.keys`. */
+  keys?: StatusKeyEntry[];
 };
 
 function toEntry(
@@ -345,6 +460,8 @@ function toEntry(
     // The route, not the key: every client resolves this against whichever
     // deployment it is pointed at, the same way an attachment url is resolved.
     mediaUrl: row.mediaKey ? `/api/v1/uploads/${row.mediaKey}` : null,
+    mediaIv: row.mediaIv,
+    mediaType: row.mediaType,
     caption: row.caption,
     background: row.background,
     durationMs: row.durationMs,
@@ -352,6 +469,13 @@ function toEntry(
     expiresAt: row.expiresAt.toISOString(),
     seen: read.seen,
     viewCount: read.viewCount,
+    keys: (row.keys ?? []).map((entry) => ({
+      recipientUserId: entry.recipientUserId,
+      recipientDeviceId: entry.recipientDeviceId,
+      senderPublicKey: entry.senderPublicKey,
+      wrappedKey: entry.wrappedKey,
+      iv: entry.iv,
+    })),
   };
 }
 

@@ -545,7 +545,11 @@ function toIdentityBackup(row: {
   };
 }
 
-function toDeviceKey(row: {
+/**
+ * Exported for the status module, which wraps for the same directory this one
+ * publishes: one shape for a device key, not two that nearly agree.
+ */
+export function toDeviceKey(row: {
   userId: string;
   deviceId: string;
   publicKey: string;

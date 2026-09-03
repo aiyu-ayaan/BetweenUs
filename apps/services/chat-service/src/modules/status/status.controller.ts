@@ -8,6 +8,13 @@
  * over time; a status is one file and one button, and a two-step version of it
  * leaves an orphaned blob every time somebody changes their mind between the
  * two steps.
+ *
+ * Everything a post says is sealed by the time it arrives: the caption is an
+ * envelope, the file is ciphertext, and the bundle of wraps that decides who
+ * may open it comes with them. So this controller no longer looks inside
+ * anything - it cannot - and the checks that used to read the bytes have gone
+ * with the plaintext they needed. `GET audience` is the other half: the
+ * directory a client wraps against before it posts.
  */
 import {
   BadRequestException,
@@ -24,26 +31,67 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { Transform } from 'class-transformer';
-import { IsHexColor, IsIn, IsInt, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
+import { Transform, Type } from 'class-transformer';
+import {
+  ArrayMaxSize,
+  IsArray,
+  IsHexColor,
+  IsIn,
+  IsInt,
+  IsOptional,
+  IsString,
+  IsUUID,
+  Length,
+  Max,
+  MaxLength,
+  Min,
+  ValidateNested,
+} from 'class-validator';
 import { CurrentUser, JwtAuthGuard, type AuthenticatedUser } from '@betweenus/auth';
+import { MAX_UPLOAD_BYTES, buildKey, getStorage } from '@betweenus/storage';
 import {
-  MAX_UPLOAD_BYTES,
-  buildKey,
-  detectPictureType,
-  detectVideoType,
-  getStorage,
-} from '@betweenus/storage';
-import {
-  STATUS_CAPTION_MAX_LENGTH,
+  STATUS_CAPTION_SEALED_MAX_LENGTH,
   STATUS_VIDEO_MAX_MS,
   type CreateStatusRequest,
+  type DeviceKey,
   type StatusEntry,
   type StatusFeed,
+  type StatusKeyEntry,
   type StatusKind,
   type StatusViewer,
 } from '@betweenus/shared-types';
 import { StatusService } from './status.service';
+
+/** Ciphertext has no type of its own, and claiming one would be a lie. */
+const OPAQUE = 'application/octet-stream';
+
+/** A serialised ECDH P-256 JWK is ~200 chars; the cap is slack, not a guess. */
+const MAX_PUBLIC_KEY_LENGTH = 1024;
+
+/** Client-minted and opaque here, exactly as in the e2ee module's DTO. */
+const MAX_DEVICE_ID_LENGTH = 128;
+
+/** One wrap of the post's key, for one device. */
+export class StatusKeyEntryDto implements StatusKeyEntry {
+  @IsUUID()
+  recipientUserId!: string;
+
+  @IsString()
+  @Length(1, MAX_DEVICE_ID_LENGTH)
+  recipientDeviceId!: string;
+
+  @IsString()
+  @Length(1, MAX_PUBLIC_KEY_LENGTH)
+  senderPublicKey!: string;
+
+  @IsString()
+  @Length(1, 512)
+  wrappedKey!: string;
+
+  @IsString()
+  @Length(1, 64)
+  iv!: string;
+}
 
 /**
  * A multipart body arrives as strings, so the numbers are converted before
@@ -55,10 +103,50 @@ export class CreateStatusDto implements CreateStatusRequest {
   @IsIn(['PHOTO', 'VIDEO', 'TEXT'])
   kind!: StatusKind;
 
+  /**
+   * The sealed caption, not the words - so the cap is on the envelope and the
+   * readable length is the composer's business. The server cannot count
+   * characters in a ciphertext and must not pretend to.
+   */
   @IsOptional()
   @IsString()
-  @MaxLength(STATUS_CAPTION_MAX_LENGTH)
+  @MaxLength(STATUS_CAPTION_SEALED_MAX_LENGTH)
   caption?: string;
+
+  /** The IV the file was sealed with. Required with a file, refused without. */
+  @IsOptional()
+  @IsString()
+  @Length(1, 64)
+  mediaIv?: string;
+
+  /**
+   * What the sealed bytes are once opened. Stored and returned as sent: it is
+   * a hint for the client's decoder, never a claim about what is on disk -
+   * what is on disk is ciphertext.
+   */
+  @IsOptional()
+  @IsString()
+  @Length(1, 128)
+  mediaType?: string;
+
+  @IsString()
+  @Length(1, MAX_DEVICE_ID_LENGTH)
+  senderDeviceId!: string;
+
+  /**
+   * The wraps. Arrives as a JSON string because the rest of the post is
+   * multipart, and multipart has no arrays - the shape is validated below
+   * exactly as if it had come in as JSON.
+   *
+   * The ceiling is a friend list times its devices. Bigger than that is not a
+   * person with a lot of friends, it is somebody probing the endpoint.
+   */
+  @Transform(({ value }) => (typeof value === 'string' ? parseKeys(value) : value))
+  @IsArray()
+  @ArrayMaxSize(2000)
+  @ValidateNested({ each: true })
+  @Type(() => StatusKeyEntryDto)
+  keys!: StatusKeyEntryDto[];
 
   /**
    * Validated as a hex colour rather than against `STATUS_BACKGROUNDS`: the
@@ -114,34 +202,48 @@ export class StatusController {
           message: 'A text status needs something to say',
         });
       }
+      // Whether it says anything is the only thing that can be asked of it -
+      // the words are sealed, so "is it blank" is answered by the composer.
       return this.statuses.create(user.id, dto, null);
     }
 
     if (!file) {
       throw new BadRequestException({ code: 'NO_FILE', message: 'No file was uploaded' });
     }
-
-    // The bytes, not the header - the same rule the picture route follows, and
-    // for the same reason: `file.mimetype` is a value the client chose.
-    const detected =
-      dto.kind === 'PHOTO' ? detectPictureType(file.buffer) : detectVideoType(file.buffer);
-    if (!detected) {
+    // Nothing here sniffs the bytes any more, because there is nothing to
+    // sniff: the file arrives sealed, and a magic-number check on ciphertext
+    // would refuse every real post. What the file is once opened is `mediaType`
+    // - a hint the author sent, stored as sent, and never trusted as a fact
+    // about the object. The IV is what makes it openable at all, so a sealed
+    // file without one is refused rather than stored unreadable for a day.
+    if (!dto.mediaIv) {
       throw new BadRequestException({
-        code: 'UNSUPPORTED_MEDIA_TYPE',
-        message:
-          dto.kind === 'PHOTO'
-            ? 'That file is not a PNG, JPEG, GIF or WebP'
-            : 'That file is not an MP4 or WebM video',
+        code: 'NO_MEDIA_IV',
+        message: 'A sealed file needs the IV it was sealed with',
       });
     }
 
     // Under `status/`, which is the prefix the download route reads to know
-    // this object is gated by friendship. Never under `attachments/`: that
-    // prefix means "claimed by a message or by nobody", and a status is
-    // neither.
-    const key = buildKey(`status/${user.id}`, `status${detected.extension}`);
-    const object = await getStorage().put(key, file.buffer, detected.contentType);
+    // this object is gated by a status key rather than by channel access.
+    // Never under `attachments/`: that prefix means "claimed by a message or
+    // by nobody", and a status is neither. No extension, for the same reason
+    // an attachment has none - the name would describe the plaintext.
+    const key = buildKey(`status/${user.id}`, '');
+    const object = await getStorage().put(key, file.buffer, OPAQUE);
     return this.statuses.create(user.id, dto, object.key);
+  }
+
+  /**
+   * Every device this account may seal a post for, right now: its own, and
+   * every friend's.
+   *
+   * Read immediately before posting rather than cached, because this list *is*
+   * the audience - a friend added a minute ago should be in it, and one who
+   * blocked the caller a minute ago should not.
+   */
+  @Get('audience')
+  audience(@CurrentUser() user: AuthenticatedUser): Promise<DeviceKey[]> {
+    return this.statuses.audienceDevices(user.id);
   }
 
   /** Records that this account opened one. Idempotent. */
@@ -170,5 +272,20 @@ export class StatusController {
     @Param('statusId', ParseUUIDPipe) statusId: string,
   ): Promise<void> {
     return this.statuses.remove(user.id, statusId);
+  }
+}
+
+/**
+ * The wrap bundle, out of the multipart field it travelled in.
+ *
+ * A parse failure becomes an empty array rather than a thrown error, so the
+ * validator below produces the ordinary "keys must be an array" refusal in the
+ * standard error shape instead of a raw `SyntaxError` escaping the pipe.
+ */
+function parseKeys(value: string): unknown {
+  try {
+    return JSON.parse(value);
+  } catch {
+    return [];
   }
 }

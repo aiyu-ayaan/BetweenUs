@@ -1,6 +1,7 @@
 /**
- * The two status rules that are worth asserting rather than reading: who a
- * status is visible to, and what order the tray comes back in.
+ * The status rules worth asserting rather than reading: who a status may be
+ * addressed to, whose wraps a post may actually carry, and what order the tray
+ * comes back in.
  *
  * The audience rule is an authorization rule with three callers - the tray,
  * the single-post gate and the media download - so it is one function and this
@@ -10,7 +11,7 @@
  */
 import assert from 'node:assert/strict';
 import type { StatusEntry } from '@betweenus/shared-types';
-import { orderRuns, statusAudience } from './status.service';
+import { keysForAudience, orderRuns, statusAudience } from './status.service';
 
 const ada = 'ada';
 const grace = 'grace';
@@ -30,6 +31,36 @@ assert.deepEqual(statusAudience([ada, grace], new Set([ada, grace])), []);
 
 // Somebody who is not a friend was never in the list to be removed from it.
 assert.deepEqual(statusAudience([], new Set([alan])), []);
+
+// --- Whose wraps a post may carry ---------------------------------------------
+
+const wrap = (recipientUserId: string) => ({
+  recipientUserId,
+  recipientDeviceId: `${recipientUserId}-laptop`,
+  senderPublicKey: 'jwk',
+  wrappedKey: 'sealed',
+  iv: 'iv',
+});
+
+// The bundle is assembled by the client from a directory it read a moment
+// earlier, and this is the gap between that read and the write: somebody who
+// stopped being addressable in between is dropped here rather than handed a
+// key by a client that had not heard yet.
+assert.deepEqual(
+  keysForAudience([wrap(ada), wrap(alan)], new Set([ada])).map((entry) => entry.recipientUserId),
+  [ada],
+);
+
+// The author is always in their own audience: a post they cannot open on the
+// machine that wrote it is the one failure nobody would ever recover from.
+assert.deepEqual(
+  keysForAudience([wrap(ada)], new Set([ada, grace])).map((entry) => entry.recipientUserId),
+  [ada],
+);
+
+// And a bundle addressed to nobody who qualifies carries nothing - which is a
+// post only its author can read, not an error.
+assert.deepEqual(keysForAudience([wrap(alan)], new Set([ada])), []);
 
 // --- Tray order ---------------------------------------------------------------
 
@@ -54,6 +85,9 @@ const post = (createdAt: string, seen: boolean): StatusEntry => ({
   expiresAt: '2030-01-01T00:00:00.000Z',
   seen,
   viewCount: null,
+  mediaIv: null,
+  mediaType: null,
+  keys: [],
 });
 
 // An unopened run outranks an opened one even when the opened one is newer.

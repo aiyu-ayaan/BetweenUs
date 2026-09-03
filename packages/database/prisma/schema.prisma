@@ -1184,8 +1184,15 @@ model Status {
   /// Null for TEXT. The `status/` prefix is what the download route reads to
   /// know this object is gated by friendship rather than by channel access.
   mediaKey   String?
-  /// The caption under a photo, or the whole of a TEXT status. Capped by the
-  /// DTO at STATUS_CAPTION_MAX_LENGTH.
+  /// The IV the media was sealed with, base64. Null for TEXT.
+  mediaIv    String?
+  /// What the sealed bytes are once opened - `image/jpeg`, `video/mp4`. In the
+  /// clear on purpose: the server holds ciphertext and cannot sniff it, and a
+  /// client needs a type to hand the decoder.
+  mediaType  String?
+  /// The caption under a photo, or the whole of a TEXT status, sealed: an
+  /// `EncryptedEnvelope` as JSON, never the words. Capped by the DTO at
+  /// STATUS_CAPTION_SEALED_MAX_LENGTH, which is the only cap a ciphertext has.
   caption    String?
   /// The colour a TEXT status is drawn on, as a CSS hex the client picked from
   /// a fixed palette. Null for media, which is its own background.
@@ -1201,12 +1208,45 @@ model Status {
 
   author User         @relation("StatusAuthor", fields: [authorId], references: [id], onDelete: Cascade)
   views  StatusView[]
+  keys   StatusKey[]
 
   /// The feed reads one author's live posts, oldest first.
   @@index([authorId, createdAt])
   /// The sweep reads what is past its stamp.
   @@index([expiresAt])
   @@map("statuses")
+}
+
+/// One status key, sealed for one device.
+///
+/// This table is the audience, and that is the whole of the design: a status
+/// has no channel to inherit membership from, so the author wraps its key for
+/// every device of every friend it had *at the moment it was posted*. A
+/// friendship made afterwards adds no row, which is why a new friend does not
+/// see yesterday's post - the same rule every app with this feature has, here
+/// enforced by arithmetic rather than by a query the server is trusted to run.
+///
+/// No epoch, unlike `ChannelKey`: a status is written once and gone in a day,
+/// so there is nothing to rotate.
+model StatusKey {
+  id                String   @id @default(uuid())
+  statusId          String
+  recipientUserId   String
+  /// Which of that user's devices this copy is sealed for. One row per device.
+  recipientDeviceId String
+  /// Which machine did the sealing, so a wrap can be attributed after the fact.
+  senderDeviceId    String
+  senderPublicKey   String
+  wrappedKey        String
+  iv                String
+  createdAt         DateTime @default(now())
+
+  status Status @relation(fields: [statusId], references: [id], onDelete: Cascade)
+
+  @@unique([statusId, recipientDeviceId])
+  /// The tray asks "which live posts is there a wrap for me on".
+  @@index([recipientUserId])
+  @@map("status_keys")
 }
 
 /// Somebody opened somebody else's status.
