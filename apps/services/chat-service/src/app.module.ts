@@ -26,6 +26,9 @@ import {
   WebhooksController,
 } from './modules/webhooks/webhooks.controller';
 import { WebhooksService } from './modules/webhooks/webhooks.service';
+import { StatusController } from './modules/status/status.controller';
+import { StatusService } from './modules/status/status.service';
+import { StatusSweeper } from './modules/status/status-sweeper';
 import { ChatGateway } from './gateways/chat.gateway';
 
 const SERVICE_NAME = 'chat-service';
@@ -40,6 +43,7 @@ const SERVICE_NAME = 'chat-service';
     BlocksController,
     DirectChannelsController,
     WebhooksController,
+    StatusController,
     // Registered after WebhooksController so `/webhooks/:id/rotate` is matched
     // by the guarded route before `/webhooks/:id/:token` can swallow it.
     WebhookExecuteController,
@@ -52,10 +56,12 @@ const SERVICE_NAME = 'chat-service';
     E2eeService,
     FriendsService,
     WebhooksService,
+    StatusService,
     ChatGateway,
     ScratchSweeper,
     AttachmentSweeper,
     DisappearingSweeper,
+    StatusSweeper,
     {
       provide: EventBus,
       useFactory: () => new EventBus(envOr('REDIS_URL', 'redis://localhost:6379'), SERVICE_NAME),

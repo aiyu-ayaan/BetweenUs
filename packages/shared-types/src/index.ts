@@ -1211,6 +1211,131 @@ export interface BlockUserRequest {
   userId: string;
 }
 
+// --- Status (phase 30) ---
+//
+// A post that expires after 24 hours and is seen by accepted friends. Not a
+// message: no channel, no conversation, and an audience that is a set rather
+// than a room. See `model Status` in the Prisma schema.
+//
+// Deliberately **not** end-to-end encrypted, unlike everything under
+// "Messages" above. A status goes to whoever is a friend at the moment each
+// viewer opens it - a set that changes after the post is written - so sealing
+// it would mean re-wrapping a key per new friendship, or freezing the audience
+// at post time. The bytes are stored opaque and gated server-side, the way an
+// avatar is. Every client draws the "not encrypted" note that goes with that.
+
+export type StatusKind = 'PHOTO' | 'VIDEO' | 'TEXT';
+
+/** How long a post lives. Twenty-four hours, which is what the word means. */
+export const STATUS_TTL_MS = 24 * 60 * 60 * 1000;
+
+/** The caption under a photo, or the whole of a TEXT status. */
+export const STATUS_CAPTION_MAX_LENGTH = 700;
+
+/**
+ * How long a photo or a text status is held on screen before the viewer moves
+ * on, in milliseconds. A video runs for its own length instead.
+ *
+ * Five seconds is WhatsApp's step and Instagram's, and it is the number every
+ * person using this has already been trained on.
+ */
+export const STATUS_PHOTO_MS = 5000;
+
+/**
+ * The longest video accepted, in milliseconds. Anything longer is a video to
+ * send, not a status - and the client trims to this rather than refusing, so
+ * picking a long clip still posts something.
+ */
+export const STATUS_VIDEO_MAX_MS = 30_000;
+
+/**
+ * The colours a TEXT status can be drawn on.
+ *
+ * A fixed palette rather than a colour picker: it is the whole visual identity
+ * of a text post, every one of these is legible under white text, and a picker
+ * is how you get white-on-yellow. Stored as the hex string, so a client that
+ * does not know a value still renders it.
+ */
+export const STATUS_BACKGROUNDS = [
+  '#075E54',
+  '#128C7E',
+  '#1F6FEB',
+  '#6D28D9',
+  '#BE185D',
+  '#B45309',
+  '#334155',
+  '#0F172A',
+] as const;
+
+/** One post, as everybody who can see it reads it. */
+export interface StatusEntry {
+  id: string;
+  authorId: string;
+  kind: StatusKind;
+  /**
+   * Where the photo or video is, rooted at `/api/v1/uploads/status/...`, or
+   * null for TEXT. It needs the caller's token like any attachment does: it is
+   * fetched as bytes and turned into an object URL, never put in a bare `src`.
+   */
+  mediaUrl: string | null;
+  caption: string | null;
+  /** The colour a TEXT status is drawn on. Null for media. */
+  background: string | null;
+  /** A video's length in milliseconds; null for a photo or text. */
+  durationMs: number | null;
+  createdAt: string;
+  expiresAt: string;
+  /** Whether the caller has opened this one. Always true for your own. */
+  seen: boolean;
+  /** How many people opened it. Only filled in on your own posts; else null. */
+  viewCount: number | null;
+}
+
+/**
+ * One person's live posts, which is the unit every screen actually draws: a
+ * ring is per person, a tap opens their whole run, and the count under a name
+ * is the length of this list.
+ */
+export interface StatusFeedEntry {
+  author: UserSummary;
+  statuses: StatusEntry[];
+  /** The newest post's time - what the list is ordered by. */
+  latestAt: string;
+  /** True while any post in the run is unopened, which is what draws the ring. */
+  unseen: boolean;
+}
+
+/**
+ * The whole tray: your own run, and everybody else's.
+ *
+ * `mine` is separate rather than the first row of `others` because it is drawn
+ * differently everywhere - it is the add button when it is empty, it shows view
+ * counts, and it can be deleted from.
+ */
+export interface StatusFeed {
+  mine: StatusEntry[];
+  others: StatusFeedEntry[];
+}
+
+/**
+ * Posting. The media, where there is any, travels in the same request as its
+ * caption: a two-step upload leaves an orphaned blob every time somebody
+ * changes their mind between the two, and there is nothing here big enough to
+ * need the multipart path.
+ */
+export interface CreateStatusRequest {
+  kind: StatusKind;
+  caption?: string;
+  background?: string;
+  durationMs?: number;
+}
+
+/** Somebody who opened your post, newest first. */
+export interface StatusViewer {
+  user: UserSummary;
+  viewedAt: string;
+}
+
 // --- Messages ---
 
 export interface MessageAuthor {
@@ -2750,6 +2875,15 @@ export type ServerChatEvent =
   | { type: 'message.gone'; messageId: string; channelId: string }
   /** Sent to both sides of a request, an acceptance or a removal. */
   | { type: 'friends.changed' }
+  /**
+   * Somebody this account can see posted a status, deleted one, or had one
+   * expire. Announced rather than carried, like a friendship: the tray is one
+   * call, it is small, and carrying a post would mean composing a different
+   * payload per recipient because `seen` and `viewCount` differ per reader.
+   *
+   * `authorId` is there so a client can ignore its own echo without refetching.
+   */
+  | { type: 'status.changed'; authorId: string }
   /** Sent to everyone watching the server, and to whoever joined or left it. */
   | { type: 'server.members.changed'; serverId: string }
   /**

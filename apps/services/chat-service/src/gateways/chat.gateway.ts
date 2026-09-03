@@ -183,6 +183,14 @@ export class ChatGateway implements OnModuleDestroy {
       }
     });
 
+    // Somebody posted, deleted, or aged out of a status. The audience was
+    // worked out where the row was written - that is where the friend list
+    // already was - so this only has to deliver it.
+    await this.events.subscribe(EVENTS.STATUS_CHANGED, (envelope) => {
+      const { userIds, authorId } = envelope.payload;
+      this.deliver(userIds.map(userRoom), { type: 'status.changed', authorId });
+    });
+
     // Every membership change reaches the same client event: the server's
     // watchers refresh their member list, and the person who joined, was
     // removed or had their permissions changed refreshes their own list of

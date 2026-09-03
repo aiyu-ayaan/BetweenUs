@@ -70,6 +70,14 @@ export const EVENTS = {
   MESSAGE_DELETED: 'message.deleted',
   FRIEND_CHANGED: 'friend.changed',
   /**
+   * Somebody posted, deleted, or aged out of a status.
+   *
+   * The audience is computed where it is published rather than where it is
+   * consumed: the gateway holds sockets, not friendships, and the service that
+   * wrote the row already had the friend list in hand to authorise the write.
+   */
+  STATUS_CHANGED: 'status.changed',
+  /**
    * Somebody read a channel, on one of their devices.
    *
    * Published so their *other* devices can take down a notification for it.
@@ -212,6 +220,11 @@ export interface EventPayloads {
     userIds: string[];
     actorId?: string;
     kind?: 'requested' | 'accepted' | 'removed';
+  };
+  [EVENTS.STATUS_CHANGED]: {
+    /** Everyone who should re-read their tray: the author's friends, and the author. */
+    userIds: string[];
+    authorId: string;
   };
   [EVENTS.SESSION_REVOKED]: {
     userId: string;

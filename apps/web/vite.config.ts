@@ -69,6 +69,7 @@ export default defineConfig(({ mode }) => {
         '/api/v1/friends': CHAT,
         '/api/v1/users': CHAT,
         '/api/v1/dm': CHAT,
+        '/api/v1/statuses': CHAT,
         '/api/v1/uploads': CHAT,
         '/api/v1/e2ee': CHAT,
         '/api/v1/calls': CALL,

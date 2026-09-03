@@ -59,6 +59,7 @@ import {
   type StoredObject,
   type UploadedPart,
 } from '@betweenus/storage';
+import { mayReadStatusMedia } from '../status/status.service';
 import {
   AbortMultipartDto,
   CompleteMultipartDto,
@@ -411,6 +412,13 @@ function callerId(request: Request): string | null {
  * that already lives, private channels and direct messages included.
  */
 async function mayRead(userId: string, key: string): Promise<boolean> {
+  // A status has no attachment row and no channel: its audience is a friend
+  // list, and the rule lives beside that list rather than being written a
+  // second time here. The prefix is what distinguishes the two - `buildKey` is
+  // the only thing that writes it, and `assertSafeKey` above has already
+  // refused anything that could climb out of it.
+  if (key.startsWith('status/')) return mayReadStatusMedia(userId, key);
+
   const row = await prisma.attachment.findUnique({
     where: { key },
     select: {

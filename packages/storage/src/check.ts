@@ -11,6 +11,7 @@ import {
   assertSafeKey,
   buildKey,
   detectPictureType,
+  detectVideoType,
   getStorage,
   isAllowedPicture,
   isInlineSafe,
@@ -196,6 +197,22 @@ async function main(): Promise<void> {
     detectPictureType(Buffer.concat([png, Buffer.from('<script>alert(1)</script>')]))?.contentType,
     'image/png',
   );
+
+  // --- Video signatures, for status posts.
+  const mp4 = Buffer.concat([
+    Buffer.from([0x00, 0x00, 0x00, 0x18]),
+    Buffer.from('ftypmp42'),
+  ]);
+  const webm = Buffer.from([0x1a, 0x45, 0xdf, 0xa3, 0x01, 0x00, 0x00, 0x00]);
+  assert.deepEqual(detectVideoType(mp4), { contentType: 'video/mp4', extension: '.mp4' });
+  assert.deepEqual(detectVideoType(webm), { contentType: 'video/webm', extension: '.webm' });
+  // A picture is not a video and a video is not a picture: the status route
+  // picks one detector per kind, and each must refuse the other's bytes.
+  assert.equal(detectVideoType(png), null);
+  assert.equal(detectPictureType(mp4), null);
+  // Not a container at all, and too short to be one.
+  assert.equal(detectVideoType(Buffer.from('<!doctype html>')), null);
+  assert.equal(detectVideoType(Buffer.from([0x1a, 0x45])), null);
 
   console.log('storage check ok');
 }

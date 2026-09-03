@@ -617,6 +617,51 @@ export function detectPictureType(bytes: Buffer): PictureType | null {
   return null;
 }
 
+/**
+ * The video signatures this server recognises, for status posts.
+ *
+ * Two containers and no more. Every phone and every browser this app runs on
+ * produces one of them, and each extra format here is another decoder a client
+ * has to have - a status that will not play on the device it reaches is worse
+ * than one that could not be posted.
+ *
+ * The same rule as `detectPictureType`: the bytes decide, and the declared type
+ * is not consulted at all. A status video is served opaque and turned into a
+ * blob URL by the client, so this is not defending an `<img>` origin - it is
+ * making sure the one place that accepts a large unencrypted upload accepts
+ * video and not anything at all.
+ */
+const VIDEO_SIGNATURES: Array<{ bytes: Array<number | null>; offset: number; type: PictureType }> = [
+  // ISO base media: four bytes of box length, then "ftyp". The brand that
+  // follows says mp4, m4v, 3gp or quicktime; all of them are the same
+  // container and every one of them plays, so the brand is not checked.
+  {
+    offset: 4,
+    bytes: [0x66, 0x74, 0x79, 0x70], // ftyp
+    type: { contentType: 'video/mp4', extension: '.mp4' },
+  },
+  // EBML, which is WebM and Matroska. Distinguishing the two would mean
+  // walking the header for the DocType, and a Matroska file that plays is not
+  // a problem worth parsing for.
+  {
+    offset: 0,
+    bytes: [0x1a, 0x45, 0xdf, 0xa3],
+    type: { contentType: 'video/webm', extension: '.webm' },
+  },
+];
+
+/** What these bytes are, or null if they are not a video this server stores. */
+export function detectVideoType(bytes: Buffer): PictureType | null {
+  for (const signature of VIDEO_SIGNATURES) {
+    if (bytes.length < signature.offset + signature.bytes.length) continue;
+    const matches = signature.bytes.every(
+      (byte, index) => byte === null || bytes[signature.offset + index] === byte,
+    );
+    if (matches) return signature.type;
+  }
+  return null;
+}
+
 /** Content types safe to render inline; everything else downloads. */
 export function isInlineSafe(contentType: string): boolean {
   const type = contentType.split(';')[0]?.trim().toLowerCase() ?? '';
