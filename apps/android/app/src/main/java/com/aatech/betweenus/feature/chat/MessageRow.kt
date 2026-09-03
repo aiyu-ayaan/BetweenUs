@@ -96,6 +96,7 @@ import com.aatech.betweenus.core.data.UserSummary
 import com.aatech.betweenus.core.store.Conversation
 import com.aatech.betweenus.core.store.ReadableMessage
 import com.aatech.betweenus.core.store.Workspace
+import com.aatech.betweenus.ui.components.Avatar
 import com.aatech.betweenus.ui.components.AvatarWithStatus
 import com.aatech.betweenus.ui.components.tintFor
 import com.aatech.betweenus.ui.components.BetweenUsIcon
@@ -182,7 +183,15 @@ fun MessageRow(
     onPlayVideo: (Uri, String) -> Unit = { _, _ -> },
 ) {
     val message = readable.message
-    val isSelf = message.author.id == self.id
+    // A webhook posts as the account that opened it, so `author` is a person
+    // who did not say this. Everything below reads `hook` first and falls back
+    // to the author, which is what keeps a build server's output from being
+    // attributed to whoever set it up.
+    val hook = message.webhook
+    // And it is never "yours", even if you created the webhook: it is not
+    // something you said, so it gets neither your side of the screen nor your
+    // bubble colour.
+    val isSelf = hook == null && message.author.id == self.id
 
     /**
      * Whether this message needs a face beside it.
@@ -196,6 +205,10 @@ fun MessageRow(
     }
     val grouped = previous != null &&
         previous.message.author.id == message.author.id &&
+        // Two different robots - and a robot and the person who set it up - all
+        // share an author id. Grouping on that alone stacked a build
+        // notification under somebody's sentence and drew one name over both.
+        previous.message.webhook?.id == hook?.id &&
         !previous.message.deleted &&
         !message.deleted &&
         withinFiveMinutes(previous.message.createdAt, message.createdAt) &&
@@ -386,14 +399,30 @@ fun MessageRow(
                     // than the default, which is the surface a member row sits
                     // on: a dot punched out of the wrong colour reads as a
                     // coloured circle inside a grey one.
-                    AvatarWithStatus(
-                        id = message.author.id,
-                        label = message.author.label,
-                        url = message.author.avatarUrl?.let { Endpoint.absolute(it) },
-                        status = authorStatus.wire,
-                        size = 36.dp,
-                        ring = MaterialTheme.colorScheme.background,
-                    )
+                    if (hook != null) {
+                        // No status dot: a webhook is not somebody who might be
+                        // here or away, and a grey dot on one would be an
+                        // answer to a question nobody asked.
+                        Avatar(
+                            id = hook.id ?: message.id,
+                            label = hook.name,
+                            url = hook.avatarUrl?.let { Endpoint.absolute(it) },
+                            size = 36.dp,
+                            // A webhook has no profile to open. A double tap
+                            // here would offer a sheet about the person who
+                            // created it, which is not who is speaking.
+                            onDoubleTap = null,
+                        )
+                    } else {
+                        AvatarWithStatus(
+                            id = message.author.id,
+                            label = message.author.label,
+                            url = message.author.avatarUrl?.let { Endpoint.absolute(it) },
+                            status = authorStatus.wire,
+                            size = 36.dp,
+                            ring = MaterialTheme.colorScheme.background,
+                        )
+                    }
                     Spacer(Modifier.width(8.dp))
                 }
             }
@@ -441,12 +470,26 @@ fun MessageRow(
                         // screen your bubble is on already said that.
                         if (!isSelf && !grouped) {
                             Text(
-                                text = message.author.label,
+                                text = hook?.name ?: message.author.label,
                                 style = MaterialTheme.typography.labelLargeEmphasized,
-                                color = tintFor(message.author.id),
+                                color = tintFor(hook?.id ?: message.author.id),
                                 maxLines = 1,
                                 overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                                 modifier = Modifier.padding(bottom = 2.dp),
+                            )
+                        }
+                        // The one thing anybody reading this channel is owed:
+                        // this message was not end-to-end encrypted, because
+                        // whatever sent it holds no key. On every message
+                        // rather than once per run - a run scrolled halfway off
+                        // the top of the screen would otherwise be an
+                        // unencrypted message with nothing saying so.
+                        if (hook != null) {
+                            Text(
+                                text = "WEBHOOK · NOT ENCRYPTED",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(bottom = 3.dp),
                             )
                         }
                         // Above the quote and above the words: the first thing

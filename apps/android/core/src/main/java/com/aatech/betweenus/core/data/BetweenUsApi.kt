@@ -372,6 +372,31 @@ object BetweenUsApi {
         authed("DELETE", "/api/v1/servers/$serverId/roles/$roleId")
     }
 
+    // --- webhooks ---
+    //
+    // A URL an outside system posts into a channel with. Every call here needs
+    // MANAGE_WEBHOOK on the channel's server; the URL itself comes back exactly
+    // twice in a webhook's life - at creation and at rotation - because the
+    // server keeps only a hash of the token.
+
+    suspend fun webhooks(channelId: String): List<Webhook> = io {
+        authedArray("GET", "/api/v1/webhooks?channelId=${enc(channelId)}").map { Webhook.from(it) }
+    }
+
+    suspend fun createWebhook(channelId: String, name: String): WebhookWithToken = io {
+        val body = JSONObject().put("channelId", channelId).put("name", name)
+        WebhookWithToken.from(authed("POST", "/api/v1/webhooks", body))
+    }
+
+    /** A new URL, invalidating the old one. The way back from a leak, and from a URL nobody kept. */
+    suspend fun rotateWebhook(webhookId: String): WebhookWithToken = io {
+        WebhookWithToken.from(authed("POST", "/api/v1/webhooks/$webhookId/rotate", JSONObject()))
+    }
+
+    suspend fun deleteWebhook(webhookId: String): Unit = io {
+        authed("DELETE", "/api/v1/webhooks/$webhookId")
+    }
+
     // --- channels ---
 
     suspend fun channels(serverId: String): List<Channel> = io {

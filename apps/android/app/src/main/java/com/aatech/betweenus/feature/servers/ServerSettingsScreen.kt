@@ -221,6 +221,12 @@ fun ServerSettingsScreen(serverId: String?, onBack: () -> Unit) {
                 onNote = { note = it },
             )
 
+            WebhookSection(
+                serverId = server.id,
+                mayManage = server.can("MANAGE_WEBHOOK"),
+                onNote = { note = it },
+            )
+
             SectionLabel("Leaving")
             Column(Modifier.padding(horizontal = 16.dp)) {
                 Text(

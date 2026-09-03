@@ -1230,6 +1230,27 @@ export interface MessageAuthor {
  */
 export type MessageKind = 'USER' | 'MEMBER_JOIN' | 'WEBHOOK';
 
+/**
+ * Which kinds of row actually carry a body.
+ *
+ * An allowlist rather than `kind !== 'USER'`, and the difference matters. That
+ * test meant "anything the server wrote", which was true while `MEMBER_JOIN`
+ * was the only other kind - and silently became "a webhook message has no
+ * text" the moment a second one existed. A row that carries words is not the
+ * same question as a row a person wrote.
+ *
+ * Still an allowlist and not a denylist, so the original property survives: a
+ * client that has never heard of some future kind draws nothing for it rather
+ * than drawing the wrong thing.
+ */
+export const BODIED_MESSAGE_KINDS: MessageKind[] = ['USER', 'WEBHOOK'];
+
+/** Whether this row has a body to open at all. See `BODIED_MESSAGE_KINDS`. */
+export function hasBody(kind: MessageKind | undefined): boolean {
+  // Absent means a build older than the column, where every row was a person's.
+  return kind === undefined || BODIED_MESSAGE_KINDS.includes(kind);
+}
+
 export interface Message {
   id: string;
   channelId: string;

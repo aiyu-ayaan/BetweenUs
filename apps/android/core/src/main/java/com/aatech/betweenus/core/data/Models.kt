@@ -606,6 +606,73 @@ data class MessageReaction(val emoji: String, val userIds: List<String>) {
     }
 }
 
+/**
+ * How a webhook is drawn on a message it posted.
+ *
+ * [id] is null once the webhook has been deleted - the messages it sent stay,
+ * because deleting a webhook closes a door rather than retracting what came
+ * through it - so the name is what a client draws and the picture falls back to
+ * an initial.
+ */
+data class MessageWebhook(
+    val id: String?,
+    val name: String,
+    val avatarUrl: String?,
+) {
+    fun toJson(): JSONObject = JSONObject()
+        .put("id", id)
+        .put("name", name)
+        .put("avatarUrl", avatarUrl)
+
+    companion object {
+        fun from(json: JSONObject) = MessageWebhook(
+            id = json.stringOrNull("id"),
+            name = json.optString("name").ifBlank { "Webhook" },
+            avatarUrl = json.stringOrNull("avatarUrl"),
+        )
+    }
+}
+
+/**
+ * A webhook as its server's settings list it. Never carries the token.
+ *
+ * The URL is returned exactly twice in a webhook's life - when it is created
+ * and when it is rotated - because the server stores only a SHA-256 of the
+ * token half. See [WebhookWithToken].
+ */
+data class Webhook(
+    val id: String,
+    val channelId: String,
+    val name: String,
+    val avatarUrl: String?,
+    val createdBy: UserSummary,
+    /** Null until something has posted through it - the first thing anybody asks. */
+    val lastUsedAt: String?,
+    val createdAt: String,
+) {
+    companion object {
+        fun from(json: JSONObject) = Webhook(
+            id = json.getString("id"),
+            channelId = json.optString("channelId"),
+            name = json.optString("name"),
+            avatarUrl = json.stringOrNull("avatarUrl"),
+            createdBy = json.optJSONObject("createdBy")
+                ?.let { UserSummary.from(it) }
+                ?: UserSummary("", "", "", null),
+            lastUsedAt = json.stringOrNull("lastUsedAt"),
+            createdAt = json.optString("createdAt"),
+        )
+    }
+}
+
+/** A webhook plus the one thing that is never shown again. */
+data class WebhookWithToken(val webhook: Webhook, val url: String) {
+    companion object {
+        fun from(json: JSONObject) =
+            WebhookWithToken(Webhook.from(json), json.optString("url"))
+    }
+}
+
 data class Message(
     val id: String,
     val channelId: String,
@@ -660,6 +727,13 @@ data class Message(
      * whether its own id is in here.
      */
     val viewedBy: List<String> = emptyList(),
+    /**
+     * Set exactly when [kind] is [KIND_WEBHOOK]. What the name and picture are
+     * drawn from - [author] is the account that created the webhook, which is
+     * not who the row is from, and drawing that attributes a build server's
+     * output to a person.
+     */
+    val webhook: MessageWebhook? = null,
 ) {
     val deleted: Boolean get() = deletedAt != null
     val pinned: Boolean get() = pinnedAt != null
@@ -667,8 +741,23 @@ data class Message(
     /** Somebody joined the server. There is no body to open and none to draw. */
     val isArrival: Boolean get() = kind == KIND_MEMBER_JOIN
 
-    /** Written by the server rather than by a person; see [kind]. */
-    val isSystem: Boolean get() = kind != KIND_USER
+    /** Posted by a webhook. Its body is plaintext; see [webhook]. */
+    val isWebhook: Boolean get() = kind == KIND_WEBHOOK
+
+    /**
+     * Whether this row carries a body at all.
+     *
+     * An allowlist rather than `kind != KIND_USER`, and the difference matters.
+     * That test meant "anything the server wrote", which was true while
+     * MEMBER_JOIN was the only other kind - and silently became "a webhook
+     * message has no text" the moment a second one existed. A row that carries
+     * words is not the same question as a row a person wrote.
+     *
+     * Still an allowlist, so the original property survives: a client that has
+     * never heard of some future kind draws nothing for it rather than drawing
+     * the wrong thing.
+     */
+    val hasBody: Boolean get() = kind in BODIED_KINDS
 
     /**
      * Whether the window closed while this copy was sitting on a screen.
@@ -705,6 +794,7 @@ data class Message(
         .put("expiresAt", expiresAt)
         .put("viewOnce", viewOnce)
         .put("viewedBy", jsonArrayOf(viewedBy))
+        .put("webhook", webhook?.toJson())
 
     companion object {
         /** A message somebody wrote. What every row was before [kind] existed. */
@@ -712,6 +802,18 @@ data class Message(
 
         /** The conversation noting that somebody joined the server. */
         const val KIND_MEMBER_JOIN = "MEMBER_JOIN"
+
+        /**
+         * Posted by an outside system through a webhook.
+         *
+         * Unlike KIND_USER, [content] is **plaintext**: the sender holds no
+         * channel key and cannot be given one. Every client draws the badge
+         * that says so - see `docs/docs/services/webhooks.md`.
+         */
+        const val KIND_WEBHOOK = "WEBHOOK"
+
+        /** See [hasBody]. */
+        val BODIED_KINDS = setOf(KIND_USER, KIND_WEBHOOK)
 
         fun from(json: JSONObject) = Message(
             id = json.getString("id"),
@@ -728,6 +830,7 @@ data class Message(
             expiresAt = json.stringOrNull("expiresAt"),
             viewOnce = json.optBoolean("viewOnce", false),
             viewedBy = json.strings("viewedBy"),
+            webhook = json.optJSONObject("webhook")?.let { MessageWebhook.from(it) },
         )
     }
 }

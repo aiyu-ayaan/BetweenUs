@@ -873,7 +873,12 @@ object Conversation {
         // The server wrote this one and it has no body to open - what it says
         // is in its kind and its author. Handing an empty string to the channel
         // key would only produce a padlock for a row nobody sealed.
-        if (message.isSystem) return ReadableMessage(message, MessageBody(""))
+        if (!message.hasBody) return ReadableMessage(message, MessageBody(""))
+        // A webhook body needs no key and never had one. `decryptForChannel`
+        // returns anything that is not an envelope untouched, which is the same
+        // path every row written before E2EE already takes - so there is
+        // nothing special to do for one here, only something special *not* to
+        // do, which was blanking it above.
         val plaintext = E2ee.decryptForChannel(message.channelId, message.content)
         return ReadableMessage(message, MessageBody.decode(plaintext))
     }

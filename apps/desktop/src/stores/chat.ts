@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { hasBody } from '@betweenus/shared-types';
 import type {
   Channel,
   ChannelReadReceipt,
@@ -947,7 +948,11 @@ async function decrypt(message: Message): Promise<DecryptedMessage> {
   // The server wrote this one and it has no body to open - what it says is in
   // its kind and its author. Handing an empty string to the channel key would
   // only produce a padlock for a row nobody sealed.
-  if (message.kind && message.kind !== 'USER') return { ...message, content: '', attachments: [] };
+  if (!hasBody(message.kind)) return { ...message, content: '', attachments: [] };
+  // A webhook body needs no key and never had one: `decryptForChannel` returns
+  // anything that is not an envelope untouched, which is the same path every
+  // row written before E2EE already takes. So there is nothing special to do
+  // here - only something special *not* to do, which was blanking it above.
   return toDecrypted(message, await decryptForChannel(message.channelId, message.content));
 }
 
@@ -970,8 +975,10 @@ function toDecrypted(message: Message, plaintext: string): DecryptedMessage {
 function notificationText(message: DecryptedMessage): string | null {
   // Somebody arriving is worth a line in the conversation and is not worth a
   // notification: it is not addressed to anybody, and a server that gains ten
-  // members is otherwise ten buzzes.
-  if (message.kind && message.kind !== 'USER') return null;
+  // members is otherwise ten buzzes. A webhook message is not that - it is a
+  // build that broke or a disk that filled, which is the reason somebody
+  // pointed a webhook at a chat channel in the first place.
+  if (!hasBody(message.kind)) return null;
   if (message.content === UNDECRYPTABLE) return null;
   if (message.content.trim()) return message.content;
   return message.attachments.length > 0 ? 'Sent an attachment' : null;
