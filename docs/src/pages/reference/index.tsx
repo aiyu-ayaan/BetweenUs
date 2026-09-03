@@ -1,6 +1,7 @@
 import React from 'react';
 import Layout from '@theme/Layout';
 import CodeReferenceExplorer from '@site/src/components/CodeReferenceExplorer';
+import EngineeringBadges from '@site/src/components/EngineeringBadges';
 import styles from './styles.module.css';
 
 export default function CodeReferencePage(): React.ReactElement {
@@ -17,6 +18,9 @@ export default function CodeReferencePage(): React.ReactElement {
           <p className={styles.pageSubtitle}>
             Browse the actual source code, interfaces, data models, and cryptographic protocols directly from the BetweenUs repository. Inspect full files with all documentation comments, search symbols, and copy definitions.
           </p>
+
+          {/* Code Health & Repository Metric Badges */}
+          <EngineeringBadges />
         </div>
 
         <CodeReferenceExplorer />

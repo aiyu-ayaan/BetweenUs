@@ -48,10 +48,16 @@
   margin-bottom: 1.5rem;
 }
 
+.heroBadgesWrapper {
+  display: flex;
+  justify-content: center;
+  margin: 1.25rem auto 1.75rem;
+  max-width: 980px;
+}
+
 .heroTitle {
   font-size: clamp(2.4rem, 5vw, 3.4rem);
   font-weight: 800;
-  letter-spacing: -0.02em;
   margin-bottom: 1rem;
   background: linear-gradient(
     135deg,

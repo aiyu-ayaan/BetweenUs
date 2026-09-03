@@ -6,8 +6,11 @@ displayed_sidebar: null
 ---
 
 import CodeReferenceExplorer from '@site/src/components/CodeReferenceExplorer';
+import EngineeringBadges from '@site/src/components/EngineeringBadges';
 
 # Code & API Reference
+
+<EngineeringBadges />
 
 Welcome to the **BetweenUs Code Reference**. Below is the live source-code explorer displaying the **actual source files** directly from the codebase with every JSDoc, KDoc, and Prisma documentation comment intact.
 

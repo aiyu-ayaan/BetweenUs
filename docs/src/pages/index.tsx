@@ -7,6 +7,8 @@ import Layout from '@theme/Layout';
 import HomepageFeatures from '@site/src/components/HomepageFeatures';
 import HomepageSetup from '@site/src/components/HomepageSetup';
 import HeroAppShowcase from '@site/src/components/HeroAppShowcase';
+import EngineeringBadges from '@site/src/components/EngineeringBadges';
+import HomepageThemeShowcase from '@site/src/components/HomepageThemeShowcase';
 
 import styles from './index.module.css';
 
@@ -29,6 +31,12 @@ function HomepageHeader() {
         <span className={styles.heroBadge}>Discord-like · E2EE · self-hosted</span>
         <h1 className={styles.heroTitle}>{siteConfig.title}</h1>
         <p className={styles.heroSubtitle}>{siteConfig.tagline}</p>
+
+        {/* Live Engineering Badges: LOC, Code Health, E2EE, Microservices */}
+        <div className={styles.heroBadgesWrapper}>
+          <EngineeringBadges />
+        </div>
+
         <HeroAppShowcase />
         <div className={styles.buttons}>
           <Link
@@ -92,6 +100,7 @@ export default function Home(): ReactNode {
       description="Architecture, system design, setups, and deployment docs for BetweenUs">
       <HomepageHeader />
       <main>
+        {/* Core Capabilities */}
         <section className={styles.section}>
           <div className="container">
             <p className={styles.sectionHeading}>Core Capabilities</p>
@@ -102,6 +111,10 @@ export default function Home(): ReactNode {
           </div>
         </section>
 
+        {/* 16 Themes & Appearance Engine Showcase */}
+        <HomepageThemeShowcase />
+
+        {/* Installation & Setup */}
         <section className={clsx(styles.section, styles.sectionAlt)}>
           <div className="container">
             <p className={styles.sectionHeading}>Installation & Setup</p>
