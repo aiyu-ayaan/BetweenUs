@@ -21,8 +21,20 @@ import type {
   StatusViewer,
 } from '@betweenus/shared-types';
 import { api } from '../services/api';
+import { openStatusCaption, sealStatus } from '../services/e2ee';
 import { chatSocket } from '../services/socket';
 import { releaseStatusMedia } from '../services/status-media';
+
+/**
+ * A post as the composer knows it: the words, not the envelope.
+ *
+ * Sealing happens here rather than there, so the composer never handles a key
+ * and every path into the tray - there is only one - seals the same way.
+ */
+export type StatusDraft = Omit<
+  CreateStatusRequest,
+  'keys' | 'senderDeviceId' | 'mediaIv' | 'mediaType'
+>;
 
 interface StatusState {
   mine: StatusEntry[];
@@ -41,7 +53,7 @@ interface StatusState {
   seenLocally: Set<string>;
 
   load: () => Promise<void>;
-  post: (draft: CreateStatusRequest, media?: Blob) => Promise<void>;
+  post: (draft: StatusDraft, media?: Blob) => Promise<void>;
   markSeen: (statusId: string) => void;
   remove: (statusId: string) => Promise<void>;
   viewersOf: (statusId: string) => Promise<StatusViewer[]>;
@@ -60,7 +72,18 @@ export const useStatusStore = create<StatusState>((set, get) => ({
     set({ loading: true, error: null });
     try {
       const feed: StatusFeed = await api.statusFeed();
-      set({ mine: feed.mine, others: feed.others, loading: false, loaded: true });
+      // Captions are opened once, here, rather than in each place one is drawn:
+      // decryption is asynchronous and everything downstream - the tray, the
+      // player, the alt text - is not. A post we hold no key for keeps the
+      // placeholder and is drawn like any other, because a friendship younger
+      // than the post is not an error.
+      const [mine, others] = await Promise.all([
+        openCaptions(feed.mine),
+        Promise.all(
+          feed.others.map(async (run) => ({ ...run, statuses: await openCaptions(run.statuses) })),
+        ),
+      ]);
+      set({ mine, others, loading: false, loaded: true });
     } catch (error) {
       // A deployment that has not been migrated yet answers 404 here, and a
       // missing status tray is not a reason for the home screen to fail - the
@@ -70,11 +93,34 @@ export const useStatusStore = create<StatusState>((set, get) => ({
   },
 
   post: async (draft, media) => {
-    const entry = await api.postStatus(draft, media);
+    // The directory is read now rather than held: this list is the audience,
+    // and it is the list as it stands at the moment of posting - which is what
+    // makes a friendship made afterwards not a way into what was posted before
+    // it. See `sealStatus`.
+    const devices = await api.statusAudience();
+    const bytes = media ? new Uint8Array(await media.arrayBuffer()) : undefined;
+    const sealed = await sealStatus({ caption: draft.caption, media: bytes }, devices);
+
+    const entry = await api.postStatus(
+      {
+        ...draft,
+        caption: sealed.caption,
+        senderDeviceId: sealed.senderDeviceId,
+        keys: sealed.keys,
+        ...(sealed.media ? { mediaIv: sealed.media.iv } : {}),
+        // What the bytes are once opened. The server cannot see them, so the
+        // type has to travel beside them for the decoder to be handed one.
+        ...(media?.type ? { mediaType: media.type } : {}),
+      },
+      sealed.media ? new Blob([sealed.media.ciphertext]) : undefined,
+    );
     // Appended rather than refetched: the poster is looking at the tray they
     // just posted into, and the announcement that would refresh it is a round
     // trip away. The run is ordered oldest-first, so a new post goes last.
-    set({ mine: [...get().mine, entry] });
+    // With the caption we typed, not the envelope that came back: this machine
+    // has the words already, and opening what it just sealed would be a round
+    // trip through its own key for no reason.
+    set({ mine: [...get().mine, { ...entry, caption: draft.caption ?? null }] });
   },
 
   /**
@@ -157,6 +203,13 @@ export function ringFor(
 chatSocket.on((event) => {
   if (event.type === 'status.changed') void useStatusStore.getState().load();
 });
+
+/** Every caption in a run, opened. Order is kept: a run is drawn in it. */
+function openCaptions(entries: StatusEntry[]): Promise<StatusEntry[]> {
+  return Promise.all(
+    entries.map(async (entry) => ({ ...entry, caption: await openStatusCaption(entry) })),
+  );
+}
 
 function message(error: unknown): string {
   return error instanceof Error ? error.message : 'Something went wrong';

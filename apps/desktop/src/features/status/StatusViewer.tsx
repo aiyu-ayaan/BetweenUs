@@ -168,7 +168,7 @@ function Player({ open }: { open: Opened }): JSX.Element | null {
       ref={trap}
       role="dialog"
       aria-modal="true"
-      aria-label={`${author.displayName}'s updates`}
+      aria-label={`${author.displayName}'s moments`}
       className="fixed inset-0 z-[70] flex animate-fade flex-col bg-black/95"
     >
       <div className="mx-auto flex h-full w-full max-w-md flex-col">
@@ -191,14 +191,14 @@ function Player({ open }: { open: Opened }): JSX.Element | null {
           <Avatar name={author.displayName} avatarUrl={author.avatarUrl} size="sm" viewable={false} />
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-semibold">
-              {isSelf ? 'My updates' : author.displayName}
+              {isSelf ? 'My moments' : author.displayName}
             </p>
             <p className="text-xs text-white/60">{statusAge(post.createdAt)}</p>
           </div>
           <button
             type="button"
             onClick={closeStatus}
-            aria-label="Close updates"
+            aria-label="Close moments"
             className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-full text-white/80 transition-colors hover:bg-white/10 hover:text-white"
           >
             <XIcon className="h-5 w-5" />
@@ -213,7 +213,7 @@ function Player({ open }: { open: Opened }): JSX.Element | null {
 
           <div className="absolute inset-0 flex">
             <TapZone
-              label="Previous update"
+              label="Previous moment"
               onClick={previous}
               onHold={setPaused}
               disabled={open.index === 0}
@@ -221,7 +221,7 @@ function Player({ open }: { open: Opened }): JSX.Element | null {
               icon={<ChevronLeftIcon className="h-6 w-6" />}
             />
             <TapZone
-              label="Next update"
+              label="Next moment"
               onClick={next}
               onHold={setPaused}
               className="flex-1"
@@ -366,7 +366,7 @@ function Slide({ post, paused }: { post: StatusEntry; paused: boolean }): JSX.El
     if (!post.mediaUrl) return;
     let live = true;
     setFailed(false);
-    void statusMedia(post.id, post.mediaUrl)
+    void statusMedia(post)
       .then((resolved) => {
         if (live) setUrl(resolved);
       })
@@ -433,7 +433,7 @@ function Slide({ post, paused }: { post: StatusEntry; paused: boolean }): JSX.El
     );
   }
 
-  return <img src={url} alt={post.caption ?? 'Update'} className="h-full w-full object-contain" />;
+  return <img src={url} alt={post.caption ?? 'Moment'} className="h-full w-full object-contain" />;
 }
 
 /**

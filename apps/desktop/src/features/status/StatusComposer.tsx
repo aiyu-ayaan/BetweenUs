@@ -17,10 +17,9 @@ import {
   STATUS_BACKGROUNDS,
   STATUS_CAPTION_MAX_LENGTH,
   STATUS_VIDEO_MAX_MS,
-  type CreateStatusRequest,
   type StatusKind,
 } from '@betweenus/shared-types';
-import { useStatusStore } from '../../stores/status';
+import { useStatusStore, type StatusDraft } from '../../stores/status';
 import { shrinkImage } from '../../services/attachments';
 import { useFocusTrap } from '../../services/focus-trap';
 import { ImageIcon, PencilIcon, VideoIcon, XIcon } from '../../components/icons';
@@ -106,7 +105,7 @@ function Composer(): JSX.Element {
     setBusy(true);
     setError(null);
     try {
-      const request: CreateStatusRequest = draft
+      const request: StatusDraft = draft
         ? {
             kind: draft.kind,
             ...(caption.trim() ? { caption: caption.trim() } : {}),
@@ -128,7 +127,7 @@ function Composer(): JSX.Element {
       ref={trap}
       role="dialog"
       aria-modal="true"
-      aria-label="Add an update"
+      aria-label="Add a moment"
       className="fixed inset-0 z-[70] flex animate-fade flex-col bg-black/95"
     >
       <header className="flex items-center gap-3 px-4 py-3 text-white">
@@ -141,7 +140,7 @@ function Composer(): JSX.Element {
         >
           <XIcon className="h-5 w-5" />
         </button>
-        <h1 className="flex-1 text-sm font-semibold">Add an update</h1>
+        <h1 className="flex-1 text-sm font-semibold">Add a moment</h1>
         <button
           type="button"
           onClick={() => void submit()}
@@ -198,8 +197,8 @@ function Composer(): JSX.Element {
                 value={text}
                 onChange={(event) => setText(event.target.value)}
                 maxLength={STATUS_CAPTION_MAX_LENGTH}
-                placeholder="Type an update"
-                aria-label="Update text"
+                placeholder="Type a moment"
+                aria-label="Moment text"
                 className="h-full w-full resize-none bg-transparent text-center text-2xl font-semibold leading-snug text-white placeholder:text-white/50 focus:outline-none"
               />
             </div>

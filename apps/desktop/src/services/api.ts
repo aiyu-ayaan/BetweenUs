@@ -581,40 +581,30 @@ export const api = {
     return new Uint8Array(await response.arrayBuffer());
   },
 
-  /**
-   * Fetches a stored object as a blob, keeping the type the server sent.
-   *
-   * Separate from `fetchObject` because the two want different things: an
-   * attachment is ciphertext and its bytes go straight into the decryptor,
-   * while a status is stored in the clear and goes into an `<img>` or a
-   * `<video>` - which needs a type on the blob or the element will not decode
-   * it. Neither can be a plain `src`: both routes want an Authorization header,
-   * and no element sends one.
-   */
-  fetchBlob: async (url: string): Promise<Blob> => {
-    const token = await bearer();
-    const response = await fetch(absoluteUrl(url), {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    });
-    if (!response.ok) {
-      throw new ApiError('OBJECT_NOT_FOUND', 'That file is no longer available', response.status);
-    }
-    return response.blob();
-  },
-
   // --- Statuses ---
   //
-  // A post that expires after a day. Unlike a message, it is not encrypted -
-  // its audience is whoever is a friend when each viewer opens it, which is a
-  // set that changes after the post is written. See the note in shared-types.
+  // A post that expires after a day, sealed the way a message is. What differs
+  // is where the audience comes from: a channel has members, a status has the
+  // friend list as it stood when it was written. See the note in shared-types.
 
   statusFeed: (): Promise<StatusFeed> => request('/api/v1/statuses'),
+
+  /**
+   * Every device a post may be sealed for. Read immediately before posting
+   * rather than cached: this list is the audience, and a friend added a minute
+   * ago belongs in it.
+   */
+  statusAudience: (): Promise<DeviceKey[]> => request('/api/v1/statuses/audience'),
 
   /**
    * Posts one. The media, where there is any, travels with the caption in the
    * same request: a status is one file and one button, and a two-step upload
    * leaves an orphaned blob every time somebody changes their mind between the
    * two steps.
+   *
+   * Everything in `draft` is already sealed by the caller - the caption is an
+   * envelope, `media` is ciphertext, and `keys` is the bundle of wraps that
+   * decides who can open either.
    */
   postStatus: (draft: CreateStatusRequest, media?: Blob): Promise<StatusEntry> => {
     const form = new FormData();
@@ -622,6 +612,12 @@ export const api = {
     if (draft.caption) form.append('caption', draft.caption);
     if (draft.background) form.append('background', draft.background);
     if (draft.durationMs !== undefined) form.append('durationMs', String(draft.durationMs));
+    if (draft.mediaIv) form.append('mediaIv', draft.mediaIv);
+    if (draft.mediaType) form.append('mediaType', draft.mediaType);
+    form.append('senderDeviceId', draft.senderDeviceId);
+    // Multipart has no arrays, so the bundle travels as JSON in one field and
+    // is parsed back by the DTO. See `parseKeys` in the controller.
+    form.append('keys', JSON.stringify(draft.keys));
     if (media) form.append('file', media, 'status');
     return upload('/api/v1/statuses', form);
   },

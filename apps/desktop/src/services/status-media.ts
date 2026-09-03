@@ -1,31 +1,35 @@
 /**
- * The bytes behind a status, as something an `<img>` or a `<video>` can take.
+ * The bytes behind a status, opened, as something an `<img>` or a `<video>`
+ * can take.
  *
- * A status is stored in the clear, unlike an attachment, but it is still
- * fetched rather than linked: the download route wants an Authorization header
- * and no element sends one. So the bytes come down through `fetch` and become
- * an object URL, exactly as a decrypted attachment does - the difference is
- * only that there is nothing to decrypt on the way.
+ * The object comes down as ciphertext - the server has never held anything
+ * else - so this is the attachment path with a different key: fetch, decrypt,
+ * and hand back an object URL. The type on the blob comes from the post rather
+ * than from the response, because the response says `application/octet-stream`
+ * and a `<video>` will not decode a blob with no type on it.
  *
  * Cached by status id, because a story is opened, closed and opened again, and
- * the second look should not be another download. Released when the post goes
- * or the window closes; a URL that is revoked while an element still points at
- * it draws nothing, so nothing revokes on unmount.
+ * the second look should not be another download and another decryption.
+ * Released when the post goes or the window closes; a URL that is revoked
+ * while an element still points at it draws nothing, so nothing revokes on
+ * unmount.
  */
+import type { StatusEntry } from '@betweenus/shared-types';
+
 const urls = new Map<string, Promise<string>>();
 
-/** The object URL for one status's media, fetching it the first time. */
-export function statusMedia(statusId: string, mediaUrl: string): Promise<string> {
-  const known = urls.get(statusId);
+/** The object URL for one post's media, fetching and opening it the first time. */
+export function statusMedia(post: StatusEntry): Promise<string> {
+  const known = urls.get(post.id);
   if (known) return known;
 
-  const pending = fetchBlobUrl(mediaUrl).catch((error: unknown) => {
+  const pending = fetchBlobUrl(post).catch((error: unknown) => {
     // A failure must not be cached: the next look should try again rather than
     // replay the same error for as long as the window is open.
-    urls.delete(statusId);
+    urls.delete(post.id);
     throw error;
   });
-  urls.set(statusId, pending);
+  urls.set(post.id, pending);
   return pending;
 }
 
@@ -41,10 +45,16 @@ export function releaseAllStatusMedia(): void {
   for (const statusId of [...urls.keys()]) releaseStatusMedia(statusId);
 }
 
-async function fetchBlobUrl(mediaUrl: string): Promise<string> {
+async function fetchBlobUrl(post: StatusEntry): Promise<string> {
+  if (!post.mediaUrl) throw new Error('That post has no media');
   // Imported lazily so this module can be read by a check without pulling the
   // whole API surface - and so the import graph stays one way: the store
   // imports this, this does not import the store.
-  const { api } = await import('./api');
-  return URL.createObjectURL(await api.fetchBlob(mediaUrl));
+  const [{ api }, { openStatusMedia }] = await Promise.all([
+    import('./api'),
+    import('./e2ee'),
+  ]);
+  const sealed = await api.fetchObject(post.mediaUrl);
+  const opened = await openStatusMedia(post, sealed);
+  return URL.createObjectURL(new Blob([opened], { type: post.mediaType ?? '' }));
 }

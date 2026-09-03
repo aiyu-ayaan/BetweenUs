@@ -9,8 +9,11 @@ import type {
   BackupSecretKind,
   ChannelKeyEntry,
   ChannelKeysResponse,
+  DeviceKey,
   EncryptedEnvelope,
   IdentityBackup,
+  StatusEntry,
+  StatusKeyEntry,
 } from '@betweenus/shared-types';
 import { ApiError, api } from './api';
 import { setIdentityStatus } from '../stores/identity';
@@ -788,6 +791,134 @@ async function shareKey(
 
   if (entries.length === 0) return;
   await api.publishChannelKeys({ channelId, epoch, senderDeviceId: deviceId(), entries });
+}
+
+
+// --- Statuses ---------------------------------------------------------------
+//
+// A status has no channel, so it has no epoch and nothing to rotate: one key
+// per post, wrapped once per device that may read it, and gone in a day. That
+// is why none of the machinery above applies - there is no `ChannelKeyState`
+// to load, no gap to fill, and no rekey.
+//
+// The wrap list is the audience. It is built from the directory *at the moment
+// of posting*, so a friendship made afterwards adds nothing to a post already
+// written, and the person who made friends today cannot open yesterday's - the
+// same rule every app with this feature has, kept here by arithmetic rather
+// than by trusting a server to filter.
+
+/** A post, sealed and ready to send. */
+export interface SealedStatus {
+  /** The caption as an envelope, absent when there was none. */
+  caption?: string;
+  media?: { ciphertext: Uint8Array<ArrayBuffer>; iv: string };
+  keys: StatusKeyEntry[];
+  senderDeviceId: string;
+}
+
+/**
+ * Seals one post for one audience.
+ *
+ * Our own devices are included by the server's directory, but this machine may
+ * not be in it yet - a laptop that signed in a moment ago has not been listed -
+ * so we always wrap for ourselves. Posting something we cannot open is the one
+ * failure with no way back.
+ */
+export async function sealStatus(
+  plain: { caption?: string; media?: Uint8Array<ArrayBuffer> },
+  devices: DeviceKey[],
+): Promise<SealedStatus> {
+  const self = await currentIdentity();
+  const key = generateChannelKey();
+  const mine = deviceId();
+  const recipients = devices.some(
+    (device) => device.userId === identityUserId && device.deviceId === mine,
+  )
+    ? devices
+    : [
+        ...devices,
+        {
+          userId: identityUserId ?? '',
+          deviceId: mine,
+          publicKey: self.publicKey,
+        } as DeviceKey,
+      ];
+
+  const keys = await Promise.all(
+    recipients.map(async (device) => {
+      const wrapped = await wrapChannelKey(key, self.privateKey, device.publicKey);
+      return {
+        recipientUserId: device.userId,
+        recipientDeviceId: device.deviceId,
+        senderPublicKey: self.publicKey,
+        wrappedKey: wrapped.wrappedKey,
+        iv: wrapped.iv,
+      };
+    }),
+  );
+
+  // Epoch 0 in the envelope: a status has no generations, and the field is
+  // there because the envelope shape is shared with messages.
+  const caption = plain.caption ? JSON.stringify(await encryptMessage(plain.caption, key, 0)) : undefined;
+  const media = plain.media ? await encryptBytes(plain.media, key) : undefined;
+
+  return {
+    ...(caption ? { caption } : {}),
+    ...(media ? { media: { ciphertext: media.ciphertext, iv: media.iv } } : {}),
+    keys,
+    senderDeviceId: mine,
+  };
+}
+
+/**
+ * The key to one post, from whichever wrap this machine's private half opens.
+ *
+ * Null rather than a throw for the ordinary cases: a post written before this
+ * device existed, or before the friendship did, carries no wrap for us. Both
+ * are things that happen, not errors.
+ */
+export async function statusKey(entry: StatusEntry): Promise<string | null> {
+  if (entry.keys.length === 0) return null;
+  const self = await currentIdentity();
+  for (const wrap of entry.keys) {
+    try {
+      return await unwrapChannelKey(
+        { wrappedKey: wrap.wrappedKey, iv: wrap.iv },
+        self.privateKey,
+        wrap.senderPublicKey,
+      );
+    } catch {
+      // Sealed for another of our machines, or for an identity we have since
+      // replaced. Ordinary: try the next.
+    }
+  }
+  return null;
+}
+
+/** A post's caption in the clear, or the placeholder. Never throws. */
+export async function openStatusCaption(entry: StatusEntry): Promise<string | null> {
+  if (!entry.caption) return null;
+  const envelope = parseEnvelope(entry.caption);
+  // Written before statuses were sealed. It expires within the day.
+  if (!envelope) return entry.caption;
+  try {
+    const key = await statusKey(entry);
+    return key ? await decryptMessage(envelope, key) : UNDECRYPTABLE;
+  } catch {
+    return UNDECRYPTABLE;
+  }
+}
+
+/** A post's media in the clear. Throws: a picture either opens or it does not. */
+export async function openStatusMedia(
+  entry: StatusEntry,
+  ciphertext: Uint8Array<ArrayBuffer>,
+): Promise<Uint8Array<ArrayBuffer>> {
+  // No IV means it was stored in the clear, before this. Hand it back as it is.
+  if (!entry.mediaIv) return ciphertext;
+  const key = await statusKey(entry);
+  if (!key) throw new MissingChannelKeyError();
+  return decryptBytes(ciphertext, entry.mediaIv, key);
 }
 
 /** Waits for sign-in key setup instead of racing it, and retries a failed one. */
