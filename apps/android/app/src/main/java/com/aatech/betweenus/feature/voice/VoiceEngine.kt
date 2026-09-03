@@ -170,8 +170,33 @@ class VoiceEngine(private val context: Context) {
         /** Retried until [CallRecovery] ran out of patience. */
         val lost: Boolean = false,
     ) {
-        /** What a tile shows. A share wins over a camera; a phone has one tile. */
-        val video: VideoTrack? get() = visibleScreen ?: visibleCamera
+        /**
+         * What a tile shows: this person's **camera**, never their share.
+         *
+         * A share used to win here, from before the share stage existed and a
+         * phone genuinely had one tile to put things in. Once `ShareInvite`
+         * arrived - "somebody else's share, offered rather than imposed" - this
+         * quietly made a liar of it: the picture appeared in their tile the
+         * instant they started sharing, so the stream was already on screen
+         * behind a banner still asking whether to join it. Somebody who never
+         * pressed Join was watching anyway.
+         *
+         * A share now reaches the screen through exactly one door: pressing
+         * Join, which opens `ShareStage` and reads [visibleScreen] directly.
+         * That also removes an odd case for the person sharing - their own
+         * screen, drawn inside their own screen.
+         */
+        val video: VideoTrack? get() = visibleCamera
+
+        /**
+         * Any picture at all from this person, share included.
+         *
+         * For the floating dock and the picture-in-picture tile, which are a
+         * glance at "is anything happening" rather than a stage somebody opted
+         * into - and which have no room to offer a choice even if they wanted
+         * to. Never used for a tile in the call grid; that is [video].
+         */
+        val anyPicture: VideoTrack? get() = visibleScreen ?: visibleCamera
 
         /** The share, unless they have said they stopped sharing. */
         val visibleScreen: VideoTrack? get() = if (screenDeclared == false) null else screen
@@ -1048,7 +1073,7 @@ class VoiceEngine(private val context: Context) {
      * asked twice.
      */
     fun hasPicture(): Boolean =
-        _participants.value.any { it.video != null } ||
+        _participants.value.any { it.anyPicture != null } ||
             (_localVideo.value != null && (_cameraOn.value || _sharing.value))
 
     private fun inCall(): Boolean =

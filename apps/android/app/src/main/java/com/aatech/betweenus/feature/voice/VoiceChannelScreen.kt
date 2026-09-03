@@ -293,7 +293,9 @@ fun VoiceChannelScreen(
         participants.firstOrNull { it.speaking }?.let { lastSpeaker = it.peer.peerId }
     }
     val pipTile = participants.firstOrNull { it.peer.peerId == lastSpeaker }
-        ?: participants.firstOrNull { it.video != null }
+        // `anyPicture`, not `video`: picture-in-picture is a glance with no room
+        // to offer a choice, so a share counts as something to show there.
+        ?: participants.firstOrNull { it.anyPicture != null }
         ?: participants.firstOrNull()
 
     // Pinned by hand: "keep showing me that one". One viewer's decision -

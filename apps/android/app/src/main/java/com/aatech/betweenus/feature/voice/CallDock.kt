@@ -135,7 +135,7 @@ fun rememberCallDock(onCallScreen: Boolean): CallDockState? {
     // the full stage uses. This is a thumbnail somebody glances at on the way
     // past, and a second copy of that bookkeeping to run it is not worth the
     // one call in ten that has two cameras on.
-    val video = participants.firstOrNull { it.video != null }?.video
+    val video = participants.firstOrNull { it.anyPicture != null }?.anyPicture
         ?: localVideo?.takeIf { cameraOn || sharing }
 
     return CallDockState(

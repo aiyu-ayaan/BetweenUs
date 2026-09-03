@@ -521,10 +521,28 @@ the same bargain on all three — a line at the bottom of the call saying who is
 presenting, with a button, and nothing moves until it is pressed. Leaving the
 share puts the banner back rather than suppressing the share.
 
+**"Nothing moves" includes the tiles, and that is the part that broke.** A tile
+shows a person's *camera* and never their share. Android's `Participant.video`
+preferred the share over the camera — correct before the share stage existed,
+when a phone genuinely had one tile to put things in, and quietly a liar once
+`ShareInvite` arrived: the stream appeared in the sharer's tile the instant they
+started, so it was already on screen behind a banner still asking whether to
+join it. Somebody who never pressed Join was watching anyway. A share now
+reaches the screen through exactly one door, which is pressing the button.
+
+The dock and picture-in-picture are the deliberate exception, via
+`Participant.anyPicture`: both are a glance at whether anything is happening,
+neither has room to offer a choice, and neither is a stage anybody opted into.
+
 Asking for the mouse (`ShareControlBar`) lives on the share itself for the same
 reason it has to: the far end is sent *fractions* of the picture, so the surface
 a touch is measured against must be the picture and not the box around it. On
-Android that is the share stage, where the letterboxed frame's own rectangle is
+Android that is the share stage — under the header, at the top, which is where
+the desktop keeps "Request control" too. It sat at the bottom until it was found
+crowding the call dock: stacked above mute and hang up, it pushed them down and
+took a strip of screen a thumb is always moving through, which is too much room
+for a request somebody makes once in a call. It rides with the chrome either
+way, so a tap on the picture hides it. The letterboxed frame's own rectangle is
 the drive surface; pinch-zoom is suspended while driving, because a one-finger
 drag cannot be both a pan here and a mouse drag there.
 

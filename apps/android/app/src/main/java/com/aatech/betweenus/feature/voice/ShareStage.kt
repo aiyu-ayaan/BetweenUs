@@ -204,56 +204,80 @@ fun ShareStage(
             exit = fadeOut() + slideOutVertically { -it },
             modifier = Modifier.align(Alignment.TopCenter),
         ) {
-            Row(
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(Color.Black.copy(alpha = 0.65f))
-                    .systemBarsPadding()
-                    .padding(horizontal = 12.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
+                    .systemBarsPadding(),
             ) {
-                IconAction(
-                    icon = BetweenUsIcons.ChevronLeft,
-                    contentDescription = "Back to the call",
-                    tint = Color(0xFFF1F5F9),
-                    onClick = onClose,
-                )
-                Column(Modifier.weight(1f).padding(start = 8.dp)) {
-                    Text(
-                        text = "$label is presenting",
-                        style = MaterialTheme.typography.titleSmall,
-                        color = Color(0xFFF8FAFC),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Text(
-                        text = orientation.label,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color(0xFF94A3B8),
-                    )
-                }
-
-                if (isTwoPane && onToggleFullscreen != null) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
                     IconAction(
-                        icon = if (isFullscreen) BetweenUsIcons.Minimize else BetweenUsIcons.Maximize,
-                        contentDescription = if (isFullscreen) "Exit full screen" else "Full screen",
-                        tint = if (isFullscreen) Accent else Color(0xFFF1F5F9),
-                        onClick = onToggleFullscreen,
+                        icon = BetweenUsIcons.ChevronLeft,
+                        contentDescription = "Back to the call",
+                        tint = Color(0xFFF1F5F9),
+                        onClick = onClose,
                     )
-                    Spacer(Modifier.width(4.dp))
+                    Column(Modifier.weight(1f).padding(start = 8.dp)) {
+                        Text(
+                            text = "$label is presenting",
+                            style = MaterialTheme.typography.titleSmall,
+                            color = Color(0xFFF8FAFC),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Text(
+                            text = orientation.label,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color(0xFF94A3B8),
+                        )
+                    }
+
+                    if (isTwoPane && onToggleFullscreen != null) {
+                        IconAction(
+                            icon = if (isFullscreen) BetweenUsIcons.Minimize else BetweenUsIcons.Maximize,
+                            contentDescription = if (isFullscreen) "Exit full screen" else "Full screen",
+                            tint = if (isFullscreen) Accent else Color(0xFFF1F5F9),
+                            onClick = onToggleFullscreen,
+                        )
+                        Spacer(Modifier.width(4.dp))
+                    }
+
+                    IconAction(
+                        icon = if (isTwoPane) BetweenUsIcons.RotateRight else BetweenUsIcons.Maximize,
+                        contentDescription = "Change the orientation",
+                        tint = if (orientation == StageOrientation.FOLLOW_PHONE) Color(0xFF94A3B8) else Accent,
+                        onClick = {
+                            val next = orientation.next()
+                            orientation = next
+                            if (next == StageOrientation.LANDSCAPE && !isFullscreen) {
+                                onToggleFullscreen?.invoke()
+                            }
+                        },
+                    )
                 }
 
-                IconAction(
-                    icon = if (isTwoPane) BetweenUsIcons.RotateRight else BetweenUsIcons.Maximize,
-                    contentDescription = "Change the orientation",
-                    tint = if (orientation == StageOrientation.FOLLOW_PHONE) Color(0xFF94A3B8) else Accent,
-                    onClick = {
-                        val next = orientation.next()
-                        orientation = next
-                        if (next == StageOrientation.LANDSCAPE && !isFullscreen) {
-                            onToggleFullscreen?.invoke()
-                        }
-                    },
+                // Asking for the mouse belongs over the picture it is about, and at
+                // the top of it.
+                //
+                // It was at the bottom, in the same stack as the filmstrip and
+                // directly above the call dock, where it pushed the dock's buttons
+                // down and sat in the one strip of the screen a thumb is always
+                // moving through. A request somebody makes once in a call does not
+                // get to crowd mute and hang up.
+                //
+                // Under the header instead, which is also where the desktop keeps
+                // "Request control" - so the same control is in the same corner of
+                // both clients, and it rides with the chrome that already hides on
+                // a tap.
+                ShareControlBar(
+                    sharerPeerId = sharerPeerId,
+                    sharerName = label,
+                    modifier = Modifier.padding(start = 12.dp, end = 12.dp, bottom = 8.dp),
                 )
             }
         }
@@ -270,16 +294,6 @@ fun ShareStage(
                     .background(Color.Black.copy(alpha = 0.65f))
                     .navigationBarsPadding(),
             ) {
-                // Asking for the mouse belongs *here*, over the picture it is
-                // about - not on the call stage, which a share replaces the
-                // instant it starts. Full width and above the filmstrip so a
-                // long refusal has room to be read.
-                ShareControlBar(
-                    sharerPeerId = sharerPeerId,
-                    sharerName = label,
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
-                )
-
                 // The people, small, along the bottom: a share without the room
                 // it is being shown to is a video, not a meeting.
                 val hasTilesToShow = participants.isNotEmpty() || cameraOn || selfSpeaking
