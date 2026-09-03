@@ -30,9 +30,9 @@ export function syncChangelog() {
   body = body.replace(/(?<!`)\{([^`\n{}]+)\}(?!`)/g, '`{$1}`');
 
   const content = `---
-sidebar_position: 10
 title: Changelog
 description: Complete release notes and historical changelog for BetweenUs.
+displayed_sidebar: null
 ---
 
 # Changelog

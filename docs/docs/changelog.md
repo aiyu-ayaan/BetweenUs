@@ -1,7 +1,7 @@
 ---
-sidebar_position: 10
 title: Changelog
 description: Complete release notes and historical changelog for BetweenUs.
+displayed_sidebar: null
 ---
 
 # Changelog

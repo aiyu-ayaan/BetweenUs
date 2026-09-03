@@ -1,7 +1,7 @@
 ---
-sidebar_position: 2
-title: Features
+title: Features & Capabilities
 description: Complete overview of BetweenUs features — E2EE chat, P2P voice and video, synchronized media, multiplayer games, remote desktop, and 16-theme customization across Desktop and Android.
+displayed_sidebar: null
 ---
 
 import useBaseUrl from '@docusaurus/useBaseUrl';
