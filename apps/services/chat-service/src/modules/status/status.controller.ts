@@ -31,7 +31,7 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { Transform, Type } from 'class-transformer';
+import { Transform, plainToInstance } from 'class-transformer';
 import {
   ArrayMaxSize,
   IsArray,
@@ -141,11 +141,10 @@ export class CreateStatusDto implements CreateStatusRequest {
    * The ceiling is a friend list times its devices. Bigger than that is not a
    * person with a lot of friends, it is somebody probing the endpoint.
    */
-  @Transform(({ value }) => (typeof value === 'string' ? parseKeys(value) : value))
+  @Transform(({ value }) => parseKeys(value))
   @IsArray()
   @ArrayMaxSize(2000)
   @ValidateNested({ each: true })
-  @Type(() => StatusKeyEntryDto)
   keys!: StatusKeyEntryDto[];
 
   /**
@@ -276,13 +275,25 @@ export class StatusController {
 }
 
 /**
- * The wrap bundle, out of the multipart field it travelled in.
+ * The wrap bundle, out of the multipart field it travelled in, as real DTOs.
+ *
+ * `plainToInstance` is the whole point of this function, and leaving it out is
+ * a bug that has already happened: a custom `@Transform` replaces the
+ * conversion `@Type` would have done, so the entries stayed plain objects, the
+ * global pipe's `forbidNonWhitelisted` found a class with no known properties,
+ * and every post came back "keys.0.property recipientUserId should not exist".
  *
  * A parse failure becomes an empty array rather than a thrown error, so the
- * validator below produces the ordinary "keys must be an array" refusal in the
+ * validator produces the ordinary "keys must be an array" refusal in the
  * standard error shape instead of a raw `SyntaxError` escaping the pipe.
  */
-function parseKeys(value: string): unknown {
+function parseKeys(value: unknown): unknown {
+  const raw = typeof value === 'string' ? tryParse(value) : value;
+  if (!Array.isArray(raw)) return raw;
+  return plainToInstance(StatusKeyEntryDto, raw);
+}
+
+function tryParse(value: string): unknown {
   try {
     return JSON.parse(value);
   } catch {
