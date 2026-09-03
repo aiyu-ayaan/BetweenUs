@@ -82,27 +82,132 @@ const isMac = typeof window !== 'undefined' && window.betweenus?.platform === 'd
 type Section =
   | 'account'
   | 'privacy'
+  | 'encryption'
   | 'voice'
   | 'calls'
   | 'notifications'
   | 'remote'
   | 'appearance'
-  | 'updates';
+  | 'updates'
+  | 'deployment';
 
-// Remote Access is about *this machine* offering itself, which a browser tab
-// cannot do - so the web client has no such section. See services/platform.ts.
-const SECTIONS: Array<{ id: Section; label: string; icon: typeof UserIcon }> = [
-  { id: 'account', label: 'My Account', icon: UserIcon },
-  { id: 'privacy', label: 'Privacy & Safety', icon: ShieldIcon },
-  { id: 'voice', label: 'Voice & Video', icon: MicIcon },
-  { id: 'calls', label: 'Calls & Data', icon: PhoneIcon },
-  { id: 'notifications', label: 'Notifications', icon: BellIcon },
-  ...(isDesktopRuntime()
-    ? [{ id: 'remote' as const, label: 'Remote Access', icon: MonitorIcon }]
-    : []),
-  { id: 'appearance', label: 'Themes & Appearance', icon: PaletteIcon },
-  { id: 'updates', label: 'Updates', icon: DownloadIcon },
+interface SectionEntry {
+  id: Section;
+  label: string;
+  /** The line under the label, so a list of eleven names is still readable. */
+  hint: string;
+  icon: typeof UserIcon;
+}
+
+/**
+ * The settings, in named groups.
+ *
+ * Android has grouped its settings since it was written - Account, Preferences,
+ * This Device, Deployment, Session - and the desktop had one flat list of eight
+ * where the phone had five headings. Eleven flat entries is a list somebody
+ * reads top to bottom every time because nothing tells them which third of it
+ * their answer is in; the same eleven under four headings is four things to
+ * skim. So this is the phone's grouping, entry for entry, on the two clients
+ * that did not have it.
+ *
+ * It is also why this list grew: "My Account" was one page carrying the
+ * profile, the password, the encryption key **and** which deployment the app
+ * talks to. Those last two are not account fields - one is this installation's
+ * key material and the other is which server exists at all - and they are the
+ * two rows Android has always had somewhere else.
+ *
+ * Remote Access is about *this machine* offering itself, which a browser tab
+ * cannot do - so the web client has no such entry. See services/platform.ts.
+ */
+const SECTION_GROUPS: Array<{ label: string; entries: SectionEntry[] }> = [
+  {
+    label: 'Account',
+    entries: [
+      {
+        id: 'account',
+        label: 'My Account',
+        hint: 'Name, pictures, status and password',
+        icon: UserIcon,
+      },
+      {
+        id: 'privacy',
+        label: 'Privacy & Safety',
+        hint: 'Blocked people, and clearing your own messages',
+        icon: BlockIcon,
+      },
+      {
+        id: 'encryption',
+        label: 'Encryption',
+        hint: 'Your key, its backup and the machines holding one',
+        icon: ShieldIcon,
+      },
+    ],
+  },
+  {
+    label: 'Preferences',
+    entries: [
+      {
+        id: 'appearance',
+        label: 'Themes & Appearance',
+        hint: 'Theme, accent, density and language',
+        icon: PaletteIcon,
+      },
+      {
+        id: 'voice',
+        label: 'Voice & Video',
+        hint: 'Devices, noise gate, push to talk, share quality',
+        icon: MicIcon,
+      },
+      {
+        id: 'notifications',
+        label: 'Notifications',
+        hint: 'Alerts, mentions, direct messages, quiet hours',
+        icon: BellIcon,
+      },
+    ],
+  },
+  {
+    label: 'This Device',
+    entries: [
+      ...(isDesktopRuntime()
+        ? [
+            {
+              id: 'remote' as const,
+              label: 'Remote Access',
+              hint: 'Offering this machine, and who may reach it',
+              icon: MonitorIcon,
+            },
+          ]
+        : []),
+      {
+        id: 'calls',
+        label: 'Calls & Data',
+        hint: 'Every call this account has been in, and bandwidth',
+        icon: PhoneIcon,
+      },
+      {
+        id: 'updates',
+        label: 'Updates',
+        hint: 'Release channel, version checks, installer',
+        icon: DownloadIcon,
+      },
+    ],
+  },
+  {
+    label: 'Deployment',
+    entries: [
+      {
+        id: 'deployment',
+        label: 'Server',
+        hint: 'The BetweenUs deployment this app talks to',
+        icon: BetweenUsLogoIcon,
+      },
+    ],
+  },
 ];
+
+/** Flattened, for the mobile tab strip and for finding an entry by its id. */
+const SECTIONS: SectionEntry[] = SECTION_GROUPS.flatMap((group) => group.entries);
 
 /**
  * Settings take the whole window rather than a dialog, because they are a place
@@ -197,26 +302,40 @@ export function UserSettings({ onClose }: { onClose: () => void }): JSX.Element 
           className="panel hidden md:flex w-[232px] shrink-0 flex-col items-end overflow-y-auto bg-surface-800 py-8 pe-2"
         >
         <div className="w-[192px]">
-          <p className="px-2.5 pb-1 text-xs font-bold uppercase tracking-wide text-slate-400">
-            User settings
-          </p>
-          {SECTIONS.map((entry) => (
-            <button
-              key={entry.id}
-              type="button"
-              onClick={() => setSection(entry.id)}
-              aria-current={section === entry.id ? 'page' : undefined}
-              className={`mt-0.5 flex w-full cursor-pointer items-center gap-2 rounded px-2.5 py-1.5 text-start text-[15px] transition-colors duration-200 ${
-                section === entry.id
-                  ? 'row-active'
-                  : 'text-slate-300 hover:bg-white/[0.05]'
-              }`}
-            >
-              <entry.icon className="h-4 w-4 shrink-0" />
-              {entry.label}
-            </button>
+          {SECTION_GROUPS.map((group) => (
+            <div key={group.label} className="mb-4">
+              <p className="px-2.5 pb-1 text-xs font-bold uppercase tracking-wide text-slate-400">
+                {group.label}
+              </p>
+              {group.entries.map((entry) => (
+                <button
+                  key={entry.id}
+                  type="button"
+                  onClick={() => setSection(entry.id)}
+                  aria-current={section === entry.id ? 'page' : undefined}
+                  className={`mt-0.5 flex w-full cursor-pointer items-start gap-2 rounded px-2.5 py-1.5 text-start transition-colors duration-200 ${
+                    section === entry.id ? 'row-active' : 'text-slate-300 hover:bg-white/[0.05]'
+                  }`}
+                >
+                  <entry.icon className="mt-0.5 h-4 w-4 shrink-0" />
+                  <span className="min-w-0">
+                    <span className="block text-[15px] leading-tight">{entry.label}</span>
+                    {/* The line Android's rows have had all along. Eleven
+                        two-word labels are eleven guesses about what is behind
+                        each; the second line is what stops somebody opening
+                        three of them looking for one setting. */}
+                    <span className="mt-0.5 block text-[11px] leading-snug text-slate-500">
+                      {entry.hint}
+                    </span>
+                  </span>
+                </button>
+              ))}
+            </div>
           ))}
 
+          {/* Signing out is its own group on Android and its own footer here,
+              for the same reason: it is the one row that ends the session
+              rather than changing a setting. */}
           <hr className="my-2 border-surface-700" />
 
           <button
@@ -234,12 +353,14 @@ export function UserSettings({ onClose }: { onClose: () => void }): JSX.Element 
         <div className="max-w-[660px]">
           {section === 'account' && <AccountSection />}
           {section === 'privacy' && <PrivacySection />}
+          {section === 'encryption' && <EncryptionSection />}
           {section === 'voice' && <VoiceSection />}
           {section === 'calls' && <CallUsageSection />}
           {section === 'notifications' && <NotificationsSection />}
           {section === 'remote' && <RemoteSection />}
           {section === 'appearance' && <AppearanceSection />}
           {section === 'updates' && <UpdatesSection />}
+          {section === 'deployment' && <DeploymentSection />}
         </div>
 
         {/* Desktop Close ESC button */}
@@ -597,8 +718,6 @@ function AccountSection(): JSX.Element {
   const [newPassword, setNewPassword] = useState('');
   const [passwordNote, setPasswordNote] = useState<string | null>(null);
 
-  const [pickingServer, setPickingServer] = useState(false);
-
   const saveProfile = async (): Promise<void> => {
     setSavingProfile(true);
     setProfileNote(null);
@@ -768,13 +887,29 @@ function AccountSection(): JSX.Element {
         {passwordNote && <p className="text-sm text-slate-300">{passwordNote}</p>}
       </div>
 
-      <EncryptionSection />
+    </>
+  );
+}
 
-      <h2 className="mt-8 text-base font-semibold text-slate-50">Server</h2>
+/**
+ * Which deployment this installation talks to.
+ *
+ * Its own page rather than the last heading on "My Account", because it is not
+ * an account field: it decides which server the account *exists on*, and
+ * changing it signs this one out. Sitting under a Save-changes form for a
+ * display name made it look like one more editable detail of the same person.
+ * Android has always had it under its own Deployment heading.
+ */
+function DeploymentSection(): JSX.Element {
+  const [pickingServer, setPickingServer] = useState(false);
+
+  return (
+    <>
+      <h1 className="text-xl font-semibold text-slate-50">Server</h1>
       <p className="mt-1 text-sm text-slate-400">
         The deployment this app talks to. Changing it signs you out of this one.
       </p>
-      <div className="mt-3 flex flex-wrap items-center gap-3">
+      <div className="mt-4 flex flex-wrap items-center gap-3">
         <code className="rounded bg-surface-800 px-3 py-2 text-sm text-slate-200">
           {serverUrl()}
         </code>
@@ -799,6 +934,13 @@ function AccountSection(): JSX.Element {
  * come here. A passphrase is for the accounts that cannot do that - a provider
  * sign-in has no password to derive from - and for anyone who would rather not
  * have one secret do both jobs.
+ *
+ * A page of its own rather than the tail of "My Account". It is not a field of
+ * the account: it is this installation's key material and the list of every
+ * machine trusted to hold some, and burying "revoke this laptop" under a
+ * display name form is burying the one control here somebody arrives in a
+ * hurry looking for. Android has kept it under Account & Security all along;
+ * this is the desktop catching up, with the list promoted with it.
  */
 function EncryptionSection(): JSX.Element {
   const identity = useIdentityStore((state) => state.identity);
@@ -840,7 +982,7 @@ function EncryptionSection(): JSX.Element {
 
   return (
     <>
-      <h2 className="mt-8 text-base font-semibold text-slate-50">Encryption key</h2>
+      <h1 className="text-xl font-semibold text-slate-50">Encryption key</h1>
       <p className="mt-1 text-sm text-slate-400">
         Messages are encrypted with a key this account owns. A sealed copy lives on the server so
         the account works on any machine you sign in on - the server cannot open it.
