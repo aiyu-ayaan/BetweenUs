@@ -106,6 +106,11 @@ const config: Config = {
           label: 'Docs',
         },
         {
+          to: '/reference',
+          label: 'Code Reference',
+          position: 'left',
+        },
+        {
           to: '/changelog',
           label: 'Changelog',
           position: 'right',
@@ -129,6 +134,7 @@ const config: Config = {
           title: 'Docs',
           items: [
             {label: 'Architecture', to: '/architecture/overview'},
+            {label: 'Code Reference', to: '/reference/overview'},
             {label: 'Running Locally', to: '/running-locally'},
             {label: 'Database Schema', to: '/database/schema'},
           ],

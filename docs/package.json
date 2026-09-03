@@ -4,9 +4,9 @@
   "private": true,
   "scripts": {
     "docusaurus": "docusaurus",
-    "prestart": "node ../scripts/sync-changelog.mjs",
+    "prestart": "node ../scripts/sync-changelog.mjs && node ../scripts/build-code-reference.mjs",
     "start": "cross-env NODE_ENV=development docusaurus start",
-    "prebuild": "node ../scripts/sync-changelog.mjs",
+    "prebuild": "node ../scripts/sync-changelog.mjs && node ../scripts/build-code-reference.mjs",
     "build": "cross-env NODE_ENV=production docusaurus build",
     "sync:changelog": "node ../scripts/sync-changelog.mjs",
     "swizzle": "docusaurus swizzle",

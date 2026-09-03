@@ -89,6 +89,22 @@ const sidebars: SidebarsConfig = {
     },
     {
       type: 'category',
+      label: 'Code Reference',
+      link: {
+        type: 'doc',
+        id: 'reference/overview',
+      },
+      items: [
+        'reference/overview',
+        'reference/shared-types',
+        'reference/api-endpoints',
+        'reference/websocket-protocol',
+        'reference/database-schema',
+        'reference/android-core',
+      ],
+    },
+    {
+      type: 'category',
       label: 'Guides',
       items: [
         'running-locally',
