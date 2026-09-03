@@ -39,6 +39,7 @@ import { CallAudio } from './features/voice/CallAudio';
 import { ShareControlConsent } from './features/voice/ShareControlConsent';
 import { IncomingCall } from './features/voice/IncomingCall';
 import { ProfileView } from './components/ProfileView';
+import { ProfileScreen } from './components/ProfileScreen';
 import { TopBar } from './features/shell/TopBar';
 import { MobileDrawer } from './features/shell/MobileDrawer';
 import { useIsMobile } from './services/responsive';
@@ -641,6 +642,7 @@ function Workbench(): JSX.Element {
       {/* The picture behind any avatar in the app, and the line that says
           somebody has not set one. */}
       <ProfileView />
+      <ProfileScreen />
 
       {settings === 'user' && <UserSettings onClose={() => setSettings('none')} />}
       {settings === 'server' && <ServerSettings onClose={() => setSettings('none')} />}

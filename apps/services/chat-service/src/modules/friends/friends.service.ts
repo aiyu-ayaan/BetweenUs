@@ -24,6 +24,7 @@ interface UserRow {
   username: string;
   displayName: string;
   avatarUrl: string | null;
+  coverUrl: string | null;
   about: string;
 }
 
@@ -76,7 +77,14 @@ export class FriendsService {
           { displayName: { contains: term, mode: 'insensitive' } },
         ],
       },
-      select: { id: true, username: true, displayName: true, avatarUrl: true, about: true },
+      select: {
+        id: true,
+        username: true,
+        displayName: true,
+        avatarUrl: true,
+        coverUrl: true,
+        about: true,
+      },
       orderBy: { username: 'asc' },
       take: SEARCH_LIMIT,
     });
@@ -389,6 +397,7 @@ function toSummary(row: UserRow): UserSummary {
     username: row.username,
     displayName: row.displayName,
     avatarUrl: row.avatarUrl,
+    coverUrl: row.coverUrl,
     about: row.about,
   };
 }

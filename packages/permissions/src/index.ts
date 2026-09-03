@@ -25,6 +25,19 @@ export const PERMISSIONS = {
    * split it for the same reason.
    */
   MANAGE_EMOJI: 'MANAGE_EMOJI',
+  /**
+   * Creating, renaming, rotating and deleting a channel's webhooks.
+   *
+   * Its own permission and not a corner of `MANAGE_CHANNEL`, because holding it
+   * is strictly more dangerous than renaming a channel: a webhook is a URL that
+   * posts into that channel forever, with no account behind it and no sealed
+   * body. Whoever may hand one out should be a decision somebody makes on
+   * purpose, and the settings screen says what it costs beside the button.
+   *
+   * Admin and above by default, unlike `MANAGE_EMOJI`, which is admin-and-above
+   * because the pictures are harmless. This one is not.
+   */
+  MANAGE_WEBHOOK: 'MANAGE_WEBHOOK',
   START_CALL: 'START_CALL',
   MANAGE_CALL: 'MANAGE_CALL',
   REMOTE_VIEW: 'REMOTE_VIEW',
@@ -57,6 +70,7 @@ const ADMIN_PERMISSIONS: Permission[] = [
   PERMISSIONS.MANAGE_MEMBER,
   PERMISSIONS.MANAGE_ROLE,
   PERMISSIONS.MANAGE_EMOJI,
+  PERMISSIONS.MANAGE_WEBHOOK,
 ];
 
 /** Role -> permission map. Remote permissions are granted per machine, never by role. */
@@ -130,6 +144,7 @@ export const ASSIGNABLE_PERMISSIONS: Permission[] = [
   PERMISSIONS.MANAGE_MEMBER,
   PERMISSIONS.MANAGE_ROLE,
   PERMISSIONS.MANAGE_EMOJI,
+  PERMISSIONS.MANAGE_WEBHOOK,
   PERMISSIONS.START_CALL,
   PERMISSIONS.MANAGE_CALL,
 ];

@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import {
   ABOUT_MAX_LENGTH,
+  COVER_ASPECT,
+  COVER_MAX_WIDTH,
   DEFAULT_ABOUT,
   LAST_SEEN_VISIBILITIES,
   type LastSeenVisibility,
@@ -44,6 +46,7 @@ import { startWebPush } from '../../services/web-push';
 import { ServerPicker } from '../auth/ServerPicker';
 import { Avatar } from '../../components/Avatar';
 import { PicturePicker } from '../../components/PicturePicker';
+import { ProfileCover } from '../../components/ProfileCover';
 import { DisappearingPicker } from '../../components/DisappearingPicker';
 import { pruneExpired } from '../../stores/chat';
 import {
@@ -634,7 +637,10 @@ function AccountSection(): JSX.Element {
       <h1 className="text-xl font-semibold text-slate-50">My Account</h1>
 
       <div className="mt-5 overflow-hidden rounded-lg bg-surface-800">
-        <div className="h-[100px] bg-accent" />
+        {/* The band that used to be a flat accent fill. It is the preview and
+            the target at once - clicking it picks a picture - so there is no
+            separate "here is your cover" thumbnail duplicating it below. */}
+        <ProfileCover coverUrl={user?.coverUrl} className="h-[100px]" />
         <div className="flex items-end gap-4 px-4 pb-4">
           <div className="-mt-10 rounded-full border-[6px] border-surface-800">
             <Avatar
@@ -654,7 +660,7 @@ function AccountSection(): JSX.Element {
           </div>
         </div>
 
-        <div className="border-t border-edge px-4 py-4">
+        <div className="space-y-4 border-t border-edge px-4 py-4">
           <PicturePicker
             label="avatar"
             onChange={async (avatarUrl) => {
@@ -665,6 +671,24 @@ function AccountSection(): JSX.Element {
               user?.avatarUrl
                 ? async () => {
                     await api.updateAccount({ avatarUrl: null });
+                    await refreshUser();
+                  }
+                : undefined
+            }
+          />
+          <PicturePicker
+            label="cover"
+            aspect={COVER_ASPECT}
+            maxWidth={COVER_MAX_WIDTH}
+            hint={`Framed to ${COVER_ASPECT}:1 and scaled to ${COVER_MAX_WIDTH}px wide. Shown behind your name on your profile.`}
+            onChange={async (coverUrl) => {
+              await api.updateAccount({ coverUrl });
+              await refreshUser();
+            }}
+            onClear={
+              user?.coverUrl
+                ? async () => {
+                    await api.updateAccount({ coverUrl: null });
                     await refreshUser();
                   }
                 : undefined

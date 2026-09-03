@@ -16,14 +16,30 @@ export function PicturePicker({
   onChange,
   onClear,
   children,
+  aspect = 1,
+  maxWidth = 512,
+  hint,
 }: {
-  /** Names the control for a screen reader: "avatar", "server icon". */
+  /** Names the control for a screen reader: "avatar", "server icon", "cover". */
   label: string;
   onChange: (url: string) => Promise<void> | void;
   /** Omitted when there is nothing to clear back to. */
   onClear?: () => Promise<void> | void;
   /** The picture as it looks now - an Avatar, usually. Omitted when already displayed elsewhere. */
   children?: React.ReactNode;
+  /**
+   * Width over height of the frame the picture is cropped to. 1 for an avatar
+   * or an icon, `COVER_ASPECT` for the band behind a name.
+   *
+   * The frame is the same number in the editor and in what is stored, because
+   * a person who moves a photograph inside a square frame and then gets a wide
+   * crop of it has been shown a lie about what they were choosing.
+   */
+  aspect?: number;
+  /** The widest the stored picture is kept. See `COVER_MAX_WIDTH`. */
+  maxWidth?: number;
+  /** Replaces the line under the buttons; the default describes a square. */
+  hint?: string;
 }): JSX.Element {
   const picker = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
@@ -40,12 +56,15 @@ export function PicturePicker({
     setBusy(true);
     setFailure(null);
     try {
-      // Still squared here: the editor's frame is square, so this is a scale
-      // to the stored size rather than a second crop.
-      const square = await preparePicture(
+      // The editor already framed it to `aspect`, so this is a scale to the
+      // stored size rather than a second crop - which is why the same aspect
+      // has to be passed to both.
+      const framed = await preparePicture(
         new File([picture], 'picture.webp', { type: picture.type }),
+        maxWidth,
+        aspect,
       );
-      const stored = await api.uploadPicture(square, 'picture.webp');
+      const stored = await api.uploadPicture(framed, 'picture.webp');
       await onChange(stored.url);
     } catch (error) {
       setFailure(error instanceof Error ? error.message : 'That picture could not be uploaded');
@@ -68,14 +87,14 @@ export function PicturePicker({
   };
 
   return (
-    <div className="flex items-center gap-4">
+    <div className={aspect === 1 ? 'flex items-center gap-4' : 'space-y-3'}>
       {editing && (
         <ImageEditor
           file={editing}
-          aspect={1}
+          aspect={aspect}
           title={`Frame your ${label}`}
           type="image/webp"
-          maxOutputEdge={1024}
+          maxOutputEdge={Math.max(1024, maxWidth)}
           onCancel={() => setEditing(null)}
           onDone={(edited) => {
             setEditing(null);
@@ -91,10 +110,16 @@ export function PicturePicker({
           disabled={busy}
           aria-label={`Change ${label}`}
           title={`Change ${label}`}
-          className="group relative cursor-pointer rounded-full disabled:cursor-not-allowed shrink-0"
+          className={`group relative cursor-pointer disabled:cursor-not-allowed shrink-0 ${
+            aspect === 1 ? 'rounded-full' : 'w-full rounded-lg'
+          }`}
         >
           {children}
-          <span className="absolute inset-0 flex items-center justify-center rounded-full bg-black/60 text-[10px] font-bold uppercase tracking-wide text-white opacity-0 transition-opacity duration-200 group-hover:opacity-100">
+          <span
+            className={`absolute inset-0 flex items-center justify-center bg-black/60 text-[10px] font-bold uppercase tracking-wide text-white opacity-0 transition-opacity duration-200 group-hover:opacity-100 ${
+              aspect === 1 ? 'rounded-full' : 'rounded-lg'
+            }`}
+          >
             {busy ? '…' : 'Change'}
           </span>
         </button>
@@ -137,7 +162,7 @@ export function PicturePicker({
           )}
         </div>
         <p className="mt-1 text-xs text-slate-400">
-          {failure ?? 'A square is cropped from the middle and scaled to 512px.'}
+          {failure ?? hint ?? `A square is cropped from the middle and scaled to ${maxWidth}px.`}
         </p>
       </div>
     </div>

@@ -1115,7 +1115,13 @@ function toMember(
     id: string;
     userId: string;
     joinedAt: Date;
-    user: { username: string; displayName: string; avatarUrl: string | null; about: string };
+    user: {
+      username: string;
+      displayName: string;
+      avatarUrl: string | null;
+      coverUrl: string | null;
+      about: string;
+    };
   },
 ): ServerMember {
   return {
@@ -1124,6 +1130,7 @@ function toMember(
     username: row.user.username,
     displayName: row.user.displayName,
     avatarUrl: row.user.avatarUrl,
+    coverUrl: row.user.coverUrl,
     role: row.role as ServerRole,
     permissions: permissionsOf(row),
     grantedPermissions: row.grantedPermissions,

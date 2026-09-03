@@ -552,6 +552,9 @@ export class AuthService {
         // null is a real value here - it clears the picture back to the
         // initial - so only an absent key means "leave it alone".
         ...(dto.avatarUrl !== undefined ? { avatarUrl: dto.avatarUrl } : {}),
+        // And the same for the wide one behind it: null clears it back to the
+        // flat accent band, an absent key leaves it alone.
+        ...(dto.coverUrl !== undefined ? { coverUrl: dto.coverUrl } : {}),
         // Trimmed, and an empty string is a value: it means "draw no line
         // under my name", which is different from never having touched it.
         ...(dto.about !== undefined ? { about: dto.about.trim() } : {}),
@@ -581,6 +584,7 @@ export class AuthService {
         username: updated.username,
         displayName: updated.displayName,
         avatarUrl: updated.avatarUrl,
+        coverUrl: updated.coverUrl,
         about: updated.about,
       },
     });
@@ -740,6 +744,7 @@ export function toPublicUser(user: User): PublicUser {
     username: user.username,
     displayName: user.displayName,
     avatarUrl: user.avatarUrl,
+    coverUrl: user.coverUrl,
     about: user.about,
     lastSeenVisibility: toVisibility(user.lastSeenVisibility),
     role: user.role,

@@ -73,6 +73,7 @@ function toAdminUser(user: UserWithDetail): AdminUser {
     username: user.username,
     displayName: user.displayName,
     avatarUrl: user.avatarUrl,
+    coverUrl: user.coverUrl,
     about: user.about,
     lastSeenVisibility: toVisibility(user.lastSeenVisibility),
     role: user.role,

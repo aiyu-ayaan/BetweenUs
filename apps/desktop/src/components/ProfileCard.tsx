@@ -17,6 +17,8 @@ import type { PresenceStatus } from '@betweenus/shared-types';
 import { usePresenceStore } from '../stores/presence';
 import { profilePresence } from '../services/last-seen';
 import { Avatar } from './Avatar';
+import { ProfileCover } from './ProfileCover';
+import { openProfile } from './ProfileScreen';
 
 /**
  * How long the pointer has to rest before the card opens.
@@ -48,13 +50,19 @@ const PRESS_AFTER_MS = 500;
 
 /** Roughly the card's own size, for the first placement before it is measured. */
 const CARD_WIDTH = 288;
-const CARD_HEIGHT = 200;
+// The cover band and the footer button both made the card taller than the 200
+// it used to guess at. Only a first guess - it is measured on the next frame -
+// but a guess that is 60px short makes the first paint jump, which is exactly
+// what measuring was added to stop.
+const CARD_HEIGHT = 300;
 
 export interface ProfileCardPerson {
   userId: string;
   displayName: string;
   username: string;
   avatarUrl: string | null;
+  /** The band behind the name. Null or absent draws the accent gradient. */
+  coverUrl?: string | null;
   about: string;
   /** The colour of their highest-ranked role, where they have one. */
   colour?: string | null;
@@ -197,39 +205,65 @@ export function ProfileCard({
       onPointerEnter={onPointerEnter}
       onPointerLeave={onPointerLeave}
       style={{ left: box.x, top: box.y }}
-      className="fixed z-[70] w-72 animate-pop rounded-xl border border-edge bg-surface-800 p-4 shadow-pop"
+      className="fixed z-[70] w-72 animate-pop overflow-hidden rounded-xl border border-edge bg-surface-800 shadow-pop"
     >
-      <div className="flex items-center gap-3">
-        <Avatar
-          name={person.displayName}
-          avatarUrl={person.avatarUrl}
-          status={status as PresenceStatus}
-          size="md"
-          ringColour="border-surface-800"
-        />
-        <div className="min-w-0">
-          <p
-            className="truncate text-[15px] font-semibold text-slate-50"
-            style={person.colour ? { color: person.colour } : undefined}
-          >
-            {person.displayName}
-          </p>
-          <p className="truncate text-xs text-slate-400">@{person.username}</p>
+      {/* A short band rather than the full one the profile screen draws: this
+          is a card, and a picture tall enough to be looked at properly is the
+          reason the screen below exists. */}
+      {/* Written out rather than built from a constant: Tailwind reads these
+          class names out of the source at build time and never sees one that
+          was concatenated at runtime. */}
+      <ProfileCover coverUrl={person.coverUrl} className="h-[60px]" />
+
+      <div className="px-4 pb-4">
+        <div className="-mt-8 inline-block rounded-full border-[5px] border-surface-800">
+          <Avatar
+            name={person.displayName}
+            avatarUrl={person.avatarUrl}
+            status={status as PresenceStatus}
+            size="md"
+            ringColour="border-surface-800"
+          />
         </div>
+        <p
+          className="truncate text-[15px] font-semibold text-slate-50"
+          style={person.colour ? { color: person.colour } : undefined}
+        >
+          {person.displayName}
+        </p>
+        <p className="truncate text-xs text-slate-400">@{person.username}</p>
+
+        <p className="mt-3 text-xs text-slate-400">{line}</p>
+
+        {person.about.trim() && (
+          <>
+            <p className="mt-3 text-[10px] font-bold uppercase tracking-wide text-slate-500">
+              About
+            </p>
+            {/* Wrapped and clamped: 140 characters is two lines at this width,
+                and a card that grows past three moves whatever is under it.
+                The unclamped line is one click away, below. */}
+            <p className="mt-1 line-clamp-3 whitespace-pre-wrap break-words text-sm text-slate-200">
+              {person.about}
+            </p>
+          </>
+        )}
+
+        {/* The way out of a hover affordance and into a place. Its own button
+            rather than making the whole card clickable: a card that opens
+            something when the pointer stops moving on it would fire every time
+            somebody crossed a member list on the way elsewhere. */}
+        <button
+          type="button"
+          onClick={() => {
+            onDismiss();
+            openProfile(person);
+          }}
+          className="mt-4 w-full cursor-pointer rounded-md bg-surface-700 px-3 py-2 text-xs font-medium text-slate-200 transition-colors duration-150 hover:bg-white/[0.08] hover:text-white"
+        >
+          View full profile
+        </button>
       </div>
-
-      <p className="mt-3 text-xs text-slate-400">{line}</p>
-
-      {person.about.trim() && (
-        <>
-          <p className="mt-3 text-[10px] font-bold uppercase tracking-wide text-slate-500">About</p>
-          {/* Wrapped and clamped: 140 characters is two lines at this width,
-              and a card that grows past three moves whatever is under it. */}
-          <p className="mt-1 line-clamp-3 whitespace-pre-wrap break-words text-sm text-slate-200">
-            {person.about}
-          </p>
-        </>
-      )}
     </div>
   );
 }

@@ -145,6 +145,18 @@ export class UpdateAccountDto implements UpdateAccountRequest {
   avatarUrl?: string | null;
 
   /**
+   * The wide picture behind the name, or null to go back to the flat accent
+   * band. Held to the same rule as `avatarUrl` and for the same reason: a
+   * profile picture is fetched by every client that can see the account, so an
+   * arbitrary URL here would be a beacon reporting who looked at whom.
+   */
+  @ValidateIf((dto: UpdateAccountDto) => dto.coverUrl !== null && dto.coverUrl !== undefined)
+  @IsString()
+  @MaxLength(512)
+  @Matches(UPLOADED_PICTURE_URL, { message: 'coverUrl must be an uploaded picture' })
+  coverUrl?: string | null;
+
+  /**
    * This account's own disappearing window in seconds, or null to switch it
    * off. One of the published list, for the same reason a server's is.
    *

@@ -169,6 +169,10 @@ function AuthorHover({
         displayName: author.displayName,
         username: member?.username ?? author.username,
         avatarUrl: author.avatarUrl,
+        // Only the member row carries a cover; a message author does not. An
+        // author who has left the server therefore gets the accent band, which
+        // is what the card drew for everybody before covers existed.
+        coverUrl: member?.coverUrl ?? null,
         about: member?.about ?? '',
         colour: member?.colour ?? null,
       }}

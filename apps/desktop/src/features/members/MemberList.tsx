@@ -160,6 +160,7 @@ function Group({
                 displayName: member.displayName,
                 username: member.username,
                 avatarUrl: member.avatarUrl,
+                coverUrl: member.coverUrl,
                 about: member.about,
                 colour: member.colour,
               }}

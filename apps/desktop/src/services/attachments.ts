@@ -236,24 +236,33 @@ export async function saveAttachment(
 // --- Pictures ---------------------------------------------------------------
 
 /**
- * An avatar or a server icon. These are stored in the clear, so the client
- * hands over exactly what it wants every other client to fetch: a square,
- * cropped from the centre, small enough that a member list of them is cheap.
+ * An avatar, a server icon or a profile cover. These are stored in the clear,
+ * so the client hands over exactly what it wants every other client to fetch:
+ * a fixed shape, cropped from the centre, small enough that a member list of
+ * them is cheap.
+ *
+ * `aspect` is width over height - 1 for the square things, `COVER_ASPECT` for
+ * the band behind a name. A parameter rather than two functions because the
+ * only difference between the two cases is which edge runs out first, and
+ * `cropBox` below is that sentence written down.
  */
-export async function preparePicture(file: File, edge = 512): Promise<Blob> {
+export async function preparePicture(file: File, edge = 512, aspect = 1): Promise<Blob> {
   const bitmap = await decodeImage(file);
   try {
-    const side = Math.min(bitmap.width, bitmap.height);
-    const canvas = new OffscreenCanvas(Math.min(edge, side), Math.min(edge, side));
+    const crop = cropBox(bitmap.width, bitmap.height, aspect);
+    // Never upscaled: enlarging a small picture to hit the cap spends bytes
+    // inventing detail that is not in the file.
+    const width = Math.min(edge, crop.width);
+    const canvas = new OffscreenCanvas(Math.round(width), Math.round(width / aspect));
     const context = canvas.getContext('2d');
     if (!context) throw new Error('This device cannot process images');
 
     context.drawImage(
       bitmap,
-      (bitmap.width - side) / 2,
-      (bitmap.height - side) / 2,
-      side,
-      side,
+      crop.x,
+      crop.y,
+      crop.width,
+      crop.height,
       0,
       0,
       canvas.width,
@@ -263,6 +272,30 @@ export async function preparePicture(file: File, edge = 512): Promise<Blob> {
   } finally {
     bitmap.close();
   }
+}
+
+/**
+ * The largest `aspect`-shaped rectangle inside `width` x `height`, centred.
+ *
+ * Exported for `image-edit.check.ts`: the cases worth pinning are a portrait
+ * photograph cropped to a wide band and a wide one cropped to a square, and
+ * both are arithmetic rather than anything a browser has to be present for.
+ */
+export function cropBox(
+  width: number,
+  height: number,
+  aspect: number,
+): { x: number; y: number; width: number; height: number } {
+  // Wider than the shape it is going into, so height is the constraint.
+  const tooWide = width / height > aspect;
+  const cropWidth = tooWide ? height * aspect : width;
+  const cropHeight = tooWide ? height : width / aspect;
+  return {
+    x: (width - cropWidth) / 2,
+    y: (height - cropHeight) / 2,
+    width: cropWidth,
+    height: cropHeight,
+  };
 }
 
 /** Above this a photo is worth re-encoding; below it the saving is noise. */
