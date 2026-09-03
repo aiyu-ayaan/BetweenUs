@@ -112,8 +112,8 @@ const FeatureList: FeatureItem[] = [
   {
     title: 'Desktop, Web & Native Android',
     badge: 'Cross-Platform Parity',
-    image: 'img/home-android.jpeg',
-    link: '/architecture/android-client',
+    image: 'img/android-home.png',
+    link: '/features#11-native-android-mobile-experience',
     description: (
       <>
         Cross-platform suite spanning Electron desktop on Windows/macOS/Linux, Web PWA via Vite,

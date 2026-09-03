@@ -13,8 +13,55 @@ implementation to match, that's `apps/desktop/src/...` and the shared
 contract in `packages/shared-types`.
 
 <p style={{textAlign: 'center'}}>
-  <img src={useBaseUrl('img/home-android.jpeg')} alt="BetweenUs Android client" style={{maxWidth: '360px', width: '100%', borderRadius: '12px', border: '1px solid var(--ifm-toc-border-color)'}} />
+  <img src={useBaseUrl('img/android-home.png')} alt="BetweenUs Android client" style={{maxWidth: '320px', width: '100%', borderRadius: '16px', border: '1px solid var(--ifm-toc-border-color)', boxShadow: '0 8px 30px rgba(0,0,0,0.4)'}} />
 </p>
+
+## Mobile Interface Gallery
+
+Real UI captures from the BetweenUs Android application running on Android 15 (API 35):
+
+<div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '20px', margin: '24px 0'}}>
+  <div style={{textAlign: 'center'}}>
+    <img src={useBaseUrl('img/android-home.png')} alt="Server & Channel Navigation" style={{width: '100%', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.15)', boxShadow: '0 8px 24px rgba(0,0,0,0.4)'}} />
+    <p style={{marginTop: '8px', fontSize: '0.9rem', fontWeight: 600}}>Server & Channel Rail</p>
+  </div>
+  <div style={{textAlign: 'center'}}>
+    <img src={useBaseUrl('img/android-chat.png')} alt="E2EE Chat & Composer" style={{width: '100%', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.15)', boxShadow: '0 8px 24px rgba(0,0,0,0.4)'}} />
+    <p style={{marginTop: '8px', fontSize: '0.9rem', fontWeight: 600}}>E2EE Chat & Composer</p>
+  </div>
+  <div style={{textAlign: 'center'}}>
+    <img src={useBaseUrl('img/android-voice.png')} alt="Voice Lounge & Call Stage" style={{width: '100%', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.15)', boxShadow: '0 8px 24px rgba(0,0,0,0.4)'}} />
+    <p style={{marginTop: '8px', fontSize: '0.9rem', fontWeight: 600}}>Voice Lounge & Call Stage</p>
+  </div>
+  <div style={{textAlign: 'center'}}>
+    <img src={useBaseUrl('img/android-themes.png')} alt="Material You & 16 Themes" style={{width: '100%', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.15)', boxShadow: '0 8px 24px rgba(0,0,0,0.4)'}} />
+    <p style={{marginTop: '8px', fontSize: '0.9rem', fontWeight: 600}}>Appearance & Themes</p>
+  </div>
+  <div style={{textAlign: 'center'}}>
+    <img src={useBaseUrl('img/android-settings.png')} alt="Settings Hub & Account" style={{width: '100%', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.15)', boxShadow: '0 8px 24px rgba(0,0,0,0.4)'}} />
+    <p style={{marginTop: '8px', fontSize: '0.9rem', fontWeight: 600}}>Settings Hub & Account</p>
+  </div>
+  <div style={{textAlign: 'center'}}>
+    <img src={useBaseUrl('img/android-moments.png')} alt="24-Hour Moments Tray" style={{width: '100%', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.15)', boxShadow: '0 8px 24px rgba(0,0,0,0.4)'}} />
+    <p style={{marginTop: '8px', fontSize: '0.9rem', fontWeight: 600}}>24-Hour Moments Tray</p>
+  </div>
+  <div style={{textAlign: 'center'}}>
+    <img src={useBaseUrl('img/android-permissions.png')} alt="Permissions Dashboard" style={{width: '100%', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.15)', boxShadow: '0 8px 24px rgba(0,0,0,0.4)'}} />
+    <p style={{marginTop: '8px', fontSize: '0.9rem', fontWeight: 600}}>Permission Dashboard</p>
+  </div>
+  <div style={{textAlign: 'center'}}>
+    <img src={useBaseUrl('img/android-search.png')} alt="Mobile Quick Switcher" style={{width: '100%', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.15)', boxShadow: '0 8px 24px rgba(0,0,0,0.4)'}} />
+    <p style={{marginTop: '8px', fontSize: '0.9rem', fontWeight: 600}}>Quick Switcher Modal</p>
+  </div>
+  <div style={{textAlign: 'center'}}>
+    <img src={useBaseUrl('img/android-updates.png')} alt="In-App APK Auto-Updater" style={{width: '100%', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.15)', boxShadow: '0 8px 24px rgba(0,0,0,0.4)'}} />
+    <p style={{marginTop: '8px', fontSize: '0.9rem', fontWeight: 600}}>APK Self-Updater</p>
+  </div>
+  <div style={{textAlign: 'center'}}>
+    <img src={useBaseUrl('img/android-friends.png')} alt="Friends & Direct Messages" style={{width: '100%', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.15)', boxShadow: '0 8px 24px rgba(0,0,0,0.4)'}} />
+    <p style={{marginTop: '8px', fontSize: '0.9rem', fontWeight: 600}}>Friends & Direct Messages</p>
+  </div>
+</div>
 
 ## Status
 

@@ -1,7 +1,7 @@
 ---
 sidebar_position: 2
 title: Features
-description: Complete overview of BetweenUs features — E2EE chat, P2P voice and video, synchronized media, multiplayer games, remote desktop, and 16-theme customization.
+description: Complete overview of BetweenUs features — E2EE chat, P2P voice and video, synchronized media, multiplayer games, remote desktop, and 16-theme customization across Desktop and Android.
 ---
 
 import useBaseUrl from '@docusaurus/useBaseUrl';
@@ -28,7 +28,7 @@ import useBaseUrl from '@docusaurus/useBaseUrl';
 | **Play Together (6 Board Games & Carrom)** | ✅ Full Support | ✅ Full Support | ✅ Full Support |
 | **Remote Desktop Control** | 🖥️ Agent & Controller | 🎮 Controller Only | 👁️ Viewer Only |
 | **Moments (24h Ephemeral Stories)** | ✅ Full Support | ✅ Full Support | ✅ Full Support |
-| **Multi-Theme Engine (16 Themes)** | ✅ 16 Themes + Accents | ✅ 16 Themes + Accents | ✅ 16 Themes + Accents |
+| **Multi-Theme Engine (16 Themes)** | ✅ 16 Themes + Accents | ✅ 16 Themes + Accents | ✅ 16 Themes + Material You |
 | **Granular Server RBAC & Roles** | ✅ Full Administration | ✅ Full Administration | ✅ Member Views |
 | **E2EE Key Backup & Machine Revocation** | ✅ Full Device Registry | ✅ Full Device Registry | ✅ Passphrase Backup |
 
@@ -38,16 +38,23 @@ import useBaseUrl from '@docusaurus/useBaseUrl';
 
 BetweenUs guarantees absolute message privacy. Messages and uploaded files are encrypted client-side using authenticated **AES-256-GCM** before touching the network. The backend only stores opaque ciphertext blobs.
 
-<p align="center">
-  <img src={useBaseUrl('img/feature-chat.png')} alt="BetweenUs E2EE Chat with Rich Markdown" style={{maxWidth: '100%', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.1)'}} />
-</p>
+<div style={{display: 'flex', gap: '20px', flexWrap: 'wrap', justifyContent: 'center', alignItems: 'flex-start', margin: '24px 0'}}>
+  <div style={{flex: '1 1 500px', maxWidth: '640px'}}>
+    <p align="center" style={{fontWeight: 600, marginBottom: '8px'}}>Desktop Client</p>
+    <img src={useBaseUrl('img/feature-chat.png')} alt="Desktop E2EE Chat with Rich Markdown" style={{width: '100%', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.1)'}} />
+  </div>
+  <div style={{flex: '0 1 240px', maxWidth: '270px'}}>
+    <p align="center" style={{fontWeight: 600, marginBottom: '8px'}}>Native Android (Compose)</p>
+    <img src={useBaseUrl('img/android-chat.png')} alt="Native Android E2EE Chat" style={{width: '100%', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.15)', boxShadow: '0 8px 24px rgba(0,0,0,0.4)'}} />
+  </div>
+</div>
 
 ### Key Capabilities
 - **Zero-Knowledge Backend**: Servers, database operators, and network intermediaries cannot inspect message content, channel names, or attachments.
 - **Rich Markdown Formatting**: Full support for headings, bold/italic inline marks, blockquotes, ordered/unordered lists, code snippets, and syntax-highlighted code blocks.
 - **Interactive Messaging**: Real-time typing indicators, emoji reactions with custom pickers, threaded replies, message pinning, and edit histories.
 - **Encrypted Media & Attachments**: Images, videos, PDFs, and archives up to 100 MB are encrypted in memory prior to upload and decrypted on the recipient device.
-- **Local Persistence & Search**: Decrypted messages are indexed into encrypted SQLite/IndexedDB storage for instant full-text search.
+- **Local Persistence & Search**: Decrypted messages are indexed into encrypted SQLite/Room storage for instant full-text search.
 
 ---
 
@@ -55,9 +62,16 @@ BetweenUs guarantees absolute message privacy. Messages and uploaded files are e
 
 Unlike legacy platforms that route audio and video through centralized media relays (SFUs), BetweenUs connects call participants in an autonomous **WebRTC full-mesh**.
 
-<p align="center">
-  <img src={useBaseUrl('img/feature-voice.png')} alt="BetweenUs Voice & Video Settings" style={{maxWidth: '100%', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.1)'}} />
-</p>
+<div style={{display: 'flex', gap: '20px', flexWrap: 'wrap', justifyContent: 'center', alignItems: 'flex-start', margin: '24px 0'}}>
+  <div style={{flex: '1 1 500px', maxWidth: '640px'}}>
+    <p align="center" style={{fontWeight: 600, marginBottom: '8px'}}>Desktop Audio Settings & Mesh Controls</p>
+    <img src={useBaseUrl('img/feature-voice.png')} alt="Desktop Voice & Video Settings" style={{width: '100%', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.1)'}} />
+  </div>
+  <div style={{flex: '0 1 240px', maxWidth: '270px'}}>
+    <p align="center" style={{fontWeight: 600, marginBottom: '8px'}}>Android E2EE Voice Stage</p>
+    <img src={useBaseUrl('img/android-voice.png')} alt="Android Voice Lounge Stage" style={{width: '100%', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.15)', boxShadow: '0 8px 24px rgba(0,0,0,0.4)'}} />
+  </div>
+</div>
 
 ### Key Capabilities
 - **Zero Media Server Overhead**: Audio and video streams flow directly peer-to-peer via DTLS-SRTP, drastically reducing infrastructure bandwidth and eliminating intermediary eavesdropping.
@@ -101,17 +115,24 @@ Integrated, low-latency multiplayer gaming directly inside voice stages.
 
 ### Architecture Highlights
 - **Server-Refereed Integrity**: Moves are verified and broadcasted by `call-service` using authoritative state machines, preventing client-side spoofing.
-- **Spectator Theater**: Non-players in the voice channel can watch live matches in real time.
+- **Spectator Theater**: Non-players in the voice channel can watch live matches in real time across desktop and Android.
 
 ---
 
 ## 5. Multi-Theme Customization Engine
 
-BetweenUs provides a customizable appearance system with **16 curated themes** and **8 dynamic accent tints**.
+BetweenUs provides a customizable appearance system with **16 curated themes**, **8 dynamic accent tints**, and **Material You** wallpaper palette extraction on Android.
 
-<p align="center">
-  <img src={useBaseUrl('img/feature-themes.png')} alt="Themes and Appearance Settings" style={{maxWidth: '100%', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.1)'}} />
-</p>
+<div style={{display: 'flex', gap: '20px', flexWrap: 'wrap', justifyContent: 'center', alignItems: 'flex-start', margin: '24px 0'}}>
+  <div style={{flex: '1 1 500px', maxWidth: '640px'}}>
+    <p align="center" style={{fontWeight: 600, marginBottom: '8px'}}>Desktop Appearance Customizer</p>
+    <img src={useBaseUrl('img/feature-themes.png')} alt="Themes and Appearance Settings" style={{width: '100%', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.1)'}} />
+  </div>
+  <div style={{flex: '0 1 240px', maxWidth: '270px'}}>
+    <p align="center" style={{fontWeight: 600, marginBottom: '8px'}}>Android Material You & 16 Themes</p>
+    <img src={useBaseUrl('img/android-themes.png')} alt="Android Material You and Theme Customizer" style={{width: '100%', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.15)', boxShadow: '0 8px 24px rgba(0,0,0,0.4)'}} />
+  </div>
+</div>
 
 ### Curated Theme Library
 - **Signature & Dark**: *Dark (Iris)*, *Midnight (AMOLED 100% Black)*, *Obsidian (Deep Charcoal)*, *Slate Dark*.
@@ -121,6 +142,7 @@ BetweenUs provides a customizable appearance system with **16 curated themes** a
 
 ### Customization Options
 - **Dynamic Accent Swatches**: Choose from 8 signature colors (Iris, Rose, Cyan, Emerald, Amber, Violet, Sky, Crimson).
+- **Material You Dynamic Theming**: On Android, accent tones and container surfaces adapt to your wallpaper color palette.
 - **Interface Density Scaling**: Adjust typography and element padding between *Compact*, *Cozy*, and *Roomy*.
 - **OS Theme Auto-Sync**: Automatically switch between Daylight and dark themes based on your operating system preferences.
 
@@ -146,9 +168,16 @@ Control unattended or assisted remote machines securely from within your Between
 
 Share real-time photos, thoughts, and status updates that disappear automatically after 24 hours.
 
-<p align="center">
-  <img src={useBaseUrl('img/feature-moments.png')} alt="Moments Feature" style={{maxWidth: '100%', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.1)'}} />
-</p>
+<div style={{display: 'flex', gap: '20px', flexWrap: 'wrap', justifyContent: 'center', alignItems: 'flex-start', margin: '24px 0'}}>
+  <div style={{flex: '1 1 500px', maxWidth: '640px'}}>
+    <p align="center" style={{fontWeight: 600, marginBottom: '8px'}}>Desktop Moments Tray & Feed</p>
+    <img src={useBaseUrl('img/feature-moments.png')} alt="Moments Feature on Desktop" style={{width: '100%', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.1)'}} />
+  </div>
+  <div style={{flex: '0 1 240px', maxWidth: '270px'}}>
+    <p align="center" style={{fontWeight: 600, marginBottom: '8px'}}>Android Native Moments Tray</p>
+    <img src={useBaseUrl('img/android-moments.png')} alt="Moments Feature on Android" style={{width: '100%', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.15)', boxShadow: '0 8px 24px rgba(0,0,0,0.4)'}} />
+  </div>
+</div>
 
 ### Key Capabilities
 - **Ephemeral Lifecycle**: Moments automatically expire and are purged from database records and storage 24 hours after posting.
@@ -166,7 +195,7 @@ BetweenUs provides cryptographic account protection and device management.
 </p>
 
 ### Key Capabilities
-- **Client-Side Key Generation**: Encryption keys are generated locally using cryptographic primitives (Web Crypto API / Libsodium).
+- **Client-Side Key Generation**: Encryption keys are generated locally using cryptographic primitives (Web Crypto API / Libsodium / Android KeyStore).
 - **Zero-Knowledge Key Backup**: Encrypt your identity key using an optional recovery passphrase or wrapped account credentials.
 - **Machine Device Registry**: Inspect all active machines authorized to decrypt your conversation history and revoke compromised devices with a single click.
 
@@ -192,20 +221,67 @@ Manage communities and workspaces with Discord-grade permission systems.
 
 Stay connected with direct messaging and real-time presence indicators.
 
-<p align="center">
-  <img src={useBaseUrl('img/feature-friends.png')} alt="Friends and Direct Messages" style={{maxWidth: '100%', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.1)'}} />
-</p>
+<div style={{display: 'flex', gap: '20px', flexWrap: 'wrap', justifyContent: 'center', alignItems: 'flex-start', margin: '24px 0'}}>
+  <div style={{flex: '1 1 500px', maxWidth: '640px'}}>
+    <p align="center" style={{fontWeight: 600, marginBottom: '8px'}}>Desktop Friends Directory</p>
+    <img src={useBaseUrl('img/feature-friends.png')} alt="Friends and Direct Messages on Desktop" style={{width: '100%', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.1)'}} />
+  </div>
+  <div style={{flex: '0 1 240px', maxWidth: '270px'}}>
+    <p align="center" style={{fontWeight: 600, marginBottom: '8px'}}>Android Friends & DMs</p>
+    <img src={useBaseUrl('img/android-friends.png')} alt="Friends and Direct Messages on Android" style={{width: '100%', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.15)', boxShadow: '0 8px 24px rgba(0,0,0,0.4)'}} />
+  </div>
+</div>
 
 ### Key Capabilities
 - **Friend Management**: Send, accept, or decline friend requests with global user tag search (`username#0000`).
 - **Real-Time Presence**: Show status as *Online*, *Idle*, *Do Not Disturb*, or *Invisible*.
-- **Privacy & Safety Controls**: Block unwanted users, manage quiet hours, and configure desktop notifications.
+- **Privacy & Safety Controls**: Block unwanted users, manage quiet hours, and configure notifications.
+
+---
+
+## 11. Native Android Mobile Experience
+
+BetweenUs provides a 100% native Kotlin and Jetpack Compose mobile client designed specifically for modern Android devices (phones, foldables, and tablets).
+
+<div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '20px', margin: '24px 0'}}>
+  <div style={{textAlign: 'center'}}>
+    <img src={useBaseUrl('img/android-home.png')} alt="Multi-Server Rail & Channels" style={{width: '100%', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.15)', boxShadow: '0 8px 24px rgba(0,0,0,0.4)'}} />
+    <p style={{marginTop: '8px', fontSize: '0.9rem', fontWeight: 600}}>Multi-Server Rail & Channels</p>
+  </div>
+  <div style={{textAlign: 'center'}}>
+    <img src={useBaseUrl('img/android-settings.png')} alt="Android Settings Hub" style={{width: '100%', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.15)', boxShadow: '0 8px 24px rgba(0,0,0,0.4)'}} />
+    <p style={{marginTop: '8px', fontSize: '0.9rem', fontWeight: 600}}>Settings Hub & Presence</p>
+  </div>
+  <div style={{textAlign: 'center'}}>
+    <img src={useBaseUrl('img/android-permissions.png')} alt="Permission Dashboard" style={{width: '100%', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.15)', boxShadow: '0 8px 24px rgba(0,0,0,0.4)'}} />
+    <p style={{marginTop: '8px', fontSize: '0.9rem', fontWeight: 600}}>Permission Health Dashboard</p>
+  </div>
+  <div style={{textAlign: 'center'}}>
+    <img src={useBaseUrl('img/android-search.png')} alt="Mobile Quick Switcher" style={{width: '100%', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.15)', boxShadow: '0 8px 24px rgba(0,0,0,0.4)'}} />
+    <p style={{marginTop: '8px', fontSize: '0.9rem', fontWeight: 600}}>Quick Switcher Modal</p>
+  </div>
+  <div style={{textAlign: 'center'}}>
+    <img src={useBaseUrl('img/android-updates.png')} alt="In-App APK Auto-Updater" style={{width: '100%', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.15)', boxShadow: '0 8px 24px rgba(0,0,0,0.4)'}} />
+    <p style={{marginTop: '8px', fontSize: '0.9rem', fontWeight: 600}}>In-App Self-Updater</p>
+  </div>
+  <div style={{textAlign: 'center'}}>
+    <img src={useBaseUrl('img/android-remote.png')} alt="Remote Machines Viewer" style={{width: '100%', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.15)', boxShadow: '0 8px 24px rgba(0,0,0,0.4)'}} />
+    <p style={{marginTop: '8px', fontSize: '0.9rem', fontWeight: 600}}>Remote Machines Viewer</p>
+  </div>
+</div>
+
+### Key Capabilities
+- **Jetpack Compose Expressive UI**: Adaptive dual-pane layouts for tablets and foldables, smooth spring physics animations, and fluid gesture navigation.
+- **Android KeyStore Hardware Security**: ECDH P-256 identity key pairs and session tokens backed by Android KeyStore hardware security modules.
+- **Background Call Continuity**: Foreground service audio pipeline keeps WebRTC calls active while navigating other apps or when the screen is turned off.
+- **Direct APK Release Pipeline**: Seamless GitHub Releases integration with device ABI detection (arm64-v8a, x86_64) for automated non-Play Store installs.
 
 ---
 
 ## Next Steps
 
 - Explore the complete [Architecture Overview](/architecture/overview).
+- Read the deep dive on the [Android Native Client](/architecture/android-client).
 - Learn more about the [Multi-Theme System](/architecture/themes).
 - Follow the [Local Development Guide](/running-locally) to run BetweenUs on your own machine.
 - Read about [End-to-End Encryption Architecture](/security/e2ee).
