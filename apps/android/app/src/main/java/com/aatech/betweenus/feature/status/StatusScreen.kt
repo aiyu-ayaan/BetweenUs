@@ -117,13 +117,19 @@ fun StatusScreen(onBack: () -> Unit) {
                     },
                     leading = {
                         Box {
-                            Avatar(
-                                id = me?.id.orEmpty(),
-                                label = me?.label ?: "You",
-                                url = me?.avatarUrl?.let { Endpoint.absolute(it) },
-                                viewable = false,
-                            )
-                            if (mine.isEmpty()) {
+                            // What you posted once there is something to show,
+                            // and your own face while there is not - an empty
+                            // circle with a plus on it is the invitation, and
+                            // it needs to look like you.
+                            if (mine.isNotEmpty()) {
+                                MomentThumb(posts = mine, unseen = false)
+                            } else {
+                                Avatar(
+                                    id = me?.id.orEmpty(),
+                                    label = me?.label ?: "You",
+                                    url = me?.avatarUrl?.let { Endpoint.absolute(it) },
+                                    viewable = false,
+                                )
                                 Box(
                                     modifier = Modifier
                                         .align(Alignment.BottomEnd)
@@ -171,14 +177,10 @@ fun StatusScreen(onBack: () -> Unit) {
                         // `viewable = false`: the row is already the way in to
                         // the statuses, so an avatar asking "profile or status"
                         // inside it would be the same question twice.
-                        leading = {
-                            Avatar(
-                                id = run.author.id,
-                                label = run.author.label,
-                                url = run.author.avatarUrl?.let { Endpoint.absolute(it) },
-                                viewable = false,
-                            )
-                        },
+                        // The newest post rather than the face: the name
+                        // beside it already says whose run this is, and the
+                        // circle is what the tap opens.
+                        leading = { MomentThumb(posts = run.statuses, unseen = run.unseen) },
                         onClick = { StatusStory.open(run.author.id) },
                     )
                 }
@@ -190,14 +192,10 @@ fun StatusScreen(onBack: () -> Unit) {
                     ListRow(
                         title = run.author.label,
                         subtitle = "${countLabel(run.statuses.size)} · ${statusAge(run.latestAt)}",
-                        leading = {
-                            Avatar(
-                                id = run.author.id,
-                                label = run.author.label,
-                                url = run.author.avatarUrl?.let { Endpoint.absolute(it) },
-                                viewable = false,
-                            )
-                        },
+                        // The newest post rather than the face: the name
+                        // beside it already says whose run this is, and the
+                        // circle is what the tap opens.
+                        leading = { MomentThumb(posts = run.statuses, unseen = run.unseen) },
                         onClick = { StatusStory.open(run.author.id) },
                     )
                 }

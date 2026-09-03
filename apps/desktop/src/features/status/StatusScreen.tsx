@@ -11,6 +11,7 @@
  * player in the app.
  */
 import { useEffect } from 'react';
+import type { StatusFeedEntry } from '@betweenus/shared-types';
 import { useAuthStore } from '../../stores/auth';
 import { runsOf, useStatusStore } from '../../stores/status';
 import { listState } from '../../services/list-state';
@@ -21,6 +22,7 @@ import { statusAge } from './age';
 import { MomentsEmptyArt } from './MomentsEmptyArt';
 import { openStatus } from './StatusViewer';
 import { openStatusComposer } from './StatusComposer';
+import { MomentThumb } from './MomentThumb';
 
 export function StatusScreen({ onOpenMenu }: { onOpenMenu?: () => void }): JSX.Element {
   const me = useAuthStore((state) => state.user);
@@ -68,12 +70,19 @@ export function StatusScreen({ onOpenMenu }: { onOpenMenu?: () => void }): JSX.E
           className="flex w-full cursor-pointer items-center gap-3 rounded-md px-2 py-2 text-start transition-colors duration-200 row-idle"
         >
           <span className="relative shrink-0">
-            <Avatar
-              userId={me?.id ?? ''}
-              name={me?.displayName ?? 'You'}
-              avatarUrl={me?.avatarUrl ?? null}
-              viewable={false}
-            />
+            {/* What you posted once there is something to show, and your own
+                face while there is not - an empty circle with a plus on it is
+                the invitation, and it needs to look like you. */}
+            {mine.length > 0 ? (
+              <MomentThumb posts={mine} />
+            ) : (
+              <Avatar
+                userId={me?.id ?? ''}
+                name={me?.displayName ?? 'You'}
+                avatarUrl={me?.avatarUrl ?? null}
+                viewable={false}
+              />
+            )}
             {mine.length === 0 && (
               <span className="absolute -bottom-0.5 -end-0.5 flex h-4 w-4 items-center justify-center rounded-full border-2 border-surface-900 bg-accent text-white">
                 <PlusIcon className="h-2.5 w-2.5" />
@@ -155,11 +164,7 @@ function Heading({ children }: { children: string }): JSX.Element {
   );
 }
 
-function Row({
-  run,
-}: {
-  run: { author: { id: string; displayName: string; avatarUrl: string | null }; statuses: Array<{ createdAt: string }> };
-}): JSX.Element {
+function Row({ run }: { run: StatusFeedEntry }): JSX.Element {
   const newest = run.statuses[run.statuses.length - 1];
   return (
     <button
@@ -167,15 +172,9 @@ function Row({
       onClick={() => openStatus(run.author.id)}
       className="flex w-full cursor-pointer items-center gap-3 rounded-md px-2 py-2 text-start transition-colors duration-200 row-idle"
     >
-      {/* `viewable={false}`: the row is already the way in to the statuses, so
-          the avatar asking "profile or status" inside it would be the same
-          question twice. */}
-      <Avatar
-        userId={run.author.id}
-        name={run.author.displayName}
-        avatarUrl={run.author.avatarUrl}
-        viewable={false}
-      />
+      {/* The newest post rather than the face: the name beside it already says
+          whose run this is, and the circle is what the tap opens. */}
+      <MomentThumb posts={run.statuses} unseen={run.unseen} />
       <span className="min-w-0 flex-1">
         <span className="block truncate font-medium text-slate-100">{run.author.displayName}</span>
         <span className="block truncate text-xs text-slate-500">
