@@ -183,6 +183,9 @@ Share real-time photos, thoughts, and status updates that disappear automaticall
 - **Ephemeral Lifecycle**: Moments automatically expire and are purged from database records and storage 24 hours after posting.
 - **Rich Captions & Media**: Attach photos and stylized captions with customizable privacy boundaries.
 - **Non-Intrusive Discovery**: View updates from your friends list and server colleagues in a dedicated Moments feed.
+- **Cross-Platform Media**: Photos are normalised to JPEG by the sender, so a moment posted from an Android camera (which writes HEIC) draws on every client rather than only on the phone that posted it.
+- **Background Posting**: Uploads run outside the composer - the screen is free as soon as you press Post, and the run fills in as each moment lands.
+- **My Moments**: Everything you have posted, one tile per moment with its own view count. On Android a drag up inside the player opens the same list of who watched.
 
 ---
 

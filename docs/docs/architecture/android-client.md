@@ -163,6 +163,16 @@ feature/remote          feature/status        feature/update        feature/voic
   the session, like `Workspace`. The segmented ring lives inside `Avatar` in
   `ui-common`, which is why every list grew one at the same moment.
 
+  Posting hands the work to `Statuses.postInBackground`, which runs on the
+  store's own scope: the composer closes on the tap, the tray fills in as each
+  post lands, and an upload survives the screen that started it. A picture goes
+  through `Photos.asJpeg` before it is sealed - a phone camera writes HEIC and
+  no browser engine decodes one, so an unconverted moment reached the desktop
+  as a broken image. `MyMomentsHost` is where the composer lands on the way
+  out: one tile per post with its own view count, and the picker instead when
+  there is nothing posted yet. In the player the progress bar waits for the
+  media to finish downloading, and a drag up opens the viewer list.
+
 - **`remote`** — a remote-desktop *viewer* only. The phone can watch and
   control an enrolled machine; it can't itself be enrolled as a target,
   since nothing on a phone can move a desktop's mouse. Same asymmetry as
