@@ -4,6 +4,7 @@ import android.widget.VideoView
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -108,15 +109,27 @@ private fun StatusStoryScreen(authorId: String, onClose: () -> Unit) {
     val posts = if (isSelf) mine else run?.statuses.orEmpty()
     val author: UserSummary? = if (isSelf) me?.summary else run?.author
 
-    // Where in the run to start: the first unopened post, because the
-    // beginning is where somebody who has already watched half a run does not
-    // want to be. A run watched through opens at the start again - there is
-    // nothing to resume to.
+    // Where to start: the post the caller named, or - when it named only a
+    // person - their first unopened one, because the beginning is where
+    // somebody who has already watched half a run does not want to be. A run
+    // watched through opens at the start again; there is nothing to resume to.
     var index by remember(authorId) {
-        mutableIntStateOf(posts.indexOfFirst { !it.seen }.takeIf { it >= 0 } ?: 0)
+        mutableIntStateOf(
+            StatusStory.index ?: posts.indexOfFirst { !it.seen }.takeIf { it >= 0 } ?: 0,
+        )
     }
     var paused by remember { mutableStateOf(false) }
     var viewers by remember { mutableStateOf<List<StatusViewer>?>(null) }
+
+    /**
+     * The post whose media has finished coming down. The clock does not run
+     * before that, so a photo on a slow line gets its five seconds of being
+     * looked at rather than five seconds of spinner. Held as an id rather than
+     * a flag so moving on resets it: the next post is not this one, so it is
+     * not ready. A post that failed counts as ready - the run has to move on
+     * past something that is never going to arrive.
+     */
+    var loadedId by remember { mutableStateOf<String?>(null) }
 
     val post = posts.getOrNull(index)
 
@@ -150,12 +163,42 @@ private fun StatusStoryScreen(authorId: String, onClose: () -> Unit) {
         Unit
     }
 
+    /** Who has looked at this one. The clock stops while the list is up. */
+    val showViewers: () -> Unit = {
+        val id = post?.id
+        if (id != null) {
+            paused = true
+            scope.launch {
+                viewers = runCatching { Statuses.viewersOf(id) }.getOrDefault(emptyList())
+            }
+        }
+        Unit
+    }
+
     if (post == null || author == null) return
 
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(Color.Black)
+            // A drag up opens the viewer list - the gesture this shape has
+            // everywhere else, and the only way to reach the list without
+            // aiming at a pill in the corner. Its own `pointerInput` rather
+            // than a branch inside the tap detector: a tap and a drag are two
+            // gestures, and the tap detector abandons a press the moment it
+            // travels far enough to be this one.
+            .pointerInput(post.id, isSelf) {
+                if (!isSelf) return@pointerInput
+                val threshold = 48.dp.toPx()
+                var travelled = 0f
+                detectVerticalDragGestures(
+                    onDragStart = { travelled = 0f },
+                    onDragEnd = { if (travelled <= -threshold) showViewers() },
+                ) { change, delta ->
+                    travelled += delta
+                    change.consume()
+                }
+            }
             .pointerInput(post.id, posts.size) {
                 detectTapGestures(
                     // A hold is a press that outlives the tap: `tryAwaitRelease`
@@ -176,7 +219,12 @@ private fun StatusStoryScreen(authorId: String, onClose: () -> Unit) {
                 )
             },
     ) {
-        Slide(post = post, paused = paused, modifier = Modifier.fillMaxSize())
+        Slide(
+            post = post,
+            paused = paused,
+            onReady = { loadedId = it },
+            modifier = Modifier.fillMaxSize(),
+        )
 
         Column(Modifier.fillMaxWidth().statusBarsPadding()) {
             Bars(
@@ -184,7 +232,7 @@ private fun StatusStoryScreen(authorId: String, onClose: () -> Unit) {
                 index = index,
                 holdMs = post.holdMs,
                 postId = post.id,
-                paused = paused,
+                paused = paused || loadedId != post.id,
                 onDone = next,
             )
             Row(
@@ -245,13 +293,7 @@ private fun StatusStoryScreen(authorId: String, onClose: () -> Unit) {
                     Pill(
                         icon = BetweenUsIcons.Eye,
                         label = (post.viewCount ?: 0).toString(),
-                        onClick = {
-                            paused = true
-                            scope.launch {
-                                viewers = runCatching { Statuses.viewersOf(post.id) }
-                                    .getOrDefault(emptyList())
-                            }
-                        },
+                        onClick = showViewers,
                     )
                     Pill(
                         icon = BetweenUsIcons.Trash,
@@ -379,10 +421,26 @@ private fun Bars(
     }
 }
 
-/** The post itself: a picture, a video, or words on a colour. */
+/**
+ * The post itself: a picture, a video, or words on a colour.
+ *
+ * [onReady] is called with the post's id once there is something to look at -
+ * or once there never will be. The player holds the clock and this holds the
+ * bytes, so the one that knows has to say.
+ */
 @Composable
-private fun Slide(post: StatusEntry, paused: Boolean, modifier: Modifier = Modifier) {
+private fun Slide(
+    post: StatusEntry,
+    paused: Boolean,
+    onReady: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val context = LocalContext.current
+
+    // Words, and anything with nothing to download, are ready on arrival.
+    LaunchedEffect(post.id) {
+        if (post.kind == StatusKind.TEXT || post.mediaUrl == null) onReady(post.id)
+    }
 
     if (post.kind == StatusKind.TEXT) {
         Box(
@@ -405,7 +463,12 @@ private fun Slide(post: StatusEntry, paused: Boolean, modifier: Modifier = Modif
 
     if (post.kind == StatusKind.VIDEO) {
         var uri by remember(post.id) { mutableStateOf<android.net.Uri?>(null) }
-        LaunchedEffect(post.id) { uri = StatusMedia.video(context, post) }
+        LaunchedEffect(post.id) {
+            uri = StatusMedia.video(context, post)
+            // Ready either way: a clip that will not come down must not hold
+            // the run on a spinner forever.
+            onReady(post.id)
+        }
         val target = uri
         if (target == null) {
             Box(modifier, contentAlignment = Alignment.Center) { CircularProgressIndicator() }
@@ -430,7 +493,10 @@ private fun Slide(post: StatusEntry, paused: Boolean, modifier: Modifier = Modif
     }
 
     var bitmap by remember(post.id) { mutableStateOf<android.graphics.Bitmap?>(null) }
-    LaunchedEffect(post.id) { bitmap = StatusMedia.photo(post) }
+    LaunchedEffect(post.id) {
+        bitmap = StatusMedia.photo(post)
+        onReady(post.id)
+    }
     val picture = bitmap
     if (picture == null) {
         Box(modifier, contentAlignment = Alignment.Center) { CircularProgressIndicator() }

@@ -127,11 +127,19 @@ object Statuses {
         media: ByteArray? = null,
         mediaContentType: String? = null,
     ) {
+        // Normalised before it is sealed, never after: once it is ciphertext
+        // nobody - here or on the server - can tell what it was. A phone camera
+        // writes HEIC, no browser has ever decoded one, and a moment posted
+        // from here drew as a broken image on the desktop for exactly as long
+        // as this line was missing. See [Photos.asJpeg], which the attachment
+        // sender has always gone through.
+        val photo = media?.let { Photos.asJpeg(it, mediaContentType.orEmpty()) }
+        val payload = photo?.bytes ?: media
         // The directory is read now rather than held: this list is the
         // audience, as it stands at the moment of posting, which is what makes
         // a friendship made afterwards not a way into what was posted before
         // it. See `E2ee.sealStatus`.
-        val sealed = E2ee.sealStatus(caption, media, BetweenUsApi.statusAudience())
+        val sealed = E2ee.sealStatus(caption, payload, BetweenUsApi.statusAudience())
         val entry = BetweenUsApi.postStatus(
             kind = kind,
             caption = sealed.caption,
@@ -139,13 +147,44 @@ object Statuses {
             durationMs = durationMs,
             media = sealed.media?.ciphertext,
             mediaIv = sealed.media?.iv,
-            mediaType = mediaContentType,
+            // What was converted has to say so: the type is the only hint the
+            // reader's decoder gets, and one that lies is worse than none.
+            mediaType = if (photo != null) "image/jpeg" else mediaContentType,
             senderDeviceId = sealed.senderDeviceId,
             keys = sealed.keys,
         )
         // With the caption that was typed, not the envelope that came back:
         // this phone has the words already.
         _mine.update { it + entry.copy(caption = caption) }
+    }
+
+    /**
+     * How many posts are still going up. Nothing waits on this - it is what the
+     * tray puts under "My moments" while the uplink catches up.
+     */
+    private val _posting = MutableStateFlow(0)
+    val posting: StateFlow<Int> = _posting.asStateFlow()
+
+    /**
+     * Posts on the store's own scope rather than the composer's.
+     *
+     * Sealing and uploading a photo is seconds, and a clip is minutes. That
+     * used to run on the composer's scope, which meant the composer had to stay
+     * on screen saying "Posting…" for the whole of it - and cancelled the
+     * upload if the user backed out of it. The screen is free the moment this
+     * is called; what is left of the work outlives it, and each post appears in
+     * the tray as it lands.
+     *
+     * [work] must not close over a Composable's state or an Activity: it is
+     * still running after both are gone.
+     */
+    fun postInBackground(work: suspend () -> Unit) {
+        _posting.update { it + 1 }
+        scope.launch {
+            runCatching { work() }
+                .onFailure { _error.value = it.message ?: "That could not be posted" }
+            _posting.update { it - 1 }
+        }
     }
 
     /** One post with its caption opened. See the note in [refresh]. */

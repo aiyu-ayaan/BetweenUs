@@ -47,7 +47,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -75,10 +74,9 @@ import com.aatech.betweenus.feature.settings.rememberPermission
 import com.aatech.betweenus.ui.components.BetweenUsIcon
 import com.aatech.betweenus.ui.components.BetweenUsIcons
 import com.aatech.betweenus.ui.components.IconAction
-import com.aatech.betweenus.ui.components.Notice
+import com.aatech.betweenus.ui.components.MyMomentsDoor
 import com.aatech.betweenus.ui.components.StatusComposerDoor
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
 import kotlin.math.ceil
@@ -115,14 +113,22 @@ fun StatusComposerHost() {
         onDismissRequest = { StatusComposerDoor.close() },
         properties = DialogProperties(usePlatformDefaultWidth = false),
     ) {
-        StatusComposerScreen(onClose = { StatusComposerDoor.close() })
+        StatusComposerScreen(
+            onClose = { StatusComposerDoor.close() },
+            // Posting lands on the run it was added to rather than back on the
+            // tray: what somebody wants to see after posting is the thing they
+            // just posted, and who has looked at it.
+            onPosted = {
+                StatusComposerDoor.close()
+                MyMomentsDoor.show()
+            },
+        )
     }
 }
 
 @Composable
-private fun StatusComposerScreen(onClose: () -> Unit) {
+private fun StatusComposerScreen(onClose: () -> Unit, onPosted: () -> Unit) {
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
 
     /** The phone's roll, newest first, with anything captured here on the front. */
     var roll by remember { mutableStateOf<List<MediaItem>>(emptyList()) }
@@ -133,8 +139,6 @@ private fun StatusComposerScreen(onClose: () -> Unit) {
     var text by remember { mutableStateOf("") }
     var caption by remember { mutableStateOf("") }
     var background by remember { mutableStateOf(STATUS_BACKGROUNDS.first()) }
-    var busy by remember { mutableStateOf(false) }
-    var error by remember { mutableStateOf<String?>(null) }
 
     var allowed by remember {
         mutableStateOf(BetweenUsPermissions.anyGranted(context, BetweenUsPermissions.MEDIA))
@@ -200,29 +204,33 @@ private fun StatusComposerScreen(onClose: () -> Unit) {
                 modifier = Modifier.weight(1f).padding(start = 8.dp),
             )
             TextButton(
-                enabled = ready && !busy,
+                enabled = ready,
                 onClick = {
-                    busy = true
-                    error = null
-                    scope.launch {
-                        val result = runCatching {
-                            postAll(
-                                context = context,
-                                selected = selected,
-                                collage = collaging,
-                                caption = caption.trim().ifBlank { null },
-                                text = text.trim(),
-                                background = background,
-                            )
-                        }
-                        busy = false
-                        result
-                            .onSuccess { onClose() }
-                            .onFailure { error = it.message ?: "That could not be posted" }
+                    // Handed over and gone. Sealing a photo is seconds and a
+                    // clip is minutes, and none of that is a reason to hold the
+                    // screen: the work runs on the store's own scope, the tray
+                    // fills in as each post lands, and a failure surfaces there
+                    // rather than on a composer nobody is looking at any more.
+                    val app = context.applicationContext
+                    val picked = selected
+                    val together = collaging
+                    val words = caption.trim().ifBlank { null }
+                    val said = text.trim()
+                    val colour = background
+                    Statuses.postInBackground {
+                        postAll(
+                            context = app,
+                            selected = picked,
+                            collage = together,
+                            caption = words,
+                            text = said,
+                            background = colour,
+                        )
                     }
+                    onPosted()
                 },
             ) {
-                Text(if (busy) "Posting…" else "Post", color = Color.White)
+                Text("Post", color = Color.White)
             }
         }
 
@@ -313,10 +321,6 @@ private fun StatusComposerScreen(onClose: () -> Unit) {
                     BetweenUsIcon(BetweenUsIcons.File, tint = Color.White, size = 22.dp)
                 }
             }
-        }
-
-        error?.let {
-            Notice(message = it, tone = MaterialTheme.colorScheme.error, modifier = Modifier.padding(16.dp))
         }
 
         if (selected.isNotEmpty()) {

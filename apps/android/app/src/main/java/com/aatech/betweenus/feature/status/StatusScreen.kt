@@ -33,6 +33,7 @@ import com.aatech.betweenus.ui.components.BetweenUsIcons
 import com.aatech.betweenus.ui.components.EmptyState
 import com.aatech.betweenus.ui.components.IconAction
 import com.aatech.betweenus.ui.components.ListRow
+import com.aatech.betweenus.ui.components.MyMomentsDoor
 import com.aatech.betweenus.ui.components.Notice
 import com.aatech.betweenus.ui.components.SectionLabel
 import com.aatech.betweenus.ui.components.StatusComposerDoor
@@ -148,12 +149,12 @@ fun StatusScreen(onBack: () -> Unit) {
                         }
                     },
                     onClick = {
-                        val id = me?.id
-                        if (mine.isNotEmpty() && id != null) {
-                            StatusStory.open(id)
-                        } else {
-                            StatusComposerDoor.show()
-                        }
+                        // What you have posted, with the counts, rather than
+                        // straight into the player: from here the run is one
+                        // tap away and who watched it is on the tile. Nothing
+                        // posted means there is nothing to show, so the picker
+                        // is what was wanted.
+                        if (mine.isNotEmpty()) MyMomentsDoor.show() else StatusComposerDoor.show()
                     },
                 )
             }
@@ -204,4 +205,5 @@ fun StatusScreen(onBack: () -> Unit) {
     }
 }
 
-private fun countLabel(count: Int): String = if (count == 1) "1 moment" else "$count moments"
+/** Shared with the My moments screen; one place decides how a run is counted. */
+internal fun countLabel(count: Int): String = if (count == 1) "1 moment" else "$count moments"

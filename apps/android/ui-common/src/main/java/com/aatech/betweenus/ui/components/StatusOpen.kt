@@ -45,12 +45,43 @@ object StatusStory {
     var authorId: String? by mutableStateOf(null)
         private set
 
-    fun open(authorId: String) {
+    /**
+     * Where in that run to start, or null for "wherever it makes sense" - the
+     * first unopened post. A number is only passed when the caller is a
+     * particular post rather than a person: a thumbnail on the My moments
+     * screen opens the moment it draws, not the run it belongs to.
+     */
+    var index: Int? by mutableStateOf(null)
+        private set
+
+    fun open(authorId: String, index: Int? = null) {
         this.authorId = authorId
+        this.index = index
     }
 
     fun close() {
         authorId = null
+        index = null
+    }
+}
+
+/**
+ * The screen showing what you have posted, and who has looked at it.
+ *
+ * A door of its own rather than a route, for the same reason the two above are:
+ * it is opened from the tray, from the composer on its way out, and from
+ * anywhere else that has just posted - none of which share a navigation graph.
+ */
+object MyMomentsDoor {
+    var open: Boolean by mutableStateOf(false)
+        private set
+
+    fun show() {
+        open = true
+    }
+
+    fun close() {
+        open = false
     }
 }
 
