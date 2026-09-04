@@ -167,9 +167,7 @@ export async function openAttachment(
   // A HEIC sent from a phone before its client learned to convert them. The
   // DOM cannot draw one, so it becomes a JPEG here, once, on the way into the
   // cache - every screen that asks for this attachment gets the JPEG.
-  const blob = isHeic(attachment.name, attachment.contentType)
-    ? await heicToJpeg(unpacked)
-    : unpacked;
+  const blob = await viewableImage(unpacked, attachment.name);
 
   // Bounded so a long scroll through an image channel does not grow forever.
   if (cache.size > 40) cache.delete(cache.keys().next().value as string);
@@ -411,6 +409,18 @@ async function decodeHeic(blob: Blob): Promise<ImageBitmap> {
     );
   });
   return createImageBitmap(pixels);
+}
+
+/**
+ * Any stored picture, made drawable: a HEIC becomes a JPEG and everything else
+ * passes straight through.
+ *
+ * Both readers go through this rather than each testing the format themselves -
+ * an attachment and a status are the same problem, and the status player used
+ * to skip the check and draw a broken image for every photo a phone posted.
+ */
+export async function viewableImage(blob: Blob, name = ''): Promise<Blob> {
+  return isHeic(name, blob.type) ? heicToJpeg(blob) : blob;
 }
 
 /** A stored HEIC, made viewable. The original on failure: a file card beats nothing. */

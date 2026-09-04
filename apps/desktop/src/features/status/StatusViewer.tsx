@@ -101,6 +101,19 @@ function Player({ open }: { open: Opened }): JSX.Element | null {
   // reloads underneath the viewer must not rewind the post being watched.
   const postId = post?.id;
 
+  /**
+   * The post whose media has finished coming down. The clock does not run
+   * before that, so a photo on a slow line gets its five seconds of being
+   * looked at rather than five seconds of spinner. Held as an id rather than a
+   * flag so moving on resets it without an effect: the next post is not this
+   * one, so it is not ready.
+   *
+   * A post that failed to load counts as ready - the run has to move on past
+   * something that will never arrive.
+   */
+  const [loadedId, setLoadedId] = useState<string | null>(null);
+  const ready = loadedId === postId;
+
   /** Moves on, and off the end of a run onto the next person's. */
   const next = (): void => {
     if (open.index + 1 < posts.length) {
@@ -181,7 +194,7 @@ function Player({ open }: { open: Opened }): JSX.Element | null {
               key={entry.id}
               state={at < open.index ? 'done' : at > open.index ? 'todo' : 'playing'}
               durationMs={durationOf(post)}
-              paused={paused}
+              paused={paused || !ready}
               onDone={next}
             />
           ))}
@@ -209,7 +222,7 @@ function Player({ open }: { open: Opened }): JSX.Element | null {
             rather than one region with coordinate maths, so a keyboard and a
             screen reader get the same two moves a thumb does. */}
         <div className="relative min-h-0 flex-1">
-          <Slide post={post} paused={paused} />
+          <Slide post={post} paused={paused} onReady={setLoadedId} />
 
           <div className="absolute inset-0 flex">
             <TapZone
@@ -356,22 +369,52 @@ function Bar({
   );
 }
 
-/** The post's content: a picture, a video, or words on a colour. */
-function Slide({ post, paused }: { post: StatusEntry; paused: boolean }): JSX.Element {
+/**
+ * The post's content: a picture, a video, or words on a colour.
+ *
+ * `onReady` is called with the post's id once there is something to look at -
+ * or once there never will be. The player holds the clock and this holds the
+ * bytes, so the one that knows has to say.
+ */
+function Slide({
+  post,
+  paused,
+  onReady,
+}: {
+  post: StatusEntry;
+  paused: boolean;
+  onReady: (statusId: string) => void;
+}): JSX.Element {
   const [url, setUrl] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
   const video = useRef<HTMLVideoElement>(null);
 
+  // The same reason `Bar` keeps its callback in a ref: the player re-renders
+  // whenever the store moves, and a new function each time would restart the
+  // download rather than the clock.
+  const ready = useRef(onReady);
+  ready.current = onReady;
+
   useEffect(() => {
-    if (!post.mediaUrl) return;
+    // Words are ready the moment they are on screen.
+    if (!post.mediaUrl) {
+      ready.current(post.id);
+      return;
+    }
     let live = true;
     setFailed(false);
     void statusMedia(post)
       .then((resolved) => {
-        if (live) setUrl(resolved);
+        if (!live) return;
+        setUrl(resolved);
+        ready.current(post.id);
       })
       .catch(() => {
-        if (live) setFailed(true);
+        if (!live) return;
+        setFailed(true);
+        // Ready in the sense that matters here: nothing more is coming, and
+        // the run must not stop on it forever.
+        ready.current(post.id);
       });
     return () => {
       live = false;

@@ -50,11 +50,17 @@ async function fetchBlobUrl(post: StatusEntry): Promise<string> {
   // Imported lazily so this module can be read by a check without pulling the
   // whole API surface - and so the import graph stays one way: the store
   // imports this, this does not import the store.
-  const [{ api }, { openStatusMedia }] = await Promise.all([
+  const [{ api }, { openStatusMedia }, { viewableImage }] = await Promise.all([
     import('./api'),
     import('./e2ee'),
+    import('./attachments'),
   ]);
   const sealed = await api.fetchObject(post.mediaUrl);
   const opened = await openStatusMedia(post, sealed);
-  return URL.createObjectURL(new Blob([opened], { type: post.mediaType ?? '' }));
+  // Through the same door an attachment goes through, because it is the same
+  // problem: a phone camera writes HEIC, Chromium has never decoded one, and a
+  // moment posted from Android drew as a broken image here for exactly that
+  // reason. Anything else comes back untouched.
+  const blob = await viewableImage(new Blob([opened], { type: post.mediaType ?? '' }));
+  return URL.createObjectURL(blob);
 }
