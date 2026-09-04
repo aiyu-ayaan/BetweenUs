@@ -36,6 +36,7 @@ import {
   XIcon,
 } from '../../components/icons';
 import { statusAge } from './age';
+import { spentAfter } from './clock';
 
 /**
  * The one-tap answers under somebody else's moment.
@@ -275,15 +276,15 @@ function Player({ open }: { open: Opened }): JSX.Element | null {
               onClick={previous}
               onHold={setPaused}
               disabled={open.index === 0}
-              className="w-1/3"
-              icon={<ChevronLeftIcon className="h-6 w-6" />}
+              className="w-1/3 justify-start ps-2"
+              icon={<ChevronLeftIcon className="h-5 w-5" />}
             />
             <TapZone
               label="Next moment"
               onClick={next}
               onHold={setPaused}
-              className="flex-1"
-              icon={<ChevronRightIcon className="h-6 w-6" />}
+              className="flex-1 justify-end pe-2"
+              icon={<ChevronRightIcon className="h-5 w-5" />}
             />
           </div>
         </div>
@@ -508,7 +509,20 @@ function Bar({
   onDone: () => void;
 }): JSX.Element {
   const [width, setWidth] = useState(0);
-  const started = useRef<number>(Date.now());
+  /**
+   * When this bar actually started running, or null while it is not.
+   *
+   * Null rather than a timestamp from mount time, and that is the whole of a
+   * bug worth remembering. Every bar in a run mounts when the player opens, so
+   * a timestamp taken there is the moment the *first* post began. The post
+   * being downloaded holds the clock (see `ready` in `Player`), which pauses
+   * each bar the instant it starts playing - and the pause branch below then
+   * charged that bar for every second the earlier posts had been on screen.
+   * With a five-second photo the second one opened already spent, fired its
+   * timer in the same frame, and the run fell off the end into the next
+   * person's before anybody saw picture two.
+   */
+  const started = useRef<number | null>(null);
   const spent = useRef(0);
 
   // `onDone` is a new function on every render of the player, and the player
@@ -521,11 +535,22 @@ function Bar({
   done.current = onDone;
 
   useEffect(() => {
-    if (state !== 'playing') return;
+    if (state !== 'playing') {
+      // Off screen: it has spent nothing and it is not running. A bar that is
+      // rewound to has to start from zero, not from whatever it held the last
+      // time it was the one playing.
+      spent.current = 0;
+      started.current = null;
+      return;
+    }
     if (paused) {
-      // Freeze where it is: read the painted width back rather than guessing,
-      // and hold the elapsed time so resuming does not restart the post.
-      spent.current += Date.now() - started.current;
+      // Freeze where it is, holding the elapsed time so resuming does not
+      // restart the post. Only a bar that was actually running has spent
+      // anything - one paused before it ever started has spent nothing, which
+      // is the case every post transition goes through while its media
+      // downloads.
+      spent.current = spentAfter(spent.current, started.current, Date.now());
+      started.current = null;
       setWidth((Math.min(spent.current / durationMs, 1)) * 100);
       return;
     }
@@ -674,6 +699,13 @@ function Slide({
  * The hold is a timer rather than "mouse down means paused", because a click
  * is also a mouse down - and pausing on every tap makes the bar stutter on its
  * way to the next post.
+ *
+ * The whole half is the target, and the arrow drawn at its outer edge is what
+ * says so. Drawn rather than revealed on hover: the tap-anywhere rule is one
+ * people arrive knowing from a phone, and a mouse is not a thumb - on a
+ * desktop there is nothing to discover it with until the pointer is already
+ * over the picture. It is also the keyboard's two keys made visible, which is
+ * the point of having both.
  */
 function TapZone({
   label,
@@ -724,9 +756,20 @@ function TapZone({
         holding.current = null;
         held.current = false;
       }}
-      className={`group flex cursor-pointer items-center justify-center text-white/0 transition-colors hover:text-white/40 disabled:cursor-default ${className}`}
+      className={`group flex cursor-pointer items-center transition-colors disabled:cursor-default ${className}`}
     >
-      {icon}
+      {/* Hidden rather than dimmed at the start of a run: an arrow that cannot
+          be pressed is a question about why, and there is no answer worth the
+          space. The half stays clickable and does nothing, exactly as a thumb
+          on the left of the first picture always has. */}
+      <span
+        aria-hidden
+        className={`flex h-9 w-9 items-center justify-center rounded-full bg-black/35 text-white/70 transition-all duration-150 group-hover:bg-black/60 group-hover:text-white ${
+          disabled ? 'opacity-0' : 'opacity-100'
+        }`}
+      >
+        {icon}
+      </span>
     </button>
   );
 }
