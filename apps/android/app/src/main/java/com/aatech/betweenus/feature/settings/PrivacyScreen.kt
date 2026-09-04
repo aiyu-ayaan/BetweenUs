@@ -1,6 +1,11 @@
 package com.aatech.betweenus.feature.settings
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -11,12 +16,16 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.ui.draw.clip
+import com.aatech.betweenus.core.store.Conversation
+import com.aatech.betweenus.feature.chat.DisappearingWindows
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -68,6 +77,44 @@ import kotlinx.coroutines.launch
  * already up was sealed for the audience it had, and nothing here can reach a
  * key that is already on somebody's device.
  */
+@Composable
+private fun DisappearingRow(value: Int?, enabled: Boolean, onPick: (Int?) -> Unit) {
+    val scheme = MaterialTheme.colorScheme
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState())
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        for (seconds in DisappearingWindows.OPTIONS) {
+            val on = seconds == value
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(if (on) scheme.primary.copy(alpha = 0.16f) else scheme.surfaceContainerHigh)
+                    .border(
+                        width = 1.dp,
+                        color = if (on) scheme.primary else scheme.outlineVariant,
+                        shape = RoundedCornerShape(10.dp),
+                    )
+                    .clickable(enabled = enabled) { onPick(seconds) }
+                    .padding(horizontal = 14.dp, vertical = 9.dp),
+            ) {
+                Text(
+                    text = DisappearingWindows.label(seconds),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = when {
+                        !enabled -> scheme.onSurfaceVariant.copy(alpha = 0.5f)
+                        on -> scheme.onSurface
+                        else -> scheme.onSurfaceVariant
+                    },
+                )
+            }
+        }
+    }
+}
+
 @Composable
 fun PrivacyScreen(
     onBack: () -> Unit,
@@ -186,6 +233,41 @@ fun PrivacyScreen(
                     )
                 },
                 onClick = onMomentsPrivacy,
+            )
+
+            Spacer(Modifier.height(16.dp))
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+
+            SectionLabel("Disappearing messages")
+            Text(
+                text = "Stop showing you messages older than this, in every conversation, on every " +
+                    "device you are signed in on. It is the same shape as clearing your messages " +
+                    "below - one-sided, and about your own screens - except that the line keeps moving " +
+                    "instead of being drawn once.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 12.dp),
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text = "Nobody else loses anything. A server can also set a window of its own, and " +
+                    "that one does delete for everybody - where the two disagree, whichever is shorter " +
+                    "is what you see.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 12.dp),
+            )
+            Spacer(Modifier.height(8.dp))
+
+            DisappearingRow(
+                value = user?.messageTtlSeconds,
+                enabled = !busy,
+                onPick = { seconds ->
+                    act {
+                        Session.updateUser(BetweenUsApi.setMessageWindow(seconds))
+                        Conversation.pruneExpired()
+                    }
+                },
             )
 
             Spacer(Modifier.height(16.dp))

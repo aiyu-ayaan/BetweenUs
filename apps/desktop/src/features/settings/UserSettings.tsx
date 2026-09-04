@@ -138,12 +138,6 @@ const SECTION_GROUPS: Array<{ label: string; entries: SectionEntry[] }> = [
         icon: BlockIcon,
       },
       {
-        id: 'moments',
-        label: 'Moments',
-        hint: 'Who can see your moments when you post',
-        icon: SparklesIcon,
-      },
-      {
         id: 'encryption',
         label: 'Encryption',
         hint: 'Your key, its backup and the machines holding one',
@@ -363,7 +357,9 @@ export function UserSettings({ onClose }: { onClose: () => void }): JSX.Element 
           {section === 'privacy' && (
             <PrivacySection onNavigateMoments={() => setSection('moments')} />
           )}
-          {section === 'moments' && <MomentsSection />}
+          {section === 'moments' && (
+            <MomentsSection onBack={() => setSection('privacy')} />
+          )}
           {section === 'encryption' && <EncryptionSection />}
           {section === 'voice' && <VoiceSection />}
           {section === 'calls' && <CallUsageSection />}
@@ -636,7 +632,7 @@ function PrivacySection({
   );
 }
 
-function MomentsSection(): JSX.Element {
+function MomentsSection({ onBack }: { onBack: () => void }): JSX.Element {
   const user = useAuthStore((state) => state.user);
   const refreshUser = useAuthStore((state) => state.refreshUser);
   const friends = useFriendsStore((state) => state.friends);
@@ -670,6 +666,15 @@ function MomentsSection(): JSX.Element {
 
   return (
     <>
+      <button
+        type="button"
+        onClick={onBack}
+        className="mb-4 flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium text-slate-400 hover:bg-white/[0.06] hover:text-slate-100 transition-colors cursor-pointer"
+      >
+        <ChevronLeftIcon className="h-4 w-4" />
+        <span>Back to Privacy &amp; Safety</span>
+      </button>
+
       <h1 className="text-xl font-semibold text-slate-50">Moments Privacy</h1>
       <p className="mt-2 text-sm text-slate-400">
         Who sees what you post, and which friends are included or excluded.

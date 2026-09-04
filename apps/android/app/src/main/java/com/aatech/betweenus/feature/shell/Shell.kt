@@ -667,7 +667,6 @@ fun Shell(user: PublicUser) {
                             onAutoUpdate = { navigation.navigate(Route.AutoUpdate) },
                             onCallUsage = { navigation.navigate(Route.CallUsage) },
                             onPrivacy = { navigation.navigate(Route.Privacy) },
-                            onMomentsSettings = { navigation.navigate(Route.MomentsPrivacy) },
                         )
                     }
                     composable(

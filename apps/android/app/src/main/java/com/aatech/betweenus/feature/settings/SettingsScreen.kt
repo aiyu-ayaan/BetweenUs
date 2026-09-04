@@ -77,7 +77,6 @@ fun SettingsScreen(
     onAutoUpdate: (() -> Unit)? = null,
     onCallUsage: (() -> Unit)? = null,
     onPrivacy: (() -> Unit)? = null,
-    onMomentsSettings: (() -> Unit)? = null,
 ) {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -185,13 +184,6 @@ fun SettingsScreen(
                 leading = { BetweenUsIcon(BetweenUsIcons.Block) },
                 trailing = { BetweenUsIcon(BetweenUsIcons.ChevronRight, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
                 onClick = { onPrivacy?.invoke() },
-            )
-            ListRow(
-                title = "Moments",
-                subtitle = "Who can see what you post",
-                leading = { BetweenUsIcon(BetweenUsIcons.Sparkles) },
-                trailing = { BetweenUsIcon(BetweenUsIcons.ChevronRight, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
-                onClick = { onMomentsSettings?.invoke() },
             )
 
             // --- Preferences Subsection ---
