@@ -29,6 +29,7 @@ import { useStatusStore, type StatusDraft } from '../../stores/status';
 import { shrinkImage } from '../../services/attachments';
 import { useFocusTrap } from '../../services/focus-trap';
 import { ImageIcon, LayoutSidebarIcon, PencilIcon, XIcon } from '../../components/icons';
+import { openMyMoments } from './MyMoments';
 
 const useComposer = create<{ open: boolean }>(() => ({ open: false }));
 
@@ -148,6 +149,10 @@ function Composer(): JSX.Element {
         }
       }
       close();
+      // Lands on the run it was added to rather than back on the tray:
+      // what somebody wants to see after posting is the thing they just
+      // posted, and who has looked at it.
+      openMyMoments();
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : 'That could not be posted');
       setBusy(false);

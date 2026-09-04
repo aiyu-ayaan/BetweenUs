@@ -31,6 +31,7 @@ import { FriendsView } from './features/home/FriendsView';
 import { StatusScreen } from './features/status/StatusScreen';
 import { StatusViewer } from './features/status/StatusViewer';
 import { StatusComposer } from './features/status/StatusComposer';
+import { MyMoments } from './features/status/MyMoments';
 import { RemoteView } from './features/remote/RemoteView';
 import { RemoteConsent } from './features/remote/RemoteConsent';
 import { RemoteSessionView } from './features/remote/RemoteSessionView';
@@ -668,6 +669,7 @@ function Workbench(): JSX.Element {
           an avatar in a conversation all open the same one. */}
       <StatusViewer />
       <StatusComposer />
+      <MyMoments />
 
       {settings === 'user' && <UserSettings onClose={() => setSettings('none')} />}
       {settings === 'server' && <ServerSettings onClose={() => setSettings('none')} />}

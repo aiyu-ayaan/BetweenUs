@@ -22,6 +22,7 @@ import { statusAge } from './age';
 import { MomentsEmptyArt } from './MomentsEmptyArt';
 import { openStatus } from './StatusViewer';
 import { openStatusComposer } from './StatusComposer';
+import { openMyMoments } from './MyMoments';
 import { MomentThumb } from './MomentThumb';
 
 export function StatusScreen({ onOpenMenu }: { onOpenMenu?: () => void }): JSX.Element {
@@ -66,7 +67,11 @@ export function StatusScreen({ onOpenMenu }: { onOpenMenu?: () => void }): JSX.E
             the avatar rather than being a second button beside it. */}
         <button
           type="button"
-          onClick={() => (mine.length > 0 ? openStatus(me?.id ?? '') : openStatusComposer())}
+          // What you posted, with the counts, rather than straight into the
+          // player: from here the run is one click away and who watched it is
+          // on the tile. Nothing posted means there is nothing to show, so the
+          // picker is what was wanted.
+          onClick={() => (mine.length > 0 ? openMyMoments() : openStatusComposer())}
           className="flex w-full cursor-pointer items-center gap-3 rounded-md px-2 py-2 text-start transition-colors duration-200 row-idle"
         >
           <span className="relative shrink-0">

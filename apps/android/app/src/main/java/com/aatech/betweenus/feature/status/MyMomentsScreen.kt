@@ -18,7 +18,7 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.itemsIndexed
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -152,7 +152,16 @@ private fun MyMomentsScreen(onClose: () -> Unit) {
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                itemsIndexed(mine, key = { _, post -> post.id }) { at, post ->
+                // Newest first, unlike the player behind it. A run is watched
+                // oldest to newest because that is the order it was lived in;
+                // a grid of your own posts is read the way every grid of your
+                // own things is read, with the thing you just did at the top.
+                // Each tile carries the position it opens, so the two orders
+                // never have to agree.
+                items(
+                    mine.withIndex().reversed(),
+                    key = { (_, post) -> post.id },
+                ) { (at, post) ->
                     MomentTile(
                         post = post,
                         onClick = { me?.id?.let { StatusStory.open(it, at) } },
