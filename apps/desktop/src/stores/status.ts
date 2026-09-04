@@ -55,6 +55,15 @@ interface StatusState {
   load: () => Promise<void>;
   post: (draft: StatusDraft, media?: Blob) => Promise<void>;
   markSeen: (statusId: string) => void;
+  /**
+   * Says one symbol back to somebody's post, or takes it back by sending the
+   * same one again.
+   *
+   * Applied here as well as sent: the row it changes is the reader's own
+   * `myReaction`, which is what the picked symbol is drawn from, and a picker
+   * that waits for a round trip to light up feels broken on a slow line.
+   */
+  react: (statusId: string, emoji: string) => Promise<void>;
   remove: (statusId: string) => Promise<void>;
   viewersOf: (statusId: string) => Promise<StatusViewer[]>;
   reset: () => void;
@@ -136,6 +145,32 @@ export const useStatusStore = create<StatusState>((set, get) => ({
     if (get().seenLocally.has(statusId)) return;
     set({ seenLocally: new Set(get().seenLocally).add(statusId) });
     void api.markStatusSeen(statusId).catch(() => undefined);
+  },
+
+  react: async (statusId, emoji) => {
+    const at = (posts: StatusEntry[]): StatusEntry[] =>
+      posts.map((post) =>
+        post.id === statusId
+          ? { ...post, myReaction: post.myReaction === emoji ? null : emoji }
+          : post,
+      );
+    set({
+      mine: at(get().mine),
+      others: get().others.map((run) => ({ ...run, statuses: at(run.statuses) })),
+    });
+    // The author's tally is recomputed from the server's answer, which arrives
+    // on the `status.changed` announcement this write causes. Nothing to do
+    // here but put the symbol back if the write failed - applying the same
+    // toggle twice is what undoes it.
+    try {
+      await api.reactToStatus(statusId, emoji);
+    } catch (error) {
+      set({
+        mine: at(get().mine),
+        others: get().others.map((run) => ({ ...run, statuses: at(run.statuses) })),
+      });
+      throw error;
+    }
   },
 
   remove: async (statusId) => {

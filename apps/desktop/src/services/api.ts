@@ -625,6 +625,13 @@ export const api = {
   markStatusSeen: (statusId: string): Promise<void> =>
     request(`/api/v1/statuses/${statusId}/view`, { method: 'POST' }),
 
+  /** One symbol back. Sending the one already there takes it back. */
+  reactToStatus: (statusId: string, emoji: string): Promise<void> =>
+    request(`/api/v1/statuses/${statusId}/reactions`, {
+      method: 'POST',
+      body: JSON.stringify({ emoji }),
+    }),
+
   statusViewers: (statusId: string): Promise<StatusViewer[]> =>
     request(`/api/v1/statuses/${statusId}/views`),
 

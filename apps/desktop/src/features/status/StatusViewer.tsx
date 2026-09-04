@@ -300,7 +300,7 @@ function Player({ open }: { open: Opened }): JSX.Element | null {
             and the way to take it down. */}
         {isSelf && (
           <footer className="flex items-center justify-center gap-2 px-4 pb-4">
-            <button
+<button
               type="button"
               onClick={() => {
                 void useStatusStore
@@ -314,6 +314,16 @@ function Player({ open }: { open: Opened }): JSX.Element | null {
               <EyeIcon className="h-4 w-4" />
               {post.viewCount ?? 0}
               <span className="sr-only"> people have seen this</span>
+              {/* What they said, in the same pill as how many of them there
+                  were: they are one fact about one post, and the list behind
+                  the pill is where either can be read person by person. */}
+              {post.reactions.map((tally) => (
+                <span key={tally.emoji} className="flex items-center gap-1 text-white/80">
+                  <span aria-hidden>{tally.emoji}</span>
+                  {tally.count}
+                  <span className="sr-only"> reacted {tally.emoji}</span>
+                </span>
+              ))}
             </button>
             <button
               type="button"
@@ -368,6 +378,7 @@ function AnswerBar({
   onHold: (holding: boolean) => void;
 }): JSX.Element {
   const answerMoment = useChatStore((state) => state.answerMoment);
+  const reactToMoment = useStatusStore((state) => state.react);
   const [text, setText] = useState('');
   const [focused, setFocused] = useState(false);
   const [sent, setSent] = useState<string | null>(null);
@@ -396,6 +407,22 @@ function AnswerBar({
       .catch(() => setFailed(true));
   };
 
+  /**
+   * A reaction does both: it is counted on the post and it is said in the
+   * conversation.
+   *
+   * Two records of one tap, on purpose. The tally is what the author reads off
+   * their own moment while it is alive; the message is what is still there
+   * tomorrow, when the moment is not. Picking the symbol already chosen takes
+   * the tally back and says nothing further - a second message would be the
+   * same reaction twice.
+   */
+  const react = (emoji: string): void => {
+    const undoing = post.myReaction === emoji;
+    void reactToMoment(post.id, emoji).catch(() => setFailed(true));
+    if (!undoing) send(emoji);
+  };
+
   return (
     <footer className="flex flex-col gap-2 px-4 pb-4">
       {sent && (
@@ -414,9 +441,12 @@ function AnswerBar({
           <button
             key={emoji}
             type="button"
-            onClick={() => send(emoji)}
+            onClick={() => react(emoji)}
             aria-label={`React ${emoji} to ${name}'s moment`}
-            className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-full text-lg transition-transform duration-150 hover:scale-125 hover:bg-white/10"
+            aria-pressed={post.myReaction === emoji}
+            className={`flex h-9 w-9 cursor-pointer items-center justify-center rounded-full text-lg transition-transform duration-150 hover:scale-125 hover:bg-white/10 ${
+              post.myReaction === emoji ? 'scale-125 bg-white/20' : ''
+            }`}
           >
             {emoji}
           </button>
@@ -740,6 +770,13 @@ function ViewerList({ viewers, onClose }: { viewers: Viewer[]; onClose: () => vo
                 <span className="min-w-0 flex-1 truncate text-sm text-slate-200">
                   {viewer.user.displayName}
                 </span>
+                {/* Beside the name rather than in a list of its own: what
+                    somebody said back is a fact about their having watched. */}
+                {viewer.reaction && (
+                  <span className="shrink-0 text-sm" title={`Reacted ${viewer.reaction}`}>
+                    {viewer.reaction}
+                  </span>
+                )}
                 <span className="shrink-0 text-xs text-slate-500">
                   {statusAge(viewer.viewedAt)}
                 </span>
