@@ -228,7 +228,7 @@ function Player({ open }: { open: Opened }): JSX.Element | null {
       role="dialog"
       aria-modal="true"
       aria-label={`${author.displayName}'s moments`}
-      className="fixed inset-0 z-[70] flex animate-fade flex-col bg-black/95"
+      className="fixed inset-0 z-[70] flex animate-fade flex-col bg-black/95 no-drag"
     >
       <div className="mx-auto flex h-full w-full max-w-md flex-col">
         {/* The bars, one per post. The one playing animates; the ones before
@@ -258,7 +258,7 @@ function Player({ open }: { open: Opened }): JSX.Element | null {
             type="button"
             onClick={closeStatus}
             aria-label="Close moments"
-            className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-full text-white/80 transition-colors hover:bg-white/10 hover:text-white"
+            className="no-drag flex h-8 w-8 cursor-pointer items-center justify-center rounded-full text-white/80 transition-colors hover:bg-white/10 hover:text-white"
           >
             <XIcon className="h-5 w-5" />
           </button>

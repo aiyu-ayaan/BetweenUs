@@ -36,6 +36,8 @@ import {
   XIcon,
 } from '../../components/icons';
 
+import { captionInset } from '../../services/platform';
+
 export function GamePanel(): JSX.Element {
   const fullscreen = useGameStore((state) => state.fullscreen);
 
@@ -48,7 +50,7 @@ export function GamePanel(): JSX.Element {
   if (!fullscreen) return panel;
 
   return createPortal(
-    <div className="fixed inset-0 z-50 flex flex-col gap-2 bg-surface-950 p-4">{panel}</div>,
+    <div style={captionInset()} className="fixed inset-0 z-50 flex flex-col gap-2 bg-surface-950 p-4 no-drag">{panel}</div>,
     document.body,
   );
 }
@@ -85,7 +87,7 @@ function Board(): JSX.Element {
             }}
             aria-label="Back to apps"
             title="Apps"
-            className="-ms-1 cursor-pointer rounded p-1 text-slate-400 transition-colors hover:bg-white/[0.06] hover:text-slate-200"
+            className="-ms-1 no-drag cursor-pointer rounded p-1 text-slate-400 transition-colors hover:bg-white/[0.06] hover:text-slate-200"
           >
             <ChevronLeftIcon className="h-4 w-4" />
           </button>
@@ -104,7 +106,7 @@ function Board(): JSX.Element {
           <button
             type="button"
             onClick={() => setChoosing((open) => !open)}
-            className="ms-2 cursor-pointer rounded px-2 py-1 text-[11px] text-slate-400 transition-colors hover:bg-white/[0.06] hover:text-slate-200"
+            className="ms-2 no-drag cursor-pointer rounded px-2 py-1 text-[11px] text-slate-400 transition-colors hover:bg-white/[0.06] hover:text-slate-200"
           >
             {choosing ? 'Back to the board' : 'Change game'}
           </button>
@@ -118,7 +120,7 @@ function Board(): JSX.Element {
           onClick={() => useGameStore.getState().setFullscreen(!fullscreen)}
           aria-label={fullscreen ? 'Leave fullscreen' : 'Fullscreen'}
           title={fullscreen ? 'Leave fullscreen - Esc' : 'Fullscreen'}
-          className="ms-auto cursor-pointer rounded p-1 text-slate-400 transition-colors hover:bg-white/[0.06] hover:text-slate-200"
+          className="ms-auto no-drag cursor-pointer rounded p-1 text-slate-400 transition-colors hover:bg-white/[0.06] hover:text-slate-200"
         >
           {fullscreen ? (
             <MinimizeIcon className="h-4 w-4" />
@@ -132,7 +134,7 @@ function Board(): JSX.Element {
           onClick={() => useGameStore.getState().setOpen(false)}
           aria-label="Close play together"
           title="Close - the game stays on the table"
-          className="cursor-pointer rounded p-1 text-slate-400 transition-colors hover:bg-white/[0.06] hover:text-slate-200"
+          className="no-drag cursor-pointer rounded p-1 text-slate-400 transition-colors hover:bg-white/[0.06] hover:text-slate-200"
         >
           <XIcon className="h-4 w-4" />
         </button>

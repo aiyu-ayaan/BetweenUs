@@ -82,23 +82,23 @@ function Screen(): JSX.Element | null {
       role="dialog"
       aria-modal="true"
       aria-label="My moments"
-      className="fixed inset-0 z-[60] flex animate-fade flex-col bg-ground"
+      className="fixed inset-0 z-[60] flex animate-fade flex-col bg-ground no-drag"
     >
       {/* Same corner, same reason as the composer: the plus would otherwise be
           under the close button. */}
       <header
         style={captionInset()}
-        className="flex h-14 shrink-0 items-center gap-2 border-b border-edge px-3"
+        className="drag-region flex h-14 shrink-0 items-center gap-2 border-b border-edge px-3"
       >
         <button
           type="button"
           onClick={close}
           aria-label="Back"
-          className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-md text-slate-400 transition-colors hover:bg-white/[0.06] hover:text-slate-200"
+          className="no-drag flex h-8 w-8 cursor-pointer items-center justify-center rounded-md text-slate-400 transition-colors hover:bg-white/[0.06] hover:text-slate-200"
         >
           <ChevronLeftIcon className="h-5 w-5" />
         </button>
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0 flex-1 select-none">
           <h1 className="truncate text-base font-semibold text-slate-100">My moments</h1>
           <p className="truncate text-xs text-slate-500">
             {countLabel(mine.length)} · gone in 24 hours
@@ -108,7 +108,7 @@ function Screen(): JSX.Element | null {
           type="button"
           onClick={openStatusComposer}
           aria-label="Add a moment"
-          className="flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-full bg-accent text-white transition-colors hover:bg-accent-hover"
+          className="no-drag flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-full bg-accent text-white transition-colors hover:bg-accent-hover"
         >
           <PlusIcon className="h-4 w-4" />
         </button>

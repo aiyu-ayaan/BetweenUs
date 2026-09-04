@@ -462,7 +462,7 @@ function Theatre({ share, tiles }: { share: VoiceShare; tiles: Stage[] }): JSX.E
       <div
         onMouseMove={resetHideTimer}
         onTouchStart={resetHideTimer}
-        className={`fixed inset-0 z-50 flex flex-col bg-black select-none ${
+        className={`fixed inset-0 z-50 flex flex-col bg-black select-none no-drag ${
           !showControls ? 'cursor-none' : ''
         }`}
       >
@@ -482,7 +482,7 @@ function Theatre({ share, tiles }: { share: VoiceShare; tiles: Stage[] }): JSX.E
           aria-label="Exit full screen"
           title="Exit full screen (Esc or F)"
           style={captionCorner()}
-          className={`absolute top-4 z-40 flex cursor-pointer items-center gap-1.5 rounded-md border border-white/10 bg-black/70 px-3 py-1.5 text-xs font-semibold text-white shadow-md backdrop-blur-md transition-opacity duration-300 hover:bg-white/20 ${
+          className={`no-drag absolute top-4 z-40 flex cursor-pointer items-center gap-1.5 rounded-md border border-white/10 bg-black/70 px-3 py-1.5 text-xs font-semibold text-white shadow-md backdrop-blur-md transition-opacity duration-300 hover:bg-white/20 ${
             showControls ? 'opacity-0 pointer-events-none' : 'opacity-70 hover:opacity-100'
           }`}
         >
@@ -493,7 +493,7 @@ function Theatre({ share, tiles }: { share: VoiceShare; tiles: Stage[] }): JSX.E
         {/* Fullscreen top header overlay (Auto-hiding) */}
         <div
           style={captionInset()}
-          className={`absolute inset-x-0 top-0 z-30 flex items-center justify-between gap-3 bg-gradient-to-b from-black/90 via-black/50 to-transparent p-4 transition-all duration-300 ease-out ${
+          className={`no-drag absolute inset-x-0 top-0 z-30 flex items-center justify-between gap-3 bg-gradient-to-b from-black/90 via-black/50 to-transparent p-4 transition-all duration-300 ease-out ${
             showControls
               ? 'opacity-100 translate-y-0 pointer-events-auto'
               : 'opacity-0 -translate-y-6 pointer-events-none'
@@ -517,7 +517,7 @@ function Theatre({ share, tiles }: { share: VoiceShare; tiles: Stage[] }): JSX.E
               <button
                 type="button"
                 onClick={() => void stopScreenShare()}
-                className="cursor-pointer rounded-md bg-red-500/90 px-3.5 py-1.5 text-xs font-semibold text-white shadow-md backdrop-blur transition-all duration-200 hover:bg-red-500 hover:shadow-red-500/20 active:scale-95"
+                className="no-drag cursor-pointer rounded-md bg-red-500/90 px-3.5 py-1.5 text-xs font-semibold text-white shadow-md backdrop-blur transition-all duration-200 hover:bg-red-500 hover:shadow-red-500/20 active:scale-95"
               >
                 Stop sharing
               </button>
@@ -532,7 +532,7 @@ function Theatre({ share, tiles }: { share: VoiceShare; tiles: Stage[] }): JSX.E
                     ? 'Right Side Gallery'
                     : 'Bottom Dock'
               } (Click to switch)`}
-              className="flex cursor-pointer items-center gap-1.5 rounded-md border border-white/10 bg-black/60 px-3 py-1.5 text-xs font-medium text-slate-200 backdrop-blur-md shadow-md transition-all duration-200 hover:bg-white/10 active:scale-95"
+              className="no-drag flex cursor-pointer items-center gap-1.5 rounded-md border border-white/10 bg-black/60 px-3 py-1.5 text-xs font-medium text-slate-200 backdrop-blur-md shadow-md transition-all duration-200 hover:bg-white/10 active:scale-95"
             >
               {layout === 'side-left' ? (
                 <LayoutSidebarIcon className="h-3.5 w-3.5" />
@@ -550,7 +550,7 @@ function Theatre({ share, tiles }: { share: VoiceShare; tiles: Stage[] }): JSX.E
               onClick={() => setShowParticipants((prev) => !prev)}
               aria-label={showParticipants ? 'Hide participants' : 'Show participants'}
               title={showParticipants ? 'Hide participants' : 'Show participants'}
-              className={`flex cursor-pointer items-center gap-1.5 rounded-md border border-white/10 px-3 py-1.5 text-xs font-medium backdrop-blur-md shadow-md transition-all duration-200 active:scale-95 ${
+              className={`no-drag flex cursor-pointer items-center gap-1.5 rounded-md border border-white/10 px-3 py-1.5 text-xs font-medium backdrop-blur-md shadow-md transition-all duration-200 active:scale-95 ${
                 showParticipants
                   ? 'bg-white/15 text-white'
                   : 'bg-black/60 text-slate-400 hover:text-slate-200'
@@ -564,7 +564,7 @@ function Theatre({ share, tiles }: { share: VoiceShare; tiles: Stage[] }): JSX.E
               onClick={toggleFullscreen}
               aria-label="Exit full screen"
               title="Exit full screen (Esc or F)"
-              className="flex cursor-pointer items-center gap-1.5 rounded-md border border-white/10 bg-white/10 px-3.5 py-1.5 text-xs font-semibold text-white backdrop-blur-md shadow-md transition-all duration-200 hover:bg-white/20 active:scale-95"
+              className="no-drag flex cursor-pointer items-center gap-1.5 rounded-md border border-white/10 bg-white/10 px-3.5 py-1.5 text-xs font-semibold text-white backdrop-blur-md shadow-md transition-all duration-200 hover:bg-white/20 active:scale-95"
             >
               <MinimizeIcon className="h-4 w-4" />
               Exit full screen
@@ -575,7 +575,7 @@ function Theatre({ share, tiles }: { share: VoiceShare; tiles: Stage[] }): JSX.E
                 setFullscreen(false);
                 watch(null);
               }}
-              className="cursor-pointer rounded-md border border-white/10 bg-black/60 px-3.5 py-1.5 text-xs font-medium text-slate-200 backdrop-blur-md shadow-md transition-all duration-200 hover:bg-white/10 active:scale-95"
+              className="no-drag cursor-pointer rounded-md border border-white/10 bg-black/60 px-3.5 py-1.5 text-xs font-medium text-slate-200 backdrop-blur-md shadow-md transition-all duration-200 hover:bg-white/10 active:scale-95"
             >
               Back to grid
             </button>
@@ -683,7 +683,7 @@ function Theatre({ share, tiles }: { share: VoiceShare; tiles: Stage[] }): JSX.E
               type="button"
               onClick={() => setShowParticipants(true)}
               title="Show cameras alongside stream"
-              className="absolute start-2 top-10 z-10 flex items-center gap-1.5 rounded-full border border-white/10 bg-black/70 px-3 py-1 text-xs font-medium text-slate-200 backdrop-blur-md shadow-lg transition-all duration-200 hover:bg-white/20 hover:text-white"
+              className="no-drag absolute start-2 top-10 z-10 flex items-center gap-1.5 rounded-full border border-white/10 bg-black/70 px-3 py-1 text-xs font-medium text-slate-200 backdrop-blur-md shadow-lg transition-all duration-200 hover:bg-white/20 hover:text-white"
             >
               <UsersIcon className="h-3.5 w-3.5" />
               <span>Show cameras ({tiles.length})</span>
@@ -696,7 +696,7 @@ function Theatre({ share, tiles }: { share: VoiceShare; tiles: Stage[] }): JSX.E
               <button
                 type="button"
                 onClick={() => void stopScreenShare()}
-                className="cursor-pointer rounded-md bg-red-500/90 px-3 py-1 text-xs font-semibold text-white transition-colors duration-200 hover:bg-red-500"
+                className="no-drag cursor-pointer rounded-md bg-red-500/90 px-3 py-1 text-xs font-semibold text-white transition-colors duration-200 hover:bg-red-500"
               >
                 Stop sharing
               </button>
@@ -706,7 +706,7 @@ function Theatre({ share, tiles }: { share: VoiceShare; tiles: Stage[] }): JSX.E
               onClick={() => setShowParticipants((prev) => !prev)}
               aria-label={showParticipants ? 'Hide cameras' : 'Show cameras'}
               title={showParticipants ? 'Hide cameras' : 'Show cameras'}
-              className={`flex cursor-pointer items-center gap-1.5 rounded-md border border-white/10 px-2.5 py-1 text-xs font-medium backdrop-blur-md shadow-md transition-all duration-200 active:scale-95 ${
+              className={`no-drag flex cursor-pointer items-center gap-1.5 rounded-md border border-white/10 px-2.5 py-1 text-xs font-medium backdrop-blur-md shadow-md transition-all duration-200 active:scale-95 ${
                 showParticipants
                   ? 'bg-white/15 text-white'
                   : 'bg-black/60 text-slate-400 hover:text-slate-200'
@@ -728,7 +728,7 @@ function Theatre({ share, tiles }: { share: VoiceShare; tiles: Stage[] }): JSX.E
                     ? 'Right Side Gallery'
                     : 'Bottom Dock'
               } (Click to switch)`}
-              className="flex cursor-pointer items-center gap-1 rounded-md bg-black/70 px-2.5 py-1 text-xs text-slate-200 transition-colors duration-200 hover:bg-black"
+              className="no-drag flex cursor-pointer items-center gap-1 rounded-md bg-black/70 px-2.5 py-1 text-xs text-slate-200 transition-colors duration-200 hover:bg-black"
             >
               {layout === 'side-left' ? (
                 <LayoutSidebarIcon className="h-3.5 w-3.5" />
@@ -746,7 +746,7 @@ function Theatre({ share, tiles }: { share: VoiceShare; tiles: Stage[] }): JSX.E
               onClick={toggleFullscreen}
               aria-label="Full screen"
               title="Full screen (F)"
-              className="flex cursor-pointer items-center gap-1 rounded-md bg-black/70 px-3 py-1 text-xs text-slate-200 transition-colors duration-200 hover:bg-black"
+              className="no-drag flex cursor-pointer items-center gap-1 rounded-md bg-black/70 px-3 py-1 text-xs text-slate-200 transition-colors duration-200 hover:bg-black"
             >
               <MaximizeIcon className="h-3.5 w-3.5" />
               Full screen
@@ -754,7 +754,7 @@ function Theatre({ share, tiles }: { share: VoiceShare; tiles: Stage[] }): JSX.E
             <button
               type="button"
               onClick={() => watch(null)}
-              className="cursor-pointer rounded-md bg-black/70 px-3 py-1 text-xs text-slate-200 transition-colors duration-200 hover:bg-black"
+              className="no-drag cursor-pointer rounded-md bg-black/70 px-3 py-1 text-xs text-slate-200 transition-colors duration-200 hover:bg-black"
             >
               Back to grid
             </button>
@@ -884,7 +884,7 @@ function ControlButtons({ share }: { share: VoiceShare }): JSX.Element {
             ? 'Hand the mouse back (Esc)'
             : `Ask ${share.name} for the mouse and keyboard on this screen`
         }
-        className={`cursor-pointer rounded-md px-3.5 py-1.5 text-xs font-semibold shadow-md backdrop-blur transition-all duration-200 active:scale-95 disabled:cursor-not-allowed disabled:opacity-60 ${
+        className={`no-drag cursor-pointer rounded-md px-3.5 py-1.5 text-xs font-semibold shadow-md backdrop-blur transition-all duration-200 active:scale-95 disabled:cursor-not-allowed disabled:opacity-60 ${
           controlling
             ? 'bg-amber-600/90 text-white hover:bg-amber-600 hover:shadow-amber-500/20'
             : asking
@@ -905,7 +905,7 @@ function ControlButtons({ share }: { share: VoiceShare }): JSX.Element {
               : `${machine.name} is offline`
           }
           onClick={() => void connectToOwner(share.userId, true)}
-          className="cursor-pointer rounded-md bg-black/70 px-3 py-1 text-xs text-slate-200 transition-colors duration-200 hover:bg-black disabled:cursor-not-allowed disabled:opacity-50"
+          className="no-drag cursor-pointer rounded-md bg-black/70 px-3 py-1 text-xs text-slate-200 transition-colors duration-200 hover:bg-black disabled:cursor-not-allowed disabled:opacity-50"
         >
           Open a session
         </button>
