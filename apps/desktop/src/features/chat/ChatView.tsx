@@ -1486,7 +1486,9 @@ function MomentQuote({ moment, mine }: { moment: MessageMoment; mine: boolean })
   const [thumbnail, setThumbnail] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!post?.mediaUrl) return;
+    // Pictures only. A clip would have to come down and be decrypted whole to
+    // fill a 28px square that draws a play mark anyway.
+    if (post?.kind !== 'PHOTO' || !post.mediaUrl) return;
     let live = true;
     void statusMedia(post)
       .then((url) => {
@@ -1498,7 +1500,7 @@ function MomentQuote({ moment, mine }: { moment: MessageMoment; mine: boolean })
     return () => {
       live = false;
     };
-  }, [post?.id, post?.mediaUrl]);
+  }, [post?.id, post?.kind, post?.mediaUrl]);
 
   // "your moment" reads correctly from both sides: the author sees their own
   // post named as theirs, and the answerer sees whose it was.
