@@ -173,6 +173,11 @@ feature/remote          feature/status        feature/update        feature/voic
   there is nothing posted yet. In the player the progress bar waits for the
   media to finish downloading, and a drag up opens the viewer list.
 
+  That gate is per-post on this client (`elapsed` is remembered by post id), so
+  it does not have the bug the desktop had: there, every bar in a run took its
+  start time at mount, and pausing one that had never run charged it for the
+  time the earlier posts were up - see `clock.ts` and its check.
+
   Answering a moment - a reaction or a reply, which are the same message with
   different text - goes through `Conversation.answerMoment`: it opens the DM
   with the author and sends `momentRef` inside the sealed body. `MomentQuote`
