@@ -31,7 +31,7 @@ import type { Channel } from '@betweenus/shared-types';
 import { useChatStore } from '../../stores/chat';
 import { usePresenceStore } from '../../stores/presence';
 import { useRemoteStore } from '../../stores/remote';
-import { isDesktopRuntime } from '../../services/platform';
+import { captionCorner, captionInset, isDesktopRuntime } from '../../services/platform';
 import { useShareControlStore } from '../../stores/shareControl';
 import { useVoiceStore, type VoiceShare, type VoiceTile } from '../../stores/voice';
 import { CallDuration } from './CallDuration';
@@ -84,11 +84,9 @@ interface Stage {
  * right, macOS puts its traffic lights on the left. A browser tab has neither, so
  * there the corner is the page's to use.
  */
-const captionInset = !isDesktopRuntime()
-  ? ''
-  : window.betweenus?.platform === 'darwin'
-    ? 'ps-[86px]'
-    : 'pe-[146px]';
+// The rule, and why, is in `services/platform.ts` - it is the same corner three
+// other full-screen overlays have to leave.
+
 
 export function VoiceChannelView({
   channel,
@@ -468,11 +466,34 @@ function Theatre({ share, tiles }: { share: VoiceShare; tiles: Stage[] }): JSX.E
           !showControls ? 'cursor-none' : ''
         }`}
       >
+        {/* The way out, and it never hides.
+
+            Everything else on this screen fades after a couple of seconds so
+            the picture is the picture - but the header carried the only Exit
+            button with it, and a control that was there a moment ago and is
+            now gone reads as no control at all. Escape and F still work and
+            always did; nothing said so once the header had gone.
+
+            Dimmed rather than removed while the rest is up, because the header
+            has its own Exit right beside this one. */}
+        <button
+          type="button"
+          onClick={toggleFullscreen}
+          aria-label="Exit full screen"
+          title="Exit full screen (Esc or F)"
+          style={captionCorner()}
+          className={`absolute top-4 z-40 flex cursor-pointer items-center gap-1.5 rounded-md border border-white/10 bg-black/70 px-3 py-1.5 text-xs font-semibold text-white shadow-md backdrop-blur-md transition-opacity duration-300 hover:bg-white/20 ${
+            showControls ? 'opacity-0 pointer-events-none' : 'opacity-70 hover:opacity-100'
+          }`}
+        >
+          <MinimizeIcon className="h-4 w-4" />
+          Exit full screen
+        </button>
+
         {/* Fullscreen top header overlay (Auto-hiding) */}
         <div
+          style={captionInset()}
           className={`absolute inset-x-0 top-0 z-30 flex items-center justify-between gap-3 bg-gradient-to-b from-black/90 via-black/50 to-transparent p-4 transition-all duration-300 ease-out ${
-            captionInset
-          } ${
             showControls
               ? 'opacity-100 translate-y-0 pointer-events-auto'
               : 'opacity-0 -translate-y-6 pointer-events-none'

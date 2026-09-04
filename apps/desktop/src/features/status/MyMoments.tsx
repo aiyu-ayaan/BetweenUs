@@ -26,6 +26,7 @@ import { useStatusStore } from '../../stores/status';
 import { statusMedia } from '../../services/status-media';
 import { useFocusTrap } from '../../services/focus-trap';
 import { ChevronLeftIcon, EyeIcon, PlayIcon, PlusIcon } from '../../components/icons';
+import { captionInset } from '../../services/platform';
 import { statusAge } from './age';
 import { openStatus } from './StatusViewer';
 import { openStatusComposer } from './StatusComposer';
@@ -83,7 +84,12 @@ function Screen(): JSX.Element | null {
       aria-label="My moments"
       className="fixed inset-0 z-[60] flex animate-fade flex-col bg-ground"
     >
-      <header className="flex h-14 shrink-0 items-center gap-2 border-b border-edge px-3">
+      {/* Same corner, same reason as the composer: the plus would otherwise be
+          under the close button. */}
+      <header
+        style={captionInset()}
+        className="flex h-14 shrink-0 items-center gap-2 border-b border-edge px-3"
+      >
         <button
           type="button"
           onClick={close}

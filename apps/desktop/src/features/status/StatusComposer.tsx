@@ -29,6 +29,7 @@ import { useStatusStore, type StatusDraft } from '../../stores/status';
 import { shrinkImage } from '../../services/attachments';
 import { useFocusTrap } from '../../services/focus-trap';
 import { ImageIcon, LayoutSidebarIcon, PencilIcon, XIcon } from '../../components/icons';
+import { captionInset } from '../../services/platform';
 import { openMyMoments } from './MyMoments';
 
 const useComposer = create<{ open: boolean }>(() => ({ open: false }));
@@ -169,7 +170,9 @@ function Composer(): JSX.Element {
       aria-label="Add a moment"
       className="fixed inset-0 z-[70] flex animate-fade flex-col bg-black/95"
     >
-      <header className="flex items-center gap-3 px-4 py-3 text-white">
+      {/* The window buttons are drawn over this corner by the system, so Post
+          has to stop short of them or it sits underneath the close button. */}
+      <header style={captionInset()} className="flex items-center gap-3 px-4 py-3 text-white">
         <button
           type="button"
           onClick={close}
