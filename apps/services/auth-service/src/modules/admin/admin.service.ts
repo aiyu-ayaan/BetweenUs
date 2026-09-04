@@ -17,7 +17,7 @@ import type {
   GlobalRole,
 } from '@betweenus/shared-types';
 import { MailService } from '../mail/mail.service';
-import { toVisibility } from '../auth/auth.service';
+import { toStatusPrivacy, toVisibility } from '../auth/auth.service';
 import { PROVIDERS, type ProviderName, callbackUrl } from './oauth-providers';
 import type { AdminOAuthProviderDto, AdminSmtpDto, AdminUserUpdateDto } from './dto';
 
@@ -79,6 +79,8 @@ function toAdminUser(user: UserWithDetail): AdminUser {
     role: user.role,
     mustChangePassword: user.mustChangePassword,
     messageTtlSeconds: user.messageTtlSeconds,
+    statusPrivacy: toStatusPrivacy(user.statusPrivacy),
+    statusPrivacyList: user.statusPrivacyList,
     createdAt: user.createdAt.toISOString(),
     disabledAt: user.disabledAt?.toISOString() ?? null,
     passwordResetUntil: user.passwordResetUntil?.toISOString() ?? null,

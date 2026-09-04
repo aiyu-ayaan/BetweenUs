@@ -53,6 +53,7 @@ import {
   STATUS_CAPTION_SEALED_MAX_LENGTH,
   STATUS_VIDEO_MAX_MS,
   type CreateStatusRequest,
+  type ReactToStatusRequest,
   type DeviceKey,
   type StatusEntry,
   type StatusFeed,
@@ -70,6 +71,13 @@ const MAX_PUBLIC_KEY_LENGTH = 1024;
 
 /** Client-minted and opaque here, exactly as in the e2ee module's DTO. */
 const MAX_DEVICE_ID_LENGTH = 128;
+
+/** Reacting to a moment. One symbol, checked further by the service. */
+export class ReactToStatusDto implements ReactToStatusRequest {
+  @IsString()
+  @Length(1, 32)
+  emoji!: string;
+}
 
 /** One wrap of the post's key, for one device. */
 export class StatusKeyEntryDto implements StatusKeyEntry {
@@ -255,7 +263,21 @@ export class StatusController {
     return this.statuses.markViewed(user.id, statusId);
   }
 
-  /** Who opened one of yours. Refused to everybody but its author. */
+  /**
+   * Says something back to one, in one symbol. Sending the symbol already
+   * there takes it back; a different one replaces it. Idempotent either way.
+   */
+  @Post(':statusId/reactions')
+  @HttpCode(204)
+  react(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('statusId', ParseUUIDPipe) statusId: string,
+    @Body() dto: ReactToStatusDto,
+  ): Promise<void> {
+    return this.statuses.react(user.id, statusId, dto.emoji);
+  }
+
+  /** Who opened one of yours, and what they said. Refused to everybody else. */
   @Get(':statusId/views')
   viewers(
     @CurrentUser() user: AuthenticatedUser,

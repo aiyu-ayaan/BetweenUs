@@ -11,7 +11,7 @@
  */
 import assert from 'node:assert/strict';
 import type { StatusEntry } from '@betweenus/shared-types';
-import { keysForAudience, orderRuns, statusAudience } from './status.service';
+import { applyStatusPrivacy, keysForAudience, orderRuns, statusAudience } from './status.service';
 
 const ada = 'ada';
 const grace = 'grace';
@@ -62,6 +62,33 @@ assert.deepEqual(
 // post only its author can read, not an error.
 assert.deepEqual(keysForAudience([wrap(alan)], new Set([ada])), []);
 
+// --- Who a post is sealed for --------------------------------------------------
+//
+// The author's own choice, applied where a post is written and nowhere else -
+// the wrap is what enforces it afterwards. Every branch narrows the friend list
+// and none of them widens it, which is the property worth asserting: an id in
+// the list that names a stranger, or nobody at all, must never let anybody in.
+
+// The default shares with the friend list, whatever is in the list beside it.
+assert.deepEqual(applyStatusPrivacy([ada, grace], 'FRIENDS', [alan]), [ada, grace]);
+assert.deepEqual(applyStatusPrivacy([ada, grace], 'FRIENDS', []), [ada, grace]);
+
+// "Except" removes the named, and ignores a name that is not a friend anyway.
+assert.deepEqual(applyStatusPrivacy([ada, grace], 'FRIENDS_EXCEPT', [grace]), [ada]);
+assert.deepEqual(applyStatusPrivacy([ada, grace], 'FRIENDS_EXCEPT', [alan]), [ada, grace]);
+assert.deepEqual(applyStatusPrivacy([ada, grace], 'FRIENDS_EXCEPT', [ada, grace]), []);
+
+// "Only" is an intersection, never the list as given: a friendship that has
+// ended since the list was chosen must not survive in it.
+assert.deepEqual(applyStatusPrivacy([ada, grace], 'ONLY_SHARE_WITH', [grace]), [grace]);
+assert.deepEqual(applyStatusPrivacy([ada], 'ONLY_SHARE_WITH', [ada, alan]), [ada]);
+assert.deepEqual(applyStatusPrivacy([ada, grace], 'ONLY_SHARE_WITH', []), []);
+
+// And a stranger is in no branch's answer, which is the whole ceiling rule.
+for (const mode of ['FRIENDS', 'FRIENDS_EXCEPT', 'ONLY_SHARE_WITH'] as const) {
+  assert.equal(applyStatusPrivacy([ada], mode, [alan]).includes(alan), false);
+}
+
 // --- Tray order ---------------------------------------------------------------
 
 const person = (id: string) => ({
@@ -85,6 +112,8 @@ const post = (createdAt: string, seen: boolean): StatusEntry => ({
   expiresAt: '2030-01-01T00:00:00.000Z',
   seen,
   viewCount: null,
+  reactions: [],
+  myReaction: null,
   mediaIv: null,
   mediaType: null,
   keys: [],

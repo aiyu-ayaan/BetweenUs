@@ -28,6 +28,7 @@ import type {
   ForgotPasswordResponse,
   LastSeenVisibility,
   PublicUser,
+  StatusPrivacy,
   UsernameAvailability,
 } from '@betweenus/shared-types';
 import { MailService, NO_MAIL_MESSAGE } from '../mail/mail.service';
@@ -569,6 +570,15 @@ export class AuthService {
         ...(dto.messageTtlSeconds !== undefined
           ? { messageTtlSeconds: dto.messageTtlSeconds }
           : {}),
+        // Same two spellings, same one conversion each way.
+        ...(dto.statusPrivacy !== undefined
+          ? { statusPrivacy: fromStatusPrivacy(dto.statusPrivacy) }
+          : {}),
+        // Written whole. "These people" is one decision, and half of it saved
+        // is a different audience from the one somebody chose.
+        ...(dto.statusPrivacyList !== undefined
+          ? { statusPrivacyList: [...new Set(dto.statusPrivacyList)] }
+          : {}),
       },
     });
 
@@ -725,6 +735,38 @@ export function toVisibility(value: string): LastSeenVisibility {
   }
 }
 
+/**
+ * Who a moment is sealed for, out of the column and into the wire spelling.
+ *
+ * Anything unrecognised reads as `friends`, which is the narrowest of the three
+ * that is always meaningful: the other two are nothing without a list, and a
+ * setting nobody can read back must not be the one that shares widest.
+ */
+export function toStatusPrivacy(value: string): StatusPrivacy {
+  switch (value) {
+    case 'FRIENDS_EXCEPT':
+      return 'friends-except';
+    case 'ONLY_SHARE_WITH':
+      return 'only-share-with';
+    default:
+      return 'friends';
+  }
+}
+
+/** And back, for a write. */
+function fromStatusPrivacy(
+  value: StatusPrivacy,
+): 'FRIENDS' | 'FRIENDS_EXCEPT' | 'ONLY_SHARE_WITH' {
+  switch (value) {
+    case 'friends-except':
+      return 'FRIENDS_EXCEPT';
+    case 'only-share-with':
+      return 'ONLY_SHARE_WITH';
+    case 'friends':
+      return 'FRIENDS';
+  }
+}
+
 /** And back, for a write. */
 function fromVisibility(value: LastSeenVisibility): 'EVERYONE' | 'FRIENDS' | 'NOBODY' {
   switch (value) {
@@ -750,6 +792,8 @@ export function toPublicUser(user: User): PublicUser {
     role: user.role,
     mustChangePassword: user.mustChangePassword,
     messageTtlSeconds: user.messageTtlSeconds,
+    statusPrivacy: toStatusPrivacy(user.statusPrivacy),
+    statusPrivacyList: user.statusPrivacyList,
     createdAt: user.createdAt.toISOString(),
   };
 }

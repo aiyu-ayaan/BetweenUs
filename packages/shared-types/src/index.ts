@@ -190,8 +190,30 @@ export interface PublicUser {
    * row rather than hiding it. See `DISAPPEARING_WINDOWS`.
    */
   messageTtlSeconds: number | null;
+  /** Who this account's moments are sealed for. See `StatusPrivacy`. */
+  statusPrivacy: StatusPrivacy;
+  /**
+   * The people `statusPrivacy` names: excluded under `friends-except`, and the
+   * whole audience under `only-share-with`. Ignored under `friends`.
+   */
+  statusPrivacyList: string[];
   createdAt: string;
 }
+
+/**
+ * Who a moment is shown to, chosen by its author.
+ *
+ * The friend list is the ceiling in every case - this narrows it and never
+ * widens it, so an id left in the list by a friendship that has since ended
+ * cannot let anybody in.
+ *
+ * Applied once, where a post is written: the audience of a moment *is* the set
+ * of key wraps it carries, so leaving somebody out of that set is the whole of
+ * what "not shared with them" means. Nothing filters on the way out, and
+ * changing the setting cannot reach back into a post whose key is already on
+ * somebody's device.
+ */
+export type StatusPrivacy = 'friends' | 'friends-except' | 'only-share-with';
 
 export interface ChangePasswordRequest {
   currentPassword: string;
@@ -268,6 +290,17 @@ export type LastSeenVisibility = 'everyone' | 'friends' | 'nobody';
 /** In the order the pickers draw them, widest first. */
 export const LAST_SEEN_VISIBILITIES: LastSeenVisibility[] = ['everyone', 'friends', 'nobody'];
 
+/** Validated against, so an unreadable setting can never be written. */
+export const STATUS_PRIVACIES: StatusPrivacy[] = ['friends', 'friends-except', 'only-share-with'];
+
+/**
+ * How many people a moment's audience list may name.
+ *
+ * A friend list is the ceiling anyway; this is here so the column cannot be
+ * used as storage by something that is not a person choosing an audience.
+ */
+export const STATUS_PRIVACY_LIST_MAX = 500;
+
 export interface UpdateAccountRequest {
   username?: string;
   displayName?: string;
@@ -298,6 +331,13 @@ export interface UpdateAccountRequest {
    * off. Must be one of `DISAPPEARING_WINDOWS`.
    */
   messageTtlSeconds?: number | null;
+  /** Who this account's moments are sealed for, from the next one onwards. */
+  statusPrivacy?: StatusPrivacy;
+  /**
+   * The people that choice names. Sent whole, never patched entry by entry:
+   * "these people" is one decision and half of it saved is the wrong audience.
+   */
+  statusPrivacyList?: string[];
 }
 
 /**
@@ -1320,6 +1360,23 @@ export interface StatusEntry {
   /** How many people opened it. Only filled in on your own posts; else null. */
   viewCount: number | null;
   /**
+   * What people said back, in one symbol each, grouped by symbol.
+   *
+   * Only on your own posts, for the same reason `viewCount` is: who watched
+   * and what they thought are the author's to see, and a run of moments whose
+   * audience cannot see each other must not report one viewer's reaction to
+   * another. Empty for everybody else's posts.
+   */
+  reactions: StatusReactionSummary[];
+  /**
+   * The reader's own reaction to this post, or null.
+   *
+   * Sent separately because it is the one part of the above that is not the
+   * author's alone: a reader has to see what they themselves picked, on every
+   * device, without being told anything about anybody else's.
+   */
+  myReaction: string | null;
+  /**
    * This post's key, wrapped for the reader's own devices - one entry per
    * machine they had signed in when the author posted.
    *
@@ -1333,6 +1390,19 @@ export interface StatusEntry {
    * rather than as an error, because neither is one.
    */
   keys: StatusKeyEntry[];
+}
+
+/**
+ * What people said back to one post, grouped by symbol.
+ *
+ * `MessageReactionSummary` with a count rather than a list of ids, and the
+ * difference is the point: the audience of a moment is a friend list, and its
+ * members have no claim on each other's names. The author gets the names from
+ * the viewer list, where each person appears once with whatever they picked.
+ */
+export interface StatusReactionSummary {
+  emoji: string;
+  count: number;
 }
 
 /**
@@ -1406,6 +1476,13 @@ export interface CreateStatusRequest {
 export interface StatusViewer {
   user: UserSummary;
   viewedAt: string;
+  /** What they said back in one symbol, or null if they only watched. */
+  reaction: string | null;
+}
+
+/** Reacting to a moment. Sending the symbol already there takes it back. */
+export interface ReactToStatusRequest {
+  emoji: string;
 }
 
 // --- Messages ---

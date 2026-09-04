@@ -54,6 +54,23 @@ enum LastSeenVisibility {
   NOBODY
 }
 
+/// Who a moment is shown to, chosen by its author.
+///
+/// The friend list is the ceiling in every case - this narrows it, it never
+/// widens it, so a stale id in `statusPrivacyList` cannot let anybody in.
+///
+/// Applied once, where a post is written: the audience of a moment is the set
+/// of key wraps in `status_keys`, so leaving somebody out of that set is what
+/// "not shared with them" means. Nothing has to filter on the way out, and
+/// changing the setting cannot retroactively hide a post whose key is already
+/// on somebody's device - which is honest, and is what every app with this
+/// feature does.
+enum StatusPrivacy {
+  FRIENDS
+  FRIENDS_EXCEPT
+  ONLY_SHARE_WITH
+}
+
 model User {
   id                 String     @id @default(uuid())
   email              String     @unique
@@ -122,6 +139,17 @@ model User {
   /// nobody else's copy. A server's own window (`Server.messageTtlSeconds`)
   /// outranks it - that one actually deletes rows, for everyone.
   messageTtlSeconds  Int?
+  /// Who this account's moments are sealed for. See `enum StatusPrivacy`.
+  statusPrivacy      StatusPrivacy @default(FRIENDS)
+  /// The people the choice above names: excluded under FRIENDS_EXCEPT, and the
+  /// whole audience under ONLY_SHARE_WITH. Ignored under FRIENDS.
+  ///
+  /// A list of ids rather than a join table: it is read once per post, written
+  /// whole whenever the setting changes, and never queried from the other end -
+  /// "whose list am I on" is not a question anybody may ask. An id that no
+  /// longer names anybody is harmless, because the friend list is still the
+  /// ceiling.
+  statusPrivacyList  String[]   @default([])
   createdAt          DateTime   @default(now())
   updatedAt          DateTime   @updatedAt
 
@@ -162,6 +190,7 @@ model User {
   /// Statuses this account has posted, and the ones it has opened. See Status.
   statuses        Status[]             @relation("StatusAuthor")
   statusViews     StatusView[]         @relation("StatusViewer")
+  statusReactions StatusReaction[]     @relation("StatusReactor")
 
   @@map("users")
 }
@@ -1206,9 +1235,10 @@ model Status {
   /// message stamps its own: the sweep then has nothing to decide.
   expiresAt  DateTime
 
-  author User         @relation("StatusAuthor", fields: [authorId], references: [id], onDelete: Cascade)
-  views  StatusView[]
-  keys   StatusKey[]
+  author    User             @relation("StatusAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+  views     StatusView[]
+  keys      StatusKey[]
+  reactions StatusReaction[]
 
   /// The feed reads one author's live posts, oldest first.
   @@index([authorId, createdAt])
@@ -1255,6 +1285,31 @@ model StatusKey {
 /// a row every time a story was re-opened would be a view counter nobody asked
 /// for. The author reads these as the viewer list; every other account can
 /// only ever read its own.
+/// What somebody said back to a moment, in one symbol.
+///
+/// One row per person rather than one per emoji, unlike `MessageReaction`: a
+/// moment is watched once and answered once, and a run of six emoji under a
+/// photo that is gone tomorrow is a message thread, which is what the reply
+/// beside this already is. Reacting again with the same symbol takes it back;
+/// with a different one replaces it.
+///
+/// The symbol is in the clear, like a message reaction and for the same reason:
+/// there is no body to hide it in, and counting is the whole of what it is for.
+model StatusReaction {
+  id        String   @id @default(uuid())
+  statusId  String
+  userId    String
+  emoji     String
+  createdAt DateTime @default(now())
+
+  status Status @relation(fields: [statusId], references: [id], onDelete: Cascade)
+  user   User   @relation("StatusReactor", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([statusId, userId])
+  @@index([statusId])
+  @@map("status_reactions")
+}
+
 model StatusView {
   id       String   @id @default(uuid())
   statusId String

@@ -1,8 +1,11 @@
 import {
+  ArrayMaxSize,
+  IsArray,
   IsEmail,
   IsIn,
   IsOptional,
   IsString,
+  IsUUID,
   Length,
   Matches,
   MaxLength,
@@ -13,6 +16,8 @@ import {
   ABOUT_MAX_LENGTH,
   DISAPPEARING_WINDOWS,
   LAST_SEEN_VISIBILITIES,
+  STATUS_PRIVACIES,
+  STATUS_PRIVACY_LIST_MAX,
   UPLOADED_PICTURE_URL,
 } from '@betweenus/shared-types';
 import type {
@@ -23,6 +28,7 @@ import type {
   RefreshRequest,
   RegisterRequest,
   ResetPasswordRequest,
+  StatusPrivacy,
   UpdateAccountRequest,
 } from '@betweenus/shared-types';
 
@@ -132,6 +138,28 @@ export class UpdateAccountDto implements UpdateAccountRequest {
   @IsOptional()
   @IsIn(LAST_SEEN_VISIBILITIES)
   lastSeenVisibility?: LastSeenVisibility;
+
+  /**
+   * Who this account's moments are sealed for.
+   *
+   * Validated against the published list for the same reason the one above is:
+   * a value nothing can read back is a privacy setting whose safe reading has
+   * to be guessed, and every guess is wrong for somebody.
+   */
+  @IsOptional()
+  @IsIn(STATUS_PRIVACIES)
+  statusPrivacy?: StatusPrivacy;
+
+  /**
+   * The people that choice names. Ids only - the server resolves nothing here,
+   * and the friend list is still the ceiling when a post is written, so an id
+   * that names a stranger or nobody at all simply never matches.
+   */
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(STATUS_PRIVACY_LIST_MAX)
+  @IsUUID('4', { each: true })
+  statusPrivacyList?: string[];
 
   /**
    * An uploaded picture, or null to go back to the initial. It has to be one of
