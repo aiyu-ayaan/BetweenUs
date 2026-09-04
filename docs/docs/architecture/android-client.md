@@ -173,6 +173,12 @@ feature/remote          feature/status        feature/update        feature/voic
   there is nothing posted yet. In the player the progress bar waits for the
   media to finish downloading, and a drag up opens the viewer list.
 
+  Answering a moment - a reaction or a reply, which are the same message with
+  different text - goes through `Conversation.answerMoment`: it opens the DM
+  with the author and sends `momentRef` inside the sealed body. `MomentQuote`
+  draws it back in the conversation, with the post's own picture while it is
+  alive and "no longer available" once it has expired.
+
 - **`remote`** — a remote-desktop *viewer* only. The phone can watch and
   control an enrolled machine; it can't itself be enrolled as a target,
   since nothing on a phone can move a desktop's mouse. Same asymmetry as
