@@ -1,5 +1,62 @@
 # Changelog
 
+## [0.0.1-alpha.26](https://github.com/aiyu-ayaan/BetweenUs/compare/v0.0.1-alpha.25...v0.0.1-alpha.26) (2026-09-04)
+
+### Features
+
+* Move moments privacy to separate screen across platforms
+* My moments, and a grid that reads newest first
+* A moment's tally, and who it is shared with
+* Reactions on a moment, and an audience its author chooses
+* React and reply to a moment, and tag it in the conversation
+* Answer a moment, and keep the tag when the moment is gone
+* Add engineering badges, code health metrics, and interactive 16-theme showcase
+* Expand Code Reference page and explorer to full viewport width
+* Add interactive VS Code-style file tree to Code Reference explorer
+* Add interactive code reference explorer and source documentation
+* Replace 3D hero with dual Desktop and Android real app showcase
+
+### Bug fixes
+
+* Prevent server tile unread badge from clipping in workspace drawer
+* Place moments privacy under privacy & safety and add disappearing messages to android
+* Correct typos and improve clarity in SKILL.md
+* Fix unclickable buttons and headers in overlays and streaming fullscreen
+* Keep overlay controls out from under the window buttons
+* Stop a run skipping to the next person after its first moment
+* Use the logical edge for the composer's remove badge
+* Convert posted photos to JPEG, free the composer, add My moments
+* Draw HEIC moments and hold the clock until one arrives
+* Fix badges placement on landing page below CTA buttons and balance 6 centered items
+* Default closed folders, compact directory paths, and mobile responsiveness
+* Fix mobile responsive layout, badge positioning, and add device switcher
+* Resolve dual active navbar links and clean up menu bar hierarchy
+* Reload the gateway, or a new route answers HTML
+
+### Other changes
+
+* Moments audience privacy, reactions, disappearing messages, and UI fixes
+* Record My moments on every client and its grid order
+* Note why the moments clock is per-post
+* Record moments privacy and reaction counts
+* Only fetch a picture for the moment quote in a bubble
+* Record reacting and replying to moments
+* Record the moments media fix and the new My moments screen
+* !docs : full-width repository code reference explorer, engineering health badges, and interactive 16-theme showcase
+* Instant 0ms folder expand with memoized tree and full repository code browser
+* Add native Android screenshots and update documentation gallery
+* Add features page, capture real UI screenshots, and enhance homepage
+* !docs : Updating docs
+* Say that the deploy reloads the gateway
+
+### Artifacts
+
+| Platform | This release |
+| --- | --- |
+| Server images | Built here |
+| Desktop (Windows) | Built here |
+| Android | Built here |
+
 ## [0.0.1-alpha.25](https://github.com/aiyu-ayaan/BetweenUs/compare/v0.0.1-alpha.24...v0.0.1-alpha.25) (2026-09-03)
 
 ### Features
