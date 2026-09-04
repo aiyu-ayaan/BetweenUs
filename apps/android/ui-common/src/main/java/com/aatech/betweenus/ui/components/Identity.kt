@@ -7,6 +7,8 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.border
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.material3.ripple
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.padding
@@ -249,6 +251,7 @@ fun ServerTile(
     selected: Boolean,
     unread: Int,
     modifier: Modifier = Modifier,
+    onClick: (() -> Unit)? = null,
     content: @Composable BoxScope.() -> Unit = {},
 ) {
     val corner by animateDpAsState(
@@ -257,7 +260,20 @@ fun ServerTile(
         label = "server-tile-corner",
     )
     val shape = RoundedCornerShape(corner)
-    Box(modifier = modifier.size(56.dp), contentAlignment = Alignment.Center) {
+    Box(
+        modifier = modifier
+            .size(56.dp)
+            .then(
+                if (onClick != null) {
+                    Modifier.clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = ripple(bounded = false, radius = 26.dp),
+                        onClick = onClick,
+                    )
+                } else Modifier
+            ),
+        contentAlignment = Alignment.Center,
+    ) {
         Avatar(
             id = id,
             label = name,

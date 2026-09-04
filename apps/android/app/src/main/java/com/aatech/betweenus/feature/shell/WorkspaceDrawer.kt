@@ -124,16 +124,14 @@ fun WorkspaceDrawer(
             )
 
             servers.forEach { entry ->
-                Box(Modifier.clip(RoundedCornerShape(24.dp))) {
-                    ServerTile(
-                        id = entry.id,
-                        name = entry.name,
-                        iconUrl = entry.iconUrl?.let { com.aatech.betweenus.core.data.Endpoint.absolute(it) },
-                        selected = entry.id == selectedServerId,
-                        unread = Workspace.unreadOfServer(entry.id),
-                        modifier = Modifier.clickable { onSelectServer(entry.id) },
-                    )
-                }
+                ServerTile(
+                    id = entry.id,
+                    name = entry.name,
+                    iconUrl = entry.iconUrl?.let { com.aatech.betweenus.core.data.Endpoint.absolute(it) },
+                    selected = entry.id == selectedServerId,
+                    unread = Workspace.unreadOfServer(entry.id),
+                    onClick = { onSelectServer(entry.id) },
+                )
             }
 
             IconAction(
