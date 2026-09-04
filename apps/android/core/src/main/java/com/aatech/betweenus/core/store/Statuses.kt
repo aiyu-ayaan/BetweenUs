@@ -220,6 +220,21 @@ object Statuses {
     fun runOf(userId: String): StatusRun? = _runs.value.firstOrNull { it.author.id == userId }
 
     /**
+     * One post by id, wherever it is - this account's own run or somebody
+     * else's.
+     *
+     * Null is the ordinary answer here, not a failure: a moment lives for a day
+     * and a message answering one lives as long as the conversation does, so a
+     * conversation read next week is full of pointers at posts that are gone.
+     * What draws for those is the other half of the block in the bubble.
+     */
+    fun entry(statusId: String): StatusEntry? =
+        _mine.value.firstOrNull { it.id == statusId }
+            ?: _runs.value.firstNotNullOfOrNull { run ->
+                run.statuses.firstOrNull { it.id == statusId }
+            }
+
+    /**
      * How many posts to draw a ring around this person for, and whether any of
      * them is unopened. Zero means no ring at all.
      *

@@ -3,6 +3,7 @@ package com.aatech.betweenus.feature.status
 import android.widget.VideoView
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -21,11 +22,15 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -38,12 +43,16 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -57,6 +66,7 @@ import com.aatech.betweenus.core.data.StatusEntry
 import com.aatech.betweenus.core.data.StatusKind
 import com.aatech.betweenus.core.data.StatusViewer
 import com.aatech.betweenus.core.data.UserSummary
+import com.aatech.betweenus.core.store.Conversation
 import com.aatech.betweenus.core.store.Statuses
 import com.aatech.betweenus.ui.components.Avatar
 import com.aatech.betweenus.ui.components.BetweenUsIcon
@@ -64,7 +74,14 @@ import com.aatech.betweenus.ui.components.BetweenUsIcons
 import com.aatech.betweenus.ui.components.IconAction
 import com.aatech.betweenus.ui.components.StatusStory
 import kotlinx.coroutines.android.awaitFrame
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+
+/**
+ * The one-tap reactions offered under somebody else's moment. The same six the
+ * desktop offers, so a reaction reads the same on both.
+ */
+private val QUICK_REACTIONS = listOf("❤️", "😂", "😮", "😢", "🙏", "👏")
 
 /**
  * Somebody's statuses, full screen, one after another.
@@ -130,6 +147,12 @@ private fun StatusStoryScreen(authorId: String, onClose: () -> Unit) {
      * past something that is never going to arrive.
      */
     var loadedId by remember { mutableStateOf<String?>(null) }
+
+    /**
+     * True while somebody is writing an answer. The clock stops for it - a post
+     * that moves on mid-sentence takes the sentence with it.
+     */
+    var answering by remember { mutableStateOf(false) }
 
     val post = posts.getOrNull(index)
 
@@ -221,7 +244,7 @@ private fun StatusStoryScreen(authorId: String, onClose: () -> Unit) {
     ) {
         Slide(
             post = post,
-            paused = paused,
+            paused = paused || answering,
             onReady = { loadedId = it },
             modifier = Modifier.fillMaxSize(),
         )
@@ -232,7 +255,7 @@ private fun StatusStoryScreen(authorId: String, onClose: () -> Unit) {
                 index = index,
                 holdMs = post.holdMs,
                 postId = post.id,
-                paused = paused || loadedId != post.id,
+                paused = paused || answering || loadedId != post.id,
                 onDone = next,
             )
             Row(
@@ -283,6 +306,17 @@ private fun StatusStoryScreen(authorId: String, onClose: () -> Unit) {
                     style = MaterialTheme.typography.bodyMedium,
                     color = Color.White,
                     textAlign = TextAlign.Center,
+                )
+            }
+
+            // Somebody else's post gets the two things you can do to it,
+            // which are one thing: a message to its author with a pointer at
+            // it. See `Conversation.answerMoment`.
+            if (!isSelf) {
+                AnswerBar(
+                    post = post,
+                    name = author.label,
+                    onHold = { answering = it },
                 )
             }
 
@@ -508,6 +542,124 @@ private fun Slide(
         contentScale = ContentScale.Fit,
         modifier = modifier,
     )
+}
+
+/**
+ * The one-tap answers under somebody else's moment.
+ *
+ * Six, and these six: enough that the reaction somebody wants is usually there,
+ * few enough to sit in a row on a phone without a picker in front of them. A
+ * reaction and a reply send the same thing - see `Conversation.answerMoment` -
+ * so the row and the field below it differ only in what the text is.
+ *
+ * Nothing is drawn back here afterwards: this is a player, not a thread. The
+ * confirmation is a line that fades, and the answer is in the conversation.
+ */
+@Composable
+private fun AnswerBar(post: StatusEntry, name: String, onHold: (Boolean) -> Unit) {
+    val scope = rememberCoroutineScope()
+    val focus = LocalFocusManager.current
+    var text by remember(post.authorId) { mutableStateOf("") }
+    var focused by remember { mutableStateOf(false) }
+    var sent by remember { mutableStateOf<String?>(null) }
+    var failed by remember { mutableStateOf(false) }
+
+    // The clock stops while there is something half-written or a cursor in the
+    // field. Reported up rather than held here: the bars belong to the player.
+    LaunchedEffect(focused, text) { onHold(focused || text.isNotBlank()) }
+    DisposableEffect(Unit) { onDispose { onHold(false) } }
+
+    val send: (String) -> Unit = { words ->
+        val said = words.trim()
+        if (said.isNotEmpty()) {
+            text = ""
+            failed = false
+            focus.clearFocus()
+            scope.launch {
+                runCatching { Conversation.answerMoment(post.authorId, post.id, said) }
+                    .onSuccess {
+                        sent = said
+                        delay(2000)
+                        sent = null
+                    }
+                    .onFailure { failed = true }
+            }
+        }
+        Unit
+    }
+
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        sent?.let {
+            Text(
+                text = "Sent to $name",
+                style = MaterialTheme.typography.labelMedium,
+                color = Color(0xFF6EE7B7),
+            )
+        }
+        if (failed) {
+            Text(
+                text = "That could not be sent. You may no longer be friends.",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.error,
+                textAlign = TextAlign.Center,
+            )
+        }
+
+        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            QUICK_REACTIONS.forEach { emoji ->
+                Text(
+                    text = emoji,
+                    style = MaterialTheme.typography.headlineSmall,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(50))
+                        .clickable { send(emoji) }
+                        .padding(horizontal = 6.dp, vertical = 4.dp),
+                )
+            }
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            BasicTextField(
+                value = text,
+                onValueChange = { text = it },
+                singleLine = true,
+                textStyle = MaterialTheme.typography.bodyMedium.copy(color = Color.White),
+                cursorBrush = SolidColor(Color.White),
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+                keyboardActions = KeyboardActions(onSend = { send(text) }),
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(50))
+                    .background(Color.White.copy(alpha = 0.12f))
+                    .padding(horizontal = 16.dp, vertical = 12.dp)
+                    .onFocusChanged { focused = it.isFocused },
+                decorationBox = { field ->
+                    if (text.isEmpty()) {
+                        Text(
+                            text = "Reply to $name…",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Color.White.copy(alpha = 0.5f),
+                        )
+                    }
+                    field()
+                },
+            )
+            IconAction(
+                icon = BetweenUsIcons.Send,
+                contentDescription = "Send reply",
+                onClick = { send(text) },
+                tint = if (text.isBlank()) Color.White.copy(alpha = 0.4f) else Color.White,
+            )
+        }
+    }
 }
 
 @Composable

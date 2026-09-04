@@ -99,6 +99,27 @@ class MessageBodyTest {
     }
 
     @Test
+    fun `answering a moment carries the pointer and is still a document`() {
+        // A reaction is this with an emoji for text, which is why there is only
+        // one shape to check.
+        val body = MessageBody("😂", momentRef = MessageMoment("a3f1", "u7"))
+        val encoded = body.encode()
+        val decoded = MessageBody.decode(encoded)
+
+        assertEquals("😂", decoded.text)
+        assertEquals(MessageMoment("a3f1", "u7"), decoded.momentRef)
+        // Not sent as bare text: the pointer is the only thing saying which
+        // moment this answers, and bare text would lose it.
+        assertEquals(true, encoded.startsWith(MessageBody.BODY_MARKER))
+    }
+
+    @Test
+    fun `a pointer with no post to point at is dropped`() {
+        val encoded = MessageBody.BODY_MARKER + "{\"text\":\"hi\",\"momentRef\":{\"authorId\":\"u7\"}}"
+        assertEquals(null, MessageBody.decode(encoded).momentRef)
+    }
+
+    @Test
     fun `a marked body that will not parse is shown rather than swallowed`() {
         val broken = "\u0000betweenus-body:1\nnot json at all"
         assertEquals(broken, MessageBody.decode(broken).text)

@@ -111,6 +111,7 @@ import com.aatech.betweenus.ui.theme.Slate100
 import com.aatech.betweenus.ui.theme.Slate300
 import com.aatech.betweenus.ui.theme.Slate400
 import com.aatech.betweenus.ui.theme.Slate50
+import com.aatech.betweenus.feature.status.MomentQuote
 import com.aatech.betweenus.ui.theme.Slate500
 import com.aatech.betweenus.ui.theme.Surface700
 import com.aatech.betweenus.ui.theme.Surface800
@@ -528,6 +529,15 @@ fun MessageRow(
                                     )
                                 }
                             }
+
+                        // The moment this answers, above the words that
+                        // answer it - and still here once the moment has
+                        // expired, saying so, because a bubble that quietly
+                        // loses what it was about reads as one that never
+                        // made sense.
+                        readable.momentRef?.takeIf { !message.deleted }?.let { moment ->
+                            MomentQuote(moment = moment, mine = isSelf)
+                        }
 
                         // The quote belongs to the message, so it sits inside
                         // the bubble and above everything the message says.

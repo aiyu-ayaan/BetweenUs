@@ -1055,6 +1055,32 @@ data class MessageCustomEmoji(val name: String, val url: String, val animated: B
     }
 }
 
+/**
+ * The moment a message answers.
+ *
+ * Byte for byte the desktop's `MessageMoment`. Changing one changes both.
+ *
+ * A pointer, not a snapshot, unlike [MessageReply] - a moment expires, and both
+ * ends already hold the key to it while it is alive, so the picture is drawn
+ * from the post rather than copied into the conversation. Once it has expired
+ * there is nothing to find, and the block in the bubble says so rather than
+ * disappearing.
+ */
+data class MessageMoment(val statusId: String, val authorId: String) {
+    fun toJson(): JSONObject = JSONObject()
+        .put("statusId", statusId)
+        .put("authorId", authorId)
+
+    companion object {
+        /** Null without an id: a pointer at nothing is not a pointer. */
+        fun from(json: JSONObject): MessageMoment? {
+            val statusId = json.optString("statusId")
+            if (statusId.isEmpty()) return null
+            return MessageMoment(statusId, json.optString("authorId"))
+        }
+    }
+}
+
 data class MessageBody(
     val text: String,
     val attachments: List<MessageAttachment> = emptyList(),
@@ -1062,9 +1088,13 @@ data class MessageBody(
     val emoji: List<MessageCustomEmoji> = emptyList(),
     /** Set when this message is somebody else's, carried in from elsewhere. */
     val forwardedFrom: MessageForward? = null,
+    /** Set when this message answers a moment. See [MessageMoment]. */
+    val momentRef: MessageMoment? = null,
 ) {
     fun encode(): String =
-        if (attachments.isEmpty() && replyTo == null && emoji.isEmpty() && forwardedFrom == null) {
+        if (attachments.isEmpty() && replyTo == null && emoji.isEmpty() &&
+            forwardedFrom == null && momentRef == null
+        ) {
             text
         } else {
             BODY_MARKER + JSONObject()
@@ -1072,6 +1102,7 @@ data class MessageBody(
                 .put("attachments", JSONArray().also { a -> attachments.forEach { a.put(it.toJson()) } })
                 .apply { replyTo?.let { put("replyTo", it.toJson()) } }
                 .apply { forwardedFrom?.let { put("forwardedFrom", it.toJson()) } }
+                .apply { momentRef?.let { put("momentRef", it.toJson()) } }
                 .apply {
                     if (emoji.isNotEmpty()) {
                         put("emoji", JSONArray().also { a -> emoji.forEach { a.put(it.toJson()) } })
@@ -1099,6 +1130,7 @@ data class MessageBody(
                         .orEmpty(),
                     forwardedFrom = json.optJSONObject("forwardedFrom")
                         ?.let { MessageForward.from(it) },
+                    momentRef = json.optJSONObject("momentRef")?.let { MessageMoment.from(it) },
                 )
             }
                 // A body we cannot read is still a message; show it rather than

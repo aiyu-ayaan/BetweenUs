@@ -9,6 +9,7 @@ import com.aatech.betweenus.core.data.MessageAttachment
 import com.aatech.betweenus.core.data.MessageBody
 import com.aatech.betweenus.core.data.MessageCustomEmoji
 import com.aatech.betweenus.core.data.MessageForward
+import com.aatech.betweenus.core.data.MessageMoment
 import com.aatech.betweenus.core.data.MessageReply
 import com.aatech.betweenus.core.data.BetweenUsApi
 import com.aatech.betweenus.core.data.UploadedObject
@@ -43,6 +44,9 @@ data class ReadableMessage(
     val text: String get() = body.text
     val attachments: List<MessageAttachment> get() = body.attachments
     val replyTo: MessageReply? get() = body.replyTo
+
+    /** The moment this answers, when it answers one. */
+    val momentRef: MessageMoment? get() = body.momentRef
 
     /** What a reply to this message quotes. */
     fun quote(): MessageReply = MessageReply(
@@ -440,6 +444,8 @@ object Conversation {
         viewOnce: Boolean = false,
         /** Set when this is somebody else's message, carried in from elsewhere. */
         forwardedFrom: MessageForward? = null,
+        /** Set when this message answers a moment. See [MessageMoment]. */
+        momentRef: MessageMoment? = null,
         /**
          * The emoji pictures to carry, when the caller already knows them.
          *
@@ -458,6 +464,7 @@ object Conversation {
             replyTo,
             emoji ?: usedEmoji(channelId, text),
             forwardedFrom,
+            momentRef,
         ).encode()
         val sealed = E2ee.encryptForChannel(channelId, body)
         // The keys go outside the envelope as well as inside it: the server
@@ -473,6 +480,38 @@ object Conversation {
             viewOnce = viewOnce && attachments.isNotEmpty(),
         )
         insert(read(message))
+    }
+
+    /**
+     * Answers somebody's moment: an ordinary direct message to its author, with
+     * a pointer at the post on it.
+     *
+     * A reaction is the same call with an emoji for text - which is what it is
+     * everywhere else this exists, and is why there is no second endpoint and
+     * no second kind of thing to store. See [MessageMoment].
+     *
+     * The conversation is opened rather than assumed: answering a moment from
+     * the tray is often the first message these two have exchanged, and where
+     * it goes is decided by whose post it is, never by whatever screen the
+     * player happens to be covering.
+     */
+    suspend fun answerMoment(authorId: String, statusId: String, text: String) {
+        val said = text.trim()
+        if (said.isEmpty()) return
+        // Idempotent on the server: it hands back the conversation these two
+        // already have, so this is also how the first answer creates one.
+        val direct = BetweenUsApi.openDirectChannel(authorId)
+        // The keys before the body. A conversation opened a moment ago has no
+        // key on the other person's machines, and an answer they cannot read is
+        // worse than no answer - `Conversation.open` does this for the same
+        // reason when a channel is opened.
+        runCatching { E2ee.syncChannelKeys(direct.channelId) }
+        send(
+            channelId = direct.channelId,
+            text = said,
+            attachments = emptyList(),
+            momentRef = MessageMoment(statusId = statusId, authorId = authorId),
+        )
     }
 
     /**
