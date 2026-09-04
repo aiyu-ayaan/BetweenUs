@@ -13,9 +13,13 @@ import type {
   LinkPreview,
   MessageAttachment,
   MessageCustomEmoji,
+  MessageMoment,
   MessageReply,
 } from '@betweenus/shared-types';
 import { pruneExpired, useChatStore, type DecryptedMessage } from '../../stores/chat';
+import { statusById, useStatusStore } from '../../stores/status';
+import { statusMedia } from '../../services/status-media';
+import { openMoment } from '../status/StatusViewer';
 import { UNDECRYPTABLE } from '../../services/e2ee';
 import { api } from '../../services/api';
 import { scrollBehavior } from '../../services/motion';
@@ -93,6 +97,7 @@ import {
   SearchIcon,
   SendIcon,
   SmileIcon,
+  SparklesIcon,
   TrashIcon,
   UsersIcon,
   XIcon,
@@ -1064,6 +1069,14 @@ function MessageList({
                       </p>
                     )}
 
+                    {/* The moment this answers, above the words that answer
+                        it - and still here once the moment has expired, saying
+                        so, because a bubble that quietly loses what it was
+                        about reads as a message that never made sense. */}
+                    {!deleted && message.momentRef && (
+                      <MomentQuote moment={message.momentRef} mine={message.author.id === me?.id} />
+                    )}
+
                     {/* The quote belongs to the message, so it sits inside
                         the bubble and above everything the message says. */}
                     {!deleted && message.replyTo && <QuotedMessage reply={message.replyTo} />}
@@ -1451,6 +1464,84 @@ function QuotedMessage({ reply }: { reply: MessageReply }): JSX.Element {
       <span className="truncate text-xs text-slate-400">
         {reply.preview || 'Sent an attachment'}
       </span>
+    </button>
+  );
+}
+
+/**
+ * The moment a message answers, drawn inside the bubble above it.
+ *
+ * Two states, and the second is the point of the block. While the post is live
+ * its picture is here and clicking it opens the player at that post. Once the
+ * day is up there is nothing to fetch and nothing to open - so the block stays,
+ * keeps its mark, and says the moment is gone. Removing it would leave a bare
+ * "😂" in a conversation with nothing to say what it was aimed at.
+ *
+ * The picture is drawn from the post itself rather than from a copy carried in
+ * the message: both ends already hold the key to it while it is alive, and a
+ * thumbnail copied into the conversation would outlive the thing it is of.
+ */
+function MomentQuote({ moment, mine }: { moment: MessageMoment; mine: boolean }): JSX.Element {
+  const post = useStatusStore((state) => statusById(state, moment.statusId));
+  const [thumbnail, setThumbnail] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!post?.mediaUrl) return;
+    let live = true;
+    void statusMedia(post)
+      .then((url) => {
+        if (live) setThumbnail(url);
+      })
+      // A picture this device holds no key for is not an error here: the block
+      // still says what it is about.
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, [post?.id, post?.mediaUrl]);
+
+  // "your moment" reads correctly from both sides: the author sees their own
+  // post named as theirs, and the answerer sees whose it was.
+  const label = mine ? 'Answered a moment' : 'Answered your moment';
+  const gone = !post;
+
+  const inside = (
+    <>
+      <span
+        aria-hidden
+        className="flex h-9 w-7 shrink-0 items-center justify-center overflow-hidden rounded border border-white/10"
+        style={{ backgroundColor: post?.kind === 'TEXT' ? (post.background ?? '#0F172A') : '#000' }}
+      >
+        {thumbnail && post?.kind === 'PHOTO' ? (
+          <img src={thumbnail} alt="" className="h-full w-full object-cover" />
+        ) : (
+          <SparklesIcon className="h-3.5 w-3.5 text-slate-400" />
+        )}
+      </span>
+      <span className="min-w-0">
+        <span className="block truncate text-xs font-medium text-accent">{label}</span>
+        <span className="block truncate text-xs text-slate-400">
+          {gone ? 'This moment is no longer available' : (post.caption ?? 'Moment')}
+        </span>
+      </span>
+    </>
+  );
+
+  const shared =
+    'mb-0.5 flex w-full min-w-0 items-center gap-2 rounded border-s-2 border-accent/50 bg-white/[0.02] py-1 ps-2 pe-1 text-start';
+
+  // Not a button when there is nothing behind it: a click that opens an empty
+  // player is worse than no click at all.
+  if (gone) return <div className={shared}>{inside}</div>;
+
+  return (
+    <button
+      type="button"
+      onClick={() => openMoment(moment.authorId, moment.statusId)}
+      title="Open this moment"
+      className={`${shared} cursor-pointer transition-colors duration-150 hover:bg-white/[0.05]`}
+    >
+      {inside}
     </button>
   );
 }

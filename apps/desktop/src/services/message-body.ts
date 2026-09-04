@@ -23,6 +23,7 @@ export function encodeBody(body: MessageBody): string {
     body.attachments.length === 0 &&
     !body.replyTo &&
     !body.forwardedFrom &&
+    !body.momentRef &&
     (body.emoji?.length ?? 0) === 0;
   if (plain) return body.text;
   return BODY_MARKER + JSON.stringify(body);
@@ -35,6 +36,7 @@ export function decodeBody(content: string): MessageBody {
     const parsed = JSON.parse(content.slice(BODY_MARKER.length)) as MessageBody;
     const reply = parsed.replyTo;
     const forwarded = parsed.forwardedFrom;
+    const moment = parsed.momentRef;
     return {
       text: typeof parsed.text === 'string' ? parsed.text : '',
       attachments: Array.isArray(parsed.attachments) ? parsed.attachments : [],
@@ -60,6 +62,17 @@ export function decodeBody(content: string): MessageBody {
             forwardedFrom: {
               author: forwarded.author,
               channel: typeof forwarded.channel === 'string' ? forwarded.channel : '',
+            },
+          }
+        : {}),
+      // The moment this answers. Without an id there is nothing to look up and
+      // nothing to say it is gone, so it is not a moment reply - it is an
+      // ordinary message that happens to carry a broken field.
+      ...(moment && typeof moment.statusId === 'string' && moment.statusId.length > 0
+        ? {
+            momentRef: {
+              statusId: moment.statusId,
+              authorId: typeof moment.authorId === 'string' ? moment.authorId : '',
             },
           }
         : {}),

@@ -94,6 +94,24 @@ async function main(): Promise<void> {
   };
   assert.deepEqual(decodeBody(encodeBody(withEmoji)), withEmoji);
 
+  // Answering a moment: no files, no quote, and still a document, because the
+  // pointer is the only thing that says which moment is being answered.
+  const onMoment = {
+    text: '😂',
+    attachments: [],
+    momentRef: { statusId: 'a3f1', authorId: 'u7' },
+  };
+  assert.deepEqual(decodeBody(encodeBody(onMoment)), onMoment);
+  assert.notEqual(encodeBody(onMoment), '😂');
+
+  // A pointer with no post to point at is not one: the block would have
+  // nothing to open and nothing to say had expired.
+  assert.equal(
+    decodeBody('\u0000betweenus-body:1\n{"text":"hi","attachments":[],"momentRef":{"authorId":"u7"}}')
+      .momentRef,
+    undefined,
+  );
+
   // An over-long message becomes a text file that keeps every character.
   const long = 'x'.repeat(OVERFLOW_CHARS + 500);
   const overflow = overflowFile(long);

@@ -22,12 +22,30 @@ import { create } from 'zustand';
 import type { StatusEntry, StatusViewer as Viewer } from '@betweenus/shared-types';
 import { STATUS_PHOTO_MS } from '@betweenus/shared-types';
 import { useAuthStore } from '../../stores/auth';
+import { useChatStore } from '../../stores/chat';
 import { runsOf, useStatusStore } from '../../stores/status';
 import { statusMedia } from '../../services/status-media';
 import { useFocusTrap } from '../../services/focus-trap';
 import { Avatar } from '../../components/Avatar';
-import { ChevronLeftIcon, ChevronRightIcon, EyeIcon, TrashIcon, XIcon } from '../../components/icons';
+import {
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  EyeIcon,
+  SendIcon,
+  TrashIcon,
+  XIcon,
+} from '../../components/icons';
 import { statusAge } from './age';
+
+/**
+ * The one-tap answers under somebody else's moment.
+ *
+ * Six, and these six: enough that the reaction somebody wants is usually there,
+ * few enough to sit in a row on a phone-width overlay without a picker in front
+ * of them. A reaction is a message - see `answerMoment` - so this row and the
+ * field beside it do the same thing with different text.
+ */
+const QUICK_REACTIONS = ['❤️', '😂', '😮', '😢', '🙏', '👏'];
 
 interface Opened {
   /** Whose run is on screen. */
@@ -50,17 +68,32 @@ export function openStatus(authorId: string, index?: number): void {
   useViewer.setState({ open: { authorId, index: index ?? firstUnseen(authorId) } });
 }
 
+/**
+ * Opens the one post, wherever it sits in its run.
+ *
+ * What a moment quoted in a conversation opens. By id rather than by position,
+ * because the message answering it was written a day ago and the run has moved
+ * since - the post it names is what has to be found, not the third one.
+ */
+export function openMoment(authorId: string, statusId: string): void {
+  const at = postsOf(authorId).findIndex((post) => post.id === statusId);
+  if (at === -1) return;
+  useViewer.setState({ open: { authorId, index: at } });
+}
+
 export function closeStatus(): void {
   useViewer.setState({ open: null });
 }
 
-function firstUnseen(authorId: string): number {
+/** One person's live run, from wherever the store keeps it. */
+function postsOf(authorId: string): StatusEntry[] {
   const state = useStatusStore.getState();
-  const posts =
-    authorId === useAuthStore.getState().user?.id
-      ? state.mine
-      : (runsOf(state).find((run) => run.author.id === authorId)?.statuses ?? []);
-  const at = posts.findIndex((post) => !post.seen);
+  if (authorId === useAuthStore.getState().user?.id) return state.mine;
+  return runsOf(state).find((run) => run.author.id === authorId)?.statuses ?? [];
+}
+
+function firstUnseen(authorId: string): number {
+  const at = postsOf(authorId).findIndex((post) => !post.seen);
   return at === -1 ? 0 : at;
 }
 
@@ -114,6 +147,13 @@ function Player({ open }: { open: Opened }): JSX.Element | null {
   const [loadedId, setLoadedId] = useState<string | null>(null);
   const ready = loadedId === postId;
 
+  /**
+   * True while somebody is writing an answer. The clock stops for it - a post
+   * that moves on mid-sentence takes the sentence with it.
+   */
+  const [answering, setAnswering] = useState(false);
+  const held = paused || answering;
+
   /** Moves on, and off the end of a run onto the next person's. */
   const next = (): void => {
     if (open.index + 1 < posts.length) {
@@ -157,6 +197,11 @@ function Player({ open }: { open: Opened }): JSX.Element | null {
   useEffect(() => {
     const onKey = (event: KeyboardEvent): void => {
       if (event.key === 'Escape') closeStatus();
+      // Space is "hold the clock" and the arrows move between posts - until
+      // somebody is writing an answer, where all three are just typing. The
+      // field is inside this overlay, so without the check a reply could not
+      // contain a space.
+      else if (typing(event.target)) return;
       else if (event.key === 'ArrowRight') next();
       else if (event.key === 'ArrowLeft') previous();
       else if (event.key === ' ') {
@@ -194,7 +239,7 @@ function Player({ open }: { open: Opened }): JSX.Element | null {
               key={entry.id}
               state={at < open.index ? 'done' : at > open.index ? 'todo' : 'playing'}
               durationMs={durationOf(post)}
-              paused={paused || !ready}
+              paused={held || !ready}
               onDone={next}
             />
           ))}
@@ -222,7 +267,7 @@ function Player({ open }: { open: Opened }): JSX.Element | null {
             rather than one region with coordinate maths, so a keyboard and a
             screen reader get the same two moves a thumb does. */}
         <div className="relative min-h-0 flex-1">
-          <Slide post={post} paused={paused} onReady={setLoadedId} />
+          <Slide post={post} paused={held} onReady={setLoadedId} />
 
           <div className="absolute inset-0 flex">
             <TapZone
@@ -246,6 +291,10 @@ function Player({ open }: { open: Opened }): JSX.Element | null {
         {post.caption && post.kind !== 'TEXT' && (
           <p className="px-4 pb-3 text-center text-sm text-white/90">{post.caption}</p>
         )}
+
+        {/* Somebody else's post gets the two things you can do to it, which
+            are one thing: a message to its author with a pointer at it. */}
+        {!isSelf && <AnswerBar post={post} name={author.displayName} onHold={setAnswering} />}
 
         {/* Your own post gets the two things nobody else may have: who saw it,
             and the way to take it down. */}
@@ -290,6 +339,116 @@ function Player({ open }: { open: Opened }): JSX.Element | null {
         />
       )}
     </div>
+  );
+}
+
+/** Whether a key event belongs to something somebody is typing into. */
+function typing(target: EventTarget | null): boolean {
+  return target instanceof HTMLElement && (target.isContentEditable || target.tagName === 'INPUT');
+}
+
+/**
+ * Answering somebody's moment: a row of reactions, and a field for words.
+ *
+ * Both send the same thing - a direct message to the author carrying a pointer
+ * at the post - because that is what a reaction to a moment is. It lands in the
+ * conversation rather than on the post, which is where the author will look for
+ * it and where it can still be read tomorrow, when the post itself is gone.
+ *
+ * Nothing is drawn back here afterwards: this is a player, not a thread. The
+ * confirmation is a line that fades, and the answer is in the conversation.
+ */
+function AnswerBar({
+  post,
+  name,
+  onHold,
+}: {
+  post: StatusEntry;
+  name: string;
+  onHold: (holding: boolean) => void;
+}): JSX.Element {
+  const answerMoment = useChatStore((state) => state.answerMoment);
+  const [text, setText] = useState('');
+  const [focused, setFocused] = useState(false);
+  const [sent, setSent] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  // The clock stops while there is something half-written or a cursor in the
+  // field. Reported up rather than held here: the bars belong to the player.
+  useEffect(() => {
+    onHold(focused || text.trim().length > 0);
+  }, [focused, text, onHold]);
+
+  // Stops holding the clock when the bar goes - moving to the next post
+  // unmounts this while it may still have been the reason nothing was moving.
+  useEffect(() => () => onHold(false), [onHold]);
+
+  const send = (words: string): void => {
+    const said = words.trim();
+    if (!said) return;
+    setText('');
+    setFailed(false);
+    void answerMoment(post.authorId, post.id, said)
+      .then(() => {
+        setSent(said);
+        window.setTimeout(() => setSent(null), 2000);
+      })
+      .catch(() => setFailed(true));
+  };
+
+  return (
+    <footer className="flex flex-col gap-2 px-4 pb-4">
+      {sent && (
+        <p role="status" className="text-center text-xs text-emerald-300">
+          Sent {sent.length > 24 ? `${sent.slice(0, 23)}…` : sent} to {name}
+        </p>
+      )}
+      {failed && (
+        <p role="alert" className="text-center text-xs text-danger">
+          That could not be sent. You may no longer be friends.
+        </p>
+      )}
+
+      <div className="flex items-center justify-center gap-1">
+        {QUICK_REACTIONS.map((emoji) => (
+          <button
+            key={emoji}
+            type="button"
+            onClick={() => send(emoji)}
+            aria-label={`React ${emoji} to ${name}'s moment`}
+            className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-full text-lg transition-transform duration-150 hover:scale-125 hover:bg-white/10"
+          >
+            {emoji}
+          </button>
+        ))}
+      </div>
+
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          send(text);
+        }}
+        className="flex items-center gap-2"
+      >
+        <input
+          value={text}
+          onChange={(event) => setText(event.target.value)}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
+          placeholder={`Reply to ${name}…`}
+          aria-label={`Reply to ${name}'s moment`}
+          className="min-w-0 flex-1 rounded-full border border-white/20 bg-white/10 px-4 py-2 text-sm text-white placeholder:text-white/50 focus:border-accent focus:outline-none"
+        />
+        <button
+          type="submit"
+          disabled={text.trim().length === 0}
+          aria-label="Send reply"
+          className="flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-full bg-accent text-white transition-colors hover:bg-accent-hover disabled:cursor-default disabled:bg-white/10 disabled:text-white/40"
+        >
+          <SendIcon className="h-4 w-4" />
+        </button>
+      </form>
+    </footer>
   );
 }
 

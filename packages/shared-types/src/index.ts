@@ -1807,6 +1807,37 @@ export interface MessageForward {
   channel: string;
 }
 
+/**
+ * The moment a message answers.
+ *
+ * Answering a moment is an ordinary direct message with this on it - not a new
+ * kind of object, and nothing the server is told about. That is the whole
+ * design: the post is sealed for its audience and the reply is sealed for the
+ * conversation, and neither key is the other's, so a pointer is all that can
+ * cross between them. A reaction is the same thing with an emoji for text,
+ * which is what it is on every app that has this.
+ *
+ * A pointer rather than a snapshot, unlike [MessageReply] - because a moment
+ * expires. Both ends already hold the key to the post while it is alive (the
+ * author sealed it for its audience, and the answerer is in that audience), so
+ * the thumbnail is drawn from the post itself and nothing about it has to be
+ * copied into the conversation. Once the day is up there is no post to find,
+ * and the block says so rather than disappearing: a conversation that quietly
+ * drops what was being answered reads as a message that never made sense.
+ */
+export interface MessageMoment {
+  /** The post. Not resolvable once it has expired, which is expected. */
+  statusId: string;
+  /**
+   * Whose post it was.
+   *
+   * Carried rather than derived from who is talking to whom: it is what the
+   * tag names once the post is gone, and a conversation with two people in it
+   * is not the only place a message can end up.
+   */
+  authorId: string;
+}
+
 export interface MessageBody {
   text: string;
   attachments: MessageAttachment[];
@@ -1815,6 +1846,8 @@ export interface MessageBody {
   emoji?: MessageCustomEmoji[];
   /** Set when this message is somebody else's, carried in from elsewhere. */
   forwardedFrom?: MessageForward;
+  /** Set when this message answers a moment. See [MessageMoment]. */
+  momentRef?: MessageMoment;
 }
 
 // --- End-to-end encryption ---

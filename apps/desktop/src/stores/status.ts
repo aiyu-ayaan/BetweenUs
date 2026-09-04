@@ -167,6 +167,24 @@ export function runsOf(state: StatusState): StatusFeedEntry[] {
   });
 }
 
+/**
+ * One post by id, wherever it is - your own run or somebody else's.
+ *
+ * Null is the ordinary answer, not a failure: a moment lives for a day and the
+ * message answering it lives for as long as the conversation does, so a
+ * conversation read a week later is full of pointers at posts that are gone.
+ * What draws for those is `MomentQuote`'s other half.
+ */
+export function statusById(state: StatusState, statusId: string): StatusEntry | null {
+  const mine = state.mine.find((status) => status.id === statusId);
+  if (mine) return mine;
+  for (const run of state.others) {
+    const found = run.statuses.find((status) => status.id === statusId);
+    if (found) return found;
+  }
+  return null;
+}
+
 /** The run belonging to one person, or null when they have posted nothing live. */
 export function runOf(state: StatusState, userId: string): StatusFeedEntry | null {
   return runsOf(state).find((run) => run.author.id === userId) ?? null;

@@ -9,6 +9,7 @@ import type {
   MessageAttachment,
   MessageCustomEmoji,
   MessageForward,
+  MessageMoment,
   MessageReply,
   ServerMember,
   ServerWithRole,
@@ -52,6 +53,8 @@ export interface DecryptedMessage extends Message {
   emoji?: MessageCustomEmoji[];
   /** Set when these are somebody else's words, carried in from elsewhere. */
   forwardedFrom?: MessageForward;
+  /** Set when this message answers a moment. See `MessageMoment`. */
+  momentRef?: MessageMoment;
 }
 
 interface ChatState {
@@ -180,6 +183,20 @@ interface ChatState {
    * with it; only the tag saying whose words these were comes along.
    */
   forwardMessage: (messageId: string, toChannelId: string) => Promise<void>;
+  /**
+   * Answers somebody's moment: an ordinary direct message to its author, with
+   * a pointer at the post on it.
+   *
+   * A reaction is the same call with an emoji for text - which is what it is
+   * everywhere else this exists, and is why there is no second endpoint and no
+   * second kind of thing to store. See `MessageMoment`.
+   *
+   * The conversation is opened rather than assumed: answering a moment from
+   * the tray is usually the first message these two have exchanged, and the
+   * channel it goes to is decided by whose post it is, never by whatever
+   * happens to be on screen behind the player.
+   */
+  answerMoment: (authorId: string, statusId: string, text: string) => Promise<void>;
   /**
    * Reports that this account has opened a one-time message, which is what
    * destroys it. Idempotent, and does nothing for the author's own message.
@@ -617,6 +634,30 @@ export const useChatStore = create<ChatState>((set, get) => ({
     );
   },
 
+  answerMoment: async (authorId, statusId, text) => {
+    const words = text.trim();
+    if (!words) return;
+    // Opening is idempotent on the server - it returns the conversation these
+    // two already have - so this is also how the first answer to a moment
+    // creates one.
+    const direct = await api.openDirectChannel(authorId);
+    // The keys before the body: a conversation opened a moment ago has none on
+    // this machine yet, and sealing would mint an epoch nobody else can read.
+    await syncChannelKeys(direct.channelId);
+    const envelope = await encryptForChannel(
+      direct.channelId,
+      encodeBody({ text: words, attachments: [], momentRef: { statusId, authorId } }),
+    );
+    await api.sendMessage(direct.channelId, envelope);
+
+    // The conversation appears in the sidebar without waiting for the next
+    // read of the list: an answer that lands nowhere visible looks like it was
+    // not sent.
+    if (!get().directs.some((item) => item.id === direct.channelId)) {
+      set({ directs: [toDirectChannel(direct), ...get().directs] });
+    }
+  },
+
   forwardMessage: async (messageId, toChannelId) => {
     const original = get().messages.find((message) => message.id === messageId);
     if (!original) return;
@@ -969,6 +1010,7 @@ function toDecrypted(message: Message, plaintext: string): DecryptedMessage {
     ...(body.replyTo ? { replyTo: body.replyTo } : {}),
     ...(body.emoji ? { emoji: body.emoji } : {}),
     ...(body.forwardedFrom ? { forwardedFrom: body.forwardedFrom } : {}),
+    ...(body.momentRef ? { momentRef: body.momentRef } : {}),
   };
 }
 
