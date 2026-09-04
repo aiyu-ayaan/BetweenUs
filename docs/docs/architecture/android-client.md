@@ -177,7 +177,10 @@ feature/remote          feature/status        feature/update        feature/voic
   different text - goes through `Conversation.answerMoment`: it opens the DM
   with the author and sends `momentRef` inside the sealed body. `MomentQuote`
   draws it back in the conversation, with the post's own picture while it is
-  alive and "no longer available" once it has expired.
+  alive and "no longer available" once it has expired. A reaction also lands
+  on the post itself (`Statuses.react`), whose tally the author reads off
+  their own pill; `PrivacyScreen` is where the audience for the next post is
+  chosen.
 
 - **`remote`** — a remote-desktop *viewer* only. The phone can watch and
   control an enrolled machine; it can't itself be enrolled as a target,

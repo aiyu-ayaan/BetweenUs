@@ -346,7 +346,9 @@ erDiagram
     User ||--o{ Status : posts
     Status ||--o{ StatusView : "was opened by"
     Status ||--o{ StatusKey : "is sealed for"
+    Status ||--o{ StatusReaction : "was answered by"
     User ||--o{ StatusView : opens
+    User ||--o{ StatusReaction : reacts
 ```
 
 ### `Status`
@@ -376,6 +378,13 @@ re-wrapping a key for every new friendship and freezing the audience; freezing
 is the choice, and it is also the behaviour wanted — a friend added tomorrow
 does not see today's post. See [E2EE](../security/e2ee.md).
 
+Who that audience is, within the friend list, is the author's own
+`User.statusPrivacy` — `FRIENDS`, `FRIENDS_EXCEPT` or `ONLY_SHARE_WITH`, with
+`User.statusPrivacyList` naming the people the last two mean. It is read once,
+here, where the wraps are written: the friend list is the ceiling in every case,
+and leaving somebody out of the wraps is the whole of what "not shared with
+them" means. Nothing on the reading side consults it.
+
 ### `StatusKey`
 One wrap of one post's key, for one device: `recipientUserId`,
 `recipientDeviceId`, `senderPublicKey`, `wrappedKey` and `iv`, unique on
@@ -390,6 +399,18 @@ The server still checks the friend list on every read, because it answers a
 different question — unfriending or blocking does not delete a wrap that was
 already written, and a post from somebody you have since blocked must leave the
 tray.
+
+### `StatusReaction`
+What somebody said back to a post, in one symbol, unique on `(statusId,
+userId)` — one row per person rather than one per emoji, unlike
+[`MessageReaction`](#messagereaction). A moment is watched once and answered
+once; a longer answer is a message, which is what a reply to a moment already
+is.
+
+The symbol is in the clear, for the same reason a message reaction's is: there
+is no body to hide it in, and counting is the whole of what it is for. What is
+protected is who is told — the tally goes back to the author alone, like the
+view count, and every other reader is told only their own.
 
 ### `StatusView`
 One person's look at one status, unique on `(statusId, viewerId)`. "Seen" is a
