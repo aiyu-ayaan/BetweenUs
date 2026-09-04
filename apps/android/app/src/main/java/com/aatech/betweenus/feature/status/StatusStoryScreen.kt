@@ -326,7 +326,13 @@ private fun StatusStoryScreen(authorId: String, onClose: () -> Unit) {
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     Pill(
                         icon = BetweenUsIcons.Eye,
-                        label = (post.viewCount ?: 0).toString(),
+                        // What they said in the same pill as how many of them
+                        // there were: one fact about one post, with the list
+                        // behind it for reading either person by person.
+                        label = listOf(
+                            (post.viewCount ?: 0).toString(),
+                            post.reactions.joinToString(" ") { "${it.emoji}${it.count}" },
+                        ).filter { it.isNotBlank() }.joinToString("  "),
                         onClick = showViewers,
                     )
                     Pill(
@@ -383,6 +389,16 @@ private fun StatusStoryScreen(authorId: String, onClose: () -> Unit) {
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                             )
+                            // Beside the name rather than in a list of its
+                            // own: what somebody said back is a fact about
+                            // their having watched.
+                            viewer.reaction?.let { said ->
+                                Text(
+                                    text = said,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    modifier = Modifier.padding(end = 8.dp),
+                                )
+                            }
                             Text(
                                 text = statusAge(viewer.viewedAt),
                                 style = MaterialTheme.typography.labelSmall,
@@ -588,6 +604,23 @@ private fun AnswerBar(post: StatusEntry, name: String, onHold: (Boolean) -> Unit
         Unit
     }
 
+    /**
+     * A reaction does both: it is counted on the post and it is said in the
+     * conversation.
+     *
+     * Two records of one tap, on purpose. The tally is what the author reads
+     * off their own moment while it is alive; the message is what is still
+     * there tomorrow, when the moment is not. Picking the symbol already chosen
+     * takes the tally back and says nothing further - a second message would be
+     * the same reaction twice.
+     */
+    val react: (String) -> Unit = { emoji ->
+        val undoing = post.myReaction == emoji
+        scope.launch { Statuses.react(post.id, emoji) }
+        if (!undoing) send(emoji)
+        Unit
+    }
+
     Column(
         modifier = Modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -611,12 +644,16 @@ private fun AnswerBar(post: StatusEntry, name: String, onHold: (Boolean) -> Unit
 
         Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             QUICK_REACTIONS.forEach { emoji ->
+                val picked = post.myReaction == emoji
                 Text(
                     text = emoji,
                     style = MaterialTheme.typography.headlineSmall,
                     modifier = Modifier
                         .clip(RoundedCornerShape(50))
-                        .clickable { send(emoji) }
+                        .background(
+                            if (picked) Color.White.copy(alpha = 0.2f) else Color.Transparent,
+                        )
+                        .clickable { react(emoji) }
                         .padding(horizontal = 6.dp, vertical = 4.dp),
                 )
             }

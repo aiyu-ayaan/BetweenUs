@@ -206,7 +206,37 @@ object Statuses {
         scope.launch { runCatching { BetweenUsApi.markStatusSeen(statusId) } }
     }
 
-    /** Who opened one of your posts, newest first. Refused to anybody else. */
+    /**
+     * Says one symbol back to somebody's post, or takes it back by sending the
+     * same one again.
+     *
+     * Applied here as well as sent: what is drawn as picked is the reader's own
+     * [StatusEntry.myReaction], and a picker that waits for a round trip to
+     * light up feels broken on a slow line. The author's tally is recomputed
+     * from the announcement this write causes.
+     */
+    suspend fun react(statusId: String, emoji: String) {
+        toggle(statusId, emoji)
+        // Applying the same toggle twice is what undoes it, so a failure only
+        // has to run it again.
+        runCatching { BetweenUsApi.reactToStatus(statusId, emoji) }
+            .onFailure { toggle(statusId, emoji) }
+    }
+
+    private fun toggle(statusId: String, emoji: String) {
+        fun at(posts: List<StatusEntry>) = posts.map { post ->
+            if (post.id != statusId) {
+                post
+            } else {
+                post.copy(myReaction = if (post.myReaction == emoji) null else emoji)
+            }
+        }
+        _mine.update { at(it) }
+        _received = _received.map { run -> run.copy(statuses = at(run.statuses)) }
+        recompute()
+    }
+
+    /** Who opened one of your posts, newest first, and what they said. */
     suspend fun viewersOf(statusId: String): List<StatusViewer> =
         BetweenUsApi.statusViewers(statusId)
 

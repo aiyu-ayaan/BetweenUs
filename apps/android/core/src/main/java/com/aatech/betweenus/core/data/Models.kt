@@ -79,6 +79,50 @@ const val ABOUT_MAX_LENGTH = 140
  * you are here *now* and freezes the value where it stands; this decides who
  * may read that value at all, whichever status you are wearing.
  */
+/**
+ * Who a moment is shown to, chosen by its author. Byte for byte the desktop's
+ * `StatusPrivacy`.
+ *
+ * The friend list is the ceiling in every case: this narrows it and never
+ * widens it. Applied once, where a post is written - the audience of a moment
+ * *is* the set of key wraps it carries - so nothing on the reading side has to
+ * know this exists.
+ */
+enum class StatusPrivacy { FRIENDS, FRIENDS_EXCEPT, ONLY_SHARE_WITH;
+
+    /** What the wire calls it: the desktop's lower-case, hyphenated spelling. */
+    val wire: String get() = name.lowercase().replace('_', '-')
+
+    val label: String
+        get() = when (this) {
+            FRIENDS -> "My friends"
+            FRIENDS_EXCEPT -> "My friends except…"
+            ONLY_SHARE_WITH -> "Only share with…"
+        }
+
+    /** Said beside the choice, so what the list means is never guessed at. */
+    val note: String
+        get() = when (this) {
+            FRIENDS -> "Everybody you have accepted as a friend."
+            FRIENDS_EXCEPT -> "Everybody except the people you tick."
+            ONLY_SHARE_WITH -> "Only the people you tick."
+        }
+
+    companion object {
+        /**
+         * Anything unrecognised reads as [FRIENDS] - the narrowest of the three
+         * that means anything on its own, since the other two are nothing
+         * without a list. A setting nobody can read back must not be the one
+         * that shares widest.
+         */
+        fun of(value: String): StatusPrivacy = when (value) {
+            "friends-except" -> FRIENDS_EXCEPT
+            "only-share-with" -> ONLY_SHARE_WITH
+            else -> FRIENDS
+        }
+    }
+}
+
 enum class LastSeenVisibility { EVERYONE, FRIENDS, NOBODY;
 
     /** What the wire calls it: lowercase, the way the other clients send it. */
@@ -1762,6 +1806,20 @@ data class StatusEntry(
     /** How many people opened it. Filled in only on your own posts. */
     val viewCount: Int?,
     /**
+     * What people said back, in one symbol each, grouped by symbol.
+     *
+     * Only on your own posts, for the same reason [viewCount] is: the audience
+     * of a moment is a friend list, and its members have no claim on each
+     * other's reactions. Empty on everybody else's.
+     */
+    val reactions: List<StatusReactionSummary> = emptyList(),
+    /**
+     * This reader's own reaction, or null. Apart from the above because it is
+     * the one part of it that is not the author's alone - somebody has to see
+     * what they themselves picked, on every device.
+     */
+    val myReaction: String? = null,
+    /**
      * This post's key, wrapped for this account's own devices - one per machine
      * it had when the author posted.
      *
@@ -1796,8 +1854,29 @@ data class StatusEntry(
             expiresAt = json.optString("expiresAt"),
             seen = json.optBoolean("seen"),
             viewCount = if (json.isNull("viewCount")) null else json.optInt("viewCount"),
+            reactions = json.optJSONArray("reactions")
+                ?.map { StatusReactionSummary.from(it) }
+                .orEmpty(),
+            myReaction = json.stringOrNull("myReaction"),
             keys = json.optJSONArray("keys")?.map { StatusKeyEntry.from(it) }.orEmpty(),
         )
+    }
+}
+
+/**
+ * What people said back to one post, grouped by symbol.
+ *
+ * A count rather than a list of ids, unlike [MessageReaction], and the
+ * difference is the point: the audience of a moment is a friend list, and its
+ * members have no claim on each other's names. The author reads the names off
+ * the viewer list, where each person appears once with whatever they picked.
+ */
+data class StatusReactionSummary(val emoji: String, val count: Int) {
+    fun toJson(): JSONObject = JSONObject().put("emoji", emoji).put("count", count)
+
+    companion object {
+        fun from(json: JSONObject) =
+            StatusReactionSummary(json.optString("emoji"), json.optInt("count"))
     }
 }
 
@@ -1873,11 +1952,14 @@ data class StatusFeed(
 data class StatusViewer(
     val user: UserSummary,
     val viewedAt: String,
+    /** What they said back in one symbol, or null if they only watched. */
+    val reaction: String? = null,
 ) {
     companion object {
         fun from(json: JSONObject) = StatusViewer(
             user = UserSummary.from(json.getJSONObject("user")),
             viewedAt = json.optString("viewedAt"),
+            reaction = json.stringOrNull("reaction"),
         )
     }
 }

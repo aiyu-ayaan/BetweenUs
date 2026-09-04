@@ -36,6 +36,13 @@ data class PublicUser(
      * untouched. A server's own window outranks it - that one deletes the row.
      */
     val messageTtlSeconds: Int? = null,
+    /** Who this account's moments are sealed for. See [StatusPrivacy]. */
+    val statusPrivacy: StatusPrivacy = StatusPrivacy.FRIENDS,
+    /**
+     * The people that choice names: excluded under FRIENDS_EXCEPT, and the
+     * whole audience under ONLY_SHARE_WITH. Ignored under FRIENDS.
+     */
+    val statusPrivacyList: List<String> = emptyList(),
 ) {
     val label: String get() = displayName.ifBlank { username }
     val summary: UserSummary
@@ -57,6 +64,8 @@ data class PublicUser(
             role = json.optString("role", "USER"),
             messageTtlSeconds = if (json.isNull("messageTtlSeconds")) null
             else json.optInt("messageTtlSeconds").takeIf { it > 0 },
+            statusPrivacy = StatusPrivacy.of(json.optString("statusPrivacy")),
+            statusPrivacyList = json.strings("statusPrivacyList"),
         )
     }
 }
@@ -155,6 +164,25 @@ object BetweenUsApi {
      */
     suspend fun setMessageWindow(seconds: Int?): PublicUser = io {
         val body = JSONObject().put("messageTtlSeconds", seconds ?: JSONObject.NULL)
+        PublicUser.from(authed("PATCH", "/api/v1/auth/account", body))
+    }
+
+    /**
+     * Sets who this account's moments are sealed for, from the next one on.
+     *
+     * Both halves in one call, always: "these people" is one decision, and half
+     * of it saved is a different audience from the one that was chosen. Its own
+     * call for the same reason [setLastSeenVisibility] is - it is a switch, not
+     * a field being edited, and a privacy switch that waits for a Save button
+     * is one people believe they have set when they have not.
+     */
+    suspend fun setStatusPrivacy(
+        privacy: StatusPrivacy,
+        list: List<String>,
+    ): PublicUser = io {
+        val body = JSONObject()
+            .put("statusPrivacy", privacy.wire)
+            .put("statusPrivacyList", jsonArrayOf(list))
         PublicUser.from(authed("PATCH", "/api/v1/auth/account", body))
     }
 
@@ -703,6 +731,14 @@ object BetweenUsApi {
             form.addFormDataPart("file", "status", media.toRequestBody(OPAQUE))
         }
         StatusEntry.from(authedForm("/api/v1/statuses", form.build()))
+    }
+
+    /**
+     * Says one symbol back to a post. Sending the one already there takes it
+     * back; a different one replaces it. Idempotent either way.
+     */
+    suspend fun reactToStatus(statusId: String, emoji: String): Unit = io {
+        authed("POST", "/api/v1/statuses/$statusId/reactions", obj("emoji" to emoji))
     }
 
     /** Records that this account opened one. Idempotent on the server. */
