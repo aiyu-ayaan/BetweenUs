@@ -231,7 +231,7 @@ function Composer(): JSX.Element {
                     className="relative h-14 w-14 shrink-0 cursor-pointer overflow-hidden rounded-lg border border-white/15"
                   >
                     <img src={draft.preview} alt="" className="h-full w-full object-cover" />
-                    <span className="absolute right-0.5 top-0.5 rounded-full bg-black/70 px-1 text-[10px] text-white">
+                    <span className="absolute end-0.5 top-0.5 rounded-full bg-black/70 px-1 text-[10px] text-white">
                       ✕
                     </span>
                   </button>
