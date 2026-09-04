@@ -78,6 +78,7 @@ object BetweenUsIcons {
     val Shield = R.drawable.ic_shield
     val Smile = R.drawable.ic_smile
     val Speaker = R.drawable.ic_speaker
+    val Sparkles = R.drawable.ic_sparkles
     val Trash = R.drawable.ic_trash
     val User = R.drawable.ic_user
     val UserPlus = R.drawable.ic_user_plus

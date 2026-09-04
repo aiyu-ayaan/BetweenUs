@@ -83,6 +83,7 @@ const isMac = typeof window !== 'undefined' && window.betweenus?.platform === 'd
 type Section =
   | 'account'
   | 'privacy'
+  | 'moments'
   | 'encryption'
   | 'voice'
   | 'calls'
@@ -135,6 +136,12 @@ const SECTION_GROUPS: Array<{ label: string; entries: SectionEntry[] }> = [
         label: 'Privacy & Safety',
         hint: 'Blocked people, and clearing your own messages',
         icon: BlockIcon,
+      },
+      {
+        id: 'moments',
+        label: 'Moments',
+        hint: 'Who can see your moments when you post',
+        icon: SparklesIcon,
       },
       {
         id: 'encryption',
@@ -353,7 +360,10 @@ export function UserSettings({ onClose }: { onClose: () => void }): JSX.Element 
       <div className="panel relative flex-1 overflow-y-auto bg-surface-900 px-4 py-6 md:px-10 md:py-10 rounded-none md:rounded-panel border-0 md:border border-edge">
         <div className="max-w-[660px]">
           {section === 'account' && <AccountSection />}
-          {section === 'privacy' && <PrivacySection />}
+          {section === 'privacy' && (
+            <PrivacySection onNavigateMoments={() => setSection('moments')} />
+          )}
+          {section === 'moments' && <MomentsSection />}
           {section === 'encryption' && <EncryptionSection />}
           {section === 'voice' && <VoiceSection />}
           {section === 'calls' && <CallUsageSection />}
@@ -409,7 +419,11 @@ const MOMENT_AUDIENCES: Array<{ value: StatusPrivacy; label: string }> = [
   { value: 'only-share-with', label: 'Only share with…' },
 ];
 
-function PrivacySection(): JSX.Element {
+function PrivacySection({
+  onNavigateMoments,
+}: {
+  onNavigateMoments: () => void;
+}): JSX.Element {
   const blocked = useFriendsStore((state) => state.blocked);
   const load = useFriendsStore((state) => state.load);
   const unblock = useFriendsStore((state) => state.unblock);
@@ -422,40 +436,6 @@ function PrivacySection(): JSX.Element {
   const refreshUser = useAuthStore((state) => state.refreshUser);
   const [savingWindow, setSavingWindow] = useState(false);
   const [windowError, setWindowError] = useState<string | null>(null);
-
-  const friends = useFriendsStore((state) => state.friends);
-  const [savingMoments, setSavingMoments] = useState(false);
-  const [momentsError, setMomentsError] = useState<string | null>(null);
-
-  /**
-   * Changes who this account's moments are sealed for.
-   *
-   * Saved on every press rather than behind a Save button: a privacy setting
-   * that waits for one is a setting people believe they have changed and have
-   * not. Both halves go together because half of "only these three" saved is a
-   * different audience from the one that was chosen.
-   *
-   * It applies from the next post onwards. A moment already posted was sealed
-   * for the audience it had, and no setting can reach a key that is already on
-   * somebody's device - the screen says so rather than implying otherwise.
-   */
-  const saveMoments = async (
-    privacy: StatusPrivacy,
-    list: string[],
-  ): Promise<void> => {
-    setSavingMoments(true);
-    setMomentsError(null);
-    try {
-      await api.updateAccount({ statusPrivacy: privacy, statusPrivacyList: list });
-      await refreshUser();
-    } catch (caught) {
-      setMomentsError(
-        caught instanceof Error ? caught.message : 'Could not change who sees your moments.',
-      );
-    } finally {
-      setSavingMoments(false);
-    }
-  };
 
   /**
    * Changes this account's own window.
@@ -567,112 +547,31 @@ function PrivacySection(): JSX.Element {
       </section>
 
       <section className="mt-8 border-t border-edge pt-6">
-        <h2 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-slate-300">
-          <SparklesIcon className="h-4 w-4" />
-          Moments
-        </h2>
-        <p className="mt-1.5 text-sm text-slate-400">
-          Who a moment is shared with when you post it. Your friend list is the widest this can
-          be - a moment is never shown to anybody else, whichever of these is chosen.
-        </p>
-        <p className="mt-1.5 text-sm text-slate-500">
-          It applies to what you post from now on. A moment already up was sealed for the people
-          it had then, and nothing here can reach a key that is already on somebody&apos;s device.
-        </p>
-
-        <div className="mt-4 flex flex-wrap gap-2">
-          {MOMENT_AUDIENCES.map((choice) => {
-            const chosen = (user?.statusPrivacy ?? 'friends') === choice.value;
-            return (
-              <button
-                key={choice.value}
-                type="button"
-                disabled={savingMoments}
-                aria-pressed={chosen}
-                onClick={() => void saveMoments(choice.value, user?.statusPrivacyList ?? [])}
-                className={`cursor-pointer rounded-md border px-3 py-1.5 text-sm transition-colors duration-200 disabled:cursor-default ${
-                  chosen
-                    ? 'border-accent bg-accent/10 text-slate-100'
-                    : 'border-edge text-slate-300 hover:border-accent hover:text-slate-100'
-                }`}
-              >
-                {choice.label}
-              </button>
-            );
-          })}
-        </div>
-
-        {/* The list only exists for the two choices that name people, and it
-            is the same list either way - what changes is what being on it
-            means, which is what the line above it says. */}
-        {user && user.statusPrivacy !== 'friends' && (
-          <div className="mt-4">
-            <p className="text-sm text-slate-400">
-              {user.statusPrivacy === 'friends-except'
-                ? 'Everybody except the people you tick.'
-                : 'Only the people you tick.'}
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h2 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-slate-300">
+              <SparklesIcon className="h-4 w-4" />
+              Moments
+            </h2>
+            <p className="mt-1.5 text-sm text-slate-400">
+              Who a moment is shared with when you post it.
             </p>
-            {friends.length === 0 ? (
-              <p className="mt-3 rounded-lg border border-edge bg-surface-950 px-4 py-6 text-center text-sm text-slate-500">
-                You have no friends to choose from yet.
-              </p>
-            ) : (
-              <ul className="mt-3 max-h-64 divide-y divide-surface-700/60 overflow-y-auto rounded-lg border border-edge bg-surface-950">
-                {friends
-                  .filter((friend) => friend.status === 'ACCEPTED')
-                  .map((friend) => {
-                    const named = (user.statusPrivacyList ?? []).includes(friend.user.id);
-                    return (
-                      <li key={friend.user.id}>
-                        <label className="flex cursor-pointer items-center gap-3 px-4 py-2.5">
-                          <input
-                            type="checkbox"
-                            checked={named}
-                            disabled={savingMoments}
-                            onChange={() =>
-                              void saveMoments(
-                                user.statusPrivacy,
-                                named
-                                  ? (user.statusPrivacyList ?? []).filter(
-                                      (id) => id !== friend.user.id,
-                                    )
-                                  : [...(user.statusPrivacyList ?? []), friend.user.id],
-                              )
-                            }
-                            className="h-4 w-4 shrink-0 accent-accent"
-                          />
-                          <Avatar
-                            name={friend.user.displayName}
-                            avatarUrl={friend.user.avatarUrl}
-                            size="sm"
-                            ringColour="border-surface-950"
-                          />
-                          <span className="min-w-0 flex-1 truncate text-sm text-slate-200">
-                            {friend.user.displayName}
-                          </span>
-                          <span className="shrink-0 truncate text-xs text-slate-500">
-                            @{friend.user.username}
-                          </span>
-                        </label>
-                      </li>
-                    );
-                  })}
-              </ul>
-            )}
-            {user.statusPrivacy === 'only-share-with' &&
-              (user.statusPrivacyList ?? []).length === 0 && (
-                <p className="mt-3 text-sm text-amber-200">
-                  Nobody is ticked, so nobody but you will see what you post.
-                </p>
-              )}
+            <p className="mt-1 text-xs text-slate-500">
+              Currently:{' '}
+              <span className="font-medium text-slate-300">
+                {MOMENT_AUDIENCES.find((a) => a.value === (user?.statusPrivacy ?? 'friends'))
+                  ?.label ?? 'My friends'}
+              </span>
+            </p>
           </div>
-        )}
-
-        {momentsError && (
-          <p role="alert" className="mt-3 text-sm text-danger">
-            {momentsError}
-          </p>
-        )}
+          <button
+            type="button"
+            onClick={onNavigateMoments}
+            className="shrink-0 cursor-pointer rounded-md border border-edge px-3 py-1.5 text-xs text-slate-300 transition-colors duration-200 hover:border-accent hover:text-slate-100"
+          >
+            Manage
+          </button>
+        </div>
       </section>
 
       <section className="mt-8 border-t border-edge pt-6">
@@ -730,6 +629,157 @@ function PrivacySection(): JSX.Element {
         {error && (
           <p role="alert" className="mt-3 text-sm text-danger">
             {error}
+          </p>
+        )}
+      </section>
+    </>
+  );
+}
+
+function MomentsSection(): JSX.Element {
+  const user = useAuthStore((state) => state.user);
+  const refreshUser = useAuthStore((state) => state.refreshUser);
+  const friends = useFriendsStore((state) => state.friends);
+  const loadFriends = useFriendsStore((state) => state.load);
+  const [savingMoments, setSavingMoments] = useState(false);
+  const [momentsError, setMomentsError] = useState<string | null>(null);
+
+  useEffect(() => {
+    void loadFriends();
+  }, [loadFriends]);
+
+  const saveMoments = async (
+    privacy: StatusPrivacy,
+    list: string[],
+  ): Promise<void> => {
+    setSavingMoments(true);
+    setMomentsError(null);
+    try {
+      await api.updateAccount({ statusPrivacy: privacy, statusPrivacyList: list });
+      await refreshUser();
+    } catch (caught) {
+      setMomentsError(
+        caught instanceof Error ? caught.message : 'Could not change who sees your moments.',
+      );
+    } finally {
+      setSavingMoments(false);
+    }
+  };
+
+  const currentPrivacy = user?.statusPrivacy ?? 'friends';
+
+  return (
+    <>
+      <h1 className="text-xl font-semibold text-slate-50">Moments Privacy</h1>
+      <p className="mt-2 text-sm text-slate-400">
+        Who sees what you post, and which friends are included or excluded.
+      </p>
+
+      <section className="mt-6">
+        <h2 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-slate-300">
+          <SparklesIcon className="h-4 w-4" />
+          Audience
+        </h2>
+        <p className="mt-1.5 text-sm text-slate-400">
+          Who a moment is shared with when you post it. Your friend list is the widest this can
+          be - a moment is never shown to anybody else, whichever of these is chosen.
+        </p>
+        <p className="mt-1.5 text-sm text-slate-500">
+          It applies to what you post from now on. A moment already up was sealed for the people
+          it had then, and nothing here can reach a key that is already on somebody&apos;s device.
+        </p>
+
+        <div className="mt-4 flex flex-wrap gap-2">
+          {MOMENT_AUDIENCES.map((choice) => {
+            const chosen = currentPrivacy === choice.value;
+            return (
+              <button
+                key={choice.value}
+                type="button"
+                disabled={savingMoments}
+                aria-pressed={chosen}
+                onClick={() => void saveMoments(choice.value, user?.statusPrivacyList ?? [])}
+                className={`cursor-pointer rounded-md border px-3 py-1.5 text-sm transition-colors duration-200 disabled:cursor-default ${
+                  chosen
+                    ? 'border-accent bg-accent/10 text-slate-100'
+                    : 'border-edge text-slate-300 hover:border-accent hover:text-slate-100'
+                }`}
+              >
+                {choice.label}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* The list only exists for the two choices that name people, and it
+            is the same list either way - what changes is what being on it
+            means, which is what the line above it says. */}
+        {user && currentPrivacy !== 'friends' && (
+          <div className="mt-4">
+            <p className="text-sm text-slate-400">
+              {currentPrivacy === 'friends-except'
+                ? 'Everybody except the people you tick.'
+                : 'Only the people you tick.'}
+            </p>
+            {friends.length === 0 ? (
+              <p className="mt-3 rounded-lg border border-edge bg-surface-950 px-4 py-6 text-center text-sm text-slate-500">
+                You have no friends to choose from yet.
+              </p>
+            ) : (
+              <ul className="mt-3 max-h-64 divide-y divide-surface-700/60 overflow-y-auto rounded-lg border border-edge bg-surface-950">
+                {friends
+                  .filter((friend) => friend.status === 'ACCEPTED')
+                  .map((friend) => {
+                    const named = (user.statusPrivacyList ?? []).includes(friend.user.id);
+                    return (
+                      <li key={friend.user.id}>
+                        <label className="flex cursor-pointer items-center gap-3 px-4 py-2.5">
+                          <input
+                            type="checkbox"
+                            checked={named}
+                            disabled={savingMoments}
+                            onChange={() =>
+                              void saveMoments(
+                                currentPrivacy,
+                                named
+                                  ? (user.statusPrivacyList ?? []).filter(
+                                      (id) => id !== friend.user.id,
+                                    )
+                                  : [...(user.statusPrivacyList ?? []), friend.user.id],
+                              )
+                            }
+                            className="h-4 w-4 shrink-0 accent-accent"
+                          />
+                          <Avatar
+                            name={friend.user.displayName}
+                            avatarUrl={friend.user.avatarUrl}
+                            size="sm"
+                            ringColour="border-surface-950"
+                          />
+                          <span className="min-w-0 flex-1 truncate text-sm text-slate-200">
+                            {friend.user.displayName}
+                          </span>
+                          <span className="shrink-0 truncate text-xs text-slate-500">
+                            @{friend.user.username}
+                          </span>
+                        </label>
+                      </li>
+                    );
+                  })}
+              </ul>
+            )}
+            {currentPrivacy === 'only-share-with' &&
+              (user.statusPrivacyList ?? []).length === 0 && (
+                <p className="mt-3 text-sm text-amber-200">
+                  Nobody is ticked, so nobody but you will see what you post.
+                </p>
+              )}
+          </div>
+        )}
+
+        {momentsError && (
+          <p role="alert" className="mt-3 text-sm text-danger">
+            {momentsError}
           </p>
         )}
       </section>

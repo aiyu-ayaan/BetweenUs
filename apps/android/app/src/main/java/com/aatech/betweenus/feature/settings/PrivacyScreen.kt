@@ -1,8 +1,6 @@
 package com.aatech.betweenus.feature.settings
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -15,8 +13,6 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Checkbox
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -35,7 +31,6 @@ import androidx.compose.ui.unit.dp
 import com.aatech.betweenus.core.data.AuthPhase
 import com.aatech.betweenus.core.data.BetweenUsApi
 import com.aatech.betweenus.core.data.Endpoint
-import com.aatech.betweenus.core.data.FriendshipStatus
 import com.aatech.betweenus.core.data.Session
 import com.aatech.betweenus.core.data.StatusPrivacy
 import com.aatech.betweenus.core.store.Workspace
@@ -74,123 +69,13 @@ import kotlinx.coroutines.launch
  * key that is already on somebody's device.
  */
 @Composable
-private fun MomentsAudience(enabled: Boolean, onFail: (String) -> Unit) {
-    val scope = rememberCoroutineScope()
-    val user = (Session.state.collectAsState().value as? AuthPhase.SignedIn)?.user
-    val friends by Workspace.friends.collectAsState()
-    var saving by remember { mutableStateOf(false) }
-
-    if (user == null) return
-    val chosen = user.statusPrivacy
-    val named = user.statusPrivacyList
-
-    fun save(privacy: StatusPrivacy, list: List<String>) {
-        saving = true
-        scope.launch {
-            runCatching { Session.updateUser(BetweenUsApi.setStatusPrivacy(privacy, list)) }
-                .onFailure { onFail(Session.messageOf(it)) }
-            saving = false
-        }
-    }
-
-    SectionLabel("Moments")
-    Text(
-        text = "Who a moment is shared with when you post it. Your friend list is the widest " +
-            "this can be - a moment is never shown to anybody else, whichever of these is " +
-            "chosen. It applies to what you post from now on.",
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(horizontal = 12.dp),
-    )
-    Spacer(Modifier.height(8.dp))
-
-    Row(
-        modifier = Modifier
-            .horizontalScroll(rememberScrollState())
-            .padding(horizontal = 12.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        StatusPrivacy.entries.forEach { option ->
-            FilterChip(
-                selected = option == chosen,
-                enabled = enabled && !saving,
-                onClick = { if (option != chosen) save(option, named) },
-                label = { Text(option.label) },
-            )
-        }
-    }
-    Spacer(Modifier.height(6.dp))
-    Text(
-        text = chosen.note,
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(horizontal = 16.dp),
-    )
-
-    // The list exists only for the two choices that name people, and it is the
-    // same list either way - what changes is what being on it means, which is
-    // what the line above says.
-    if (chosen != StatusPrivacy.FRIENDS) {
-        Spacer(Modifier.height(8.dp))
-        val accepted = friends.filter { it.status == FriendshipStatus.ACCEPTED }
-        if (accepted.isEmpty()) {
-            Text(
-                text = "You have no friends to choose from yet.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = 16.dp),
-            )
-        } else {
-            accepted.forEach { friend ->
-                val ticked = friend.user.id in named
-                ListRow(
-                    title = friend.user.label,
-                    subtitle = friend.user.handle,
-                    leading = {
-                        Avatar(
-                            id = friend.user.id,
-                            label = friend.user.label,
-                            url = friend.user.avatarUrl?.let { Endpoint.absolute(it) },
-                            viewable = false,
-                        )
-                    },
-                    trailing = {
-                        Checkbox(
-                            checked = ticked,
-                            enabled = enabled && !saving,
-                            onCheckedChange = {
-                                save(
-                                    chosen,
-                                    if (ticked) named - friend.user.id else named + friend.user.id,
-                                )
-                            },
-                        )
-                    },
-                    onClick = {
-                        if (!saving) {
-                            save(
-                                chosen,
-                                if (ticked) named - friend.user.id else named + friend.user.id,
-                            )
-                        }
-                    },
-                )
-            }
-        }
-        if (chosen == StatusPrivacy.ONLY_SHARE_WITH && named.isEmpty()) {
-            Notice(
-                message = "Nobody is ticked, so nobody but you will see what you post.",
-                tone = MaterialTheme.colorScheme.tertiary,
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-            )
-        }
-    }
-}
-
-@Composable
-fun PrivacyScreen(onBack: () -> Unit) {
+fun PrivacyScreen(
+    onBack: () -> Unit,
+    onMomentsPrivacy: () -> Unit = {},
+) {
     val scope = rememberCoroutineScope()
     val blocked by Workspace.blocked.collectAsState()
+    val user = (Session.state.collectAsState().value as? AuthPhase.SignedIn)?.user
 
     var note by remember { mutableStateOf<String?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -289,7 +174,19 @@ fun PrivacyScreen(onBack: () -> Unit) {
             Spacer(Modifier.height(16.dp))
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
-            MomentsAudience(enabled = !busy, onFail = { error = it })
+            SectionLabel("Moments")
+            ListRow(
+                title = "Moments privacy",
+                subtitle = user?.statusPrivacy?.label ?: "My friends",
+                leading = { BetweenUsIcon(BetweenUsIcons.Sparkles) },
+                trailing = {
+                    BetweenUsIcon(
+                        BetweenUsIcons.ChevronRight,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                },
+                onClick = onMomentsPrivacy,
+            )
 
             Spacer(Modifier.height(16.dp))
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)

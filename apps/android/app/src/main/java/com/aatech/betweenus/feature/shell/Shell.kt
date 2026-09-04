@@ -67,6 +67,7 @@ import com.aatech.betweenus.feature.settings.AccountSecurityScreen
 import com.aatech.betweenus.feature.settings.BetweenUsPermissions
 import com.aatech.betweenus.feature.settings.CallUsageScreen
 import com.aatech.betweenus.feature.settings.DeviceSettingsScreen
+import com.aatech.betweenus.feature.settings.MomentsPrivacyScreen
 import com.aatech.betweenus.feature.settings.NotificationSettingsScreen
 import com.aatech.betweenus.feature.settings.PermissionDetailScreen
 import com.aatech.betweenus.feature.settings.PermissionsScreen
@@ -133,6 +134,7 @@ fun Shell(user: PublicUser) {
         Route.Permissions,
         Route.Themes,
         Route.Privacy,
+        Route.MomentsPrivacy,
         Route.CallUsage,
         Route.AutoUpdate,
         Route.ServerSettings -> true
@@ -665,6 +667,7 @@ fun Shell(user: PublicUser) {
                             onAutoUpdate = { navigation.navigate(Route.AutoUpdate) },
                             onCallUsage = { navigation.navigate(Route.CallUsage) },
                             onPrivacy = { navigation.navigate(Route.Privacy) },
+                            onMomentsSettings = { navigation.navigate(Route.MomentsPrivacy) },
                         )
                     }
                     composable(
@@ -729,7 +732,27 @@ fun Shell(user: PublicUser) {
                             slideOutHorizontally(travel) { it } + fadeOut(fade)
                         },
                     ) {
-                        PrivacyScreen(onBack = { navigation.popBackStack() })
+                        PrivacyScreen(
+                            onBack = { navigation.popBackStack() },
+                            onMomentsPrivacy = { navigation.navigate(Route.MomentsPrivacy) },
+                        )
+                    }
+                    composable(
+                        Route.MomentsPrivacy,
+                        enterTransition = {
+                            slideInHorizontally(travel) { it } + fadeIn(fade)
+                        },
+                        exitTransition = {
+                            slideOutHorizontally(travel) { -it / 3 } + fadeOut(fade)
+                        },
+                        popEnterTransition = {
+                            slideInHorizontally(travel) { -it / 3 } + fadeIn(fade)
+                        },
+                        popExitTransition = {
+                            slideOutHorizontally(travel) { it } + fadeOut(fade)
+                        },
+                    ) {
+                        MomentsPrivacyScreen(onBack = { navigation.popBackStack() })
                     }
                     composable(
                         Route.Themes,
@@ -953,6 +976,7 @@ object Route {
     const val DeviceSettings = "device-settings"
     const val Themes = "themes"
     const val Privacy = "privacy"
+    const val MomentsPrivacy = "moments-privacy"
     const val ServerSettings = "server-settings"
     const val Permissions = "permissions"
     const val PermissionDetail = "permission-detail"
