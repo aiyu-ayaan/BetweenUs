@@ -170,7 +170,10 @@ feature/remote          feature/status        feature/update        feature/voic
   no browser engine decodes one, so an unconverted moment reached the desktop
   as a broken image. `MyMomentsHost` is where the composer lands on the way
   out: one tile per post with its own view count, and the picker instead when
-  there is nothing posted yet. In the player the progress bar waits for the
+  there is nothing posted yet. Its grid reads newest first while the player
+  behind it plays oldest to newest, so each tile carries the position it opens
+  rather than either order being bent to fit the other. The desktop's
+  `MyMoments.tsx` is the same screen. In the player the progress bar waits for the
   media to finish downloading, and a drag up opens the viewer list.
 
   That gate is per-post on this client (`elapsed` is remembered by post id), so

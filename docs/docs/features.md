@@ -185,7 +185,7 @@ Share real-time photos, thoughts, and status updates that disappear automaticall
 - **Non-Intrusive Discovery**: View updates from your friends list and server colleagues in a dedicated Moments feed.
 - **Cross-Platform Media**: Photos are normalised to JPEG by the sender, so a moment posted from an Android camera (which writes HEIC) draws on every client rather than only on the phone that posted it.
 - **Background Posting**: Uploads run outside the composer - the screen is free as soon as you press Post, and the run fills in as each moment lands.
-- **My Moments**: Everything you have posted, one tile per moment with its own view count. On Android a drag up inside the player opens the same list of who watched.
+- **My Moments**: Everything you have posted, on every client, one tile per moment with its own age, view count and reaction tally. The grid reads newest first while the player still plays a run oldest to newest — the order it was lived in. On Android a drag up inside the player opens the same list of who watched.
 - **Moments Privacy**: Choose who a moment is posted to - all your friends, all of them except some, or only some. The friend list is always the ceiling, and the choice is enforced by which devices the post's key is sealed for rather than by any client hiding it.
 - **Reaction Counts**: A moment carries the tally of what people said back, shown to its author beside the view count, with each viewer's own symbol beside their name.
 - **React & Reply**: Answer somebody's moment with a one-tap reaction or words. The answer lands in your conversation with them, tagged with the moment it was about - and once the moment expires the tag stays and says so, rather than leaving a bare emoji with nothing to explain it.
