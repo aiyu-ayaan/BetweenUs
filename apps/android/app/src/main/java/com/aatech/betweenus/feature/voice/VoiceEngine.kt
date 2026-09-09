@@ -31,6 +31,7 @@ import kotlin.math.sqrt
 import org.json.JSONObject
 import org.webrtc.AudioTrack
 import org.webrtc.Camera1Enumerator
+import org.webrtc.CameraEnumerator
 import org.webrtc.Camera2Enumerator
 import org.webrtc.DataChannel
 import org.webrtc.DefaultVideoDecoderFactory
@@ -538,6 +539,13 @@ class VoiceEngine(private val context: Context) {
      */
     private var shareProjection: android.media.projection.MediaProjection? = null
     private var videoCapturer: VideoCapturer? = null
+
+    /**
+     * The size the camera was last opened at, so the ceiling can be derived
+     * from it. Without this the bitrate is quoted against a size nobody
+     * recorded, which is how a flat number survives as long as it did.
+     */
+    private var cameraSize: ShareQuality.Size = ShareQuality.cameraSize(ShareQuality.CameraQuality.AUTO)
     private var cameraTrack: VideoTrack? = null
     private var screenTrack: VideoTrack? = null
 
@@ -1079,28 +1087,45 @@ class VoiceEngine(private val context: Context) {
     private fun inCall(): Boolean =
         _state.value is CallState.Live || _state.value is CallState.Connecting
 
+    /** Which cameras this phone has, for the picker. See [AudioPrefs.cameraDeviceName]. */
+    fun cameraEnumerator(): CameraEnumerator =
+        if (Camera2Enumerator.isSupported(context)) Camera2Enumerator(context) else Camera1Enumerator(true)
+
     /** The camera. [startScreenShare] instead turns the capture into a share. */
     fun startCamera(front: Boolean = _isFrontCamera.value) {
         _isFrontCamera.value = front
         if (videoCapturer != null) stopVideo()
-        val enumerator = if (Camera2Enumerator.isSupported(context)) {
-            Camera2Enumerator(context)
-        } else {
-            Camera1Enumerator(true)
-        }
-        val name = enumerator.deviceNames.firstOrNull {
-            if (front) enumerator.isFrontFacing(it) else enumerator.isBackFacing(it)
-        } ?: enumerator.deviceNames.firstOrNull() ?: return
+        val enumerator = cameraEnumerator()
 
-        // 1080p30 asked for; the enumerator picks the nearest format the camera
-        // actually has, which on most phones is 1080p or 720p.
+        // A named camera wins, but only while it is still facing the way the
+        // flip button says. Without that second half, picking the wide-angle
+        // back lens once would pin every later call to it and the flip button
+        // would appear to do nothing - the setting is for choosing *among* the
+        // cameras on one side, not for overruling which side is in use.
+        val chosen = AudioPrefs.cameraDeviceName?.takeIf { name ->
+            enumerator.deviceNames.contains(name) &&
+                (if (front) enumerator.isFrontFacing(name) else enumerator.isBackFacing(name))
+        }
+        val name = chosen
+            ?: enumerator.deviceNames.firstOrNull {
+                if (front) enumerator.isFrontFacing(it) else enumerator.isBackFacing(it)
+            }
+            ?: enumerator.deviceNames.firstOrNull()
+            ?: return
+
+        // Asked for, not demanded: the enumerator picks the nearest format the
+        // camera actually has. This was pinned at 1080p for every phone, which
+        // is the size a mid-range front sensor interpolates rather than
+        // resolves - twice the bitrate for upscaled noise.
+        val size = ShareQuality.cameraSize(AudioPrefs.cameraQuality)
         val track = beginCapture(
             enumerator.createCapturer(name, null),
-            1920,
-            1080,
+            size.width,
+            size.height,
             ShareQuality.CAMERA_FRAME_RATE,
         ) ?: return
         cameraTrack = track
+        cameraSize = size
         _cameraOn.value = true
         publish(Slot.CAMERA, track)
         afterMediaChange()
@@ -1769,7 +1794,11 @@ class VoiceEngine(private val context: Context) {
                 val screen = slot == Slot.SCREEN
                 for (encoding in encodings) {
                     encoding.maxBitrateBps =
-                        if (screen) ShareQuality.screenBitrate(shareSize) else ShareQuality.cameraBitrate()
+                        if (screen) {
+                            ShareQuality.screenBitrate(shareSize)
+                        } else {
+                            ShareQuality.cameraBitrate(cameraSize)
+                        }
                     encoding.maxFramerate =
                         if (screen) ShareQuality.SCREEN_FRAME_RATE else ShareQuality.CAMERA_FRAME_RATE
                     // Send what was captured. Congestion control still shrinks

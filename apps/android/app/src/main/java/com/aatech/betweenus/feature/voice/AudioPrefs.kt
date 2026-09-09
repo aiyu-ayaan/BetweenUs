@@ -80,6 +80,38 @@ object AudioPrefs {
             if (value == null) remove("gate") else putInt("gate", value)
         }.apply()
 
+    /**
+     * Which camera the call uses, by the enumerator's own device name.
+     *
+     * Null is "whichever the flip button last landed on", which is what the
+     * phone did before this existed and is still right for the two cameras
+     * every phone has. It is for the third one: a phone with a wide or a
+     * telephoto lens enumerates several back-facing cameras, and
+     * `startCamera` used to take the first of them with no way to say
+     * otherwise.
+     *
+     * A name rather than an index. Indices move when a camera is added or a
+     * driver reorders the list, and a stored index that has moved is a setting
+     * that silently selects a different lens.
+     */
+    var cameraDeviceName: String?
+        get() = prefs.getString("camera.device", null)
+        set(value) = prefs.edit().apply {
+            if (value == null) remove("camera.device") else putString("camera.device", value)
+        }.apply()
+
+    /**
+     * What size to ask the camera for. The desktop's four names - see
+     * [ShareQuality.CameraQuality].
+     */
+    var cameraQuality: ShareQuality.CameraQuality
+        get() = runCatching {
+            ShareQuality.CameraQuality.valueOf(
+                prefs.getString("camera.quality", null) ?: "AUTO",
+            )
+        }.getOrDefault(ShareQuality.CameraQuality.AUTO)
+        set(value) = prefs.edit().putString("camera.quality", value.name).apply()
+
     var echoCancellation: Boolean
         get() = prefs.getBoolean("aec", true)
         set(value) = prefs.edit().putBoolean("aec", value).apply()

@@ -38,13 +38,23 @@ import com.aatech.betweenus.ui.theme.Slate500
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun CallDeviceSheet(onDismiss: () -> Unit) {
+fun CallDeviceSheet(
+    onDismiss: () -> Unit,
+    /**
+     * Reopen the camera, because a size is a property of the capture and only
+     * a new one can change it. A callback rather than the engine itself: this
+     * sheet otherwise knows nothing about calls, and the caller already holds
+     * both the engine and whether a camera is running.
+     */
+    onCameraQualityChanged: () -> Unit = {},
+) {
     val context = LocalContext.current
     val sheet = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val devices by rememberCallDevices()
 
     var route by remember { mutableStateOf(AudioPrefs.route) }
     var input by remember { mutableStateOf(AudioPrefs.input) }
+    var quality by remember { mutableStateOf(AudioPrefs.cameraQuality) }
 
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheet) {
         Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(bottom = 12.dp)) {
@@ -88,6 +98,26 @@ fun CallDeviceSheet(onDismiss: () -> Unit) {
                 )
             }
 
+            SectionLabel("Camera quality")
+            ShareQuality.CameraQuality.entries.forEach { option ->
+                ListRow(
+                    title = cameraQualityLabel(option),
+                    subtitle = cameraQualityDetail(option),
+                    selected = option == quality,
+                    leading = {
+                        BetweenUsIcon(
+                            icon = BetweenUsIcons.Video,
+                            tint = if (option == quality) Accent else Slate400,
+                        )
+                    },
+                    onClick = {
+                        quality = option
+                        AudioPrefs.cameraQuality = option
+                        onCameraQualityChanged()
+                    },
+                )
+            }
+
             Text(
                 text = "Android routes a call as one device, so choosing a headset's microphone " +
                     "puts the call in that headset as well.",
@@ -97,6 +127,20 @@ fun CallDeviceSheet(onDismiss: () -> Unit) {
             )
         }
     }
+}
+
+private fun cameraQualityLabel(quality: ShareQuality.CameraQuality): String = when (quality) {
+    ShareQuality.CameraQuality.AUTO -> "Automatic"
+    ShareQuality.CameraQuality.P360 -> "360p"
+    ShareQuality.CameraQuality.P720 -> "720p"
+    ShareQuality.CameraQuality.P1080 -> "1080p"
+}
+
+private fun cameraQualityDetail(quality: ShareQuality.CameraQuality): String = when (quality) {
+    ShareQuality.CameraQuality.AUTO -> "720p, which is what a phone's sensor is actually good at"
+    ShareQuality.CameraQuality.P360 -> "For a metered or a struggling connection"
+    ShareQuality.CameraQuality.P720 -> "The usual choice"
+    ShareQuality.CameraQuality.P1080 -> "Worth it on a phone whose camera resolves it"
 }
 
 fun routeLabel(route: AudioPrefs.Route): String = when (route) {

@@ -426,7 +426,14 @@ fun VoiceChannelScreen(
             // still there and the share can be rejoined.
             onClose = { watchingShare = null },
         )
-        if (pickingDevices) CallDeviceSheet(onDismiss = { pickingDevices = false })
+        if (pickingDevices) {
+            CallDeviceSheet(
+                onDismiss = { pickingDevices = false },
+                // Only a camera that is already running: nobody expects
+                // picking a size to turn one on.
+                onCameraQualityChanged = { if (cameraOn) engine.startCamera() },
+            )
+        }
         if (showingConnection) ConnectionSheet(linkStats) { showingConnection = false }
         if (inviting && channelId != null) {
             InviteToCallSheet(
@@ -1222,7 +1229,14 @@ fun VoiceChannelScreen(
             onConnection = { showMore = false; showingConnection = true },
         )
     }
-    if (pickingDevices) CallDeviceSheet(onDismiss = { pickingDevices = false })
+    if (pickingDevices) {
+        CallDeviceSheet(
+            onDismiss = { pickingDevices = false },
+            // Only a camera that is already running: nobody expects
+            // picking a size to turn one on.
+            onCameraQualityChanged = { if (cameraOn) engine.startCamera() },
+        )
+    }
     if (showingConnection) ConnectionSheet(linkStats) { showingConnection = false }
     if (inviting && channelId != null) {
         InviteToCallSheet(

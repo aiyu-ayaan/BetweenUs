@@ -40,8 +40,17 @@ object ShareQuality {
     private const val MIN_BITRATE = 8_000_000
     private const val MAX_BITRATE = 50_000_000
 
-    /** A camera is not a screen: fewer pixels, and nothing to read on it. */
-    private const val CAMERA_BITRATE = 5_000_000
+    /**
+     * A camera is not a screen: fewer pixels, and nothing to read on it.
+     *
+     * These mirror `camera-quality.ts` on the desktop, number for number, for
+     * the same reason the share's do - a call has both clients in it, and two
+     * ladders that disagree is a picture whose quality depends on who is
+     * sending it.
+     */
+    private const val CAMERA_REFERENCE_BITRATE = 4_000_000
+    private const val CAMERA_MIN_BITRATE = 600_000
+    private const val CAMERA_MAX_BITRATE = 8_000_000
 
     const val SCREEN_FRAME_RATE = 60
     const val CAMERA_FRAME_RATE = 30
@@ -83,7 +92,44 @@ object ShareQuality {
         return min(MAX_BITRATE, max(MIN_BITRATE, scaled))
     }
 
-    fun cameraBitrate(): Int = CAMERA_BITRATE
+    /**
+     * A camera ceiling proportional to the pixels actually being sent.
+     *
+     * This was a flat 5 Mbps for every size, which is wrong in both directions
+     * at once: a 360p capture was handed fourteen times the bitrate it can
+     * spend, and a 1080p one was capped below what it is worth. The screen's
+     * ceiling has scaled with its pixel count since it was written; the camera's
+     * simply never did.
+     */
+    fun cameraBitrate(size: Size): Int {
+        val pixels = max(1, size.width * size.height)
+        val scaled =
+            ((pixels.toDouble() / REFERENCE_PIXELS) * CAMERA_REFERENCE_BITRATE).roundToInt()
+        return min(CAMERA_MAX_BITRATE, max(CAMERA_MIN_BITRATE, scaled))
+    }
+
+    /**
+     * What to ask the camera for.
+     *
+     * The desktop's four names, deliberately - `CameraQuality` in
+     * `camera-quality.ts`. "Set it to 720p" has to mean one thing in a support
+     * conversation whichever client somebody is holding, which is the same rule
+     * the noise-suppression levels follow.
+     */
+    enum class CameraQuality { AUTO, P360, P720, P1080 }
+
+    /**
+     * `AUTO` is 720p, and for the reason the desktop gives: a phone's front
+     * sensor is good at it, and the 1080p mode above it is frequently the same
+     * sensor interpolated - twice the bitrate for upscaled noise. The
+     * enumerator picks the nearest format the camera really has, so none of
+     * these is a demand.
+     */
+    fun cameraSize(quality: CameraQuality): Size = when (quality) {
+        CameraQuality.P360 -> Size(640, 360)
+        CameraQuality.P1080 -> Size(1920, 1080)
+        else -> Size(1280, 720)
+    }
 
     /**
      * What one video codec is worth on a screen. Higher sorts first.
