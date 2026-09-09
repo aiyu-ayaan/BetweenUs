@@ -1,30 +1,14 @@
 /**
- * A seam between the camera and the sender, running nothing yet.
+ * A seam between the camera and the sender for real-time video filters.
  *
- * Filters and a portrait blur both need the same thing: somewhere to stand
- * between the captured frames and the ones that go on the wire. That place did
- * not exist - the camera track went straight from `getUserMedia` to
- * `RTCRtpSender.replaceTrack` - and building it at the same time as the first
- * effect would have meant debugging a shader and a track lifecycle at once,
- * with a black tile for everybody in the call as the failure mode.
+ * Filters need somewhere to stand between the captured frames and the ones that
+ * go on the wire. That place did not exist - the camera track went straight from
+ * `getUserMedia` to `RTCRtpSender.replaceTrack`.
  *
  * What lands here is the structural half: the worker, the track swap, the
  * teardown, the capability gate and the budget guard. The colour filters ride
- * along with it - not as scope creep, but because a seam with nothing going
- * through it is not a verified seam, it is dead code waiting to be debugged
- * later underneath a shader. `ctx.filter` is one assignment and no dependency,
- * which makes it the cheapest honest load to prove the pipeline with.
- *
- * The portrait blur is what is *not* here, and it is the expensive half:
- * blurring a background means knowing which pixels are background, which means
- * a segmentation model and the download that comes with it. It attaches to this
- * pipeline rather than replacing it.
- *
- * **Why native blur is not simply used instead.** It is not reachable. The
- * `backgroundBlur` track constraint is wired to platform video effects that
- * ship on ChromeOS and a thin slice of Windows builds and report unsupported
- * on nearly every machine this runs on; colour filters were never native
- * anywhere. That is the whole reason there is a processing stage.
+ * along with it. `ctx.filter` is one assignment and no dependency, which makes
+ * it the cheapest honest load to run the pipeline with.
  *
  * **What this costs where it is unavailable.** `MediaStreamTrackProcessor` is
  * Chromium's, which is free in Electron and absent in Firefox and Safari on the
@@ -39,33 +23,18 @@
 /**
  * What to do to each frame.
  *
- * A canvas filter string, because that is the form both halves of phase 3 want:
- * the colour filters are one directly (`saturate(1.2) sepia(.3)`), and the
- * portrait blur is one applied to a masked background layer. `null` is "leave
- * the frame alone", which is not the same as an empty string - see
- * `isPassThrough`.
+ * A canvas filter string (`saturate(1.2) sepia(.3)`). `null` is "leave the frame
+ * alone", which is not the same as an empty string - see `isPassThrough`.
  */
 export interface CameraEffect {
   /** A CSS filter string for `CanvasRenderingContext2D.filter`, or null. */
   filter: string | null;
-  /** Background blur radius in pixels; 0 is off. Phase 3 consumes this. */
-  blurBackground: number;
 }
 
-export const NO_EFFECT: CameraEffect = { filter: null, blurBackground: 0 };
+export const NO_EFFECT: CameraEffect = { filter: null };
 
 /**
  * The filters on offer, as canvas filter strings.
- *
- * These ship with the seam rather than after it, and deliberately: a pipeline
- * with nothing going through it is not a verified pipeline, it is dead code
- * that will be debugged later under a shader. A filter is the cheapest possible
- * load to run it with - `ctx.filter` is one assignment, the compositing is the
- * browser's, and there is no model, no dependency and no wasm to download.
- *
- * The portrait blur is *not* here, because it is the expensive half: blurring a
- * background means knowing which pixels are the background, which means a
- * segmentation model. `blurBackground` above is the field it will fill.
  *
  * Values are gentle on purpose. A filter somebody notices is a filter they turn
  * off; these are the difference between a webcam's flat colour and a picture
@@ -75,48 +44,18 @@ export const FILTERS: Record<string, CameraEffect> = {
   none: NO_EFFECT,
   // A cheap sensor under an office light renders skin grey. This is the
   // correction, not a look.
-  warm: { filter: 'saturate(1.15) sepia(0.16) contrast(1.04)', blurBackground: 0 },
-  cool: { filter: 'saturate(1.08) hue-rotate(-8deg) brightness(1.04)', blurBackground: 0 },
-  vivid: { filter: 'saturate(1.4) contrast(1.12)', blurBackground: 0 },
-  mono: { filter: 'grayscale(1) contrast(1.08)', blurBackground: 0 },
-  // Lifts the black point rather than blurring: a soft-focus look that costs
-  // nothing, as opposed to the real background blur that costs a model.
-  soft: { filter: 'brightness(1.06) contrast(0.94) saturate(1.05)', blurBackground: 0 },
+  warm: { filter: 'saturate(1.15) sepia(0.16) contrast(1.04)' },
+  cool: { filter: 'saturate(1.08) hue-rotate(-8deg) brightness(1.04)' },
+  vivid: { filter: 'saturate(1.4) contrast(1.12)' },
+  mono: { filter: 'grayscale(1) contrast(1.08)' },
+  soft: { filter: 'brightness(1.06) contrast(0.94) saturate(1.05)' },
 };
 
 export type FilterName = keyof typeof FILTERS;
 
-/**
- * How hard the background is blurred, in pixels of blur radius.
- *
- * Two steps rather than a slider. The honest range is narrow - under about six
- * pixels nothing looks blurred, and over about twenty the edge of somebody's
- * hair starts to matter more than the blur does - so a slider would be a
- * hundred positions across a choice with two useful answers.
- */
-export const PORTRAIT_BLUR = { off: 0, light: 8, strong: 18 } as const;
-
-export type PortraitLevel = keyof typeof PORTRAIT_BLUR;
-
-/**
- * One effect from the two things somebody picked.
- *
- * They compose rather than exclude: a filter and a blur are different
- * questions - what the colour is, and what is behind you - and picking one
- * should not silently drop the other. The worker applies the filter to the
- * person and to the background alike, so a warm portrait is warm all through
- * rather than a warm face on a neutral room.
- */
-export function effectFrom(filter: string, portrait: string | number): CameraEffect {
-  const base = FILTERS[filter] ?? NO_EFFECT;
-  // Both are stored by name, and an unknown name is nothing rather than a
-  // crash: a profile in local storage may have been written by a build with a
-  // level this one has since dropped.
-  const blur =
-    typeof portrait === 'number'
-      ? portrait
-      : (PORTRAIT_BLUR[portrait as PortraitLevel] ?? 0);
-  return { filter: base.filter, blurBackground: Math.max(0, blur) };
+/** One effect from the filter name somebody picked. */
+export function effectFrom(filter: string): CameraEffect {
+  return FILTERS[filter] ?? NO_EFFECT;
 }
 
 /** The chosen filter alone, or nothing when the name is one we dropped. */
@@ -141,7 +80,7 @@ export function effectFor(name: string): CameraEffect {
 export function isPassThrough(effect: CameraEffect): boolean {
   const filter = effect.filter?.trim();
   const filtering = filter !== undefined && filter !== '' && filter !== 'none';
-  return !filtering && effect.blurBackground <= 0;
+  return !filtering;
 }
 
 /**
@@ -177,21 +116,9 @@ export function effectsSupported(scope: Record<string, unknown> = globalThis): b
  */
 export const FRAME_BUDGET_MS = 16;
 
-/**
- * The same, with the portrait blur on.
- *
- * A whole frame interval at 30 fps rather than half of one, because
- * segmentation is not a filter: it runs a model over every frame, and on a
- * mid-range machine that genuinely costs more than 16 ms while still keeping
- * up. Holding it to the filter's budget would switch the blur off within a
- * second on hardware perfectly capable of running it - a guard that fires on
- * working software is worse than no guard.
- */
-export const PORTRAIT_BUDGET_MS = 33;
-
 /** Which budget an effect is judged against. */
-export function budgetFor(effect: CameraEffect): number {
-  return effect.blurBackground > 0 ? PORTRAIT_BUDGET_MS : FRAME_BUDGET_MS;
+export function budgetFor(_effect?: CameraEffect): number {
+  return FRAME_BUDGET_MS;
 }
 
 /**
@@ -338,7 +265,6 @@ export class CameraPipeline {
     source: MediaStreamTrack,
     effect: CameraEffect,
     onBypass: (bypassed: boolean) => void,
-    onNoPortrait: () => void = () => undefined,
   ): CameraPipeline | null {
     if (isPassThrough(effect) || !effectsSupported()) return null;
 
@@ -367,13 +293,6 @@ export class CameraPipeline {
       worker.onmessage = (event: MessageEvent<{ type: string; ms?: number }>) => {
         if (event.data.type === 'failed') {
           onBypass(true);
-          return;
-        }
-        // The segmentation model could not be loaded - a missing file, a
-        // browser without the WebAssembly it needs. The filter half is
-        // unaffected and keeps running, so this is not a bypass.
-        if (event.data.type === 'no-portrait') {
-          onNoPortrait();
           return;
         }
         if (pipeline.budget.record(event.data.ms ?? 0)) {

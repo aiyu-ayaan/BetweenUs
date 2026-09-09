@@ -36,28 +36,19 @@ class CameraLookTest {
     }
 
     @Test
-    fun `portraitFor null and unknown defaults to OFF`() {
-        assertEquals(CameraLook.Portrait.OFF, CameraLook.portraitFor(null))
-        assertEquals(CameraLook.Portrait.OFF, CameraLook.portraitFor("unknown"))
+    fun `isPassThrough for none or null is true`() {
+        assertTrue(CameraLook.isPassThrough("none"))
+        assertTrue(CameraLook.isPassThrough(null))
+        assertTrue(CameraLook.isPassThrough("unknown"))
     }
 
     @Test
-    fun `portrait radius matches expectations for light strong and off`() {
-        assertEquals(6f, CameraLook.portraitFor("light").radius, 0.001f)
-        assertEquals(13f, CameraLook.portraitFor("strong").radius, 0.001f)
-        assertEquals(0f, CameraLook.Portrait.OFF.radius, 0.001f)
-    }
-
-    @Test
-    fun `isPassThrough for none and off is true`() {
-        assertTrue(CameraLook.isPassThrough("none", "off"))
-    }
-
-    @Test
-    fun `isPassThrough is false when filter or portrait is active`() {
-        assertFalse(CameraLook.isPassThrough("warm", "off"))
-        assertFalse(CameraLook.isPassThrough("none", "light"))
-        assertFalse(CameraLook.isPassThrough("vivid", "strong"))
+    fun `isPassThrough is false when filter is active`() {
+        assertFalse(CameraLook.isPassThrough("warm"))
+        assertFalse(CameraLook.isPassThrough("cool"))
+        assertFalse(CameraLook.isPassThrough("vivid"))
+        assertFalse(CameraLook.isPassThrough("mono"))
+        assertFalse(CameraLook.isPassThrough("soft"))
     }
 
     @Test

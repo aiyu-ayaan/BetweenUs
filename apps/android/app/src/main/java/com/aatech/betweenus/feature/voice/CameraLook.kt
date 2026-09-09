@@ -103,23 +103,6 @@ object CameraLook {
         FILTERS.firstOrNull { it.name == name } ?: FILTERS.first()
 
     /**
-     * How hard the background is blurred, as a radius in source pixels.
-     *
-     * Two steps rather than a slider, and the desktop's two: the honest range is
-     * narrow - below a certain point nothing looks blurred, and above it the
-     * edge of somebody's hair matters more than the blur does - so a slider
-     * would be a hundred positions across a choice with two useful answers.
-     */
-    enum class Portrait(val level: String, val label: String, val radius: Float) {
-        OFF("off", "Off", 0f),
-        LIGHT("light", "Light", 6f),
-        STRONG("strong", "Strong", 13f),
-    }
-
-    fun portraitFor(level: String?): Portrait =
-        Portrait.entries.firstOrNull { it.level == level } ?: Portrait.OFF
-
-    /**
      * Whether anything at all has been asked for.
      *
      * "No effect" must not mean "an identity shader": a pass-through still costs
@@ -127,6 +110,6 @@ object CameraLook {
      * phone that is already encoding video. It means the processor hands the
      * frame straight to the sink and no GL runs at all.
      */
-    fun isPassThrough(filter: String?, portrait: String?): Boolean =
-        filterFor(filter).name == "none" && portraitFor(portrait) == Portrait.OFF
+    fun isPassThrough(filter: String?): Boolean =
+        filterFor(filter).name == "none"
 }

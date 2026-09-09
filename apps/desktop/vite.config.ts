@@ -2,7 +2,6 @@ import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import electron from 'vite-plugin-electron/simple';
-import { mediapipeAssets } from './vite-mediapipe';
 
 const AUTH = process.env.AUTH_SERVICE_URL ?? 'http://127.0.0.1:3001';
 const SERVER = process.env.SERVER_SERVICE_URL ?? 'http://127.0.0.1:3003';
@@ -22,7 +21,6 @@ export default defineConfig({
   envDir: fileURLToPath(new URL('../../', import.meta.url)),
   plugins: [
     react(),
-    mediapipeAssets(),
     electron({
       main: {
         entry: 'electron/main.ts',

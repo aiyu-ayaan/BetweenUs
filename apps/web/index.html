@@ -37,19 +37,8 @@
       sensitivity, no push-to-talk silence, and no local speaking indicator,
       because the level the ring is drawn from is measured inside it.
 
-      script-src also allows 'wasm-unsafe-eval', which is the portrait blur.
-      Blurring a background means knowing which pixels are the background, which
-      means a segmentation model, which means WebAssembly - and a page with any
-      script-src at all cannot compile WebAssembly without being told it may.
-
-      It is a far narrower grant than it sounds, and deliberately not the one
-      next to it: 'unsafe-eval' would re-enable eval() and the Function
-      constructor for every script in this window, where 'wasm-unsafe-eval'
-      permits WebAssembly compilation and nothing else. **script-src is still
-      'self'** - the wasm and the model are served from this origin, staged out
-      of node_modules by vite-mediapipe.ts, never from Google's CDN. The rule
-      that keeps YouTube's iframe API out of this window is the same rule that
-      keeps MediaPipe's loader out of it.
+      script-src also allows 'wasm-unsafe-eval' for WebAssembly compilation.
+      script-src remains 'self' blob: - no external CDN code is permitted.
     -->
     <meta
       http-equiv="Content-Security-Policy"

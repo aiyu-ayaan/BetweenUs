@@ -28,9 +28,6 @@ json = "20240303"
 navigationCompose = "2.9.6"
 desugar = "2.1.5"
 webrtc = "125.6422.07"
-# The portrait blur's person detector. A bundled model, so the blur works with
-# no network and nothing about a camera ever leaves the phone.
-mlkitSegmentation = "16.0.0-beta6"
 appcompat = "1.7.1"
 browser = "1.9.0"
 material = "1.14.0"
@@ -80,7 +77,6 @@ json = { group = "org.json", name = "json", version.ref = "json" }
 androidx-navigation-compose = { group = "androidx.navigation", name = "navigation-compose", version.ref = "navigationCompose" }
 desugar-jdk-libs = { group = "com.android.tools", name = "desugar_jdk_libs", version.ref = "desugar" }
 webrtc = { group = "io.github.webrtc-sdk", name = "android", version.ref = "webrtc" }
-mlkit-segmentation = { group = "com.google.mlkit", name = "segmentation-selfie", version.ref = "mlkitSegmentation" }
 androidx-room-runtime = { group = "androidx.room", name = "room-runtime", version.ref = "room" }
 androidx-room-ktx = { group = "androidx.room", name = "room-ktx", version.ref = "room" }
 androidx-room-compiler = { group = "androidx.room", name = "room-compiler", version.ref = "room" }

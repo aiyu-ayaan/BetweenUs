@@ -1,5 +1,5 @@
 /**
- * Filters and the background blur, on your own tile, inside the call.
+ * Filters on your own tile, inside the call.
  *
  * The same argument the device picker makes: the full set of camera controls
  * lives in Settings → Voice & Video, and the moment somebody wants a filter is
@@ -19,7 +19,7 @@
 import { forwardRef, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useAudioSettings } from '../../stores/audioSettings';
-import { FILTERS, PORTRAIT_BLUR, effectsSupported } from '../../services/camera-effects';
+import { FILTERS, effectsSupported } from '../../services/camera-effects';
 import { SparklesIcon, XIcon } from '../../components/icons';
 
 const FILTER_LABELS: Record<string, string> = {
@@ -29,12 +29,6 @@ const FILTER_LABELS: Record<string, string> = {
   vivid: 'Vivid',
   mono: 'Mono',
   soft: 'Soft',
-};
-
-const PORTRAIT_LABELS: Record<string, string> = {
-  off: 'Off',
-  light: 'Light',
-  strong: 'Strong',
 };
 
 export function CameraLook({
@@ -153,59 +147,30 @@ export function CameraLook({
 
       {!supported ? (
         <p className="text-xs text-slate-400">
-          This browser cannot process camera frames, so filters and the background blur are not
-          available here. The desktop app and Chrome or Edge can. Your camera itself is unaffected.
+          This browser cannot process camera frames, so filters are not available here. The desktop
+          app and Chrome or Edge can. Your camera itself is unaffected.
         </p>
       ) : (
-        <>
-          <div>
-            <span className="mb-1.5 block text-[11px] font-semibold text-slate-400">Filter</span>
-            <div className="grid grid-cols-3 gap-1">
-              {Object.keys(FILTERS).map((name) => (
-                <button
-                  key={name}
-                  type="button"
-                  onClick={() => update({ camera: { ...camera, filter: name } })}
-                  aria-pressed={camera.filter === name}
-                  className={`cursor-pointer rounded-lg px-2 py-1.5 text-[11px] font-medium transition-colors ${
-                    camera.filter === name
-                      ? 'bg-accent text-white'
-                      : 'bg-white/[0.06] text-slate-300 hover:bg-white/[0.12] hover:text-white'
-                  }`}
-                >
-                  {FILTER_LABELS[name] ?? name}
-                </button>
-              ))}
-            </div>
+        <div>
+          <span className="mb-1.5 block text-[11px] font-semibold text-slate-400">Filter</span>
+          <div className="grid grid-cols-3 gap-1">
+            {Object.keys(FILTERS).map((name) => (
+              <button
+                key={name}
+                type="button"
+                onClick={() => update({ camera: { ...camera, filter: name } })}
+                aria-pressed={camera.filter === name}
+                className={`cursor-pointer rounded-lg px-2 py-1.5 text-[11px] font-medium transition-colors ${
+                  camera.filter === name
+                    ? 'bg-accent text-white'
+                    : 'bg-white/[0.06] text-slate-300 hover:bg-white/[0.12] hover:text-white'
+                }`}
+              >
+                {FILTER_LABELS[name] ?? name}
+              </button>
+            ))}
           </div>
-
-          <div>
-            <span className="mb-1.5 block text-[11px] font-semibold text-slate-400">
-              Blur background
-            </span>
-            <div className="grid grid-cols-3 gap-1">
-              {Object.keys(PORTRAIT_BLUR).map((level) => (
-                <button
-                  key={level}
-                  type="button"
-                  onClick={() => update({ camera: { ...camera, portrait: level } })}
-                  aria-pressed={camera.portrait === level}
-                  className={`cursor-pointer rounded-lg px-2 py-1.5 text-[11px] font-medium transition-colors ${
-                    camera.portrait === level
-                      ? 'bg-accent text-white'
-                      : 'bg-white/[0.06] text-slate-300 hover:bg-white/[0.12] hover:text-white'
-                  }`}
-                >
-                  {PORTRAIT_LABELS[level] ?? level}
-                </button>
-              ))}
-            </div>
-            <p className="mt-1.5 text-[11px] leading-snug text-slate-500">
-              Everyone in the call sees this, not just you. It takes a moment to start the first
-              time, and turns itself off if this machine cannot keep up.
-            </p>
-          </div>
-        </>
+        </div>
       )}
     </div>
   );
@@ -234,8 +199,8 @@ export const CameraLookButton = forwardRef<
       type="button"
       onClick={onToggle}
       aria-expanded={open}
-      aria-label="Filters and background blur"
-      title="Filters and background blur"
+      aria-label="Camera filters"
+      title="Camera filters"
       className={`absolute end-2 top-2 z-30 flex cursor-pointer items-center gap-1 rounded-lg border border-white/10 px-2 py-1 text-[11px] font-semibold backdrop-blur-md transition-all duration-200 focus-visible:opacity-100 active:scale-95 ${
         open
           ? 'bg-accent text-white opacity-100'

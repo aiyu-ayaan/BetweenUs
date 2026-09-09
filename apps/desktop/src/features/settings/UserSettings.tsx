@@ -1769,32 +1769,6 @@ function VoiceSection(): JSX.Element {
               : 'Filters need frame processing, which this browser does not have. The desktop app and Chrome or Edge have it. Your camera still works - it is only the filters that are unavailable here.'}
           </span>
         </label>
-
-        <label className="block">
-          <span className="block text-xs font-bold uppercase tracking-wide text-slate-400">
-            Blur background
-          </span>
-          <select
-            value={settings.camera.portrait}
-            disabled={!effectsAvailable}
-            onChange={(event) =>
-              update({ camera: { ...settings.camera, portrait: event.target.value } })
-            }
-            className="mt-2 w-full cursor-pointer rounded-lg border border-edge bg-surface-950 px-3 py-2 text-slate-100 outline-none transition-colors focus:border-accent/60 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            <option value="off">Off</option>
-            <option value="light">Light</option>
-            <option value="strong">Strong</option>
-          </select>
-          <span className="mt-1.5 block text-xs text-slate-500">
-            Keeps you sharp and softens the room behind you. It runs a person-detection model on
-            every frame, entirely on this machine - nothing about your camera leaves it - which is
-            why it takes a moment to start the first time and costs noticeably more than a filter.
-            Two strengths rather than a slider, because the useful range is narrow: below a certain
-            point nothing looks blurred, and above it the edge of your hair starts to matter more
-            than the blur does.
-          </span>
-        </label>
       </div>
 
       <h2 className="mt-8 text-base font-semibold text-slate-50">Sounds</h2>

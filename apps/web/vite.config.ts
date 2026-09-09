@@ -2,7 +2,6 @@ import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import basicSsl from '@vitejs/plugin-basic-ssl';
-import { mediapipeAssets } from '../desktop/vite-mediapipe';
 
 const AUTH = process.env.AUTH_SERVICE_URL ?? 'http://127.0.0.1:3001';
 const SERVER = process.env.SERVER_SERVICE_URL ?? 'http://127.0.0.1:3003';
@@ -33,7 +32,7 @@ export default defineConfig(({ mode }) => {
   return {
     // One .env for the whole repo, same as the desktop app.
     envDir: fileURLToPath(new URL('../../', import.meta.url)),
-    plugins: [react(), mediapipeAssets(), ...(lan ? [basicSsl()] : [])],
+    plugins: [react(), ...(lan ? [basicSsl()] : [])],
     // Served at the root of the gateway - `https://betweenus.example.com/` is the
     // app, `/admin` is the panel - so asset URLs are domain-rooted.
     base: '/',

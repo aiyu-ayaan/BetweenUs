@@ -52,7 +52,7 @@ fun CallDeviceSheet(
      * both the engine and whether a camera is running.
      */
     onCameraQualityChanged: () -> Unit = {},
-    onCameraLookChanged: (filter: String, portrait: String) -> Unit = { _, _ -> },
+    onCameraLookChanged: (filter: String) -> Unit = {},
 ) {
     val context = LocalContext.current
     val sheet = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -63,7 +63,6 @@ fun CallDeviceSheet(
     var quality by remember { mutableStateOf(AudioPrefs.cameraQuality) }
     var selectedCamera by remember { mutableStateOf(AudioPrefs.cameraDeviceName) }
     var filter by remember { mutableStateOf(AudioPrefs.cameraFilter) }
-    var portrait by remember { mutableStateOf(AudioPrefs.cameraPortrait) }
 
     val enumerator = remember {
         if (Camera2Enumerator.isSupported(context)) Camera2Enumerator(context) else Camera1Enumerator(true)
@@ -197,28 +196,7 @@ fun CallDeviceSheet(
                     onClick = {
                         filter = f.name
                         AudioPrefs.cameraFilter = f.name
-                        onCameraLookChanged(f.name, portrait)
-                    },
-                )
-            }
-
-            SectionLabel("Background blur")
-            CameraLook.Portrait.entries.forEach { p ->
-                val isSelected = p.level == portrait
-                ListRow(
-                    title = p.label,
-                    subtitle = cameraPortraitDetail(p.level),
-                    selected = isSelected,
-                    leading = {
-                        BetweenUsIcon(
-                            icon = BetweenUsIcons.Sparkles,
-                            tint = if (isSelected) Accent else Slate400,
-                        )
-                    },
-                    onClick = {
-                        portrait = p.level
-                        AudioPrefs.cameraPortrait = p.level
-                        onCameraLookChanged(filter, p.level)
+                        onCameraLookChanged(f.name)
                     },
                 )
             }
@@ -256,13 +234,6 @@ private fun cameraFilterDetail(name: String): String = when (name) {
     "mono" -> "Greyscale black and white"
     "soft" -> "Soft lifted tones"
     else -> "Camera filter"
-}
-
-private fun cameraPortraitDetail(level: String): String = when (level) {
-    "off" -> "Show background clearly"
-    "light" -> "Subtle background softening"
-    "strong" -> "Heavy depth-of-field blur"
-    else -> "Background blur"
 }
 
 

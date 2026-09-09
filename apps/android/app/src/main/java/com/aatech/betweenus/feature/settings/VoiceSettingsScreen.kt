@@ -85,7 +85,6 @@ fun VoiceSettingsScreen(
 
     var cameraQuality by remember { mutableStateOf(AudioPrefs.cameraQuality) }
     var cameraFilter by remember { mutableStateOf(AudioPrefs.cameraFilter) }
-    var cameraPortrait by remember { mutableStateOf(AudioPrefs.cameraPortrait) }
     var cameraDevice by remember { mutableStateOf(AudioPrefs.cameraDeviceName) }
     val enumerator = remember {
         if (Camera2Enumerator.isSupported(context)) Camera2Enumerator(context) else Camera1Enumerator(true)
@@ -363,27 +362,7 @@ fun VoiceSettingsScreen(
                             val next = filters[nextIndex]
                             cameraFilter = next.name
                             AudioPrefs.cameraFilter = next.name
-                            VoiceEngine.live.value?.setCameraLook(next.name, cameraPortrait)
-                        },
-                    )
-                },
-            )
-
-            ListRow(
-                title = "Background Blur",
-                subtitle = CameraLook.portraitFor(cameraPortrait).label,
-                leading = { BetweenUsIcon(BetweenUsIcons.Sparkles) },
-                trailing = {
-                    Chip(
-                        text = "Change",
-                        onClick = {
-                            val portraits = CameraLook.Portrait.entries
-                            val currentIndex = portraits.indexOfFirst { it.level == cameraPortrait }
-                            val nextIndex = (currentIndex + 1).mod(portraits.size)
-                            val next = portraits[nextIndex]
-                            cameraPortrait = next.level
-                            AudioPrefs.cameraPortrait = next.level
-                            VoiceEngine.live.value?.setCameraLook(cameraFilter, next.level)
+                            VoiceEngine.live.value?.setCameraLook(next.name)
                         },
                     )
                 },

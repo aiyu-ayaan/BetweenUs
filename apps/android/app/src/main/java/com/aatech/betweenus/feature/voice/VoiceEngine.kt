@@ -1156,10 +1156,9 @@ class VoiceEngine(private val context: Context) {
      * pipeline and only its two fields change. Reopening the camera for a
      * filter change would blink the light and drop a frame for everybody.
      */
-    fun setCameraLook(filter: String, portrait: String) {
+    fun setCameraLook(filter: String) {
         AudioPrefs.cameraFilter = filter
-        AudioPrefs.cameraPortrait = portrait
-        cameraEffects?.setLook(filter, portrait)
+        cameraEffects?.setLook(filter)
     }
 
     /** Flip between front and back facing cameras. */
@@ -1253,7 +1252,7 @@ class VoiceEngine(private val context: Context) {
         // a filter on a shared screen is a shared screen nobody can read.
         if (!capturer.isScreencast) {
             val effects = CameraEffects(helper)
-            effects.setLook(AudioPrefs.cameraFilter, AudioPrefs.cameraPortrait)
+            effects.setLook(AudioPrefs.cameraFilter)
             source.setVideoProcessor(effects)
             cameraEffects = effects
         }

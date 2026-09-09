@@ -956,9 +956,8 @@ async function openCamera(settings: VoiceSettings): Promise<void> {
   // because a call with an unfiltered picture is working software.
   cameraPipeline = CameraPipeline.start(
     source,
-    effectFrom(settings.camera.filter, settings.camera.portrait),
+    effectFrom(settings.camera.filter),
     onCameraBypass,
-    onNoPortrait,
   );
   const published = cameraPipeline?.track ?? source;
 
@@ -992,40 +991,14 @@ async function openCamera(settings: VoiceSettings): Promise<void> {
  * a filter somebody's machine has already failed to sustain should not switch
  * itself back on mid-call. They can pick it again.
  */
-/**
- * The segmentation model could not be loaded.
- *
- * Only the blur is turned off - the filter half runs on a canvas and is
- * unaffected, so taking it down with the model would be punishing the working
- * feature for the broken one. The notice matters because the failure is
- * otherwise perfectly silent: the picture simply never blurs, and every
- * explanation for that is somebody's own guess.
- */
-function onNoPortrait(): void {
-  const { settings, update } = useAudioSettings.getState();
-  if (settings.camera.portrait === 'off') return;
-  update({ camera: { ...settings.camera, portrait: 'off' } });
-  useVoiceStore.setState({
-    error: 'Camera: the background blur could not start on this machine.',
-  });
-  refresh();
-}
-
 function onCameraBypass(bypassed: boolean): void {
   if (!bypassed) return;
   const { settings, update } = useAudioSettings.getState();
-  const { filter, portrait } = settings.camera;
-  if (filter === 'none' && portrait === 'off') return;
-  // The blur is dropped first and on its own when both are on: it is the
-  // expensive half by a wide margin, and turning off a colour filter to rescue
-  // a segmentation pass would give back almost nothing.
-  const patch = portrait !== 'off' ? { portrait: 'off' } : { filter: 'none' };
-  update({ camera: { ...settings.camera, ...patch } });
+  const { filter } = settings.camera;
+  if (filter === 'none') return;
+  update({ camera: { ...settings.camera, filter: 'none' } });
   useVoiceStore.setState({
-    error:
-      portrait !== 'off'
-        ? 'Camera: the background blur was using too much of this machine, so it has been turned off.'
-        : 'Camera: the filter was using too much of this machine, so it has been turned off.',
+    error: 'Camera: the filter was using too much of this machine, so it has been turned off.',
   });
   refresh();
 }
@@ -1236,9 +1209,8 @@ async function rebuildCameraEffect(settings: VoiceSettings): Promise<void> {
   cameraPipeline?.stop();
   cameraPipeline = CameraPipeline.start(
     cameraSource,
-    effectFrom(settings.camera.filter, settings.camera.portrait),
+    effectFrom(settings.camera.filter),
     onCameraBypass,
-    onNoPortrait,
   );
 
   const published = cameraPipeline?.track ?? cameraSource;
@@ -1281,8 +1253,8 @@ async function applyCameraSettings(next: VoiceSettings, previous: VoiceSettings)
   // so there is no permission prompt, no camera light blinking and no
   // renegotiation - only the published track changes. Reopening the camera for
   // a filter change would be visible to everybody in the call.
-  if (before.filter !== after.filter || before.portrait !== after.portrait) {
-    const effect = effectFrom(after.filter, after.portrait);
+  if (before.filter !== after.filter) {
+    const effect = effectFrom(after.filter);
     if (cameraPipeline && !isPassThrough(effect)) {
       // One real filter replacing another: the worker takes the new string and
       // keeps its track, so nothing is republished and nobody sees a flicker.
