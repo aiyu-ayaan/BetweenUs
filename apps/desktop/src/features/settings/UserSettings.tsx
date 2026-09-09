@@ -22,6 +22,7 @@ import { DeviceSelect, useDevices } from '../../components/DeviceSelect';
 import { DEFAULT_VOICE_SETTINGS, GATE_RANGE } from '../../services/voice-quality';
 import { BITRATE_RANGE, FRAME_RATES, type CodecChoice } from '../../services/share-quality';
 import type { CameraQuality } from '../../services/camera-quality';
+import { FILTERS, effectsSupported } from '../../services/camera-effects';
 
 /** Where the manual bitrate starts when it is switched on: a fast LAN's worth. */
 const DEFAULT_MANUAL_BITRATE = 25_000_000;
@@ -1373,6 +1374,9 @@ function VoiceSection(): JSX.Element {
   const update = useAudioSettings((state) => state.update);
 
   const [devices, refreshDevices] = useDevices();
+  // Asked once per mount rather than per render: it is a property of the
+  // browser and cannot change while the settings screen is open.
+  const [effectsAvailable] = useState(effectsSupported);
   const [level, setLevel] = useState<MicLevel>({ db: -100, open: false });
   const [testing, setTesting] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
@@ -1740,6 +1744,31 @@ function VoiceSection(): JSX.Element {
           checked={settings.camera.mirror}
           onChange={(mirror) => update({ camera: { ...settings.camera, mirror } })}
         />
+
+        <label className="block">
+          <span className="block text-xs font-bold uppercase tracking-wide text-slate-400">
+            Filter
+          </span>
+          <select
+            value={settings.camera.filter}
+            disabled={!effectsAvailable}
+            onChange={(event) =>
+              update({ camera: { ...settings.camera, filter: event.target.value } })
+            }
+            className="mt-2 w-full cursor-pointer rounded-lg border border-edge bg-surface-950 px-3 py-2 text-slate-100 outline-none transition-colors focus:border-accent/60 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {Object.keys(FILTERS).map((name) => (
+              <option key={name} value={name}>
+                {name === 'none' ? 'None' : name[0]?.toUpperCase() + name.slice(1)}
+              </option>
+            ))}
+          </select>
+          <span className="mt-1.5 block text-xs text-slate-500">
+            {effectsAvailable
+              ? 'Applied before the picture is sent, so everybody sees it. It costs a little processor per frame; if this machine cannot keep up, the filter turns itself off rather than making the call stutter.'
+              : 'Filters need frame processing, which this browser does not have. The desktop app and Chrome or Edge have it. Your camera still works - it is only the filters that are unavailable here.'}
+          </span>
+        </label>
       </div>
 
       <h2 className="mt-8 text-base font-semibold text-slate-50">Sounds</h2>

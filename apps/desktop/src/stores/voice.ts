@@ -40,6 +40,7 @@ import { playCallTone, rosterChange, setToneOutput } from '../services/call-tone
 import { micCapture, micEncoding, micProcessing, type VoiceSettings } from '../services/voice-quality';
 import { shareOptions, type ShareIntent, type ShareSize } from '../services/share-quality';
 import { cameraOptions } from '../services/camera-quality';
+import { CameraPipeline, effectFor, isPassThrough } from '../services/camera-effects';
 
 /** The local participant's own key in every map here. */
 export const LOCAL = 'local';
@@ -217,6 +218,19 @@ let speaking = new Set<string>();
 
 /** What this client captured, so it can be stopped and replaced. */
 const localTracks: Partial<Record<Slot, MediaStreamTrack | null>> = {};
+
+/**
+ * The camera as it came out of the hardware, and the effect standing on it.
+ *
+ * `localTracks.camera` is the track that is *published* - which is the
+ * generated one whenever a filter is on - so the self-view and every peer see
+ * the same picture. These two are what that was made from: the source has to be
+ * stopped separately (stopping the generated track does not turn the camera
+ * light off) and its `getSettings()` is the only honest answer about the
+ * resolution, since a generator reports nothing useful.
+ */
+let cameraSource: MediaStreamTrack | null = null;
+let cameraPipeline: CameraPipeline | null = null;
 
 /**
  * Identity -> when they last spoke. Kept outside the store because it is a
@@ -932,21 +946,56 @@ async function openCamera(settings: VoiceSettings): Promise<void> {
 
   const asked = cameraOptions(settings.camera);
   const stream = await openVideoCapture(asked.capture);
-  const track = stream.getVideoTracks()[0] ?? null;
-  if (!track) throw new Error('That camera handed back no video');
+  const source = stream.getVideoTracks()[0] ?? null;
+  if (!source) throw new Error('That camera handed back no video');
+  cameraSource = source;
+
+  // The filter, if there is one. `start` answers null for a filter that does
+  // nothing, for a browser that cannot process frames, and for a pipeline that
+  // refused to build - and the raw camera is the right answer to all three,
+  // because a call with an unfiltered picture is working software.
+  cameraPipeline = CameraPipeline.start(source, effectFor(settings.camera.filter), onCameraBypass);
+  const published = cameraPipeline?.track ?? source;
 
   // A face, never a document. It also decides `is_screencast`, which is what
   // arms the quality scaler - see the note in `share-quality.ts`.
-  track.contentHint = asked.publish.contentHint;
+  published.contentHint = asked.publish.contentHint;
 
-  const real = track.getSettings();
+  // Read off the source rather than the published track: a generated track
+  // reports nothing useful for width and height, and the ceiling is derived
+  // from the real resolution.
+  const real = source.getSettings();
   const granted =
     real.width && real.height ? { width: real.width, height: real.height } : undefined;
   const { publish } = cameraOptions(settings.camera, granted);
 
-  localTracks.camera = track;
-  await mesh.setTrack('camera', track);
+  localTracks.camera = published;
+  await mesh.setTrack('camera', published);
   await mesh.setCameraPublish(publish);
+}
+
+/**
+ * The effect could not keep up, or fell over.
+ *
+ * The filter setting is turned off rather than the track being swapped behind
+ * the interface's back: the settings screen would otherwise say a filter is on
+ * while the picture has none, and nothing would explain why. Turning it off
+ * routes through `applyCameraSettings` like any other change, which does the
+ * swap, and the notice says what happened.
+ *
+ * `bypassed` false is the recovery direction and is deliberately not acted on -
+ * a filter somebody's machine has already failed to sustain should not switch
+ * itself back on mid-call. They can pick it again.
+ */
+function onCameraBypass(bypassed: boolean): void {
+  if (!bypassed) return;
+  const { settings, update } = useAudioSettings.getState();
+  if (settings.camera.filter === 'none') return;
+  update({ camera: { ...settings.camera, filter: 'none' } });
+  useVoiceStore.setState({
+    error: 'Camera: the filter was using too much of this machine, so it has been turned off.',
+  });
+  refresh();
 }
 
 /**
@@ -1072,6 +1121,17 @@ function stopLocal(slot: Slot): void {
   // leaving the call - so this is the one place that can tell the main process
   // the desktop no longer has to be held in composed flip for it.
   if (slot === 'screen' && track) void window.betweenus?.releaseScreenCapture();
+  // Every path out of the camera comes through here - the button, a device
+  // change, leaving the call - so the effect and the real capture are torn down
+  // here too rather than at each caller. `track.stop()` above stopped the
+  // *published* track, which when a filter is on is the generated one and has
+  // no camera behind it: without this the light stays on after the call.
+  if (slot === 'camera') {
+    cameraPipeline?.stop();
+    cameraPipeline = null;
+    cameraSource?.stop();
+    cameraSource = null;
+  }
 }
 
 /** Ends the call's machinery without touching rendered state. */
@@ -1132,6 +1192,30 @@ async function captureSize(source: ScreenSource | null): Promise<ShareSize> {
  * only a new capture picks up a new device.
  */
 /**
+ * Puts a different effect on the camera that is already open.
+ *
+ * The capture is untouched: no permission prompt, no camera light blinking, no
+ * renegotiation. Only which track is handed to the senders changes, and
+ * `replaceTrack` does that on a live connection without telling anybody.
+ */
+async function rebuildCameraEffect(settings: VoiceSettings): Promise<void> {
+  if (!mesh || !cameraSource) return;
+
+  cameraPipeline?.stop();
+  cameraPipeline = CameraPipeline.start(
+    cameraSource,
+    effectFor(settings.camera.filter),
+    onCameraBypass,
+  );
+
+  const published = cameraPipeline?.track ?? cameraSource;
+  published.contentHint = 'motion';
+  localTracks.camera = published;
+  await mesh.setTrack('camera', published);
+  refresh();
+}
+
+/**
  * A camera setting changed while a camera is live.
  *
  * Split by what it costs. The device and the size are properties of the
@@ -1158,6 +1242,23 @@ async function applyCameraSettings(next: VoiceSettings, previous: VoiceSettings)
     });
     refresh();
     return;
+  }
+
+  // A filter goes on and off the *existing* capture: the camera is untouched,
+  // so there is no permission prompt, no camera light blinking and no
+  // renegotiation - only the published track changes. Reopening the camera for
+  // a filter change would be visible to everybody in the call.
+  if (before.filter !== after.filter) {
+    const effect = effectFor(after.filter);
+    if (cameraPipeline && !isPassThrough(effect)) {
+      // One real filter replacing another: the worker takes the new string and
+      // keeps its track, so nothing is republished and nobody sees a flicker.
+      cameraPipeline.setEffect(effect);
+    } else {
+      // A pipeline that has to be built, or torn down. Either way the published
+      // track changes, which `replaceTrack` handles without renegotiating.
+      await rebuildCameraEffect(next);
+    }
   }
 
   if (

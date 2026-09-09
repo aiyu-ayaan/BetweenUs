@@ -75,6 +75,15 @@ export interface CameraSettings extends QualityOverride {
    * is the one thing a camera is used for that is not a face.
    */
   mirror: boolean;
+  /**
+   * Which filter is on the camera, by name - see `FILTERS` in
+   * `camera-effects.ts`.
+   *
+   * A name rather than the filter string itself, because the strings are tuned
+   * and a profile in local storage must not pin somebody to last month's
+   * values. An unknown name resolves to no filter at all.
+   */
+  filter: string;
 }
 
 export const DEFAULT_CAMERA_SETTINGS: CameraSettings = {
@@ -82,6 +91,7 @@ export const DEFAULT_CAMERA_SETTINGS: CameraSettings = {
   deviceId: null,
   quality: 'auto',
   mirror: true,
+  filter: 'none',
 };
 
 /** The `getUserMedia({ video })` half. */
