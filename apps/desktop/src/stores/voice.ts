@@ -33,11 +33,13 @@ import {
   captureIsStale,
   chosenIsMissing,
   openAudioCapture,
+  openVideoCapture,
   realDevices,
 } from '../services/audio-devices';
 import { playCallTone, rosterChange, setToneOutput } from '../services/call-tones';
 import { micCapture, micEncoding, micProcessing, type VoiceSettings } from '../services/voice-quality';
 import { shareOptions, type ShareIntent, type ShareSize } from '../services/share-quality';
+import { cameraOptions } from '../services/camera-quality';
 
 /** The local participant's own key in every map here. */
 export const LOCAL = 'local';
@@ -560,17 +562,17 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
       if (cameraEnabled) {
         stopLocal('camera');
         await mesh.setTrack('camera', null);
+        // Dropped as well as the track: a stale publish would be re-applied to
+        // the next link that negotiates, tuning a camera slot with nothing in it.
+        await mesh.setCameraPublish(null);
         set({ cameraEnabled: false, error: null });
         publishMediaState();
         refresh();
         return;
       }
 
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-      const track = stream.getVideoTracks()[0] ?? null;
-      localTracks.camera = track;
-      await mesh.setTrack('camera', track);
-      set({ cameraEnabled: Boolean(track), error: null });
+      await openCamera(useAudioSettings.getState().settings);
+      set({ cameraEnabled: Boolean(localTracks.camera), error: null });
       publishMediaState();
       refresh();
     } catch (error) {
@@ -906,6 +908,48 @@ async function openMicrophone(settings: VoiceSettings): Promise<void> {
 }
 
 /**
+ * Captures the camera at the size somebody chose and publishes it deliberately.
+ *
+ * This used to be `getUserMedia({ video: true })` and nothing else, which is
+ * three separate omissions wearing one line: no device (so a machine with two
+ * cameras opened whichever the browser preferred, with no way to say
+ * otherwise), no size (so a 1080p webcam was opened at whatever default the
+ * browser felt like) and no sender parameters at all (so the encoder ran at
+ * WebRTC's own guess, which is deliberately conservative because it has no idea
+ * what the picture is for). The last is the one nobody could see: it looks
+ * correct locally and soft to everyone else.
+ *
+ * The publish parameters are computed **twice**, and that is the point. The
+ * first pass asks for the chosen size; the second reads what the camera
+ * actually handed over and re-derives the ceiling from it. A camera asked for
+ * 1080p that answers with 720p would otherwise be published at a 1080p bitrate
+ * - harmless - and, far worse, a camera asked for 360p that only has a 1080p
+ * mode would be published at a 360p bitrate, which is a permanently soft
+ * picture for no saving whatsoever. Only the second pass can tell.
+ */
+async function openCamera(settings: VoiceSettings): Promise<void> {
+  if (!mesh) return;
+
+  const asked = cameraOptions(settings.camera);
+  const stream = await openVideoCapture(asked.capture);
+  const track = stream.getVideoTracks()[0] ?? null;
+  if (!track) throw new Error('That camera handed back no video');
+
+  // A face, never a document. It also decides `is_screencast`, which is what
+  // arms the quality scaler - see the note in `share-quality.ts`.
+  track.contentHint = asked.publish.contentHint;
+
+  const real = track.getSettings();
+  const granted =
+    real.width && real.height ? { width: real.width, height: real.height } : undefined;
+  const { publish } = cameraOptions(settings.camera, granted);
+
+  localTracks.camera = track;
+  await mesh.setTrack('camera', track);
+  await mesh.setCameraPublish(publish);
+}
+
+/**
  * Whether the microphone should be passing audio right now.
  *
  * Two conditions, and they are different questions: the button says whether
@@ -1087,9 +1131,55 @@ async function captureSize(source: ScreenSource | null): Promise<ShareSize> {
  * bitrate and channel count are fixed when the connection is negotiated, and
  * only a new capture picks up a new device.
  */
+/**
+ * A camera setting changed while a camera is live.
+ *
+ * Split by what it costs. The device and the size are properties of the
+ * *capture*, so changing either means opening the camera again - a new track,
+ * and a renegotiation with it. Everything else is a property of the sender, and
+ * `tune` changes those on a live sender with no renegotiation at all, so a
+ * bitrate slider does not flicker the picture for everybody in the call.
+ *
+ * Doing it the other way round is what makes a quality control feel broken:
+ * reopening for a bitrate change drops a frame or two on every peer, and
+ * re-tuning for a device change leaves the old camera on the wire.
+ */
+async function applyCameraSettings(next: VoiceSettings, previous: VoiceSettings): Promise<void> {
+  if (!mesh || !useVoiceStore.getState().cameraEnabled) return;
+
+  const before = previous.camera;
+  const after = next.camera;
+  if (before === after) return;
+
+  if (before.deviceId !== after.deviceId || before.quality !== after.quality) {
+    stopLocal('camera');
+    await openCamera(next).catch((error: unknown) => {
+      useVoiceStore.setState({ cameraEnabled: false, error: `Camera: ${messageOf(error)}` });
+    });
+    refresh();
+    return;
+  }
+
+  if (
+    before.maxBitrate !== after.maxBitrate ||
+    before.frameRate !== after.frameRate ||
+    before.videoCodec !== after.videoCodec
+  ) {
+    const real = localTracks.camera?.getSettings();
+    const granted =
+      real?.width && real.height ? { width: real.width, height: real.height } : undefined;
+    await mesh.setCameraPublish(cameraOptions(after, granted).publish);
+  }
+}
+
 async function applyAudioSettings(next: VoiceSettings, previous: VoiceSettings): Promise<void> {
   const { status, micEnabled } = useVoiceStore.getState();
   if (!mesh || status !== 'connected') return;
+
+  // Before the microphone's early return below: the camera is not the
+  // microphone, and a camera setting changed while the mic happens to be muted
+  // must still reach the camera.
+  await applyCameraSettings(next, previous);
 
   // Output device is the sink's business, not the mesh's - see MediaSink.
   if (!micEnabled) return;
@@ -1165,16 +1255,36 @@ function unpinDevices(devices: MediaDeviceInfo[]): void {
   const patch: Partial<VoiceSettings> = {};
   if (chosenIsMissing(devices, 'audioinput', settings.inputDeviceId)) patch.inputDeviceId = null;
   if (chosenIsMissing(devices, 'audiooutput', settings.outputDeviceId)) patch.outputDeviceId = null;
+  // A camera is unplugged exactly as a headset is, and a pinned webcam that is
+  // in a bag is the same dead choice a pinned microphone in a drawer is.
+  if (chosenIsMissing(devices, 'videoinput', settings.camera.deviceId)) {
+    patch.camera = { ...settings.camera, deviceId: null };
+  }
   if (Object.keys(patch).length === 0) return;
 
   update(patch);
 }
 
 async function followDeviceChange(devices: MediaDeviceInfo[]): Promise<void> {
-  const { status, micEnabled } = useVoiceStore.getState();
-  if (!mesh || status !== 'connected' || !micEnabled) return;
+  const { status, micEnabled, cameraEnabled } = useVoiceStore.getState();
+  if (!mesh || status !== 'connected') return;
 
   const settings = useAudioSettings.getState().settings;
+
+  // The camera follows the hardware on exactly the same rule the microphone
+  // does, and for the same reason: a capture is bound to a device when it
+  // opens, so a webcam unplugged and plugged back in leaves the call on the
+  // fallback it fell to and never comes home.
+  if (cameraEnabled) {
+    const capturedCamera = localTracks.camera?.getSettings().deviceId ?? null;
+    if (captureIsStale(settings.camera.deviceId, capturedCamera, devices, 'videoinput')) {
+      stopLocal('camera');
+      await openCamera(settings).catch(() => undefined);
+      refresh();
+    }
+  }
+
+  if (!micEnabled) return;
   const captured = localTracks.mic?.getSettings().deviceId ?? null;
   if (!captureIsStale(settings.inputDeviceId, captured, devices)) return;
 

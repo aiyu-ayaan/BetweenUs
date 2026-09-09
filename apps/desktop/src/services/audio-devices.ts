@@ -8,6 +8,14 @@
  *
  * The pure parts - which device a setting resolves to, and whether it is still
  * there - are exported separately so they can be tested under Node.
+ *
+ * **Cameras are in here too, despite the file name.** `enumerateDevices` returns
+ * every kind at once and every rule below was already written against a
+ * `MediaDeviceKind` rather than against microphones; only the capture helper
+ * was audio-shaped, and only by which constraint key it fills in. A parallel
+ * `video-devices.ts` would have been this file with two words changed and a
+ * second `devicechange` listener racing this one - and the unplugged-device
+ * rule, which is the subtle part, duplicated away from its self-check.
  */
 
 let devices: MediaDeviceInfo[] = [];
@@ -102,11 +110,12 @@ export function captureIsStale(
   chosen: string | null,
   capturedDeviceId: string | null,
   devices: MediaDeviceInfo[],
+  kind: MediaDeviceKind = 'audioinput',
 ): boolean {
   if (!chosen) return true;
   // Chosen but absent: the fallback is the best that can be done, and
   // recapturing would only pick the same fallback again.
-  if (chosenIsMissing(devices, 'audioinput', chosen)) return false;
+  if (chosenIsMissing(devices, kind, chosen)) return false;
   return capturedDeviceId !== chosen;
 }
 
@@ -144,5 +153,58 @@ export async function openAudioCapture(constraints: MediaTrackConstraints): Prom
     if (constraints.deviceId === undefined || !deviceIsGone(error)) throw error;
     const { deviceId: _gone, ...withoutDevice } = constraints;
     return navigator.mediaDevices.getUserMedia({ audio: withoutDevice });
+  }
+}
+
+/**
+ * Which constraint a browser refused, when it says so.
+ *
+ * `OverconstrainedError` carries the name of the offending constraint, and a
+ * camera gives two genuinely different reasons to raise one: the device id is
+ * for a webcam that has been unplugged, or the resolution is one this camera
+ * has no format for. They want opposite retries - keep the size and drop the
+ * device, or keep the device and drop the size - so guessing is worse than
+ * asking. A browser that does not fill the field in is treated as the device
+ * case, which is the far commoner one.
+ */
+function refusedConstraint(error: unknown): string | null {
+  if (typeof error !== 'object' || error === null) return null;
+  const named = (error as { constraint?: unknown }).constraint;
+  return typeof named === 'string' && named !== '' ? named : null;
+}
+
+/**
+ * Opens a camera, giving up the least it can when the ask cannot be met.
+ *
+ * The camera is asked for with `exact` on the device and `ideal` on everything
+ * else, for the reasons in `camera-quality.ts`. That leaves exactly two ways to
+ * be refused, and collapsing both to `video: true` would throw away the working
+ * half of the request along with the broken one:
+ *
+ * - **The chosen camera is gone.** Keep the resolution, drop the device, and
+ *   land on the system default - the same deliberate substitution
+ *   `openAudioCapture` makes, and the reason `exact` is affordable at all.
+ * - **This camera has no such format.** Keep the device - somebody picked it -
+ *   and drop the size, letting the camera open at whatever it does have.
+ *
+ * A second failure is reported rather than retried. Anything else here is a
+ * refused permission or a machine with no camera, and retrying either only
+ * makes the eventual error say something less true.
+ */
+export async function openVideoCapture(constraints: MediaTrackConstraints): Promise<MediaStream> {
+  try {
+    return await navigator.mediaDevices.getUserMedia({ video: constraints });
+  } catch (error) {
+    if (!deviceIsGone(error)) throw error;
+
+    const refused = refusedConstraint(error);
+    if (refused === 'width' || refused === 'height' || refused === 'frameRate') {
+      const { width: _w, height: _h, frameRate: _f, ...withoutSize } = constraints;
+      return navigator.mediaDevices.getUserMedia({ video: withoutSize });
+    }
+
+    if (constraints.deviceId === undefined) throw error;
+    const { deviceId: _gone, ...withoutDevice } = constraints;
+    return navigator.mediaDevices.getUserMedia({ video: withoutDevice });
   }
 }

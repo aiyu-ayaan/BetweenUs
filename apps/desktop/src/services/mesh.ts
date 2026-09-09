@@ -92,6 +92,7 @@ import {
   sortPreferredVideoCodecs,
   type SharePublish,
 } from './share-quality';
+import type { CameraPublish } from './camera-quality';
 import type { MicEncoding } from './voice-quality';
 import { toStats, type LinkSample, type LinkStats } from './call-stats';
 import {
@@ -411,6 +412,7 @@ class PeerLink {
   private readonly polite: boolean;
   private micEncoding: MicEncoding | null = null;
   private sharePublish: SharePublish | null = null;
+  private cameraPublish: CameraPublish | null = null;
   private closed = false;
   /**
    * What this client wants to be sending, held for the answering side: it has
@@ -677,6 +679,28 @@ class PeerLink {
         await this.tune('screenAudio', { maxBitrate: this.sharePublish.audio.maxBitrate });
       }
     }
+    await this.applyCameraPublish();
+  }
+
+  /**
+   * The camera's ceiling on this link's sender.
+   *
+   * Separate from the share's block above because the two are independent: a
+   * camera is usually on when no share is, and folding it into that `if` is how
+   * a camera ends up published at the browser's guess whenever nobody is
+   * sharing a screen - which is almost every call.
+   */
+  private async applyCameraPublish(): Promise<void> {
+    if (!this.cameraPublish) return;
+    await this.tune(
+      'camera',
+      {
+        maxBitrate: this.cameraPublish.maxBitrate,
+        maxFramerate: this.cameraPublish.maxFramerate,
+        scaleResolutionDownBy: this.cameraPublish.scaleResolutionDownBy,
+      },
+      this.cameraPublish.degradationPreference,
+    );
   }
 
   /**
@@ -1082,6 +1106,31 @@ class PeerLink {
     this.sharePublish = publish;
   }
 
+  /** Remembered for the same reason, for the camera. */
+  setCameraPublish(publish: CameraPublish | null): void {
+    this.cameraPublish = publish;
+  }
+
+  /**
+   * The camera's codec preference, on the camera slot.
+   *
+   * H.264 for the same reason the share asks for it - it is the one codec with
+   * a hardware encoder on essentially every machine - but asked for separately,
+   * because the two slots are negotiated independently and a preference set on
+   * the screen's transceiver says nothing about the camera's.
+   */
+  preferCameraCodec(codec: CameraPublish['videoCodec']): void {
+    const transceiver = this.transceivers.get('camera');
+    if (!transceiver?.setCodecPreferences) return;
+
+    try {
+      const supported = RTCRtpSender.getCapabilities('video')?.codecs ?? [];
+      transceiver.setCodecPreferences(sortPreferredVideoCodecs(supported, codec));
+    } catch {
+      // Codec preferences are an optimisation; the call works without them.
+    }
+  }
+
   /**
    * Asks for High Profile H.264 on the screen slot, where hardware encoding is what makes
    * 1080p60/4K60 possible with pristine clarity. Ignored where the codec is unavailable.
@@ -1356,6 +1405,7 @@ export class Mesh {
   private readonly local = new Map<Slot, MediaStreamTrack | null>();
   private micEncoding: MicEncoding | null = null;
   private sharePublish: SharePublish | null = null;
+  private cameraPublish: CameraPublish | null = null;
   private speakingTimer: number | null = null;
   /** Local speaking, fed by the microphone gate rather than by statistics. */
   private localSpeaking = false;
@@ -1784,6 +1834,19 @@ export class Mesh {
         await link.tune('screenAudio', { maxBitrate: this.sharePublish.audio.maxBitrate });
       }
     }
+    if (this.cameraPublish) {
+      link.setCameraPublish(this.cameraPublish);
+      link.preferCameraCodec(this.cameraPublish.videoCodec);
+      await link.tune(
+        'camera',
+        {
+          maxBitrate: this.cameraPublish.maxBitrate,
+          maxFramerate: this.cameraPublish.maxFramerate,
+          scaleResolutionDownBy: this.cameraPublish.scaleResolutionDownBy,
+        },
+        this.cameraPublish.degradationPreference,
+      );
+    }
   }
 
   async setMicEncoding(encoding: MicEncoding): Promise<void> {
@@ -1799,6 +1862,24 @@ export class Mesh {
     for (const link of this.links.values()) {
       link.setSharePublish(publish);
       if (publish) link.preferShareCodec(publish.videoCodec);
+    }
+    if (!publish) return;
+    await Promise.all([...this.links.values()].map((link) => this.applyTuning(link)));
+  }
+
+  /**
+   * The camera's encoding, remembered and pushed to every link.
+   *
+   * Called when the camera opens and whenever its settings change, exactly as
+   * `setSharePublish` is - and, unlike the share's, it is worth calling with
+   * the same numbers twice: `tune` is idempotent and a renegotiation may have
+   * replaced the sender underneath it.
+   */
+  async setCameraPublish(publish: CameraPublish | null): Promise<void> {
+    this.cameraPublish = publish;
+    for (const link of this.links.values()) {
+      link.setCameraPublish(publish);
+      if (publish) link.preferCameraCodec(publish.videoCodec);
     }
     if (!publish) return;
     await Promise.all([...this.links.values()].map((link) => this.applyTuning(link)));

@@ -1,5 +1,5 @@
 /**
- * Microphone and speakers, changed from inside the call.
+ * Microphone, speakers and camera, changed from inside the call.
  *
  * The full set of controls lives in Settings → Voice & Video, but the moment
  * somebody wants their devices is the moment they cannot be heard - which is a
@@ -55,8 +55,15 @@ export function DevicePicker({ onClose }: { onClose: () => void }): JSX.Element 
         value={settings.outputDeviceId}
         onChange={(outputDeviceId) => update({ outputDeviceId })}
       />
+      <DeviceSelect
+        label="Camera"
+        kind="videoinput"
+        devices={devices}
+        value={settings.camera.deviceId}
+        onChange={(deviceId) => update({ camera: { ...settings.camera, deviceId } })}
+      />
       <p className="text-xs text-slate-400">
-        Sensitivity and processing are in Settings → Voice &amp; Video.
+        Sensitivity, processing and camera quality are in Settings → Voice &amp; Video.
       </p>
     </div>
   );

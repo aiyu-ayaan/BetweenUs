@@ -35,6 +35,7 @@ import { captionCorner, captionInset } from '../../services/platform';
 import { CHORD_LABEL, localChordOf } from '../../services/keyboard';
 import { useShareControlStore } from '../../stores/shareControl';
 import { useVoiceStore, type VoiceShare, type VoiceTile } from '../../stores/voice';
+import { useAudioSettings } from '../../stores/audioSettings';
 import { CallDuration } from './CallDuration';
 import { VoiceControls } from './VoiceControls';
 import { NotHeardNotice } from './NotHeardNotice';
@@ -1148,6 +1149,10 @@ function StageTile({
   pinned?: boolean;
   onTogglePin?: (key: string) => void;
 }): JSX.Element {
+  // Read here rather than threaded down from the stage: every path to a tile -
+  // the grid, the pip, a pin - would otherwise have to carry a prop that only
+  // one tile in the call ever uses.
+  const mirrorSelf = useAudioSettings((state) => state.settings.camera.mirror);
   return (
     <div
       className={`group relative flex ${
@@ -1187,7 +1192,10 @@ function StageTile({
           </div>
           {/* Sharp contained foreground video */}
           <div className="relative z-10 flex h-full w-full items-center justify-center">
-            <VideoSink track={tile.videoTrack} fit="contain" />
+            {/* Mirrored for your own tile only, and only when asked: seeing
+                yourself the way a mirror shows you is what every video app
+                does, and seeing everybody else that way would be wrong. */}
+            <VideoSink track={tile.videoTrack} fit="contain" mirror={tile.isLocal && mirrorSelf} />
           </div>
         </>
       ) : (

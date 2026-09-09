@@ -14,9 +14,20 @@ export function VideoSink({
   track,
   fit = 'cover',
   onAspect,
+  mirror = false,
 }: {
   track: MediaStreamTrack;
   fit?: 'cover' | 'contain';
+  /**
+   * Flip the picture horizontally.
+   *
+   * Only ever the self-view, and only ever here: this is a CSS transform on one
+   * `<video>` element, so it cannot reach the track and therefore cannot reach
+   * anybody else. Mirroring what is *sent* would put everybody's writing
+   * backwards, and holding something up to a camera is the one use of a camera
+   * that is not a face.
+   */
+  mirror?: boolean;
   /**
    * The shape of the picture, width over height, as soon as there is one - and
    * again whenever it changes.
@@ -64,7 +75,9 @@ export function VideoSink({
       autoPlay
       playsInline
       muted
-      className={`h-full w-full ${fit === 'contain' ? 'object-contain' : 'object-cover'}`}
+      className={`h-full w-full ${fit === 'contain' ? 'object-contain' : 'object-cover'} ${
+        mirror ? 'scale-x-[-1]' : ''
+      }`}
     />
   );
 }

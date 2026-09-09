@@ -37,6 +37,7 @@
  */
 
 import { NO_OVERRIDE, type QualityOverride } from './share-quality';
+import { DEFAULT_CAMERA_SETTINGS, type CameraSettings } from './camera-quality';
 
 /**
  * Something that sits between a captured track and the one that is sent.
@@ -159,6 +160,13 @@ export interface VoiceSettings {
    * both are the same encoder being asked the same question.
    */
   share: QualityOverride;
+  /**
+   * The camera on this machine - which one, at what size, and what this uplink
+   * can carry. See `camera-quality.ts`, which is a sibling of the share ladder
+   * rather than a mode inside it, because a face and a spreadsheet want
+   * opposite trades when a link tightens.
+   */
+  camera: CameraSettings;
 }
 
 export const DEFAULT_VOICE_SETTINGS: VoiceSettings = {
@@ -178,6 +186,7 @@ export const DEFAULT_VOICE_SETTINGS: VoiceSettings = {
   pushToTalkKey: 'AltRight',
   callTones: true,
   share: NO_OVERRIDE,
+  camera: DEFAULT_CAMERA_SETTINGS,
 };
 
 /**
@@ -256,6 +265,18 @@ export function migrateVoiceSettings(stored: unknown): Partial<VoiceSettings> {
     settings.noiseSuppression = settings.noiseSuppression ? 'standard' : 'off';
   } else if (!isNoiseSuppression(settings.noiseSuppression)) {
     delete settings.noiseSuppression;
+  }
+
+  // `camera` is a nested object, and the store spreads storage over the
+  // defaults exactly one level deep - so a profile written today, read back
+  // after a field is added to `CameraSettings` tomorrow, would arrive with that
+  // field `undefined` and no default behind it. Refilled here rather than left
+  // to the spread, because "the settings screen draws nothing as selected" is
+  // the same failure `noiseSuppression` above already shipped once.
+  if (typeof settings.camera === 'object' && settings.camera !== null) {
+    settings.camera = { ...DEFAULT_CAMERA_SETTINGS, ...(settings.camera as object) };
+  } else {
+    delete settings.camera;
   }
 
   return settings as Partial<VoiceSettings>;

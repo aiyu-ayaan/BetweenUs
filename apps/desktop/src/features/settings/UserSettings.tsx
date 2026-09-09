@@ -21,9 +21,18 @@ import { CallUsageSection } from './CallUsage';
 import { DeviceSelect, useDevices } from '../../components/DeviceSelect';
 import { DEFAULT_VOICE_SETTINGS, GATE_RANGE } from '../../services/voice-quality';
 import { BITRATE_RANGE, FRAME_RATES, type CodecChoice } from '../../services/share-quality';
+import type { CameraQuality } from '../../services/camera-quality';
 
 /** Where the manual bitrate starts when it is switched on: a fast LAN's worth. */
 const DEFAULT_MANUAL_BITRATE = 25_000_000;
+
+/**
+ * The same, for a camera - and two orders of magnitude smaller, because a face
+ * is the easiest thing an encoder is ever handed and a screen full of small
+ * text is the hardest. Starting this slider at the share's number would be
+ * offering a webcam twenty-five megabits it cannot spend.
+ */
+const DEFAULT_MANUAL_CAMERA_BITRATE = 4_000_000;
 import { api } from '../../services/api';
 import {
   notificationPreferences,
@@ -1596,6 +1605,141 @@ function VoiceSection(): JSX.Element {
             are usually encoded in software, which costs the latency this is buying.
           </span>
         </label>
+      </div>
+
+      <h2 className="mt-8 text-base font-semibold text-slate-50">Camera quality</h2>
+      <p className="mt-1 text-sm text-slate-400">
+        A camera used to be opened with no size, no frame rate and no bitrate at all - whatever
+        the browser guessed, which is deliberately cautious because it has no idea what the
+        picture is for. It is inferred now, from the resolution the camera actually hands over.
+        These are for when the guess is wrong: a camera that is soft on a link with room to
+        spare, or one spending an uplink you need for something else.
+      </p>
+      <div className="mt-3 space-y-3 rounded-lg bg-surface-800 p-4">
+        <DeviceSelect
+          label="Camera"
+          kind="videoinput"
+          devices={devices}
+          value={settings.camera.deviceId}
+          onChange={(deviceId) => update({ camera: { ...settings.camera, deviceId } })}
+        />
+
+        <label className="block">
+          <span className="block text-xs font-bold uppercase tracking-wide text-slate-400">
+            Resolution
+          </span>
+          <select
+            value={settings.camera.quality}
+            onChange={(event) =>
+              update({
+                camera: { ...settings.camera, quality: event.target.value as CameraQuality },
+              })
+            }
+            className="mt-2 w-full cursor-pointer rounded-lg border border-edge bg-surface-950 px-3 py-2 text-slate-100 outline-none transition-colors focus:border-accent/60"
+          >
+            <option value="auto">Automatic (720p)</option>
+            <option value="360p">360p</option>
+            <option value="720p">720p</option>
+            <option value="1080p">1080p</option>
+          </select>
+          <span className="mt-1.5 block text-xs text-slate-500">
+            A request, not a demand: a camera with no such format opens at the nearest one it has
+            rather than refusing. Automatic asks for 720p, because the sensor in a laptop lid is
+            a 720p sensor with an interpolated 1080p mode - asking for the larger one buys
+            upscaled noise at twice the bitrate. Pick 1080p if you have a camera worth it.
+          </span>
+        </label>
+
+        <Switch
+          label="Set the bitrate myself"
+          hint="A ceiling, not a target - a still face spends a fraction of it either way."
+          checked={settings.camera.maxBitrate !== null}
+          onChange={(on) =>
+            update({
+              camera: { ...settings.camera, maxBitrate: on ? DEFAULT_MANUAL_CAMERA_BITRATE : null },
+            })
+          }
+        />
+        {settings.camera.maxBitrate !== null && (
+          <label className="block">
+            <span className="flex items-baseline justify-between text-xs text-slate-400">
+              <span>Ceiling</span>
+              <span className="text-slate-300">
+                {(settings.camera.maxBitrate / 1_000_000).toFixed(1)} Mbps
+              </span>
+            </span>
+            <input
+              type="range"
+              min={BITRATE_RANGE.min}
+              max={12_000_000}
+              step={500_000}
+              value={settings.camera.maxBitrate}
+              onChange={(event) =>
+                update({
+                  camera: { ...settings.camera, maxBitrate: Number(event.target.value) },
+                })
+              }
+              className="mt-2 w-full accent-accent"
+            />
+          </label>
+        )}
+
+        <label className="block">
+          <span className="block text-xs font-bold uppercase tracking-wide text-slate-400">
+            Frame rate
+          </span>
+          <select
+            value={settings.camera.frameRate ?? ''}
+            onChange={(event) =>
+              update({
+                camera: {
+                  ...settings.camera,
+                  frameRate: event.target.value ? Number(event.target.value) : null,
+                },
+              })
+            }
+            className="mt-2 w-full cursor-pointer rounded-lg border border-edge bg-surface-950 px-3 py-2 text-slate-100 outline-none transition-colors focus:border-accent/60"
+          >
+            <option value="">Automatic (30)</option>
+            {FRAME_RATES.map((rate) => (
+              <option key={rate} value={rate}>
+                {rate} fps
+              </option>
+            ))}
+          </select>
+          <span className="mt-1.5 block text-xs text-slate-500">
+            Thirty is what a webcam produces; sixty is a webcam interpolating, and it costs the
+            bitrate twice over to look no better on a face.
+          </span>
+        </label>
+
+        <label className="block">
+          <span className="block text-xs font-bold uppercase tracking-wide text-slate-400">
+            Video codec
+          </span>
+          <select
+            value={settings.camera.videoCodec}
+            onChange={(event) =>
+              update({
+                camera: { ...settings.camera, videoCodec: event.target.value as CodecChoice },
+              })
+            }
+            className="mt-2 w-full cursor-pointer rounded-lg border border-edge bg-surface-950 px-3 py-2 text-slate-100 outline-none transition-colors focus:border-accent/60"
+          >
+            <option value="auto">Automatic (H.264, hardware where there is one)</option>
+            <option value="H264">H.264</option>
+            <option value="VP9">VP9</option>
+            <option value="VP8">VP8</option>
+            <option value="AV1">AV1</option>
+          </select>
+        </label>
+
+        <Switch
+          label="Mirror my own camera"
+          hint="The self-view only. What everybody else sees is never mirrored - text held up to a camera would arrive backwards for all of them."
+          checked={settings.camera.mirror}
+          onChange={(mirror) => update({ camera: { ...settings.camera, mirror } })}
+        />
       </div>
 
       <h2 className="mt-8 text-base font-semibold text-slate-50">Sounds</h2>
