@@ -1,5 +1,7 @@
 package com.aatech.betweenus.feature.voice
 
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -24,6 +26,8 @@ import com.aatech.betweenus.ui.components.SectionLabel
 import com.aatech.betweenus.ui.theme.Accent
 import com.aatech.betweenus.ui.theme.Slate400
 import com.aatech.betweenus.ui.theme.Slate500
+import org.webrtc.Camera1Enumerator
+import org.webrtc.Camera2Enumerator
 
 /**
  * Which device the call is heard on and spoken into, from inside the call.
@@ -40,6 +44,7 @@ import com.aatech.betweenus.ui.theme.Slate500
 @Composable
 fun CallDeviceSheet(
     onDismiss: () -> Unit,
+    onCameraChanged: (name: String) -> Unit = {},
     /**
      * Reopen the camera, because a size is a property of the capture and only
      * a new one can change it. A callback rather than the engine itself: this
@@ -47,6 +52,7 @@ fun CallDeviceSheet(
      * both the engine and whether a camera is running.
      */
     onCameraQualityChanged: () -> Unit = {},
+    onCameraLookChanged: (filter: String, portrait: String) -> Unit = { _, _ -> },
 ) {
     val context = LocalContext.current
     val sheet = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -55,9 +61,23 @@ fun CallDeviceSheet(
     var route by remember { mutableStateOf(AudioPrefs.route) }
     var input by remember { mutableStateOf(AudioPrefs.input) }
     var quality by remember { mutableStateOf(AudioPrefs.cameraQuality) }
+    var selectedCamera by remember { mutableStateOf(AudioPrefs.cameraDeviceName) }
+    var filter by remember { mutableStateOf(AudioPrefs.cameraFilter) }
+    var portrait by remember { mutableStateOf(AudioPrefs.cameraPortrait) }
+
+    val enumerator = remember {
+        if (Camera2Enumerator.isSupported(context)) Camera2Enumerator(context) else Camera1Enumerator(true)
+    }
+    val cameraNames = remember(enumerator) { enumerator.deviceNames.toList() }
 
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheet) {
-        Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(bottom = 12.dp)) {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .navigationBarsPadding()
+                .padding(bottom = 12.dp)
+        ) {
             SectionLabel("Play through")
             devices.routes.forEach { option ->
                 ListRow(
@@ -98,6 +118,49 @@ fun CallDeviceSheet(
                 )
             }
 
+            if (cameraNames.isNotEmpty()) {
+                SectionLabel("Camera")
+                val frontCount = cameraNames.count { enumerator.isFrontFacing(it) }
+                val backCount = cameraNames.count { enumerator.isBackFacing(it) }
+                val defaultCamera = cameraNames.firstOrNull { enumerator.isFrontFacing(it) }
+                    ?: cameraNames.firstOrNull()
+
+                cameraNames.forEach { name ->
+                    val isFront = enumerator.isFrontFacing(name)
+                    val isBack = enumerator.isBackFacing(name)
+                    val title = when {
+                        isFront && frontCount > 1 -> "Front camera ($name)"
+                        isFront -> "Front camera"
+                        isBack && backCount > 1 -> "Back camera ($name)"
+                        isBack -> "Back camera"
+                        else -> "Camera $name"
+                    }
+                    val subtitle = when {
+                        isFront -> "Front facing lens"
+                        isBack -> "Back facing lens"
+                        else -> "Lens $name"
+                    }
+                    val isSelected = name == selectedCamera || (selectedCamera == null && name == defaultCamera)
+
+                    ListRow(
+                        title = title,
+                        subtitle = subtitle,
+                        selected = isSelected,
+                        leading = {
+                            BetweenUsIcon(
+                                icon = BetweenUsIcons.Video,
+                                tint = if (isSelected) Accent else Slate400,
+                            )
+                        },
+                        onClick = {
+                            selectedCamera = name
+                            AudioPrefs.cameraDeviceName = name
+                            onCameraChanged(name)
+                        },
+                    )
+                }
+            }
+
             SectionLabel("Camera quality")
             ShareQuality.CameraQuality.entries.forEach { option ->
                 ListRow(
@@ -114,6 +177,48 @@ fun CallDeviceSheet(
                         quality = option
                         AudioPrefs.cameraQuality = option
                         onCameraQualityChanged()
+                    },
+                )
+            }
+
+            SectionLabel("Camera filter")
+            CameraLook.FILTERS.forEach { f ->
+                val isSelected = f.name == filter
+                ListRow(
+                    title = f.label,
+                    subtitle = cameraFilterDetail(f.name),
+                    selected = isSelected,
+                    leading = {
+                        BetweenUsIcon(
+                            icon = BetweenUsIcons.Sparkles,
+                            tint = if (isSelected) Accent else Slate400,
+                        )
+                    },
+                    onClick = {
+                        filter = f.name
+                        AudioPrefs.cameraFilter = f.name
+                        onCameraLookChanged(f.name, portrait)
+                    },
+                )
+            }
+
+            SectionLabel("Background blur")
+            CameraLook.Portrait.entries.forEach { p ->
+                val isSelected = p.level == portrait
+                ListRow(
+                    title = p.label,
+                    subtitle = cameraPortraitDetail(p.level),
+                    selected = isSelected,
+                    leading = {
+                        BetweenUsIcon(
+                            icon = BetweenUsIcons.Sparkles,
+                            tint = if (isSelected) Accent else Slate400,
+                        )
+                    },
+                    onClick = {
+                        portrait = p.level
+                        AudioPrefs.cameraPortrait = p.level
+                        onCameraLookChanged(filter, p.level)
                     },
                 )
             }
@@ -142,6 +247,24 @@ private fun cameraQualityDetail(quality: ShareQuality.CameraQuality): String = w
     ShareQuality.CameraQuality.P720 -> "The usual choice"
     ShareQuality.CameraQuality.P1080 -> "Worth it on a phone whose camera resolves it"
 }
+
+private fun cameraFilterDetail(name: String): String = when (name) {
+    "none" -> "Natural sensor colors"
+    "warm" -> "Warmer skin tones"
+    "cool" -> "Cooler crisp tones"
+    "vivid" -> "Higher saturation and contrast"
+    "mono" -> "Greyscale black and white"
+    "soft" -> "Soft lifted tones"
+    else -> "Camera filter"
+}
+
+private fun cameraPortraitDetail(level: String): String = when (level) {
+    "off" -> "Show background clearly"
+    "light" -> "Subtle background softening"
+    "strong" -> "Heavy depth-of-field blur"
+    else -> "Background blur"
+}
+
 
 fun routeLabel(route: AudioPrefs.Route): String = when (route) {
     AudioPrefs.Route.AUTO -> "Automatic"

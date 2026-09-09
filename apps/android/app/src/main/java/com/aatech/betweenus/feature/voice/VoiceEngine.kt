@@ -1097,6 +1097,18 @@ class VoiceEngine(private val context: Context) {
     fun cameraEnumerator(): CameraEnumerator =
         if (Camera2Enumerator.isSupported(context)) Camera2Enumerator(context) else Camera1Enumerator(true)
 
+    /** Select a specific camera device by name, restarting capture if running. */
+    fun setCameraDevice(name: String) {
+        AudioPrefs.cameraDeviceName = name
+        val enumerator = cameraEnumerator()
+        val isFront = enumerator.isFrontFacing(name)
+        if (_cameraOn.value) {
+            startCamera(front = isFront)
+        } else {
+            _isFrontCamera.value = isFront
+        }
+    }
+
     /** The camera. [startScreenShare] instead turns the capture into a share. */
     fun startCamera(front: Boolean = _isFrontCamera.value) {
         _isFrontCamera.value = front

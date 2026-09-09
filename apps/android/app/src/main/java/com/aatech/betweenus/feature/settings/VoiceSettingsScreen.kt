@@ -39,7 +39,9 @@ import androidx.compose.ui.unit.dp
 import com.aatech.betweenus.feature.voice.AudioPrefs
 import com.aatech.betweenus.feature.voice.CallAudio
 import com.aatech.betweenus.feature.voice.CallTones
+import com.aatech.betweenus.feature.voice.CameraLook
 import com.aatech.betweenus.feature.voice.MicGate
+import com.aatech.betweenus.feature.voice.ShareQuality
 import com.aatech.betweenus.feature.voice.VoiceEngine
 import com.aatech.betweenus.feature.voice.inputLabel
 import com.aatech.betweenus.feature.voice.rememberCallDevices
@@ -52,6 +54,9 @@ import com.aatech.betweenus.ui.components.ListRow
 import com.aatech.betweenus.ui.components.SectionLabel
 import com.aatech.betweenus.ui.theme.StatusOnline
 import kotlinx.coroutines.flow.MutableStateFlow
+import org.webrtc.Camera1Enumerator
+import org.webrtc.Camera2Enumerator
+import org.webrtc.CameraEnumerator
 
 /**
  * Dedicated Voice & Calls Settings Sub-Page.
@@ -77,6 +82,15 @@ fun VoiceSettingsScreen(
     var autoGainControl by remember { mutableStateOf(AudioPrefs.autoGainControl) }
     var sensitivity by remember { mutableStateOf(AudioPrefs.sensitivityDb) }
     val devices by rememberCallDevices()
+
+    var cameraQuality by remember { mutableStateOf(AudioPrefs.cameraQuality) }
+    var cameraFilter by remember { mutableStateOf(AudioPrefs.cameraFilter) }
+    var cameraPortrait by remember { mutableStateOf(AudioPrefs.cameraPortrait) }
+    var cameraDevice by remember { mutableStateOf(AudioPrefs.cameraDeviceName) }
+    val enumerator = remember {
+        if (Camera2Enumerator.isSupported(context)) Camera2Enumerator(context) else Camera1Enumerator(true)
+    }
+    val cameraNames = remember(enumerator) { enumerator.deviceNames.toList() }
 
     Column(
         Modifier
@@ -291,6 +305,90 @@ fun VoiceSettingsScreen(
                 },
             )
 
+            // --- Camera & Video ---
+            SectionLabel("Camera & Video")
+
+            if (cameraNames.isNotEmpty()) {
+                ListRow(
+                    title = "Camera",
+                    subtitle = cameraLabel(cameraDevice, cameraNames, enumerator),
+                    leading = { BetweenUsIcon(BetweenUsIcons.Video) },
+                    trailing = {
+                        Chip(
+                            text = "Change",
+                            onClick = {
+                                val activeTarget = cameraDevice
+                                    ?: cameraNames.firstOrNull { runCatching { enumerator.isFrontFacing(it) }.getOrDefault(false) }
+                                    ?: cameraNames.firstOrNull()
+                                val currentIndex = cameraNames.indexOf(activeTarget)
+                                val nextIndex = (currentIndex + 1).mod(cameraNames.size)
+                                val next = cameraNames[nextIndex]
+                                cameraDevice = next
+                                AudioPrefs.cameraDeviceName = next
+                            },
+                        )
+                    },
+                )
+            }
+
+            ListRow(
+                title = "Resolution",
+                subtitle = cameraQualityLabel(cameraQuality),
+                leading = { BetweenUsIcon(BetweenUsIcons.Video) },
+                trailing = {
+                    Chip(
+                        text = "Change",
+                        onClick = {
+                            val qualities = ShareQuality.CameraQuality.entries
+                            val nextIndex = (qualities.indexOf(cameraQuality) + 1).mod(qualities.size)
+                            val next = qualities[nextIndex]
+                            cameraQuality = next
+                            AudioPrefs.cameraQuality = next
+                        },
+                    )
+                },
+            )
+
+            ListRow(
+                title = "Filter",
+                subtitle = CameraLook.filterFor(cameraFilter).label,
+                leading = { BetweenUsIcon(BetweenUsIcons.Sparkles) },
+                trailing = {
+                    Chip(
+                        text = "Change",
+                        onClick = {
+                            val filters = CameraLook.FILTERS
+                            val currentIndex = filters.indexOfFirst { it.name == cameraFilter }
+                            val nextIndex = (currentIndex + 1).mod(filters.size)
+                            val next = filters[nextIndex]
+                            cameraFilter = next.name
+                            AudioPrefs.cameraFilter = next.name
+                            VoiceEngine.live.value?.setCameraLook(next.name, cameraPortrait)
+                        },
+                    )
+                },
+            )
+
+            ListRow(
+                title = "Background Blur",
+                subtitle = CameraLook.portraitFor(cameraPortrait).label,
+                leading = { BetweenUsIcon(BetweenUsIcons.Sparkles) },
+                trailing = {
+                    Chip(
+                        text = "Change",
+                        onClick = {
+                            val portraits = CameraLook.Portrait.entries
+                            val currentIndex = portraits.indexOfFirst { it.level == cameraPortrait }
+                            val nextIndex = (currentIndex + 1).mod(portraits.size)
+                            val next = portraits[nextIndex]
+                            cameraPortrait = next.level
+                            AudioPrefs.cameraPortrait = next.level
+                            VoiceEngine.live.value?.setCameraLook(cameraFilter, next.level)
+                        },
+                    )
+                },
+            )
+
             // --- Call Sounds & Analytics ---
             SectionLabel("Call Sounds & Data")
 
@@ -401,5 +499,30 @@ private fun VoiceMicMeter(levelDb: Double, thresholdDb: Int, open: Boolean, live
                     .background(MaterialTheme.colorScheme.onSurface),
             )
         }
+    }
+}
+
+private fun cameraQualityLabel(quality: ShareQuality.CameraQuality): String = when (quality) {
+    ShareQuality.CameraQuality.AUTO -> "Auto"
+    ShareQuality.CameraQuality.P360 -> "360p"
+    ShareQuality.CameraQuality.P720 -> "720p"
+    ShareQuality.CameraQuality.P1080 -> "1080p"
+}
+
+private fun cameraLabel(name: String?, cameraNames: List<String>, enumerator: CameraEnumerator): String {
+    val target = name
+        ?: cameraNames.firstOrNull { runCatching { enumerator.isFrontFacing(it) }.getOrDefault(false) }
+        ?: cameraNames.firstOrNull()
+        ?: return "None"
+    val frontCount = cameraNames.count { runCatching { enumerator.isFrontFacing(it) }.getOrDefault(false) }
+    val backCount = cameraNames.count { runCatching { enumerator.isBackFacing(it) }.getOrDefault(false) }
+    val isFront = runCatching { enumerator.isFrontFacing(target) }.getOrDefault(false)
+    val isBack = runCatching { enumerator.isBackFacing(target) }.getOrDefault(false)
+    return when {
+        isFront && frontCount > 1 -> "Front camera ($target)"
+        isFront -> "Front camera"
+        isBack && backCount > 1 -> "Back camera ($target)"
+        isBack -> "Back camera"
+        else -> "Camera $target"
     }
 }

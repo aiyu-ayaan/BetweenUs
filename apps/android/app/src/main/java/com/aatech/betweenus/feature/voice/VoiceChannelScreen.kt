@@ -429,9 +429,11 @@ fun VoiceChannelScreen(
         if (pickingDevices) {
             CallDeviceSheet(
                 onDismiss = { pickingDevices = false },
+                onCameraChanged = { name -> engine.setCameraDevice(name) },
                 // Only a camera that is already running: nobody expects
                 // picking a size to turn one on.
                 onCameraQualityChanged = { if (cameraOn) engine.startCamera() },
+                onCameraLookChanged = { f, p -> engine.setCameraLook(f, p) },
             )
         }
         if (showingConnection) ConnectionSheet(linkStats) { showingConnection = false }
@@ -1232,9 +1234,11 @@ fun VoiceChannelScreen(
     if (pickingDevices) {
         CallDeviceSheet(
             onDismiss = { pickingDevices = false },
+            onCameraChanged = { name -> engine.setCameraDevice(name) },
             // Only a camera that is already running: nobody expects
             // picking a size to turn one on.
             onCameraQualityChanged = { if (cameraOn) engine.startCamera() },
+            onCameraLookChanged = { f, p -> engine.setCameraLook(f, p) },
         )
     }
     if (showingConnection) ConnectionSheet(linkStats) { showingConnection = false }

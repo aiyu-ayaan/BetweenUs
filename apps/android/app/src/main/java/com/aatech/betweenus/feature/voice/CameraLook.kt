@@ -63,7 +63,15 @@ object CameraLook {
 
     private fun multiply(a: FloatArray, b: FloatArray): FloatArray {
         val out = FloatArray(16)
-        android.opengl.Matrix.multiplyMM(out, 0, a, 0, b, 0)
+        for (col in 0..3) {
+            for (row in 0..3) {
+                var sum = 0f
+                for (k in 0..3) {
+                    sum += a[k * 4 + row] * b[col * 4 + k]
+                }
+                out[col * 4 + row] = sum
+            }
+        }
         return out
     }
 
