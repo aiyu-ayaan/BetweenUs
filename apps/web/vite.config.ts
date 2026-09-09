@@ -2,6 +2,7 @@ import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import basicSsl from '@vitejs/plugin-basic-ssl';
+import { mediapipeAssets } from '../desktop/vite-mediapipe';
 
 const AUTH = process.env.AUTH_SERVICE_URL ?? 'http://127.0.0.1:3001';
 const SERVER = process.env.SERVER_SERVICE_URL ?? 'http://127.0.0.1:3003';
@@ -32,7 +33,7 @@ export default defineConfig(({ mode }) => {
   return {
     // One .env for the whole repo, same as the desktop app.
     envDir: fileURLToPath(new URL('../../', import.meta.url)),
-    plugins: [react(), ...(lan ? [basicSsl()] : [])],
+    plugins: [react(), mediapipeAssets(), ...(lan ? [basicSsl()] : [])],
     // Served at the root of the gateway - `https://betweenus.example.com/` is the
     // app, `/admin` is the panel - so asset URLs are domain-rooted.
     base: '/',
@@ -81,6 +82,12 @@ export default defineConfig(({ mode }) => {
         '/ws/call': { target: CALL, ws: true },
       },
     },
+    // The camera effects worker imports MediaPipe lazily, and a dynamic
+    // import is code-splitting - which Rollup cannot do into the IIFE that
+    // workers are bundled as by default. Every browser that has the frame
+    // processing this worker needs has module workers too, so there is
+    // nothing to lose by asking for one.
+    worker: { format: 'es' },
     build: { outDir: 'dist', emptyOutDir: true },
   };
 });

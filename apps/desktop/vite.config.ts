@@ -2,6 +2,7 @@ import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import electron from 'vite-plugin-electron/simple';
+import { mediapipeAssets } from './vite-mediapipe';
 
 const AUTH = process.env.AUTH_SERVICE_URL ?? 'http://127.0.0.1:3001';
 const SERVER = process.env.SERVER_SERVICE_URL ?? 'http://127.0.0.1:3003';
@@ -21,6 +22,7 @@ export default defineConfig({
   envDir: fileURLToPath(new URL('../../', import.meta.url)),
   plugins: [
     react(),
+    mediapipeAssets(),
     electron({
       main: {
         entry: 'electron/main.ts',
@@ -74,5 +76,11 @@ export default defineConfig({
       '/ws/remote': { target: REMOTE, ws: true },
     },
   },
-  build: { outDir: 'dist', emptyOutDir: true },
+  // The camera effects worker imports MediaPipe lazily, and a dynamic
+    // import is code-splitting - which Rollup cannot do into the IIFE that
+    // workers are bundled as by default. Every browser that has the frame
+    // processing this worker needs has module workers too, so there is
+    // nothing to lose by asking for one.
+    worker: { format: 'es' },
+    build: { outDir: 'dist', emptyOutDir: true },
 });

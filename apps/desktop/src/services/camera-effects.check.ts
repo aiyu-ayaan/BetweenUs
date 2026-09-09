@@ -12,9 +12,13 @@ import assert from 'node:assert/strict';
 import {
   FILTERS,
   FRAME_BUDGET_MS,
+  PORTRAIT_BLUR,
+  PORTRAIT_BUDGET_MS,
   FrameBudget,
   NO_EFFECT,
+  budgetFor,
   effectFor,
+  effectFrom,
   effectsSupported,
   isPassThrough,
 } from './camera-effects';
@@ -141,6 +145,64 @@ const fast = 1;
   for (let i = 0; i < 30; i += 1) budget.record(slow);
   assert.equal(budget.record(fast), false);
   assert.equal(budget.bypassed, true);
+}
+
+// --- The two controls compose ----------------------------------------------
+//
+// A filter and a blur answer different questions - what the colour is, and what
+// is behind you - so picking one must not silently drop the other.
+
+assert.deepEqual(effectFrom('none', 'off'), NO_EFFECT);
+assert.equal(isPassThrough(effectFrom('none', 'off')), true);
+
+// Either one alone builds a pipeline.
+assert.equal(isPassThrough(effectFrom('mono', 'off')), false);
+assert.equal(isPassThrough(effectFrom('none', 'light')), false);
+
+// Both together keep both. The guarded bug is a warm portrait that comes out
+// neutral, or a blurred background that loses the filter.
+const both = effectFrom('warm', 'strong');
+assert.equal(both.filter, FILTERS.warm?.filter);
+assert.equal(both.blurBackground, PORTRAIT_BLUR.strong);
+
+// Strong is stronger than light, or the two labels are a lie.
+assert.ok(PORTRAIT_BLUR.strong > PORTRAIT_BLUR.light);
+assert.ok(PORTRAIT_BLUR.light > 0);
+assert.equal(PORTRAIT_BLUR.off, 0);
+
+// Both are stored by name, and a name this build has dropped is nothing rather
+// than a crash - a profile in local storage outlives the build that wrote it.
+assert.equal(effectFrom('a-dropped-filter', 'off').filter, null);
+assert.equal(effectFrom('none', 'a-dropped-level').blurBackground, 0);
+// A raw number is accepted too, which is what a future slider would pass.
+assert.equal(effectFrom('none', 12).blurBackground, 12);
+// And a negative one cannot become a blur: `blur(-5px)` is an invalid filter
+// string, and an invalid filter silently disables the whole canvas filter.
+assert.equal(effectFrom('none', -5).blurBackground, 0);
+
+// --- The blur is judged more generously than a filter -----------------------
+//
+// Segmentation genuinely costs more than a canvas filter while still keeping
+// up. Holding it to the filter's budget would switch it off within a second on
+// hardware perfectly capable of running it, and a guard that fires on working
+// software is worse than no guard.
+
+assert.equal(budgetFor(effectFrom('mono', 'off')), FRAME_BUDGET_MS);
+assert.equal(budgetFor(effectFrom('none', 'light')), PORTRAIT_BUDGET_MS);
+assert.ok(PORTRAIT_BUDGET_MS > FRAME_BUDGET_MS);
+
+// A frame time that ends a filter must not end a portrait.
+{
+  const filterBudget = new FrameBudget(FRAME_BUDGET_MS);
+  const portraitBudget = new FrameBudget(PORTRAIT_BUDGET_MS);
+  const between = (FRAME_BUDGET_MS + PORTRAIT_BUDGET_MS) / 2;
+
+  for (let i = 0; i < 60; i += 1) {
+    filterBudget.record(between);
+    portraitBudget.record(between);
+  }
+  assert.equal(filterBudget.bypassed, true);
+  assert.equal(portraitBudget.bypassed, false, 'a portrait keeping up must not be turned off');
 }
 
 console.log('camera-effects.check.ts: ok');

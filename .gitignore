@@ -33,3 +33,7 @@ google-services.json
 
 # Session handoff documents
 betweenus-turn-session-handoff.md
+
+# Staged from node_modules by vite-mediapipe.ts - 12MB of generated binary
+# that has no business in a diff. See that file for why it is not committed.
+apps/desktop/public/mediapipe/

@@ -86,7 +86,40 @@ export const FILTERS: Record<string, CameraEffect> = {
 
 export type FilterName = keyof typeof FILTERS;
 
-/** The chosen filter, or nothing at all when the name is one we dropped. */
+/**
+ * How hard the background is blurred, in pixels of blur radius.
+ *
+ * Two steps rather than a slider. The honest range is narrow - under about six
+ * pixels nothing looks blurred, and over about twenty the edge of somebody's
+ * hair starts to matter more than the blur does - so a slider would be a
+ * hundred positions across a choice with two useful answers.
+ */
+export const PORTRAIT_BLUR = { off: 0, light: 8, strong: 18 } as const;
+
+export type PortraitLevel = keyof typeof PORTRAIT_BLUR;
+
+/**
+ * One effect from the two things somebody picked.
+ *
+ * They compose rather than exclude: a filter and a blur are different
+ * questions - what the colour is, and what is behind you - and picking one
+ * should not silently drop the other. The worker applies the filter to the
+ * person and to the background alike, so a warm portrait is warm all through
+ * rather than a warm face on a neutral room.
+ */
+export function effectFrom(filter: string, portrait: string | number): CameraEffect {
+  const base = FILTERS[filter] ?? NO_EFFECT;
+  // Both are stored by name, and an unknown name is nothing rather than a
+  // crash: a profile in local storage may have been written by a build with a
+  // level this one has since dropped.
+  const blur =
+    typeof portrait === 'number'
+      ? portrait
+      : (PORTRAIT_BLUR[portrait as PortraitLevel] ?? 0);
+  return { filter: base.filter, blurBackground: Math.max(0, blur) };
+}
+
+/** The chosen filter alone, or nothing when the name is one we dropped. */
 export function effectFor(name: string): CameraEffect {
   return FILTERS[name] ?? NO_EFFECT;
 }
@@ -145,6 +178,23 @@ export function effectsSupported(scope: Record<string, unknown> = globalThis): b
 export const FRAME_BUDGET_MS = 16;
 
 /**
+ * The same, with the portrait blur on.
+ *
+ * A whole frame interval at 30 fps rather than half of one, because
+ * segmentation is not a filter: it runs a model over every frame, and on a
+ * mid-range machine that genuinely costs more than 16 ms while still keeping
+ * up. Holding it to the filter's budget would switch the blur off within a
+ * second on hardware perfectly capable of running it - a guard that fires on
+ * working software is worse than no guard.
+ */
+export const PORTRAIT_BUDGET_MS = 33;
+
+/** Which budget an effect is judged against. */
+export function budgetFor(effect: CameraEffect): number {
+  return effect.blurBackground > 0 ? PORTRAIT_BUDGET_MS : FRAME_BUDGET_MS;
+}
+
+/**
  * How many consecutive over-budget frames end it, and how much slack is
  * required to come back.
  *
@@ -175,6 +225,13 @@ export class FrameBudget {
   private underRun = 0;
   private degraded = false;
 
+  /**
+   * `budgetMs` is what one frame may cost, which depends on what the effect is
+   * - see `budgetFor`. Held rather than passed per frame so the two halves of
+   * the decision, the threshold and the run length, cannot disagree.
+   */
+  constructor(private readonly budgetMs: number = FRAME_BUDGET_MS) {}
+
   /** True while the effect should be bypassed. */
   get bypassed(): boolean {
     return this.degraded;
@@ -186,7 +243,7 @@ export class FrameBudget {
    */
   record(ms: number): boolean {
     if (this.degraded) {
-      this.underRun = ms <= FRAME_BUDGET_MS * RECOVERY_RATIO ? this.underRun + 1 : 0;
+      this.underRun = ms <= this.budgetMs * RECOVERY_RATIO ? this.underRun + 1 : 0;
       if (this.underRun >= RECOVERY_FRAMES) {
         this.degraded = false;
         this.underRun = 0;
@@ -196,7 +253,7 @@ export class FrameBudget {
       return false;
     }
 
-    this.overRun = ms > FRAME_BUDGET_MS ? this.overRun + 1 : 0;
+    this.overRun = ms > this.budgetMs ? this.overRun + 1 : 0;
     if (this.overRun >= OVER_BUDGET_FRAMES) {
       this.degraded = true;
       this.overRun = 0;
@@ -259,7 +316,7 @@ type GeneratorCtor = new (init?: { kind: 'video' }) => TrackGenerator & MediaStr
  */
 export class CameraPipeline {
   private worker: Worker | null = null;
-  private readonly budget = new FrameBudget();
+  private budget = new FrameBudget();
 
   /**
    * `track` is the *generated* one - what the sender publishes. The generator
@@ -281,6 +338,7 @@ export class CameraPipeline {
     source: MediaStreamTrack,
     effect: CameraEffect,
     onBypass: (bypassed: boolean) => void,
+    onNoPortrait: () => void = () => undefined,
   ): CameraPipeline | null {
     if (isPassThrough(effect) || !effectsSupported()) return null;
 
@@ -300,6 +358,7 @@ export class CameraPipeline {
       const output = generator.track ?? (generator as MediaStreamTrack);
 
       const pipeline = new CameraPipeline(output);
+      pipeline.budget = new FrameBudget(budgetFor(effect));
 
       const worker = new Worker(new URL('./camera-effects.worker.ts', import.meta.url), {
         type: 'module',
@@ -308,6 +367,13 @@ export class CameraPipeline {
       worker.onmessage = (event: MessageEvent<{ type: string; ms?: number }>) => {
         if (event.data.type === 'failed') {
           onBypass(true);
+          return;
+        }
+        // The segmentation model could not be loaded - a missing file, a
+        // browser without the WebAssembly it needs. The filter half is
+        // unaffected and keeps running, so this is not a bypass.
+        if (event.data.type === 'no-portrait') {
+          onNoPortrait();
           return;
         }
         if (pipeline.budget.record(event.data.ms ?? 0)) {
@@ -329,8 +395,17 @@ export class CameraPipeline {
     }
   }
 
-  /** Changes the effect without rebuilding anything. */
+  /**
+   * Changes the effect without rebuilding anything.
+   *
+   * The budget is replaced with it, because turning the blur on changes what a
+   * frame is allowed to cost - judging a segmentation pass against the filter's
+   * budget would switch it straight back off. A fresh counter is the right
+   * behaviour too: the run length so far was measured against a different
+   * threshold and means nothing under the new one.
+   */
   setEffect(effect: CameraEffect): void {
+    this.budget = new FrameBudget(budgetFor(effect));
     this.worker?.postMessage({ type: 'effect', effect });
   }
 

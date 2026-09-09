@@ -84,6 +84,15 @@ export interface CameraSettings extends QualityOverride {
    * values. An unknown name resolves to no filter at all.
    */
   filter: string;
+  /**
+   * The portrait blur, by level - see `PORTRAIT_BLUR` in `camera-effects.ts`.
+   *
+   * `'off'` is the default, and it has to be: the blur costs a segmentation
+   * model per frame and a twelve-megabyte runtime to download, and turning that
+   * on for somebody who did not ask for it is a call that gets slower for no
+   * reason they can see.
+   */
+  portrait: string;
 }
 
 export const DEFAULT_CAMERA_SETTINGS: CameraSettings = {
@@ -92,6 +101,7 @@ export const DEFAULT_CAMERA_SETTINGS: CameraSettings = {
   quality: 'auto',
   mirror: true,
   filter: 'none',
+  portrait: 'off',
 };
 
 /** The `getUserMedia({ video })` half. */

@@ -36,6 +36,7 @@ import { CHORD_LABEL, localChordOf } from '../../services/keyboard';
 import { useShareControlStore } from '../../stores/shareControl';
 import { useVoiceStore, type VoiceShare, type VoiceTile } from '../../stores/voice';
 import { useAudioSettings } from '../../stores/audioSettings';
+import { CameraLook, CameraLookButton } from './CameraLook';
 import { CallDuration } from './CallDuration';
 import { VoiceControls } from './VoiceControls';
 import { NotHeardNotice } from './NotHeardNotice';
@@ -1153,6 +1154,12 @@ function StageTile({
   // the grid, the pip, a pin - would otherwise have to carry a prop that only
   // one tile in the call ever uses.
   const mirrorSelf = useAudioSettings((state) => state.settings.camera.mirror);
+  const [look, setLook] = useState(false);
+
+  // Only your own tile, and only while there is a picture to change: a look
+  // control on somebody else's face would be one that cannot do anything.
+  const canChangeLook = tile.isLocal && Boolean(tile.videoTrack);
+
   return (
     <div
       className={`group relative flex ${
@@ -1183,6 +1190,13 @@ function StageTile({
           {!compact && <span>{pinned ? 'Unpin' : 'Pin'}</span>}
         </button>
       )}
+
+      {/* The opposite corner from the pin, so neither has to move and a
+          hovered tile does not put two buttons under one cursor. */}
+      {canChangeLook && (
+        <CameraLookButton open={look} onToggle={() => setLook((on) => !on)} compact={compact} />
+      )}
+      {canChangeLook && look && <CameraLook onClose={() => setLook(false)} />}
 
       {tile.videoTrack ? (
         <>
