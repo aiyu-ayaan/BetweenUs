@@ -82,16 +82,24 @@ async function loadSegmenter(): Promise<Segmenter | null> {
   const { FilesetResolver, ImageSegmenter } = await import('@mediapipe/tasks-vision');
   // Same origin, staged by `vite-mediapipe.ts`. Never a CDN: that would be
   // remote code in this window, which `script-src 'self'` exists to refuse.
-  const fileset = await FilesetResolver.forVisionTasks('/mediapipe');
-  return (await ImageSegmenter.createFromOptions(fileset, {
-    baseOptions: { modelAssetPath: '/models/selfie_segmenter.tflite', delegate: 'GPU' },
-    // A category mask is one byte per pixel saying person or not-person, which
-    // is the whole question here. A confidence mask would be a float per pixel
-    // to threshold ourselves, for a softness the compositing already provides.
-    outputCategoryMask: true,
-    outputConfidenceMasks: false,
-    runningMode: 'VIDEO',
-  })) as unknown as Segmenter;
+  const fileset = await FilesetResolver.forVisionTasks('/mediapipe', true);
+  try {
+    return (await ImageSegmenter.createFromOptions(fileset, {
+      baseOptions: { modelAssetPath: '/models/selfie_segmenter.tflite', delegate: 'GPU' },
+      outputCategoryMask: true,
+      outputConfidenceMasks: false,
+      runningMode: 'VIDEO',
+    })) as unknown as Segmenter;
+  } catch (gpuError) {
+    // GPU delegate can fail under certain drivers or virtual devices. Falling back
+    // to CPU keeps portrait blur working smoothly rather than dropping the feature.
+    return (await ImageSegmenter.createFromOptions(fileset, {
+      baseOptions: { modelAssetPath: '/models/selfie_segmenter.tflite', delegate: 'CPU' },
+      outputCategoryMask: true,
+      outputConfidenceMasks: false,
+      runningMode: 'VIDEO',
+    })) as unknown as Segmenter;
+  }
 }
 
 /**

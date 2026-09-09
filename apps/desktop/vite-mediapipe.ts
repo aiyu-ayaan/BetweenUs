@@ -1,6 +1,6 @@
-import { copyFileSync, existsSync, mkdirSync, statSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import { dirname, join } from 'node:path';
+import { dirname, extname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Plugin } from 'vite';
 
@@ -14,63 +14,88 @@ import type { Plugin } from 'vite';
  * exists to refuse, and the same rule that stopped Listen Together loading
  * YouTube's iframe API. So it is served from this origin instead.
  *
- * Copied into `public/` rather than committed there. Twelve megabytes of
- * generated binary in git is twelve megabytes in every clone and every diff, of
- * a file nobody will ever read, that has to be re-downloaded to update the
- * dependency anyway. `public/mediapipe/` is in `.gitignore` and this rebuilds
- * it from `node_modules` whenever it is missing or stale.
- *
- * Copied rather than emitted through Rollup for the same reason it is not a
- * dependency of any module: it is fetched by URL at runtime by MediaPipe's own
- * loader, not imported. Landing it in `public/` means Vite serves it in
- * development and copies it into `dist/` on a build, with no second code path
- * for either.
- *
- * **SIMD only.** The package also carries a `nosimd` build, twice as much again,
- * for browsers without WebAssembly SIMD - which means before Chrome 91 and
- * Firefox 89, neither of which can run the rest of this application. Where the
- * loader asks for the nosimd files it gets a 404, the segmenter fails to start,
- * and the portrait blur reports itself unavailable, which is the same answer
- * that browser gets for every other reason.
+ * Copied into `public/` rather than committed there. Generated binaries in git
+ * add megabytes to every clone and diff. `public/mediapipe/` is in `.gitignore`
+ * and this rebuilds it from `node_modules` whenever it is missing or stale.
  */
-const FILES = ['vision_wasm_internal.js', 'vision_wasm_internal.wasm'];
+const FILES = [
+  'vision_wasm_internal.js',
+  'vision_wasm_internal.wasm',
+  'vision_wasm_module_internal.js',
+  'vision_wasm_module_internal.wasm',
+  'vision_wasm_nosimd_internal.js',
+  'vision_wasm_nosimd_internal.wasm',
+];
 
 export function mediapipeAssets(): Plugin {
+  const require = createRequire(import.meta.url);
+  const here = dirname(fileURLToPath(import.meta.url));
+  const target = join(here, 'public', 'mediapipe');
+
+  function stageFiles(warn?: (msg: string) => void): void {
+    let source: string;
+    try {
+      source = dirname(require.resolve('@mediapipe/tasks-vision'));
+    } catch {
+      warn?.('@mediapipe/tasks-vision is not installed; the portrait blur will be unavailable');
+      return;
+    }
+
+    mkdirSync(target, { recursive: true });
+    for (const file of FILES) {
+      const from = join(source, 'wasm', file);
+      const to = join(target, file);
+      if (!existsSync(from)) continue;
+
+      let content = readFileSync(from);
+      // For non-module loader scripts, ensure globalThis.ModuleFactory is exposed so that
+      // dynamic import() in module workers succeeds without "ModuleFactory not set".
+      if (file === 'vision_wasm_internal.js' || file === 'vision_wasm_nosimd_internal.js') {
+        const text = content.toString('utf8');
+        if (!text.includes('globalThis.ModuleFactory')) {
+          content = Buffer.from(
+            text +
+              '\nif (typeof ModuleFactory !== "undefined") { globalThis.ModuleFactory = ModuleFactory; self.ModuleFactory = ModuleFactory; }\n',
+            'utf8',
+          );
+        }
+      }
+
+      if (existsSync(to) && statSync(to).size === content.length) continue;
+      writeFileSync(to, content);
+    }
+  }
+
   return {
     name: 'betweenus:mediapipe-assets',
-    // Before anything is served or built, and in both modes: the dev server
-    // reads `public/` off disk on request, so staging at config time would be
-    // one restart away from being wrong.
     buildStart() {
-      const require = createRequire(import.meta.url);
-      const here = dirname(fileURLToPath(import.meta.url));
-      const target = join(here, 'public', 'mediapipe');
+      stageFiles((msg) => this.warn(msg));
+    },
+    configureServer(server) {
+      // Ensure files are staged when the dev server starts up
+      stageFiles();
 
-      let source: string;
-      try {
-        // Resolved through the main entry rather than `package.json`: the
-        // package declares an `exports` map that does not list its own manifest,
-        // so asking for it directly is `ERR_PACKAGE_PATH_NOT_EXPORTED`. The
-        // bundle sits at the package root, so its directory is the root.
-        source = dirname(require.resolve('@mediapipe/tasks-vision'));
-      } catch {
-        // The dependency is not installed. Say so once rather than failing the
-        // build: everything except the portrait blur still works without it.
-        this.warn('@mediapipe/tasks-vision is not installed; the portrait blur will be unavailable');
-        return;
-      }
-
-      mkdirSync(target, { recursive: true });
-      for (const file of FILES) {
-        const from = join(source, 'wasm', file);
-        const to = join(target, file);
-        if (!existsSync(from)) continue;
-        // Size rather than a hash: these are release artefacts of a pinned
-        // version, so they change when the version does and not otherwise, and
-        // hashing 12 MB on every start to learn that costs more than it saves.
-        if (existsSync(to) && statSync(to).size === statSync(from).size) continue;
-        copyFileSync(from, to);
-      }
+      // Intercept /mediapipe/ requests in the dev server before Vite's transform middleware,
+      // so Vite does not reject them with "This file is in /public and will be copied as-is...".
+      server.middlewares.use((req, res, next) => {
+        const rawUrl = req.url?.split('?')[0] ?? '';
+        if (rawUrl.startsWith('/mediapipe/')) {
+          const filename = rawUrl.slice('/mediapipe/'.length);
+          const filePath = join(target, filename);
+          if (existsSync(filePath)) {
+            const ext = extname(filePath);
+            if (ext === '.js' || ext === '.mjs') {
+              res.setHeader('Content-Type', 'application/javascript');
+            } else if (ext === '.wasm') {
+              res.setHeader('Content-Type', 'application/wasm');
+            }
+            res.setHeader('Cache-Control', 'no-cache');
+            res.end(readFileSync(filePath));
+            return;
+          }
+        }
+        next();
+      });
     },
   };
 }
