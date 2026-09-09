@@ -584,14 +584,24 @@ the web client's only route to driving anything.
 
 ### Full screen on the desktop, and the two keys it keeps
 
-Full screen puts the chrome in rows rather than on top of the picture: a header
-above, the share in a bordered frame, the call controls below. Overlaid, the two
-bars covered the top and bottom of whatever was being shared — on a desktop or a
-browser window that is the title bar, the tabs and the task bar, which is the
-part a viewer most needs to read. They used to fade out after a couple of
-seconds, which only made the overlap intermittent while also taking **Release
-control** away from somebody whose keyboard was busy driving another machine.
-Nothing auto-hides now, and nothing is ever on top of anything else.
+Full screen is two wishes that pull opposite ways, so it is two modes with a
+button between them.
+
+**Fill** is the default and is what full screen usually means: the picture edge
+to edge, chrome floating over it and fading after a couple of seconds, the
+cursor going with it. A film letterboxed inside a chrome sandwich is not full
+screen, and that is what a single docked layout produced.
+
+**Docked** puts the chrome in rows instead — a header above, the share in a
+bordered frame, the call controls below — and nothing fades. It exists because
+the top of a shared desktop is its title bar and its tabs and the bottom is its
+task bar, which is the part a viewer most needs to read, and floating chrome
+sits on exactly those. Fading only makes that intermittent.
+
+Taking control of a share forces Docked and disables the button, saying why.
+Chrome that fades takes **Release control** with it, and floating chrome is a
+strip of this app over the machine being clicked into; neither is survivable in
+the one mode where every pixel has to be readable and every control reachable.
 
 Only two bindings stay local while a share is on screen, and both are chords:
 

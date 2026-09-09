@@ -26,12 +26,12 @@
  * one person can be pinned to fill the stage with everybody else in a strip
  * underneath.
  */
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Channel } from '@betweenus/shared-types';
 import { useChatStore } from '../../stores/chat';
 import { usePresenceStore } from '../../stores/presence';
 import { useRemoteStore } from '../../stores/remote';
-import { captionInset } from '../../services/platform';
+import { captionCorner, captionInset } from '../../services/platform';
 import { CHORD_LABEL, localChordOf } from '../../services/keyboard';
 import { useShareControlStore } from '../../stores/shareControl';
 import { useVoiceStore, type VoiceShare, type VoiceTile } from '../../stores/voice';
@@ -401,13 +401,55 @@ function Theatre({ share, tiles }: { share: VoiceShare; tiles: Stage[] }): JSX.E
   const [showParticipants, setShowParticipants] = useState(true);
   const [layout, setLayout] = useState<LayoutMode>('side-left');
 
-  // Nothing auto-hides here any more, and the timer that used to do it is
-  // gone. Hiding the chrome was only ever worth it because the chrome sat on
-  // top of the picture, so fading it gave those pixels back. The bars now have
-  // their own rows and the picture has its own frame between them - fading
-  // them would give back nothing and would still take the controls away, which
-  // is unusable when the keyboard and mouse are driving somebody's machine and
-  // Release control is one of the things that disappeared.
+  /**
+   * Full screen is two different wishes and they pull opposite ways.
+   *
+   * Watching something is the common one: the picture edge to edge, nothing
+   * else on screen, chrome that floats over it and gets out of the way. Docked
+   * chrome cannot do that - it letterboxes the picture into a sandwich, which
+   * is not what anybody means by full screen when a film is on.
+   *
+   * Reading somebody's screen is the other: the top of a shared desktop is its
+   * title bar and its tabs, the bottom is its task bar, and floating chrome
+   * sits on exactly those. Fading after a couple of seconds only makes that
+   * intermittent, and it takes **Release control** away from somebody whose
+   * keyboard is busy driving another machine.
+   *
+   * So both, with a button, and immersive by default because watching is what
+   * full screen usually means. Docked never auto-hides: it has its own space
+   * and nothing to gain by disappearing.
+   */
+  const [docked, setDocked] = useState(false);
+  const [showControls, setShowControls] = useState(true);
+  const hideTimerRef = useRef<number | null>(null);
+
+  // Driving somebody's machine docks it whatever the button says, and the
+  // button says so. Chrome that fades is chrome that takes Release control with
+  // it, and floating chrome is a strip of this app sitting over the machine you
+  // are clicking into - both are wrong in the one mode where every pixel has to
+  // be readable and every control reachable.
+  const driving = useShareControlStore((state) => state.driving) !== null;
+  const immersive = fullscreen && !docked && !driving;
+
+  const resetHideTimer = useCallback(() => {
+    setShowControls(true);
+    if (hideTimerRef.current !== null) window.clearTimeout(hideTimerRef.current);
+    if (!immersive) return;
+    hideTimerRef.current = window.setTimeout(() => setShowControls(false), 2500);
+  }, [immersive]);
+
+  useEffect(() => {
+    if (immersive) {
+      resetHideTimer();
+    } else {
+      setShowControls(true);
+      if (hideTimerRef.current !== null) window.clearTimeout(hideTimerRef.current);
+      hideTimerRef.current = null;
+    }
+    return () => {
+      if (hideTimerRef.current !== null) window.clearTimeout(hideTimerRef.current);
+    };
+  }, [immersive, resetHideTimer]);
 
   // Full screen is a chord, not the letter F. A bare key was reachable from
   // anywhere - including from a session where the keyboard belongs to somebody
@@ -424,10 +466,11 @@ function Theatre({ share, tiles }: { share: VoiceShare; tiles: Stage[] }): JSX.E
       } else if (e.key === 'Escape' && fullscreen && !driving) {
         setFullscreen(false);
       }
+      resetHideTimer();
     };
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
-  }, [fullscreen]);
+  }, [fullscreen, resetHideTimer]);
 
   const toggleFullscreen = (): void => {
     setFullscreen((prev) => !prev);
@@ -441,18 +484,45 @@ function Theatre({ share, tiles }: { share: VoiceShare; tiles: Stage[] }): JSX.E
 
   if (fullscreen) {
     return (
-      <div className="fixed inset-0 z-50 flex flex-col bg-black select-none no-drag">
-        {/* The bar above the picture, not on it.
+      <div
+        onMouseMove={immersive ? resetHideTimer : undefined}
+        onTouchStart={immersive ? resetHideTimer : undefined}
+        className={`fixed inset-0 z-50 flex flex-col bg-black select-none no-drag ${
+          immersive && !showControls ? 'cursor-none' : ''
+        }`}
+      >
+        {/* The way back, for when the chrome has faded and the only thing on
+            screen is the picture. Immersive only: docked keeps its own Exit in
+            the bar, which never goes anywhere. */}
+        {immersive && (
+          <button
+            type="button"
+            onClick={toggleFullscreen}
+            aria-label="Exit full screen"
+            title={`Exit full screen (Esc or ${CHORD_LABEL['toggle-fullscreen']})`}
+            style={captionCorner()}
+            className={`no-drag absolute top-4 z-40 flex cursor-pointer items-center gap-1.5 rounded-md border border-white/10 bg-black/70 px-3 py-1.5 text-xs font-semibold text-white shadow-md backdrop-blur-md transition-opacity duration-300 hover:bg-white/20 ${
+              showControls ? 'opacity-0 pointer-events-none' : 'opacity-70 hover:opacity-100'
+            }`}
+          >
+            <MinimizeIcon className="h-4 w-4" />
+            Exit full screen
+          </button>
+        )}
 
-            It used to be an overlay that faded out after a couple of seconds.
-            Overlaid, it covered the top of whatever was being shared - which on
-            a shared window or desktop is the title bar and the tabs, the part a
-            viewer most needs to read - and the fade only made that intermittent
-            rather than fixing it. Now it is a row, the picture is a frame below
-            it, and neither is ever on top of the other. */}
+        {/* The top bar: floating and fading over the picture when immersive, a
+            row above it when docked. See `docked` for why both exist. */}
         <div
           style={captionInset()}
-          className="no-drag relative z-30 flex shrink-0 items-center justify-between gap-3 border-b border-white/10 bg-surface-900 p-3"
+          className={
+            immersive
+              ? `no-drag absolute inset-x-0 top-0 z-30 flex items-center justify-between gap-3 bg-gradient-to-b from-black/90 via-black/50 to-transparent p-4 transition-all duration-300 ease-out ${
+                  showControls
+                    ? 'opacity-100 translate-y-0 pointer-events-auto'
+                    : 'opacity-0 -translate-y-6 pointer-events-none'
+                }`
+              : 'no-drag relative z-30 flex shrink-0 items-center justify-between gap-3 border-b border-white/10 bg-surface-900 p-3'
+          }
         >
           {/* Live badge & Stream name */}
           <div className="flex items-center gap-2 rounded-full border border-white/10 bg-black/60 px-3.5 py-1.5 backdrop-blur-md shadow-lg">
@@ -516,6 +586,28 @@ function Theatre({ share, tiles }: { share: VoiceShare; tiles: Stage[] }): JSX.E
             </button>
             <button
               type="button"
+              onClick={() => setDocked((prev) => !prev)}
+              disabled={driving}
+              aria-pressed={!immersive}
+              aria-label={immersive ? 'Keep the controls out of the picture' : 'Fill the screen'}
+              title={
+                driving
+                  ? 'Docked while you are driving this screen, so nothing covers it and nothing fades'
+                  : immersive
+                    ? 'Dock the controls: nothing covers the shared screen, nothing fades'
+                    : 'Fill the screen: the picture edge to edge, controls float and fade away'
+              }
+              className={`no-drag flex items-center gap-1.5 rounded-md border border-white/10 px-3 py-1.5 text-xs font-medium backdrop-blur-md shadow-md transition-all duration-200 active:scale-95 disabled:cursor-not-allowed disabled:opacity-60 ${
+                immersive
+                  ? 'cursor-pointer bg-black/60 text-slate-400 hover:text-slate-200'
+                  : 'cursor-pointer bg-white/15 text-white'
+              }`}
+            >
+              <LayoutBottomIcon className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">{immersive ? 'Fill' : 'Docked'}</span>
+            </button>
+            <button
+              type="button"
               onClick={toggleFullscreen}
               aria-label="Exit full screen"
               title={`Exit full screen (Esc or ${CHORD_LABEL['toggle-fullscreen']})`}
@@ -538,14 +630,24 @@ function Theatre({ share, tiles }: { share: VoiceShare; tiles: Stage[] }): JSX.E
         </div>
 
         {/* Fullscreen Main Content Area (Side Gallery and Center Stage) */}
-        <div className="relative flex min-h-0 w-full flex-1 flex-row items-stretch justify-center gap-3 overflow-hidden bg-black p-3">
+        <div
+          className={`relative flex min-h-0 w-full flex-1 flex-row items-stretch justify-center overflow-hidden bg-black ${
+            immersive ? 'gap-0 p-0' : 'gap-3 p-3'
+          }`}
+        >
           {/* Show Cameras pill, only when the rail is put away */}
           {!showParticipants && (
             <button
               type="button"
               onClick={() => setShowParticipants(true)}
               title="Show cameras alongside stream"
-              className="absolute start-6 top-6 z-20 flex items-center gap-1.5 rounded-full border border-white/10 bg-black/70 px-3.5 py-1.5 text-xs font-semibold text-slate-200 backdrop-blur-md shadow-xl transition-colors duration-200 hover:bg-white/20 hover:text-white active:scale-95"
+              className={`absolute z-20 flex items-center gap-1.5 rounded-full border border-white/10 bg-black/70 px-3.5 py-1.5 text-xs font-semibold text-slate-200 backdrop-blur-md shadow-xl transition-all duration-300 hover:bg-white/20 hover:text-white active:scale-95 ${
+                immersive ? 'start-4 top-20' : 'start-6 top-6'
+              } ${
+                immersive && !showControls
+                  ? 'opacity-0 -translate-y-4 pointer-events-none'
+                  : 'opacity-100 translate-y-0'
+              }`}
             >
               <UsersIcon className="h-3.5 w-3.5" />
               <span>Show cameras ({tiles.length})</span>
@@ -553,7 +655,7 @@ function Theatre({ share, tiles }: { share: VoiceShare; tiles: Stage[] }): JSX.E
           )}
 
           {layout === 'side-left' && showParticipants && (
-            <div className="z-20 flex h-full flex-col justify-center">
+            <div className={`z-20 flex h-full flex-col justify-center ${immersive ? 'p-4' : ''}`}>
               <SideGallery
                 tiles={tiles}
                 isFullscreen
@@ -562,11 +664,15 @@ function Theatre({ share, tiles }: { share: VoiceShare; tiles: Stage[] }): JSX.E
             </div>
           )}
 
-          {/* The picture's own frame. A border rather than nothing, because a
-              screen share letterboxed on black has no edge of its own, and
-              without one there is no telling where the shared desktop stops and
-              this app starts. */}
-          <div className="relative flex h-full min-h-0 w-full flex-1 items-center justify-center overflow-hidden rounded-lg border border-white/10 bg-black">
+          {/* Docked, the picture gets a frame: inset on black it has no edge of
+              its own, and without one there is no telling where the shared
+              desktop stops and this app starts. Immersive it fills everything,
+              where a border would only be a line drawn round the screen. */}
+          <div
+            className={`relative flex h-full min-h-0 w-full flex-1 items-center justify-center overflow-hidden bg-black ${
+              immersive ? '' : 'rounded-lg border border-white/10'
+            }`}
+          >
             {share.track ? (
               <ShareStage share={share} />
             ) : (
@@ -577,7 +683,7 @@ function Theatre({ share, tiles }: { share: VoiceShare; tiles: Stage[] }): JSX.E
           </div>
 
           {layout === 'side-right' && showParticipants && (
-            <div className="z-20 flex h-full flex-col justify-center">
+            <div className={`z-20 flex h-full flex-col justify-center ${immersive ? 'p-4' : ''}`}>
               <SideGallery
                 tiles={tiles}
                 isFullscreen
@@ -587,11 +693,16 @@ function Theatre({ share, tiles }: { share: VoiceShare; tiles: Stage[] }): JSX.E
           )}
         </div>
 
-        {/* Same for the call controls: a row under the frame, not a dock on top
-            of the shared screen's task bar. */}
-        <div className="relative z-30 flex shrink-0 flex-col items-center gap-3 border-t border-white/10 bg-surface-900 px-6 py-3">
+        {/* And the call controls, the same two ways. */}
+        <div
+          className={
+            immersive
+              ? 'absolute inset-x-0 bottom-0 z-30 flex flex-col items-center gap-3 bg-gradient-to-t from-black/95 via-black/60 to-transparent px-6 pb-5 pt-8 pointer-events-none'
+              : 'relative z-30 flex shrink-0 flex-col items-center gap-3 border-t border-white/10 bg-surface-900 px-6 py-3'
+          }
+        >
           {layout === 'bottom' && showParticipants && (
-            <ul className="flex max-w-full shrink-0 justify-center gap-2.5 overflow-x-auto pb-1">
+            <ul className="pointer-events-auto flex max-w-full shrink-0 justify-center gap-2.5 overflow-x-auto pb-1">
               {tiles.map((tile) => (
                 <li key={tile.key} className="w-36 shrink-0">
                   <StageTile tile={tile} />
@@ -599,7 +710,13 @@ function Theatre({ share, tiles }: { share: VoiceShare; tiles: Stage[] }): JSX.E
               ))}
             </ul>
           )}
-          <div className="flex items-center justify-center rounded-2xl border border-white/10 bg-black/70 px-4 py-2 backdrop-blur-md shadow-pop">
+          <div
+            className={`flex items-center justify-center rounded-2xl border border-white/10 bg-black/70 px-4 py-2 backdrop-blur-md shadow-pop transition-all duration-300 ease-out ${
+              immersive && !showControls
+                ? 'opacity-0 translate-y-6 pointer-events-none'
+                : 'opacity-100 translate-y-0 pointer-events-auto'
+            }`}
+          >
             <VoiceControls size="sm" />
           </div>
         </div>
