@@ -546,6 +546,35 @@ way, so a tap on the picture hides it. The letterboxed frame's own rectangle is
 the drive surface; pinch-zoom is suspended while driving, because a one-finger
 drag cannot be both a pan here and a mouse drag there.
 
+### Full screen on the desktop, and the two keys it keeps
+
+Full screen puts the chrome in rows rather than on top of the picture: a header
+above, the share in a bordered frame, the call controls below. Overlaid, the two
+bars covered the top and bottom of whatever was being shared — on a desktop or a
+browser window that is the title bar, the tabs and the task bar, which is the
+part a viewer most needs to read. They used to fade out after a couple of
+seconds, which only made the overlap intermittent while also taking **Release
+control** away from somebody whose keyboard was busy driving another machine.
+Nothing auto-hides now, and nothing is ever on top of anything else.
+
+Only two bindings stay local while a share is on screen, and both are chords:
+
+| Chord | Does |
+| --- | --- |
+| `Ctrl+Shift+F` | Toggle full screen |
+| `Ctrl+Shift+X` | Hand the mouse and keyboard back |
+
+They are matched on `event.code` in `services/keyboard.ts`, so a non-QWERTY
+layout gets the same physical keys, and they are the same two in a call share
+and in a remote session. Neither can be a single key: while control is being
+driven every keystroke belongs to the far machine, so a bare `f` was flipping
+this view instead of typing an `f` over there, and a bare `Escape` handed
+control back on the key most likely to be pressed — leaving the driver unable to
+send Escape at all. Escape still leaves full screen when nobody is driving,
+which is what Escape means everywhere else. Ctrl-or-Cmd plus Shift, never with
+Alt, is what keeps both clear of `Ctrl+F`, `Cmd+F`, `Ctrl+Shift+Esc` and the Alt
+chords the two desktops reserve.
+
 ## Live streaming: deliberately out of scope
 
 One-to-many streaming needs a media server — a broadcast to 50 viewers is 50

@@ -61,8 +61,13 @@ export function shortcuts(command: string = commandKey()): Shortcut[] {
       where: 'In a conversation',
     },
     {
-      keys: ['F'],
+      keys: [command, 'Shift', 'F'],
       what: 'Full screen, and back',
+      where: 'In a call',
+    },
+    {
+      keys: [command, 'Shift', 'X'],
+      what: 'Hand back a screen you were given control of',
       where: 'In a call',
     },
     {
@@ -76,10 +81,12 @@ export function shortcuts(command: string = commandKey()): Shortcut[] {
 /**
  * Whether a keystroke is somebody typing rather than reaching for a shortcut.
  *
- * The rule every unmodified binding needs and the one that is easy to get
- * wrong: `F` toggles full screen in a call, and without this it also does so
- * in the middle of a word. `contentEditable` counts, because a rich composer is
- * not an `<input>`.
+ * The rule every unmodified binding needs: without it a bare letter fires in
+ * the middle of a word. `contentEditable` counts, because a rich composer is
+ * not an `<input>`. Full screen used to be the example here and is no longer
+ * unmodified - a bare `F` also fired while the keyboard was driving somebody
+ * else's screen, where a composer check cannot help because the composer is on
+ * the other machine.
  *
  * A binding with a modifier does not ask - `Ctrl+K` while typing is a person
  * who wants the switcher - which is why this takes the event rather than only

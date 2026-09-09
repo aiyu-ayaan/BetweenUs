@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useRemoteStore } from '../../stores/remote';
-import { modifiersOf } from '../../services/keyboard';
+import { CHORD_LABEL, localChordOf, modifiersOf } from '../../services/keyboard';
 import { formatBytes } from '../../services/remote-transfer';
 import { MonitorIcon, PhoneOffIcon, XIcon } from '../../components/icons';
 
@@ -14,8 +14,10 @@ import { MonitorIcon, PhoneOffIcon, XIcon } from '../../components/icons';
  * Control is a mode, not a permission: watching is the default even for a
  * session allowed to control, and taking it is one button. A session that was
  * not granted control asks the machine for it instead, RDP style, and somebody
- * sitting there answers. Escape always hands it back and never travels - one
- * key has to stay local or an unresponsive session traps the keyboard.
+ * sitting there answers. Ctrl+Shift+X always hands it back and never travels -
+ * one binding has to stay local or an unresponsive session traps the keyboard,
+ * and it is a chord rather than Escape so the driver can still press Escape on
+ * the machine they are driving.
  */
 export function RemoteSessionView(): JSX.Element {
   const session = useRemoteStore((state) => state.session);
@@ -83,10 +85,14 @@ export function RemoteSessionView(): JSX.Element {
     if (!controlling || !mayControl) return;
 
     const onKey = (event: KeyboardEvent): void => {
-      // Escape hands control back, so it never travels: without one key that
-      // always stays local, a session that stops responding traps the keyboard.
-      if (event.key === 'Escape') {
-        releaseControl();
+      // Ctrl+Shift+X hands control back, so it never travels: without one
+      // binding that always stays local, a session that stops responding traps
+      // the keyboard. A chord and not a bare key, because every single key -
+      // Escape included - belongs to the far machine while it is being driven.
+      const chord = localChordOf(event);
+      if (chord) {
+        event.preventDefault();
+        if (chord === 'release-control' && event.type === 'keydown') releaseControl();
         return;
       }
       event.preventDefault();
@@ -209,7 +215,7 @@ export function RemoteSessionView(): JSX.Element {
           }`}
         >
           {controlling
-            ? 'Release control (Esc)'
+            ? `Release control (${CHORD_LABEL['release-control']})`
             : requesting
               ? 'Asking the machine…'
               : mayControl

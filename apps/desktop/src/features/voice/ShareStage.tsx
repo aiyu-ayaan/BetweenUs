@@ -17,7 +17,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useShareControlStore } from '../../stores/shareControl';
-import { modifiersOf } from '../../services/keyboard';
+import { localChordOf, modifiersOf } from '../../services/keyboard';
 import type { VoiceShare } from '../../stores/voice';
 import { contentBox, fractionIn, EMPTY_BOX, type Box } from './stage-geometry';
 
@@ -62,13 +62,19 @@ export function ShareStage({ share }: { share: VoiceShare }): JSX.Element {
     };
   }, [measure, share.track]);
 
-  // Escape hands the mouse back and never travels: without one key that always
-  // stays local, a share that stops responding traps the keyboard.
+  // Ctrl+Shift+X hands the mouse back and never travels: without one binding
+  // that always stays local, a share that stops responding traps the keyboard.
+  // It is a chord and not Escape, because Escape is a key the driver has to be
+  // able to press on the other machine - see `localChordOf`. Ctrl+Shift+F is
+  // swallowed here too: full screen is the view's to toggle, and forwarding it
+  // would type it into the far machine as well.
   useEffect(() => {
     if (!controlling) return;
     const onKey = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape') {
-        stop();
+      const chord = localChordOf(event);
+      if (chord) {
+        event.preventDefault();
+        if (chord === 'release-control' && event.type === 'keydown') stop();
         return;
       }
       event.preventDefault();
