@@ -1155,6 +1155,7 @@ function StageTile({
   // one tile in the call ever uses.
   const mirrorSelf = useAudioSettings((state) => state.settings.camera.mirror);
   const [look, setLook] = useState(false);
+  const lookButtonRef = useRef<HTMLButtonElement>(null);
 
   // Only your own tile, and only while there is a picture to change: a look
   // control on somebody else's face would be one that cannot do anything.
@@ -1194,9 +1195,16 @@ function StageTile({
       {/* The opposite corner from the pin, so neither has to move and a
           hovered tile does not put two buttons under one cursor. */}
       {canChangeLook && (
-        <CameraLookButton open={look} onToggle={() => setLook((on) => !on)} compact={compact} />
+        <CameraLookButton
+          ref={lookButtonRef}
+          open={look}
+          onToggle={() => setLook((on) => !on)}
+          compact={compact}
+        />
       )}
-      {canChangeLook && look && <CameraLook onClose={() => setLook(false)} />}
+      {canChangeLook && look && (
+        <CameraLook anchor={lookButtonRef.current} onClose={() => setLook(false)} />
+      )}
 
       {tile.videoTrack ? (
         <>

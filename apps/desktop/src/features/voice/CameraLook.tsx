@@ -16,7 +16,8 @@
  * disagree about what is on - and the voice store applies it to the running
  * call without reopening the camera.
  */
-import { useEffect, useRef } from 'react';
+import { forwardRef, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useAudioSettings } from '../../stores/audioSettings';
 import { FILTERS, PORTRAIT_BLUR, effectsSupported } from '../../services/camera-effects';
 import { SparklesIcon, XIcon } from '../../components/icons';
@@ -36,17 +37,77 @@ const PORTRAIT_LABELS: Record<string, string> = {
   strong: 'Strong',
 };
 
-export function CameraLook({ onClose }: { onClose: () => void }): JSX.Element {
+export function CameraLook({
+  anchor,
+  onClose,
+}: {
+  anchor?: HTMLElement | null;
+  onClose: () => void;
+}): JSX.Element {
   const settings = useAudioSettings((state) => state.settings);
   const update = useAudioSettings((state) => state.update);
   const panel = useRef<HTMLDivElement>(null);
   const supported = effectsSupported();
 
+  const [coords, setCoords] = useState<{
+    top?: number;
+    bottom?: number;
+    right: number;
+    maxHeight: number;
+  } | null>(null);
+
+  useLayoutEffect(() => {
+    if (!anchor) return;
+    const updatePosition = (): void => {
+      const rect = anchor.getBoundingClientRect();
+      const popupWidth = 240;
+      const popupHeight = panel.current?.offsetHeight || 320;
+      const margin = 8;
+
+      const spaceBelow = window.innerHeight - rect.bottom - margin;
+      const spaceAbove = rect.top - margin;
+
+      // When room below is too tight (e.g. tile in bottom-right corner), flip upwards
+      const openUpwards = spaceBelow < popupHeight && spaceAbove > spaceBelow;
+
+      let right = window.innerWidth - rect.right;
+      if (right + popupWidth > window.innerWidth - margin) {
+        right = Math.max(margin, window.innerWidth - popupWidth - margin);
+      }
+      right = Math.max(margin, right);
+
+      if (openUpwards) {
+        setCoords({
+          bottom: window.innerHeight - rect.top + margin,
+          right,
+          maxHeight: Math.max(160, spaceAbove - margin),
+        });
+      } else {
+        setCoords({
+          top: rect.bottom + margin,
+          right,
+          maxHeight: Math.max(160, spaceBelow - margin),
+        });
+      }
+    };
+
+    updatePosition();
+    window.addEventListener('resize', updatePosition);
+    window.addEventListener('scroll', updatePosition, true);
+    return () => {
+      window.removeEventListener('resize', updatePosition);
+      window.removeEventListener('scroll', updatePosition, true);
+    };
+  }, [anchor]);
+
   // Closes on a click away or Escape, the same way `DevicePicker` does - a
   // pointerdown rather than a click, so a drag that starts outside counts.
   useEffect(() => {
     const away = (event: PointerEvent): void => {
-      if (!panel.current?.contains(event.target as Node)) onClose();
+      const target = event.target as Node;
+      if (panel.current?.contains(target)) return;
+      if (anchor?.contains(target)) return;
+      onClose();
     };
     const key = (event: KeyboardEvent): void => {
       if (event.key === 'Escape') onClose();
@@ -57,16 +118,26 @@ export function CameraLook({ onClose }: { onClose: () => void }): JSX.Element {
       document.removeEventListener('pointerdown', away);
       document.removeEventListener('keydown', key);
     };
-  }, [onClose]);
+  }, [onClose, anchor]);
 
   const camera = settings.camera;
 
-  return (
+  const content = (
     <div
       ref={panel}
       role="dialog"
       aria-label="Camera look"
-      className="absolute end-2 top-10 z-40 w-56 space-y-3 rounded-xl border border-white/10 bg-surface-900/95 p-3 shadow-2xl backdrop-blur-md"
+      style={
+        coords
+          ? {
+              position: 'fixed',
+              ...(coords.bottom !== undefined ? { bottom: coords.bottom } : { top: coords.top }),
+              right: coords.right,
+              maxHeight: coords.maxHeight,
+            }
+          : { position: 'fixed', top: 48, right: 16 }
+      }
+      className="z-[90] w-60 space-y-3 overflow-y-auto animate-pop rounded-xl border border-edge bg-surface-900/95 p-3 shadow-pop backdrop-blur-md"
     >
       <div className="flex items-center justify-between">
         <span className="text-xs font-bold uppercase tracking-wide text-slate-400">Look</span>
@@ -138,6 +209,8 @@ export function CameraLook({ onClose }: { onClose: () => void }): JSX.Element {
       )}
     </div>
   );
+
+  return createPortal(content, document.body);
 }
 
 /**
@@ -147,17 +220,17 @@ export function CameraLook({ onClose }: { onClose: () => void }): JSX.Element {
  * nothing to filter otherwise, and a control for somebody else's picture would
  * be a control that cannot do anything.
  */
-export function CameraLookButton({
-  open,
-  onToggle,
-  compact,
-}: {
-  open: boolean;
-  onToggle: () => void;
-  compact: boolean;
-}): JSX.Element {
+export const CameraLookButton = forwardRef<
+  HTMLButtonElement,
+  {
+    open: boolean;
+    onToggle: () => void;
+    compact: boolean;
+  }
+>(function CameraLookButton({ open, onToggle, compact }, ref) {
   return (
     <button
+      ref={ref}
       type="button"
       onClick={onToggle}
       aria-expanded={open}
@@ -173,4 +246,4 @@ export function CameraLookButton({
       {!compact && <span>Look</span>}
     </button>
   );
-}
+});
