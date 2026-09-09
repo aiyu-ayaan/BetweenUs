@@ -347,6 +347,96 @@ connection panel as `Held by`, next to the inbound size that was already there �
 because a soft picture shrunk before it left and one damaged on the way are
 identical from the far end, and `bandwidth` and `cpu` want opposite fixes.
 
+## What decides a camera's picture
+
+For a long time, nothing did. A camera was opened with `getUserMedia({ video:
+true })` and handed straight to the sender, which is three separate omissions
+wearing one line: no device, so a machine with two cameras opened whichever the
+browser preferred; no resolution, so a 1080p webcam opened at whatever default
+the browser felt like; and no sender parameters at all, so the encoder ran at
+WebRTC's own guess. That last one is invisible where it happens — the picture
+looks correct on the machine sending it, and only the far end sees it soft.
+
+The camera has its own quality module rather than a mode inside the share's,
+and the reason is that the two want opposite trades:
+
+| | screen share | camera |
+| :--- | :--- | :--- |
+| when the link tightens | `maintain-resolution` — hold the pixels, drop frames | `balanced` — spend whichever is cheaper |
+| content hint | `text` for a document, `motion` for a film | `motion`, always |
+| bitrate at 1080p | 20 Mbps | 4 Mbps |
+
+Text has to stay readable, so a share holds its pixels and gives up frames.
+Nobody reads a face, and a camera that goes choppy *and* stays sharp looks
+broken in a way a slightly softer one does not. The bitrate gap is the same
+observation from the other side: a megapixel of small sharp text costs bits at
+every edge, and a face in a room is the easiest thing a video encoder is ever
+handed.
+
+Both clients carry the same reference, floor and ceiling, and both assert them —
+`camera-quality.check.ts` on the desktop, `CameraQualityTest` on Android. A call
+has both clients in it, and two ladders that disagree is a picture quality that
+depends on who is holding which device.
+
+**The size asked for is not the size granted.** The publish parameters are
+derived twice: once from what was requested, then again from what
+`getSettings()` actually handed back. A camera asked for 360p that only has a
+1080p mode would otherwise be published at a 360p ceiling — a permanently soft
+picture for no saving at all — and only the second pass can tell the difference.
+
+**Choosing a camera uses the same rules as choosing a microphone**, because
+`enumerateDevices` returns every kind at once and the rules were never
+microphone-specific. The device id is named with `exact` (anything weaker is
+advisory and Chromium ignores it), an unplugged camera falls back deliberately
+rather than silently, and `followSystemDevices` drops a pinned camera that is
+genuinely gone. On Android the camera is stored by device *name* rather than
+index, because indices move when a driver reorders the list — and a named camera
+only wins while it still faces the way the flip button says, or picking the
+wide-angle lens once would pin every later call to it.
+
+## Filters, and the seam they run on
+
+Filters and a portrait blur both need somewhere to stand between the captured
+frames and the ones that go on the wire. On the desktop and web that is
+`camera-effects.ts`: `MediaStreamTrackProcessor` reads frames out of the camera,
+a canvas applies the effect, and `VideoTrackGenerator` puts them back into the
+track that is published. It runs in a worker — a camera at 1080p30 is thirty
+full-frame draws a second for the length of a call, and on the main thread the
+symptom is not a slow filter but an interface that stutters whenever the camera
+is on.
+
+**Native blur is not used because it is not reachable.** The `backgroundBlur`
+track constraint is wired to platform video effects that ship on ChromeOS and a
+narrow slice of Windows builds and report unsupported nearly everywhere else;
+on Android the app captures through WebRTC's `Camera2Enumerator`, whose
+`CameraCaptureSession` is not the `CameraExtensionSession` bokeh lives on. And
+colour filters were never native anywhere. That is the whole reason there is a
+processing stage.
+
+Three things can go wrong, and each is answered rather than assumed away:
+
+- **A browser without Insertable Streams** — Firefox and Safari on the web
+  client, never Electron — reports filters unavailable and publishes the raw
+  camera. The settings screen says so. A setting that is accepted and then
+  silently dropped is worse than one that admits it cannot be honoured.
+- **A machine that cannot keep up** turns the filter off, but only after a
+  sustained run over budget: a garbage collection or a dragged window is not a
+  verdict. Coming back requires frames comfortably *under* budget, because a
+  machine sitting exactly on the line would otherwise toggle the effect for the
+  whole call, which is worse to watch than either state.
+- **A frame that will not draw** is forwarded untouched rather than dropped.
+  This sits between a camera and every peer: an unfiltered frame is cosmetic,
+  and a missing one is a stall everybody sees.
+
+The portrait blur is not here. Blurring a background means knowing which pixels
+are the background, which means a segmentation model and the download behind it;
+it attaches to this pipeline rather than replacing it. Android has no equivalent
+stage yet.
+
+Mirroring is a CSS transform on the self-view alone and never touches the track.
+What everybody else receives is never mirrored — text held up to a camera would
+arrive backwards for all of them.
+
 ## One signal at a time
 
 Negotiation is the WebRTC spec's perfect-negotiation shape: politeness is

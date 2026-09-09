@@ -78,6 +78,8 @@ Unlike legacy platforms that route audio and video through centralized media rel
 - **High-Fidelity Audio Controls**: Integrated software noise gate, acoustic echo cancellation, automated microphone sensitivity calibration, and push-to-talk keybindings.
 - **Ultra-Low Latency Screen Sharing**: Share applications or entire monitors up to 4K resolution at 60 FPS with hardware-accelerated VP9/AV1 codecs.
 - **Dynamic Topology Optimization**: Automatic STUN/TURN traversal fallback ensures connection reliability across restrictive symmetric NATs and corporate firewalls.
+- **Camera Choice and Quality**: Pick which camera a call uses — from inside the call, next to the microphone and speaker rows, because the moment somebody wants their camera changed is the moment they are in one. Resolution (automatic, 360p, 720p, 1080p), frame rate, bitrate ceiling and codec are all adjustable on desktop and web; the phone carries the same four resolution names. The defaults are derived from the resolution the camera actually hands over rather than guessed, which is the difference between a picture that looks right to you and one that looks right to everybody else.
+- **Camera Filters**: Warm, cool, vivid, mono and soft, applied before the picture is sent so every participant sees them. Processed off the main thread, and turned off automatically — with a notice — on a machine that cannot sustain the frame budget, rather than being allowed to make the call stutter. Available on the desktop app and in Chromium-based browsers; a browser without frame processing says so instead of silently ignoring the setting.
 
 ---
 
