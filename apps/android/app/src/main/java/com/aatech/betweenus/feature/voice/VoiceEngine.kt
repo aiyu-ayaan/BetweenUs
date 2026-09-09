@@ -546,6 +546,12 @@ class VoiceEngine(private val context: Context) {
      * recorded, which is how a flat number survives as long as it did.
      */
     private var cameraSize: ShareQuality.Size = ShareQuality.cameraSize(ShareQuality.CameraQuality.AUTO)
+
+    /**
+     * The filter and blur standing between the camera and the senders, when
+     * there is one. Null for a screen share, which never gets one.
+     */
+    private var cameraEffects: CameraEffects? = null
     private var cameraTrack: VideoTrack? = null
     private var screenTrack: VideoTrack? = null
 
@@ -1131,6 +1137,19 @@ class VoiceEngine(private val context: Context) {
         afterMediaChange()
     }
 
+    /**
+     * Changes the filter and the blur on a camera that is already running.
+     *
+     * No new capture and no renegotiation: the processor is already in the
+     * pipeline and only its two fields change. Reopening the camera for a
+     * filter change would blink the light and drop a frame for everybody.
+     */
+    fun setCameraLook(filter: String, portrait: String) {
+        AudioPrefs.cameraFilter = filter
+        AudioPrefs.cameraPortrait = portrait
+        cameraEffects?.setLook(filter, portrait)
+    }
+
     /** Flip between front and back facing cameras. */
     fun switchCamera() {
         val next = !_isFrontCamera.value
@@ -1218,6 +1237,15 @@ class VoiceEngine(private val context: Context) {
         val source = factory().createVideoSource(capturer.isScreencast)
         capturer.initialize(helper, context, source.capturerObserver)
 
+        // The camera only. `beginCapture` is shared with the screen share, and
+        // a filter on a shared screen is a shared screen nobody can read.
+        if (!capturer.isScreencast) {
+            val effects = CameraEffects(helper)
+            effects.setLook(AudioPrefs.cameraFilter, AudioPrefs.cameraPortrait)
+            source.setVideoProcessor(effects)
+            cameraEffects = effects
+        }
+
         // A capturer that will not start is a tile that stays empty, not a
         // process that dies. The platform throws here for reasons that are
         // nothing to do with the call - a revoked projection, a camera another
@@ -1254,6 +1282,11 @@ class VoiceEngine(private val context: Context) {
         runCatching { videoCapturer?.stopCapture() }
         videoCapturer?.dispose()
         videoCapturer = null
+        // Before the helper goes: the effect's GL objects live on that helper's
+        // thread and in its EGL context, and releasing them afterwards would be
+        // releasing against a context that no longer exists.
+        cameraEffects?.release()
+        cameraEffects = null
         surfaceHelper?.dispose()
         surfaceHelper = null
 

@@ -260,6 +260,7 @@ dependencies {
     implementation(libs.androidx.work.runtime.ktx)
     // Voice, video, screen share and the remote screen. A mesh, never an SFU.
     implementation(libs.webrtc)
+    implementation(libs.mlkit.segmentation)
     // Transcoding a picked video before it is sent. A phone writes 4K at 50
     // Mbps, which is a file nobody wants to upload and nobody wants to be
     // sent; Transformer is the maintained way to drive MediaCodec, and

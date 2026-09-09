@@ -112,6 +112,28 @@ object AudioPrefs {
         }.getOrDefault(ShareQuality.CameraQuality.AUTO)
         set(value) = prefs.edit().putString("camera.quality", value.name).apply()
 
+    /**
+     * The colour filter on the camera, by name - see [CameraLook.FILTERS].
+     *
+     * A name rather than the matrix, for the same reason the desktop stores a
+     * name: the values are tuned, and a setting written to disk must not pin
+     * somebody to last month's numbers. An unrecognised name is no filter.
+     */
+    var cameraFilter: String
+        get() = prefs.getString("camera.filter", null) ?: "none"
+        set(value) = prefs.edit().putString("camera.filter", value).apply()
+
+    /**
+     * How hard the background is blurred - see [CameraLook.Portrait].
+     *
+     * Off by default, and it has to be: it runs a person detector on every
+     * frame, and turning that on for somebody who did not ask for it is a call
+     * that gets hotter and slower for no reason they can see.
+     */
+    var cameraPortrait: String
+        get() = prefs.getString("camera.portrait", null) ?: "off"
+        set(value) = prefs.edit().putString("camera.portrait", value).apply()
+
     var echoCancellation: Boolean
         get() = prefs.getBoolean("aec", true)
         set(value) = prefs.edit().putBoolean("aec", value).apply()
