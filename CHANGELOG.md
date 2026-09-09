@@ -1,5 +1,41 @@
 # Changelog
 
+## [0.0.1-alpha.27](https://github.com/aiyu-ayaan/BetweenUs/compare/v0.0.1-alpha.26...v0.0.1-alpha.27) (2026-09-09)
+
+### Features
+
+* Camera device picker, look controls, and settings parity
+* Camera effects seam, filters and portrait blur with ML Kit
+* Portrait blur, and a Look control on your own tile
+* Let the phone choose its camera, and size its ceiling
+* A seam between the camera and the sender, with filters on it
+* Give the camera the treatment the mic and the share already had
+
+### Bug fixes
+
+* Stage all mediapipe wasm files, add dev server middleware and CPU fallback
+* Render CameraLook popup in portal with smart viewport anchor positioning
+* Give full screen its picture back, with a Docked mode for reading a screen
+* Give the web client a way to control a machine, and stop lying about why it cannot
+* Frame the full-screen share instead of covering it, and put its two keys behind chords
+* Pin deploy.sh to the repo's .env and simplify disk reclamation step
+
+### Other changes
+
+* Camera quality controls, device selection, and real-time color filters
+* Remove portrait blur, keep camera filters and picker
+* What decides a camera's picture, and the seam filters run on
+* Design for camera settings, encoding and the effects seam
+* !docs : Updating docs
+
+### Artifacts
+
+| Platform | This release |
+| --- | --- |
+| Server images | Built here |
+| Desktop (Windows) | Built here |
+| Android | Built here |
+
 ## [0.0.1-alpha.26](https://github.com/aiyu-ayaan/BetweenUs/compare/v0.0.1-alpha.25...v0.0.1-alpha.26) (2026-09-04)
 
 ### Features
