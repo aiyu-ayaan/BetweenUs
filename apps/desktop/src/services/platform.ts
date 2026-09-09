@@ -10,11 +10,17 @@ import type { CSSProperties } from 'react';
  * build flag but the bridge's own presence: one bundle, and the parts that
  * cannot work in a tab are not offered there.
  *
- * What this gates is the *remote desktop* section - the machine list, the agent
- * that offers this machine, and the Remote Access settings. Asking for control
- * of somebody's screen share inside a call is not gated: sending input events
- * over the data channel needs no bridge, and the machine on the other end is the
- * one that has to be able to apply them (see stores/shareControl.ts).
+ * The line runs between *offering* a machine and *reaching* one, not around
+ * remote desktop as a whole. Offering is the Electron main process - the agent,
+ * the Remote Access settings - and is gated. Reaching is an API call, a
+ * WebSocket and a peer connection, all of which a tab has, so the machine list
+ * and a live session are not gated and neither is asking for control of a
+ * screen share in a call: input events ride the data channel, and it is the
+ * machine on the *other* end that has to be able to apply them.
+ *
+ * Which is also why a share from a browser can never hand its own mouse over,
+ * and why a web client needs the machine list most of all - it is the only way
+ * it has of driving anything (see services/share-control-access.ts).
  */
 
 /** True in the Electron app, false in a browser tab. */

@@ -24,9 +24,14 @@
  *   while a screen is still being shared, and only when that share is a whole
  *   display - a window can be dragged between monitors, so there is no fraction
  *   of a screen to map a click onto, and control of one is refused.
+ * - Only a client that can move its own machine's mouse may offer to. A browser
+ *   tab cannot, so a web share refuses every ask and says so - see
+ *   `services/share-control-access.ts`. Driving is the other way round: a tab
+ *   sends input over a data channel like any other client, and a web client can
+ *   both take control of a desktop share and run a remote session.
  * - Control ends when the share ends, when the call does, when that person
  *   leaves, when either side presses the button, and when the person driving
- *   presses Escape.
+ *   presses Ctrl+Shift+X.
  *
  * Pointers are the other half. Several people watch a share and any of them may
  * be pointing at something; each sends where their cursor is over the picture,
@@ -36,6 +41,8 @@
 import { create } from 'zustand';
 import type { CallPeer } from '@betweenus/shared-types';
 import type { Mesh } from '../services/mesh';
+import { isDesktopRuntime } from '../services/platform';
+import { shareControlRefusal } from '../services/share-control-access';
 // Circular by design and safe: the voice store attaches this one, and this one
 // only reads it from inside a function, long after both modules have loaded.
 import { useVoiceStore } from './voice';
@@ -417,10 +424,13 @@ function sharedDisplayId(): string | null {
   return screenEnabled ? displayId : null;
 }
 
+/** The live state, in the shape `shareControlRefusal` decides on. */
 function whyControlIsImpossible(): string | null {
   const { screenEnabled, sharedDisplayId: displayId } = useVoiceStore.getState();
-  if (!screenEnabled) return 'they are not sharing a screen';
-  if (!displayId) return 'a window is being shared, not a whole screen';
-  if (window.betweenus?.platform !== 'win32') return 'control is not supported on that machine';
-  return null;
+  return shareControlRefusal({
+    sharing: screenEnabled,
+    onDesktop: isDesktopRuntime(),
+    platform: window.betweenus?.platform,
+    wholeDisplay: displayId !== null,
+  });
 }

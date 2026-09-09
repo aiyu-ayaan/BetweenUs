@@ -546,6 +546,42 @@ way, so a tap on the picture hides it. The letterboxed frame's own rectangle is
 the drive surface; pinch-zoom is suspended while driving, because a one-finger
 drag cannot be both a pan here and a mouse drag there.
 
+### Who can be driven, and who can drive
+
+These are two different questions and the answer is different for each, which is
+what the refusal message used to get wrong.
+
+**Being driven needs a bridge.** Input arrives as a fraction of a display and
+something has to turn it into a real mouse move on that machine, which is the
+Electron main process. A browser tab has no such API and no such API is coming,
+so a share from a tab can never hand its own mouse over — whatever was picked in
+the browser's picker, tab or window or entire screen.
+
+**Driving needs nothing but a connection.** An API call, a WebSocket and a peer
+connection, all of which a tab has. So a web client can take control of a
+desktop share, and can open and drive a full remote session, exactly like the
+desktop app. Only the clipboard sync skips itself, because that reads the local
+clipboard through the bridge.
+
+The refusal a web sharer sends back therefore asks about the runtime *before*
+the surface, and names the way through:
+
+> they are sharing from a browser, which cannot hand over its mouse — the
+> desktop app can, or open a remote session on their machine instead
+
+Asking about the surface first was the bug: somebody who had just shared their
+entire screen from a tab was told "a window is being shared, not a whole
+screen", and got the same wrong answer for every option in the picker. The
+ordering is in `services/share-control-access.ts` and is the only thing that
+module does.
+
+That last clause is a real path, not a consolation. **Remote machines** and the
+**Open a session** button beside a share are no longer hidden in a browser tab —
+they were, on the reasoning that remote desktop is a desktop-app feature, which
+is only half true. Offering *this* machine is desktop-only and still is, under
+Settings → Remote Access. Reaching *another* machine is not, and hiding it took
+the web client's only route to driving anything.
+
 ### Full screen on the desktop, and the two keys it keeps
 
 Full screen puts the chrome in rows rather than on top of the picture: a header

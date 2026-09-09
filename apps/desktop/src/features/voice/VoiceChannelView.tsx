@@ -31,7 +31,7 @@ import type { Channel } from '@betweenus/shared-types';
 import { useChatStore } from '../../stores/chat';
 import { usePresenceStore } from '../../stores/presence';
 import { useRemoteStore } from '../../stores/remote';
-import { captionInset, isDesktopRuntime } from '../../services/platform';
+import { captionInset } from '../../services/platform';
 import { CHORD_LABEL, localChordOf } from '../../services/keyboard';
 import { useShareControlStore } from '../../stores/shareControl';
 import { useVoiceStore, type VoiceShare, type VoiceTile } from '../../stores/voice';
@@ -807,19 +807,22 @@ function ControlButtons({ share }: { share: VoiceShare }): JSX.Element {
   const ask = useShareControlStore((state) => state.ask);
   const stop = useShareControlStore((state) => state.stop);
 
-  const onDesktop = isDesktopRuntime();
-
+  // Both halves of this run in a browser tab. Driving a machine is an API call,
+  // a WebSocket and a peer connection - the bridge is what a machine needs to
+  // *be* driven, not what a client needs to drive one. Gating the machine list
+  // on the runtime hid the only way a web client had of reaching a machine at
+  // all, which is the way that matters most there: a share from a tab can never
+  // hand over its own mouse, so a remote session is not a lesser path on the
+  // web, it is the path. See services/platform.ts.
   useEffect(() => {
-    if (onDesktop) void load();
-  }, [load, onDesktop]);
+    void load();
+  }, [load]);
 
   // Control is asked of a *connection*; a machine belongs to a *person*. One
   // account with two windows open is two peers and one owner, so these two
   // lines deliberately key off different ids.
   const controlling = driving === share.identity;
-  const machine = onDesktop
-    ? machines.find((candidate) => candidate.ownerId === share.userId)
-    : undefined;
+  const machine = machines.find((candidate) => candidate.ownerId === share.userId);
 
   return (
     <>

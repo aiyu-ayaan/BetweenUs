@@ -2,7 +2,6 @@ import { useChatStore } from '../../stores/chat';
 import { useFriendsStore } from '../../stores/friends';
 import { useStatusOf } from '../../stores/presence';
 import { runsOf, useStatusStore } from '../../stores/status';
-import { isDesktopRuntime } from '../../services/platform';
 import { UserPanel } from '../settings/UserPanel';
 import { VoicePanel } from '../voice/VoicePanel';
 import { Avatar } from '../../components/Avatar';
@@ -106,25 +105,24 @@ export function HomeSidebar({
         {/* Machines sit beside people on purpose: reaching your desktop is the
             same kind of thing as opening a conversation with someone.
 
-            Not in a browser tab, though: remote desktop is a desktop-app
-            section end to end - the agent that offers a machine is the Electron
-            main process - so the web client does not advertise a door it cannot
-            open. See services/platform.ts. */}
-        {isDesktopRuntime() && (
-          <button
-            type="button"
-            onClick={onShowRemote}
-            aria-current={showingRemote ? 'page' : undefined}
-            className={`mt-0.5 flex w-full cursor-pointer items-center gap-3 rounded-md px-2 py-2 text-start transition-colors duration-200 ${
-              showingRemote
-                ? 'row-active'
-                : 'row-idle'
-            }`}
-          >
-            <MonitorIcon className="h-5 w-5 shrink-0" />
-            <span className="flex-1 font-medium">Remote machines</span>
-          </button>
-        )}
+            Shown in a browser tab as well. Only half of remote desktop is a
+            desktop-app section: *offering* a machine is the Electron main
+            process and stays behind the runtime check in Settings, but
+            *reaching* one is an API call, a WebSocket and a peer connection,
+            all of which a tab has. Hiding this hid the web client's only way
+            to a machine - including the one a web screen share cannot offer
+            through the call. See services/platform.ts. */}
+        <button
+          type="button"
+          onClick={onShowRemote}
+          aria-current={showingRemote ? 'page' : undefined}
+          className={`mt-0.5 flex w-full cursor-pointer items-center gap-3 rounded-md px-2 py-2 text-start transition-colors duration-200 ${
+            showingRemote ? 'row-active' : 'row-idle'
+          }`}
+        >
+          <MonitorIcon className="h-5 w-5 shrink-0" />
+          <span className="flex-1 font-medium">Remote machines</span>
+        </button>
 
         <p className="px-2 pb-1 pt-5 text-xs font-bold uppercase tracking-wide text-slate-400">
           Direct messages
