@@ -1,5 +1,44 @@
 # Changelog
 
+## [1.0.0](https://github.com/aiyu-ayaan/BetweenUs/compare/v0.0.1-alpha.27...v1.0.0) (2026-09-11)
+
+### ⚠ Breaking changes
+
+* Final stable release v1.0.0 - The complete 1,000-commit cycle
+
+### Features
+
+* Add alpha tag with icon and disclaimer to listen together
+* Add Linux AppImage build and self-updater support
+* Add pnpm size, an artifact budget matrix
+
+### Other changes
+
+* Bump the npm_and_yarn group across 2 directories with 1 update (#42)
+* Regenerate the code reference index
+* Point the submodule at the size and performance matrix
+* Document the artifact size budgets and the size matrix
+* Drop unreferenced appcompat and material catalog entries
+* Ship one Chromium locale and compress at maximum
+* Upgrade Electron to 40.10.6 to drop extract-zip
+* Regenerate changelog and code reference index
+* Patch six Docusaurus transitives via npm overrides
+* Override uuid to 11.1.1 in the Firebase dependency chain
+* Override eight transitive packages to their patched versions
+* Upgrade Electron to 39.8.10
+* Upgrade NestJS to 11, Express to 5 and multer to 2
+* Upgrade nodemailer to 9.1.1
+* Upgrade electron-builder to 26.15.3
+* Upgrade vite to 6.4.3 across web, admin and desktop
+
+### Artifacts
+
+| Platform | This release |
+| --- | --- |
+| Server images | Built here |
+| Desktop | Built here |
+| Android | Built here |
+
 ## [0.0.1-alpha.27](https://github.com/aiyu-ayaan/BetweenUs/compare/v0.0.1-alpha.26...v0.0.1-alpha.27) (2026-09-09)
 
 ### Features
