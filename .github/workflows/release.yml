@@ -780,14 +780,15 @@ jobs:
             cache: |
               ~/AppData/Local/electron/Cache
               ~/AppData/Local/electron-builder/Cache
-          - label: Linux AppImage
-            os: ubuntu-latest
-            artifact: linux
-            builder: --linux
-            output: apps/desktop/release/*.AppImage
-            cache: |
-              ~/.cache/electron
-              ~/.cache/electron-builder
+          # Linux AppImage build commented out for now:
+          # - label: Linux AppImage
+          #   os: ubuntu-latest
+          #   artifact: linux
+          #   builder: --linux
+          #   output: apps/desktop/release/*.AppImage
+          #   cache: |
+          #     ~/.cache/electron
+          #     ~/.cache/electron-builder
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -1286,10 +1287,12 @@ jobs:
             It installs for you alone, so it never asks for an administrator, and
             it updates itself from then on.
 
+            <!-- Desktop (Linux) commented out for now:
             **Desktop (Linux)** — `BetweenUs-${{ needs.merged.outputs.version }}.AppImage`.
             Mark it executable (`chmod +x`) and run it; there is nothing to install.
             Keep it somewhere you can write to and it updates itself in place, so
             put it where you mean to keep it rather than in your downloads folder.
+            -->
 
             **Android** — take the APK matching your device (`arm64-v8a` unless it is
             old or an emulator), or `universal` if you would rather not choose. The
