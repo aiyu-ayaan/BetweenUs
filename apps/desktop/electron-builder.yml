@@ -1,6 +1,25 @@
 appId: com.betweenus.desktop
 productName: BetweenUs
 electronVersion: 40.10.6
+# Chromium ships 55 locale tables; this application ships one language.
+# `src/services/i18n.ts` names five locales, but that is a claim about which way
+# the layout runs and what each language is called - no catalogue has been
+# written, so every string on screen is the English at the call site. The other
+# 54 .pak files are ~46 MB of translations for menus nobody is reading in
+# Polish, carried into every download.
+#
+# The match is directional and it is worth knowing which way round: a file is
+# kept when the *wanted* tag starts with the *file's* name, so asking for `en`
+# against a folder holding `en-US.pak` matches nothing, deletes all 55, and
+# leaves Chromium with no locale at all. The exact tag is not optional here.
+#
+# When a translation genuinely ships, its tag goes here beside this one.
+electronLanguages:
+  - en-US
+# LZMA at its highest setting. The installer is built once per release by CI and
+# then downloaded by everybody, so spending build minutes to take megabytes off
+# the download is the right side of that trade every time.
+compression: maximum
 directories:
   output: release
 files:
