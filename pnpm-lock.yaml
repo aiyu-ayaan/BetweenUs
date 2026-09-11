@@ -112,8 +112,8 @@ importers:
         specifier: ^10.4.19
         version: 10.5.4(postcss@8.5.26)
       electron:
-        specifier: 40.10.6
-        version: 40.10.6
+        specifier: 41.10.3
+        version: 41.10.3
       electron-builder:
         specifier: ^26.15.3
         version: 26.15.3(electron-builder-squirrel-windows@24.13.3(dmg-builder@26.15.3))
@@ -2955,8 +2955,8 @@ packages:
   electron-to-chromium@1.5.402:
     resolution: {integrity: sha512-/oOpMaPT6Yg+6/1XQhyIPlzgj7Ye9zf+nNM2Uh6OcE2G2oNptWazFa+qB2Pdqqbsc9KnIDzgAntoYN0dbwOXwA==}
 
-  electron@40.10.6:
-    resolution: {integrity: sha512-TGjlkOU9Lg6K4KjDbsErywCWCIDaNgLh0q+xj0nlpRoQhevI7VBIxBTtJI/V30lypyLAaXMpnP9O9jui1/qRFw==}
+  electron@41.10.3:
+    resolution: {integrity: sha512-MJuSODPw8siv/I8JjhctW/cS/XNldwI4gLRyyWZx6QkoZJUDgbEvitp7IVOnGrHENTQb6Udo+zMpKhFnhlIhdg==}
     engines: {node: '>= 22.12.0'}
     hasBin: true
 
@@ -7043,7 +7043,7 @@ snapshots:
 
   electron-to-chromium@1.5.402: {}
 
-  electron@40.10.6:
+  electron@41.10.3:
     dependencies:
       '@electron-internal/extract-zip': 1.0.5
       '@electron/get': 5.1.0
