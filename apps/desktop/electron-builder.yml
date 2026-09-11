@@ -1,6 +1,6 @@
 appId: com.betweenus.desktop
 productName: BetweenUs
-electronVersion: 31.3.1
+electronVersion: 39.8.10
 directories:
   output: release
 files:
