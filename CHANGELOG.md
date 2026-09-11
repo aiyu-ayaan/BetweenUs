@@ -2,20 +2,67 @@
 
 ## [1.0.0](https://github.com/aiyu-ayaan/BetweenUs/compare/v0.0.1-alpha.27...v1.0.0) (2026-09-11)
 
+BetweenUs v1.0.0 is the first major stable release, marking the culmination of over 1,130 commits of engineering. It transitions BetweenUs from an alpha prototype into a production-grade, self-hostable, privacy-first collaboration and voice platform across Desktop (Windows, Linux), Android, and Web.
+
 ### ⚠ Breaking changes
 
 * Final stable release v1.0.0 - The complete 1,000-commit cycle
 
+### Key Capabilities & Highlights
+
+#### End-to-End Encryption & Privacy
+* **Double Ratchet & Signal-grade E2EE**: Every direct message, private channel message, and group chat is encrypted end-to-end with forward secrecy and break-in recovery.
+* **Zero server knowledge**: Server databases and object stores hold only opaque ciphertext and blinded IDs. Message plaintext, file names, photos, voice notes, and media keys never reach the server in the clear.
+* **Safety Numbers & Out-of-band Verification**: Cryptographic identity fingerprint cards with QR codes allow peers to verify encryption keys directly.
+* **Passphrase Recovery & Backup**: Mnemonic recovery phrases and encrypted local backup exports ensure account recovery without compromising zero-trust boundaries.
+
+#### Voice, Video & Collaborative Stage
+* **P2P WebRTC Mesh & TURN Relay**: Direct peer-to-peer audio/video streaming with automatic fallback to operator-configured TURN (coturn/eturnal) relay when direct NAT traversal is blocked.
+* **Acoustic Processing**: Integrated acoustic echo cancellation (AEC3), adaptive noise suppression, auto gain control, and silence noise gating.
+* **High-FPS Screen Sharing**: Share full monitors, application windows, or browser tabs with adaptive resolution and framerate scaling.
+* **Camera Look & Filters**: In-call camera switcher, exposure adjustments, and real-time GPU-accelerated color shaders.
+* **In-Call Remote Desktop**: Low-latency remote screen viewing and keyboard/mouse control directly inside voice calls.
+
+#### Synchronized Apps: Listen Together & Play Together
+* **Listen Together**: Synchronized YouTube playback across all call members using a shared gateway clock, drift correction (<250ms), and automatic music volume ducking during speech.
+* **Play Together**: Six synchronized multiplayer board games (Chess, Checkers, Reversi, Connect 4, Tic-Tac-Toe, Carrom) with server-side move refereeing and spectator mode.
+* **Alpha status indicators**: Transparent badge indicators with tooltips for experimental stage features.
+
+#### Rich Chat, Media & Moments
+* **Full Markdown & Syntax Highlighting**: Bold, italics, spoilers, blockquotes, inline/fenced code blocks with language highlighting, and rich metadata link previews.
+* **Interactive Voice Notes**: In-chat voice messaging with real-time waveform recording and interactive playback scrubbers.
+* **Reactions & Custom Emojis**: Unicode reactions, animated emoji stickers, and server-level custom emoji upload support.
+* **Ephemeral Moments**: 24-hour disappearing photo updates with granular audience privacy controls, reaction tallies, and threaded in-conversation replies.
+
+#### Desktop Application (Windows & Linux)
+* **Hardened Electron 40 Shell**: Context isolation, sandboxed renderers, and strictly guarded IPC interfaces.
+* **Windows & Linux Support**: Windows NSIS setup installer and standalone Linux AppImage.
+* **Self-Updater Daemon**: Background update checks, automated downloads, and cryptographic verification before install.
+* **Frameless Titlebar & System Tray**: Custom titlebar overlay respecting native OS controls, Windows snap layouts, and minimized-to-tray background daemon.
+* **Optimized Footprint**: Single-locale pruning and maximum compression to maintain tight artifact budgets (`pnpm size`).
+
+#### Native Android Application
+* **Modern Compose UI**: 100% Kotlin codebase built with Jetpack Compose and Material 3 Expressive design tokens.
+* **Native WebRTC Integration**: Hardware-accelerated video codecs, earpiece/speaker/Bluetooth SCO routing, and background foreground call service.
+* **System Picture-in-Picture (PiP)**: Smooth PiP transition keeping active speakers in view while navigating other apps.
+* **Hardware Push-to-Talk**: Dedicated physical key support for push-to-talk in voice channels.
+
+#### Backend Microservices & Operations
+* **Decoupled Architecture**: 9 specialized containerized NestJS microservices (auth, chat, call, remote, gateway, notification, storage, web, admin).
+* **Multi-Arch Docker Images**: Native `linux/amd64` and `linux/arm64` container images for every service.
+* **S3-Compatible Object Storage**: Multi-bucket MinIO/S3 storage with automated background retention and cleanup sweepers.
+* **Admin Dashboard & Telemetry**: Server management console with live health metrics, connection diagnostics, and webhook management.
+
 ### Features
 
-* Add alpha tag with icon and disclaimer to listen together
+* Add alpha tag with icon and disclaimer to listen together across desktop, web, and android
 * Add Linux AppImage build and self-updater support
-* Add pnpm size, an artifact budget matrix
+* Add artifact budget matrix and `pnpm size` reporting
 
 ### Other changes
 
 * Bump the npm_and_yarn group across 2 directories with 1 update (#42)
-* Regenerate the code reference index
+* Regenerate the code reference index and documentation links
 * Point the submodule at the size and performance matrix
 * Document the artifact size budgets and the size matrix
 * Drop unreferenced appcompat and material catalog entries
@@ -36,7 +83,7 @@
 | Platform | This release |
 | --- | --- |
 | Server images | Built here |
-| Desktop | Built here |
+| Desktop (Windows) | Built here |
 | Android | Built here |
 
 ## [0.0.1-alpha.27](https://github.com/aiyu-ayaan/BetweenUs/compare/v0.0.1-alpha.26...v0.0.1-alpha.27) (2026-09-09)
