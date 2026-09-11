@@ -48,5 +48,27 @@
     "@resvg/resvg-js": "^2.6.2",
     "turbo": "^2.0.0",
     "typescript": "^5.5.4"
+  },
+  "pnpm": {
+    "comment": [
+      "Security patches for packages nothing here depends on directly, so there",
+      "is no manifest to bump - every one of these is a transitive of a build or",
+      "framework dependency that has not yet released with the fix pulled in.",
+      "Each is pinned to the minimum patched version rather than to latest, and",
+      "the ranged keys (pkg@range) keep the override inside the major the",
+      "dependent asked for, so nothing crosses a breaking boundary.",
+      "Drop an entry once the parent ships a release that already resolves past",
+      "it; an override kept after that is a version pin nobody remembers making."
+    ],
+    "overrides": {
+      "app-builder-lib": "^26.15.3",
+      "builder-util-runtime": "^9.7.0",
+      "@xmldom/xmldom@>=0.9.0": "^0.9.12",
+      "fast-uri@^3": "^3.1.6",
+      "glob@>=10.2.0 <11": "^10.5.0",
+      "js-yaml@^4": "^4.3.2",
+      "multer@^2": "^2.3.0",
+      "qs@^6": "^6.16.0"
+    }
   }
 }
