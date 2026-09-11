@@ -250,12 +250,23 @@ export class UploadsController {
    * avatar in the app failing to load. It stays public, which
    * development/E2EE.md has always said it is.
    */
-  @Get(':key(*)')
+  // A storage key contains slashes (`attachments/2026/ab12.png`), so this has
+  // to be a wildcard rather than a segment. Express 5 / path-to-regexp 8 drop
+  // the `:key(*)` form this used to be written as; `*key` is the replacement
+  // and still arrives under `@Param('key')`. Pinned by uploads-route.check.ts,
+  // because getting it wrong breaks every download rather than failing to boot.
+  @Get('*key')
   async download(
-    @Param('key') key: string,
+    @Param('key') captured: string | string[],
     @Req() request: Request,
     @Res() response: Response,
   ): Promise<void> {
+    // path-to-regexp 8 hands a wildcard back as the *segments* it matched, so
+    // this arrives as ['attachments', '2026', 'ab12.png'] rather than as a
+    // path. Joined here, at the one point it enters, so everything below -
+    // `assertSafeKey` first among them - sees the string it is typed for.
+    const key = Array.isArray(captured) ? captured.join('/') : captured;
+
     try {
       assertSafeKey(key);
     } catch {
