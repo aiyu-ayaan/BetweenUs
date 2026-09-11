@@ -29,6 +29,9 @@ export function syncChangelog() {
   // Escape unescaped curly braces outside code fences for MDX compatibility
   body = body.replace(/(?<!`)\{([^`\n{}]+)\}(?!`)/g, '`{$1}`');
 
+  // Escape comparison operators and angle brackets before digits (e.g. <250ms) for MDX compatibility
+  body = body.replace(/<(?=[0-9])/g, '&lt;');
+
   const content = `---
 title: Changelog
 description: Complete release notes and historical changelog for BetweenUs.

@@ -24,7 +24,7 @@ BetweenUs v1.0.0 is the first major stable release, marking the culmination of o
 * **In-Call Remote Desktop**: Low-latency remote screen viewing and keyboard/mouse control directly inside voice calls.
 
 #### Synchronized Apps: Listen Together & Play Together
-* **Listen Together**: Synchronized YouTube playback across all call members using a shared gateway clock, drift correction (<250ms), and automatic music volume ducking during speech.
+* **Listen Together**: Synchronized YouTube playback across all call members using a shared gateway clock, drift correction (&lt;250ms), and automatic music volume ducking during speech.
 * **Play Together**: Six synchronized multiplayer board games (Chess, Checkers, Reversi, Connect 4, Tic-Tac-Toe, Carrom) with server-side move refereeing and spectator mode.
 * **Alpha status indicators**: Transparent badge indicators with tooltips for experimental stage features.
 
