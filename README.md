@@ -803,6 +803,7 @@ docs/                     full Docusaurus documentation suite (architecture, ser
 | `pnpm build` | Build every package, service and the desktop bundle |
 | `pnpm typecheck` | Type-check the whole monorepo |
 | `pnpm check` | Package self-checks - crypto, storage, logger, auth, permissions, websocket |
+| `pnpm size` | Measure the built desktop and Android artifacts against their size budgets |
 | `pnpm db:migrate` / `db:seed` / `db:studio` | Schema, demo data, Prisma Studio |
 | `pnpm data:path <path>` | Configure single-point data root directory in `.env` and set up tree |
 | `pnpm db:backup` | Trigger pre-migration or manual database dump to `BACKUP_DATA_PATH` |

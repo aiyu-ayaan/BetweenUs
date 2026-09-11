@@ -80,6 +80,7 @@ const sidebars: SidebarsConfig = {
       items: [
         'deployment/docker-compose',
         'deployment/release-pipeline',
+        'deployment/artifact-size',
         'deployment/client-updates',
         'deployment/turn-server',
         'deployment/turn-server-oracle',
