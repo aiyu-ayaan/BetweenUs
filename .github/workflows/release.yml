@@ -750,11 +750,44 @@ jobs:
           sh .github/scripts/retag.sh "$CARRY" "$VERSION"
           echo "Images for v${VERSION} are v${CARRY}'s, re-tagged."
 
+  # One job per desktop platform, each on a runner of that platform.
+  # electron-builder packages for the OS it runs on, and neither an NSIS
+  # installer nor an AppImage cross-builds from the other - so this is a matrix
+  # rather than one job with two targets.
+  #
+  # macOS is deliberately not in it. The `mac: dmg` block in
+  # electron-builder.yml would build, but an unsigned and un-notarised DMG is
+  # refused by Gatekeeper as "damaged and can't be opened", which is a worse
+  # download than no download at all. It joins this matrix with an Apple
+  # Developer ID and a notarisation step and not before; `electron/updates.ts`
+  # offers a Mac nothing in the meantime, so nobody is shown an update that
+  # cannot be applied.
   desktop:
-    name: Windows installer
+    name: ${{ matrix.label }}
     needs: merged
     if: needs.merged.outputs.release == 'true' && contains(needs.merged.outputs.targets, 'desktop')
-    runs-on: windows-latest
+    runs-on: ${{ matrix.os }}
+    strategy:
+      # One platform failing does not throw away what the other built.
+      fail-fast: false
+      matrix:
+        include:
+          - label: Windows installer
+            os: windows-latest
+            artifact: windows
+            builder: --win
+            output: apps/desktop/release/*.exe
+            cache: |
+              ~/AppData/Local/electron/Cache
+              ~/AppData/Local/electron-builder/Cache
+          - label: Linux AppImage
+            os: ubuntu-latest
+            artifact: linux
+            builder: --linux
+            output: apps/desktop/release/*.AppImage
+            cache: |
+              ~/.cache/electron
+              ~/.cache/electron-builder
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -792,15 +825,19 @@ jobs:
       # The Electron zip is 111 MB from GitHub's release CDN, which is the one
       # step of this job that fails for reasons that have nothing to do with us.
       # Once a run has it, later runs take it from here and never ask again.
+      # `runner.os` is already in the key, so the two platforms never share a
+      # cache entry - only the paths differ.
       - uses: actions/cache@v4
         with:
-          path: |
-            ~/AppData/Local/electron/Cache
-            ~/AppData/Local/electron-builder/Cache
+          path: ${{ matrix.cache }}
           key: electron-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
           restore-keys: electron-${{ runner.os }}-
 
       - name: Package
+        # bash on both runners rather than PowerShell on one and sh on the
+        # other: the retry below is the same three lines either way, and two
+        # copies of it is two places for it to drift.
+        shell: bash
         env:
           # No code-signing certificate here. electron-builder would otherwise
           # go looking for one in the machine store and fail on what it finds.
@@ -808,18 +845,23 @@ jobs:
         # And when the cache is cold, the download still drops often enough to
         # sink a release on its own. Three tries.
         run: |
-          for ($i = 1; $i -le 3; $i++) {
-            pnpm --filter @betweenus/desktop exec electron-builder --config electron-builder.yml --win
-            if ($LASTEXITCODE -eq 0) { exit 0 }
-            Write-Host "Package attempt $i failed; retrying."
-            Start-Sleep -Seconds 15
-          }
+          for attempt in 1 2 3; do
+            if pnpm --filter @betweenus/desktop exec electron-builder \
+                 --config electron-builder.yml ${{ matrix.builder }}; then
+              exit 0
+            fi
+            echo "Package attempt $attempt failed; retrying."
+            sleep 15
+          done
           exit 1
 
+      # One name per platform. Both legs uploading `desktop` is a 409 on the
+      # second, the same way the two Android legs collide; `publish` collects
+      # them back with its `desktop-*` pattern.
       - uses: actions/upload-artifact@v4
         with:
-          name: desktop
-          path: apps/desktop/release/*.exe
+          name: desktop-${{ matrix.artifact }}
+          path: ${{ matrix.output }}
           if-no-files-found: error
 
   # The APKs and the bundle are two jobs, not two Gradle invocations in one.
@@ -1145,7 +1187,8 @@ jobs:
       - uses: actions/download-artifact@v4
         if: needs.desktop.result == 'success'
         with:
-          name: desktop
+          pattern: desktop-*
+          merge-multiple: true
           path: artifacts/desktop
 
       - uses: actions/download-artifact@v4
@@ -1178,7 +1221,7 @@ jobs:
           fi
           if [ "$DESKTOP" != success ]; then
             mkdir -p artifacts/desktop
-            gh release download "v${CARRY}" --repo "$GITHUB_REPOSITORY"               --pattern '*.exe' --dir artifacts/desktop
+            gh release download "v${CARRY}" --repo "$GITHUB_REPOSITORY"               --pattern '*.exe' --pattern '*.AppImage' --dir artifacts/desktop
           fi
           if [ "$ANDROID" != success ]; then
             mkdir -p artifacts/android
@@ -1242,6 +1285,11 @@ jobs:
             **Desktop (Windows)** — `BetweenUs-${{ needs.merged.outputs.version }}-Setup.exe`.
             It installs for you alone, so it never asks for an administrator, and
             it updates itself from then on.
+
+            **Desktop (Linux)** — `BetweenUs-${{ needs.merged.outputs.version }}.AppImage`.
+            Mark it executable (`chmod +x`) and run it; there is nothing to install.
+            Keep it somewhere you can write to and it updates itself in place, so
+            put it where you mean to keep it rather than in your downloads folder.
 
             **Android** — take the APK matching your device (`arm64-v8a` unless it is
             old or an emulator), or `universal` if you would rather not choose. The

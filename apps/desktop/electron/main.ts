@@ -1678,17 +1678,58 @@ ipcMain.handle('update:download', async (_event, offer: unknown): Promise<string
 });
 
 /**
+ * Writes the downloaded AppImage over the running one, and answers with the
+ * path that now holds the new build.
+ *
+ * Replacing a *running* AppImage is safe, and it is the one thing about the
+ * format worth knowing here: the file is FUSE-mounted at launch, so the mount
+ * holds the old inode open and unlinking the path does not disturb the process
+ * still executing from it. The path afterwards names the new build, which is
+ * what the relaunch below starts.
+ *
+ * Staged beside the target rather than renamed across from the updates
+ * directory. `<userData>/updates` and wherever somebody keeps their AppImage
+ * are routinely different filesystems - a home directory and a mounted disk -
+ * and `rename` across one fails with `EXDEV`. Copying into the target's own
+ * directory first makes the rename local, and therefore atomic: a failure
+ * part-way leaves the old build in place and runnable rather than a half-written
+ * file where the application used to be.
+ */
+function replaceAppImage(downloaded: string): string {
+  const target = process.env.APPIMAGE;
+  if (!target) throw new Error('This build is not an AppImage, so it cannot replace itself.');
+
+  const staged = `${target}.new`;
+  try {
+    fs.copyFileSync(downloaded, staged);
+    // An AppImage without the execute bit is a file the desktop offers to open
+    // in an archive manager. `copyFileSync` does carry the mode across, but the
+    // source came off the network and is only as executable as the download
+    // left it.
+    fs.chmodSync(staged, 0o755);
+    fs.renameSync(staged, target);
+  } catch (error) {
+    fs.rmSync(staged, { force: true });
+    throw error;
+  }
+  return target;
+}
+
+/**
  * Hands the machine over to the new build and gets out of the way.
  *
- * The setup exe is started the way an updater has to start it - silently, and
- * told to launch the app when it is done - and this process quits so NSIS has
- * nothing left to close. Started bare, as it was, it opened its wizard over a
- * running BetweenUs and waited for somebody to click through it, which is why
- * "Restart and install" appeared to do nothing at all.
+ * **Windows.** The setup exe is started the way an updater has to start it -
+ * silently, and told to launch the app when it is done - and this process quits
+ * so NSIS has nothing left to close. Started bare, as it was, it opened its
+ * wizard over a running BetweenUs and waited for somebody to click through it,
+ * which is why "Restart and install" appeared to do nothing at all.
  *
  *   --updated    tells the installer it is replacing an install, not making one
  *   /S           silent: no wizard, and the directory already chosen is kept
  *   --force-run  starts BetweenUs again once the files are in place
+ *
+ * **Linux.** There is no installer to run. An AppImage is one file, so the
+ * update *is* writing the new one over it, and the app starts itself again.
  *
  * If it cannot be started the download is still on the disk and perfectly
  * runnable, so the file is shown in the file manager rather than lost.
@@ -1698,10 +1739,26 @@ ipcMain.handle('update:install', (): { started: boolean; reason?: string } => {
   if (!pending) return { started: false, reason: 'Nothing has been downloaded yet.' };
 
   try {
-    spawn(pending.file, ['--updated', '/S', '--force-run'], {
-      detached: true,
-      stdio: 'ignore',
-    }).unref();
+    if (process.platform === 'linux') {
+      const target = replaceAppImage(pending.file);
+      // `relaunch` rather than `spawn`, for two reasons that both bite.
+      //
+      // This app holds a single-instance lock (see above), so a copy started
+      // while this one is still alive hands its window straight back to us and
+      // exits - the update would look like it had done nothing at all. Electron
+      // starts a relaunch only once this process is gone.
+      //
+      // And `execPath` is named explicitly because inside an AppImage
+      // `process.execPath` points at the unpacked binary within the FUSE mount,
+      // which disappears with this process. The AppImage path is the one that
+      // still exists a second from now.
+      app.relaunch({ execPath: target, args: [] });
+    } else {
+      spawn(pending.file, ['--updated', '/S', '--force-run'], {
+        detached: true,
+        stdio: 'ignore',
+      }).unref();
+    }
 
     quitting = true;
     app.quit();

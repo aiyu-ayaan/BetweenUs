@@ -36,7 +36,7 @@ const TYPE = /^(feat|fix|chore|docs|refactor|perf|test|build|ci|style|revert)(\(
 // to call them in front of a reader.
 const TARGET_LABELS = [
   ['docker', 'Server images'],
-  ['desktop', 'Desktop (Windows)'],
+  ['desktop', 'Desktop'],
   ['android', 'Android'],
 ];
 
@@ -203,7 +203,7 @@ function selfCheck() {
   });
   assertOk(partial.body.includes('| Android | Built here |'), 'the built platform says so');
   assertOk(
-    partial.body.includes('| Desktop (Windows) | Carried forward from [v0.0.6](https://github.com/a/b/releases/tag/v0.0.6) |'),
+    partial.body.includes('| Desktop | Carried forward from [v0.0.6](https://github.com/a/b/releases/tag/v0.0.6) |'),
     'a skipped platform names and links where its artifacts came from',
   );
   assertOk(partial.body.includes('| Server images | Carried forward'), 'server images too');
@@ -211,7 +211,7 @@ function selfCheck() {
   // linking a tag that does not exist.
   assertOk(
     notes(['!alpha(android): x'], { version: '0.0.1-alpha.1', targets: ['android'] }).body.includes(
-      '| Desktop (Windows) | Not in this release |',
+      '| Desktop | Not in this release |',
     ),
     'no previous release means no carry-forward claim',
   );

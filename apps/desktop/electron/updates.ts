@@ -108,21 +108,40 @@ export function channelOf(version: string | null | undefined): Channel {
 // --- Flavours ---------------------------------------------------------------
 
 /**
- * Which Windows build this is.
+ * Which build this is, and therefore whether it can replace itself.
  *
- * `installer` was put here by `BetweenUs-<version>-Setup.exe` and updates
- * itself with the next one; `unpacked` is a development run, which has no
- * release to update to and must never be offered one.
+ * `installer` was put here by a release artifact - the setup exe on Windows,
+ * the AppImage on Linux - and updates itself with the next one; `unpacked` has
+ * no release to update to and must never be offered one.
  *
  * There was a third, `portable`, for the single exe that shipped beside the
- * installer. Windows ships one build now, so a copy of that portable exe is
- * treated as an install and is offered the setup exe - which is the only
+ * Windows installer. Windows ships one build now, so a copy of that portable
+ * exe is treated as an install and is offered the setup exe - which is the only
  * update it can be given, and installs properly over it.
  */
 export type Flavor = 'installer' | 'unpacked';
 
-export function flavorFrom(packaged: boolean): Flavor {
-  return packaged ? 'installer' : 'unpacked';
+/**
+ * Packaged is the whole answer on Windows and is not sufficient on Linux.
+ *
+ * An AppImage is a single file, and `APPIMAGE` is the runtime telling the app
+ * where that file is - which is exactly the path an update writes over. Without
+ * it this is a `linux-unpacked` tree or a directory somebody extracted: both are
+ * `app.isPackaged === true`, and neither has one file to replace. Offering those
+ * an update downloads ninety megabytes that can never be applied, so they report
+ * `unpacked`, which is the flavour that is never offered anything.
+ *
+ * The platform and the variable are parameters rather than read inline so the
+ * self-check can put this on a machine it is not running on.
+ */
+export function flavorFrom(
+  packaged: boolean,
+  platform: string = process.platform,
+  appImage: string | undefined = process.env.APPIMAGE,
+): Flavor {
+  if (!packaged) return 'unpacked';
+  if (platform === 'linux') return appImage ? 'installer' : 'unpacked';
+  return 'installer';
 }
 
 // --- Releases ---------------------------------------------------------------
@@ -198,24 +217,49 @@ export function pickRelease(
 }
 
 /**
- * The asset this install can actually apply: the setup exe, and nothing else.
- * A release that built the other platforms only offers nothing rather than
- * handing Windows an APK.
+ * The one asset each platform can apply, and the name it is read back out of
+ * the updates directory with.
+ *
+ * Both halves of one naming contract in one place, because they have to agree:
+ * the release workflow attaches the name, `assetFor` finds it in a release, and
+ * `versionOfFile` reads the version back off a downloaded file - which is what
+ * makes the updates directory the record of what is waiting, with nothing
+ * written down beside it.
+ *
+ * macOS is deliberately absent rather than guessed at. `electron-builder.yml`
+ * declares a `.dmg` target, but no Mac build has ever been released and an
+ * unsigned, un-notarised one is refused by Gatekeeper - so a Mac reports
+ * `unpacked` and is offered nothing at all, which is the honest answer until
+ * there is a notarised build to offer.
  */
-export function assetFor(release: Release, flavor: Flavor): ReleaseAsset | null {
+const ASSETS: Record<string, { suffix: string; name: RegExp }> = {
+  win32: { suffix: '-setup.exe', name: /^BetweenUs-(.+)-Setup\.exe$/i },
+  linux: { suffix: '.appimage', name: /^BetweenUs-(.+)\.AppImage$/i },
+};
+
+/**
+ * The asset this install can actually apply, and nothing else. A release that
+ * built the other platforms only offers nothing rather than handing Linux a
+ * setup exe.
+ */
+export function assetFor(
+  release: Release,
+  flavor: Flavor,
+  platform: string = process.platform,
+): ReleaseAsset | null {
   if (flavor === 'unpacked') return null;
-  return release.assets.find((asset) => asset.name.toLowerCase().endsWith('-setup.exe')) ?? null;
+  const spec = ASSETS[platform];
+  if (!spec) return null;
+  return release.assets.find((asset) => asset.name.toLowerCase().endsWith(spec.suffix)) ?? null;
 }
 
 /**
- * The version in a downloaded file's name, or null if it is not one of ours.
- *
- * The other half of the naming contract `assetFor` matches on: the release
- * workflow names the asset, this reads it back, and the directory a download
- * waits in needs nothing written down beside it. See main.ts.
+ * The version in a downloaded file's name, or null if it is not one this
+ * platform could run. See main.ts, which sweeps the directory with it - a file
+ * left behind by a different platform's build reads as null and is deleted.
  */
-export function versionOfFile(name: string): string | null {
-  const label = /^BetweenUs-(.+)-Setup\.exe$/i.exec(name)?.[1];
+export function versionOfFile(name: string, platform: string = process.platform): string | null {
+  const label = ASSETS[platform]?.name.exec(name)?.[1];
   return label && parseVersion(label) ? label : null;
 }
 
@@ -241,6 +285,7 @@ export async function findUpdate(
   channel: Channel,
   flavor: Flavor,
   fetchImpl: typeof fetch = fetch,
+  platform: string = process.platform,
 ): Promise<UpdateOffer | null> {
   if (flavor === 'unpacked') return null;
   const response = await fetchImpl(RELEASES_API, {
@@ -253,7 +298,7 @@ export async function findUpdate(
     channel,
   );
   if (!release) return null;
-  const asset = assetFor(release, flavor);
+  const asset = assetFor(release, flavor, platform);
   if (!asset) return null;
   return {
     version: release.tag.replace(/^v/, ''),

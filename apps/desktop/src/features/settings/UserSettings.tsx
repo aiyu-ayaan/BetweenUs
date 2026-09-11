@@ -89,6 +89,9 @@ import {
 import { useFocusTrap } from '../../services/focus-trap';
 
 const isMac = typeof window !== 'undefined' && window.betweenus?.platform === 'darwin';
+// What an update does to this copy differs by platform - an installer runs, an
+// AppImage is overwritten in place - and the Updates panel says which.
+const isLinux = typeof window !== 'undefined' && window.betweenus?.platform === 'linux';
 
 type Section =
   | 'account'
@@ -2442,8 +2445,9 @@ function UpdatesSection(): JSX.Element {
 
           {info?.flavor === 'installer' && (
             <p className="mt-2 text-sm text-slate-400">
-              An update downloads the setup exe and installs itself over this copy, keeping where
-              it is installed and everything in it. BetweenUs starts again when it is done.
+              {isLinux
+                ? 'An update downloads the new AppImage and writes it over this one, then starts it again. It stays wherever you keep the file.'
+                : 'An update downloads the setup exe and installs itself over this copy, keeping where it is installed and everything in it. BetweenUs starts again when it is done.'}
             </p>
           )}
 

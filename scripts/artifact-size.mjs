@@ -133,6 +133,20 @@ function measure() {
     }
     const unpacked = join(releaseDir, 'win-unpacked');
     if (existsSync(unpacked)) found.push({ id: 'desktop/unpacked', bytes: dirSize(unpacked) });
+
+    // The AppImage, matched by shape for the same reason. It has no budget in
+    // the table above on purpose: budgets here are set from a measured build and
+    // never from a guess, and no Linux release has been cut to measure. It
+    // reports as `unbudgeted` until the first one has, which the table already
+    // distinguishes from a pass.
+    const appImage = readdirSync(releaseDir).find((f) => /\.AppImage$/.test(f));
+    if (appImage) {
+      found.push({
+        id: 'desktop/appimage',
+        bytes: statSync(join(releaseDir, appImage)).size,
+        note: appImage,
+      });
+    }
   }
 
   // The renderer bundle: what Vite emitted, which is the half of the desktop
