@@ -103,6 +103,8 @@ import com.aatech.betweenus.core.store.Workspace
 import com.aatech.betweenus.feature.settings.BetweenUsPermissions
 import com.aatech.betweenus.feature.settings.rememberPermission
 import com.aatech.betweenus.feature.settings.rememberPermissions
+import android.widget.Toast
+import com.aatech.betweenus.ui.components.AlphaBadge
 import com.aatech.betweenus.ui.components.Avatar
 import com.aatech.betweenus.ui.components.BetweenUsButton
 import com.aatech.betweenus.ui.components.BetweenUsIcon
@@ -2076,6 +2078,7 @@ private fun CallMoreSheet(
     onConnection: () -> Unit,
 ) {
     val sheet = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val context = LocalContext.current
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheet) {
         Column(
             Modifier
@@ -2084,6 +2087,21 @@ private fun CallMoreSheet(
                 .padding(bottom = 12.dp),
         ) {
             SectionLabel("In this call")
+            ListRow(
+                title = "Listen together",
+                subtitle = "Listening together is in alpha phase and will not able to play songs.",
+                leading = { BetweenUsIcon(BetweenUsIcons.Speaker, tint = Amber200) },
+                trailing = {
+                    AlphaBadge()
+                },
+                onClick = {
+                    Toast.makeText(
+                        context,
+                        "Listening together is in alpha phase and will not able to play songs.",
+                        Toast.LENGTH_LONG,
+                    ).show()
+                },
+            )
             ListRow(
                 title = "Play together",
                 subtitle = "A game everybody in the call can see",

@@ -45,6 +45,7 @@ object BetweenUsIcons {
     val Globe = R.drawable.ic_globe
     val Hash = R.drawable.ic_hash
     val Image = R.drawable.ic_image
+    val Info = R.drawable.ic_info
     val LayoutBottom = R.drawable.ic_layout_bottom
     val LayoutSidebar = R.drawable.ic_layout_sidebar
     val Lock = R.drawable.ic_lock

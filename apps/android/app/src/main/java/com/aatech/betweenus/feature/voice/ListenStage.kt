@@ -35,6 +35,7 @@ import com.aatech.betweenus.core.store.ListenSession
 import com.aatech.betweenus.core.store.ListenTrack
 import com.aatech.betweenus.core.store.ListenSync
 import com.aatech.betweenus.core.store.listenPositionAt
+import com.aatech.betweenus.ui.components.AlphaBadge
 import com.aatech.betweenus.ui.components.BetweenUsIcon
 import com.aatech.betweenus.ui.components.BetweenUsIcons
 import com.aatech.betweenus.ui.components.IconAction
@@ -128,13 +129,20 @@ private fun ListenStageContent(session: ListenSession, modifier: Modifier = Modi
 
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                Text(
-                    text = current?.let { listenLabel(it) } ?: "Nothing queued",
-                    style = MaterialTheme.typography.titleSmall,
-                    color = scheme.onSurface,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text(
+                        text = current?.let { listenLabel(it) } ?: "Nothing queued",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = scheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false),
+                    )
+                    AlphaBadge()
+                }
                 Text(
                     text = current?.let { "Added by ${it.addedByUsername}" }
                         ?: "Anybody in the call can add a track from a desktop",

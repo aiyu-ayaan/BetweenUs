@@ -40,6 +40,7 @@ import { ListenSearch } from './ListenSearch';
 import {
   ChevronLeftIcon,
   CompassIcon,
+  InfoIcon,
   MusicIcon,
   PauseIcon,
   PlayIcon,
@@ -97,6 +98,21 @@ export function ListenPanel(): JSX.Element {
         </button>
         <MusicIcon className="h-4 w-4 shrink-0 text-amber-300" />
         <span className="text-sm font-medium text-slate-200">Listen together</span>
+        <span className="relative group/tag inline-flex items-center">
+          <span
+            title="Listening together is in alpha phase and will not able to play songs."
+            className="inline-flex items-center gap-1 rounded border border-amber-500/30 bg-amber-500/20 px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide text-amber-300 cursor-help"
+          >
+            <InfoIcon className="h-2.5 w-2.5 shrink-0 text-amber-300" />
+            <span>alpha</span>
+          </span>
+          <span
+            role="tooltip"
+            className="pointer-events-none absolute top-full left-1/2 -translate-x-1/2 mt-1.5 z-30 hidden w-52 rounded bg-slate-900/95 px-2 py-1 text-center text-[10px] leading-tight text-slate-200 shadow-xl border border-white/15 group-hover/tag:block"
+          >
+            Listening together is in alpha phase and will not able to play songs.
+          </span>
+        </span>
 
         <div className="ms-2 flex items-center gap-0.5 rounded-md bg-surface-900 p-0.5">
           <Tab active={tab === 'browse'} onClick={() => useListenStore.getState().setTab('browse')}>

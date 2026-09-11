@@ -20,7 +20,7 @@ import { GAMES, type GameSession, type ListenSession } from '@betweenus/shared-t
 import { useAppsStore } from '../../stores/apps';
 import { useGameStore } from '../../stores/game';
 import { useListenStore } from '../../stores/listen';
-import { ChevronRightIcon, GamepadIcon, MusicIcon, XIcon } from '../../components/icons';
+import { ChevronRightIcon, GamepadIcon, InfoIcon, MusicIcon, XIcon } from '../../components/icons';
 
 export function AppsPanel(): JSX.Element {
   const listen = useListenStore((state) => state.session);
@@ -59,6 +59,8 @@ export function AppsPanel(): JSX.Element {
           blurb="One queue, in step, playing from everybody's own connection - so it stays at full quality and costs nobody any upload. Anybody here can change what is on."
           status={listenStatus(listen)}
           accent="amber"
+          tag="alpha"
+          tagTooltip="Listening together is in alpha phase and will not able to play songs."
           onClick={openListen}
         />
         <AppCard
@@ -93,6 +95,8 @@ function AppCard({
   blurb,
   status,
   accent,
+  tag,
+  tagTooltip,
   onClick,
 }: {
   icon: JSX.Element;
@@ -101,6 +105,8 @@ function AppCard({
   /** What it is doing right now, or null when it is not doing anything. */
   status: string | null;
   accent: 'amber' | 'emerald';
+  tag?: string;
+  tagTooltip?: string;
   onClick: () => void;
 }): JSX.Element {
   const ring =
@@ -112,13 +118,32 @@ function AppCard({
     <button
       type="button"
       onClick={onClick}
-      className={`flex cursor-pointer flex-col gap-2 rounded-xl border p-4 text-start transition-colors ${
+      className={`relative flex cursor-pointer flex-col gap-2 rounded-xl border p-4 text-start transition-colors ${
         status ? ring : 'border-white/10 hover:border-white/20'
       } bg-surface-900 hover:bg-white/[0.04]`}
     >
       <span className="flex items-center gap-2">
         {icon}
         <span className="text-sm font-medium text-slate-100">{name}</span>
+        {tag && (
+          <span className="relative group/tag inline-flex items-center">
+            <span
+              title={tagTooltip}
+              className="inline-flex items-center gap-1 rounded border border-amber-500/30 bg-amber-500/20 px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide text-amber-300 cursor-help"
+            >
+              <InfoIcon className="h-2.5 w-2.5 shrink-0 text-amber-300" />
+              <span>{tag}</span>
+            </span>
+            {tagTooltip && (
+              <span
+                role="tooltip"
+                className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 z-30 hidden w-52 rounded bg-slate-900/95 px-2 py-1 text-center text-[10px] leading-tight text-slate-200 shadow-xl border border-white/15 group-hover/tag:block"
+              >
+                {tagTooltip}
+              </span>
+            )}
+          </span>
+        )}
         {status && (
           <span
             className={`rounded px-1.5 py-0.5 text-[9px] uppercase tracking-wide ${

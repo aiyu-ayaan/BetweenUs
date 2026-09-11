@@ -5,9 +5,13 @@ import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkHorizontally
+import android.widget.Toast
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -28,18 +32,28 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.PlainTooltip
 import androidx.compose.material3.Text
 import androidx.compose.material3.ToggleButton
+import androidx.compose.material3.TooltipBox
+import androidx.compose.material3.TooltipDefaults
+import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.aatech.betweenus.ui.theme.BetweenUsMotion
 
 /**
@@ -274,3 +288,63 @@ fun Notice(message: String, tone: Color, modifier: Modifier = Modifier) {
             .padding(horizontal = 14.dp, vertical = 10.dp),
     )
 }
+
+/**
+ * An alpha indicator badge with an explanatory tooltip on hover / long-press,
+ * and a toast on tap.
+ */
+@Composable
+fun AlphaBadge(
+    modifier: Modifier = Modifier,
+    message: String = "Listening together is in alpha phase and will not able to play songs.",
+) {
+    val context = LocalContext.current
+    val tooltipState = rememberTooltipState()
+    TooltipBox(
+        positionProvider = TooltipDefaults.rememberTooltipPositionProvider(),
+        tooltip = {
+            PlainTooltip {
+                Text(message)
+            }
+        },
+        state = tooltipState,
+        modifier = modifier,
+    ) {
+        Box(
+            modifier = Modifier
+                .clip(MaterialTheme.shapes.extraSmall)
+                .background(Color(0xFFF59E0B).copy(alpha = 0.2f))
+                .border(1.dp, Color(0xFFF59E0B).copy(alpha = 0.35f), MaterialTheme.shapes.extraSmall)
+                .clickable {
+                    Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+                }
+                .semantics {
+                    contentDescription = message
+                }
+                .padding(horizontal = 5.dp, vertical = 2.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(3.dp),
+            ) {
+                BetweenUsIcon(
+                    icon = BetweenUsIcons.Info,
+                    size = 11.dp,
+                    tint = Color(0xFFFCD34D),
+                    contentDescription = null,
+                )
+                Text(
+                    text = "ALPHA",
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 0.5.sp,
+                    ),
+                    color = Color(0xFFFCD34D),
+                )
+            }
+        }
+    }
+}
+
