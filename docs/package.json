@@ -29,6 +29,22 @@
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },
+  "comment:overrides": [
+    "Security patches for transitives of Docusaurus, which is already on its",
+    "latest release (3.10.2) - so there is no upstream bump that resolves these",
+    "and an override is the only lever. Each is the minimum patched version.",
+    "uuid is keyed to the 8.x line on purpose: a bare 'uuid' override would",
+    "also drag the unaffected 14.0.2 copy in this tree backwards.",
+    "Drop an entry once Docusaurus ships a release that resolves past it."
+  ],
+  "overrides": {
+    "serialize-javascript": "^7.0.5",
+    "uuid@^8": "^11.1.1",
+    "qs": "^6.16.0",
+    "fast-uri": "^3.1.6",
+    "svgo": "^3.3.5",
+    "js-yaml": "^4.3.2"
+  },
   "devDependencies": {
     "@docusaurus/module-type-aliases": "3.10.2",
     "@docusaurus/tsconfig": "3.10.2",
