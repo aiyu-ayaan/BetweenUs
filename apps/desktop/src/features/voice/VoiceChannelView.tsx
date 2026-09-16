@@ -31,7 +31,7 @@ import type { Channel } from '@betweenus/shared-types';
 import { useChatStore } from '../../stores/chat';
 import { usePresenceStore } from '../../stores/presence';
 import { useRemoteStore } from '../../stores/remote';
-import { captionCorner, captionInset } from '../../services/platform';
+import { captionInset } from '../../services/platform';
 import { CHORD_LABEL, localChordOf } from '../../services/keyboard';
 import { useShareControlStore } from '../../stores/shareControl';
 import { useVoiceStore, type VoiceShare, type VoiceTile } from '../../stores/voice';
@@ -395,6 +395,16 @@ function ShareBanners({
 
 type LayoutMode = 'side-left' | 'side-right' | 'bottom';
 
+/**
+ * One shape for every control in the full-screen strip.
+ *
+ * They used to each carry their own border, blur and background, which is how
+ * a row ends up looking like six unrelated pills stuck to the top of somebody
+ * else's desktop. The strip is the surface now; the buttons sit in it.
+ */
+const FS_BUTTON =
+  'no-drag flex h-8 shrink-0 cursor-pointer items-center gap-1.5 rounded-lg px-2.5 text-xs font-medium transition-colors duration-150 active:scale-95';
+
 /** One shared screen big, everyone else small underneath or in a side rail. Movie night. */
 function Theatre({ share, tiles }: { share: VoiceShare; tiles: Stage[] }): JSX.Element {
   const watch = useVoiceStore((state) => state.watch);
@@ -485,6 +495,134 @@ function Theatre({ share, tiles }: { share: VoiceShare; tiles: Stage[] }): JSX.E
   };
 
   if (fullscreen) {
+    /**
+     * One bar, not two.
+     *
+     * Everything this view can do lives in a single strip: what is on screen,
+     * what you can do to it, and the call controls. Two strips - share chrome
+     * along the top and the call dock along the bottom - sat on the two parts
+     * of a shared desktop worth reading, its tab bar and its task bar, and
+     * left whoever was looking at it guessing which of six pills was the way
+     * out.
+     */
+    const bar = (
+      <>
+        <div className="flex items-center gap-2 rounded-full bg-white/[0.06] px-3 py-1">
+          <span className="relative flex h-2 w-2">
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-75"></span>
+            <span className="relative inline-flex h-2 w-2 rounded-full bg-red-500"></span>
+          </span>
+          <span className="max-w-[16ch] truncate text-xs font-semibold tracking-wide text-slate-100">
+            {share.isLocal ? 'Your screen' : `${share.name}'s screen`}
+          </span>
+        </div>
+
+        {!share.isLocal && <ControlButtons share={share} />}
+        {share.isLocal && (
+          <button
+            type="button"
+            onClick={() => void stopScreenShare()}
+            className="no-drag cursor-pointer rounded-md bg-red-500/90 px-3 py-1.5 text-xs font-semibold text-white transition-colors duration-200 hover:bg-red-500"
+          >
+            Stop sharing
+          </button>
+        )}
+
+        <button
+          type="button"
+          onClick={cycleLayout}
+          aria-label="Where the cameras sit"
+          title={`Cameras: ${
+            layout === 'side-left' ? 'left' : layout === 'side-right' ? 'right' : 'along the bottom'
+          } (click to move them)`}
+          className={`${FS_BUTTON} text-slate-300 hover:bg-white/10 hover:text-white`}
+        >
+          {layout === 'side-left' ? (
+            <LayoutSidebarIcon className="h-3.5 w-3.5" />
+          ) : layout === 'side-right' ? (
+            <LayoutSidebarIcon className="h-3.5 w-3.5 scale-x-[-1]" />
+          ) : (
+            <LayoutBottomIcon className="h-3.5 w-3.5" />
+          )}
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setShowParticipants((prev) => !prev)}
+          aria-pressed={showParticipants}
+          aria-label={showParticipants ? 'Hide cameras' : 'Show cameras'}
+          title={showParticipants ? 'Hide cameras' : 'Show cameras'}
+          className={`${FS_BUTTON} ${
+            showParticipants
+              ? 'bg-white/15 text-white'
+              : 'text-slate-400 hover:bg-white/10 hover:text-slate-200'
+          }`}
+        >
+          <UsersIcon className="h-3.5 w-3.5" />
+          <span>{tiles.length}</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setDocked((prev) => !prev)}
+          disabled={driving}
+          aria-pressed={!immersive}
+          aria-label={immersive ? 'Dock the controls' : 'Fill the screen'}
+          title={
+            driving
+              ? 'Docked while you are driving this screen, so nothing covers it and nothing fades'
+              : immersive
+                ? 'Dock the controls: nothing covers the shared screen, nothing fades'
+                : 'Fill the screen: the picture edge to edge, controls float and fade away'
+          }
+          className={`${FS_BUTTON} disabled:cursor-not-allowed disabled:opacity-60 ${
+            immersive
+              ? 'text-slate-400 hover:bg-white/10 hover:text-slate-200'
+              : 'bg-white/15 text-white'
+          }`}
+        >
+          <LayoutBottomIcon className="h-3.5 w-3.5" />
+          <span className="hidden sm:inline">{immersive ? 'Fill' : 'Docked'}</span>
+        </button>
+
+        <span className="mx-0.5 h-5 w-px shrink-0 bg-white/10" aria-hidden="true" />
+        <VoiceControls size="sm" />
+        <span className="mx-0.5 h-5 w-px shrink-0 bg-white/10" aria-hidden="true" />
+
+        <button
+          type="button"
+          onClick={() => {
+            setFullscreen(false);
+            watch(null);
+          }}
+          title="Back to the grid of everyone in the call"
+          className={`${FS_BUTTON} text-slate-300 hover:bg-white/10 hover:text-white`}
+        >
+          Back to grid
+        </button>
+        <button
+          type="button"
+          onClick={toggleFullscreen}
+          aria-label="Exit full screen"
+          title={`Exit full screen (Esc or ${CHORD_LABEL['toggle-fullscreen']})`}
+          className={`${FS_BUTTON} bg-white/10 font-semibold text-white hover:bg-white/20`}
+        >
+          <MinimizeIcon className="h-4 w-4" />
+          <span className="hidden sm:inline">Exit</span>
+        </button>
+      </>
+    );
+
+    const filmstrip = layout === 'bottom' && showParticipants && (
+      <ul className="pointer-events-auto flex max-w-full shrink-0 justify-center gap-2.5 overflow-x-auto pb-1">
+        {tiles.map((tile) => (
+          <li key={tile.key} className="w-36 shrink-0">
+            <StageTile tile={tile} />
+          </li>
+        ))}
+      </ul>
+    );
+
     return (
       <div
         onMouseMove={immersive ? resetHideTimer : undefined}
@@ -493,176 +631,27 @@ function Theatre({ share, tiles }: { share: VoiceShare; tiles: Stage[] }): JSX.E
           immersive && !showControls ? 'cursor-none' : ''
         }`}
       >
-        {/* The way back, for when the chrome has faded and the only thing on
-            screen is the picture. Immersive only: docked keeps its own Exit in
-            the bar, which never goes anywhere. */}
-        {immersive && (
-          <button
-            type="button"
-            onClick={toggleFullscreen}
-            aria-label="Exit full screen"
-            title={`Exit full screen (Esc or ${CHORD_LABEL['toggle-fullscreen']})`}
-            style={captionCorner()}
-            className={`no-drag absolute top-4 z-40 flex cursor-pointer items-center gap-1.5 rounded-md border border-white/10 bg-black/70 px-3 py-1.5 text-xs font-semibold text-white shadow-md backdrop-blur-md transition-opacity duration-300 hover:bg-white/20 ${
-              showControls ? 'opacity-0 pointer-events-none' : 'opacity-70 hover:opacity-100'
-            }`}
+        {/* Docked puts the strip above the picture, where it covers nothing -
+            which is the whole point of the mode: the shared desktop's own top
+            and bottom stay readable while somebody is driving it. It leaves
+            the window buttons their corner, because it reaches that corner. */}
+        {!immersive && (
+          <div
+            style={captionInset()}
+            className="no-drag relative z-30 flex shrink-0 flex-wrap items-center gap-2 border-b border-white/10 bg-surface-900 px-3 py-2"
           >
-            <MinimizeIcon className="h-4 w-4" />
-            Exit full screen
-          </button>
+            {bar}
+          </div>
         )}
 
-        {/* The top bar: floating and fading over the picture when immersive, a
-            row above it when docked. See `docked` for why both exist. */}
-        <div
-          style={captionInset()}
-          className={
-            immersive
-              ? `no-drag absolute inset-x-0 top-0 z-30 flex items-center justify-between gap-3 bg-gradient-to-b from-black/90 via-black/50 to-transparent p-4 transition-all duration-300 ease-out ${
-                  showControls
-                    ? 'opacity-100 translate-y-0 pointer-events-auto'
-                    : 'opacity-0 -translate-y-6 pointer-events-none'
-                }`
-              : 'no-drag relative z-30 flex shrink-0 items-center justify-between gap-3 border-b border-white/10 bg-surface-900 p-3'
-          }
-        >
-          {/* Live badge & Stream name */}
-          <div className="flex items-center gap-2 rounded-full border border-white/10 bg-black/60 px-3.5 py-1.5 backdrop-blur-md shadow-lg">
-            <span className="relative flex h-2 w-2">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-75"></span>
-              <span className="relative inline-flex h-2 w-2 rounded-full bg-red-500"></span>
-            </span>
-            <span className="text-xs font-semibold text-slate-100 tracking-wide">
-              {share.isLocal ? 'Your screen' : `${share.name}'s screen`}
-            </span>
-          </div>
-
-          {/* Action buttons */}
-          <div className="flex items-center gap-2">
-            {!share.isLocal && <ControlButtons share={share} />}
-            {share.isLocal && (
-              <button
-                type="button"
-                onClick={() => void stopScreenShare()}
-                className="no-drag cursor-pointer rounded-md bg-red-500/90 px-3.5 py-1.5 text-xs font-semibold text-white shadow-md backdrop-blur transition-all duration-200 hover:bg-red-500 hover:shadow-red-500/20 active:scale-95"
-              >
-                Stop sharing
-              </button>
-            )}
-            <button
-              type="button"
-              onClick={cycleLayout}
-              title={`Layout: ${
-                layout === 'side-left'
-                  ? 'Left Side Gallery'
-                  : layout === 'side-right'
-                    ? 'Right Side Gallery'
-                    : 'Bottom Dock'
-              } (Click to switch)`}
-              className="no-drag flex cursor-pointer items-center gap-1.5 rounded-md border border-white/10 bg-black/60 px-3 py-1.5 text-xs font-medium text-slate-200 backdrop-blur-md shadow-md transition-all duration-200 hover:bg-white/10 active:scale-95"
-            >
-              {layout === 'side-left' ? (
-                <LayoutSidebarIcon className="h-3.5 w-3.5" />
-              ) : layout === 'side-right' ? (
-                <LayoutSidebarIcon className="h-3.5 w-3.5 scale-x-[-1]" />
-              ) : (
-                <LayoutBottomIcon className="h-3.5 w-3.5" />
-              )}
-              <span className="hidden sm:inline">
-                {layout === 'side-left' ? 'Left' : layout === 'side-right' ? 'Right' : 'Bottom'}
-              </span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowParticipants((prev) => !prev)}
-              aria-label={showParticipants ? 'Hide participants' : 'Show participants'}
-              title={showParticipants ? 'Hide participants' : 'Show participants'}
-              className={`no-drag flex cursor-pointer items-center gap-1.5 rounded-md border border-white/10 px-3 py-1.5 text-xs font-medium backdrop-blur-md shadow-md transition-all duration-200 active:scale-95 ${
-                showParticipants
-                  ? 'bg-white/15 text-white'
-                  : 'bg-black/60 text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              <UsersIcon className="h-3.5 w-3.5" />
-              <span>{tiles.length}</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setDocked((prev) => !prev)}
-              disabled={driving}
-              aria-pressed={!immersive}
-              aria-label={immersive ? 'Keep the controls out of the picture' : 'Fill the screen'}
-              title={
-                driving
-                  ? 'Docked while you are driving this screen, so nothing covers it and nothing fades'
-                  : immersive
-                    ? 'Dock the controls: nothing covers the shared screen, nothing fades'
-                    : 'Fill the screen: the picture edge to edge, controls float and fade away'
-              }
-              className={`no-drag flex items-center gap-1.5 rounded-md border border-white/10 px-3 py-1.5 text-xs font-medium backdrop-blur-md shadow-md transition-all duration-200 active:scale-95 disabled:cursor-not-allowed disabled:opacity-60 ${
-                immersive
-                  ? 'cursor-pointer bg-black/60 text-slate-400 hover:text-slate-200'
-                  : 'cursor-pointer bg-white/15 text-white'
-              }`}
-            >
-              <LayoutBottomIcon className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">{immersive ? 'Fill' : 'Docked'}</span>
-            </button>
-            <button
-              type="button"
-              onClick={toggleFullscreen}
-              aria-label="Exit full screen"
-              title={`Exit full screen (Esc or ${CHORD_LABEL['toggle-fullscreen']})`}
-              className="no-drag flex cursor-pointer items-center gap-1.5 rounded-md border border-white/10 bg-white/10 px-3.5 py-1.5 text-xs font-semibold text-white backdrop-blur-md shadow-md transition-all duration-200 hover:bg-white/20 active:scale-95"
-            >
-              <MinimizeIcon className="h-4 w-4" />
-              Exit full screen
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setFullscreen(false);
-                watch(null);
-              }}
-              className="no-drag cursor-pointer rounded-md border border-white/10 bg-black/60 px-3.5 py-1.5 text-xs font-medium text-slate-200 backdrop-blur-md shadow-md transition-all duration-200 hover:bg-white/10 active:scale-95"
-            >
-              Back to grid
-            </button>
-          </div>
-        </div>
-
-        {/* Fullscreen Main Content Area (Side Gallery and Center Stage) */}
         <div
           className={`relative flex min-h-0 w-full flex-1 flex-row items-stretch justify-center overflow-hidden bg-black ${
             immersive ? 'gap-0 p-0' : 'gap-3 p-3'
           }`}
         >
-          {/* Show Cameras pill, only when the rail is put away */}
-          {!showParticipants && (
-            <button
-              type="button"
-              onClick={() => setShowParticipants(true)}
-              title="Show cameras alongside stream"
-              className={`absolute z-20 flex items-center gap-1.5 rounded-full border border-white/10 bg-black/70 px-3.5 py-1.5 text-xs font-semibold text-slate-200 backdrop-blur-md shadow-xl transition-all duration-300 hover:bg-white/20 hover:text-white active:scale-95 ${
-                immersive ? 'start-4 top-20' : 'start-6 top-6'
-              } ${
-                immersive && !showControls
-                  ? 'opacity-0 -translate-y-4 pointer-events-none'
-                  : 'opacity-100 translate-y-0'
-              }`}
-            >
-              <UsersIcon className="h-3.5 w-3.5" />
-              <span>Show cameras ({tiles.length})</span>
-            </button>
-          )}
-
           {layout === 'side-left' && showParticipants && (
             <div className={`z-20 flex h-full flex-col justify-center ${immersive ? 'p-4' : ''}`}>
-              <SideGallery
-                tiles={tiles}
-                isFullscreen
-                onClose={() => setShowParticipants(false)}
-              />
+              <SideGallery tiles={tiles} isFullscreen onClose={() => setShowParticipants(false)} />
             </div>
           )}
 
@@ -686,42 +675,34 @@ function Theatre({ share, tiles }: { share: VoiceShare; tiles: Stage[] }): JSX.E
 
           {layout === 'side-right' && showParticipants && (
             <div className={`z-20 flex h-full flex-col justify-center ${immersive ? 'p-4' : ''}`}>
-              <SideGallery
-                tiles={tiles}
-                isFullscreen
-                onClose={() => setShowParticipants(false)}
-              />
+              <SideGallery tiles={tiles} isFullscreen onClose={() => setShowParticipants(false)} />
             </div>
           )}
         </div>
 
-        {/* And the call controls, the same two ways. */}
-        <div
-          className={
-            immersive
-              ? 'absolute inset-x-0 bottom-0 z-30 flex flex-col items-center gap-3 bg-gradient-to-t from-black/95 via-black/60 to-transparent px-6 pb-5 pt-8 pointer-events-none'
-              : 'relative z-30 flex shrink-0 flex-col items-center gap-3 border-t border-white/10 bg-surface-900 px-6 py-3'
-          }
-        >
-          {layout === 'bottom' && showParticipants && (
-            <ul className="pointer-events-auto flex max-w-full shrink-0 justify-center gap-2.5 overflow-x-auto pb-1">
-              {tiles.map((tile) => (
-                <li key={tile.key} className="w-36 shrink-0">
-                  <StageTile tile={tile} />
-                </li>
-              ))}
-            </ul>
-          )}
+        {/* Immersive: the same strip, floating over the bottom and fading with
+            everything else. Nothing is pinned to the top, because the top of a
+            shared screen is its tabs. Moving the mouse brings it back, which is
+            why there is no second Exit button hiding in a corner waiting for
+            the first one to fade. */}
+        {immersive ? (
           <div
-            className={`flex items-center justify-center rounded-2xl border border-white/10 bg-black/70 px-4 py-2 backdrop-blur-md shadow-pop transition-all duration-300 ease-out ${
-              immersive && !showControls
-                ? 'opacity-0 translate-y-6 pointer-events-none'
-                : 'opacity-100 translate-y-0 pointer-events-auto'
+            className={`pointer-events-none absolute inset-x-0 bottom-0 z-30 flex flex-col items-center gap-3 bg-gradient-to-t from-black/90 via-black/50 to-transparent px-4 pb-4 pt-10 transition-all duration-300 ease-out ${
+              showControls ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-6'
             }`}
           >
-            <VoiceControls size="sm" />
+            {filmstrip}
+            <div className="pointer-events-auto flex max-w-full flex-wrap items-center justify-center gap-2 rounded-2xl border border-white/10 bg-black/75 px-3 py-2 backdrop-blur-md shadow-pop">
+              {bar}
+            </div>
           </div>
-        </div>
+        ) : (
+          filmstrip && (
+            <div className="relative z-30 flex shrink-0 justify-center border-t border-white/10 bg-surface-900 px-6 py-2">
+              {filmstrip}
+            </div>
+          )
+        )}
       </div>
     );
   }

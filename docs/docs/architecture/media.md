@@ -677,16 +677,24 @@ the web client's only route to driving anything.
 Full screen is two wishes that pull opposite ways, so it is two modes with a
 button between them.
 
-**Fill** is the default and is what full screen usually means: the picture edge
-to edge, chrome floating over it and fading after a couple of seconds, the
-cursor going with it. A film letterboxed inside a chrome sandwich is not full
-screen, and that is what a single docked layout produced.
+Either way it is **one strip**, never two: the share's name, what can be done
+to it, and the call controls sit in a single bar. Two bars — share chrome along
+the top, the call dock along the bottom — landed on the two parts of a shared
+desktop worth reading, its tab bar and its task bar, and split the way out
+across six separate pills.
 
-**Docked** puts the chrome in rows instead — a header above, the share in a
-bordered frame, the call controls below — and nothing fades. It exists because
-the top of a shared desktop is its title bar and its tabs and the bottom is its
-task bar, which is the part a viewer most needs to read, and floating chrome
-sits on exactly those. Fading only makes that intermittent.
+**Fill** is the default and is what full screen usually means: the picture edge
+to edge, the strip floating over the *bottom* and fading after a couple of
+seconds, the cursor going with it. Nothing is pinned to the top, because the
+top of a shared screen is its tabs. Moving the mouse brings the strip back,
+which is why there is no second Exit button waiting in a corner for the first
+one to fade — that duplicate is gone.
+
+**Docked** puts the same strip in a row above the picture instead, with the
+share in a bordered frame below it, and nothing fades. Docked chrome covers
+nothing, which is the whole point: the shared desktop's own top and bottom stay
+readable while somebody is driving it. The strip leaves the window buttons
+their corner (`captionInset`), since it reaches that corner.
 
 Taking control of a share forces Docked and disables the button, saying why.
 Chrome that fades takes **Release control** with it, and floating chrome is a
