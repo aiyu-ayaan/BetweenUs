@@ -46,14 +46,10 @@
 //
 // THE DOCS SITE
 //
-// `docs` is a scope name too, and it is an extra rather than a platform: it asks
-// for the Docusaurus site to be deployed once the release is published.
-//
-//   !fix(docs)             a full release, and the docs site after it
-//   !fix(android,docs)     the APKs, and the docs site after it
-//
-// It never narrows what is built - a scope naming only `docs` still builds
-// everything, the same as an empty one.
+// Every release deploys it, so nothing here decides that. `docs` is still
+// accepted as a scope name and is still not a platform: it is ignored, so
+// `!fix(docs)` is `!fix` and `!fix(android,docs)` is `!fix(android)`. Markers
+// written when it meant something keep doing what they meant.
 //
 // A push with no marker is not a release. When several pushed commits carry
 // markers the strongest wins, in the order listed above - a push containing
@@ -83,8 +79,9 @@ const VERSION_RE = /^(\d+)\.(\d+)\.(\d+)(?:-(alpha|beta)\.(\d+))?$/;
 // What a release can build, in the order the notes list them.
 export const TARGETS = ['docker', 'desktop', 'android'];
 
-// Neither a platform nor an artifact: the scope name that asks for the docs
-// site to be deployed after the release, alongside whatever else was built.
+// Neither a platform nor an artifact: a scope name that names the docs site,
+// which every release deploys anyway. Kept so it stays a scope that narrows
+// nothing rather than reading as an unknown one.
 const DOCS_ALIASES = new Set(['docs', 'doc', 'documentation', 'site']);
 
 // The spellings a human reaches for. `web` and `admin-web` are Docker images
@@ -163,8 +160,7 @@ export function parseTargets(subjects) {
   const chosen = new Set();
   for (const subject of subjects) {
     for (const name of scopeNames(subject) ?? []) {
-      // `docs` is an extra, not a platform, and never narrows what is built:
-      // `!fix(docs)` is a full release that also deploys the site.
+      // `docs` is not a platform and never narrows what is built.
       if (DOCS_ALIASES.has(name)) continue;
       if (name === 'all') TARGETS.forEach((target) => chosen.add(target));
       else chosen.add(TARGET_ALIASES[name]);
@@ -173,13 +169,6 @@ export function parseTargets(subjects) {
   // No marker named a platform: build the lot, which is what every release did
   // before this existed.
   return chosen.size === 0 ? [...TARGETS] : TARGETS.filter((target) => chosen.has(target));
-}
-
-/** Whether any marker asked for the docs site to go out with the release. */
-export function parseDocs(subjects) {
-  return subjects.some((subject) =>
-    (scopeNames(subject) ?? []).some((name) => DOCS_ALIASES.has(name)),
-  );
 }
 
 export function nextVersion(current, marker) {
@@ -276,18 +265,12 @@ function selfCheck() {
 
   strictEqual(targets(['!patch(desktop): x']), 'desktop', 'a patch has a scope like any marker');
 
-  // `docs` is an extra, never a narrowing: it says what happens after the
-  // release, not what the release builds.
-  const docs = (subjects) => parseDocs(subjects);
-  strictEqual(docs(['!fix: x']), false);
-  strictEqual(docs(['!fix(docs): x']), true);
+  // `docs` names the site that every release deploys, so it is ignored here:
+  // it never narrows a scope and never widens one.
   strictEqual(targets(['!fix(docs): x']), 'docker,desktop,android', 'docs alone builds everything');
-  strictEqual(docs(['!fix(android,docs): x']), true);
   strictEqual(targets(['!fix(android,docs): x']), 'android', 'and does not widen a scope either');
-  strictEqual(docs(['!patch(docs): x']), true, 'a patch can redeploy the site too');
   // Still a conventional scope when a word in it is neither.
-  strictEqual(docs(['!fix(docs,chat): x']), false);
-  strictEqual(docs(['docs: a written thing']), false, 'a docs commit is not a docs deploy');
+  strictEqual(targets(['!fix(docs,chat): x']), 'docker,desktop,android');
 
   console.log('release-version self-check passed');
 }
@@ -313,7 +296,6 @@ function main(argv) {
         `marker=${marker}`,
         `version=${nextVersion(current, marker)}`,
         `targets=${parseTargets(subjects).join(',')}`,
-        `docs=${parseDocs(subjects)}`,
       ]
     : ['release=false'];
 

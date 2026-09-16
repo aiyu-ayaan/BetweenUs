@@ -84,7 +84,7 @@ before="$(git rev-parse HEAD)"
 git commit -q --allow-empty -m '!patch(desktop,docs): rebuild the installer'
 run push '' '' '!patch(desktop,docs): rebuild the installer' "$before"
 check 'a patch rebuilds in place' \
-  release=true patch=true version=1.2.3 targets=desktop docs=true carry=1.2.3 exit=0
+  release=true patch=true version=1.2.3 targets=desktop carry=1.2.3 exit=0
 
 # There is nothing to replace when the version was never published.
 setup 9.9.9
@@ -96,13 +96,13 @@ check 'a patch of an unreleased version refuses' 'has nothing to replace' exit=1
 # A merged release PR builds what the PR wrote down, not everything.
 setup 1.2.3
 git tag v1.2.3
-printf 'android\ndocs\n' > .github/release-targets
+printf 'android\ndocs\n' > .github/release-targets  # second line: an older release's
 node -e "const m=require('./package.json');m.version='1.3.0';require('fs').writeFileSync('package.json',JSON.stringify(m))"
 git add -A
 git commit -qm 'chore(release): v1.3.0'
 run push '' '' 'chore(release): v1.3.0' ''
 check 'a merged release PR keeps its scope' \
-  release=true patch=false version=1.3.0 targets=android docs=true carry=1.2.3 exit=0
+  release=true patch=false version=1.3.0 targets=android carry=1.2.3 exit=0
 
 # And everything, when nothing was written down.
 setup 1.2.3
@@ -112,7 +112,7 @@ git add -A
 git commit -qm 'Merge pull request #7 from chore/release-v1.3.0'
 run push '' '' 'Merge pull request #7 from chore/release-v1.3.0' ''
 check 'a merge commit is read from the version field' \
-  release=true version=1.3.0 targets=docker,desktop,android docs=false
+  release=true version=1.3.0 targets=docker,desktop,android
 
 setup 1.2.3
 git tag v1.2.3
@@ -136,13 +136,13 @@ setup 1.2.3
 git tag v1.2.3
 run workflow_dispatch patch 'android, docs' '' ''
 check 'a dispatched patch reads its own targets' \
-  release=true patch=true targets=android docs=true exit=0
+  release=true patch=true targets=android exit=0
 
 setup 1.2.3
 git tag v1.2.3
 run workflow_dispatch release '' '' ''
 check 'a dispatched release is not a patch' \
-  release=true patch=false targets=docker,desktop,android docs=false
+  release=true patch=false targets=docker,desktop,android
 
 cd "$ROOT" || exit 1
 if [ "$fail" = 0 ]; then

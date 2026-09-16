@@ -105,19 +105,24 @@ rebuild of the old one wants the release, which already contains it.
 !fix(android,desktop)  both clients, no server images
 !feat(docker)          the nine service images only
 !feat                  everything (empty scope = all)
-!fix(android,docs)     the APKs, and the docs site after the release
+!fix(android,docs)     the APKs; `docs` is accepted and changes nothing
 ```
 
 A scope that isn't entirely known names (`docker`/`desktop`/`android` and
 their aliases, plus `docs`) is read as an ordinary conventional-commit
 scope and changes nothing — `!feat(chat)` still builds everything.
 
-`docs` is the odd name out: not a platform, and it never narrows what is
-built. It asks for the Docusaurus site to be deployed once the release is
-published — `!fix(docs)` is still a full release, `!fix(android,docs)` is
-still only the APKs. It uses `docs.yml`'s build and shares its concurrency
-group, and it sits outside the rollback story: a Pages outage should not
-undo a release whose images and installers are already out.
+The Docusaurus site is not one of those platforms and is never carried
+forward: **every release deploys it**, from the commit that was released,
+so a published release and the site describing it are never out of step.
+It uses `docs.yml`'s build and shares its concurrency group, and it sits
+outside the rollback story: a Pages outage should not undo a release whose
+images and installers are already out.
+
+`docs` in the scope position is still accepted and still not a platform:
+it is ignored, so `!fix(docs)` is `!fix` and `!fix(android,docs)` is
+`!fix(android)`. A docs change with no release behind it is still `!docs`
+on its own — see [Docs Deployment](/deployment/docs-deployment).
 
 ## What a skipped platform gets
 
@@ -141,7 +146,7 @@ no new one.
 ```text
 !patch                 rebuild everything for this version
 !patch(desktop)        replace the installer, leave the rest alone
-!patch(docker,docs)    replace the images, and redeploy the docs site
+!patch(docker)         replace the images, leave the rest alone
 ```
 
 It skips the release PR entirely (a patch has no diff to show). The image

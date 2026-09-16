@@ -31,10 +31,12 @@
 # The first release cannot carry anything forward, so a scoped marker with no
 # previous tag behind it quietly builds everything instead.
 #
-# A scope may also name `docs`, which is not a platform and never narrows what
-# is built. It asks for the Docusaurus site to be deployed once the release is
-# published: `!fix(docs)` is a full release with the site after it, and
-# `!fix(android,docs)` is the APKs with the site after it.
+# The Docusaurus site is not one of those platforms and is never carried
+# forward: every release deploys it, from the commit that was released, so a
+# published release and the site describing it are never out of step. `docs` in
+# the scope position is still accepted and still narrows nothing - `!fix(docs)`
+# and `!fix` do the same thing - so markers already written keep working. A docs
+# change with no release behind it is still `!docs` on its own, in docs.yml.
 #
 # REBUILDING A RELEASE THAT EXISTS
 #
@@ -103,6 +105,8 @@
 #
 # `docs` is deliberately outside all of that. It runs after `publish`, and a
 # Pages outage does not undo a release whose images and installers are out.
+# It runs for every release: the site is how a release is read, and needing a
+# second `!docs` push after every one is how the two drift apart.
 #
 # Nothing here deploys. The Release carries a docker-compose.yml pinned to the
 # version, and a server takes it when its operator decides to: a running
@@ -129,7 +133,7 @@ on:
         type: choice
         options: [alpha, beta, stable, fix, feat, major]
       targets:
-        description: 'What to build (pr and patch modes): all, or any of docker/desktop/android, comma-separated; add docs to deploy the docs site after it'
+        description: 'What to build (pr and patch modes): all, or any of docker/desktop/android, comma-separated. The docs site always goes out with the release.'
         required: false
         default: all
         type: string
@@ -161,7 +165,6 @@ jobs:
       current: ${{ steps.current.outputs.version }}
       targets: ${{ steps.targets.outputs.targets }}
       carry: ${{ steps.targets.outputs.carry }}
-      docs: ${{ steps.next.outputs.docs }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -229,7 +232,6 @@ jobs:
           } >> "$GITHUB_OUTPUT"
           echo "building: $targets"
           echo "carrying from: ${carry:-<nothing>}"
-          echo "docs site: ${{ steps.next.outputs.docs }}"
 
       - name: Nothing to release
         if: steps.next.outputs.release != 'true'
@@ -276,10 +278,8 @@ jobs:
       - name: Record what this release builds
         env:
           TARGETS: ${{ needs.version.outputs.targets }}
-          DOCS: ${{ needs.version.outputs.docs }}
         run: |
           echo "$TARGETS" > .github/release-targets
-          if [ "$DOCS" = true ]; then echo docs >> .github/release-targets; fi
           cat .github/release-targets
 
       # Everything since the last released tag, which is what this version
@@ -325,7 +325,7 @@ jobs:
             | Marker | `!${{ needs.version.outputs.marker }}` |
             | Builds | `${{ needs.version.outputs.targets }}` |
             | Carries the rest from | `${{ needs.version.outputs.carry || 'nothing - first release' }}` |
-            | Docs site | `${{ needs.version.outputs.docs == 'true' && 'deployed after this release' || 'not touched' }}` |
+            | Docs site | `deployed after this release` |
 
             Anything not in **Builds** keeps the artifacts of the release named
             above: its images are re-tagged under this version and its
@@ -373,7 +373,6 @@ jobs:
       targets: ${{ steps.detect.outputs.targets }}
       carry: ${{ steps.detect.outputs.carry }}
       patch: ${{ steps.detect.outputs.patch }}
-      docs: ${{ steps.detect.outputs.docs }}
     steps:
       # The whole history: HEAD^ is what the version is compared against - on a
       # merge commit that is master as it stood before the PR went in - and the
@@ -399,7 +398,6 @@ jobs:
           current="$(node -p "require('./package.json').version")"
           release=false
           patch=false
-          docs=false
           targets=""
 
           if [ "$EVENT" = workflow_dispatch ]; then
@@ -487,20 +485,17 @@ jobs:
             fi
             plan="${plan:-$(node scripts/release-version.mjs --current "$current" --subjects-file subjects.txt)}"
             targets="$(printf '%s\n' "$plan" | sed -n 's/^targets=//p')"
-            case "$(printf '%s\n' "$plan" | sed -n 's/^docs=//p')" in true) docs=true ;; esac
             # A platform the patch skips carries from the release being patched,
             # which is this one: its images are re-tagged from themselves and its
             # assets re-attached to the Release they are already on. Both are
             # no-ops, which is exactly what "leave that platform alone" means.
             carry="$current"
           else
-            # What the release PR wrote down: the platforms on the first line, and
-            # `docs` on a line of its own when the marker asked for the site.
+            # What the release PR wrote down: the platforms, on the first line.
             # Absent - a release cut before this file existed, or a hand-made bump
             # - means everything, which is what every release did until then.
             targets="$(head -1 .github/release-targets 2>/dev/null | tr -d '[:space:]')"
             [ -n "$targets" ] || targets=docker,desktop,android
-            if grep -qx docs .github/release-targets 2>/dev/null; then docs=true; fi
 
             # The last release that exists, which is where a platform this one
             # skips takes its artifacts from. HEAD is not tagged yet.
@@ -519,11 +514,10 @@ jobs:
             echo "targets=$targets"
             echo "carry=$carry"
             echo "patch=$patch"
-            echo "docs=$docs"
           } >> "$GITHUB_OUTPUT"
           echo "Releasing v$current on the $channel channel."
           echo "Building: $targets; carrying the rest from ${carry:-<nothing>}."
-          echo "Replacing what is already there: $patch. Docs site: $docs."
+          echo "Replacing what is already there: $patch."
 
   # amd64 and arm64, one runner each, both native. QEMU was the other option
   # and it is the wrong one here: every image runs `pnpm install` and `tsc`
@@ -1325,11 +1319,16 @@ jobs:
             bundle/nginx.conf
             bundle/backup.sh
 
-  # The docs site, when the marker asked for it with a `docs` scope. It is the
-  # same build and the same deploy as docs.yml, from the commit that was
-  # released, and it shares that workflow’s concurrency group so a `!docs` push
-  # and a release carrying `docs` queue behind one another rather than
-  # force-pushing gh-pages at the same moment.
+  # The docs site, for every release. It is the same build and the same deploy
+  # as docs.yml, from the commit that was released, and it shares that
+  # workflow’s concurrency group so a `!docs` push and a release deploy queue
+  # behind one another rather than force-pushing gh-pages at the same moment.
+  #
+  # Unconditional on purpose: the site carries the CHANGELOG entry and the
+  # download links for the version that just shipped, so a release that does not
+  # publish it leaves the site describing the release before this one - and the
+  # `!docs` push that used to follow is a step nobody remembers until the site is
+  # already stale.
   #
   # Outside the rollback story on purpose: the site is documentation, not an
   # artifact of the release, and a Pages outage should not undo a release whose
@@ -1337,7 +1336,7 @@ jobs:
   docs:
     name: Deploy the docs site
     needs: [merged, publish]
-    if: needs.merged.outputs.release == 'true' && needs.merged.outputs.docs == 'true'
+    if: needs.merged.outputs.release == 'true'
     runs-on: ubuntu-latest
     concurrency:
       group: docs-deploy
