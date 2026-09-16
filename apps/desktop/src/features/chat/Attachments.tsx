@@ -1105,6 +1105,14 @@ function useDecrypted(
     if (!attachment) return;
     let cancelled = false;
 
+    // The previous run's URL was revoked by its own cleanup, so leaving it in
+    // state points an `<img>` at a blob that no longer exists - a broken
+    // picture until the new fetch lands. A stale error is worse: a message
+    // re-rendered for a reaction or a receipt would keep showing the file icon
+    // of a fetch that has already been asked again and answered.
+    setUrl(null);
+    setError(null);
+
     openAttachment(channelId, attachment)
       .then((blob) => {
         if (cancelled) return;

@@ -867,8 +867,14 @@ private fun PhotoTile(
         val fetched = runCatching { Conversation.openAttachment(channelId, attachment) }
             .onFailure { failed = true }
             .getOrNull() ?: return@LaunchedEffect
-        bitmap = decodeDownsampled(fetched, MAX_DECODE_EDGE_PX)
-            ?.also { MediaCache.putBitmap(attachment.key, it) }
+        // A decode that comes back null is a picture this phone cannot open -
+        // an encoding it has no decoder for, or bytes that are not the picture
+        // they claim to be. Left unsaid it was a spinner that never stopped,
+        // which reads as "still loading" for ever rather than as the failure
+        // it is.
+        val decoded = decodeDownsampled(fetched, MAX_DECODE_EDGE_PX)
+        if (decoded == null) failed = true
+        bitmap = decoded?.also { MediaCache.putBitmap(attachment.key, it) }
     }
 
     val shown = bitmap
@@ -976,8 +982,11 @@ internal fun AttachmentCard(
     LaunchedEffect(bytes) {
         val fetched = bytes?.takeIf { attachment.isImage } ?: return@LaunchedEffect
         if (imageBitmap != null) return@LaunchedEffect
-        imageBitmap = decodeDownsampled(fetched, MAX_DECODE_EDGE_PX)
-            ?.also { MediaCache.putBitmap(attachment.key, it) }
+        // See the note in `PhotoTile`: a null decode is a failure, and saying
+        // nothing about it leaves the card mid-load for ever.
+        val decoded = decodeDownsampled(fetched, MAX_DECODE_EDGE_PX)
+        if (decoded == null) failed = true
+        imageBitmap = decoded?.also { MediaCache.putBitmap(attachment.key, it) }
     }
 
     Box(

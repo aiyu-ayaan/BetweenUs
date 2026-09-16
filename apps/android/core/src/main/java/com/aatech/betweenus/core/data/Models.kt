@@ -921,6 +921,15 @@ data class MessageAttachment(
      * placeholder shape in both cases and still plays.
      */
     val waveform: List<Float> = emptyList(),
+    /**
+     * Set when the plaintext was gzipped before it was encrypted.
+     *
+     * The desktop packs text-shaped files - text/*, JSON, XML, SVG - above a
+     * few kilobytes, so the bytes that come back out of the cipher are a
+     * deflate stream rather than the file. Without unpacking them an SVG drew
+     * as a failed decode in an album and a text attachment read as binary.
+     */
+    val gzip: Boolean = false,
 ) {
     val isImage: Boolean get() = contentType.startsWith("image/")
     val isVideo: Boolean get() = contentType.startsWith("video/")
@@ -954,6 +963,7 @@ data class MessageAttachment(
             if (waveform.isNotEmpty()) {
                 put("waveform", JSONArray().apply { waveform.forEach { put(it.toDouble()) } })
             }
+            if (gzip) put("gzip", true)
         }
 
     companion object {
@@ -974,6 +984,7 @@ data class MessageAttachment(
             waveform = json.optJSONArray("waveform")?.let { array ->
                 List(array.length()) { at -> array.optDouble(at).toFloat() }
             }.orEmpty(),
+            gzip = json.optBoolean("gzip"),
         )
     }
 }

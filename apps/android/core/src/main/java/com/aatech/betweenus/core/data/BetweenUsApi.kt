@@ -1,6 +1,9 @@
 package com.aatech.betweenus.core.data
 
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.MultipartBody
@@ -103,6 +106,16 @@ class ApiError(val code: String, message: String, val status: Int) : Exception(m
  * moves itself to the IO dispatcher, so a caller never has to remember to.
  */
 object BetweenUsApi {
+
+    /**
+     * How many stored objects may be in flight at once. Four keeps a fast
+     * connection busy and stays well inside the gateway's burst even with a
+     * second device on the same address. See [fetchObject].
+     */
+    private val objects = Semaphore(4)
+    private const val OBJECT_RETRIES = 3
+    /** Refusals worth asking again about: a full queue, not a missing file. */
+    private val OBJECT_RETRY_STATUSES = setOf(429, 502, 503, 504)
 
     // --- auth ---
 
@@ -624,12 +637,42 @@ object BetweenUsApi {
     }
 
     /** Fetches a stored object's bytes. Attachments come back as ciphertext. */
-    suspend fun fetchObject(objectUrl: String): ByteArray = io {
-        val result = Http.get(Endpoint.absolute(objectUrl), Session.accessToken)
-        if (result.status !in 200..299) {
-            throw ApiError("OBJECT_NOT_FOUND", "That file is no longer available", result.status)
+    /**
+     * A stored object's bytes, queued and retried.
+     *
+     * The gateway rate-limits `/api/v1/uploads` to the `api` zone - 20r/s with
+     * a burst of 20, per address (infrastructure/nginx/nginx.conf) - and a
+     * channel full of photo albums asks for every tile the moment it composes.
+     * The overflow comes back 503, and a row that turned one 503 into "failed"
+     * stayed failed: a grid with error icons scattered among the photos, a
+     * moment that never loaded. Not a broken picture - a refused request
+     * nobody asked again for.
+     *
+     * So a queue rather than a stampede, and a retry rather than a verdict.
+     * This is the one door every attachment, poster, voice note and moment
+     * goes through, so it is the one place the limit is answered for all of
+     * them.
+     */
+    suspend fun fetchObject(objectUrl: String): ByteArray = objects.withPermit {
+        io {
+            for (attempt in 0..OBJECT_RETRIES) {
+                val result = Http.get(Endpoint.absolute(objectUrl), Session.accessToken)
+                if (result.status in 200..299) return@io result.bytes
+                if (result.status !in OBJECT_RETRY_STATUSES || attempt == OBJECT_RETRIES) {
+                    throw ApiError(
+                        "OBJECT_NOT_FOUND",
+                        "That file is no longer available",
+                        result.status,
+                    )
+                }
+                // Far enough back to be on the other side of the gateway's
+                // window, with a jitter so a screenful of tiles does not retry
+                // in lockstep and rebuild the burst that refused them.
+                delay(250L * (1 shl attempt) + (0..250).random())
+            }
+            // The loop above either returns or throws on its last pass.
+            throw ApiError("OBJECT_NOT_FOUND", "That file is no longer available", 0)
         }
-        result.bytes
     }
 
     // --- friends and direct messages ---

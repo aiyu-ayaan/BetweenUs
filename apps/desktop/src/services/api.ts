@@ -1,4 +1,5 @@
 import { sampleServerClock } from './server-clock';
+import { objectSlot, retryDelayMs, worthRetrying } from './object-fetch';
 import type {
   BackupSecretKind,
   CreateServerInviteRequest,
@@ -569,17 +570,34 @@ export const api = {
   abortMultipart: (ticket: string): Promise<void> =>
     request('/api/v1/uploads/multipart', { method: 'DELETE', body: JSON.stringify({ ticket }) }),
 
-  /** Fetches a stored object's bytes. Attachments come back as ciphertext. */
-  fetchObject: async (url: string): Promise<Uint8Array<ArrayBuffer>> => {
-    const token = await bearer();
-    const response = await fetch(absoluteUrl(url), {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    });
-    if (!response.ok) {
-      throw new ApiError('OBJECT_NOT_FOUND', 'That file is no longer available', response.status);
-    }
-    return new Uint8Array(await response.arrayBuffer());
-  },
+  /**
+   * Fetches a stored object's bytes. Attachments come back as ciphertext.
+   *
+   * Queued and retried rather than fired off the moment something asks. See
+   * the note on `objectSlot` below: this is the one door every picture, video,
+   * voice note and moment goes through, so it is the one place the gateway's
+   * rate limit can be answered for all of them at once.
+   */
+  fetchObject: (url: string): Promise<Uint8Array<ArrayBuffer>> =>
+    objectSlot(async () => {
+      for (let attempt = 0; ; attempt += 1) {
+        const token = await bearer();
+        const response = await fetch(absoluteUrl(url), {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
+        if (response.ok) return new Uint8Array(await response.arrayBuffer());
+        if (!worthRetrying(response.status, attempt)) {
+          throw new ApiError(
+            'OBJECT_NOT_FOUND',
+            'That file is no longer available',
+            response.status,
+          );
+        }
+        await new Promise((resolve) => {
+          setTimeout(resolve, retryDelayMs(attempt));
+        });
+      }
+    }),
 
   // --- Statuses ---
   //

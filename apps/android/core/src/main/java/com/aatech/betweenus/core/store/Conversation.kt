@@ -28,8 +28,10 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import org.json.JSONObject
+import java.io.ByteArrayInputStream
 import java.time.Instant
 import java.util.concurrent.ConcurrentHashMap
+import java.util.zip.GZIPInputStream
 
 /**
  * One message, ready to draw: the stored row plus whatever came out of the
@@ -732,13 +734,29 @@ object Conversation {
         return (if (dot > 0) name.substring(0, dot) else name) + "." + extension
     }
 
-    suspend fun openAttachment(channelId: String, attachment: MessageAttachment): ByteArray =
-        E2ee.decryptFileForChannel(
+    /**
+     * An attachment's plaintext: fetched, decrypted, and unpacked if it was
+     * packed.
+     *
+     * The gzip step is not optional bookkeeping. The desktop compresses
+     * text-shaped files - text/*, JSON, XML, and SVG - above a few kilobytes
+     * before it encrypts them, and this end skipped the unpacking entirely: an
+     * SVG sent from a desktop arrived here as a deflate stream, failed to
+     * decode, and drew as a broken tile in an album that had no way to say
+     * why. Same door as the desktop's `openAttachment`, same order.
+     */
+    suspend fun openAttachment(channelId: String, attachment: MessageAttachment): ByteArray {
+        val plaintext = E2ee.decryptFileForChannel(
             channelId,
             BetweenUsApi.fetchObject(attachment.url),
             attachment.iv,
             attachment.epoch,
         )
+        return if (attachment.gzip) gunzip(plaintext) else plaintext
+    }
+
+    private fun gunzip(bytes: ByteArray): ByteArray =
+        GZIPInputStream(ByteArrayInputStream(bytes)).use { it.readBytes() }
 
     /**
      * The emoji a message actually uses, and nothing else.
