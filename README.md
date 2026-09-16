@@ -1,7 +1,7 @@
 # BetweenUs
 
 <p align="center">
-  <img src="pictures/home.png" alt="BetweenUs Client Preview" width="100%" />
+  <video src="video.mp4" alt="BetweenUs Client Preview" width="100%" autoplay loop muted playsinline></video>
 </p>
 
 <p align="center">

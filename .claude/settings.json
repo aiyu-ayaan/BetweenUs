@@ -2,6 +2,7 @@
   "enabledPlugins": {
     "ponytail@ponytail": true,
     "superpowers@superpowers-marketplace": true,
-    "planning-with-files@planning-with-files": true
+    "planning-with-files@planning-with-files": true,
+    "brag@brag": true
   }
 }

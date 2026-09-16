@@ -13,7 +13,7 @@ permissioned remote control of another machine — across a desktop client
 today, with web and Android planned in the same backend.
 
 <p>
-  <img src={useBaseUrl('img/home.png')} alt="BetweenUs desktop client" style={{maxWidth: '100%', borderRadius: '8px'}} />
+  <video src={useBaseUrl('img/video.mp4')} alt="BetweenUs desktop client" style={{maxWidth: '100%', borderRadius: '8px'}} autoPlay loop muted playsInline />
 </p>
 
 :::tip Download BetweenUs
