@@ -47,7 +47,16 @@ afterwards.
 | PUT | `/machines/:machineId/grants` | Set a grant (permissions, optional expiry) |
 | GET | `/machines/:machineId/audit` | Read `RemoteAudit` for a machine |
 | POST | `/sessions` | Request a session (may raise a consent prompt on the target) |
-| DELETE | `/sessions/:sessionId` | End a session |
+| DELETE | `/sessions/:sessionId` | End a session; the body carries what the controller counted |
+| GET | `/usage?days=` | This account's own remote sessions over a window, and what they moved |
+
+`DELETE /sessions/:sessionId` takes an optional `RemoteSessionUsage`
+(`bytesSent`, `bytesReceived`, `transport`). It is the client's own count and
+nothing here can check it, so it is clamped rather than trusted, and only the
+controller's figures are taken — an administrator ending somebody else's
+session reports nothing. `GET /usage` is the remote half of the Calls & Data
+page: a call and a remote session are the same shape of thing, and only one of
+them used to be counted.
 
 A machine somebody has no access to answers 404 rather than 403, so machine
 ids aren't probeable. See [Remote Desktop](/architecture/remote-desktop) for

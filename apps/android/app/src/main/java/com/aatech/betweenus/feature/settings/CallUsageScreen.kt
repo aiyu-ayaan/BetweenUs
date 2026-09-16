@@ -42,6 +42,8 @@ import com.aatech.betweenus.core.data.CallHistoryEntry
 import com.aatech.betweenus.core.data.CallLinkReport
 import com.aatech.betweenus.core.data.CallTransportSplit
 import com.aatech.betweenus.core.data.CallUsageTotals
+import com.aatech.betweenus.core.data.RemoteHistoryEntry
+import com.aatech.betweenus.core.data.RemoteUsageReport
 import com.aatech.betweenus.ui.components.BetweenUsIcons
 import com.aatech.betweenus.ui.components.Chip
 import com.aatech.betweenus.ui.components.IconAction
@@ -72,6 +74,13 @@ import java.util.TimeZone
  * because the log is per account and not per device - a call taken on a phone
  * and one taken on a laptop belong in one list or the list is wrong on both.
  *
+ * Remote-desktop sessions are here too, and for the reason they were missing:
+ * a session is a screen, its sound and a file channel over a peer connection
+ * between two machines, often for an hour, often through a relay. On a metered
+ * connection it is regularly the biggest number of the month, and a page that
+ * said "22 GB in calls" while an afternoon of relayed screen went unmentioned
+ * was not answering the question somebody opened it with.
+ *
  * Everything here is measured by the clients. Media goes directly between the
  * people in a call, so nothing in the backend is in the path to count a byte,
  * and a call the app was killed in reports nothing at all - which the page says
@@ -82,11 +91,18 @@ fun CallUsageScreen(onBack: () -> Unit) {
     var days by remember { mutableStateOf(30) }
     var analytics by remember { mutableStateOf<CallAnalytics?>(null) }
     var entries by remember { mutableStateOf<List<CallHistoryEntry>?>(null) }
+    /**
+     * Null while it loads, and also when the remote service is unreachable. A
+     * page that failed whole because its remote half did would be a regression
+     * for everybody who has never used remote desktop.
+     */
+    var remote by remember { mutableStateOf<RemoteUsageReport?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     var open by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(days) {
         analytics = null
+        remote = null
         error = null
         runCatching {
             val usage = BetweenUsApi.callAnalytics(days)
@@ -98,6 +114,9 @@ fun CallUsageScreen(onBack: () -> Unit) {
         }.onFailure {
             error = it.message ?: "Could not load your calls"
         }
+        // Its own service, and allowed to fail on its own: the call report is
+        // worth drawing without it.
+        remote = runCatching { BetweenUsApi.remoteUsage(days) }.getOrNull()
     }
 
     Column(Modifier.fillMaxSize().background(Ground).navigationBarsPadding()) {
@@ -121,9 +140,9 @@ fun CallUsageScreen(onBack: () -> Unit) {
 
         Column(Modifier.verticalScroll(rememberScrollState()).padding(bottom = 40.dp)) {
             Text(
-                text = "Every call this account has been in, and what it moved. Media goes " +
-                    "directly between the people in a call, so these are your own devices' " +
-                    "numbers rather than a server's.",
+                text = "Every call and remote-desktop session this account has been in, " +
+                    "and what each one moved. Media goes directly between the machines " +
+                    "involved, so these are your own devices' numbers rather than a server's.",
                 style = MaterialTheme.typography.bodySmall,
                 color = Slate400,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
@@ -153,7 +172,7 @@ fun CallUsageScreen(onBack: () -> Unit) {
 
             if (usage != null) {
                 Spacer(Modifier.height(12.dp))
-                Totals(usage.totals, usage.transport)
+                Totals(usage.totals, usage.transport, remote)
                 UsageChart(usage)
                 Ranked(
                     title = "Busiest channels",
@@ -208,21 +227,121 @@ fun CallUsageScreen(onBack: () -> Unit) {
                     onToggle = { open = if (open == entry.id) null else entry.id },
                 )
             }
+
+            remote?.takeIf { it.sessions.isNotEmpty() }?.let { RemoteSessions(it) }
         }
+    }
+}
+
+/**
+ * Remote-desktop sessions, listed the way calls are.
+ *
+ * Its own section rather than rows mixed into the call log: they are not calls,
+ * they name a machine rather than a channel, and nobody else was in them. What
+ * they share is the thing this page exists for - a peer connection somebody's
+ * connection paid for - so the totals above count both and the lists stay apart.
+ *
+ * Drawn only when there is something to draw: somebody who has never used
+ * remote desktop should not be given a heading to wonder about.
+ */
+@Composable
+private fun RemoteSessions(report: RemoteUsageReport) {
+    SectionLabel("Remote access")
+    Text(
+        text = buildString {
+            append(report.totals.sessions)
+            append(if (report.totals.sessions == 1) " session · " else " sessions · ")
+            append(duration(report.totals.seconds.toInt()))
+            append(" · ")
+            append(if (report.totals.bytes > 0) bytes(report.totals.bytes) else "nothing recorded")
+            if (report.relayed > 0) append(" · ${report.relayed} through a relay")
+        },
+        style = MaterialTheme.typography.bodySmall,
+        color = Slate500,
+        modifier = Modifier.padding(horizontal = 16.dp),
+    )
+    Text(
+        text = "The screen goes directly between the two machines, so these are the numbers " +
+            "counted by whichever device you were driving from - a session the app was " +
+            "killed in has none.",
+        style = MaterialTheme.typography.bodySmall,
+        color = Slate500,
+        modifier = Modifier.padding(horizontal = 16.dp),
+    )
+    Spacer(Modifier.height(8.dp))
+
+    for (session in report.sessions) RemoteRow(session)
+}
+
+@Composable
+private fun RemoteRow(session: RemoteHistoryEntry) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 4.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(Surface900)
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = session.machineName,
+                style = MaterialTheme.typography.bodyMedium,
+                color = Slate100,
+                modifier = Modifier.weight(1f),
+            )
+            Text(
+                text = session.durationSeconds?.let { duration(it) }
+                    ?: "no ending recorded",
+                style = MaterialTheme.typography.labelSmall,
+                color = Slate400,
+            )
+        }
+        Text(
+            text = buildString {
+                append(when_(session.startedAt))
+                append(" · ")
+                append(
+                    if (session.bytes > 0) {
+                        "${bytes(session.bytes)} · ${bytes(session.bytesSent)} up · " +
+                            "${bytes(session.bytesReceived)} down"
+                    } else {
+                        "no data recorded"
+                    },
+                )
+                when (session.transport) {
+                    "relay" -> append(" · relayed")
+                    "direct" -> append(" · direct")
+                }
+            },
+            style = MaterialTheme.typography.bodySmall,
+            color = if (session.transport == "relay") Amber200 else Slate500,
+        )
     }
 }
 
 /** The three answers somebody opens this page for, before any of the detail. */
 @Composable
-private fun Totals(totals: CallUsageTotals, transport: CallTransportSplit) {
+private fun Totals(
+    totals: CallUsageTotals,
+    transport: CallTransportSplit,
+    remote: RemoteUsageReport?,
+) {
+    // Calls and remote sessions together, because "data used" is one number on
+    // one connection and splitting it across two pages was the whole bug.
+    val sent = totals.bytesSent + (remote?.totals?.bytesSent ?: 0L)
+    val received = totals.bytesReceived + (remote?.totals?.bytesReceived ?: 0L)
+    val remoteBytes = remote?.totals?.bytes ?: 0L
+
     Row(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Total(
             label = "Data used",
-            value = bytes(totals.bytes),
-            detail = "${bytes(totals.bytesSent)} up · ${bytes(totals.bytesReceived)} down",
+            value = bytes(sent + received),
+            detail = "${bytes(sent)} up · ${bytes(received)} down" +
+                if (remoteBytes > 0) ", incl. ${bytes(remoteBytes)} remote" else "",
             modifier = Modifier.weight(1f),
         )
         Total(

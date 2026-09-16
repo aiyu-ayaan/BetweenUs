@@ -166,3 +166,5 @@ Base Route: `/api/v1/remote`
 | `GET` | `/machines/:machineId/grants`| Yes | Lists user access permissions for a machine. |
 | `POST` | `/machines/:machineId/grants`| Yes | Grants or revokes remote control / view permissions. |
 | `POST` | `/sessions/start` | Yes | Negotiates peer-to-peer WebRTC data channels for remote control. |
+| `DELETE` | `/sessions/:sessionId` | Yes | Ends a session. Optional body reports what the controller's machine moved. |
+| `GET` | `/usage` | Yes | This account's own remote sessions over `days`, with totals — the remote half of Calls & Data. |

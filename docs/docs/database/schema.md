@@ -468,6 +468,15 @@ re-read — the session's authority is frozen, so revoking a grant mid-session
 is a decision the gateway makes deliberately (ending the session) rather
 than a race against event ordering.
 
+`bytesSent`, `bytesReceived` and `transport` are the **controller's own
+measurements**, on exactly the same footing as a call's: the screen, its audio
+and the file channel go peer to peer, so nothing server-side is in the path to
+count a byte. They are clamped (`clampReportedBytes` in
+`@betweenus/nest-common`) before they are written, and only the controller
+reports — the two ends see the same peer connection from opposite sides, and
+recording both would double every byte. Zero for a session whose client never
+got to report, which a window killed mid-session does.
+
 ### `RemoteAudit`
 Append-only. Nothing in the application updates or deletes a row. Records
 enrollment, renames, permission changes, session start/end, and refused

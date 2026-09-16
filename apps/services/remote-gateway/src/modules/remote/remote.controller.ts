@@ -20,9 +20,11 @@ import type {
   RemoteGrantSummary,
   RemoteMachineSummary,
   RemoteSessionResponse,
+  RemoteUsageReport,
 } from '@betweenus/shared-types';
 import { RemoteService } from './remote.service';
 import {
+  EndRemoteSessionDto,
   EnrolMachineDto,
   RenameMachineDto,
   SetRemoteGrantDto,
@@ -125,7 +127,34 @@ export class RemoteController {
   async end(
     @CurrentUser() user: AuthenticatedUser,
     @Param('sessionId', ParseUUIDPipe) sessionId: string,
+    @Body() dto: EndRemoteSessionDto,
   ): Promise<void> {
-    await this.remote.endSessionFor(user.id, sessionId, 'controller');
+    // The body is what the controller's machine counted. Absent - an older
+    // client, or a window that died before it could say - leaves the row's
+    // figures at zero rather than inventing any.
+    const reported =
+      dto.bytesSent !== undefined || dto.bytesReceived !== undefined
+        ? {
+            bytesSent: dto.bytesSent ?? 0,
+            bytesReceived: dto.bytesReceived ?? 0,
+            transport: dto.transport ?? null,
+          }
+        : undefined;
+    await this.remote.endSessionFor(user.id, sessionId, 'controller', reported);
+  }
+
+  /**
+   * This account's own remote sessions over a window, and what they moved.
+   *
+   * The other half of the Calls & Data page. Whose is never a parameter - the
+   * service decides, so there is nothing here to get wrong.
+   */
+  @Get('usage')
+  usage(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query('days') days?: string,
+  ): Promise<RemoteUsageReport> {
+    const parsed = Number(days);
+    return this.remote.usage(user.id, Number.isFinite(parsed) ? parsed : 30);
   }
 }

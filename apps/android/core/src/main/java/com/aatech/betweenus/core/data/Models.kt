@@ -924,7 +924,7 @@ data class MessageAttachment(
     /**
      * Set when the plaintext was gzipped before it was encrypted.
      *
-     * The desktop packs text-shaped files - text/*, JSON, XML, SVG - above a
+     * The desktop packs text-shaped files - text types, JSON, XML, SVG - above a
      * few kilobytes, so the bytes that come back out of the cipher are a
      * deflate stream rather than the file. Without unpacking them an SVG drew
      * as a failed decode in an album and a text attachment read as binary.
@@ -1466,6 +1466,95 @@ data class CallHistoryEntry(
             bytesSent = json.optLong("bytesSent"),
             bytesReceived = json.optLong("bytesReceived"),
             links = json.optJSONArray("links")?.map { CallLinkReport.from(it) }.orEmpty(),
+        )
+    }
+}
+
+/**
+ * What this device counted over one remote-desktop session.
+ *
+ * Reported once, on the way out, by the controlling device and nobody else: the
+ * two ends see the same peer connection from opposite sides, and adding both
+ * would count every byte twice. Nothing on the server can check any of it - the
+ * screen never goes near one - so it is clamped where it lands.
+ */
+data class RemoteSessionUsage(
+    val bytesSent: Long,
+    val bytesReceived: Long,
+    /** "direct", "relay", or null when ICE never settled anywhere. */
+    val transport: String?,
+) {
+    fun toJson(): JSONObject = JSONObject()
+        .put("bytesSent", bytesSent)
+        .put("bytesReceived", bytesReceived)
+        .apply { transport?.let { put("transport", it) } }
+}
+
+/** One remote-desktop session, as the usage report reads it back. */
+data class RemoteHistoryEntry(
+    val id: String,
+    val machineId: String,
+    val machineName: String,
+    val startedAt: String,
+    val endedAt: String?,
+    val durationSeconds: Int?,
+    val endedReason: String?,
+    val bytesSent: Long,
+    val bytesReceived: Long,
+    val transport: String?,
+) {
+    val bytes: Long get() = bytesSent + bytesReceived
+
+    companion object {
+        fun from(json: JSONObject) = RemoteHistoryEntry(
+            id = json.optString("id"),
+            machineId = json.optString("machineId"),
+            machineName = json.optString("machineName"),
+            startedAt = json.optString("startedAt"),
+            endedAt = json.stringOrNull("endedAt"),
+            durationSeconds =
+                if (json.isNull("durationSeconds")) null else json.optInt("durationSeconds"),
+            endedReason = json.stringOrNull("endedReason"),
+            bytesSent = json.optLong("bytesSent"),
+            bytesReceived = json.optLong("bytesReceived"),
+            transport = json.stringOrNull("transport"),
+        )
+    }
+}
+
+/** Remote sessions added up over the same window the call report covers. */
+data class RemoteUsageTotals(
+    val sessions: Int,
+    val seconds: Long,
+    val bytesSent: Long,
+    val bytesReceived: Long,
+) {
+    val bytes: Long get() = bytesSent + bytesReceived
+
+    companion object {
+        fun from(json: JSONObject) = RemoteUsageTotals(
+            sessions = json.optInt("sessions"),
+            seconds = json.optLong("seconds"),
+            bytesSent = json.optLong("bytesSent"),
+            bytesReceived = json.optLong("bytesReceived"),
+        )
+    }
+}
+
+/** The remote half of the usage report: the totals, and the sessions behind them. */
+data class RemoteUsageReport(
+    val days: Int,
+    val totals: RemoteUsageTotals,
+    val sessions: List<RemoteHistoryEntry>,
+    val relayed: Int,
+) {
+    companion object {
+        fun from(json: JSONObject) = RemoteUsageReport(
+            days = json.optInt("days"),
+            totals = json.optJSONObject("totals")?.let { RemoteUsageTotals.from(it) }
+                ?: RemoteUsageTotals(0, 0, 0, 0),
+            sessions = json.optJSONArray("sessions")?.map { RemoteHistoryEntry.from(it) }.orEmpty(),
+            relayed = json.optJSONObject("transport")?.optInt("relay") ?: 0,
         )
     }
 }

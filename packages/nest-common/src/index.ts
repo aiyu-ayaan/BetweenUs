@@ -488,3 +488,35 @@ export async function bootstrapService(options: BootstrapOptions): Promise<INest
 
 export { createLogger };
 export type { Logger };
+
+// --- Reported usage ---------------------------------------------------------
+
+/**
+ * A tenth of a terabyte: past any real call or remote session, short of
+ * anything that overflows.
+ */
+export const MAX_REPORTED_BYTES = 100 * 1024 * 1024 * 1024;
+
+/**
+ * What to believe about a number only the client can measure.
+ *
+ * Media is peer to peer - in a call and in a remote session alike - so nothing
+ * on a server ever sees a byte of either, and there is nothing here to check a
+ * client's figure against. It is recorded anyway, because "this used 400 MB" is
+ * the whole point of the usage report for anybody on a metered connection, but
+ * it is clamped first: the worst a broken or lying client can do is write a
+ * wrong number in its own row rather than an absurd one, or a negative that
+ * would read as data refunded.
+ *
+ * Lives here rather than in either service because both of them need exactly
+ * this, and a second copy is a second ceiling to keep in step.
+ */
+export function clampReportedBytes(bytes: number): number {
+  if (!Number.isFinite(bytes) || bytes <= 0) return 0;
+  return Math.min(Math.floor(bytes), MAX_REPORTED_BYTES);
+}
+
+/** The two answers ICE can settle on, and the one it can fail to give. */
+export function clampReportedTransport(value: unknown): 'direct' | 'relay' | null {
+  return value === 'direct' || value === 'relay' ? value : null;
+}

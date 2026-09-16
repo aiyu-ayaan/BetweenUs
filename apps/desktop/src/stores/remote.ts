@@ -218,12 +218,19 @@ export const useRemoteStore = create<RemoteState>((set, get) => ({
     socket?.close();
     socket = null;
 
+    // Read before the link is closed, because a closed peer connection has no
+    // counters left to read - which is how a session that ended cleanly used to
+    // report nothing at all. Only this end reports: the agent sees the same
+    // connection from the other side, and counting both would double it.
+    const usage = link ? await link.usage().catch(() => undefined) : undefined;
+
     link?.close();
     link = null;
 
     // The socket closing already tells the gateway, but a window that is being
-    // torn down may not get the close out; the HTTP call is the belt.
-    if (session) await api.endRemoteSession(session.sessionId).catch(() => undefined);
+    // torn down may not get the close out; the HTTP call is the belt - and it
+    // is the only path that carries what the session moved.
+    if (session) await api.endRemoteSession(session.sessionId, usage).catch(() => undefined);
     stopClipboardSync();
     set({
       session: null,

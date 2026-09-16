@@ -25,14 +25,19 @@ import {
   type RemoteAccess,
 } from '@betweenus/database';
 import { EVENTS, EventBus } from '@betweenus/events';
+import { clampReportedBytes, clampReportedTransport } from '@betweenus/nest-common';
 import { PERMISSIONS, type RemotePermission } from '@betweenus/permissions';
 import type {
+  CallTransport,
   EnrolMachineResponse,
   IceServer,
   RemoteAuditEntry,
   RemoteGrantSummary,
+  RemoteHistoryEntry,
   RemoteMachineSummary,
   RemoteSessionResponse,
+  RemoteSessionUsage,
+  RemoteUsageReport,
 } from '@betweenus/shared-types';
 
 /**
@@ -356,7 +361,17 @@ export class RemoteService {
     return iceServers();
   }
 
-  async endSession(sessionId: string, reason: string): Promise<void> {
+  /**
+   * Closes a session: when it stopped, why, and what the controller's machine
+   * moved while it was up.
+   *
+   * `usage` is the controller's own count and nothing here can check it - the
+   * gateway is not in the media path, by design - so it is clamped rather than
+   * trusted, the same way a call's figures are. Absent for a session whose
+   * window died before it could say, and for a client built before this
+   * existed; both read back as zero, which is what they are.
+   */
+  async endSession(sessionId: string, reason: string, usage?: RemoteSessionUsage): Promise<void> {
     const session = await prisma.remoteSession.findUnique({
       where: { id: sessionId },
       select: { id: true, machineId: true, userId: true, endedAt: true },
@@ -365,7 +380,17 @@ export class RemoteService {
 
     await prisma.remoteSession.update({
       where: { id: sessionId },
-      data: { endedAt: new Date(), endedReason: reason },
+      data: {
+        endedAt: new Date(),
+        endedReason: reason,
+        ...(usage
+          ? {
+              bytesSent: BigInt(clampReportedBytes(usage.bytesSent)),
+              bytesReceived: BigInt(clampReportedBytes(usage.bytesReceived)),
+              transport: clampReportedTransport(usage.transport),
+            }
+          : {}),
+      },
     });
     await recordRemoteAudit({
       machineId: session.machineId,
@@ -431,7 +456,12 @@ export class RemoteService {
    * controller holding it, or whoever administers the machine. A stranger with
    * a session id gets the same 404 they would get for a machine id.
    */
-  async endSessionFor(userId: string, sessionId: string, reason: string): Promise<void> {
+  async endSessionFor(
+    userId: string,
+    sessionId: string,
+    reason: string,
+    usage?: RemoteSessionUsage,
+  ): Promise<void> {
     const session = await prisma.remoteSession.findUnique({
       where: { id: sessionId },
       select: { id: true, machineId: true, userId: true, endedAt: true },
@@ -450,7 +480,10 @@ export class RemoteService {
     }
 
     if (session.endedAt) return;
-    await this.endSession(sessionId, reason);
+    // Only the controller's own figures are taken. Somebody administering the
+    // machine may end a session they were not in, and what *their* machine
+    // moved has nothing to do with it.
+    await this.endSession(sessionId, reason, session.userId === userId ? usage : undefined);
     await this.onSessionEnded(sessionId, session.machineId, reason);
   }
 
@@ -461,6 +494,67 @@ export class RemoteService {
    */
   onSessionEnded: (sessionId: string, machineId: string, reason: string) => Promise<void> =
     async () => undefined;
+
+  /**
+   * This account's own remote sessions over a window, and what they moved.
+   *
+   * Only their own: there is no parameter for whose, because a "whose" is the
+   * only thing that could ever be wrong here - the same rule the call log
+   * follows, for the same reason.
+   *
+   * It answers the half of "Calls & Data" that was missing. A call and a remote
+   * session are the same shape of thing - a stay in a peer connection, billed
+   * to whoever's connection carried it - and only one of them was ever counted,
+   * so a page that said "22 GB in calls" was silent about an hour of relayed
+   * screen that cost more than any of them.
+   *
+   * ponytail: the sessions are added up in memory rather than in SQL. It is one
+   * person's window of their own sessions - tens of rows, not thousands - and
+   * `groupBy` is the fix if that ever stops being true, without the shape of
+   * the answer changing. The same note stands over `CallsService.analytics`.
+   */
+  async usage(userId: string, days: number): Promise<RemoteUsageReport> {
+    const window = Math.min(Math.max(Math.round(days) || DEFAULT_USAGE_DAYS, 1), MAX_USAGE_DAYS);
+    const since = new Date();
+    since.setHours(0, 0, 0, 0);
+    since.setDate(since.getDate() - (window - 1));
+
+    const rows = await prisma.remoteSession.findMany({
+      where: { userId, startedAt: { gte: since } },
+      orderBy: { startedAt: 'desc' },
+      take: MAX_USAGE_SESSIONS,
+      include: { machine: { select: { name: true } } },
+    });
+
+    const sessions: RemoteHistoryEntry[] = rows.map((row) => ({
+      id: row.id,
+      machineId: row.machineId,
+      // The machine as it is named now, so one that was renamed reads as the
+      // machine it is rather than as the name it had that week.
+      machineName: row.machine?.name ?? 'That machine',
+      startedAt: row.startedAt.toISOString(),
+      endedAt: row.endedAt?.toISOString() ?? null,
+      durationSeconds: row.endedAt
+        ? Math.max(0, Math.round((row.endedAt.getTime() - row.startedAt.getTime()) / 1000))
+        : null,
+      endedReason: row.endedReason,
+      bytesSent: Number(row.bytesSent),
+      bytesReceived: Number(row.bytesReceived),
+      transport: (row.transport as CallTransport | null) ?? null,
+    }));
+
+    const totals = { sessions: 0, seconds: 0, bytesSent: 0, bytesReceived: 0 };
+    const transport = { direct: 0, relay: 0, unknown: 0 };
+    for (const session of sessions) {
+      totals.sessions += 1;
+      totals.seconds += session.durationSeconds ?? 0;
+      totals.bytesSent += session.bytesSent;
+      totals.bytesReceived += session.bytesReceived;
+      transport[session.transport ?? ('unknown' as const)] += 1;
+    }
+
+    return { days: window, totals, sessions, transport };
+  }
 
   /** The machine's own history. Owner or a delegated administrator only. */
   async audit(userId: string, machineId: string, limit = 100): Promise<RemoteAuditEntry[]> {
@@ -575,3 +669,14 @@ function parseExpiry(value: string | null | undefined): Date | null {
   }
   return date;
 }
+
+/** How far back the usage report looks when nothing says otherwise. */
+const DEFAULT_USAGE_DAYS = 30;
+/** The furthest back it will look. Matches the call report's ceiling. */
+const MAX_USAGE_DAYS = 365;
+/**
+ * How many sessions come back with it. The page shows a list somebody reads,
+ * not an archive, and the totals above it are computed from the same rows - so
+ * this is the honest cap on both, and the page says so.
+ */
+const MAX_USAGE_SESSIONS = 200;

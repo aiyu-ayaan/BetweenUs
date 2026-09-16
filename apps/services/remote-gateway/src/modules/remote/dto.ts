@@ -1,7 +1,9 @@
 import {
   ArrayMaxSize,
   IsArray,
+  IsIn,
   IsISO8601,
+  IsNumber,
   IsOptional,
   IsString,
   IsUUID,
@@ -10,6 +12,7 @@ import {
 import type {
   EnrolMachineRequest,
   RemotePermission,
+  RemoteSessionUsage,
   SetRemoteGrantRequest,
   StartRemoteSessionRequest,
 } from '@betweenus/shared-types';
@@ -53,4 +56,27 @@ export class SetRemoteGrantDto implements SetRemoteGrantRequest {
 export class StartRemoteSessionDto implements StartRemoteSessionRequest {
   @IsUUID()
   machineId!: string;
+}
+
+/**
+ * What the controller's machine counted, sent as it leaves.
+ *
+ * Every field is optional: a client that reports nothing is a session that
+ * reads as zero, which is exactly what a window killed mid-session is, and a
+ * build that predates this reports nothing at all. Numbers are clamped in the
+ * service rather than bounded here - the ceiling belongs with the thing that
+ * writes the row.
+ */
+export class EndRemoteSessionDto implements Partial<RemoteSessionUsage> {
+  @IsOptional()
+  @IsNumber()
+  bytesSent?: number;
+
+  @IsOptional()
+  @IsNumber()
+  bytesReceived?: number;
+
+  @IsOptional()
+  @IsIn(['direct', 'relay'])
+  transport?: 'direct' | 'relay' | null;
 }

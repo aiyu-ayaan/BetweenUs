@@ -29,7 +29,7 @@
  * middle. Closing that needs a key agreed between agent and controller without
  * the gateway learning it; see "Known limits" in development/E2EE.md.
  */
-import type { IceServer, RemoteSignal } from '@betweenus/shared-types';
+import type { IceServer, RemoteSessionUsage, RemoteSignal } from '@betweenus/shared-types';
 import { serialize } from './signal-queue';
 import {
   PLAYOUT_DELAY,
@@ -322,6 +322,66 @@ export class ScreenLink {
     } catch (error) {
       console.warn('[remote-peer] could not accept a signal', error);
     }
+  }
+
+  /**
+   * What this link has moved, and how it got there.
+   *
+   * Read once, on the way out, so the usage report has something to say about a
+   * remote session at all - `getStats` is not free, and a number nobody is
+   * reading is a number not worth taking. Counters are cumulative, so the last
+   * reading *is* the session's total; there is no differencing to do.
+   *
+   * Only the controller calls this. Both ends see the same peer connection from
+   * opposite sides, and recording both would count every byte twice - see the
+   * note on `RemoteSession.bytesSent` in the schema.
+   */
+  async usage(): Promise<RemoteSessionUsage> {
+    const total: RemoteSessionUsage = { bytesSent: 0, bytesReceived: 0, transport: null };
+    if (this.closed) return total;
+
+    const reports = await this.pc.getStats().catch(() => null);
+    if (!reports) return total;
+
+    // The pair actually carrying the session, and every candidate by id, so the
+    // two ends of it can be looked up by type below.
+    let pair: Record<string, unknown> | null = null;
+    const candidateTypes = new Map<string, string>();
+
+    reports.forEach((report: Record<string, unknown>) => {
+      const kind = report.type;
+      if (kind === 'inbound-rtp') {
+        total.bytesReceived += Number(report.bytesReceived) || 0;
+      } else if (kind === 'outbound-rtp') {
+        total.bytesSent += Number(report.bytesSent) || 0;
+      } else if (kind === 'data-channel') {
+        // The file channel. On a session that moved a folder across it this is
+        // most of the session, and leaving it out would have made the report
+        // wrong in exactly the case somebody came to it to check.
+        total.bytesSent += Number(report.bytesSent) || 0;
+        total.bytesReceived += Number(report.bytesReceived) || 0;
+      } else if (kind === 'candidate-pair' && report.nominated && report.state === 'succeeded') {
+        pair = report;
+      } else if (kind === 'local-candidate' || kind === 'remote-candidate') {
+        const id = typeof report.id === 'string' ? report.id : '';
+        const type = typeof report.candidateType === 'string' ? report.candidateType : '';
+        if (id && type) candidateTypes.set(id, type);
+      }
+    });
+
+    const selected = pair as Record<string, unknown> | null;
+    if (selected) {
+      const local = candidateTypes.get(String(selected.localCandidateId ?? ''));
+      const remote = candidateTypes.get(String(selected.remoteCandidateId ?? ''));
+      // Null rather than a guess when ICE never named both ends: not knowing
+      // and knowing it was direct are different answers, and a relay bill is
+      // what the difference is worth.
+      if (local && remote) {
+        total.transport = local === 'relay' || remote === 'relay' ? 'relay' : 'direct';
+      }
+    }
+
+    return total;
   }
 
   close(): void {

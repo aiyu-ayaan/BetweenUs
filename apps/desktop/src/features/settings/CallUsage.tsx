@@ -6,6 +6,13 @@
  * one connection but one per other person and they do not behave alike - the
  * one that went through a relay is usually the whole answer.
  *
+ * Remote-desktop sessions are here too, and for the reason they were missing:
+ * a session is a screen, its sound and a file channel over a peer connection
+ * between two machines, often for an hour, often through a relay. On a metered
+ * connection it is frequently the biggest number of the month - and a page that
+ * said "22 GB in calls" while an afternoon of relayed screen went unmentioned
+ * was not answering the question somebody opened it with.
+ *
  * Everything drawn here is measured by the clients, not by any server: media
  * goes directly between the people in a call, so nothing in the backend is in
  * the path to count a byte. That is also why a call the app was killed in
@@ -16,7 +23,13 @@
  * megabyte to draw thirty rectangles.
  */
 import { useEffect, useMemo, useState } from 'react';
-import type { CallAnalytics, CallHistoryEntry, CallLinkReport } from '@betweenus/shared-types';
+import type {
+  CallAnalytics,
+  CallHistoryEntry,
+  CallLinkReport,
+  RemoteHistoryEntry,
+  RemoteUsageReport,
+} from '@betweenus/shared-types';
 import { api } from '../../services/api';
 import { formatBytes } from '../../services/attachments';
 import { formatCallDuration } from '../../services/call-stats';
@@ -31,12 +44,27 @@ export function CallUsageSection(): JSX.Element {
   const [days, setDays] = useState<number>(30);
   const [analytics, setAnalytics] = useState<CallAnalytics | null>(null);
   const [entries, setEntries] = useState<CallHistoryEntry[] | null>(null);
+  /**
+   * Null while it loads, and also when this build has no remote section to
+   * read - the web client's dev proxy has no /api/v1/remote at all. A page that
+   * failed whole because the remote half was unreachable would be a regression
+   * for everybody who never uses remote desktop.
+   */
+  const [remote, setRemote] = useState<RemoteUsageReport | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState<string | null>(null);
 
   useEffect(() => {
     let live = true;
     setAnalytics(null);
+    setRemote(null);
+    // The remote half is allowed to fail on its own. It is a separate service,
+    // and the call report is worth drawing without it.
+    void api
+      .remoteUsage(days)
+      .then((report) => live && setRemote(report))
+      .catch(() => undefined);
+
     Promise.all([api.callAnalytics(days), api.callHistory()])
       .then(([usage, history]) => {
         if (!live) return;
@@ -53,15 +81,23 @@ export function CallUsageSection(): JSX.Element {
   }, [days]);
 
   const totals = analytics?.totals;
-  const totalBytes = totals ? totals.bytesSent + totals.bytesReceived : 0;
+  const remoteTotals = remote?.totals;
+  // Calls and remote sessions together, because "data used" is one number on
+  // one connection and splitting it between two pages was the whole bug.
+  const sentBytes = (totals?.bytesSent ?? 0) + (remoteTotals?.bytesSent ?? 0);
+  const receivedBytes = (totals?.bytesReceived ?? 0) + (remoteTotals?.bytesReceived ?? 0);
+  const totalBytes = sentBytes + receivedBytes;
+  const remoteBytes = remoteTotals
+    ? remoteTotals.bytesSent + remoteTotals.bytesReceived
+    : 0;
 
   return (
     <>
       <h1 className="text-xl font-semibold text-slate-50">Calls &amp; Data</h1>
       <p className="mt-2 text-sm text-slate-400">
-        Every call this account has been in, and what it moved. Media goes directly between the
-        people in a call, so these are your own machine&apos;s numbers rather than a server&apos;s -
-        a call the app was killed in has none to report.
+        Every call and remote-desktop session this account has been in, and what each one moved.
+        Media goes directly between the machines involved, so these are your own machine&apos;s
+        numbers rather than a server&apos;s - anything the app was killed in has none to report.
       </p>
 
       {error && (
@@ -94,7 +130,10 @@ export function CallUsageSection(): JSX.Element {
         <>
           <div className="mt-4 grid grid-cols-3 gap-3">
             <Total label="Data used" value={formatBytes(totalBytes)}>
-              {formatBytes(totals.bytesSent)} up · {formatBytes(totals.bytesReceived)} down
+              {formatBytes(sentBytes)} up · {formatBytes(receivedBytes)} down
+              {remoteBytes > 0 && (
+                <span className="block">including {formatBytes(remoteBytes)} remote access</span>
+              )}
             </Total>
             <Total label="Time in calls" value={formatCallDuration(totals.seconds)}>
               across {totals.calls} {totals.calls === 1 ? 'call' : 'calls'}
@@ -178,8 +217,73 @@ export function CallUsageSection(): JSX.Element {
           </li>
         ))}
       </ul>
+
+      <RemoteSessions report={remote} />
     </>
   );
+}
+
+/**
+ * Remote-desktop sessions, listed the way calls are.
+ *
+ * Its own section rather than rows mixed into the call log: they are not calls,
+ * they name a machine rather than a channel, and nobody else was in them. What
+ * they share is the thing this page exists for - a peer connection somebody's
+ * connection paid for - so the totals above count both and the lists stay apart.
+ *
+ * Absent entirely when there is nothing to show. Somebody who has never used
+ * remote desktop should not be given a heading to wonder about.
+ */
+function RemoteSessions({ report }: { report: RemoteUsageReport | null }): JSX.Element | null {
+  if (!report || report.sessions.length === 0) return null;
+  const { totals } = report;
+  const bytes = totals.bytesSent + totals.bytesReceived;
+
+  return (
+    <>
+      <h2 className="mt-8 text-sm font-semibold uppercase tracking-wide text-slate-400">
+        Remote access
+      </h2>
+      <p className="mt-1 text-xs text-slate-500">
+        {totals.sessions} {totals.sessions === 1 ? 'session' : 'sessions'} ·{' '}
+        {formatCallDuration(totals.seconds)} · {bytes > 0 ? formatBytes(bytes) : 'nothing recorded'}
+        {report.transport.relay > 0 && ` · ${report.transport.relay} through a relay`}
+      </p>
+      <p className="mt-1 text-xs text-slate-500">
+        The screen goes directly between the two machines, so these are the numbers counted by
+        whichever machine you were driving from - a session whose window was killed has none.
+      </p>
+
+      <ul className="mt-3 space-y-2">
+        {report.sessions.map((session) => (
+          <li key={session.id} className="rounded-lg bg-surface-800 px-4 py-3">
+            <div className="flex items-baseline justify-between gap-3">
+              <p className="truncate text-sm font-medium text-slate-100">{session.machineName}</p>
+              <span className="shrink-0 text-xs tabular-nums text-slate-400">
+                {session.durationSeconds === null
+                  ? 'no ending recorded'
+                  : formatCallDuration(session.durationSeconds)}
+              </span>
+            </div>
+            <p className="mt-1 text-xs text-slate-400">
+              {describeWhen(session.startedAt)} · {describeRemoteData(session)}
+              <span
+                className={session.transport === 'relay' ? 'text-amber-300' : undefined}
+              >
+                {session.transport ? ` · ${session.transport === 'relay' ? 'relayed' : 'direct'}` : ''}
+              </span>
+            </p>
+          </li>
+        ))}
+      </ul>
+    </>
+  );
+}
+
+function describeRemoteData(session: RemoteHistoryEntry): string {
+  const bytes = session.bytesSent + session.bytesReceived;
+  if (bytes === 0) return 'no data recorded';
+  return `${formatBytes(bytes)} · ${formatBytes(session.bytesSent)} up · ${formatBytes(session.bytesReceived)} down`;
 }
 
 /**

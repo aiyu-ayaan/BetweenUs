@@ -1093,6 +1093,22 @@ model RemoteSession {
   endedAt     DateTime?
   /// Why it stopped: "controller", "agent", "revoked", "agent-offline".
   endedReason String?
+  /// What this session moved, as the controller's own machine counted it.
+  ///
+  /// A remote session is a screen, its sound and a file channel running over a
+  /// peer connection between two machines, and the server is no more in that
+  /// path than it is in a call's. So these are the controller's figures,
+  /// clamped on the way in the same way a call's are - see
+  /// `clampReportedBytes` in @betweenus/nest-common - and zero for a session
+  /// whose window died before it could report. Only the controller reports:
+  /// the two ends see the same link from opposite sides, and adding both would
+  /// count every byte twice.
+  bytesSent     BigInt   @default(0)
+  bytesReceived BigInt   @default(0)
+  /// "direct", "relay", or null when ICE never settled. The difference between
+  /// a session that cost the operator nothing and one that spent relay
+  /// bandwidth for its whole length, and invisible from anywhere else.
+  transport   String?
 
   machine RemoteMachine @relation(fields: [machineId], references: [id], onDelete: Cascade)
   user    User          @relation("RemoteSessionUser", fields: [userId], references: [id], onDelete: Cascade)

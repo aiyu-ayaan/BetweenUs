@@ -367,6 +367,23 @@ and `viewCount` differ per reader, so the tray is re-read rather than patched.
 Attachments are encrypted client-side before upload and served only as
 opaque downloads — see [`E2EE.md`](/security/e2ee).
 
+**Clients queue their object fetches.** The gateway rate-limits
+`/api/v1/uploads` to the `api` zone — 20r/s with a burst of 20, per address
+(`infrastructure/nginx/nginx.conf`) — and a channel of photo albums would
+otherwise ask for every tile at once, pushing the overflow past the limit and
+getting a `503` for it. Every client therefore funnels object downloads through
+one door with at most **4 in flight**, and retries `429/502/503/504` three
+times with an exponential, jittered backoff: `objectSlot` in
+`apps/desktop/src/services/object-fetch.ts`, and the matching `Semaphore` in
+`BetweenUsApi.fetchObject` on Android. Before this, a single refused request
+became a permanent "this file could not be opened" — the file icons scattered
+through an album, and the moments that never loaded.
+
+A client that gzipped an attachment before encrypting it sets `gzip` on the
+manifest entry, and **every** client must un-gzip on the way out. The desktop
+packs text-shaped types (text, JSON, XML, SVG) above 4 KB; a client that
+ignored the flag handed a deflate stream to its image decoder.
+
 A message may carry `MAX_ATTACHMENTS_PER_MESSAGE` (10) files. The cap is a
 client one, enforced in the picker on every platform where it can be explained,
 and it exists so the attachment manifest sealed inside the message body stays

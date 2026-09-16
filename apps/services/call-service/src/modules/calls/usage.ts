@@ -9,15 +9,14 @@
  * rather than an absurd one, or a negative that would read as data refunded.
  */
 
+import { clampReportedBytes, clampReportedTransport } from '@betweenus/nest-common';
 import type { CallLinkReport } from '@betweenus/shared-types';
 
-/** A tenth of a terabyte: past any real call, short of anything that overflows. */
-export const MAX_REPORTED_BYTES = 100 * 1024 * 1024 * 1024;
-
-export function clampReportedBytes(bytes: number): number {
-  if (!Number.isFinite(bytes) || bytes <= 0) return 0;
-  return Math.min(Math.floor(bytes), MAX_REPORTED_BYTES);
-}
+// The byte clamp itself lives in @betweenus/nest-common: a remote session is
+// the same problem - a figure only the client can measure - and one ceiling
+// kept in one place is one ceiling. Re-exported so the callers here keep the
+// import they had.
+export { MAX_REPORTED_BYTES, clampReportedBytes } from '@betweenus/nest-common';
 
 /** Past any real call: eight peers is the ceiling, and a link is not a call. */
 const MAX_LINKS = 32;
@@ -40,8 +39,7 @@ export function clampReportedLinks(value: unknown): CallLinkReport[] {
     const userId = typeof link.userId === 'string' ? link.userId.slice(0, 64) : '';
     if (!userId) return [];
 
-    const transport =
-      link.transport === 'direct' || link.transport === 'relay' ? link.transport : null;
+    const transport = clampReportedTransport(link.transport);
 
     return [
       {

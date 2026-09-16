@@ -44,6 +44,8 @@ import type {
   RemoteMachineSummary,
   RemotePermission,
   RemoteSessionResponse,
+  RemoteSessionUsage,
+  RemoteUsageReport,
   CreateServerRoleRequest,
   ServerCustomRole,
   CreateWebhookRequest,
@@ -821,8 +823,22 @@ export const api = {
   startRemoteSession: (machineId: string): Promise<RemoteSessionResponse> =>
     request('/api/v1/remote/sessions', { method: 'POST', body: JSON.stringify({ machineId }) }),
 
-  endRemoteSession: (sessionId: string): Promise<void> =>
-    request(`/api/v1/remote/sessions/${sessionId}`, { method: 'DELETE' }),
+  /**
+   * Ends a session, carrying what this machine counted while it was up.
+   *
+   * The usage is optional because a session can end without anybody being in a
+   * position to measure it - the window died, the socket went first. A row with
+   * no figures reads as zero, which is exactly what it is.
+   */
+  endRemoteSession: (sessionId: string, usage?: RemoteSessionUsage): Promise<void> =>
+    request(`/api/v1/remote/sessions/${sessionId}`, {
+      method: 'DELETE',
+      body: JSON.stringify(usage ?? {}),
+    }),
+
+  /** This account's own remote sessions over a window, and what they moved. */
+  remoteUsage: (days = 30): Promise<RemoteUsageReport> =>
+    request(`/api/v1/remote/usage?days=${days}`),
 
   // --- Calls ---
 

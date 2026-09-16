@@ -4,6 +4,7 @@ import android.content.Context
 import com.aatech.betweenus.core.data.IceServer
 import com.aatech.betweenus.core.data.BetweenUsApi
 import com.aatech.betweenus.core.data.RemoteScreen
+import com.aatech.betweenus.core.data.RemoteSessionUsage
 import com.aatech.betweenus.core.data.RemoteSocket
 import com.aatech.betweenus.core.data.Session
 import kotlinx.coroutines.CoroutineScope
@@ -25,6 +26,7 @@ import org.webrtc.IceCandidate
 import org.webrtc.MediaConstraints
 import org.webrtc.PeerConnection
 import org.webrtc.PeerConnectionFactory
+import org.webrtc.RTCStatsReport
 import org.webrtc.RtpTransceiver
 import org.webrtc.SdpObserver
 import org.webrtc.SessionDescription
@@ -126,11 +128,27 @@ class RemoteEngine(context: Context) {
     fun end() {
         sessionId?.let { id ->
             RemoteSocket.send(JSONObject().put("type", "session.end"))
-            scope.launch { runCatching { BetweenUsApi.endRemoteSession(id) } }
+            // The connection is read before it is closed, because a closed one
+            // has no counters left to read. Captured into the coroutine rather
+            // than reached for from inside it: `connection` is null by the time
+            // the launch runs, and a session that reported nothing is what the
+            // usage page had for every remote session there has ever been.
+            val live = connection
+            scope.launch {
+                val usage = live?.let { runCatching { usageOf(it) }.getOrNull() }
+                runCatching { BetweenUsApi.endRemoteSession(id, usage) }
+                runCatching { live?.close() }
+                runCatching { live?.dispose() }
+            }
         }
         detach?.invoke()
         detach = null
-        connection?.let { runCatching { it.close() }; runCatching { it.dispose() } }
+        // Already handed to the coroutine above when there was a session to
+        // report for; this closes the connection of a session that never got
+        // one - a start that failed before `sessionId` was set.
+        if (sessionId == null) {
+            connection?.let { runCatching { it.close() }; runCatching { it.dispose() } }
+        }
         connection = null
         _screen.value = null
         _screens.value = emptyList()
@@ -329,6 +347,74 @@ class RemoteEngine(context: Context) {
 
     private fun signal(data: JSONObject) =
         RemoteSocket.send(JSONObject().put("type", "rtc.signal").put("data", data))
+
+    /**
+     * What this session moved, and how it got there.
+     *
+     * Read once, on the way out: `getStats` is not free, and a number nobody is
+     * reading is a number not worth taking. The counters are cumulative, so the
+     * last reading *is* the session's total - there is no differencing to do.
+     *
+     * Only this end reports. The agent sees the same peer connection from the
+     * other side, and recording both would count every byte twice - see the
+     * note on `RemoteSession.bytesSent` in the schema.
+     */
+    private suspend fun usageOf(pc: PeerConnection): RemoteSessionUsage {
+        val report = statsOf(pc) ?: return RemoteSessionUsage(0, 0, null)
+
+        var sent = 0L
+        var received = 0L
+        var pair: Map<String, Any>? = null
+        val candidateTypes = mutableMapOf<String, String>()
+
+        for (stat in report.statsMap.values) {
+            val members = stat.members
+            when (stat.type) {
+                "inbound-rtp" -> received += (members["bytesReceived"] as? Number)?.toLong() ?: 0L
+                "outbound-rtp" -> sent += (members["bytesSent"] as? Number)?.toLong() ?: 0L
+                // The file channel. On a session that moved a folder across it
+                // this is most of the session, and leaving it out would make
+                // the report wrong in the one case somebody came to check.
+                "data-channel" -> {
+                    sent += (members["bytesSent"] as? Number)?.toLong() ?: 0L
+                    received += (members["bytesReceived"] as? Number)?.toLong() ?: 0L
+                }
+                "candidate-pair" ->
+                    if (members["nominated"] == true && members["state"] == "succeeded") {
+                        pair = members
+                    }
+                "local-candidate", "remote-candidate" ->
+                    (members["candidateType"] as? String)?.let { candidateTypes[stat.id] = it }
+            }
+        }
+
+        val local = candidateTypes[pair?.get("localCandidateId") as? String ?: ""]
+        val remote = candidateTypes[pair?.get("remoteCandidateId") as? String ?: ""]
+        // Null rather than a guess when ICE never named both ends: not knowing
+        // and knowing it was direct are different answers, and a relay bill is
+        // what the difference is worth.
+        val transport = if (local.isNullOrBlank() || remote.isNullOrBlank()) {
+            null
+        } else if (local == "relay" || remote == "relay") {
+            "relay"
+        } else {
+            "direct"
+        }
+
+        return RemoteSessionUsage(sent, received, transport)
+    }
+
+    /** `getStats` as something that can be awaited. Null if it never answers. */
+    private suspend fun statsOf(pc: PeerConnection): RTCStatsReport? =
+        suspendCancellableCoroutine { continuation ->
+            runCatching {
+                pc.getStats { report ->
+                    if (continuation.isActive) continuation.resumeWith(Result.success(report))
+                }
+            }.onFailure {
+                if (continuation.isActive) continuation.resumeWith(Result.success(null))
+            }
+        }
 }
 
 private fun IceServer.toWebRtc(): PeerConnection.IceServer =

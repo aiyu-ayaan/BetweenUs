@@ -3218,6 +3218,70 @@ export interface RemoteScreen {
   primary: boolean;
 }
 
+/**
+ * What a controller's machine counted over one remote session.
+ *
+ * Reported once, on the way out, by the controller and nobody else: the two
+ * ends see the same peer connection from opposite sides, and adding both would
+ * count every byte twice. Nothing on the server can check any of it - the media
+ * never goes near one - so it is clamped where it lands, exactly as a call's
+ * figures are.
+ */
+export interface RemoteSessionUsage {
+  bytesSent: number;
+  bytesReceived: number;
+  /**
+   * `direct` when the screen went straight between the two machines, `relay`
+   * when it went through TURN, null when ICE never settled. An hour of relayed
+   * screen is the single most expensive thing this product does to an
+   * operator's bandwidth, and it is invisible without this.
+   */
+  transport: CallTransport | null;
+}
+
+/**
+ * One remote session, as the usage report reads it back.
+ *
+ * Deliberately the same shape of answer as `CallHistoryEntry`: both are "a
+ * stay in a live peer connection, and what it moved", both are read by the one
+ * person they belong to, and the Calls & Data page draws them side by side. It
+ * names a machine rather than a channel, and nobody else was in it.
+ */
+export interface RemoteHistoryEntry {
+  id: string;
+  machineId: string;
+  machineName: string;
+  startedAt: string;
+  /** Null for a session that never got an ending written - the process died. */
+  endedAt: string | null;
+  /** Whole seconds, or null when there is no ending to measure to. */
+  durationSeconds: number | null;
+  /** Why it stopped: "controller", "agent", "revoked", "agent-offline". */
+  endedReason: string | null;
+  /** What the controller's machine moved. Both zero when it never reported. */
+  bytesSent: number;
+  bytesReceived: number;
+  transport: CallTransport | null;
+}
+
+/** Remote sessions added up over the same window the call report covers. */
+export interface RemoteUsageTotals {
+  sessions: number;
+  seconds: number;
+  bytesSent: number;
+  bytesReceived: number;
+}
+
+/** The remote half of the usage report: the totals, and the sessions behind them. */
+export interface RemoteUsageReport {
+  days: number;
+  totals: RemoteUsageTotals;
+  /** Newest first, capped - the page shows a list, not an archive. */
+  sessions: RemoteHistoryEntry[];
+  /** How the screens got there, across every session in the window. */
+  transport: { direct: number; relay: number; unknown: number };
+}
+
 export interface RemoteAuditEntry {
   id: string;
   action: string;

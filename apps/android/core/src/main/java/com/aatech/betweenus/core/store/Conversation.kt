@@ -739,7 +739,7 @@ object Conversation {
      * packed.
      *
      * The gzip step is not optional bookkeeping. The desktop compresses
-     * text-shaped files - text/*, JSON, XML, and SVG - above a few kilobytes
+     * text-shaped files - text types, JSON, XML, and SVG - above a few kilobytes
      * before it encrypts them, and this end skipped the unpacking entirely: an
      * SVG sent from a desktop arrived here as a deflate stream, failed to
      * decode, and drew as a broken tile in an album that had no way to say

@@ -1128,8 +1128,20 @@ object BetweenUsApi {
         )
     }
 
-    suspend fun endRemoteSession(sessionId: String): Unit = io {
-        authed("DELETE", "/api/v1/remote/sessions/$sessionId")
+    /**
+     * Ends a session, carrying what this device counted while it was up.
+     *
+     * The body is optional because a session can end without anybody being in
+     * a position to measure it - the process died, the socket went first. A
+     * row with no figures reads as zero, which is exactly what it is.
+     */
+    suspend fun endRemoteSession(sessionId: String, usage: RemoteSessionUsage? = null): Unit = io {
+        authed("DELETE", "/api/v1/remote/sessions/$sessionId", usage?.toJson() ?: JSONObject())
+    }
+
+    /** This account's own remote sessions over a window, and what they moved. */
+    suspend fun remoteUsage(days: Int = 30): RemoteUsageReport = io {
+        RemoteUsageReport.from(authed("GET", "/api/v1/remote/usage?days=$days"))
     }
 
     // --- plumbing ---
