@@ -26,7 +26,7 @@
  * one person can be pinned to fill the stage with everybody else in a strip
  * underneath.
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Channel } from '@betweenus/shared-types';
 import { useChatStore } from '../../stores/chat';
 import { usePresenceStore } from '../../stores/presence';
@@ -410,25 +410,24 @@ function Theatre({ share, tiles }: { share: VoiceShare; tiles: Stage[] }): JSX.E
    *
    * Reading somebody's screen is the other: the top of a shared desktop is its
    * title bar and its tabs, the bottom is its task bar, and floating chrome
-   * sits on exactly those. Fading after a couple of seconds only makes that
-   * intermittent, and it takes **Release control** away from somebody whose
-   * keyboard is busy driving another machine.
+   * sits on exactly those, so it has to be possible to put it away and have it
+   * stay away - and **Release control** has to stay reachable for somebody
+   * whose keyboard is busy driving another machine.
    *
    * So both, with a button, and immersive by default because watching is what
-   * full screen usually means. Docked never auto-hides: it has its own space
-   * and nothing to gain by disappearing.
+   * full screen usually means. Docked never hides: it has its own space and
+   * nothing to gain by disappearing.
    */
   const [docked, setDocked] = useState(false);
   /**
-   * Floating chrome that is pinned stays put. Fading is right for a film and
-   * wrong for a session where the strip is being used - reaching Release
-   * control or the mute button should not start with a wiggle of the mouse
-   * every time. Docked is the other answer to that and costs the picture its
-   * edges; this one keeps them.
+   * Shown or hidden by the handle below the strip, and by nothing else.
+   *
+   * It used to fade on a timer and come back on any movement, which meant a
+   * mouse crossing the screen - or a keystroke on its way to the machine being
+   * driven - threw a bar of this app over somebody else's task bar. Asked for,
+   * it appears; put away, it stays away.
    */
-  const [pinned, setPinned] = useState(false);
   const [showControls, setShowControls] = useState(true);
-  const hideTimerRef = useRef<number | null>(null);
 
   // Driving somebody's machine docks it whatever the button says, and the
   // button says so. Chrome that fades is chrome that takes Release control with
@@ -437,27 +436,12 @@ function Theatre({ share, tiles }: { share: VoiceShare; tiles: Stage[] }): JSX.E
   // be readable and every control reachable.
   const driving = useShareControlStore((state) => state.driving) !== null;
   const immersive = fullscreen && !docked && !driving;
-  const fades = immersive && !pinned;
 
-  const resetHideTimer = useCallback(() => {
-    setShowControls(true);
-    if (hideTimerRef.current !== null) window.clearTimeout(hideTimerRef.current);
-    if (!fades) return;
-    hideTimerRef.current = window.setTimeout(() => setShowControls(false), 2500);
-  }, [fades]);
-
+  // Leaving full screen, or docking, brings the strip back: it is the one place
+  // the Exit button lives, and a mode with no way out is a trap.
   useEffect(() => {
-    if (fades) {
-      resetHideTimer();
-    } else {
-      setShowControls(true);
-      if (hideTimerRef.current !== null) window.clearTimeout(hideTimerRef.current);
-      hideTimerRef.current = null;
-    }
-    return () => {
-      if (hideTimerRef.current !== null) window.clearTimeout(hideTimerRef.current);
-    };
-  }, [fades, resetHideTimer]);
+    if (!immersive) setShowControls(true);
+  }, [immersive]);
 
   /**
    * Full screen means the screen, not the window.
@@ -502,11 +486,10 @@ function Theatre({ share, tiles }: { share: VoiceShare; tiles: Stage[] }): JSX.E
       } else if (e.key === 'Escape' && fullscreen && !driving) {
         setFullscreen(false);
       }
-      resetHideTimer();
     };
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
-  }, [fullscreen, resetHideTimer]);
+  }, [fullscreen]);
 
   const toggleFullscreen = (): void => {
     setFullscreen((prev) => !prev);
@@ -586,27 +569,6 @@ function Theatre({ share, tiles }: { share: VoiceShare; tiles: Stage[] }): JSX.E
           <span>{tiles.length}</span>
         </button>
 
-        {immersive && (
-          <button
-            type="button"
-            onClick={() => setPinned((prev) => !prev)}
-            aria-pressed={pinned}
-            aria-label={pinned ? 'Let the controls fade' : 'Keep the controls on screen'}
-            title={
-              pinned
-                ? 'Controls stay on screen. Click to let them fade again.'
-                : 'Keep the controls on screen instead of moving the mouse to bring them back'
-            }
-            className={`${FS_BUTTON} ${
-              pinned
-                ? 'bg-white/15 text-white'
-                : 'text-slate-400 hover:bg-white/10 hover:text-slate-200'
-            }`}
-          >
-            <PinIcon className="h-3.5 w-3.5" />
-          </button>
-        )}
-
         <button
           type="button"
           onClick={() => setDocked((prev) => !prev)}
@@ -670,11 +632,7 @@ function Theatre({ share, tiles }: { share: VoiceShare; tiles: Stage[] }): JSX.E
 
     return (
       <div
-        onMouseMove={fades ? resetHideTimer : undefined}
-        onTouchStart={fades ? resetHideTimer : undefined}
-        className={`fixed inset-0 z-50 flex flex-col bg-black select-none no-drag ${
-          fades && !showControls ? 'cursor-none' : ''
-        }`}
+        className="fixed inset-0 z-50 flex flex-col bg-black select-none no-drag"
       >
         {/* Docked puts the strip above the picture, where it covers nothing -
             which is the whole point of the mode: the shared desktop's own top
@@ -723,11 +681,30 @@ function Theatre({ share, tiles }: { share: VoiceShare; tiles: Stage[] }): JSX.E
           )}
         </div>
 
-        {/* Immersive: the same strip, floating over the bottom and fading with
-            everything else. Nothing is pinned to the top, because the top of a
-            shared screen is its tabs. Moving the mouse brings it back, which is
-            why there is no second Exit button hiding in a corner waiting for
-            the first one to fade. */}
+        {/* Immersive: the same strip, floating over the bottom, and a handle
+            under it that is the only thing that puts it away or brings it
+            back. Nothing is pinned to the top, because the top of a shared
+            screen is its tabs, and nothing reacts to the mouse - a pointer
+            crossing the picture on its way somewhere else is not a request for
+            a toolbar. The handle stays whatever the strip is doing, so there is
+            always a way back to Exit. */}
+        {immersive && (
+          <button
+            type="button"
+            onClick={() => setShowControls((prev) => !prev)}
+            aria-expanded={showControls}
+            aria-label={showControls ? 'Hide the controls' : 'Show the controls'}
+            title={showControls ? 'Hide the controls' : 'Show the controls'}
+            className={`no-drag absolute bottom-1 left-1/2 z-40 flex h-6 w-14 -translate-x-1/2 cursor-pointer items-center justify-center rounded-full border border-white/10 bg-black/60 text-slate-300 backdrop-blur-md transition-opacity duration-200 hover:bg-black/80 hover:text-white ${
+              showControls ? 'opacity-0 hover:opacity-100 focus-visible:opacity-100' : 'opacity-70'
+            }`}
+          >
+            <ChevronRightIcon
+              className={`h-4 w-4 ${showControls ? 'rotate-90' : '-rotate-90'}`}
+            />
+          </button>
+        )}
+
         {immersive ? (
           <div
             className={`pointer-events-none absolute inset-x-0 bottom-0 z-30 flex flex-col items-center gap-3 bg-gradient-to-t from-black/90 via-black/50 to-transparent px-4 pb-4 pt-10 transition-all duration-300 ease-out ${
@@ -735,8 +712,8 @@ function Theatre({ share, tiles }: { share: VoiceShare; tiles: Stage[] }): JSX.E
             }`}
           >
             {filmstrip}
-            {/* Faded out it must also be untouchable: an invisible bar that
-                still takes clicks is a row of dead pixels over the picture. */}
+            {/* Hidden it must also be untouchable: an invisible bar that still
+                takes clicks is a row of dead pixels over the picture. */}
             <div
               className={`flex max-w-full flex-wrap items-center justify-center gap-2 rounded-2xl border border-white/10 bg-black/75 px-3 py-2 backdrop-blur-md shadow-pop ${
                 showControls ? 'pointer-events-auto' : 'pointer-events-none'

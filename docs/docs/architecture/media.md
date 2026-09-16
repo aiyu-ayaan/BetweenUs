@@ -697,17 +697,19 @@ desktop worth reading, its tab bar and its task bar, and split the way out
 across six separate pills.
 
 **Fill** is the default and is what full screen usually means: the picture edge
-to edge, the strip floating over the *bottom* and fading after a couple of
-seconds, the cursor going with it. Nothing is pinned to the top, because the
-top of a shared screen is its tabs. Moving the mouse brings the strip back,
-which is why there is no second Exit button waiting in a corner for the first
-one to fade — that duplicate is gone.
+to edge, the strip floating over the *bottom*. Nothing is pinned to the top,
+because the top of a shared screen is its tabs, and there is no second Exit
+button waiting in a corner — that duplicate is gone.
 
-A **pin** button in that strip turns the fading off without giving up the
-edges. Fading is right for a film and wrong for a session where the strip is
-being used: reaching the mute button or **Release control** should not start
-with a wiggle of the mouse every time. Pinned, the strip and the cursor stay
-put; the button only exists in Fill, since Docked never fades.
+The strip is put away and brought back by a **handle** under it, and by
+nothing else. It used to fade on a timer and return on any mouse or keyboard
+movement, which meant a pointer crossing the picture on its way somewhere else
+— or a keystroke on its way to the machine being driven — threw a bar of this
+app over somebody else's task bar. A pointer crossing the screen is not a
+request for a toolbar. The handle is always there, whatever the strip is doing,
+so **Exit** is never more than one click away; it fades to invisible while the
+strip is open and comes up under the pointer, since the strip is its own label
+by then.
 
 **Docked** puts the same strip in a row above the picture instead, with the
 share in a bordered frame below it, and nothing fades. Docked chrome covers
