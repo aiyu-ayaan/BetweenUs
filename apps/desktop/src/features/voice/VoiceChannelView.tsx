@@ -31,7 +31,6 @@ import type { Channel } from '@betweenus/shared-types';
 import { useChatStore } from '../../stores/chat';
 import { usePresenceStore } from '../../stores/presence';
 import { useRemoteStore } from '../../stores/remote';
-import { captionInset } from '../../services/platform';
 import { CHORD_LABEL, localChordOf } from '../../services/keyboard';
 import { useShareControlStore } from '../../stores/shareControl';
 import { useVoiceStore, type VoiceShare, type VoiceTile } from '../../stores/voice';
@@ -78,18 +77,6 @@ interface Stage {
   videoTrack: MediaStreamTrack | null;
   lastSpokeAt: number;
 }
-
-/**
- * Full screen here is the app's own overlay, not the operating system's, so the
- * window buttons stay where they are and anything drawn into that corner ends up
- * underneath them. The overlay header keeps the same corner clear that
- * {@link TopBar} does: Windows and Linux paint minimise/maximise/close on the
- * right, macOS puts its traffic lights on the left. A browser tab has neither, so
- * there the corner is the page's to use.
- */
-// The rule, and why, is in `services/platform.ts` - it is the same corner three
-// other full-screen overlays have to leave.
-
 
 export function VoiceChannelView({
   channel,
@@ -432,6 +419,14 @@ function Theatre({ share, tiles }: { share: VoiceShare; tiles: Stage[] }): JSX.E
    * and nothing to gain by disappearing.
    */
   const [docked, setDocked] = useState(false);
+  /**
+   * Floating chrome that is pinned stays put. Fading is right for a film and
+   * wrong for a session where the strip is being used - reaching Release
+   * control or the mute button should not start with a wiggle of the mouse
+   * every time. Docked is the other answer to that and costs the picture its
+   * edges; this one keeps them.
+   */
+  const [pinned, setPinned] = useState(false);
   const [showControls, setShowControls] = useState(true);
   const hideTimerRef = useRef<number | null>(null);
 
@@ -442,16 +437,17 @@ function Theatre({ share, tiles }: { share: VoiceShare; tiles: Stage[] }): JSX.E
   // be readable and every control reachable.
   const driving = useShareControlStore((state) => state.driving) !== null;
   const immersive = fullscreen && !docked && !driving;
+  const fades = immersive && !pinned;
 
   const resetHideTimer = useCallback(() => {
     setShowControls(true);
     if (hideTimerRef.current !== null) window.clearTimeout(hideTimerRef.current);
-    if (!immersive) return;
+    if (!fades) return;
     hideTimerRef.current = window.setTimeout(() => setShowControls(false), 2500);
-  }, [immersive]);
+  }, [fades]);
 
   useEffect(() => {
-    if (immersive) {
+    if (fades) {
       resetHideTimer();
     } else {
       setShowControls(true);
@@ -461,7 +457,35 @@ function Theatre({ share, tiles }: { share: VoiceShare; tiles: Stage[] }): JSX.E
     return () => {
       if (hideTimerRef.current !== null) window.clearTimeout(hideTimerRef.current);
     };
-  }, [immersive, resetHideTimer]);
+  }, [fades, resetHideTimer]);
+
+  /**
+   * Full screen means the screen, not the window.
+   *
+   * A `fixed inset-0` overlay only fills the page: the task bar still sits
+   * along the bottom of the shared desktop and the caption buttons still sit
+   * over its top corner, which is exactly the two strips a shared screen needs
+   * back. The platform already has the thing that takes them away, in both
+   * modes - docked has no less claim on the screen than fill does.
+   */
+  useEffect(() => {
+    if (fullscreen) {
+      void document.documentElement.requestFullscreen?.().catch(() => undefined);
+    } else if (document.fullscreenElement) {
+      void document.exitFullscreen().catch(() => undefined);
+    }
+  }, [fullscreen]);
+
+  // F11, or Escape swallowed by the browser, leaves this state saying full
+  // screen while the window is not - so the window is what it is read from.
+  useEffect(() => {
+    const sync = (): void => setFullscreen(document.fullscreenElement !== null);
+    document.addEventListener('fullscreenchange', sync);
+    return () => {
+      document.removeEventListener('fullscreenchange', sync);
+      if (document.fullscreenElement) void document.exitFullscreen().catch(() => undefined);
+    };
+  }, []);
 
   // Full screen is a chord, not the letter F. A bare key was reachable from
   // anywhere - including from a session where the keyboard belongs to somebody
@@ -562,6 +586,27 @@ function Theatre({ share, tiles }: { share: VoiceShare; tiles: Stage[] }): JSX.E
           <span>{tiles.length}</span>
         </button>
 
+        {immersive && (
+          <button
+            type="button"
+            onClick={() => setPinned((prev) => !prev)}
+            aria-pressed={pinned}
+            aria-label={pinned ? 'Let the controls fade' : 'Keep the controls on screen'}
+            title={
+              pinned
+                ? 'Controls stay on screen. Click to let them fade again.'
+                : 'Keep the controls on screen instead of moving the mouse to bring them back'
+            }
+            className={`${FS_BUTTON} ${
+              pinned
+                ? 'bg-white/15 text-white'
+                : 'text-slate-400 hover:bg-white/10 hover:text-slate-200'
+            }`}
+          >
+            <PinIcon className="h-3.5 w-3.5" />
+          </button>
+        )}
+
         <button
           type="button"
           onClick={() => setDocked((prev) => !prev)}
@@ -625,21 +670,19 @@ function Theatre({ share, tiles }: { share: VoiceShare; tiles: Stage[] }): JSX.E
 
     return (
       <div
-        onMouseMove={immersive ? resetHideTimer : undefined}
-        onTouchStart={immersive ? resetHideTimer : undefined}
+        onMouseMove={fades ? resetHideTimer : undefined}
+        onTouchStart={fades ? resetHideTimer : undefined}
         className={`fixed inset-0 z-50 flex flex-col bg-black select-none no-drag ${
-          immersive && !showControls ? 'cursor-none' : ''
+          fades && !showControls ? 'cursor-none' : ''
         }`}
       >
         {/* Docked puts the strip above the picture, where it covers nothing -
             which is the whole point of the mode: the shared desktop's own top
-            and bottom stay readable while somebody is driving it. It leaves
-            the window buttons their corner, because it reaches that corner. */}
+            and bottom stay readable while somebody is driving it. No caption
+            inset: the window is natively full screen here, so there are no
+            window buttons in that corner to leave room for. */}
         {!immersive && (
-          <div
-            style={captionInset()}
-            className="no-drag relative z-30 flex shrink-0 flex-wrap items-center gap-2 border-b border-white/10 bg-surface-900 px-3 py-2"
-          >
+          <div className="no-drag relative z-30 flex shrink-0 flex-wrap items-center gap-2 border-b border-white/10 bg-surface-900 px-3 py-2">
             {bar}
           </div>
         )}

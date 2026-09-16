@@ -677,6 +677,14 @@ the web client's only route to driving anything.
 Full screen is two wishes that pull opposite ways, so it is two modes with a
 button between them.
 
+Both take the **screen**, not the window: the view asks for the platform's own
+full screen (`requestFullscreen`), so the task bar and the caption buttons go
+away in either mode. An overlay at `inset-0` only fills the page, which left
+Windows' task bar along the bottom of the shared desktop and the window buttons
+over its top corner — the two strips a shared screen most needs back. `F11` and
+a browser-swallowed `Escape` are read back off `fullscreenchange`, so the
+view's own state cannot disagree with the window's.
+
 Either way it is **one strip**, never two: the share's name, what can be done
 to it, and the call controls sit in a single bar. Two bars — share chrome along
 the top, the call dock along the bottom — landed on the two parts of a shared
@@ -690,11 +698,18 @@ top of a shared screen is its tabs. Moving the mouse brings the strip back,
 which is why there is no second Exit button waiting in a corner for the first
 one to fade — that duplicate is gone.
 
+A **pin** button in that strip turns the fading off without giving up the
+edges. Fading is right for a film and wrong for a session where the strip is
+being used: reaching the mute button or **Release control** should not start
+with a wiggle of the mouse every time. Pinned, the strip and the cursor stay
+put; the button only exists in Fill, since Docked never fades.
+
 **Docked** puts the same strip in a row above the picture instead, with the
 share in a bordered frame below it, and nothing fades. Docked chrome covers
 nothing, which is the whole point: the shared desktop's own top and bottom stay
-readable while somebody is driving it. The strip leaves the window buttons
-their corner (`captionInset`), since it reaches that corner.
+readable while somebody is driving it. It needs no caption inset: the window is
+natively full screen here, so there are no window buttons in that corner to
+leave room for.
 
 Taking control of a share forces Docked and disables the button, saying why.
 Chrome that fades takes **Release control** with it, and floating chrome is a
