@@ -692,7 +692,13 @@ function Theatre({ share, tiles }: { share: VoiceShare; tiles: Stage[] }): JSX.E
             }`}
           >
             {filmstrip}
-            <div className="pointer-events-auto flex max-w-full flex-wrap items-center justify-center gap-2 rounded-2xl border border-white/10 bg-black/75 px-3 py-2 backdrop-blur-md shadow-pop">
+            {/* Faded out it must also be untouchable: an invisible bar that
+                still takes clicks is a row of dead pixels over the picture. */}
+            <div
+              className={`flex max-w-full flex-wrap items-center justify-center gap-2 rounded-2xl border border-white/10 bg-black/75 px-3 py-2 backdrop-blur-md shadow-pop ${
+                showControls ? 'pointer-events-auto' : 'pointer-events-none'
+              }`}
+            >
               {bar}
             </div>
           </div>
