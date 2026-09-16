@@ -1,5 +1,37 @@
 # Changelog
 
+## [1.0.1](https://github.com/aiyu-ayaan/BetweenUs/compare/v1.0.0...v1.0.1) (2026-09-16)
+
+### Features
+
+* Auto-hide fullscreen controls after 3s with a small toggle button
+* A handle for the full-screen strip, not a mouse twitch
+* Take the screen in full screen, and let the strip be pinned
+* One strip for the full-screen share, docked or floating
+* Count remote access in Calls & Data
+
+### Bug fixes
+
+* Auto-hide fullscreen controls and replace mouse-triggered strip
+* Allow the fullscreen permission, so full screen is full screen
+* Stop the faded full-screen strip from taking clicks
+* Queue and retry stored-object fetches so media loads
+
+### Other changes
+
+* Deploy the docs site on every release
+* Replace static images with video.mp4 across README and docs
+* !docs : fix MDX changelog compilation by escaping raw comparison angle brackets
+* !docs : Update v1.0.0 changelog and publish release documentation
+
+### Artifacts
+
+| Platform | This release |
+| --- | --- |
+| Server images | Built here |
+| Desktop | Built here |
+| Android | Built here |
+
 ## [1.0.0](https://github.com/aiyu-ayaan/BetweenUs/compare/v0.0.1-alpha.27...v1.0.0) (2026-09-11)
 
 BetweenUs v1.0.0 is the first major stable release, marking the culmination of over 1,130 commits of engineering. It transitions BetweenUs from an alpha prototype into a production-grade, self-hostable, privacy-first collaboration and voice platform across Desktop (Windows, Linux), Android, and Web.
