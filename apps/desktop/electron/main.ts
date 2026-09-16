@@ -1522,26 +1522,26 @@ void app.whenReady().then(() => {
   // Cmd+C, Cmd+Q and Hide live, and removing it breaks them.
   if (process.platform !== 'darwin') Menu.setApplicationMenu(null);
 
-  // Voice channels need the microphone and camera; screen share needs display
-  // capture. Everything else a page might ask for is denied.
+  /**
+   * Voice channels need the microphone and camera; screen share needs display
+   * capture; `fullscreen` is what Chromium asks for on `requestFullscreen`, and
+   * without it the full-screen share is an overlay under the task bar. Every
+   * other permission a page might ask for is denied.
+   */
+  const ALLOWED_PERMISSIONS = new Set([
+    'media',
+    'audioCapture',
+    'videoCapture',
+    'display-capture',
+    'fullscreen',
+  ]);
+
   session.defaultSession.setPermissionRequestHandler((_contents, permission, callback) => {
-    const perm = permission as string;
-    callback(
-      perm === 'media' ||
-        perm === 'audioCapture' ||
-        perm === 'videoCapture' ||
-        perm === 'display-capture',
-    );
+    callback(ALLOWED_PERMISSIONS.has(permission as string));
   });
 
   session.defaultSession.setPermissionCheckHandler((_webContents, permission) => {
-    const perm = permission as string;
-    return (
-      perm === 'media' ||
-        perm === 'audioCapture' ||
-        perm === 'videoCapture' ||
-        perm === 'display-capture'
-    );
+    return ALLOWED_PERMISSIONS.has(permission as string);
   });
 
   session.defaultSession.setDisplayMediaRequestHandler((request, callback) => {

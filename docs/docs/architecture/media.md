@@ -685,6 +685,11 @@ over its top corner — the two strips a shared screen most needs back. `F11` an
 a browser-swallowed `Escape` are read back off `fullscreenchange`, so the
 view's own state cannot disagree with the window's.
 
+On the desktop this needs Electron's permission handler to allow `fullscreen`
+alongside the capture permissions (`electron/main.ts`). A browser grants it
+itself, so the same code worked on the web and did nothing in the app: the
+request was rejected and the overlay stayed under the task bar.
+
 Either way it is **one strip**, never two: the share's name, what can be done
 to it, and the call controls sit in a single bar. Two bars — share chrome along
 the top, the call dock along the bottom — landed on the two parts of a shared
