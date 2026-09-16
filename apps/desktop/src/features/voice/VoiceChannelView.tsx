@@ -420,14 +420,15 @@ function Theatre({ share, tiles }: { share: VoiceShare; tiles: Stage[] }): JSX.E
    */
   const [docked, setDocked] = useState(false);
   /**
-   * Shown or hidden by the handle below the strip, and by nothing else.
+   * Shown or hidden by a small button, and auto-hidden after 3 seconds.
    *
-   * It used to fade on a timer and come back on any movement, which meant a
-   * mouse crossing the screen - or a keystroke on its way to the machine being
-   * driven - threw a bar of this app over somebody else's task bar. Asked for,
-   * it appears; put away, it stays away.
+   * The button is the only thing that brings the controls back — not mouse
+   * movement, not keyboard input. A pointer crossing the picture on its way
+   * somewhere else is not a request for a toolbar, and a keystroke on its way
+   * to the machine being driven is not either.
    */
   const [showControls, setShowControls] = useState(true);
+  const hideTimerRef = useRef<number | null>(null);
 
   // Driving somebody's machine docks it whatever the button says, and the
   // button says so. Chrome that fades is chrome that takes Release control with
@@ -436,6 +437,27 @@ function Theatre({ share, tiles }: { share: VoiceShare; tiles: Stage[] }): JSX.E
   // be readable and every control reachable.
   const driving = useShareControlStore((state) => state.driving) !== null;
   const immersive = fullscreen && !docked && !driving;
+
+  // Auto-hide after 3 seconds in immersive mode. Every time controls become
+  // visible, start a timer. If they are hidden or we leave immersive, cancel.
+  useEffect(() => {
+    if (hideTimerRef.current !== null) {
+      clearTimeout(hideTimerRef.current);
+      hideTimerRef.current = null;
+    }
+    if (immersive && showControls) {
+      hideTimerRef.current = window.setTimeout(() => {
+        setShowControls(false);
+        hideTimerRef.current = null;
+      }, 3000);
+    }
+    return () => {
+      if (hideTimerRef.current !== null) {
+        clearTimeout(hideTimerRef.current);
+        hideTimerRef.current = null;
+      }
+    };
+  }, [immersive, showControls]);
 
   // Leaving full screen, or docking, brings the strip back: it is the one place
   // the Exit button lives, and a mode with no way out is a trap.
@@ -681,26 +703,26 @@ function Theatre({ share, tiles }: { share: VoiceShare; tiles: Stage[] }): JSX.E
           )}
         </div>
 
-        {/* Immersive: the same strip, floating over the bottom, and a handle
-            under it that is the only thing that puts it away or brings it
-            back. Nothing is pinned to the top, because the top of a shared
-            screen is its tabs, and nothing reacts to the mouse - a pointer
-            crossing the picture on its way somewhere else is not a request for
-            a toolbar. The handle stays whatever the strip is doing, so there is
-            always a way back to Exit. */}
+        {/* A tiny toggle dot — always visible at low opacity so the shared
+            content is not distracted, but always reachable. When the controls
+            are hidden it becomes a bit more opaque so somebody looking for it
+            can find it. Clicking shows the controls, which then auto-hide
+            after 3 seconds. */}
         {immersive && (
           <button
             type="button"
             onClick={() => setShowControls((prev) => !prev)}
             aria-expanded={showControls}
-            aria-label={showControls ? 'Hide the controls' : 'Show the controls'}
-            title={showControls ? 'Hide the controls' : 'Show the controls'}
-            className={`no-drag absolute bottom-1 left-1/2 z-40 flex h-6 w-14 -translate-x-1/2 cursor-pointer items-center justify-center rounded-full border border-white/10 bg-black/60 text-slate-300 backdrop-blur-md transition-opacity duration-200 hover:bg-black/80 hover:text-white ${
-              showControls ? 'opacity-0 hover:opacity-100 focus-visible:opacity-100' : 'opacity-70'
+            aria-label={showControls ? 'Hide controls' : 'Show controls'}
+            title={showControls ? 'Hide controls' : 'Show controls'}
+            className={`no-drag absolute bottom-2 left-1/2 z-40 flex h-6 w-6 -translate-x-1/2 cursor-pointer items-center justify-center rounded-full border border-white/10 text-slate-300 transition-all duration-300 hover:scale-110 hover:bg-white/20 hover:text-white ${
+              showControls
+                ? 'bg-white/10 opacity-40 hover:opacity-100'
+                : 'bg-white/15 opacity-60 hover:opacity-100'
             }`}
           >
             <ChevronRightIcon
-              className={`h-4 w-4 ${showControls ? 'rotate-90' : '-rotate-90'}`}
+              className={`h-3 w-3 transition-transform duration-200 ${showControls ? 'rotate-90' : '-rotate-90'}`}
             />
           </button>
         )}

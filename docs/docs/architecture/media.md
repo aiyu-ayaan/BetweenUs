@@ -701,15 +701,13 @@ to edge, the strip floating over the *bottom*. Nothing is pinned to the top,
 because the top of a shared screen is its tabs, and there is no second Exit
 button waiting in a corner — that duplicate is gone.
 
-The strip is put away and brought back by a **handle** under it, and by
-nothing else. It used to fade on a timer and return on any mouse or keyboard
-movement, which meant a pointer crossing the picture on its way somewhere else
-— or a keystroke on its way to the machine being driven — threw a bar of this
-app over somebody else's task bar. A pointer crossing the screen is not a
-request for a toolbar. The handle is always there, whatever the strip is doing,
-so **Exit** is never more than one click away; it fades to invisible while the
-strip is open and comes up under the pointer, since the strip is its own label
-by then.
+The strip **auto-hides after three seconds** and is brought back by a small
+dot button at the bottom centre of the screen. Nothing else triggers it — not
+mouse movement, not keyboard input. A pointer crossing the picture on its way
+somewhere else is not a request for a toolbar, and a keystroke on its way to the
+machine being driven is not either. The button is always visible at low opacity,
+small enough not to distract from the shared content, and clicking it shows the
+strip which then auto-hides again after three seconds.
 
 **Docked** puts the same strip in a row above the picture instead, with the
 share in a bordered frame below it, and nothing fades. Docked chrome covers
