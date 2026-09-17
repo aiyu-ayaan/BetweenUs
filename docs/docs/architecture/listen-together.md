@@ -10,6 +10,10 @@ change what it is.
 
 It is the one thing in BetweenUs that looks like media and deliberately is not.
 
+**It is audio.** There is no shared picture and no rectangle for one. A picture
+would be a second screen share nobody asked for, costing every participant the
+upload this feature exists to avoid — and the thing being shared is a song.
+
 ## The idea, in one paragraph
 
 **No audio crosses the wire.** Each client plays the track itself, from
@@ -23,7 +27,7 @@ flowchart TD
     %% TIER 1: CLIENT CONTROLLER
     subgraph T_CLIENT_A ["Trust Boundary 1: Client A (Controller / Listener)"]
         ClientA["<b>Client A (Desktop / Web / Mobile)</b><br/><i>Dispatches Play/Pause/Seek Commands</i>"]
-        LocalYT_A["<b>Local YouTube Player A</b><br/><i>Direct Audio Stream from youtube.com</i>"]
+        LocalYT_A["<b>Local Player A</b><br/><i>Desktop: real youtube.com in a hidden view</i>"]
         ClientA -->|"Local Sync"| LocalYT_A
     end
 
@@ -38,7 +42,7 @@ flowchart TD
     %% TIER 3: CLIENT LISTENER B
     subgraph T_CLIENT_B ["Trust Boundary 3: Client B (Participant Listener)"]
         ClientB["<b>Client B (Desktop / Web / Mobile)</b><br/><i>Calculates Local Offset Delta</i>"]
-        LocalYT_B["<b>Local YouTube Player B</b><br/><i>Direct Audio Stream from youtube.com</i>"]
+        LocalYT_B["<b>Local Player B</b><br/><i>Web: the /embed/ player</i>"]
         ClientB -->|"Local Sync"| LocalYT_B
     end
 
@@ -139,9 +143,13 @@ minutes, and a seek is a hole in the music where being a second out is only
 being a second out.
 
 The textbook alternative, nudging `playbackRate` by a few percent to close small
-gaps smoothly, does not work here: the YouTube embed quantises playback rate to
-the values in its own menu, so a request for 1.04 is either refused or rounded
-to 1.25 — a chipmunk rather than a correction.
+gaps smoothly, was ruled out against the embed, which quantises playback rate to
+the values in its own menu — a request for 1.04 is refused or rounded to 1.25, a
+chipmunk rather than a correction. The desktop player drives a real `<video>`
+element, which would take 1.04 happily, so this is now a *choice* rather than a
+constraint: one seek every few minutes is a hole in the music, and a permanent
+1.04 is a song playing at the wrong pitch for everyone who notices. It stays a
+seek, and the web client could not do it either way.
 
 ## Ducking
 
@@ -207,7 +215,7 @@ clients have the player open anyway. First one to know fills it in; a later
 client reporting a *different* title is ignored, since that is either a regional
 cut or somebody relabelling a track in everybody else's queue after the fact.
 
-## The panel, and the two bugs its shape came from
+## The panel
 
 Listen Together takes the voice stage, the way a shared screen does, with two
 tabs and a transport bar under them. It was a popover on the call controls, and
@@ -222,22 +230,15 @@ and pressing the button from the sidebar navigates there first.
 
 **The video filled the screen.** It was `aspect-video w-full`, which on a 1750px
 stage is a 984px-tall box, and nothing above it was `min-h-0` — so flexbox let
-it push past the bottom of the window. It is now `flex-1 min-h-0` against the
-stage and capped at `max-w-5xl`, with **no aspect ratio of its own**: a 16:9 box
-cannot be bounded on both axes by `aspect-ratio` alone, because whichever axis
-is definite wins and the other one breaks the shape. The player letterboxes
-inside whatever box it is given, exactly as it does on youtube.com, so the black
-surround is free and correct.
-
-The two tabs are tabs, and not two panes, for a reason beyond space: a native
-browser view and an embedded player must never be on screen together. See the
-native-surface note below.
+it push past the bottom of the window. That box is gone entirely now, along with
+the bug: the feature is audio, and the Playing tab shows what is on rather than
+a picture of it.
 
 ```text
 ┌─ Listen together ──── [Browse] [Playing] ───────────────────── ✕ ┐
 │                                              │  Queue            │
-│   youtube.com, or the shared video           │  ▸ track one      │
-│   (bounded: flex-1 min-h-0, max-w-5xl)       │    track two      │
+│   youtube.com (desktop), or what is on       │  ▸ track one      │
+│                                              │    track two      │
 │                                              │  [paste a link] + │
 ├──────────────────────────────────────────────┴───────────────────┤
 │ ⏮ ⏸ ⏭   Title · added by   3:07 ──●────── 6:12   🔊──   Stop     │
@@ -245,8 +246,14 @@ native-surface note below.
 ```
 
 Closing it leaves a one-line bar above the tiles with the same transport on it.
-The picture parks and the music carries on, which is what closing a panel should
-cost.
+The music carries on, which is what closing a panel should cost.
+
+Browse and Playing are still tabs rather than two panes, but the reason has
+narrowed to space. It used to be a hard constraint — a `WebContentsView` paints
+above every pixel of the renderer's DOM, so an embedded player shown beside the
+site would have been invisible with nothing to explain it. There is no embedded
+player in the desktop window any more, so only the browse view is a native
+surface, and only it needs the rectangle to itself.
 
 ## Getting a track in: browse, don't paste
 
@@ -261,13 +268,62 @@ So on **desktop**, the panel opens youtube.com itself inside the call:
 - **Add to queue stays on Browse:** An "Add to queue" button remains available on the browser bar so listeners can line up subsequent tracks while continuing to search.
 - **Atomic jump (`playNow`):** Queuing and playing happen in one server revision. Sending `listen.add` followed by `listen.play` would be two revisions, where a concurrent queue modification could shift track indices and cause the wrong song to play.
 
-### The browser is not a second player
+### Two views, and why there must be two
 
-Opening a YouTube watch page naturally starts autoplaying. Left alone, the in-app browser would decode and play its own copy out of sync with the call's shared player.
+The desktop app holds **two** `WebContentsView`s on youtube.com, sharing the
+`persist:youtube` session so both are the same signed-in account:
 
-To prevent this:
-1. The `WebContentsView` is permanently muted.
-2. The main process intercepts `media-started-playing` events and immediately pauses the internal view. This prevents wasted background CPU/decoding and ensures only the shared stage player plays audio.
+| | Browser (`youtube-view.ts`) | Player (`youtube-player.ts`) |
+| --- | --- | --- |
+| Visible | yes, over the Browse rectangle | never — parked off the window |
+| Sound | muted, always | this is the only thing making sound |
+| What it is for | choosing a track | playing the one the call chose |
+| Anything that starts playing in it | is paused, and offered to the call | is the point |
+
+One view cannot be both, and the reason is the ordinary case rather than an edge
+one: browsing navigates away from the watch page. A single view would stop the
+music every time somebody went looking for the next song — which is exactly what
+people do while a song is playing.
+
+The browser half is still permanently muted and still pauses whatever starts in
+it, through `media-started-playing`. That event is the one place all four ways
+of starting a video arrive — a thumbnail clicked, the page's own play button, an
+SPA navigation, YouTube running the next video — so pausing from it needs no
+timing guess. What changed is what happens next: the video id goes to the call,
+and the *player* view loads it.
+
+### The site does not get a vote on what plays next
+
+YouTube plays a related video when one ends. On a page nobody is looking at,
+that is a second song starting in one person's headphones while everybody else
+is still on the first.
+
+So the player view watches its own navigations: any move to a video the call did
+not ask for is undone. And when a track genuinely ends, the page goes to
+`about:blank` — the renderer already has that answer and is telling the gateway,
+and a blank page cannot fill the gap while the answer comes back.
+
+### Adverts
+
+A signed-out account gets adverts, and while one is showing, every number on the
+video element belongs to the advert. Reporting its position would seek everybody
+else into the middle of a song; reporting its `ended` would skip a track nobody
+had heard.
+
+So an advert is detected (`#movie_player.ad-showing`) and the window sits it out:
+no position, no duration, no `ended`, and no drift correction. It rejoins by
+itself on the first tick after the advert finishes, because by then the numbers
+mean the track again. Two people on different adverts are simply out of step
+until both are through, and nothing can be done about that from here.
+
+One bug worth recording, because it was silent and expensive: pressing pause
+during an advert used to send `positionMs: 0`, since that is what this window's
+player was honestly reporting — and the whole call jumped back to the start of
+the song because one person was being shown a car advertisement. Pausing now
+falls back to the shared clock whenever the local player is mid-advert.
+
+**An account with YouTube Premium sees none of this.** It is the recommended way
+to use the feature, and the only way that is exactly in step.
 
 ### Seek scrubbing without snapback
 
@@ -352,36 +408,91 @@ and keeps playing.
 Hiding costs nothing — the sign-in, the scroll position and the search all
 survive it. Only ending the call destroys the view.
 
-## The player, and the CSP
+## The two players, and why the desktop one is not an embed
 
-The obvious way to embed YouTube is to load `iframe_api.js` and use the object
-it hands back. That is **remote code running in the renderer**, and the client's
-whole CSP argument is one line: `script-src` stays `'self'`, so nothing this
-window fetches can become code.
+This is the part that was rebuilt, and the reason is the only one that ever
+mattered: **the embed will not play music.**
 
-It is not needed. `iframe_api.js` is a wrapper around a `postMessage` protocol
-the embed speaks anyway, and that protocol is about a hundred lines
-(`apps/desktop/src/services/youtube.ts`):
+`/embed/<id>` is the only frameable YouTube surface, and a record label's video
+— which is most of what anybody queues — answers it with error 101 or 150, *the
+owner does not allow embedding*, and a black frame. Eleven fix commits went at
+the symptoms of that one at a time: a `sandbox` attribute that made it silent, a
+`file://` origin it refused, a loopback relay server to give it a real origin, a
+`strict-origin-when-cross-origin` referrer for Content ID, error 153 becoming
+152 becoming 150. Every one was a negotiation with a surface that was entitled
+to say no.
 
-- post `{event: 'listening'}` and the frame starts reporting state;
-- post `{event: 'command', func, args}` to drive it;
-- it posts `{event: 'infoDelivery', info: {...}}` with position, player state,
-  duration and title.
+The desktop app stopped negotiating. It plays **youtube.com**, in a hidden view,
+signed in as whoever signed in on the Browse tab. The site does not refuse the
+site.
 
-So the directive that changed is `frame-src`, which permits `youtube.com` and
-`youtube-nocookie.com`. The embed uses `https://www.youtube.com/embed/<id>` with
-`referrerpolicy="strict-origin-when-cross-origin"` and `widget_referrer` parameters
-so that Content ID licensed music (e.g. record label videos) plays cleanly without
-"Video unavailable" (error 150/101) restrictions. YouTube's code runs in YouTube's
-own origin, and the entire surface between them is a message channel that checks
-`event.origin` and `event.source` on the way in.
+| | Desktop | Web |
+| --- | --- | --- |
+| Plays | real `youtube.com/watch` in a `WebContentsView` | `/embed/<id>` in an iframe |
+| Driven by | the page's own `<video>` element | a `postMessage` protocol |
+| A label's music video | plays | often refuses — 101/150 |
+| Age-restricted, Premium, no adverts | yes, it is your session | no |
+| Needs a real http origin | no | yes |
 
-### The `sandbox` attribute that made it silent
+Both satisfy one interface — `play`, `pause`, `seek`, `setVolume`, `current`,
+`close` — and everything above it, the queue and the clock and the drift
+arithmetic and the ducking, is written once and does not know which it has.
 
-The frame carried `sandbox="allow-scripts allow-presentation"` and **nothing
-ever played.** Worth writing down, because it fails in the most expensive
-possible way — no error, no console message, a player that is visibly present
-and simply mute.
+### What it took to drive a page nobody wrote for us
+
+Three things were measured before any of this was written, because each one
+fails in the most expensive possible way — no error, no console message, a
+player that is present, correct, in step and silent:
+
+- **`loadURL` rejects on a watch page.** youtube.com redirects to
+  `?themeRefresh=1`, which aborts the original navigation, and Electron surfaces
+  that abort as `ERR_ABORTED` on the promise. The page loads and plays perfectly.
+  The rejection is noise.
+- **The site restores its own remembered volume and its own remembered mute.**
+  Either is a silent player. Both are therefore *asserted on every read* — twice
+  a second — rather than set once on load, because the moment the page reloads
+  underneath is a moment nothing here can name.
+- **A hidden view goes on playing**, parked off the window at real video
+  dimensions with `backgroundThrottling` off. Not `setVisible(false)` and not one
+  pixel: Chromium is entitled to throttle what it believes nobody can see, and a
+  throttled player is a stalled one. It is the same lesson the iframe host
+  learned, and it is why the web client's frame parks at 320×180 off-screen
+  rather than at 1×1.
+
+### Polled, not pushed
+
+The renderer asks the main process what the player is doing about twice a
+second. It is not told, because being told would need a preload in a view that
+loads pages from the open web — a bridge into this application, opened to save a
+round trip. Half a second is comfortably inside the 1.5 seconds the drift
+correction waits for before it acts on anything.
+
+### The web client's embed, and the CSP
+
+The web client cannot do any of the above. youtube.com sends `X-Frame-Options`
+and a `frame-ancestors` policy and refuses to be framed, full stop; only
+`/embed/<id>` is frameable. So the web client keeps the embed, a restricted
+track still fails there, and the panel says so and offers the link rather than
+showing a black box.
+
+The embed is driven without loading `iframe_api.js`, which would be **remote
+code running in the renderer** — the client's whole CSP argument is one line:
+`script-src` stays `'self'`. That script is a wrapper around a `postMessage`
+protocol the embed speaks anyway, and that protocol is about a hundred lines
+(`apps/desktop/src/services/youtube.ts`).
+
+So the only directive this feature ever needed is `frame-src`, naming YouTube
+and nothing else. It used to also carry `http://127.0.0.1:*`, for the loopback
+page a `file://` document had to frame the embed from. That page is gone with
+the embed it served, and so is the permission — which had been a standing
+allowance for *any* page on the machine to be framed by this window.
+
+#### The `sandbox` attribute that made it silent
+
+Worth keeping, because it is the purest example of the failure mode this whole
+rewrite is about. The frame carried `sandbox="allow-scripts allow-presentation"`
+and **nothing ever played** — no error, no console message, a player visibly
+present and simply mute.
 
 A `sandbox` without `allow-same-origin` gives the frame an **opaque** origin, so
 every message it posts arrives with `event.origin === "null"`. The origin check
@@ -393,39 +504,31 @@ embedding document by the same-origin policy, exactly as hard as the sandbox was
 pretending to be. There is no `sandbox` attribute now, and that is deliberate
 rather than an omission.
 
-### Cross-Origin Iframe Parking on the Web
-
-In web browsers, cross-origin iframes that are rendered with `1px x 1px` dimensions
-or `opacity: 0` are flagged as invisible/background frames. Modern browser engines
-aggressively throttle timers and block autoplay/postMessage handshakes on invisible
-cross-origin frames. To prevent the audio stream and handshake from freezing when
-navigating away from the active video stage, the player host element is parked
-off-screen (`top: -9999px; left: -9999px; width: 320px; height: 180px;`) with valid
-video dimensions and standard opacity.
-
-Two neighbours of the same bug, fixed at the same time: `origin=file://` is
-refused by YouTube outright, so a **packaged build would have failed where the
-dev server worked** — the parameter is now sent only for real web origins (with
-`127.0.0.1` mapped to `localhost` to satisfy YouTube domain origin security) — and
-the embed was never asked to autoplay in its URL, only commanded to over the
-channel that was broken.
-
-When a video owner restricts third-party embedding entirely or YouTube returns
-`onError` (codes 101, 150, 2, 5), the store records the error state and displays
-an actionable notification banner allowing users to skip the track or open it directly
-on YouTube.
+### The trust boundary
 
 Anything a client pastes is parsed to a bare eleven-character video id before it
 is sent, and checked again at the gateway against the provider's own alphabet.
-Whatever comes out of that ends up in an iframe `src` in **everybody else's**
-window, so it is a trust boundary and it is tested as one.
+Whatever comes out of that ends up in a URL **this process navigates to** and in
+an iframe `src` in everybody else's window, so it is a trust boundary and it is
+tested as one (`electron/youtube-page.check.ts`).
+
+Both views are fenced the same way, off one host list: navigation is confined to
+Google's own hosts — what a sign-in flow needs, and a great deal less than "the
+internet" — new windows are refused, and neither view has a preload or Node.
+Neither can read a BetweenUs session, and nothing in the app is reachable from a
+page loaded in either.
 
 ## What it deliberately does not do
 
-- **No youtube.com in the web client.** The site refuses to be framed, so the
-  web client searches instead of browsing — see above. Playlists and
-  subscriptions stay desktop-only, because those need the user's own session and
-  the only place that session can be shown is the real site.
+- **No youtube.com in the web client** — not for browsing and not for playing.
+  The site refuses to be framed, so the web client searches instead of browsing
+  and keeps the `/embed/` player. Playlists, subscriptions, age-restricted
+  tracks and anything a label has locked down stay desktop-only, because all of
+  them need the user's own session and the only place that session can be shown
+  is the real site.
+- **No picture.** The shared thing is a song. A video would be a screen share in
+  everything but name, and the first line of this document is why that is the
+  most expensive possible way to solve this.
 - **No YouTube Data API on any server.** The optional search key is read by the
   browser and used by the browser. No service of ours holds it, sends it or
   learns what anybody searched for.
@@ -458,14 +561,17 @@ the chooser rather than to the call.
 | Its self-check | `apps/services/call-service/src/listen-session.check.ts` |
 | Gateway wiring | `apps/services/call-service/src/call.gateway.ts` |
 | Clock and drift | `apps/desktop/src/services/listen-sync.ts` |
-| The YouTube embed | `apps/desktop/src/services/youtube.ts` |
+| The web client's YouTube embed | `apps/desktop/src/services/youtube.ts` |
 | Reconciler and ducking | `apps/desktop/src/stores/listen.ts` |
-| The queue popover | `apps/desktop/src/features/voice/ListenTogether.tsx` |
-| The picture, and the transport | `apps/desktop/src/features/voice/ListenStage.tsx` |
+| The panel, the queue and the transport | `apps/desktop/src/features/voice/ListenPanel.tsx` |
+| The desktop player (renderer handle) | `apps/desktop/src/services/native-player.ts` |
+| The desktop player (main process) | `apps/desktop/electron/youtube-player.ts` |
+| What both views know about YouTube pages | `apps/desktop/electron/youtube-page.ts` |
+| Its self-check | `apps/desktop/electron/youtube-page.check.ts` |
 | The in-app YouTube browser (UI) | `apps/desktop/src/features/voice/ListenBrowser.tsx` |
+| The in-app YouTube browser (main) | `apps/desktop/electron/youtube-view.ts` |
 | The web client's search (UI) | `apps/desktop/src/features/voice/ListenSearch.tsx` |
 | The web client's search (API call) | `apps/desktop/src/services/youtube-search.ts` |
-| The in-app YouTube browser (main) | `apps/desktop/electron/youtube-view.ts` |
 
 ## The rule both surfaces follow
 
@@ -476,15 +582,27 @@ An iframe removed from the document stops playing and loses its place. A
 the search. And a rebuilt one is not a recovery — it is a fresh player, back at
 zero, refused autoplay, and out of step with everybody else in the call.
 
-So neither ever moves. A React component offers an **empty rectangle**, and the
-frame or the view is positioned on top of it, tracked on a frame loop (the box
-moves for reasons no `ResizeObserver` reports: a sidebar opening, a banner
-appearing above it, the window crossing to another monitor). When the component
-unmounts, the picture parks in a one-pixel corner and the music carries on.
+Audio-only made most of this easy. Nothing has to be shown, so nothing has to be
+moved: the desktop player is parked off the window for its whole life and the
+web client's frame is parked off-screen for its whole life. Neither is ever
+positioned over anything, which is why the slot machinery and the frame loop
+that tracked it are gone.
 
-Parked is one pixel rather than `display: none` on purpose — a hidden iframe is
-one Chromium is entitled to stop, and stopping it is the difference between
-music that survives switching to a text channel and music that does not.
+The browse view still follows a rectangle, because it genuinely has to be seen.
+It is tracked on a frame loop rather than a `ResizeObserver` for the same old
+reason: the box moves for reasons no observer reports — a sidebar opening, a
+banner appearing above it, the window crossing to another monitor.
+
+Parked is 320×180 off-screen rather than one pixel or `display: none`, on both
+surfaces. A frame or a view Chromium believes nobody can see is one it is
+entitled to throttle, and throttling it is the difference between music that
+survives switching to a text channel and music that does not.
+
+The rule has one more consequence now there are two views: a track change is a
+**navigation**, not a new player. Rebuilding a browser on every skip would cost
+a cold start in the gap between two songs. The views are built when the first
+track plays and destroyed when the call ends, and nothing in between touches
+them.
 
 ## A single replica, for now
 

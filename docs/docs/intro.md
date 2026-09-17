@@ -53,7 +53,7 @@ Production binaries for Windows (Electron NSIS installer) and Android (Native AP
 - **Servers & Channels**: Public and private channels, custom roles with colors, per-member overrides, invite links with limits.
 - **End-to-End Encrypted Chat**: Messages, edits, reactions, replies, pins, rich markdown parsing (bulleted/numbered lists, inline marks, code blocks), and encrypted attachments up to 100 MB.
 - **Voice, Video & Screen Share**: Peer-to-peer WebRTC mesh, camera, screen sharing with interactive remote control handover and multi-cursor overlays.
-- **Listen Together**: Synchronized YouTube playback in voice calls, browse youtube.com in-app, click-to-play with zero uplink, and automatic speech ducking.
+- **Listen Together**: Synchronized YouTube audio in voice calls, browse youtube.com in-app, click-to-play with zero uplink, and automatic speech ducking.
 - **Play Together**: Tic-tac-toe, Connect Four, Reversi, Dots and Boxes, Ludo and Carrom - the last a real physics simulation both ends replay - inside a voice call — one board everybody sees, two chairs anybody can take, refereed by the gateway so nothing is played on trust.
 - **Remote Desktop**: Screen viewing, remote control, clipboard sync, multi-monitor selection, granular permission grants with expiry, and audit trail.
 - **Presence & Notifications**: Status selection, typing indicators, desktop tray, quiet hours, push suppression across devices, and FCM push notifications.

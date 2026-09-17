@@ -46,7 +46,7 @@ Messages, attachments, and call media are end-to-end encrypted: the server store
 | Channels | Public and private text channels, private channels as an allowlist, direct messages between friends |
 | Messages & Chat | End-to-end encrypted, realtime over WebSocket, history paging in both directions, replies, `:` emoji search, per-server custom emoji including animated, reactions with who-reacted names, drag-and-drop and a preview before sending, full-screen zoomable image viewer, integrated video player, and local media album saving |
 | Voice and video | Peer-to-peer voice channels, camera, one screen share at a time with takeover, join and leave tones, manual quality override, end-to-end encrypted media, no media server |
-| Listen together | A shared YouTube queue inside a voice call: everyone hears the same track in step, from their own connection, at full quality, with the video on screen. Browse the real youtube.com inside the app, signed in as yourself, and queue what you are looking at. Anybody can add, skip or pause; music ducks under whoever is talking. No audio is streamed between anybody |
+| Listen together | A shared YouTube queue inside a voice call: everyone hears the same track in step, from their own connection, at full quality. Audio only - no picture, and no stream between anybody. The desktop app plays the real youtube.com, so a label's music video plays where an embed refuses it. Browse the site inside the app, signed in as yourself, and queue what you are looking at. Anybody can add, skip or pause; music ducks under whoever is talking |
 | Play together | Six board games inside a voice call - Tic-tac-toe, Connect Four, Reversi, Dots and Boxes, Ludo, and Carrom with a real physics simulation. One board everybody sees, two chairs anybody can take, and a rematch button. `call-service` referees the moves, so a move is a number on the wire rather than somebody's screen being streamed |
 | Android Client | Native Jetpack Compose + Material 3 app with E2EE messaging, WhatsApp-style media picker and composer, media viewers, and public gallery saving (`Pictures/BetweenUs`, `Movies/BetweenUs`) |
 | Presence | Online / idle / do not disturb / invisible, last seen with a three-tier privacy setting, typing indicators, voice rosters |
@@ -1016,9 +1016,16 @@ All three clients have all of it.
 ### Listen together
 
 - **A shared music queue inside a voice call.** Everybody hears the same track,
-  in step, while they work, with the video on screen. There is no host: anybody
-  can add, skip, seek or pause, and `call-service` decides the order the way it
-  already does for the screen share.
+  in step, while they work. Audio only - there is no shared picture, because a
+  picture would be a screen share in everything but name. There is no host
+  either: anybody can add, skip, seek or pause, and `call-service` decides the
+  order the way it already does for the screen share.
+- **The desktop app plays youtube.com itself**, in a hidden view beside the one
+  you browse in, driven against the page's own video element. The `/embed/`
+  player refuses a record label's video outright - error 101 or 150, a black
+  frame - and that is most of the music anybody queues. The site does not refuse
+  the site. The web client keeps the embed, because youtube.com will not be
+  framed by any browser tab, and says so when a track will not play.
 - **The real youtube.com, inside the app, on desktop.** Signed in as you, with
   search, your playlists and your subscriptions, and a button that queues
   whatever is on screen - because nobody keeps a list of video ids. It is a
@@ -1202,8 +1209,10 @@ All three clients have all of it.
 - Migrations are waiting to be applied - see the list at the bottom of
   `development/TRACK.md`, including two whose names sort backwards.
 - Listen Together has not been run with two real clients: the transport and the
-  clock have self-checks, the player and the ducking do not and cannot without a
-  browser. `development/TESTING.md` has the walkthrough.
+  clock have self-checks, and the desktop player has been driven end to end
+  against real youtube.com (playback, seek, pause, volume, mute recovery, track
+  change), but the ducking and the two-window sync have not. See
+  `development/TESTING.md` for the walkthrough.
 - Play Together has not been run with two real clients either. The referee and
   the four sets of rules have self-checks, and so does the player's-eye view;
   the boards themselves need two windows and a person in each.

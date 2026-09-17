@@ -24,7 +24,7 @@ import useBaseUrl from '@docusaurus/useBaseUrl';
 | **Encrypted File Attachments (&le;100MB)** | ✅ Full Support | ✅ Full Support | ✅ Full Support |
 | **P2P Voice & Video Calls** | ✅ Full Support (WebRTC Mesh) | ✅ Full Support | ✅ Full Support |
 | **Screen Sharing (Up to 4K / 60 FPS)** | ✅ Host & Watch | 👁️ Watch & Share | 👁️ Watch Only |
-| **Listen Together (YouTube)** | ✅ Host & Sync | ✅ Host & Sync | 🎵 Audio Sync |
+| **Listen Together (YouTube)** | ✅ Full (real youtube.com) | ⚠️ Embed only | 🎵 Audio Sync |
 | **Play Together (6 Board Games & Carrom)** | ✅ Full Support | ✅ Full Support | ✅ Full Support |
 | **Remote Desktop Control** | 🖥️ Agent & Controller | 🎮 Controller Only | 👁️ Viewer Only |
 | **Moments (24h Ephemeral Stories)** | ✅ Full Support | ✅ Full Support | ✅ Full Support |
@@ -108,15 +108,18 @@ Unlike legacy platforms that route audio and video through centralized media rel
 
 ## 3. Listen Together (Synchronized YouTube)
 
-Share musical and video experiences inside any voice channel without taxing the host's uplink bandwidth.
+Share music inside any voice channel without taxing anybody's uplink bandwidth.
+Audio only: what is shared is the track, the queue and the position, never a
+picture and never a stream.
 
 <p align="center">
   <img src={useBaseUrl('img/feature-listen.png')} alt="Listen Together in Voice Channels" style={{maxWidth: '100%', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.1)'}} />
 </p>
 
 ### Key Capabilities
-- **Zero Uplink Bandwidth**: Rather than screen-sharing video frames, Listen Together synchronizes video playback metadata (timestamp, state, queue index) across peers; each client streams video directly from the source.
-- **In-App Browser & Queue**: Search youtube.com or paste direct URLs to build synchronized shared queues.
+- **Zero Uplink Bandwidth**: Rather than screen-sharing frames, Listen Together synchronizes playback metadata (timestamp, state, queue index) across peers; each client streams the track directly from the source.
+- **Plays What Embeds Refuse**: The desktop app plays real youtube.com in a hidden view rather than the `/embed/` player, so a record label's music video — which the embed rejects outright with error 101/150 — plays normally, signed in as you.
+- **In-App Browser & Queue**: Browse youtube.com (desktop) or search (web) to build synchronized shared queues, or paste direct URLs.
 - **Automatic Speech Ducking**: Media playback volume automatically softens when participants speak, ensuring clear conversation.
 - **Host & Collaborative Modes**: Server admins or room hosts can lock controls or allow any member in the call to manage the queue.
 
