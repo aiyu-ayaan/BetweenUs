@@ -411,16 +411,37 @@ export function rateLimit(options: RateLimitOptions): Type<CanActivate> {
  * separates entries so a deployment can name its web client and its admin panel
  * without opening the door to everything.
  */
-export function corsOptions(origin: string): { origin: string | string[]; credentials: boolean } {
+/**
+ * Response headers a cross-origin client may actually read.
+ *
+ * Only seven response headers are readable by default, and `Date` is not one of
+ * them - a fetch can be perfectly successful and still hand the caller a header
+ * list with nothing in it. That is not an abstract restriction here: the
+ * packaged desktop client loads its renderer from `file://`, so every API call
+ * it makes is cross-origin, and `services/server-clock.ts` learns the server's
+ * clock from exactly this header. Without it the clients that most need to know
+ * their clock is wrong - the installed ones, on machines that sleep - silently
+ * measure nothing and report an offset of zero.
+ *
+ * `x-request-id` goes with it so a client can quote the id of the request it is
+ * reporting, which is the whole point of propagating one.
+ */
+const EXPOSED_HEADERS = ['Date', REQUEST_ID_HEADER];
+
+export function corsOptions(origin: string): {
+  origin: string | string[];
+  credentials: boolean;
+  exposedHeaders: string[];
+} {
   const list = origin
     .split(',')
     .map((entry) => entry.trim())
     .filter(Boolean);
 
   if (list.length === 0 || list.includes('*')) {
-    return { origin: '*', credentials: false };
+    return { origin: '*', credentials: false, exposedHeaders: EXPOSED_HEADERS };
   }
-  return { origin: list, credentials: true };
+  return { origin: list, credentials: true, exposedHeaders: EXPOSED_HEADERS };
 }
 
 /** Every service mounts this at `/health`. Keep the payload free of infra detail. */

@@ -26,12 +26,19 @@ function main(): void {
   assert.equal(clientAddress(request({})), '10.0.0.9');
 
   // Credentials are never allowed alongside a wildcard origin.
-  assert.deepEqual(corsOptions('*'), { origin: '*', credentials: false });
-  assert.deepEqual(corsOptions(''), { origin: '*', credentials: false });
+  const exposed = ['Date', 'x-request-id'];
+  assert.deepEqual(corsOptions('*'), { origin: '*', credentials: false, exposedHeaders: exposed });
+  assert.deepEqual(corsOptions(''), { origin: '*', credentials: false, exposedHeaders: exposed });
   assert.deepEqual(corsOptions('https://a.example, https://b.example'), {
     origin: ['https://a.example', 'https://b.example'],
     credentials: true,
+    exposedHeaders: exposed,
   });
+
+  // `Date` is not readable cross-origin unless it is named here, and the
+  // packaged desktop client - renderer on `file://`, so every API call is
+  // cross-origin - learns the server's clock from nothing else.
+  assert.equal(corsOptions('*').exposedHeaders.includes('Date'), true);
 
   // One login attempt is counted twice: against the address, and against the
   // account being guessed at.

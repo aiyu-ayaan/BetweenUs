@@ -69,6 +69,45 @@ class ServerClockTest {
     }
 
     @Test
+    fun `a round trip too slow to mean anything is not believed`() {
+        // The offset is the midpoint of the round trip, so it carries up to
+        // half of however asymmetric that trip was. An upload that took twelve
+        // minutes to answer would otherwise report a six-minute skew on a phone
+        // whose clock is exactly right - and one quiet spell later that is the
+        // best sample held, and the banner is up.
+        ServerClock.sample(0, 12 * 60 * 1000L, 1)
+        assertEquals(0L, ServerClock.offsetMs.value)
+
+        // The edge is inclusive, and a trip that came back before it left is
+        // the clock moving under the measurement itself.
+        assertTrue(usable(ServerClock.Sample(0, ServerClock.MAX_ROUND_TRIP_MS, 1)))
+        assertFalse(usable(ServerClock.Sample(0, ServerClock.MAX_ROUND_TRIP_MS + 1, 1)))
+        assertFalse(usable(ServerClock.Sample(5_000, 4_000, 5_000)))
+    }
+
+    @Test
+    fun `a corrected clock stops being wrong`() {
+        // The measurement that keeps a banner up: the offset is the
+        // least-delayed sample held, so a fast one taken while the clock was an
+        // hour out stays the best after the clock is fixed. It was timed
+        // against a clock that no longer exists.
+        val then = 1_000_000L
+        ServerClock.sample(then, then + 100, then + hour + 50)
+        assertTrue(ServerClock.isWrong())
+
+        val now = then + ServerClock.SAMPLE_TTL_MS + 60_000L
+        ServerClock.sample(now, now + 100, now + 50)
+        assertFalse(ServerClock.isWrong())
+
+        // Within the window it is kept, so an ordinary session still has
+        // several to choose the least-delayed one from.
+        assertTrue(fresh(ServerClock.Sample(0, then, then), then + ServerClock.SAMPLE_TTL_MS))
+        assertFalse(fresh(ServerClock.Sample(0, then, then), then + ServerClock.SAMPLE_TTL_MS + 1))
+        // And a sample from before a clock that stepped backwards goes too.
+        assertFalse(fresh(ServerClock.Sample(0, then, then), then - 1))
+    }
+
+    @Test
     fun `five minutes is the line`() {
         // Below it nothing on screen misleads, and a phone whose clock drifts a
         // little must not be nagged about it.

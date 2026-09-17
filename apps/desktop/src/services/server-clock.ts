@@ -49,6 +49,59 @@ export const CLOCK_WARNING_MS = 5 * 60 * 1000;
 /** How many measurements are kept when picking the least-delayed one. */
 export const CLOCK_SAMPLES = 8;
 
+/**
+ * How long a measurement is worth keeping.
+ *
+ * Ten minutes, and it is what makes the banner *go away*. The offset is the
+ * least-delayed of the samples held, so without an age limit a measurement
+ * taken before the clock was corrected stays the best one - it was a fast round
+ * trip, and it still is - and the app goes on saying the clock is wrong for as
+ * long as that sample survives, however right the clock now is.
+ *
+ * It also covers the case that produced those samples in the first place: a
+ * clock that *jumps* (an NTP correction landing, a laptop waking, somebody
+ * changing the time) invalidates every measurement taken on the old one,
+ * because each was timed with a clock that no longer exists.
+ */
+export const CLOCK_SAMPLE_TTL_MS = 10 * 60 * 1000;
+
+/**
+ * How slow a round trip may be and still say anything about the time.
+ *
+ * The estimate is the midpoint of the round trip, so it is wrong by up to half
+ * of however asymmetric that trip was - and the trips this samples are whatever
+ * the app was doing anyway, including a multi-megabyte upload on a bad
+ * connection. A request that took twelve minutes to come back can therefore
+ * manufacture a six-minute "skew" on a machine whose clock is perfect, and it
+ * only takes a quiet spell for such a sample to be the best one held.
+ *
+ * Ten seconds. Anything slower is discarded rather than believed: five minutes
+ * is the threshold being tested against, and a sample cannot be allowed to
+ * carry a quarter of it in error.
+ */
+export const CLOCK_MAX_ROUND_TRIP_MS = 10_000;
+
+/**
+ * The measurements still worth believing at `nowMs`, which is the moment the
+ * newest one arrived.
+ *
+ * A sample that arrived *after* "now" is not from the future - it is from
+ * before a clock that stepped backwards, timed against a clock that is gone -
+ * so it goes the same way as one that is simply old.
+ */
+export function freshSamples(samples: ClockSample[], nowMs: number): ClockSample[] {
+  return samples.filter((sample) => {
+    const age = nowMs - sample.receivedAtMs;
+    return age >= 0 && age <= CLOCK_SAMPLE_TTL_MS;
+  });
+}
+
+/** Whether one round trip is quick enough for its midpoint to mean anything. */
+export function usableSample(sample: ClockSample): boolean {
+  const roundTrip = sample.receivedAtMs - sample.sentAtMs;
+  return roundTrip >= 0 && roundTrip <= CLOCK_MAX_ROUND_TRIP_MS;
+}
+
 interface ServerClockState {
   /** Server time minus device time, in milliseconds. Zero until measured. */
   offsetMs: number;
@@ -61,7 +114,12 @@ export const useServerClock = create<ServerClockState>((set, get) => ({
   offsetMs: 0,
   samples: [],
   sample: (sample) => {
-    const samples = [...get().samples, sample].slice(-CLOCK_SAMPLES);
+    // A negative round trip is the clock moving under the measurement itself,
+    // and it would be the "fastest" sample held - the worst one to believe.
+    if (!usableSample(sample)) return;
+    const samples = [...freshSamples(get().samples, sample.receivedAtMs), sample].slice(
+      -CLOCK_SAMPLES,
+    );
     set({ samples, offsetMs: bestOffset(samples) });
   },
   reset: () => set({ samples: [], offsetMs: 0 }),

@@ -50,6 +50,39 @@ object ServerClock {
     /** How many measurements are kept when picking the least-delayed one. */
     const val SAMPLES = 8
 
+    /**
+     * How long a measurement is worth keeping.
+     *
+     * Ten minutes, and it is what makes the banner *go away*. The offset is the
+     * least-delayed of the samples held, so without an age limit a measurement
+     * taken before the clock was corrected stays the best one - it was a fast
+     * round trip, and it still is - and the app goes on saying the clock is
+     * wrong for as long as that sample survives, however right the clock now is.
+     *
+     * It also covers the case that produced those samples: a clock that *jumps*
+     * - an NTP correction landing, a phone waking, somebody changing the time in
+     * Settings - invalidates every measurement taken on the old one, because
+     * each was timed with a clock that no longer exists.
+     */
+    const val SAMPLE_TTL_MS = 10 * 60 * 1000L
+
+    /**
+     * How slow a round trip may be and still say anything about the time.
+     *
+     * The estimate is the midpoint of the round trip, so it is wrong by up to
+     * half of however asymmetric that trip was - and the trips this samples are
+     * whatever the app was doing anyway, including an upload on a bad
+     * connection with a three-minute timeout. A request that took twelve
+     * minutes to come back can manufacture a six-minute "skew" on a phone whose
+     * clock is perfect, and it only takes a quiet spell for such a sample to be
+     * the best one held.
+     *
+     * Ten seconds. Anything slower is discarded rather than believed: five
+     * minutes is the threshold being tested against, and a sample cannot be
+     * allowed to carry a quarter of it in error.
+     */
+    const val MAX_ROUND_TRIP_MS = 10_000L
+
     /** One round trip: when it left, when it came back, and the server's stamp. */
     data class Sample(val sentAtMs: Long, val receivedAtMs: Long, val serverMs: Long)
 
@@ -101,8 +134,16 @@ object ServerClock {
      */
     fun sample(sentAtMs: Long, receivedAtMs: Long, serverMs: Long?) {
         if (serverMs == null || serverMs <= 0L) return
+        val measurement = Sample(sentAtMs, receivedAtMs, serverMs)
+        // A negative round trip is the clock moving under the measurement
+        // itself, and it would be the "fastest" sample held - the worst one to
+        // believe. A very slow one carries too much of its own asymmetry.
+        if (!usable(measurement)) return
         synchronized(samples) {
-            samples.addLast(Sample(sentAtMs, receivedAtMs, serverMs))
+            // Everything measured on a clock that is gone - too old, or from
+            // before a step backwards - goes with it.
+            samples.retainAll { fresh(it, receivedAtMs) }
+            samples.addLast(measurement)
             while (samples.size > SAMPLES) samples.removeFirst()
             _offsetMs.value = bestOffset(samples.toList())
         }
@@ -125,6 +166,23 @@ object ServerClock {
  * estimate - which is exactly NTP's, and is wrong by at most half the asymmetry
  * of the round trip.
  */
+/** Whether one round trip is quick enough for its midpoint to mean anything. */
+fun usable(sample: ServerClock.Sample): Boolean {
+    val roundTrip = sample.receivedAtMs - sample.sentAtMs
+    return roundTrip in 0..ServerClock.MAX_ROUND_TRIP_MS
+}
+
+/**
+ * Whether a measurement is still worth believing at [nowMs], which is the
+ * moment the newest one arrived.
+ *
+ * A sample that arrived *after* "now" is not from the future - it is from
+ * before a clock that stepped backwards, timed against a clock that is gone -
+ * so it goes the same way as one that is simply old.
+ */
+fun fresh(sample: ServerClock.Sample, nowMs: Long): Boolean =
+    (nowMs - sample.receivedAtMs) in 0..ServerClock.SAMPLE_TTL_MS
+
 fun offsetOf(sample: ServerClock.Sample): Long =
     sample.serverMs + (sample.receivedAtMs - sample.sentAtMs) / 2 - sample.receivedAtMs
 

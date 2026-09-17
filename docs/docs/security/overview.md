@@ -265,7 +265,39 @@ rather than as a wrong clock.
 No timezone is sent anywhere, and none is needed: timestamps are UTC on the
 wire (`toISOString()`), no client mints one, and each client renders in its own
 zone. A reader's timezone is not something the server has to know, so it is not
-something it collects.
+something it collects. The comparison itself never sees a zone either: both
+sides are Unix epoch milliseconds — `Date.now()` / `System.currentTimeMillis()`
+against `Date.parse()` of the `Date` header, which is GMT by specification — so
+two people in different zones with correct clocks measure the same offset of
+zero. A wrong zone is a wrong *label*, and the operating system's business; only
+a wrong clock moves this number.
+
+Three rules keep the strip honest, because a warning that appears on a machine
+whose clock is right is worse than no warning at all:
+
+- **A measurement expires after ten minutes.** The offset is the least-delayed
+  sample held, so a fast measurement taken before the clock was corrected would
+  otherwise stay the best one and keep the strip up indefinitely. The same rule
+  covers a clock that *jumps*: every sample timed on the old clock is discarded,
+  including any that appear to have arrived in the future.
+- **A round trip over ten seconds is discarded.** The estimate is the midpoint,
+  so it carries up to half of however asymmetric the trip was — and a slow
+  upload answering after twelve minutes would manufacture a six-minute "skew"
+  on a perfect clock.
+- **A negative round trip is discarded.** That is the clock moving underneath
+  the measurement, and it would otherwise be the fastest sample held.
+
+`Date` is not a CORS-safelisted response header, so the services name it in
+`Access-Control-Expose-Headers` (`corsOptions`). Without that the packaged
+desktop client — renderer on `file://`, so every API call is cross-origin —
+reads no header, measures nothing, and reports an offset of zero on a machine
+that may be hours out.
+
+One thing the strip cannot tell you is *which* of the two clocks is wrong: it
+measures a disagreement. Against a deployment that is the device, near enough
+always. Against a backend on a developer's own machine it may well not be —
+a container or a WSL2 VM that has been suspended is a classic source of a
+server clock minutes behind the host's.
 
 ## Errors and logs
 
