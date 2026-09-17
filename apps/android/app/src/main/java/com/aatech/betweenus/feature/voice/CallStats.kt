@@ -268,4 +268,48 @@ object CallStats {
             rate.takeIf { it > 0 },
         )
     }
+
+    /**
+     * The candidate pair actually carrying the call. The desktop's
+     * `selectedCandidatePair`, rule for rule.
+     *
+     * This used to be "the last entry in the report that is `succeeded` and
+     * `nominated`", which is wrong in a way that only shows up after a link has
+     * had a bad minute - and a bad minute is exactly when everything reading it
+     * matters.
+     *
+     * A link recovers by restarting ICE. Every restart gathers a fresh set of
+     * pairs, and the pair that was carrying the call before it **stays in the
+     * report**, still `succeeded`, still `nominated`, with counters frozen at
+     * the moment it died. `getStats` guarantees no ordering, so "whichever came
+     * last" is a coin flip between the live pair and a corpse.
+     *
+     * Reading the corpse is silent and it is not harmless: no
+     * `currentRoundTripTime`, so the panel shows a dash on a call that is fine;
+     * no `availableOutgoingBitrate`, so the frame-rate ladder gets no reading
+     * and never moves; and the *old* candidate ids, so "direct or relayed" is
+     * answered about a path that no longer exists.
+     *
+     * [selectedId] is `RTCTransportStats.selectedCandidatePairId`, which is the
+     * spec's own answer and always names the live pair. The scan is a fallback
+     * for a report with no transport entry, and it breaks the tie on traffic
+     * rather than on order: a pair that died stopped accumulating bytes.
+     */
+    fun selectedPair(
+        pairs: List<Map<String, Any>>,
+        selectedId: String?,
+    ): Map<String, Any>? {
+        if (selectedId != null) {
+            pairs.firstOrNull { it["id"] == selectedId }?.let { return it }
+        }
+
+        val live = pairs.filter {
+            (it["nominated"] as? Boolean ?: false) && (it["state"] as? String) == "succeeded"
+        }
+        return live.maxByOrNull { traffic(it) }
+    }
+
+    private fun traffic(pair: Map<String, Any>): Long =
+        ((pair["bytesSent"] as? Number)?.toLong() ?: 0L) +
+            ((pair["bytesReceived"] as? Number)?.toLong() ?: 0L)
 }

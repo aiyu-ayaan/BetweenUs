@@ -2417,9 +2417,9 @@ class VoiceEngine(private val context: Context) {
                 var outboundVideo = 0L
                 var packetsLost = 0L
                 var packetsReceived = 0L
-                var roundTrip: Double? = null
                 var picture: Triple<Int?, Int?, Double?> = Triple(null, null, null)
-                var pair: Map<String, Any>? = null
+                val pairs = mutableListOf<Map<String, Any>>()
+                var selectedPairId: String? = null
                 val candidateTypes = HashMap<String, String>()
 
                 for (stats in report.statsMap.values) {
@@ -2453,18 +2453,17 @@ class VoiceEngine(private val context: Context) {
                             if (kind == "audio") outboundAudio += bytes else outboundVideo += bytes
                         }
 
-                        // Only the pair actually carrying the call. The losers
-                        // of the ICE race stay in the report and their round
-                        // trip means nothing.
-                        "candidate-pair" -> {
-                            val nominated = members["nominated"] as? Boolean ?: false
-                            val succeeded = (members["state"] as? String) == "succeeded"
-                            if (nominated && succeeded) {
-                                (members["currentRoundTripTime"] as? Number)?.toDouble()
-                                    ?.let { roundTrip = it }
-                                pair = members
-                            }
-                        }
+                        // Kept whole and chosen between after the walk. The
+                        // losers of the ICE race stay in the report, and - the
+                        // case that actually bites - so does the winner of the
+                        // *previous* race after a restart, still `succeeded`
+                        // and still `nominated` with its counters frozen. See
+                        // `CallStats.selectedPair`.
+                        "candidate-pair" -> pairs += members
+
+                        "transport" ->
+                            (members["selectedCandidatePairId"] as? String)
+                                ?.let { selectedPairId = it }
 
                         // Kept by id whatever they are: the pair that names them
                         // is not guaranteed to have been walked yet.
@@ -2477,6 +2476,9 @@ class VoiceEngine(private val context: Context) {
                 val camera = liveVideo(Slot.CAMERA, decoded)
                 val screen = liveVideo(Slot.SCREEN, decoded)
                 val speaking = (levels[transceivers[Slot.MIC]?.mid] ?: 0.0) >= SPEAKING_LEVEL
+
+                val pair = CallStats.selectedPair(pairs, selectedPairId)
+                val roundTrip = (pair?.get("currentRoundTripTime") as? Number)?.toDouble()
 
                 applyLadder(pair)
 

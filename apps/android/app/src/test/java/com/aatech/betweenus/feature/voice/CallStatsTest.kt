@@ -198,4 +198,61 @@ class CallStatsTest {
         assertNull(CallStats.resolution(second.copy(frameWidth = 0)))
         assertEquals("1920×1080 @ 30", CallStats.resolution(second))
     }
+
+    // --- Which candidate pair is actually carrying the call ---
+
+    private val dead = mapOf<String, Any>(
+        "id" to "pair-old",
+        "state" to "succeeded",
+        "nominated" to true,
+        "bytesSent" to 900_000L,
+        "bytesReceived" to 900_000L,
+    )
+    private val live = mapOf<String, Any>(
+        "id" to "pair-new",
+        "state" to "succeeded",
+        "nominated" to true,
+        "bytesSent" to 12_000L,
+        "bytesReceived" to 30_000L,
+        "currentRoundTripTime" to 0.08,
+    )
+
+    @Test
+    fun `the transport names the live pair, whatever the report order`() {
+        // The guarded bug is silent and only appears after a link has had a bad
+        // minute: an ICE restart leaves the pair that died in the report, still
+        // succeeded and still nominated, and `getStats` guarantees no order.
+        assertEquals("pair-new", CallStats.selectedPair(listOf(dead, live), "pair-new")?.get("id"))
+        assertEquals("pair-new", CallStats.selectedPair(listOf(live, dead), "pair-new")?.get("id"))
+    }
+
+    @Test
+    fun `a transport naming a pair that is not there still gets an answer`() {
+        assertNotNull(CallStats.selectedPair(listOf(dead, live), "missing"))
+    }
+
+    @Test
+    fun `without a transport entry the choice is order-independent`() {
+        // The fallback is a guess; what it must not be is a coin flip on the
+        // order `getStats` happened to return.
+        val one = CallStats.selectedPair(listOf(dead, live), null)
+        val other = CallStats.selectedPair(listOf(live, dead), null)
+        assertNotNull(one)
+        assertEquals(one?.get("id"), other?.get("id"))
+    }
+
+    @Test
+    fun `a pair that never succeeded is never chosen`() {
+        val failed = mapOf<String, Any>("id" to "f", "state" to "failed", "nominated" to true)
+        val waiting = mapOf<String, Any>("id" to "w", "state" to "waiting", "nominated" to false)
+        assertNull(CallStats.selectedPair(listOf(failed, waiting), null))
+    }
+
+    @Test
+    fun `nothing to choose between is null rather than a throw`() {
+        // A report taken before ICE has settled has no pairs at all, which is
+        // the normal first second of every call.
+        assertNull(CallStats.selectedPair(emptyList(), null))
+        assertNull(CallStats.selectedPair(emptyList(), "pair-new"))
+    }
 }
