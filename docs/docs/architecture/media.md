@@ -433,6 +433,48 @@ A new capture resets the ladder. Every rung was arithmetic on `SharePublish.capt
 so a rung held across a changed display, a window instead of a screen, or a
 changed quality setting is a budget for a picture nobody is capturing.
 
+### Which candidate pair is answering
+
+Three separate things read "the pair carrying this call": the round trip in the
+connection panel, direct-or-relayed (and therefore `RELAY_MAX_BITRATE`), and the
+ladder's own `availableOutgoingBitrate`. All three used to scan the report for
+`succeeded && nominated` and keep the last match.
+
+`getStats()` guarantees no ordering, and a link recovers by calling
+`restartIce()` — up to four times, per `call-recovery.ts`. Every restart gathers
+a fresh set of pairs, and **the pair that was carrying the call before it stays
+in the report**: still `succeeded`, still `nominated`, counters frozen at the
+moment it died. So "whichever came last" is a coin flip between the live pair
+and a corpse, and the corpse only turns up after a link has had a bad minute —
+which is exactly when all three readings matter.
+
+Reading it is silent and it is not harmless:
+
+- no `currentRoundTripTime`, so the panel shows `Round trip —` on a healthy call
+- no `availableOutgoingBitrate`, so the ladder gets no reading and never moves
+- the *old* candidate ids, so direct-or-relayed is answered about a path that no
+  longer exists
+
+`selectedCandidatePair` (`CallStats.selectedPair` on Android) prefers
+`RTCTransportStats.selectedCandidatePairId`, which is the spec's own answer and
+always names the live pair. The scan survives only as a fallback for a report
+with no transport entry, and it breaks the tie on traffic rather than on order:
+a pair that died stopped accumulating bytes.
+
+### What the panel can now answer
+
+`Link est.` is `availableOutgoingBitrate` — the same reading the ladder acts on.
+It is the difference between "my connection is slow" and "WebRTC decided my
+connection is slow", which are different faults: an estimate far below a link
+that is demonstrably fine is an estimate that collapsed and never climbed back,
+and the way back up is ALR probing, which is why the content hint above matters
+so much.
+
+`Path` is direct or via relay. It had been measured since the relay ceiling was
+written and discarded at the panel boundary, so there was no way to tell from
+inside the app that a call was on TURN — while being held to `RELAY_MAX_BITRATE`
+on purpose and paying for every byte twice.
+
 **A ceiling on pixels, spent before anything is encoded.** Every other number
 here is a ceiling on bits. `maxHeight` in `QualityOverride` is a ceiling on the
 capture itself, and it is the only one that acts before the encoder or the link
