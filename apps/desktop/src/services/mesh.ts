@@ -88,6 +88,7 @@ import { wsUrl } from './endpoint';
 import { deviceId } from './e2ee';
 import {
   PLAYOUT_DELAY,
+  ShareLadder,
   ceilingFor,
   patchVideoBandwidth,
   sortPreferredVideoCodecs,
@@ -434,6 +435,15 @@ class PeerLink {
    * being taken, and acted on by `applyShare`.
    */
   private relayed = false;
+  /**
+   * What this link can actually carry, and where that puts the share.
+   *
+   * Per link for the reason `relayed` is: the same capture goes to everybody,
+   * but what each person's connection can carry is theirs. Driven from
+   * `pollVideo` off a `getStats` that is already being taken, and acted on by
+   * `applyShare` - which is exactly how the relay ceiling already works.
+   */
+  private readonly shareLadder = new ShareLadder();
   /** How loud this peer is, 0..1. See `pollAudioLevel`. */
   private level = 0;
   /**
@@ -683,18 +693,23 @@ class PeerLink {
    *
    * One place rather than three: it used to be written out at every call site
    * that had a `SharePublish` in hand, and the numbers have to come from this
-   * link rather than from the share, because `relayed` is a fact about the link
-   * and nothing else knows it. Idempotent, so re-applying it after a
-   * renegotiation - or after ICE settles on a relayed pair - costs nothing.
+   * link rather than from the share, because `relayed` and what the link
+   * measures are facts about the link and nothing else knows them. Idempotent,
+   * so re-applying it after a renegotiation - or after ICE settles on a relayed
+   * pair - costs nothing.
+   *
+   * The frame rate and the scale come from the ladder once it has a reading,
+   * and from the share's own numbers until then. See `ShareLadder`.
    */
   async applyShare(): Promise<void> {
     if (!this.sharePublish) return;
+    const rung = this.shareLadder.position;
     await this.tune(
       'screen',
       {
         maxBitrate: ceilingFor(this.sharePublish, this.relayed),
-        maxFramerate: this.sharePublish.maxFramerate,
-        scaleResolutionDownBy: this.sharePublish.scaleResolutionDownBy,
+        maxFramerate: rung?.frameRate ?? this.sharePublish.maxFramerate,
+        scaleResolutionDownBy: rung?.scaleResolutionDownBy ?? this.sharePublish.scaleResolutionDownBy,
         priority: this.sharePublish.priority,
       },
       this.sharePublish.degradationPreference,
@@ -1123,9 +1138,18 @@ class PeerLink {
     this.micEncoding = encoding;
   }
 
-  /** Remembered so every future offer and answer carries the screen bitrate options. */
+  /**
+   * Remembered so every future offer and answer carries the screen bitrate
+   * options.
+   *
+   * The ladder resets with it. Every rung was computed against `captured`, so a
+   * new capture - a different monitor, a window instead of a screen, a changed
+   * quality setting - makes the rung the share is standing on a budget for a
+   * picture that no longer exists.
+   */
   setSharePublish(publish: SharePublish | null): void {
     this.sharePublish = publish;
+    this.shareLadder.reset();
   }
 
   /** Remembered for the same reason, for the camera. */
@@ -1213,6 +1237,7 @@ class PeerLink {
     });
 
     await this.applyRelayCeiling(nominated, candidates);
+    await this.applyLadder(nominated);
 
     for (const slot of ['camera', 'screen'] as const) {
       const transceiver = this.transceivers.get(slot);
@@ -1257,6 +1282,33 @@ class PeerLink {
     const relayed = local === 'relay' || remote === 'relay';
     if (relayed === this.relayed) return;
     this.relayed = relayed;
+    await this.applyShare();
+  }
+
+  /**
+   * Moves the share to what this link has been measured to carry.
+   *
+   * `availableOutgoingBitrate` is the congestion controller's own estimate, and
+   * it was being thrown away. Everything the share was configured with came
+   * from the display's size and the machine's guess about itself; the one number
+   * that knows what the connection actually does was sitting in a report this
+   * loop already takes, unread. That is how a share ends up at 1080p and 2 fps:
+   * not because nothing noticed the link was bad, but because nothing asked.
+   *
+   * On the candidate pair rather than the sender, and that matters: it is the
+   * estimate for the *path*, so it is a number about this link and belongs
+   * beside `relayed`. Only a real move re-tunes - `ShareLadder.step` returns
+   * null on the ticks where the answer has not changed, which is most of them.
+   */
+  private async applyLadder(nominated: Record<string, unknown> | null): Promise<void> {
+    if (!this.sharePublish || !nominated) return;
+
+    const available = Number(nominated.availableOutgoingBitrate ?? Number.NaN);
+    const next = this.shareLadder.step(
+      this.sharePublish,
+      Number.isFinite(available) && available > 0 ? available : null,
+    );
+    if (!next) return;
     await this.applyShare();
   }
 
