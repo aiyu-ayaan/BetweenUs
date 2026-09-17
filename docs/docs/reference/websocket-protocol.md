@@ -12,6 +12,31 @@ BetweenUs operates two distinct WebSocket ingress gateways:
 
 ---
 
+## 0. Connection Liveness & Reconnection
+
+Every gateway (`/ws/chat`, `/ws/presence`, `/ws/call`, `/ws/remote`) replies to a
+`ping` frame with `pong`, and pings at the protocol level itself, terminating
+sockets that stop answering. Clients are expected to hold up their half:
+
+| Behaviour | Value |
+| :--- | :--- |
+| Reconnect backoff | 1s doubling to 30s |
+| Give up and show "Disconnected" | after 30s down |
+| Handshake timeout | 10s |
+| Idle probe | `ping` every 25s, `pong` expected within 10s |
+
+A socket that reads as open is not evidence that it is: a suspended laptop or a
+dozing phone leaves a connection that will never deliver another byte and never
+close. Clients therefore probe rather than trust, and re-probe whenever the app
+returns to the foreground or the device finds a network again. A `4401` close
+code means the access token was rejected, not that the connection failed - the
+client refreshes the token and stays on the reconnect ladder.
+
+Implementation: `apps/desktop/src/services/socket.ts`,
+`apps/android/core/.../data/Sockets.kt`.
+
+---
+
 ## 1. Chat Gateway (`/ws/chat`)
 
 ### Connection Handshake
