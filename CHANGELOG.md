@@ -1,5 +1,41 @@
 # Changelog
 
+## [1.0.3](https://github.com/aiyu-ayaan/BetweenUs/compare/v1.0.2...v1.0.3) (2026-09-17)
+
+### Features
+
+* Show the bandwidth estimate and the media path in the connection panel
+
+### Bug fixes
+
+* Screen share adaptive ladder, live candidate pair tracking, and client reconnection fixes
+* Stop "Reconnecting…" sticking after doze or process death
+* Stop the reconnect banner getting stuck after a long background
+* Refactor Theatre component layout for improved screen sharing experience
+* Stop budgeting resolution against the bandwidth estimate
+* Read the live candidate pair, matching the desktop
+* Read the live candidate pair, not the one an ICE restart left behind
+* Carry the same frame-rate ladder as the desktop
+* Drive the share ladder from the stats poll that already runs
+* Hold the share's frame rate and size the picture to the measured link
+* Tune speech ducking ratio to 0.55 and enable interruptible fade transitions
+
+### Other changes
+
+* Write down the client connection-liveness rules
+* Bump docs submodule
+* The selected candidate pair, and what the panel can now answer
+* Bump docs submodule to phase 47
+* Document the frame-rate ladder and why both preferences fail alone
+
+### Artifacts
+
+| Platform | This release |
+| --- | --- |
+| Server images | Built here |
+| Desktop | Built here |
+| Android | Built here |
+
 ## [1.0.2](https://github.com/aiyu-ayaan/BetweenUs/compare/v1.0.1...v1.0.2) (2026-09-17)
 
 ### Features
