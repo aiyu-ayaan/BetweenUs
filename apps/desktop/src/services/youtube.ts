@@ -1,6 +1,14 @@
 /**
- * A YouTube player driven by `postMessage`, with no YouTube script in this
- * window.
+ * The **web client's** YouTube player: an embed driven by `postMessage`, with
+ * no YouTube script in this window.
+ *
+ * The desktop app does not use this. It plays real youtube.com in a hidden view
+ * the main process owns (`electron/youtube-player.ts`), because the embed
+ * refuses a label's video outright - error 101 or 150, a black frame - and
+ * that is most of the music anybody queues. A browser tab cannot do the same:
+ * youtube.com sends `X-Frame-Options` and refuses to be framed, full stop, so
+ * the embed is all the web has and a restricted track fails there. The panel
+ * says so and offers the link.
  *
  * The obvious way to embed YouTube is to load `iframe_api.js` and use the
  * object it hands back. That is remote code running in the renderer, and this
@@ -56,42 +64,6 @@ export const YOUTUBE_ORIGINS = [
   'https://music.youtube.com',
 ];
 
-/**
- * The frame this window actually holds, which is not always the embed.
- *
- * A packaged desktop build serves this document from `file://`, and a YouTube
- * embed framed by a `file://` document is refused outright - error 153, "Video
- * player configuration error", on every track. The player decides that from the
- * page it is embedded in, so neither a `Referer` header nor a custom `app://`
- * scheme moves it; both were measured, and both still refuse.
- *
- * So on desktop the main process serves one page over loopback and this window
- * frames that, and it frames the embed. The protocol is unchanged - the same
- * `listening` handshake and the same commands - it just passes through one more
- * window, which relays in both directions. See electron/youtube-relay.ts.
- *
- * Everywhere with a real origin already - the web client, a dev run over
- * http://localhost - the embed is framed directly, as before.
- */
-export function playerSrc(videoId: string, origin: string, relay: string | null): string {
-  if (!relay) return embedUrl(videoId, origin);
-  const separator = relay.includes('?') ? '&' : '?';
-  return `${relay}${separator}v=${encodeURIComponent(videoId)}`;
-}
-
-/** The origins a message may legitimately arrive on, relay included. */
-export function messageOrigins(relay: string | null): string[] {
-  if (!relay) return YOUTUBE_ORIGINS;
-  try {
-    const origin = new URL(relay).origin;
-    const localhostOrigin = origin.replace('127.0.0.1', 'localhost');
-    const ipOrigin = origin.replace('localhost', '127.0.0.1');
-    return Array.from(new Set([...YOUTUBE_ORIGINS, origin, localhostOrigin, ipOrigin]));
-  } catch {
-    return YOUTUBE_ORIGINS;
-  }
-}
-
 /** What the embed reports about itself. */
 export interface YouTubeState {
   /** Seconds, as the player reports them. */
@@ -101,6 +73,34 @@ export interface YouTubeState {
   ended: boolean;
   title: string | null;
   error: number | null;
+  /**
+   * True while an advert is playing instead of the track.
+   *
+   * Always false here - the embed does not serve them and does not say. It is
+   * on the shared shape because the desktop player, which plays the real site,
+   * very much does. See `ListenPlayer`.
+   */
+  ad?: boolean;
+}
+
+/**
+ * What the reconciler needs from a player, whichever one this window has.
+ *
+ * Two implementations, and they are genuinely different things rather than an
+ * interface invented for one: `YouTubePlayer` below is an iframe in the web
+ * client, and `NativeListenPlayer` is a view in the main process that the
+ * desktop app drives over IPC. Everything above this line - the queue, the
+ * clock, the drift arithmetic, the ducking - is written once against these six
+ * methods and does not know which it has.
+ */
+export interface ListenPlayer {
+  play(): void;
+  pause(): void;
+  seek(positionMs: number): void;
+  /** 0 to 100. Used for ducking under whoever is talking, not by a slider. */
+  setVolume(volume: number): void;
+  current(): YouTubeState;
+  close(): void;
 }
 
 /**
@@ -154,11 +154,10 @@ function valid(id: string | null | undefined): string | null {
 /**
  * The URL the frame is pointed at. Separated so the check can read it.
  *
- * `origin` is passed only when it is a real web origin. A packaged Electron
- * build serves the renderer from `file://`, and `origin=file://` is not a thing
- * YouTube accepts - it refuses the API handshake outright, which is a player
- * that loads, shows a frame and never answers a command. Omitting the parameter
- * is allowed and is what that case needs.
+ * `origin` is passed only when it is a real web origin. It always is now - this
+ * runs in a browser tab - but the guard stays: `origin=file://` is not a thing
+ * YouTube accepts, and it refuses the handshake outright rather than saying so,
+ * which is a player that loads, shows a frame and never answers a command.
  */
 export function embedUrl(videoId: string, origin: string): string {
   const params = new URLSearchParams({
@@ -194,7 +193,7 @@ export function embedUrl(videoId: string, origin: string): string {
  * to live does not autoplay, and the element has to be in the document before
  * the first command is worth sending.
  */
-export class YouTubePlayer {
+export class YouTubePlayer implements ListenPlayer {
   readonly frame: HTMLIFrameElement;
   private state: YouTubeState = {
     positionMs: 0,
@@ -210,17 +209,16 @@ export class YouTubePlayer {
   private readonly listener: (event: MessageEvent) => void;
   private handshake: number | null = null;
 
-  /** Where a message may come from: the embed, or the relay standing in for it. */
+  /** Where a message may legitimately come from. */
   private readonly origins: string[];
 
   constructor(
     videoId: string,
     private readonly onState: (state: YouTubeState) => void,
   ) {
-    const relay = typeof window !== 'undefined' ? (window.betweenus?.youtubeRelay ?? null) : null;
-    this.origins = messageOrigins(relay);
+    this.origins = YOUTUBE_ORIGINS;
     this.frame = document.createElement('iframe');
-    this.frame.src = playerSrc(videoId, window.location.origin, relay);
+    this.frame.src = embedUrl(videoId, window.location.origin);
     this.frame.allow = 'autoplay; encrypted-media; fullscreen; picture-in-picture';
     this.frame.setAttribute('allowfullscreen', 'true');
     this.frame.setAttribute('referrerpolicy', 'strict-origin-when-cross-origin');

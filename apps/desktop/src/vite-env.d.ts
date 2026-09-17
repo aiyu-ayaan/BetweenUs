@@ -162,11 +162,17 @@ interface Window {
     updateInstall?: () => Promise<{ started: boolean; reason?: string }>;
 
     /**
-     * Where the Listen Together player lives - a loopback page the main
-     * process serves, because a `file://` document cannot frame a YouTube
-     * embed. Null when there is none, and the embed is framed directly.
+     * The Listen Together player: a hidden view on real youtube.com, which is
+     * what the call hears.
+     *
+     * Desktop only. A browser tab has none of this and falls back to the
+     * `/embed/` player, which is why a restricted track plays on the desktop
+     * app and does not on the web client.
      */
-    youtubeRelay?: string | null;
+    listenPlayerLoad?: (videoId: string, volume: number) => Promise<void>;
+    listenPlayerControl?: (action: string, value: number) => Promise<void>;
+    listenPlayerRead?: () => Promise<ListenPlayerState | null>;
+    listenPlayerClose?: () => Promise<void>;
 
     /**
      * The real youtube.com, shown over a rectangle of this window.
@@ -208,6 +214,23 @@ type DesktopUpdateChannel = 'stable' | 'beta' | 'alpha';
  * nothing.
  */
 type DesktopUpdateFlavor = 'installer' | 'unpacked';
+
+/**
+ * What the Listen Together player says it is doing.
+ *
+ * Declared here rather than imported: this file is ambient, and an import
+ * would make it a module - which would take the `Window` augmentation above
+ * with it. The main process owns the original, in `electron/youtube-page.ts`.
+ */
+interface ListenPlayerState {
+  positionMs: number;
+  durationMs: number;
+  playing: boolean;
+  ended: boolean;
+  title: string | null;
+  /** True while YouTube is playing an advert rather than the track. */
+  ad: boolean;
+}
 
 interface DesktopUpdateInfo {
   version: string;

@@ -20,22 +20,24 @@
       no say over it, which is as well: the addresses it reaches are the other
       participants', discovered at the time and nameable in advance by nobody.
 
-      frame-src names YouTube and one loopback page for Listen Together. The
-      loopback page is the player's origin: a `file://` document cannot frame a
-      YouTube embed at all - the player refuses to configure itself, which is
-      error 153 on every track - so a packaged build frames a page the main
-      process serves on 127.0.0.1, and that page frames the embed. It is served
-      on a port the OS picks behind a random path, which is why the directive
-      cannot name a port. See electron/youtube-relay.ts.
+      frame-src names YouTube, and only YouTube, for Listen Together - and only
+      the web client ever uses it. The desktop app plays real youtube.com in a
+      view the main process owns, which is not a frame and is not governed here;
+      a browser tab cannot do that, because youtube.com refuses to be framed, so
+      the web client keeps the /embed/ player. See services/youtube.ts.
 
-      frame-src names YouTube, and only YouTube, for Listen Together. That is
-      the one directive this feature needed and script-src is deliberately not
-      it: the usual way to embed a player is to load YouTube's iframe_api.js,
-      which is remote code running in *this* window. Instead the embed is driven
-      over the postMessage protocol that script is a wrapper around, so YouTube's
-      code runs in YouTube's own origin, in a sandboxed cross-origin frame that
-      cannot read this document and which this document cannot read. See
-      services/youtube.ts.
+      It used to also allow http://127.0.0.1:* - a loopback page the main
+      process served, so that a `file://` document had something with a real
+      origin to frame the embed from. That whole arrangement is gone with the
+      embed it existed for, and so is the permission: leaving it would let any
+      page on this machine be framed by this window, for nothing.
+
+      script-src is deliberately not part of this. The usual way to embed a
+      player is to load YouTube's iframe_api.js, which is remote code running in
+      *this* window. Instead the embed is driven over the postMessage protocol
+      that script is a wrapper around, so YouTube's code runs in YouTube's own
+      origin, in a cross-origin frame that cannot read this document and which
+      this document cannot read.
 
       script-src allows blob: for the microphone gate, which is an AudioWorklet
       compiled from a string - see services/mic-gate.ts. It has to be script-src
@@ -50,7 +52,7 @@
     -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self' blob: 'wasm-unsafe-eval'; frame-src https://www.youtube.com https://www.youtube-nocookie.com https://youtube.com https://youtube-nocookie.com http://127.0.0.1:*; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: http: https:; media-src 'self' blob:; connect-src 'self' http: https: ws: wss:"
+      content="default-src 'self'; script-src 'self' blob: 'wasm-unsafe-eval'; frame-src https://www.youtube.com https://www.youtube-nocookie.com https://youtube.com https://youtube-nocookie.com; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: http: https:; media-src 'self' blob:; connect-src 'self' http: https: ws: wss:"
     />
     <meta name="referrer" content="strict-origin-when-cross-origin" />
     <title>BetweenUs</title>

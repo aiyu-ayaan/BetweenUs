@@ -13,25 +13,29 @@
  * wants the screen. So the panel takes the stage the way a shared screen does,
  * and the tiles come straight back when it closes.
  *
- * Two tabs, because only one of them can have the space and because a native
- * browser view and an embedded player must never be on screen together - a
- * `WebContentsView` paints above every pixel of the DOM whatever any `z-index`
- * says, so "both at once" means "the player is invisible and nobody knows why".
+ * **Listen Together is audio.** There is no picture and no rectangle for one,
+ * which is most of why this file is shorter than it was: the player is a hidden
+ * view on desktop and a parked frame on the web, and neither is ever shown. The
+ * shared thing is the track, the queue and the position - a picture would only
+ * be a second screen share nobody asked for, costing everybody the upload the
+ * feature exists to avoid.
+ *
+ * Two tabs, because only one of them can have the space:
  *
  *   Browse   - the real youtube.com, signed in as you, on desktop; search
  *              results in a browser tab, which is as close as a web page is
  *              allowed to get. The default, because looking for something to
  *              play is what opening this means.
- *   Playing  - the video everybody in the call is watching.
+ *   Playing  - what the call is listening to, and the queue beside it.
  *
- * Neither tab draws anything itself. Both offer an empty rectangle and
- * something the store owns is positioned over it, so that switching tabs,
- * closing the panel or leaving the screen cannot destroy what is playing. See
- * `stores/listen.ts`.
+ * The browse tab draws nothing itself: it offers an empty rectangle and the
+ * main process puts a `WebContentsView` over it, so switching tabs or closing
+ * the panel cannot destroy a sign-in or a half-typed search. See
+ * `stores/listen.ts` and `electron/youtube-view.ts`.
  */
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { listenPositionAt } from '@betweenus/shared-types';
-import { claimListenSlot, useListenStore } from '../../stores/listen';
+import { useListenStore } from '../../stores/listen';
 import { useAppsStore } from '../../stores/apps';
 import { formatPosition } from '../../services/listen-sync';
 import { isDesktopRuntime } from '../../services/platform';
@@ -58,7 +62,6 @@ export function ListenPanel(): JSX.Element {
   const error = useListenStore((state) => state.error);
   const currentTrack = session ? session.queue[session.index] : undefined;
 
-  const playerSlot = useRef<HTMLDivElement>(null);
   /**
    * The desktop app frames youtube.com itself; a browser tab cannot, and gets
    * search results instead. Both are the same gesture - find something, press
@@ -66,18 +69,6 @@ export function ListenPanel(): JSX.Element {
    * one of them being a lesser thing hidden somewhere else.
    */
   const native = isDesktopRuntime() && Boolean(window.betweenus?.youtubeOpen);
-
-  // The picture is handed this rectangle only while the player tab has the
-  // space. On the browser tab it is released, which parks it - still playing,
-  // and no longer sitting invisibly underneath a native view.
-  useEffect(() => {
-    if (tab !== 'playing' || !session) {
-      claimListenSlot(null);
-      return undefined;
-    }
-    claimListenSlot(playerSlot.current);
-    return () => claimListenSlot(null);
-  }, [tab, session]);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-2">
@@ -173,26 +164,7 @@ export function ListenPanel(): JSX.Element {
           {tab === 'browse' ? (
             native ? <ListenBrowser /> : <ListenSearch />
           ) : session ? (
-            /* Bounded on both axes, which is the whole of the "it filled the
-               entire screen and ran off the bottom" bug.
-        
-               It was `aspect-video w-full`: at a 1750px stage that is a 984px
-               tall box, and nothing above it was `min-h-0`, so flexbox let it
-               push straight past the window. `flex-1 min-h-0` caps the height
-               against the stage and `max-w-5xl` stops it spanning an ultrawide
-               monitor.
-        
-               No aspect ratio here on purpose. Constraining a 16:9 box by both
-               a max width and a max height cannot be done with `aspect-ratio`
-               alone - whichever axis is definite wins and the other one breaks
-               the shape. The player letterboxes inside whatever box it is
-               given, exactly as it does on YouTube itself, so a black surround
-               is both free and correct. */
-            <div
-              ref={playerSlot}
-              aria-label="Shared video"
-              className="mx-auto min-h-0 w-full max-w-5xl flex-1 rounded-lg bg-black"
-            />
+            <NowPlaying />
           ) : (
             <Empty />
           )}
@@ -206,6 +178,41 @@ export function ListenPanel(): JSX.Element {
   );
 }
 
+/**
+ * What is on, with no picture to show for it.
+ *
+ * The transport under the panel already carries the title, the position and the
+ * controls, so this is deliberately not a second copy of them - it is the
+ * answer to "is anything happening", which a blank rectangle used to give
+ * wrongly once the video went away.
+ */
+function NowPlaying(): JSX.Element {
+  const session = useListenStore((state) => state.session);
+  const ducking = useListenStore((state) => state.ducking);
+  const track = session?.queue[session.index] ?? null;
+
+  return (
+    <div className="mx-auto flex min-h-0 w-full max-w-xl flex-1 flex-col items-center justify-center gap-3 rounded-lg border border-white/5 bg-surface-900/60 p-6 text-center">
+      <MusicIcon className="h-10 w-10 text-slate-700" />
+      <div className="min-w-0 max-w-full">
+        <p className="truncate text-sm font-medium text-slate-200">
+          {track?.title || 'Loading track...'}
+        </p>
+        {track?.addedByUsername && (
+          <p className="mt-0.5 truncate text-xs text-slate-500">
+            added by {track.addedByUsername}
+          </p>
+        )}
+      </div>
+      {/* Not decoration: two people with microphones open otherwise wonder why
+          the music went quiet, and reach for the volume rather than waiting. */}
+      {ducking && (
+        <p className="text-[11px] text-amber-300/80">Turned down while somebody is talking</p>
+      )}
+    </div>
+  );
+}
+
 function Empty(): JSX.Element {
   return (
     <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-white/10 p-6 text-center">
@@ -213,7 +220,8 @@ function Empty(): JSX.Element {
       <p className="max-w-sm text-xs leading-relaxed text-slate-400">
         Everyone in the call hears the same track, in step, from their own
         connection - so it stays at full quality and costs nobody any upload.
-        Anybody here can change what is playing.
+        Anybody here can change what is playing. Audio only: nothing is
+        streamed between you, just the queue and a timestamp.
       </p>
       {/* One button on both clients. What Browse *is* differs - the site on
           desktop, search results in a browser tab - and that is a difference

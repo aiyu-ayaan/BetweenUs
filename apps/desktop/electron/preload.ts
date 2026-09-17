@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import type { Channel, UpdateOffer } from './updates';
+import type { ListenPlayerState } from './youtube-page';
 
 /**
  * The only bridge between renderer and main. Keep this surface small and
@@ -248,19 +249,29 @@ const api = {
     ipcRenderer.invoke('update:install'),
 
   /**
-   * Where the Listen Together player lives.
+   * The Listen Together player: a hidden view on real youtube.com.
    *
-   * A `file://` document cannot frame a YouTube embed - the player refuses to
-   * configure itself - so the main process serves one page over loopback and
-   * the renderer frames that instead. Null when the relay could not start, and
-   * the renderer then frames the embed directly, which is right for a dev run
-   * and for the web client.
+   * This is what the call hears. It replaced a YouTube `/embed/` iframe in the
+   * renderer, because the embed refuses to play a label's video - error 101 or
+   * 150 and a black frame - which is most of the music anybody queues.
    *
-   * Synchronous on purpose: the first player is built before any promise here
-   * could settle, and a frame pointed at the wrong URL for the first track is
-   * exactly the bug this is fixing.
+   * The renderer never holds the view. It names a track, drives the transport,
+   * and asks what is happening; everything else is the main process's.
    */
-  youtubeRelay: (ipcRenderer.sendSync('youtube:relay') as string | null) ?? null,
+  listenPlayerLoad: (videoId: string, volume: number): Promise<void> =>
+    ipcRenderer.invoke('listen:player:load', videoId, volume),
+  listenPlayerControl: (action: string, value: number): Promise<void> =>
+    ipcRenderer.invoke('listen:player:control', action, value),
+  /**
+   * Polled rather than pushed, about twice a second.
+   *
+   * A page from the open web does not get a preload and a channel into this
+   * application to save a round trip. Half a second is well inside the 1.5s
+   * the drift correction waits for anyway.
+   */
+  listenPlayerRead: (): Promise<ListenPlayerState | null> =>
+    ipcRenderer.invoke('listen:player:read'),
+  listenPlayerClose: (): Promise<void> => ipcRenderer.invoke('listen:player:close'),
 
   /**
    * The real youtube.com, shown over a rectangle of this window.

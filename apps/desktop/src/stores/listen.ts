@@ -30,7 +30,8 @@ import {
   correction,
   type ClockSample,
 } from '../services/listen-sync';
-import { YouTubePlayer, parseYouTube } from '../services/youtube';
+import { YouTubePlayer, parseYouTube, type ListenPlayer, type YouTubeState } from '../services/youtube';
+import { NativeListenPlayer, closeNativePlayer, hasNativePlayer } from '../services/native-player';
 import { useVoiceStore } from './voice';
 import { useGameStore } from './game';
 
@@ -140,92 +141,50 @@ interface ListenState {
   allow: () => void;
 }
 
-/** The live pieces, outside the store: React must not re-render on a player tick. */
-let mesh: Mesh | null = null;
-let player: YouTubePlayer | null = null;
-/** Which track the current player was built for, so it is rebuilt only on a change. */
-let loadedTrackId: string | null = null;
 /**
- * Where the player's frame lives: one element on `document.body`, always, that
- * is *moved over* whatever slot the UI is currently offering it.
+ * Builds whichever player this window has.
  *
- * This is the shape the feature needs and the first version got wrong. An
- * iframe removed from the document stops playing and loses its position, so a
- * frame rendered inside a React component dies every time that component
- * unmounts - closing the panel, switching to a text channel, paging the grid.
- * Re-mounting it is not a fix either: a fresh frame is a fresh player, back at
- * zero, refused autoplay, and out of step with everybody.
+ * Desktop gets real youtube.com in a view the main process owns, because the
+ * `/embed/` player refuses a label's video - error 101 or 150, a black frame -
+ * and that is most of the music anybody queues. A browser tab cannot have that:
+ * youtube.com refuses to be framed, so the web client gets the embed and a
+ * restricted track fails there, with the link offered instead.
  *
- * So the frame never moves in the DOM. A component claims the slot by handing
- * over its own element, and this positions the frame on top of it - `fixed`,
- * tracking that element's rectangle. When nothing claims it, the frame shrinks
- * into a corner and keeps playing, which is what "the music carries on while
- * you go and read something" has to mean.
+ * Nothing below this line knows which one it got.
+ */
+function buildPlayer(videoId: string, onState: (state: YouTubeState) => void): ListenPlayer {
+  if (hasNativePlayer()) return new NativeListenPlayer(videoId, onState);
+  const embed = new YouTubePlayer(videoId, onState);
+  // The web embed is an iframe and has to be in the document to play at all.
+  // Parked, permanently: this feature has no picture, so there is no rectangle
+  // for it to be moved over and nothing ever shows it. Real video dimensions
+  // off-screen rather than one pixel or `display:none`, because Chromium
+  // throttles and then stalls a frame it believes nobody can see.
+  embedHost().append(embed.frame);
+  return embed;
+}
+
+/**
+ * Somewhere off-screen for the web client's iframe to live and keep playing.
+ *
+ * Desktop never builds this: its player is not in this document at all.
  */
 let host: HTMLDivElement | null = null;
-/** The element the picture is currently drawn over, if any. */
-let slot: HTMLElement | null = null;
-let slotObserver: ResizeObserver | null = null;
-let followFrame: number | null = null;
-
-function playerHost(): HTMLDivElement {
+function embedHost(): HTMLDivElement {
   if (host) return host;
   host = document.createElement('div');
   host.style.cssText =
-    'position:fixed;top:-9999px;left:-9999px;width:320px;height:180px;pointer-events:none;overflow:hidden;background:#000;border-radius:0.5rem;';
+    'position:fixed;top:-9999px;left:-9999px;width:320px;height:180px;pointer-events:none;overflow:hidden;';
   document.body.append(host);
-  follow();
   return host;
 }
 
-/**
- * Puts the frame where the claimed slot is, or parks it when there is none.
- *
- * Parked is positioned off-screen with valid video dimensions (320x180) rather
- * than 1px x 1px with zero opacity: Chromium treats 1px or zero-opacity
- * cross-origin iframes as invisible/dead, throttling their message loops,
- * background JS execution, and blocking audio/video playback.
- */
-function follow(): void {
-  if (!host) return;
-  if (!slot || !slot.isConnected) {
-    host.style.cssText =
-      'position:fixed;top:-9999px;left:-9999px;width:320px;height:180px;pointer-events:none;overflow:hidden;';
-    return;
-  }
-  const box = slot.getBoundingClientRect();
-  host.style.cssText =
-    'position:fixed;z-index:20;overflow:hidden;background:#000;border-radius:0.5rem;' +
-    `left:${box.left}px;top:${box.top}px;width:${box.width}px;height:${box.height}px;`;
-}
+/** The live pieces, outside the store: React must not re-render on a player tick. */
+let mesh: Mesh | null = null;
+let player: ListenPlayer | null = null;
+/** Which track the current player was built for, so it is rebuilt only on a change. */
+let loadedTrackId: string | null = null;
 
-/**
- * A component offering the picture somewhere to be, or `null` on its way out.
- *
- * Followed on a frame loop rather than only on resize, because the rectangle
- * moves for reasons no observer reports: a sidebar opening, a banner appearing
- * above it, the window being dragged between monitors. One `getBoundingClientRect`
- * a frame is nothing next to the video it is positioning.
- */
-export function claimListenSlot(element: HTMLElement | null): void {
-  slot = element;
-  slotObserver?.disconnect();
-  slotObserver = null;
-  if (followFrame !== null) cancelAnimationFrame(followFrame);
-  followFrame = null;
-
-  playerHost();
-  follow();
-  if (!element) return;
-
-  slotObserver = new ResizeObserver(() => follow());
-  slotObserver.observe(element);
-  const tick = (): void => {
-    follow();
-    followFrame = requestAnimationFrame(tick);
-  };
-  followFrame = requestAnimationFrame(tick);
-}
 const clock = new ServerClock();
 let driftTimer: number | null = null;
 let clockTimer: number | null = null;
@@ -287,11 +246,11 @@ export const useListenStore = create<ListenState>((set, get) => ({
     unsubscribeVoice?.();
     unsubscribeVoice = null;
     teardownPlayer();
-    claimListenSlot(null);
-    // Destroyed rather than hidden, here and only here: the sign-in is worth
-    // keeping across a collapsed panel and is not worth keeping across a call
-    // nobody is in.
+    // Destroyed rather than hidden, here and only here - both views. The
+    // sign-in and the half-typed search are worth keeping across a collapsed
+    // panel and are not worth keeping across a call nobody is in.
     void window.betweenus?.youtubeClose?.();
+    closeNativePlayer();
     host?.remove();
     host = null;
     reportedEnd.clear();
@@ -374,9 +333,18 @@ export const useListenStore = create<ListenState>((set, get) => ({
     // The position goes with the pause, taken from this window's own player
     // rather than from the shared clock: the player is the thing that actually
     // stopped, and it stopped where it stopped.
+    //
+    // Unless this window is in an advert, and then it emphatically did not.
+    // Everything the player reports mid-advert is about the advert, and this
+    // one reports a position of zero by design - so pausing during one used to
+    // mean "pause, at the beginning", and the whole call jumped back to the
+    // start of a song because one person's window was showing them a car ad.
+    // The shared clock is what this window would have been at, and is right.
+    const local = player?.current();
     mesh?.sendListen({
       type: 'listen.pause',
-      positionMs: player?.current().positionMs ?? listenPositionAt(session, clock.now()),
+      positionMs:
+        local && !local.ad ? local.positionMs : listenPositionAt(session, clock.now()),
     });
   },
 
@@ -409,14 +377,14 @@ function reconcile(): void {
     return;
   }
 
-  // A different track means a different video, and the embed loads one video.
-  // Rebuilt rather than told to load another, because a frame that has already
-  // been refused autoplay stays refused, and a fresh one gets a fresh answer.
+  // A different track means a different video, and a player plays one video.
+  // Rebuilt rather than told to load another, because a web embed that has
+  // already been refused autoplay stays refused and a fresh one gets a fresh
+  // answer. On desktop the rebuild is a navigation in a view that stays put.
   if (loadedTrackId !== track.id) {
     teardownPlayer();
     loadedTrackId = track.id;
-    player = new YouTubePlayer(track.ref, (state) => onPlayerState(state));
-    playerHost().append(player.frame);
+    player = buildPlayer(track.ref, (state) => onPlayerState(state));
     applyDuck(true);
     // Nothing else here: the player has not loaded, so telling it to seek is
     // telling nobody. The next tick, or its first state message, does it.
@@ -425,6 +393,13 @@ function reconcile(): void {
   if (!player) return;
 
   const actual = player.current();
+  // Mid-advert, every number the player reports is about the advert and not
+  // about the track. Correcting from them would seek everybody else into the
+  // middle of a song, so this window sits the advert out and rejoins on the
+  // tick after it ends - which the ordinary drift correction below does by
+  // itself, because by then the numbers mean the track again.
+  if (actual.ad) return;
+
   if (session.paused && actual.playing) player.pause();
   if (!session.paused && !actual.playing && !actual.ended) player.play();
 
@@ -432,12 +407,15 @@ function reconcile(): void {
   if (seekTo !== null) player.seek(seekTo);
 }
 
-/** What the embed says about itself, turned into what the call needs to know. */
-function onPlayerState(state: ReturnType<YouTubePlayer['current']>): void {
+/** What the player says about itself, turned into what the call needs to know. */
+function onPlayerState(state: YouTubeState): void {
   const store = useListenStore.getState();
   const session = store.session;
   const track = currentTrack(session);
   if (!session || !track) return;
+  // An advert's title is not the track's and an advert's end is not the
+  // track's, so nothing said during one is told to anybody else.
+  if (state.ad) return;
 
   // The title and the length: a pasted link carries neither, and a player that
   // has loaded the video knows both. First window to say so fills them in for
@@ -479,7 +457,19 @@ function onPlayerState(state: ReturnType<YouTubePlayer['current']>): void {
   // Told to play, loaded, and not playing: the browser refused. Nothing here
   // can fix that - a gesture in this window can, and saying so is the only
   // honest thing to put on screen.
-  if (!session.paused && !state.playing && !state.ended && state.durationMs > 0 && !state.error) {
+  //
+  // The web client only. The desktop player runs with autoplay permitted,
+  // because nobody can click a view nobody can see - so a desktop window that
+  // is not playing has some other problem, and "press play here" would be a
+  // button that does nothing pointed at a person who cannot help.
+  if (
+    !hasNativePlayer() &&
+    !session.paused &&
+    !state.playing &&
+    !state.ended &&
+    state.durationMs > 0 &&
+    !state.error
+  ) {
     if (!store.needsGesture) useListenStore.setState({ needsGesture: true });
   } else if (store.needsGesture && state.playing) {
     useListenStore.setState({ needsGesture: false });

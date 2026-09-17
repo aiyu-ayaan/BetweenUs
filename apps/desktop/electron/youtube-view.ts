@@ -36,8 +36,13 @@
  */
 import { WebContentsView, session as electronSession, shell, type BrowserWindow } from 'electron';
 
-/** The site, and the hosts a Google sign-in legitimately passes through. */
-const ALLOWED_HOSTS = [
+/**
+ * The site, and the hosts a Google sign-in legitimately passes through.
+ *
+ * Shared with the player view (`youtube-player.ts`), which is fenced the same
+ * way and for the same reason: two views on the open web, one list.
+ */
+export const ALLOWED_HOSTS = [
   'youtube.com',
   'www.youtube.com',
   'm.youtube.com',
