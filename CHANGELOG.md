@@ -1,5 +1,37 @@
 # Changelog
 
+## [1.0.2](https://github.com/aiyu-ayaan/BetweenUs/compare/v1.0.1...v1.0.2) (2026-09-17)
+
+### Features
+
+* Run adverts out rather than sitting through them
+* Play the real youtube.com, and only its sound
+* A Dev channel that runs beside the installed app
+* A maximum share resolution, 1080p by default
+
+### Bug fixes
+
+* Enable background autoplay in prod, perceptual volume, and hover-aware controls
+* Enable background autoplay in prod, real-time perceptual volume control, and hover-aware controls
+* Give the packaged Dev channel its own data directory
+* Stop the clock strip appearing on a clock that is right
+* A share that recovers, and one a relay can carry
+
+### Other changes
+
+* Adverts are run out, and why nothing is blocked
+* Audio only, and a player that does not ask permission
+* What decides a share picture, after phase 44
+* !docs: restore feature screenshots, add video showcase section, and fix README video link
+
+### Artifacts
+
+| Platform | This release |
+| --- | --- |
+| Server images | Built here |
+| Desktop | Built here |
+| Android | Built here |
+
 ## [1.0.1](https://github.com/aiyu-ayaan/BetweenUs/compare/v1.0.0...v1.0.1) (2026-09-16)
 
 ### Features
