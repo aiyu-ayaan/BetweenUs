@@ -5,6 +5,9 @@ import android.util.DisplayMetrics
 import android.view.WindowManager
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.round
+import kotlin.math.sqrt
+import kotlin.math.min
 import kotlin.math.roundToInt
 
 /**
@@ -54,6 +57,151 @@ object ShareQuality {
 
     const val SCREEN_FRAME_RATE = 60
     const val CAMERA_FRAME_RATE = 30
+
+    /**
+     * Frame rates a share will hold, best first.
+     *
+     * The desktop's `FRAME_TIERS` in `share-quality.ts`, number for number, for
+     * the reason the bitrate ladder mirrors it: a call has both clients in it,
+     * and two ladders that disagree is a picture whose smoothness depends on
+     * who is sending it.
+     *
+     * 24 is the floor because it is the rate film has used for a century. Below
+     * it motion stops reading as motion, which is the failure this exists to
+     * prevent rather than a milder form of it.
+     */
+    val FRAME_TIERS = intArrayOf(60, 30, 24)
+
+    /**
+     * Bits per pixel per frame an H.264 screen encode needs to look clean.
+     *
+     * Calibrated rather than derived: 1080p60 that people call good measures
+     * around 10 Mbit, and 10e6 / (1920*1080 * 60) is 0.080.
+     */
+    private const val BITS_PER_PIXEL_FRAME = 0.08
+
+    /** The smallest picture worth giving up a frame rate tier to keep. */
+    private const val FLOOR_HEIGHT = 540
+
+    /** What to encode: a frame rate to hold, and the shrink that pays for it. */
+    data class Adaptation(val frameRate: Int, val scale: Double)
+
+    /**
+     * What to encode, given what the link says it can carry.
+     *
+     * The other half of a ceiling. Everything else here is decided before the
+     * share starts, from the display's size, and none of it can know what the
+     * connection turned out to do - so the encoder was handed 1080p60 and a
+     * 20 Mbit ceiling, the link delivered 400 kbit, and what happened next was
+     * whatever `degradationPreference` said. Under `MAINTAIN_RESOLUTION` that
+     * is 1080p at 2 fps: a full-size slideshow, which is not a better failure
+     * than a small sharp picture but a worse one.
+     *
+     * `available` is `availableOutgoingBitrate` from the nominated candidate
+     * pair - the congestion controller's own measurement, which was being read
+     * and thrown away. Null means nothing has been measured yet, and the answer
+     * is then the whole capture at the full rate: the estimator only measures
+     * what is actually sent, so a share that starts small reports a small link
+     * and never grows out of it.
+     */
+    fun adapt(captured: Size, ceiling: Int, wantedFrameRate: Int, available: Double?): Adaptation {
+        if (available == null || available <= 0.0) {
+            return Adaptation(wantedFrameRate, 1.0)
+        }
+
+        // The reading, held to this share's own ceiling: an estimate above what
+        // the share will ever send is headroom, not permission to send more.
+        val budget = min(available, ceiling.toDouble())
+        val pixels = max(1, captured.width * captured.height).toDouble()
+
+        // Tiers above what somebody asked for are not on offer: a 30 fps
+        // setting is a decision, and a ladder that climbs past it does nothing.
+        val ladder = FRAME_TIERS.filter { it <= wantedFrameRate }.ifEmpty { listOf(wantedFrameRate) }
+
+        for ((index, tier) in ladder.withIndex()) {
+            val affordable = budget / (tier * BITS_PER_PIXEL_FRAME)
+            // Linear on each edge, so the pixel ratio is the square of it.
+            val scale = sqrt(pixels / affordable)
+            if (scale <= 1.0) return Adaptation(tier, 1.0)
+
+            // The last tier has nothing below it to fall to, so it takes
+            // whatever shrink the link demands.
+            val last = index == ladder.size - 1
+            if (last || captured.height / scale >= FLOOR_HEIGHT) {
+                return Adaptation(tier, round(scale * 100) / 100)
+            }
+        }
+
+        return Adaptation(ladder.last(), 1.0)
+    }
+
+    /** Consecutive readings of sustained headroom before a share climbs back up. */
+    private const val CLIMB_TICKS = 5
+
+    /**
+     * Scale changes smaller than this are not changes.
+     *
+     * `availableOutgoingBitrate` wobbles by a few percent every second on a link
+     * with nothing wrong with it, and re-encoding at 2.9x instead of 3.0x is a
+     * keyframe and a visible hitch bought for nothing.
+     */
+    private const val SCALE_DEADBAND = 0.15
+
+    /**
+     * One link's position on the ladder, over time. The desktop's `ShareLadder`.
+     *
+     * [adapt] answers "what fits right now", which is not "what should change".
+     * Applied straight, a per-second reading re-encodes the share every second;
+     * applied symmetrically it is worse, because a share dragged down by one bad
+     * second reports a smaller estimate, which is a ratchet that only tightens.
+     *
+     * So the directions are deliberately not symmetric. **Down immediately**: a
+     * link that cannot carry the picture is already dropping frames, and waiting
+     * to be sure is more seconds of the thing being fixed. **Up slowly**: the
+     * estimate rises by probing, so the first rise is the probe, not the link.
+     */
+    class Ladder {
+        var position: Adaptation? = null
+            private set
+        private var climbing = 0
+
+        /** One reading. Null when nothing should change, which is most ticks. */
+        fun step(captured: Size, ceiling: Int, wantedFrameRate: Int, available: Double?): Adaptation? {
+            val next = adapt(captured, ceiling, wantedFrameRate, available)
+            val now = position
+            if (now == null) {
+                position = next
+                return next
+            }
+
+            val delta = next.scale - now.scale
+            val worse = next.frameRate < now.frameRate || delta > SCALE_DEADBAND
+            val better = next.frameRate > now.frameRate || delta < -SCALE_DEADBAND
+
+            if (worse) {
+                climbing = 0
+                position = next
+                return next
+            }
+            if (!better) {
+                // Inside the deadband: the reading agrees with where the share
+                // already is, and agreement is not headroom.
+                climbing = 0
+                return null
+            }
+            if (++climbing < CLIMB_TICKS) return null
+
+            climbing = 0
+            position = next
+            return next
+        }
+
+        /** A new capture is a new budget: every rung was arithmetic on the old size. */
+        fun reset() {
+            position = null
+            climbing = 0
+        }
+    }
 
     /**
      * The longest edge a phone will capture its own screen at.

@@ -1204,6 +1204,10 @@ class VoiceEngine(private val context: Context) {
         // pixels have already been read.
         val size = ShareQuality.captureSize(context)
         shareSize = size
+        // Every rung of every link's ladder was arithmetic on the size that has
+        // just changed, so a rung held over from the last share is a budget for
+        // a picture nobody is capturing any more.
+        connections.values.forEach { it.resetShareLadder() }
 
         // Claimed before the capture starts, so whoever is sharing stops while
         // this one is still starting - the alternative is a moment with two
@@ -1589,6 +1593,16 @@ class VoiceEngine(private val context: Context) {
         private val decodedOnce = HashSet<Slot>()
 
         /**
+         * What this link can carry, and where that puts the share.
+         *
+         * Per link, because the same capture goes to everybody but what each
+         * person's connection carries is theirs. Driven from [poll] off a
+         * `getStats` that is already being taken - see [applyLadder] - and acted
+         * on by [tune].
+         */
+        private val shareLadder = ShareQuality.Ladder()
+
+        /**
          * What this client wants to be sending, held for the answering side: it
          * has no senders until the offer arrives, and a camera turned on before
          * that would otherwise never reach anybody.
@@ -1836,6 +1850,10 @@ class VoiceEngine(private val context: Context) {
                 if (encodings.isEmpty()) return
 
                 val screen = slot == Slot.SCREEN
+                // Where the ladder has this link, once a reading has put it
+                // somewhere. Null until then, and the answer is the whole
+                // capture at the full rate - see `ShareQuality.adapt`.
+                val rung = if (screen) shareLadder.position else null
                 for (encoding in encodings) {
                     encoding.maxBitrateBps =
                         if (screen) {
@@ -1843,28 +1861,67 @@ class VoiceEngine(private val context: Context) {
                         } else {
                             ShareQuality.cameraBitrate(cameraSize)
                         }
-                    encoding.maxFramerate =
-                        if (screen) ShareQuality.SCREEN_FRAME_RATE else ShareQuality.CAMERA_FRAME_RATE
-                    // Send what was captured. Congestion control still shrinks
-                    // it when the link says so; this only stops it starting
-                    // small for no reason.
-                    encoding.scaleResolutionDownBy = 1.0
+                    encoding.maxFramerate = when {
+                        !screen -> ShareQuality.CAMERA_FRAME_RATE
+                        else -> rung?.frameRate ?: ShareQuality.SCREEN_FRAME_RATE
+                    }
+                    // Full size until something measured says otherwise. The
+                    // shrink is computed from the link's own estimate rather
+                    // than discovered by the encoder failing - see `adapt`.
+                    encoding.scaleResolutionDownBy = if (screen) rung?.scale ?: 1.0 else 1.0
                     // A share is the call's primary visual media, not
                     // background video.
                     if (screen) encoding.networkPriority = 3
                 }
 
-                // Text stays readable and frames are what gets sacrificed - the
-                // opposite trade to a camera, where a dropped frame is invisible
-                // and a soft face is not.
+                // Frames are what a share holds, and the desktop holds them for
+                // the same reason - see the comment over `PROFILES` in
+                // `share-quality.ts`. This said MAINTAIN_RESOLUTION, which has
+                // no floor under the thing it gives up: it keeps 1920x1080 and
+                // drops frames as far as it takes, which on a 405 kbps link is
+                // 1080p at 2 fps. A full-size slideshow is not a milder failure
+                // than a small sharp picture, it is a worse one. What made
+                // holding frames safe is that `adapt` now decides how much
+                // resolution to spend, from a real measurement, so WebRTC's own
+                // adapter is a backstop rather than the whole policy.
                 parameters.degradationPreference = if (screen) {
-                    RtpParameters.DegradationPreference.MAINTAIN_RESOLUTION
+                    RtpParameters.DegradationPreference.MAINTAIN_FRAMERATE
                 } else {
                     RtpParameters.DegradationPreference.BALANCED
                 }
 
                 sender.parameters = parameters
             }
+        }
+
+        /**
+         * Moves the share to what this link has been measured to carry.
+         *
+         * `availableOutgoingBitrate` is the congestion controller's own
+         * estimate, and it was being walked past: `poll` already has the
+         * nominated pair open to answer "direct or relayed", and the one number
+         * that knows what this connection actually does was sitting in it
+         * unread. That is how a share ends up at 1080p and 2 fps - not because
+         * nothing noticed the link was bad, but because nothing asked.
+         *
+         * Per link, because it is per link: the same capture goes to everybody
+         * and what each person's connection carries is theirs. Only a real move
+         * re-tunes; `Ladder.step` returns null on the ticks where the answer has
+         * not changed, which is most of them.
+         */
+        /** A new capture is a new budget. See [beginScreenCapture]. */
+        fun resetShareLadder() = shareLadder.reset()
+
+        private fun applyLadder(pair: Map<String, Any>?) {
+            if (screenTrack == null || pair == null) return
+            val available = (pair["availableOutgoingBitrate"] as? Number)?.toDouble()
+            val moved = shareLadder.step(
+                shareSize,
+                ShareQuality.screenBitrate(shareSize),
+                ShareQuality.SCREEN_FRAME_RATE,
+                available?.takeIf { it > 0.0 },
+            )
+            if (moved != null) tune(Slot.SCREEN)
         }
 
         /**
@@ -2420,6 +2477,8 @@ class VoiceEngine(private val context: Context) {
                 val camera = liveVideo(Slot.CAMERA, decoded)
                 val screen = liveVideo(Slot.SCREEN, decoded)
                 val speaking = (levels[transceivers[Slot.MIC]?.mid] ?: 0.0) >= SPEAKING_LEVEL
+
+                applyLadder(pair)
 
                 val sample = LinkSample(
                     at = System.currentTimeMillis(),
