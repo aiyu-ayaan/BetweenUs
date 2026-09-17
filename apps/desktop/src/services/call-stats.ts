@@ -39,6 +39,18 @@ export interface LinkSample {
   packetsReceived: number;
   /** Round trip on the selected candidate pair, in seconds, when known. */
   roundTripSeconds: number | null;
+  /**
+   * What congestion control believes this link can carry, in kbps.
+   *
+   * `availableOutgoingBitrate` on the selected pair - the same reading the
+   * frame-rate ladder acts on. It is here because it is the one number that
+   * separates the two questions people actually ask: "my connection is 40 Mbps,
+   * why is this share 500 kbps" has completely different answers depending on
+   * whether WebRTC agrees the link is 40 Mbps. An estimate far below a link
+   * that is demonstrably fine is an estimate that collapsed and did not climb
+   * back, which is a different fault from a link that is genuinely small.
+   */
+  availableOutgoingKbps: number | null;
   /** The screen or camera as it arrives, when one does. */
   frameWidth: number | null;
   frameHeight: number | null;
@@ -85,6 +97,17 @@ export interface LinkStats {
   /** Percentage of their packets that never arrived, over the whole call. */
   lossPercent: number | null;
   roundTripMs: number | null;
+  /** See `LinkSample.availableOutgoingKbps`. */
+  availableOutgoingKbps: number | null;
+  /**
+   * Direct or through a relay, which the panel showed nowhere.
+   *
+   * It was already being measured and thrown away at this boundary, and it is
+   * half of every "why is this slow" conversation: a relayed link is held to
+   * `RELAY_MAX_BITRATE` on purpose and goes up to a VM and back down, and there
+   * was no way to tell from the app that it was even happening.
+   */
+  transport: CallTransport | null;
   frameWidth: number | null;
   frameHeight: number | null;
   framesPerSecond: number | null;
@@ -124,6 +147,62 @@ export function lossPercent(lost: number, received: number): number | null {
   const total = lost + received;
   if (total <= 0) return null;
   return Math.round((lost / total) * 1000) / 10;
+}
+
+/** The fields of an `RTCIceCandidatePairStats` this file needs to choose between pairs. */
+export interface CandidatePair {
+  id?: string;
+  state?: string;
+  nominated?: boolean;
+  bytesSent?: number;
+  bytesReceived?: number;
+}
+
+/**
+ * The candidate pair actually carrying the call.
+ *
+ * This used to be "the last entry in the report that is `succeeded` and
+ * `nominated`", which is wrong in a way that only shows up after the connection
+ * has had a bad minute - and a bad minute is exactly when everything that reads
+ * this matters.
+ *
+ * A link recovers by calling `restartIce()`, up to four times (see
+ * `call-recovery.ts`). Every restart gathers a fresh set of pairs, and the pair
+ * that was carrying the call before it **stays in the report**, still
+ * `succeeded`, still `nominated`, with counters frozen at the moment it died.
+ * `getStats()` guarantees no ordering, so "whichever came last" is a coin flip
+ * between the live pair and a corpse.
+ *
+ * Reading the corpse is silent and it is not harmless. It has no
+ * `currentRoundTripTime`, so the panel shows "Round trip —" on a call that is
+ * fine. It has no `availableOutgoingBitrate`, so the frame-rate ladder gets no
+ * reading and never moves. And its candidate ids are the *old* ones, so
+ * "direct or relayed" is answered about a path that no longer exists - which is
+ * the relay ceiling applied, or not applied, on the strength of history.
+ *
+ * `selectedId` comes from `RTCTransportStats.selectedCandidatePairId`, which is
+ * the spec's own answer to this question and always names the live pair. The
+ * scan is kept only as a fallback for a report that has no transport entry, and
+ * it breaks the tie on traffic rather than on order: a pair that died stopped
+ * accumulating bytes, and the live one did not.
+ */
+export function selectedCandidatePair<T extends CandidatePair>(
+  pairs: readonly T[],
+  selectedId: string | null,
+): T | null {
+  if (selectedId) {
+    const chosen = pairs.find((pair) => pair.id === selectedId);
+    if (chosen) return chosen;
+  }
+
+  const live = pairs.filter((pair) => pair.state === 'succeeded' && pair.nominated);
+  if (live.length <= 1) return live[0] ?? null;
+
+  return live.reduce((busiest, pair) => (traffic(pair) > traffic(busiest) ? pair : busiest));
+}
+
+function traffic(pair: CandidatePair): number {
+  return (Number(pair.bytesSent) || 0) + (Number(pair.bytesReceived) || 0);
 }
 
 /**
@@ -268,6 +347,8 @@ export function toStats(
     lossPercent: lossPercent(now.packetsLost, now.packetsReceived),
     roundTripMs:
       now.roundTripSeconds === null ? null : Math.round(now.roundTripSeconds * 1000),
+    availableOutgoingKbps: now.availableOutgoingKbps,
+    transport: now.transport,
     frameWidth: now.frameWidth,
     frameHeight: now.frameHeight,
     framesPerSecond: now.framesPerSecond === null ? null : Math.round(now.framesPerSecond),

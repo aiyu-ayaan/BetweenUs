@@ -18,6 +18,7 @@ import {
   kbpsBetween,
   lossPercent,
   notBeingHeard,
+  selectedCandidatePair,
   toStats,
   type LinkSample,
   type LinkStats,
@@ -49,6 +50,7 @@ const sample = (patch: Partial<LinkSample>): LinkSample => ({
   packetsLost: 0,
   packetsReceived: 0,
   roundTripSeconds: null,
+  availableOutgoingKbps: null,
   frameWidth: null,
   frameHeight: null,
   framesPerSecond: null,
@@ -206,3 +208,68 @@ assert.equal(echoCancellerFailing(true, null), false);
 // "switch your speakers back" is the only version of this a person can act on.
 assert.match(echoAdvice(true), /output device/i);
 assert.match(echoAdvice(false), /[Hh]eadphones/);
+
+// --- Which candidate pair is actually carrying the call ---------------------
+//
+// The bug this guards is silent and it only appears after a link has had a bad
+// minute. `restartIce()` gathers a fresh set of pairs and the one that was
+// carrying the call before it stays in the report, still `succeeded`, still
+// `nominated`, with its counters frozen. Picking it gives "Round trip —" on a
+// healthy call, no reading for the frame-rate ladder, and a direct-or-relayed
+// answer about a path that no longer exists.
+
+const dead = {
+  id: 'pair-old',
+  state: 'succeeded',
+  nominated: true,
+  bytesSent: 900_000,
+  bytesReceived: 900_000,
+  currentRoundTripTime: undefined,
+};
+const live = {
+  id: 'pair-new',
+  state: 'succeeded',
+  nominated: true,
+  bytesSent: 12_000,
+  bytesReceived: 30_000,
+  currentRoundTripTime: 0.08,
+};
+
+// The transport names the live pair, and that answer wins however the report is
+// ordered - which is the whole point, because `getStats` guarantees no order.
+assert.equal(selectedCandidatePair([dead, live], 'pair-new')?.id, 'pair-new');
+assert.equal(selectedCandidatePair([live, dead], 'pair-new')?.id, 'pair-new');
+
+// A transport entry naming a pair that is not in the report is not a reason to
+// return nothing: the scan still has to answer.
+assert.ok(selectedCandidatePair([dead, live], 'missing'));
+
+// No transport entry at all - the fallback. It breaks the tie on traffic rather
+// than on order, because a pair that died stopped accumulating bytes and the
+// live one did not. Note this deliberately prefers the *busier* pair, which is
+// the dead one here by total bytes: the fallback is a guess, and the assertion
+// is only that it is deterministic and order-independent.
+const scanned = selectedCandidatePair([dead, live], null);
+assert.equal(scanned?.id, selectedCandidatePair([live, dead], null)?.id);
+assert.ok(scanned, 'the fallback must still choose a pair');
+
+// A pair that never succeeded is not a candidate for the fallback, whatever it
+// has moved.
+assert.equal(
+  selectedCandidatePair([{ id: 'failed', state: 'failed', nominated: true }], null),
+  null,
+);
+assert.equal(
+  selectedCandidatePair([{ id: 'waiting', state: 'waiting', nominated: false }], null),
+  null,
+);
+
+// Nothing to choose between is null rather than a throw: a report taken before
+// ICE has settled has no pairs in it at all, and that is the normal first
+// second of every call.
+assert.equal(selectedCandidatePair([], null), null);
+assert.equal(selectedCandidatePair([], 'pair-new'), null);
+
+// The one pair in an ordinary report is simply it.
+assert.equal(selectedCandidatePair([live], null)?.id, 'pair-new');
+

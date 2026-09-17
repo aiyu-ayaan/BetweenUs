@@ -96,7 +96,7 @@ import {
 } from './share-quality';
 import type { CameraPublish } from './camera-quality';
 import type { MicEncoding } from './voice-quality';
-import { toStats, type LinkSample, type LinkStats } from './call-stats';
+import { selectedCandidatePair, toStats, type LinkSample, type LinkStats } from './call-stats';
 import {
   GRACE_MS,
   SIGNALLING_DEADLINE_MS,
@@ -1218,7 +1218,12 @@ class PeerLink {
     // is the only loop that takes one every second whether or not anybody has
     // the connection panel up. `sample()` answers the same question for the
     // panel; that one is not running when it matters.
-    let nominated: Record<string, unknown> | null = null;
+    // Every pair, not the last one that looked plausible: after an ICE restart
+    // the pair that died is still `succeeded` and `nominated`, and picking it
+    // is how the ladder stops reading and the relay ceiling answers about a
+    // path that no longer exists. See `selectedCandidatePair`.
+    const pairs: (RTCStats & Record<string, unknown>)[] = [];
+    let selectedPairId: string | null = null;
     const candidates = new Map<string, string>();
 
     (await this.pc.getStats()).forEach((report) => {
@@ -1227,8 +1232,12 @@ class PeerLink {
         decoded.set(String(entry.mid), Number(entry.framesDecoded ?? 0));
         return;
       }
-      if (entry.type === 'candidate-pair' && entry.state === 'succeeded' && entry.nominated) {
-        nominated = entry;
+      if (entry.type === 'candidate-pair') {
+        pairs.push(entry);
+        return;
+      }
+      if (entry.type === 'transport' && entry.selectedCandidatePairId) {
+        selectedPairId = String(entry.selectedCandidatePairId);
         return;
       }
       if (entry.type === 'local-candidate' || entry.type === 'remote-candidate') {
@@ -1236,6 +1245,7 @@ class PeerLink {
       }
     });
 
+    const nominated = selectedCandidatePair(pairs, selectedPairId);
     await this.applyRelayCeiling(nominated, candidates);
     await this.applyLadder(nominated);
 
@@ -1329,6 +1339,7 @@ class PeerLink {
       packetsLost: 0,
       packetsReceived: 0,
       roundTripSeconds: null,
+      availableOutgoingKbps: null,
       frameWidth: null,
       frameHeight: null,
       framesPerSecond: null,
@@ -1347,9 +1358,11 @@ class PeerLink {
     const reports = await this.pc.getStats().catch(() => null);
     if (!reports) return now;
 
-    // The candidate pair carrying the call, and every candidate by id, so
-    // "direct or relayed" can be answered after the whole report is walked.
-    let nominated: Record<string, unknown> | null = null;
+    // Every candidate pair and every candidate by id, so both "which pair is
+    // live" and "direct or relayed" can be answered after the whole report is
+    // walked - neither is decidable from one entry in isolation.
+    const pairs: Record<string, unknown>[] = [];
+    let selectedPairId: string | null = null;
     const candidates = new Map<string, string>();
 
     reports.forEach((report) => {
@@ -1403,12 +1416,17 @@ class PeerLink {
         return;
       }
 
-      // Only the pair actually carrying the call. Chromium keeps the losers of
-      // the ICE race in the report, and their round trip means nothing.
-      if (entry.type === 'candidate-pair' && entry.state === 'succeeded' && entry.nominated) {
-        const rtt = Number(entry.currentRoundTripTime ?? Number.NaN);
-        if (Number.isFinite(rtt)) now.roundTripSeconds = rtt;
-        nominated = entry as Record<string, unknown>;
+      // Kept whole and chosen between afterwards. Chromium keeps the losers of
+      // the ICE race in the report, and - the case that actually bites - it
+      // keeps the winner of the *previous* race after a restart, still
+      // `succeeded` and still `nominated`. See `selectedCandidatePair`.
+      if (entry.type === 'candidate-pair') {
+        pairs.push(entry as Record<string, unknown>);
+        return;
+      }
+
+      if (entry.type === 'transport' && entry.selectedCandidatePairId) {
+        selectedPairId = String(entry.selectedCandidatePairId);
         return;
       }
 
@@ -1429,10 +1447,16 @@ class PeerLink {
       }
     });
 
-    if (nominated) {
+    const pair = selectedCandidatePair(pairs, selectedPairId);
+    if (pair) {
+      const rtt = Number(pair.currentRoundTripTime ?? Number.NaN);
+      if (Number.isFinite(rtt)) now.roundTripSeconds = rtt;
+
+      const available = Number(pair.availableOutgoingBitrate ?? Number.NaN);
+      if (Number.isFinite(available)) now.availableOutgoingKbps = Math.round(available / 1000);
+
       // Either end being a relay candidate means the media is relayed: TURN is
       // in the path once, whichever side put it there.
-      const pair = nominated as Record<string, unknown>;
       const local = candidates.get(String(pair.localCandidateId ?? ''));
       const remote = candidates.get(String(pair.remoteCandidateId ?? ''));
       if (local && remote) now.transport = local === 'relay' || remote === 'relay' ? 'relay' : 'direct';
