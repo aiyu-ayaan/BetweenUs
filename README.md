@@ -1,7 +1,13 @@
 # BetweenUs
 
 <p align="center">
-  <video src="video.mp4" alt="BetweenUs Client Preview" width="100%" autoplay loop muted playsinline></video>
+  <a href="video.mp4">
+    <img src="pictures/home.png" alt="BetweenUs Client Preview - Click to Watch Demo Video" width="100%" />
+  </a>
+</p>
+
+<p align="center">
+  <a href="video.mp4">▶️ <b>Watch 36s Feature Walkthrough Video (video.mp4)</b></a> &nbsp;•&nbsp; <a href="https://aiyu-ayaan.github.io/BetweenUs/features">📖 <b>Interactive Features &amp; Video Tour</b></a>
 </p>
 
 <p align="center">

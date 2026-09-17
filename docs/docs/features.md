@@ -11,7 +11,7 @@ import useBaseUrl from '@docusaurus/useBaseUrl';
 **BetweenUs** is a modern, privacy-first communication and collaboration platform designed as a self-hostable alternative to Discord and Slack, combined with permissioned remote desktop capabilities.
 
 <p align="center">
-  <video src={useBaseUrl('img/video.mp4')} alt="BetweenUs Workbench Overview" style={{maxWidth: '100%', borderRadius: '12px', boxShadow: '0 8px 30px rgba(0, 0, 0, 0.5)'}} autoPlay loop muted playsInline />
+  <img src={useBaseUrl('img/home.png')} alt="BetweenUs Workbench Overview" style={{maxWidth: '100%', borderRadius: '12px', boxShadow: '0 8px 30px rgba(0, 0, 0, 0.5)'}} />
 </p>
 
 ---
@@ -34,6 +34,29 @@ import useBaseUrl from '@docusaurus/useBaseUrl';
 
 ---
 
+## Video Showcase & Product Tour
+
+Watch an overview of BetweenUs in action — featuring end-to-end encrypted messaging, peer-to-peer WebRTC voice/video calls, synchronized listening, board games, and 16-theme customization:
+
+<p align="center">
+  <video
+    src={useBaseUrl('img/video.mp4')}
+    controls
+    autoPlay
+    loop
+    muted
+    playsInline
+    style={{
+      maxWidth: '100%',
+      borderRadius: '12px',
+      border: '1px solid rgba(255,255,255,0.15)',
+      boxShadow: '0 8px 30px rgba(0, 0, 0, 0.5)'
+    }}
+  />
+</p>
+
+---
+
 ## 1. End-to-End Encrypted Messaging
 
 BetweenUs guarantees absolute message privacy. Messages and uploaded files are encrypted client-side using authenticated **AES-256-GCM** before touching the network. The backend only stores opaque ciphertext blobs.
@@ -41,11 +64,11 @@ BetweenUs guarantees absolute message privacy. Messages and uploaded files are e
 <div style={{display: 'flex', gap: '20px', flexWrap: 'wrap', justifyContent: 'center', alignItems: 'flex-start', margin: '24px 0'}}>
   <div style={{flex: '1 1 500px', maxWidth: '640px'}}>
     <p align="center" style={{fontWeight: 600, marginBottom: '8px'}}>Desktop Client</p>
-    <video src={useBaseUrl('img/video.mp4')} alt="Desktop E2EE Chat with Rich Markdown" style={{width: '100%', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.1)'}} autoPlay loop muted playsInline />
+    <img src={useBaseUrl('img/feature-chat.png')} alt="Desktop E2EE Chat with Rich Markdown" style={{width: '100%', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.1)'}} />
   </div>
   <div style={{flex: '0 1 240px', maxWidth: '270px'}}>
     <p align="center" style={{fontWeight: 600, marginBottom: '8px'}}>Native Android (Compose)</p>
-    <video src={useBaseUrl('img/video.mp4')} alt="Native Android E2EE Chat" style={{width: '100%', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.15)', boxShadow: '0 8px 24px rgba(0,0,0,0.4)'}} autoPlay loop muted playsInline />
+    <img src={useBaseUrl('img/android-chat.png')} alt="Native Android E2EE Chat" style={{width: '100%', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.15)', boxShadow: '0 8px 24px rgba(0,0,0,0.4)'}} />
   </div>
 </div>
 
@@ -65,11 +88,11 @@ Unlike legacy platforms that route audio and video through centralized media rel
 <div style={{display: 'flex', gap: '20px', flexWrap: 'wrap', justifyContent: 'center', alignItems: 'flex-start', margin: '24px 0'}}>
   <div style={{flex: '1 1 500px', maxWidth: '640px'}}>
     <p align="center" style={{fontWeight: 600, marginBottom: '8px'}}>Desktop Audio Settings & Mesh Controls</p>
-    <video src={useBaseUrl('img/video.mp4')} alt="Desktop Voice & Video Settings" style={{width: '100%', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.1)'}} autoPlay loop muted playsInline />
+    <img src={useBaseUrl('img/feature-voice.png')} alt="Desktop Voice & Video Settings" style={{width: '100%', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.1)'}} />
   </div>
   <div style={{flex: '0 1 240px', maxWidth: '270px'}}>
     <p align="center" style={{fontWeight: 600, marginBottom: '8px'}}>Android E2EE Voice Stage</p>
-    <video src={useBaseUrl('img/video.mp4')} alt="Android Voice Lounge Stage" style={{width: '100%', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.15)', boxShadow: '0 8px 24px rgba(0,0,0,0.4)'}} autoPlay loop muted playsInline />
+    <img src={useBaseUrl('img/android-voice.png')} alt="Android Voice Lounge Stage" style={{width: '100%', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.15)', boxShadow: '0 8px 24px rgba(0,0,0,0.4)'}} />
   </div>
 </div>
 
@@ -88,7 +111,7 @@ Unlike legacy platforms that route audio and video through centralized media rel
 Share musical and video experiences inside any voice channel without taxing the host's uplink bandwidth.
 
 <p align="center">
-  <video src={useBaseUrl('img/video.mp4')} alt="Listen Together in Voice Channels" style={{maxWidth: '100%', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.1)'}} autoPlay loop muted playsInline />
+  <img src={useBaseUrl('img/feature-listen.png')} alt="Listen Together in Voice Channels" style={{maxWidth: '100%', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.1)'}} />
 </p>
 
 ### Key Capabilities
@@ -104,7 +127,7 @@ Share musical and video experiences inside any voice channel without taxing the 
 Integrated, low-latency multiplayer gaming directly inside voice stages.
 
 <p align="center">
-  <video src={useBaseUrl('img/video.mp4')} alt="Play Together Games" style={{maxWidth: '100%', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.1)'}} autoPlay loop muted playsInline />
+  <img src={useBaseUrl('img/feature-games.png')} alt="Play Together Games" style={{maxWidth: '100%', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.1)'}} />
 </p>
 
 ### Included Games
@@ -128,11 +151,11 @@ BetweenUs provides a customizable appearance system with **16 curated themes**, 
 <div style={{display: 'flex', gap: '20px', flexWrap: 'wrap', justifyContent: 'center', alignItems: 'flex-start', margin: '24px 0'}}>
   <div style={{flex: '1 1 500px', maxWidth: '640px'}}>
     <p align="center" style={{fontWeight: 600, marginBottom: '8px'}}>Desktop Appearance Customizer</p>
-    <video src={useBaseUrl('img/video.mp4')} alt="Themes and Appearance Settings" style={{width: '100%', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.1)'}} autoPlay loop muted playsInline />
+    <img src={useBaseUrl('img/feature-themes.png')} alt="Themes and Appearance Settings" style={{width: '100%', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.1)'}} />
   </div>
   <div style={{flex: '0 1 240px', maxWidth: '270px'}}>
     <p align="center" style={{fontWeight: 600, marginBottom: '8px'}}>Android Material You & 16 Themes</p>
-    <video src={useBaseUrl('img/video.mp4')} alt="Android Material You and Theme Customizer" style={{width: '100%', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.15)', boxShadow: '0 8px 24px rgba(0,0,0,0.4)'}} autoPlay loop muted playsInline />
+    <img src={useBaseUrl('img/android-themes.png')} alt="Android Material You and Theme Customizer" style={{width: '100%', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.15)', boxShadow: '0 8px 24px rgba(0,0,0,0.4)'}} />
   </div>
 </div>
 
@@ -155,7 +178,7 @@ BetweenUs provides a customizable appearance system with **16 curated themes**, 
 Control unattended or assisted remote machines securely from within your BetweenUs client.
 
 <p align="center">
-  <video src={useBaseUrl('img/video.mp4')} alt="Remote Desktop and Machine Access" style={{maxWidth: '100%', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.1)'}} autoPlay loop muted playsInline />
+  <img src={useBaseUrl('img/feature-remote.png')} alt="Remote Desktop and Machine Access" style={{maxWidth: '100%', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.1)'}} />
 </p>
 
 ### Key Capabilities
@@ -173,11 +196,11 @@ Share real-time photos, thoughts, and status updates that disappear automaticall
 <div style={{display: 'flex', gap: '20px', flexWrap: 'wrap', justifyContent: 'center', alignItems: 'flex-start', margin: '24px 0'}}>
   <div style={{flex: '1 1 500px', maxWidth: '640px'}}>
     <p align="center" style={{fontWeight: 600, marginBottom: '8px'}}>Desktop Moments Tray & Feed</p>
-    <video src={useBaseUrl('img/video.mp4')} alt="Moments Feature on Desktop" style={{width: '100%', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.1)'}} autoPlay loop muted playsInline />
+    <img src={useBaseUrl('img/feature-moments.png')} alt="Moments Feature on Desktop" style={{width: '100%', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.1)'}} />
   </div>
   <div style={{flex: '0 1 240px', maxWidth: '270px'}}>
     <p align="center" style={{fontWeight: 600, marginBottom: '8px'}}>Android Native Moments Tray</p>
-    <video src={useBaseUrl('img/video.mp4')} alt="Moments Feature on Android" style={{width: '100%', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.15)', boxShadow: '0 8px 24px rgba(0,0,0,0.4)'}} autoPlay loop muted playsInline />
+    <img src={useBaseUrl('img/android-moments.png')} alt="Moments Feature on Android" style={{width: '100%', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.15)', boxShadow: '0 8px 24px rgba(0,0,0,0.4)'}} />
   </div>
 </div>
 
@@ -199,7 +222,7 @@ Share real-time photos, thoughts, and status updates that disappear automaticall
 BetweenUs provides cryptographic account protection and device management.
 
 <p align="center">
-  <video src={useBaseUrl('img/video.mp4')} alt="Encryption & Key Backup Management" style={{maxWidth: '100%', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.1)'}} autoPlay loop muted playsInline />
+  <img src={useBaseUrl('img/feature-e2ee.png')} alt="Encryption & Key Backup Management" style={{maxWidth: '100%', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.1)'}} />
 </p>
 
 ### Key Capabilities
@@ -214,7 +237,7 @@ BetweenUs provides cryptographic account protection and device management.
 Manage communities and workspaces with Discord-grade permission systems.
 
 <p align="center">
-  <video src={useBaseUrl('img/video.mp4')} alt="Server Roles & Permissions" style={{maxWidth: '100%', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.1)'}} autoPlay loop muted playsInline />
+  <img src={useBaseUrl('img/feature-roles.png')} alt="Server Roles & Permissions" style={{maxWidth: '100%', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.1)'}} />
 </p>
 
 ### Key Capabilities
@@ -232,11 +255,11 @@ Stay connected with direct messaging and real-time presence indicators.
 <div style={{display: 'flex', gap: '20px', flexWrap: 'wrap', justifyContent: 'center', alignItems: 'flex-start', margin: '24px 0'}}>
   <div style={{flex: '1 1 500px', maxWidth: '640px'}}>
     <p align="center" style={{fontWeight: 600, marginBottom: '8px'}}>Desktop Friends Directory</p>
-    <video src={useBaseUrl('img/video.mp4')} alt="Friends and Direct Messages on Desktop" style={{width: '100%', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.1)'}} autoPlay loop muted playsInline />
+    <img src={useBaseUrl('img/feature-friends.png')} alt="Friends and Direct Messages on Desktop" style={{width: '100%', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.1)'}} />
   </div>
   <div style={{flex: '0 1 240px', maxWidth: '270px'}}>
     <p align="center" style={{fontWeight: 600, marginBottom: '8px'}}>Android Friends & DMs</p>
-    <video src={useBaseUrl('img/video.mp4')} alt="Friends and Direct Messages on Android" style={{width: '100%', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.15)', boxShadow: '0 8px 24px rgba(0,0,0,0.4)'}} autoPlay loop muted playsInline />
+    <img src={useBaseUrl('img/android-friends.png')} alt="Friends and Direct Messages on Android" style={{width: '100%', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.15)', boxShadow: '0 8px 24px rgba(0,0,0,0.4)'}} />
   </div>
 </div>
 
@@ -253,27 +276,27 @@ BetweenUs provides a 100% native Kotlin and Jetpack Compose mobile client design
 
 <div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '20px', margin: '24px 0'}}>
   <div style={{textAlign: 'center'}}>
-    <video src={useBaseUrl('img/video.mp4')} alt="Multi-Server Rail & Channels" style={{width: '100%', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.15)', boxShadow: '0 8px 24px rgba(0,0,0,0.4)'}} autoPlay loop muted playsInline />
+    <img src={useBaseUrl('img/android-home.png')} alt="Multi-Server Rail & Channels" style={{width: '100%', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.15)', boxShadow: '0 8px 24px rgba(0,0,0,0.4)'}} />
     <p style={{marginTop: '8px', fontSize: '0.9rem', fontWeight: 600}}>Multi-Server Rail & Channels</p>
   </div>
   <div style={{textAlign: 'center'}}>
-    <video src={useBaseUrl('img/video.mp4')} alt="Android Settings Hub" style={{width: '100%', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.15)', boxShadow: '0 8px 24px rgba(0,0,0,0.4)'}} autoPlay loop muted playsInline />
+    <img src={useBaseUrl('img/android-settings.png')} alt="Android Settings Hub" style={{width: '100%', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.15)', boxShadow: '0 8px 24px rgba(0,0,0,0.4)'}} />
     <p style={{marginTop: '8px', fontSize: '0.9rem', fontWeight: 600}}>Settings Hub & Presence</p>
   </div>
   <div style={{textAlign: 'center'}}>
-    <video src={useBaseUrl('img/video.mp4')} alt="Permission Dashboard" style={{width: '100%', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.15)', boxShadow: '0 8px 24px rgba(0,0,0,0.4)'}} autoPlay loop muted playsInline />
+    <img src={useBaseUrl('img/android-permissions.png')} alt="Permission Dashboard" style={{width: '100%', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.15)', boxShadow: '0 8px 24px rgba(0,0,0,0.4)'}} />
     <p style={{marginTop: '8px', fontSize: '0.9rem', fontWeight: 600}}>Permission Health Dashboard</p>
   </div>
   <div style={{textAlign: 'center'}}>
-    <video src={useBaseUrl('img/video.mp4')} alt="Mobile Quick Switcher" style={{width: '100%', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.15)', boxShadow: '0 8px 24px rgba(0,0,0,0.4)'}} autoPlay loop muted playsInline />
+    <img src={useBaseUrl('img/android-search.png')} alt="Mobile Quick Switcher" style={{width: '100%', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.15)', boxShadow: '0 8px 24px rgba(0,0,0,0.4)'}} />
     <p style={{marginTop: '8px', fontSize: '0.9rem', fontWeight: 600}}>Quick Switcher Modal</p>
   </div>
   <div style={{textAlign: 'center'}}>
-    <video src={useBaseUrl('img/video.mp4')} alt="In-App APK Auto-Updater" style={{width: '100%', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.15)', boxShadow: '0 8px 24px rgba(0,0,0,0.4)'}} autoPlay loop muted playsInline />
+    <img src={useBaseUrl('img/android-updates.png')} alt="In-App APK Auto-Updater" style={{width: '100%', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.15)', boxShadow: '0 8px 24px rgba(0,0,0,0.4)'}} />
     <p style={{marginTop: '8px', fontSize: '0.9rem', fontWeight: 600}}>In-App Self-Updater</p>
   </div>
   <div style={{textAlign: 'center'}}>
-    <video src={useBaseUrl('img/video.mp4')} alt="Remote Machines Viewer" style={{width: '100%', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.15)', boxShadow: '0 8px 24px rgba(0,0,0,0.4)'}} autoPlay loop muted playsInline />
+    <img src={useBaseUrl('img/android-remote.png')} alt="Remote Machines Viewer" style={{width: '100%', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.15)', boxShadow: '0 8px 24px rgba(0,0,0,0.4)'}} />
     <p style={{marginTop: '8px', fontSize: '0.9rem', fontWeight: 600}}>Remote Machines Viewer</p>
   </div>
 </div>
