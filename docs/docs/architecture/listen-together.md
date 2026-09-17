@@ -153,19 +153,12 @@ seek, and the web client could not do it either way.
 
 ## Ducking
 
-While anybody in the call is speaking, the music drops to a quarter and fades
-back nine hundred milliseconds after the last word.
-
-This is the bit that makes it *working together* rather than *watching a film*.
-Two people with music on and microphones open otherwise turn the volume down by
-hand every time one of them starts a sentence, until they give up and mute. The
-hold exists because speech is not continuous — a duck that recovers instantly
-pumps the volume through every pause in a sentence, which is more distracting
-than the music was.
-
-It rides on the speaking detection the call already does, which is measured from
-the audio rather than from whether a microphone is open — so a muted person in a
-noisy room does not turn anybody's music down.
+While anybody in the call is speaking, the music drops smoothly by approximately
+ten decibels (`DUCK = 0.55` on the slider, translating via quadratic scaling to
+~30% acoustic power) and fades back nine hundred milliseconds after the last word.
+This keeps the groove and melody clearly audible in the background without fighting
+or overpowering the speaker. Mid-fade transitions reverse seamlessly if speech starts
+or stops abruptly.
 
 ## There is no host
 

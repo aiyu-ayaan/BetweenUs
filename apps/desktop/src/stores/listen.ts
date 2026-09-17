@@ -42,10 +42,12 @@ import { useGameStore } from './game';
  * This is the bit that makes it "working together" rather than "watching a
  * film". Two people with music on and a microphone open either shout over it or
  * turn it down by hand every time one of them starts a sentence, and the second
- * of those is what everybody actually does until they give up and mute. Pulling
- * it down automatically is what a person would do, done in eighty milliseconds.
+ * Because volume uses a quadratic perceptual curve ((volume/100)^2), a slider
+ * ratio of 0.55 corresponds to ~0.30 (-10.4 dB) acoustic power. This pulls
+ * the music back gracefully so conversation is effortless to follow, without
+ * making the music disappear or lowering it too much.
  */
-const DUCK = 0.2;
+const DUCK = 0.55;
 
 /**
  * How long the music stays down after the last word.
@@ -243,6 +245,7 @@ export const useListenStore = create<ListenState>((set, get) => ({
       if (timer !== null) window.clearInterval(timer);
     }
     clockTimer = driftTimer = duckTimer = fadeTimer = null;
+    fadeFrom = fadeTarget = get().volume;
     unsubscribeVoice?.();
     unsubscribeVoice = null;
     teardownPlayer();
@@ -495,11 +498,22 @@ function applyDuck(immediate = false): void {
   if (immediate) {
     if (fadeTimer !== null) window.clearInterval(fadeTimer);
     fadeTimer = null;
-    player.setVolume(target);
+    fadeTarget = target;
     fadeFrom = target;
+    player.setVolume(target);
     return;
   }
-  if (fadeFrom === target || fadeTimer !== null) return;
+
+  // Already at the target and no fade in progress
+  if (fadeFrom === target && fadeTimer === null) return;
+  // Already actively fading towards this exact target
+  if (fadeTarget === target && fadeTimer !== null) return;
+
+  fadeTarget = target;
+  if (fadeTimer !== null) {
+    window.clearInterval(fadeTimer);
+    fadeTimer = null;
+  }
 
   const from = fadeFrom;
   const step = (target - from) / DUCK_FADE_STEPS;
@@ -508,15 +522,16 @@ function applyDuck(immediate = false): void {
     taken += 1;
     fadeFrom = taken >= DUCK_FADE_STEPS ? target : Math.round(from + step * taken);
     player?.setVolume(fadeFrom);
-    if (taken >= DUCK_FADE_STEPS && fadeTimer !== null) {
-      window.clearInterval(fadeTimer);
+    if (taken >= DUCK_FADE_STEPS) {
+      if (fadeTimer !== null) window.clearInterval(fadeTimer);
       fadeTimer = null;
     }
   }, DUCK_FADE_MS);
 }
 
-/** Where the fade currently is, so a second one starts from the truth. */
+/** Where the fade currently is and where it is heading, so reversals start smoothly from the current level. */
 let fadeFrom = 60;
+let fadeTarget = 60;
 
 function teardownPlayer(): void {
   player?.close();
