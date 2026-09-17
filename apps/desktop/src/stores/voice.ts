@@ -38,7 +38,12 @@ import {
 } from '../services/audio-devices';
 import { playCallTone, rosterChange, setToneOutput } from '../services/call-tones';
 import { micCapture, micEncoding, micProcessing, type VoiceSettings } from '../services/voice-quality';
-import { shareOptions, type ShareIntent, type ShareSize } from '../services/share-quality';
+import {
+  captureConstraints,
+  shareOptions,
+  type ShareIntent,
+  type ShareSize,
+} from '../services/share-quality';
 import { cameraOptions } from '../services/camera-quality';
 import { CameraPipeline, effectFrom, isPassThrough } from '../services/camera-effects';
 
@@ -636,11 +641,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
       if (!withAudio) options.capture.audio = false;
 
       const stream = await navigator.mediaDevices.getDisplayMedia({
-        video: {
-          width: { ideal: options.capture.video.width, max: Math.max(3840, options.capture.video.width) },
-          height: { ideal: options.capture.video.height, max: Math.max(2160, options.capture.video.height) },
-          frameRate: { ideal: options.capture.video.frameRate, max: 60 },
-        },
+        video: captureConstraints(options.capture),
         audio: options.capture.audio === false ? false : options.capture.audio,
       } as DisplayMediaStreamOptions);
 
@@ -1165,9 +1166,15 @@ async function captureSize(source: ScreenSource | null): Promise<ShareSize> {
   const screenWidth = typeof window !== 'undefined' && window.screen ? window.screen.width : 1920;
   const screenHeight = typeof window !== 'undefined' && window.screen ? window.screen.height : 1080;
   const dpr = typeof window !== 'undefined' && window.devicePixelRatio ? window.devicePixelRatio : 1;
+  // The panel's own size, with no floor under it. There used to be a
+  // `Math.max(1920, ...)` here, from when a bigger number could only ever cost
+  // nothing - but the ceiling in `share-quality.ts` is now applied to whatever
+  // this returns, and a 1366x768 laptop claiming to be 1080p is a capture
+  // upscaled by 40% before it is encoded. A small display's own size is the
+  // right answer for a small display.
   const fallback = {
-    width: Math.max(1920, Math.round(screenWidth * dpr)),
-    height: Math.max(1080, Math.round(screenHeight * dpr)),
+    width: Math.round(screenWidth * dpr),
+    height: Math.round(screenHeight * dpr),
   };
   const displays = (await window.betweenus?.screenDisplays()) ?? [];
   if (displays.length === 0) return fallback;

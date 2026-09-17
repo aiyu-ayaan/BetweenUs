@@ -20,12 +20,34 @@ import { playCallTone } from '../../services/call-tones';
 import { CallUsageSection } from './CallUsage';
 import { DeviceSelect, useDevices } from '../../components/DeviceSelect';
 import { DEFAULT_VOICE_SETTINGS, GATE_RANGE } from '../../services/voice-quality';
-import { BITRATE_RANGE, FRAME_RATES, type CodecChoice } from '../../services/share-quality';
+import {
+  BITRATE_RANGE,
+  FRAME_RATES,
+  MAX_HEIGHTS,
+  cappedSize,
+  type CodecChoice,
+} from '../../services/share-quality';
 import type { CameraQuality } from '../../services/camera-quality';
 import { FILTERS, effectsSupported } from '../../services/camera-effects';
 
 /** Where the manual bitrate starts when it is switched on: a fast LAN's worth. */
 const DEFAULT_MANUAL_BITRATE = 25_000_000;
+
+/**
+ * This machine's display in real pixels, for the line under the resolution
+ * dropdown.
+ *
+ * Read from `window.screen` rather than over IPC because it is a sentence, not
+ * a constraint: the capture's real ceiling is the display Electron hands over
+ * at capture time, and a settings page that opened a second channel to the main
+ * process to describe it would be a second source of truth for a caption.
+ */
+function nativeSize(): { width: number; height: number } {
+  const dpr = typeof window !== 'undefined' && window.devicePixelRatio ? window.devicePixelRatio : 1;
+  const width = typeof window !== 'undefined' && window.screen ? window.screen.width : 1920;
+  const height = typeof window !== 'undefined' && window.screen ? window.screen.height : 1080;
+  return { width: Math.round(width * dpr), height: Math.round(height * dpr) };
+}
 
 /**
  * The same, for a camera - and two orders of magnitude smaller, because a face
@@ -1528,6 +1550,11 @@ function VoiceSection(): JSX.Element {
         first. This is where a LAN gets told it is a LAN. It covers a remote session too.
       </p>
       <div className="mt-3 space-y-3 rounded-lg bg-surface-800 p-4">
+        <ShareResolution
+          value={settings.share.maxHeight}
+          onChange={(maxHeight) => update({ share: { ...settings.share, maxHeight } })}
+        />
+
         <Switch
           label="Set the bitrate myself"
           hint="A ceiling, not a target - a still desktop spends a fraction of it either way."
@@ -2998,4 +3025,58 @@ function TextField({
 
 function formatDate(iso?: string): string {
   return iso ? new Date(iso).toLocaleDateString() : '';
+}
+
+/**
+ * The one setting that is spent before anything is encoded.
+ *
+ * A ceiling on the *capture*, so it is the only control here that lowers what
+ * the encoder is asked to do rather than what it is allowed to spend. Sharing a
+ * 1440p or 4K panel at its native size asks a consumer hardware encoder for
+ * three to eight megapixels sixty times a second and asks a home uplink for
+ * 60-80 Mbit, and the answer to both is a picture in single-figure frames per
+ * second on a connection with nothing wrong with it.
+ *
+ * Never an upscale: a display shorter than the ceiling is captured at its own
+ * height, which is why the caption says what this machine will actually send
+ * rather than repeating the number in the dropdown back.
+ */
+function ShareResolution({
+  value,
+  onChange,
+}: {
+  value: number | null;
+  onChange: (value: number | null) => void;
+}): JSX.Element {
+  const native = nativeSize();
+  const effective = cappedSize(native, value);
+
+  return (
+    <label className="block">
+      <span className="block text-xs font-bold uppercase tracking-wide text-slate-400">
+        Maximum resolution
+      </span>
+      <select
+        value={value === null ? 'native' : String(value)}
+        onChange={(event) =>
+          onChange(event.target.value === 'native' ? null : Number(event.target.value))
+        }
+        className="mt-2 w-full cursor-pointer rounded-lg border border-edge bg-surface-950 px-3 py-2 text-slate-100 outline-none transition-colors focus:border-accent/60"
+      >
+        {MAX_HEIGHTS.map((height) => (
+          <option key={height ?? 'native'} value={height ?? 'native'}>
+            {height === null
+              ? `This display (${native.width} x ${native.height})`
+              : `${height}p${height === 1080 ? ' - default' : ''}`}
+          </option>
+        ))}
+      </select>
+      <span className="mt-1.5 block text-xs text-slate-500">
+        A ceiling, never an enlargement: this display is {native.width} x {native.height}, so a
+        share of it leaves here at {effective.width} x {effective.height}. Above 1080p wants a
+        hardware encoder and an uplink that can carry it - if a share goes choppy on a connection
+        that is otherwise fine, this is the setting that fixes it.
+      </span>
+    </label>
+  );
 }

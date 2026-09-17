@@ -267,16 +267,24 @@ export function migrateVoiceSettings(stored: unknown): Partial<VoiceSettings> {
     delete settings.noiseSuppression;
   }
 
-  // `camera` is a nested object, and the store spreads storage over the
-  // defaults exactly one level deep - so a profile written today, read back
-  // after a field is added to `CameraSettings` tomorrow, would arrive with that
-  // field `undefined` and no default behind it. Refilled here rather than left
-  // to the spread, because "the settings screen draws nothing as selected" is
-  // the same failure `noiseSuppression` above already shipped once.
+  // `camera` and `share` are nested objects, and the store spreads storage over
+  // the defaults exactly one level deep - so a profile written today, read back
+  // after a field is added to either tomorrow, would arrive with that field
+  // `undefined` and no default behind it. Refilled here rather than left to the
+  // spread, because "the settings screen draws nothing as selected" is the same
+  // failure `noiseSuppression` above already shipped once - and for `share` it
+  // is worse than a blank dropdown: `maxHeight` of `undefined` is not `null`,
+  // so a share would be captured at a ceiling of `undefined` lines.
   if (typeof settings.camera === 'object' && settings.camera !== null) {
     settings.camera = { ...DEFAULT_CAMERA_SETTINGS, ...(settings.camera as object) };
   } else {
     delete settings.camera;
+  }
+
+  if (typeof settings.share === 'object' && settings.share !== null) {
+    settings.share = { ...NO_OVERRIDE, ...(settings.share as object) };
+  } else {
+    delete settings.share;
   }
 
   return settings as Partial<VoiceSettings>;

@@ -12,7 +12,7 @@ import { createPortal } from 'react-dom';
 import { useVoiceStore } from '../../stores/voice';
 import { isDesktopRuntime } from '../../services/platform';
 import { useAudioSettings } from '../../stores/audioSettings';
-import type { ShareIntent } from '../../services/share-quality';
+import { DEFAULT_MAX_HEIGHT, type ShareIntent } from '../../services/share-quality';
 import { ScreenShareIcon } from '../../components/icons';
 import { useFocusTrap } from '../../services/focus-trap';
 
@@ -206,10 +206,15 @@ export function ScreenSharePicker({ onClose }: { onClose: () => void }): JSX.Ele
               nothing: a line reading "automatic" on every share is noise, and
               the only state worth reporting is the one somebody chose and may
               have forgotten. */}
-          {(share.maxBitrate !== null || share.frameRate !== null || share.videoCodec !== 'auto') && (
+          {(share.maxBitrate !== null ||
+            share.frameRate !== null ||
+            share.videoCodec !== 'auto' ||
+            share.maxHeight !== DEFAULT_MAX_HEIGHT) && (
             <p className="text-xs text-amber-300/90" title="Settings → Voice & Video">
               Forced:{' '}
               {[
+                share.maxHeight !== DEFAULT_MAX_HEIGHT &&
+                  (share.maxHeight === null ? 'this display' : `${share.maxHeight}p`),
                 share.maxBitrate !== null && `${Math.round(share.maxBitrate / 1_000_000)} Mbps`,
                 share.frameRate !== null && `${share.frameRate} fps`,
                 share.videoCodec !== 'auto' && share.videoCodec,

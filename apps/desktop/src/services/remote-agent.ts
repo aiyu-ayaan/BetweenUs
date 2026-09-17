@@ -24,7 +24,7 @@ import { wsUrl } from './endpoint';
 import { secureGet, secureSet } from './e2ee';
 import { ScreenLink } from './remote-peer';
 import { TransferSink, safeFileName } from './remote-transfer';
-import { shareOptions } from './share-quality';
+import { captureConstraints, shareOptions } from './share-quality';
 import { useAudioSettings } from '../stores/audioSettings';
 
 const TOKEN_KEY = 'remote.agentToken';
@@ -493,11 +493,7 @@ async function publishDisplay(
   );
 
   const stream = await navigator.mediaDevices.getDisplayMedia({
-    video: {
-      width: { ideal: options.capture.video.width, max: Math.max(3840, options.capture.video.width) },
-      height: { ideal: options.capture.video.height, max: Math.max(2160, options.capture.video.height) },
-      frameRate: { ideal: options.capture.video.frameRate, max: 60 },
-    },
+    video: captureConstraints(options.capture),
     audio: wantAudio,
   });
 
