@@ -270,7 +270,7 @@ Two mechanisms, and only one of them is negotiated.
 
 | | |
 | --- | --- |
-| **Per-sender parameters** | `PeerLink.tune` sets `maxBitrate`, `maxFramerate` and `degradationPreference` through `RTCRtpSender.setParameters`. No renegotiation, so it is applied the instant a share starts and is the only place that sees the share's own profile — the ceiling computed by `bitrateFor` from the pixels actually being captured. |
+| **Per-sender parameters** | `PeerLink.tune` sets `maxBitrate`, `maxFramerate`, `scaleResolutionDownBy` and `degradationPreference` through `RTCRtpSender.setParameters`. No renegotiation, so it is applied the instant a share starts and re-applied every time the link's own reading moves — see [The frame-rate ladder](#the-frame-rate-ladder). It is the only place that sees both the share's profile (the ceiling `bitrateFor` computes from the pixels actually captured) and what this particular link turned out to carry. |
 | **SDP hints** | `patchVideoBandwidth` writes `b=AS`, `b=TIAS` and `x-google-max-bitrate` / `x-google-start-bitrate` into every video m-line at negotiation time — which is call-join time, long before anybody shares. It exists only so congestion control does not begin at WebRTC's ~300 kbps default and crawl. |
 
 Both clients have both. `ShareQuality.kt` holds the phone's ceilings,
@@ -322,22 +322,30 @@ the desktop's preference never fired at all and left baseline first, and
 Android's would have missed `640c1f` the same way. Both now read the profile
 byte alone.
 
-**No profile spends the resolution.** `degradationPreference` picks what a
-struggling link gives up, and `maintain-framerate` gives up pixels: WebRTC
-scales the capture by 1.5, 2, 3, 4, so a 1440p share walks down to 480p within
-seconds of the estimate settling and stays there. The `motion` profile used to
-ask for exactly that — it reads as "keep it smooth", and 60 fps of a quarter-size
-picture stretched back up is what it actually bought. That was the whole of "the
-share drops to 480p".
+**Every profile holds the frame rate, and something measured decides what that
+costs.** `degradationPreference` picks what a struggling link gives up, and
+there are only two values worth having — each of which, alone, is a way for a
+share to collapse.
 
-Parsec holds the resolution and lets quantisation take the hit, and
-`maintain-resolution` is the nearest thing WebRTC has: the rate controller
-raises QP first in every mode, and only once QP is pinned does adaptation act —
-and under this preference what it gives up is frames. A struggling link now goes
-soft, then choppy, at full size, rather than sharp and smooth at a quarter of it.
-Both desktop profiles use it and Android has only ever used it. What the intent
-still changes is the bitrate the picture is worth, the content hint, and whether
-the sound is a soundtrack.
+`maintain-framerate` gives up pixels, and lets WebRTC's own adapter do it in
+1.5x, 2x, 3x, 4x steps off an estimate it is still finding: a 1440p share walked
+down to 480p within seconds and stayed there, which was the whole of "the share
+drops to 480p". So both profiles asked for `maintain-resolution` instead. But
+that preference has **no floor under the thing it gives up**. It holds
+1920×1080 and drops frames as far as it takes, and on a 405 kbps link that is
+*1080p at 2 fps* — a full-size slideshow, which is not a milder failure than a
+small sharp picture but a worse one, and it is the one people reported.
+
+The axis being held was never the problem. The problem was that nothing chose
+what to give up on the *other* axis, so whichever one WebRTC was left to pick it
+picked without limit. **`adaptShare` chooses it now** — see
+[The frame-rate ladder](#the-frame-rate-ladder) below. The resolution is
+whatever the measured bitrate can carry at a watchable frame rate, computed
+before the encoder is asked, so holding frames is safe: WebRTC's adapter becomes
+a backstop for a budget that came out optimistic instead of being the whole
+policy. Both desktop profiles use `maintain-framerate` and Android's screen
+sender matches it. What the intent still changes is the bitrate the picture is
+worth, the content hint, and whether the sound is a soundtrack.
 
 **A screen share always carries a screencast content hint.** `contentHint` looks
 like a label and is a switch. Chromium turns `detail` and `text` into
@@ -349,14 +357,81 @@ libwebrtc's `is_screencast = true` and `motion` into `false`, and
   minute has no way back up while the encoder is application-limited — the
   estimator learns what a link can carry only from traffic it actually sent, and
   a four-frame-a-second slideshow sends nothing worth learning from.
-- **The quality scaler**, armed when `is_screencast` is false, whose resolution
-  half is exactly what `maintain-resolution` asks it not to do.
+- **The quality scaler**, armed when `is_screencast` is false, which is a second
+  mechanism scaling the picture alongside the ladder's own budget.
 
 So the `motion` profile — a film, a game — describes its content best with the
 one hint it must never carry, and uses `detail` instead. This is the difference
 between a share that goes soft during a bad minute and one that goes soft and
 *stays* soft on a link that has already recovered: not a link that stayed bad, an
 estimate that never climbed back.
+
+### The frame-rate ladder
+
+Everything above this point is a **ceiling**, decided before the share starts
+from the display's size and the machine's guess about itself. None of it can
+know what the link turned out to carry, and a ceiling is not a plan for missing
+it: the encoder is handed 1080p60 and 20 Mbit, the link delivers 400 kbit, and
+what happens next is whatever `degradationPreference` says.
+
+The congestion controller has already measured the link.
+`availableOutgoingBitrate`, on the nominated ICE candidate pair, *is* that
+measurement — and it was being read and thrown away. Given bits per second and a
+frame rate worth holding, the resolution that fits is arithmetic, and it is far
+better arithmetic than an encoder discovering the same thing by failing.
+
+| | |
+| --- | --- |
+| **`FRAME_TIERS`** | `[60, 30, 24]`, best first. 24 is the floor because it is the rate film has used for a century; below it motion stops reading as motion, which is the failure being fixed rather than a milder form of it. |
+| **`adaptShare`** | Picks the highest tier whose affordable resolution still clears `FLOOR_HEIGHT` (540), and the `scaleResolutionDownBy` that puts the picture inside the budget at that rate. The last tier has no floor — at 24 fps the picture shrinks as far as the link demands, because the alternative is the frame rate collapsing instead. Pure, so the ladder is a table that can be checked rather than behaviour to reproduce on a bad hotel connection. |
+| **`BITS_PER_PIXEL_FRAME`** | `0.08`, calibrated rather than derived: 1080p60 that people call good measures around 10 Mbit, and `10e6 / (1920·1080·60)` is 0.080. The one number here that is a property of the encoder, so it is the knob to turn if shares come out consistently softer or more expensive than they should. |
+| **`ShareLadder`** | One link's position over time. `adaptShare` answers "what fits now", which is not "what should change": applied straight, a per-second reading re-encodes the share every second. |
+
+A reading of `null` — nothing measured yet — means the whole capture at the full
+rate. That is deliberate and it is not optimism: **the estimator only measures
+what is actually sent**, so a share that starts small to be safe reports a small
+link and never grows. Starting at full size and stepping down off a real reading
+is the only order that converges.
+
+`ShareLadder`'s two directions are deliberately not symmetric:
+
+- **Down immediately.** A link that cannot carry the picture is already dropping
+  frames. Waiting to be sure is more seconds of the thing being fixed.
+- **Up after five consecutive readings with room.** The estimate rises through
+  probing, so the first rise is the probe, not the link. A share dragged down by
+  one bad second reports a smaller estimate, which is a ratchet that only
+  tightens — the run length is what stops it.
+
+Changes inside a `SCALE_DEADBAND` of 0.15 are not changes: the estimate wobbles
+by a few percent every second on a link with nothing wrong with it, and
+re-encoding at 2.9x instead of 3.0x is a keyframe and a visible hitch bought for
+nothing. `step` returns `null` on those ticks, which is most of them, and only a
+real move calls `setParameters`.
+
+What it does on a 1080p capture:
+
+| measured uplink | result |
+| --- | --- |
+| 405 kbps | 24 fps @ 611×344 |
+| 1.2 Mbps | 24 fps @ 1055×593 |
+| 2 Mbps | 30 fps @ 1215×684 |
+| 3.5 Mbps | 60 fps @ 1136×639 |
+| 8 Mbps | 60 fps @ 1714×964 |
+| 12 Mbps and up | 60 fps @ 1920×1080 |
+
+The ladder is per link, for the same reason the relay ceiling is: the same
+capture goes to everybody, but what each person's connection can carry is
+theirs. It is driven from the `getStats` poll that already runs every second
+whether or not anybody has the connection panel open — `PeerLink.pollVideo` on
+the desktop, `PeerLink.poll` on Android — and acted on by `applyShare` / `tune`,
+exactly where the relay ceiling already lands. Both clients carry the same
+tiers, coefficient and floor; `share-quality.check.ts` and `ShareQualityTest.kt`
+assert the same answers on both sides, because a call has both clients in it and
+two ladders that disagree is a smoothness that depends on who is sending.
+
+A new capture resets the ladder. Every rung was arithmetic on `SharePublish.captured`,
+so a rung held across a changed display, a window instead of a screen, or a
+changed quality setting is a budget for a picture nobody is capturing.
 
 **A ceiling on pixels, spent before anything is encoded.** Every other number
 here is a ceiling on bits. `maxHeight` in `QualityOverride` is a ceiling on the
@@ -423,7 +498,7 @@ and the reason is that the two want opposite trades:
 
 | | screen share | camera |
 | :--- | :--- | :--- |
-| when the link tightens | `maintain-resolution` — hold the pixels, drop frames | `balanced` — spend whichever is cheaper |
+| when the link tightens | `maintain-framerate` — hold 60/30/24, spend the pixels the measured bitrate cannot carry | `balanced` — spend whichever is cheaper |
 | content hint | `text` for a document, `motion` for a film | `motion`, always |
 | bitrate at 1080p | 20 Mbps | 4 Mbps |
 
