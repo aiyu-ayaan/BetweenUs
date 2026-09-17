@@ -47,6 +47,29 @@ A relay therefore needs a host with a public address of its own. A small VM is
 enough: it forwards packets it has no key for.
 :::
 
+## What a relay costs, and what the clients do about it
+
+A relay carries a call **twice**: every packet goes up to it and back down, so
+one 8 Mbps screen share is 16 Mbps of relay traffic, and a mesh call relays
+once per relayed pair rather than once per call.
+
+That matters because the desktop's screen-share ceilings are sized for a direct
+path — 20–80 Mbps depending on the profile and the capture size. Pointed at a
+small VM those numbers do not produce a fast share; they produce loss, and
+WebRTC's estimator reads loss as a link that cannot carry anything, so the share
+collapses on a relay that would have forwarded a perfectly good 8 Mbps picture.
+
+So the clients hold a relayed link to a relay-sane ceiling of their own.
+`PeerLink` watches the nominated ICE candidate pair, and when either end of it is
+a `relay` candidate the screen sender is tuned down to `RELAY_MAX_BITRATE`
+(8 Mbps) — per link, because in a mesh one peer may be direct and the next
+relayed. See `docs/docs/architecture/media.md`.
+
+An operator can still bound it from this side. `max-bps` in `turnserver.conf` is
+a per-allocation ceiling and is the one that survives a client that ignores all
+of the above; `user-quota` and `total-quota` bound sessions rather than
+bandwidth.
+
 ## What you need
 
 - A VM with a public IPv4 address. The smallest tier of anything is enough —

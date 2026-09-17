@@ -339,6 +339,67 @@ Both desktop profiles use it and Android has only ever used it. What the intent
 still changes is the bitrate the picture is worth, the content hint, and whether
 the sound is a soundtrack.
 
+**A screen share always carries a screencast content hint.** `contentHint` looks
+like a label and is a switch. Chromium turns `detail` and `text` into
+libwebrtc's `is_screencast = true` and `motion` into `false`, and
+`is_screencast` decides two things that outweigh any number above it:
+
+- **Periodic ALR probing.** `VideoSendStreamImpl` enables it for screen content
+  only. Without it, a send-side bandwidth estimate that collapsed during one bad
+  minute has no way back up while the encoder is application-limited — the
+  estimator learns what a link can carry only from traffic it actually sent, and
+  a four-frame-a-second slideshow sends nothing worth learning from.
+- **The quality scaler**, armed when `is_screencast` is false, whose resolution
+  half is exactly what `maintain-resolution` asks it not to do.
+
+So the `motion` profile — a film, a game — describes its content best with the
+one hint it must never carry, and uses `detail` instead. This is the difference
+between a share that goes soft during a bad minute and one that goes soft and
+*stays* soft on a link that has already recovered: not a link that stayed bad, an
+estimate that never climbed back.
+
+**A ceiling on pixels, spent before anything is encoded.** Every other number
+here is a ceiling on bits. `maxHeight` in `QualityOverride` is a ceiling on the
+capture itself, and it is the only one that acts before the encoder or the link
+ever sees a frame. A share used to be captured at the display's native size,
+whatever that was — on a 1440p or 4K monitor, a consumer hardware encoder asked
+for three to eight megapixels sixty times a second and a home uplink asked for
+60–80 Mbps, which is a `qualityLimitationReason` of `cpu` or `bandwidth`, a
+frame rate in single figures, and a share that looks broken on a connection with
+nothing wrong with it.
+
+`cappedSize` holds the capture to **1080p by default**, keeping the display's
+aspect ratio exactly and rounding both dimensions even. It is never an
+enlargement: a 1366×768 panel is captured at 1366×768, because asking a display
+for lines it does not have is an upscale paid for in bitrate. `bitrateFor` is
+then quoted against the capped size, so the pipe is sized for the picture that is
+actually sent. Settings → Voice & Video offers *this display*, 2160p, 1440p,
+1080p and 720p; the first is for a LAN that can carry it.
+
+The ceiling reaches `getDisplayMedia` through `captureConstraints` as a **`max`,
+never an `ideal`**. `ideal` is a preference Chromium scores and is free to miss,
+so the old constraint — `ideal` at the real size beside `max: Math.max(3840, …)`
+— let a 4K display go on handing back 4K. Both capture sites (a share in a call,
+and a remote session in `remote-agent.ts`) go through the one helper.
+
+**A relayed link gets its own ceiling.** Every number above is sized for a direct
+path between two machines, where the only limits are the two uplinks. A relayed
+pair is a different problem: media goes up to the TURN server and back down, so
+one share costs the relay *twice* its bitrate, and a relay is a small VM on an
+operator's bill rather than a fabric. Pointing 35–80 Mbps at one does not produce
+35–80 Mbps; it produces loss, and the estimator reads loss as a link that cannot
+carry anything. The relay was being used correctly and at a rate it was never
+going to carry.
+
+`PeerLink` watches the nominated candidate pair in the `getStats` its video poll
+already takes every second. When either end of that pair is a `relay` candidate,
+`ceilingFor` holds the screen sender to `RELAY_MAX_BITRATE` (8 Mbps — well above
+what 1080p60 H.264 needs to look clean, well inside what a modest VM forwards).
+Per link, because in a mesh one peer may be direct and the next relayed; and
+watched rather than decided once, because ICE is usually still choosing a pair
+when a share starts and a pair can change mid-call. A manual ceiling already
+below the relay limit is never raised.
+
 **Why a share went soft.** `qualityLimitationReason` on the outbound stream is
 the one reading that separates *the link cannot carry it* from *this machine
 cannot encode it* from *nothing is holding it back and it still looks like
