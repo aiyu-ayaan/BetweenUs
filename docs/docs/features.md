@@ -120,6 +120,7 @@ picture and never a stream.
 - **Zero Uplink Bandwidth**: Rather than screen-sharing frames, Listen Together synchronizes playback metadata (timestamp, state, queue index) across peers; each client streams the track directly from the source.
 - **Plays What Embeds Refuse**: The desktop app plays real youtube.com in a hidden view rather than the `/embed/` player, so a record label's music video — which the embed rejects outright with error 101/150 — plays normally, signed in as you.
 - **In-App Browser & Queue**: Browse youtube.com (desktop) or search (web) to build synchronized shared queues, or paste direct URLs.
+- **Adverts Run Out**: On the desktop player, a pre-roll is skipped or seeked to its end — ~1.8s instead of 15–30s. Nothing is blocked, so YouTube's anti-adblock interstitial never comes into it. A Premium account removes them entirely.
 - **Automatic Speech Ducking**: Media playback volume automatically softens when participants speak, ensuring clear conversation.
 - **Host & Collaborative Modes**: Server admins or room hosts can lock controls or allow any member in the call to manage the queue.
 

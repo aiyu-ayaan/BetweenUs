@@ -310,17 +310,58 @@ video element belongs to the advert. Reporting its position would seek everybody
 else into the middle of a song; reporting its `ended` would skip a track nobody
 had heard.
 
-So an advert is detected (`#movie_player.ad-showing`) and the window sits it out:
-no position, no duration, no `ended`, and no drift correction. It rejoins by
-itself on the first tick after the advert finishes, because by then the numbers
-mean the track again. Two people on different adverts are simply out of step
-until both are through, and nothing can be done about that from here.
+So an advert is detected (`#movie_player.ad-showing`) and two things happen.
 
-One bug worth recording, because it was silent and expensive: pressing pause
-during an advert used to send `positionMs: 0`, since that is what this window's
-player was honestly reporting — and the whole call jumped back to the start of
-the song because one person was being shown a car advertisement. Pausing now
-falls back to the shared clock whenever the local player is mid-advert.
+**It is run out.** The same injected read that corrects the volume presses the
+skip button when there is one, and seeks the advert to its own end when there is
+not. Measured against a real pre-roll: **1.8 seconds**, where an unskipped one
+is fifteen to thirty.
+
+**And it is still sat out** for however long it lasts: no position, no duration,
+no `ended`, no drift correction. The window rejoins by itself on the first tick
+afterwards, because by then the numbers mean the track again.
+
+### Nothing is blocked, and that is the design
+
+The obvious approach is the one a blocking browser takes — refuse the requests.
+It does not work here, and it would cost the feature rather than the advert:
+
+- **A pre-roll is not a request to an advertising host.** It arrives inside the
+  `youtubei/v1/player` response as `adPlacements`, and the media streams from the
+  same `googlevideo.com` host the track does. Blocking that host blocks the
+  music.
+- **Removing it means rewriting a response body** — what the `json-prune`
+  scriptlets in the filter-list world do. Electron's `webRequest` cannot modify
+  response bodies at all; it would take a proxy in front of the session.
+- **A detected block is answered with an interstitial that stops playback.** A
+  player that will not play is strictly worse than an advert lasting half a
+  second.
+
+Seeking asks for nothing and refuses nothing, so there is no block to detect. If
+YouTube ever closes it the failure is graceful: the advert plays as it used to,
+the window sits it out as it already does, and nothing breaks.
+
+None of this reaches the **web client**, whose player is a cross-origin iframe
+this application cannot read into — ad blocking there is between YouTube and
+whatever the person runs in their own browser. Nor the **browse view**, which is
+muted and paused and whose adverts nobody hears.
+
+Two bugs worth recording, both silent and both expensive.
+
+**Pausing during an advert** used to send `positionMs: 0`, since that is what
+this window's player was honestly reporting — and the whole call jumped back to
+the start of the song because one person was being shown a car advertisement.
+Pausing now falls back to the shared clock whenever the local player is
+mid-advert.
+
+**The handover at the end of one.** The advert and the track are the same
+`<video>` element, and `ad-showing` is removed a moment *before* the track's
+media is in place. A read landing in that gap sees no advert and an `ended` that
+belongs to one — and reports that the song finished, skipping a song nobody has
+heard. The gap was always there; running adverts out deliberately means arriving
+at it deliberately, every time, which is what turned it from something never
+seen into something worth closing. An `ended` within two seconds of an advert is
+no longer believed.
 
 **An account with YouTube Premium sees none of this.** It is the recommended way
 to use the feature, and the only way that is exactly in step.
