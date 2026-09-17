@@ -54,7 +54,7 @@ import {
   type Flavor,
   type UpdateOffer,
 } from './updates';
-import { appUserModelIdFor, flavorOf, productNameFor, type AppFlavor } from './flavor';
+import { DEV_PRODUCT_NAME, appUserModelIdFor, flavorOf, type AppFlavor } from './flavor';
 
 const dirname = path.dirname(fileURLToPath(import.meta.url));
 const rendererDevUrl = process.env.VITE_DEV_SERVER_URL;
@@ -75,7 +75,7 @@ const profile = process.env.BETWEENUS_PROFILE;
  */
 const flavor: AppFlavor = flavorOf(app.isPackaged, app.getName());
 if (!app.isPackaged) {
-  app.setName(productNameFor(flavor));
+  app.setName(DEV_PRODUCT_NAME);
   app.setPath('userData', path.join(app.getPath('appData'), app.getName()));
 }
 if (profile) app.setPath('userData', path.join(app.getPath('temp'), `betweenus-${profile}`));

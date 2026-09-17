@@ -43,9 +43,15 @@ pnpm desktop:package:dev                # package the Dev channel, installable b
 
 ### Flavours: BetweenUs and BetweenUs Dev
 
-A development run is a *different application* from the BetweenUs somebody has
-installed. It is named `BetweenUs Dev`, and because Electron derives everything
-else from the name, that one difference gives it its own
+A development run used to be the *same application* as the BetweenUs somebody
+has installed, and not by analogy: `app.getName()` reads the manifest inside the
+bundle rather than the product name on the shortcut, so the installed client and
+`pnpm dev` both answered to `@betweenus/desktop` - one `userData` directory, one
+single-instance lock, and a development window that never opened while the
+installed one was running.
+
+A development run is named `BetweenUs Dev` instead, and because Electron derives
+everything else from the name, that one difference gives it its own
 `%APPDATA%\BetweenUs Dev` (its own settings, secrets, E2EE device key and
 downloads), its own single-instance lock, its own Windows notification identity
 and its own tray tooltip.

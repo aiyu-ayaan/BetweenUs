@@ -21,6 +21,16 @@ appId: com.betweenus.desktop.dev
 # Must match DEV_PRODUCT_NAME in electron/flavor.ts: a packaged build is
 # recognised as the Dev channel by this string and nothing else.
 productName: BetweenUs Dev
+# `productName` above names the installer, the executable and the shortcut. It
+# does *not* reach `app.getName()`, which reads the package.json inside the
+# bundle - and that name is what Electron derives `userData` from. Without this
+# block a packaged Dev build would write into `<appData>/@betweenus/desktop`,
+# which is where the installed stable client keeps its settings, its secrets
+# and its device key. `extraMetadata` writes the field into the packaged
+# manifest, so the runtime agrees with the installer about which application
+# this is.
+extraMetadata:
+  productName: BetweenUs Dev
 nsis:
   artifactName: BetweenUs-Dev-${version}-Setup.${ext}
   shortcutName: BetweenUs Dev
