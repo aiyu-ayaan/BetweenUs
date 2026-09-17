@@ -1,6 +1,7 @@
 package com.aatech.betweenus.feature.voice
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -105,133 +106,122 @@ class ShareQualityTest {
         assertTrue(mode1 > mode0)
     }
 
-    // --- The frame-rate ladder ---
+    // --- The resolution ladder ---
     //
-    // The desktop's, tier for tier: `share-quality.check.ts` asserts the same
-    // answers on the other side, because a call has both clients in it and two
-    // ladders that disagree is a smoothness that depends on who is sending.
+    // The desktop's, rule for rule: `share-quality.check.ts` asserts the same
+    // answers on the other side.
 
-    private val hd = ShareQuality.Size(1920, 1080)
-
-    private fun rung(bps: Double?) =
-        ShareQuality.adapt(hd, ShareQuality.screenBitrate(hd), ShareQuality.SCREEN_FRAME_RATE, bps)
+    private fun reading(limitedBy: String?, fps: Double?) =
+        ShareQuality.Reading(limitedBy, fps)
 
     @Test
-    fun `a collapsed link keeps a watchable frame rate`() {
-        // The reported bug as a number: 405 kbps arriving as 1920x1080 at 2 fps.
-        // MAINTAIN_RESOLUTION held the size and spent every frame it had doing
-        // it. Whatever comes out now, it is not two frames a second.
-        val low = rung(405_000.0)
-        assertEquals(24, low.frameRate)
-        assertTrue("it has to pay in pixels: ${low.scale}", low.scale > 2.0)
-
-        // And what it pays is a picture somebody can still watch.
-        val height = 1080 / low.scale
-        assertTrue("got ${height}p", height > 300 && height < 540)
+    fun `a still screen is never treated as a fault`() {
+        // A capturer only emits a frame when pixels change, so a terminal
+        // nobody is typing in at 4 fps and a few kbps is a correct answer. The
+        // first version of this ladder read exactly that as a small link and
+        // shrank the picture, on loopback, where capacity is unlimited.
+        assertFalse(ShareQuality.isStarved(reading(null, 4.0)))
+        assertFalse(ShareQuality.isStarved(reading(null, 0.0)))
+        assertFalse(ShareQuality.isStarved(reading(null, 2.0)))
     }
 
     @Test
-    fun `a link with room gives up nothing`() {
-        val roomy = rung(30_000_000.0)
-        assertEquals(60, roomy.frameRate)
-        assertEquals(1.0, roomy.scale, 0.001)
+    fun `neither half of the signal is enough on its own`() {
+        // `bandwidth` shows up transiently on shares that are completely fine.
+        assertFalse(ShareQuality.isStarved(reading("bandwidth", 60.0)))
+        assertFalse(ShareQuality.isStarved(reading("bandwidth", 30.0)))
+        // A CPU limit wants fewer frames, not fewer pixels.
+        assertFalse(ShareQuality.isStarved(reading("cpu", 2.0)))
+        // No frame rate reported is not evidence of anything.
+        assertFalse(ShareQuality.isStarved(reading("bandwidth", null)))
     }
 
     @Test
-    fun `nothing measured yet is not a bad link`() {
-        // The estimator only measures what is sent, so a share that starts
-        // small reports a small link and never climbs out of it.
-        assertEquals(60, rung(null).frameRate)
-        assertEquals(1.0, rung(null).scale, 0.001)
-        assertEquals(1.0, rung(0.0).scale, 0.001)
+    fun `both together is the encoder saying it could not send more`() {
+        assertTrue(ShareQuality.isStarved(reading("bandwidth", 3.0)))
+        assertTrue(ShareQuality.isStarved(reading("bandwidth", 12.0)))
     }
 
     @Test
-    fun `more bitrate is never a worse share`() {
-        var fps = 0
-        var scale = Double.MAX_VALUE
-        for (bps in listOf(200_000, 405_000, 1_000_000, 2_000_000, 5_000_000, 10_000_000, 25_000_000)) {
-            val next = rung(bps.toDouble())
-            assertTrue("$bps is not a tier", ShareQuality.FRAME_TIERS.contains(next.frameRate))
-            assertTrue("a share is never scaled up", next.scale >= 1.0)
-            val better = next.frameRate > fps || (next.frameRate == fps && next.scale <= scale + 0.001)
-            assertTrue("$bps bps is worse than less bitrate was", better)
-            fps = next.frameRate
-            scale = next.scale
-        }
-    }
-
-    @Test
-    fun `every tier is reachable`() {
-        // A ladder whose middle rung nothing lands on is two tiers wearing
-        // three names.
-        assertEquals(24, rung(405_000.0).frameRate)
-        assertEquals(30, rung(2_000_000.0).frameRate)
-        assertEquals(60, rung(8_000_000.0).frameRate)
-    }
-
-    @Test
-    fun `a chosen frame rate is a ceiling, not a starting point`() {
-        val capped = ShareQuality.adapt(hd, ShareQuality.screenBitrate(hd), 30, 30_000_000.0)
-        assertEquals(30, capped.frameRate)
-        assertEquals(24, ShareQuality.adapt(hd, ShareQuality.screenBitrate(hd), 30, 405_000.0).frameRate)
-    }
-
-    @Test
-    fun `the budget is quoted against the pixels captured`() {
-        // The guarded bug is a budget computed for 1080p applied to a 4K
-        // capture, which is a share sized for a pipe it is not being sent down.
-        val uhd = ShareQuality.Size(3840, 2160)
-        val big = ShareQuality.adapt(uhd, ShareQuality.screenBitrate(uhd), 60, 5_000_000.0)
-        assertTrue(big.scale > rung(5_000_000.0).scale)
-    }
-
-    @Test
-    fun `the ladder drops at once and climbs slowly`() {
+    fun `a healthy or quiet share never costs pixels`() {
         val ladder = ShareQuality.Ladder()
-        val ceiling = ShareQuality.screenBitrate(hd)
-        fun step(bps: Double) = ladder.step(hd, ceiling, ShareQuality.SCREEN_FRAME_RATE, bps)
-
-        // The first reading always applies: nothing to compare it against, and
-        // no reason to spend a second on a share that is already wrong.
-        assertEquals(60, step(30_000_000.0)?.frameRate)
-        // A tick saying the same thing changes nothing. This is what stops a
-        // re-encode, and the keyframe behind it, every second forever.
-        assertNull(step(30_000_000.0))
-        assertNull("a few percent of wobble is not a change", step(28_000_000.0))
-
-        // Down immediately: a link that cannot carry the picture is already
-        // dropping frames, and waiting to be sure is more of the bug.
-        assertEquals(24, step(405_000.0)?.frameRate)
-
-        // Up slowly - the estimate rises by probing, so the first rise is the
-        // probe and not the link. Four readings are not enough; the fifth is.
-        for (tick in 1 until 5) assertNull("climbed on reading $tick", step(30_000_000.0))
-        assertEquals(60, step(30_000_000.0)?.frameRate)
+        assertEquals(1.0, ladder.scale, 0.001)
+        assertFalse(ladder.step(reading(null, 58.0)))
+        assertFalse(ladder.step(reading(null, 4.0)))
+        assertFalse(ladder.step(reading(null, 4.0)))
+        assertEquals(1.0, ladder.scale, 0.001)
     }
 
     @Test
-    fun `a run of headroom has to be a run`() {
-        // One bad reading mid-run puts the count back to nothing, or a link
-        // flapping once a second climbs anyway.
+    fun `the ladder steps down on a sustained collapse and stops at the bottom`() {
         val ladder = ShareQuality.Ladder()
-        val ceiling = ShareQuality.screenBitrate(hd)
-        fun step(bps: Double) = ladder.step(hd, ceiling, ShareQuality.SCREEN_FRAME_RATE, bps)
+        val starved = reading("bandwidth", 3.0)
 
-        step(405_000.0)
-        step(30_000_000.0)
-        step(30_000_000.0)
-        step(405_000.0)
-        for (tick in 1 until 5) assertNull("climbed on a broken run at $tick", step(30_000_000.0))
-        assertNotNull("a whole run must still climb", step(30_000_000.0))
+        assertFalse("one reading is a hiccup", ladder.step(starved))
+        assertTrue(ladder.step(starved))
+        assertEquals(1.5, ladder.scale, 0.001)
+
+        assertFalse(ladder.step(starved))
+        assertTrue(ladder.step(starved))
+        assertEquals(2.0, ladder.scale, 0.001)
+
+        repeat(20) { ladder.step(starved) }
+        assertEquals("the ladder has a bottom", 3.0, ladder.scale, 0.001)
     }
 
     @Test
-    fun `a new capture is a new ladder`() {
+    fun `climbing back needs a sustained run, one step at a time`() {
         val ladder = ShareQuality.Ladder()
-        ladder.step(hd, ShareQuality.screenBitrate(hd), 60, 405_000.0)
-        assertNotNull(ladder.position)
+        val starved = reading("bandwidth", 3.0)
+        val healthy = reading(null, 58.0)
+        ladder.step(starved)
+        ladder.step(starved)
+        ladder.step(starved)
+        ladder.step(starved)
+        assertEquals(2.0, ladder.scale, 0.001)
+
+        for (tick in 1 until 6) assertFalse("climbed on reading $tick", ladder.step(healthy))
+        assertTrue(ladder.step(healthy))
+        assertEquals(1.5, ladder.scale, 0.001)
+    }
+
+    @Test
+    fun `a quiet screen counts toward the climb`() {
+        // The opposite of the old behaviour, where quiet meant shrink. There is
+        // no evidence left that the link is the problem, and the only way to
+        // find out is to try a bigger picture.
+        val ladder = ShareQuality.Ladder()
+        ladder.step(reading("bandwidth", 3.0))
+        ladder.step(reading("bandwidth", 3.0))
+        assertEquals(1.5, ladder.scale, 0.001)
+
+        val quiet = reading(null, 4.0)
+        for (tick in 1 until 6) ladder.step(quiet)
+        assertTrue(ladder.step(quiet))
+        assertEquals(1.0, ladder.scale, 0.001)
+    }
+
+    @Test
+    fun `a run has to be a run`() {
+        val ladder = ShareQuality.Ladder()
+        val starved = reading("bandwidth", 3.0)
+        val healthy = reading(null, 58.0)
+        ladder.step(starved)
+        ladder.step(starved)
+        ladder.step(healthy)
+        ladder.step(healthy)
+        ladder.step(starved)
+        for (tick in 1 until 6) assertFalse("climbed on a broken run at $tick", ladder.step(healthy))
+        assertTrue(ladder.step(healthy))
+    }
+
+    @Test
+    fun `a new capture starts at the top`() {
+        val ladder = ShareQuality.Ladder()
+        ladder.step(reading("bandwidth", 3.0))
+        ladder.step(reading("bandwidth", 3.0))
+        assertEquals(1.5, ladder.scale, 0.001)
         ladder.reset()
-        assertNull(ladder.position)
+        assertEquals(1.0, ladder.scale, 0.001)
     }
 }

@@ -1850,10 +1850,6 @@ class VoiceEngine(private val context: Context) {
                 if (encodings.isEmpty()) return
 
                 val screen = slot == Slot.SCREEN
-                // Where the ladder has this link, once a reading has put it
-                // somewhere. Null until then, and the answer is the whole
-                // capture at the full rate - see `ShareQuality.adapt`.
-                val rung = if (screen) shareLadder.position else null
                 for (encoding in encodings) {
                     encoding.maxBitrateBps =
                         if (screen) {
@@ -1861,31 +1857,27 @@ class VoiceEngine(private val context: Context) {
                         } else {
                             ShareQuality.cameraBitrate(cameraSize)
                         }
-                    encoding.maxFramerate = when {
-                        !screen -> ShareQuality.CAMERA_FRAME_RATE
-                        else -> rung?.frameRate ?: ShareQuality.SCREEN_FRAME_RATE
-                    }
-                    // Full size until something measured says otherwise. The
-                    // shrink is computed from the link's own estimate rather
-                    // than discovered by the encoder failing - see `adapt`.
-                    encoding.scaleResolutionDownBy = if (screen) rung?.scale ?: 1.0 else 1.0
+                    // The profile's rate throughout. The ladder spends
+                    // resolution, never frames: frames are what a share is for.
+                    encoding.maxFramerate =
+                        if (screen) ShareQuality.SCREEN_FRAME_RATE else ShareQuality.CAMERA_FRAME_RATE
+                    // Full size unless the encoder has reported it cannot carry
+                    // the picture - see `ShareQuality.isStarved`.
+                    encoding.scaleResolutionDownBy = if (screen) shareLadder.scale else 1.0
                     // A share is the call's primary visual media, not
                     // background video.
                     if (screen) encoding.networkPriority = 3
                 }
 
-                // Frames are what a share holds, and the desktop holds them for
-                // the same reason - see the comment over `PROFILES` in
-                // `share-quality.ts`. This said MAINTAIN_RESOLUTION, which has
-                // no floor under the thing it gives up: it keeps 1920x1080 and
-                // drops frames as far as it takes, which on a 405 kbps link is
-                // 1080p at 2 fps. A full-size slideshow is not a milder failure
-                // than a small sharp picture, it is a worse one. What made
-                // holding frames safe is that `adapt` now decides how much
-                // resolution to spend, from a real measurement, so WebRTC's own
-                // adapter is a backstop rather than the whole policy.
+                // Resolution has exactly one owner on a share, and it is
+                // `ShareQuality.Ladder`. MAINTAIN_FRAMERATE was tried here and
+                // put WebRTC's own adapter on the same picture, and the two
+                // scalers multiplied - a share the ladder had already halved to
+                // 960x540 arrived at 660x350. On its own this preference drops
+                // frames with no floor, which is what the ladder is for; two
+                // things spending the same resource is the worse failure.
                 parameters.degradationPreference = if (screen) {
-                    RtpParameters.DegradationPreference.MAINTAIN_FRAMERATE
+                    RtpParameters.DegradationPreference.MAINTAIN_RESOLUTION
                 } else {
                     RtpParameters.DegradationPreference.BALANCED
                 }
@@ -1897,31 +1889,24 @@ class VoiceEngine(private val context: Context) {
         /**
          * Moves the share to what this link has been measured to carry.
          *
-         * `availableOutgoingBitrate` is the congestion controller's own
-         * estimate, and it was being walked past: `poll` already has the
-         * nominated pair open to answer "direct or relayed", and the one number
-         * that knows what this connection actually does was sitting in it
-         * unread. That is how a share ends up at 1080p and 2 fps - not because
-         * nothing noticed the link was bad, but because nothing asked.
+         * This read `availableOutgoingBitrate` and budgeted a resolution
+         * against it, which is wrong for a reason invisible in the arithmetic:
+         * that number is an estimate, it only grows by probing with real
+         * traffic, and a share of a screen nobody is touching sends a few kbps.
+         * The estimate sat at its starting value, the budget shrank the picture,
+         * and a smaller picture sends even less.
          *
-         * Per link, because it is per link: the same capture goes to everybody
-         * and what each person's connection carries is theirs. Only a real move
-         * re-tunes; `Ladder.step` returns null on the ticks where the answer has
-         * not changed, which is most of them.
+         * `qualityLimitationReason` cannot be faked by a quiet screen: it is
+         * the encoder saying it wanted to send more and could not. Per link,
+         * because it is per link - the same capture goes to everybody and what
+         * each connection carries is theirs. Only a real move re-tunes.
          */
         /** A new capture is a new budget. See [beginScreenCapture]. */
         fun resetShareLadder() = shareLadder.reset()
 
-        private fun applyLadder(pair: Map<String, Any>?) {
-            if (screenTrack == null || pair == null) return
-            val available = (pair["availableOutgoingBitrate"] as? Number)?.toDouble()
-            val moved = shareLadder.step(
-                shareSize,
-                ShareQuality.screenBitrate(shareSize),
-                ShareQuality.SCREEN_FRAME_RATE,
-                available?.takeIf { it > 0.0 },
-            )
-            if (moved != null) tune(Slot.SCREEN)
+        private fun applyLadder(reading: ShareQuality.Reading) {
+            if (screenTrack == null) return
+            if (shareLadder.step(reading)) tune(Slot.SCREEN)
         }
 
         /**
@@ -2420,6 +2405,8 @@ class VoiceEngine(private val context: Context) {
                 var picture: Triple<Int?, Int?, Double?> = Triple(null, null, null)
                 val pairs = mutableListOf<Map<String, Any>>()
                 var selectedPairId: String? = null
+                var limitedBy: String? = null
+                var sendFps: Double? = null
                 val candidateTypes = HashMap<String, String>()
 
                 for (stats in report.statsMap.values) {
@@ -2451,6 +2438,16 @@ class VoiceEngine(private val context: Context) {
                         "outbound-rtp" -> {
                             val bytes = (members["bytesSent"] as? Number)?.toLong() ?: 0L
                             if (kind == "audio") outboundAudio += bytes else outboundVideo += bytes
+                            // The share's own sender, which is the only thing
+                            // that knows whether it is being held back and why.
+                            if (kind == "video") {
+                                (members["qualityLimitationReason"] as? String)
+                                    ?.takeIf { it != "none" }
+                                    ?.let { limitedBy = it }
+                                (members["framesPerSecond"] as? Number)?.toDouble()?.let {
+                                    sendFps = maxOf(sendFps ?: 0.0, it)
+                                }
+                            }
                         }
 
                         // Kept whole and chosen between after the walk. The
@@ -2480,7 +2477,7 @@ class VoiceEngine(private val context: Context) {
                 val pair = CallStats.selectedPair(pairs, selectedPairId)
                 val roundTrip = (pair?.get("currentRoundTripTime") as? Number)?.toDouble()
 
-                applyLadder(pair)
+                applyLadder(ShareQuality.Reading(limitedBy, sendFps))
 
                 val sample = LinkSample(
                     at = System.currentTimeMillis(),

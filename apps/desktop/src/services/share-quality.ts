@@ -265,26 +265,30 @@ interface Profile {
 }
 
 /**
- * Both profiles hold the frame rate, and the reason is the bug this replaced.
+ * Both profiles hold the resolution, and the ladder is what spends it.
  *
- * There are only two of these preferences worth having and each one, alone, is
- * a way for a share to collapse. `maintain-framerate` lets WebRTC's own adapter
- * spend pixels in 1.5x, 2x, 3x, 4x steps off a bandwidth estimate it is still
- * finding, so a 1440p share walked down to 480p within seconds and stayed - and
- * that is why this said `maintain-resolution` instead. But `maintain-resolution`
- * has no floor under the thing it gives up: it holds 1920x1080 and drops frames
- * as far as it takes, which on a 405 kbps link is *1080p at 2 fps*. A slideshow
- * at full size is not a better failure than a small sharp picture, it is a
- * worse one, and it is the one people actually reported.
+ * There are only two degradation preferences worth having and each one, alone,
+ * is a way for a share to collapse - this setting has now been wrong in both
+ * directions, so both are written down.
  *
- * The axis being held was never the problem. The problem was that nothing chose
- * what to give up on the *other* axis, so whichever one WebRTC was left to pick
- * it picked without limit. `adaptShare` chooses it now, from the estimate the
- * congestion controller has already made: the resolution is whatever that
- * bitrate can carry at a watchable frame rate, computed before the encoder is
- * asked. With a budget in hand, holding frames is safe - WebRTC's adapter is
- * only a backstop for a budget that came out optimistic, instead of being the
- * whole policy.
+ * `maintain-framerate` gives up pixels and lets WebRTC's own adapter decide how
+ * many, in 1.5x/2x/3x/4x steps off an estimate it is still finding. A 1440p
+ * share walked down to 480p within seconds and stayed there.
+ *
+ * `maintain-resolution` holds the size and drops frames, with no floor: on a
+ * 405 kbps link that is 1080p at 2 fps.
+ *
+ * The fix for the second was not the first. Asking for `maintain-framerate`
+ * while `ShareLadder` was *also* scaling the picture put two independent
+ * scalers on one frame, and they multiplied - a loopback share the ladder had
+ * already halved to 960x540 arrived at 660x350. Two things spending the same
+ * resource is worse than either one spending it badly.
+ *
+ * So resolution has exactly one owner. `maintain-resolution` keeps WebRTC's
+ * adapter off it, and `ShareLadder` steps it down when - and only when - the
+ * encoder reports it is bandwidth-limited *and* the frame rate has actually
+ * collapsed. A quiet share and a healthy share both leave it alone, which is
+ * why a still screen at 4 fps no longer costs anybody any pixels.
  *
  * The hint on `motion` is `detail`, not `motion`, and that is deliberate - see
  * `ShareContentHint`. `motion` is the honest description of a film and it also
@@ -296,7 +300,7 @@ const PROFILES: Record<ShareIntent, Profile> = {
   detail: {
     frameRate: 60,
     contentHint: 'text',
-    degradation: 'maintain-framerate',
+    degradation: 'maintain-resolution',
     referenceBitrate: 20_000_000,
     minBitrate: 8_000_000,
     maxBitrate: 50_000_000,
@@ -305,7 +309,7 @@ const PROFILES: Record<ShareIntent, Profile> = {
   motion: {
     frameRate: 60,
     contentHint: 'detail',
-    degradation: 'maintain-framerate',
+    degradation: 'maintain-resolution',
     referenceBitrate: 35_000_000,
     minBitrate: 15_000_000,
     maxBitrate: 80_000_000,
@@ -438,196 +442,162 @@ export function ceilingFor(publish: SharePublish, relayed: boolean): number {
   return relayed ? Math.min(publish.maxBitrate, RELAY_MAX_BITRATE) : publish.maxBitrate;
 }
 
-// --- The frame-rate ladder --------------------------------------------------
+// --- The resolution ladder -------------------------------------------------
 //
-// Everything above this line is a ceiling decided before the share starts, off
-// the display's size and the machine's guess about itself. None of it can know
-// what the link turned out to carry, and a ceiling is not a plan for missing
-// it: the encoder is handed 1080p60 and 20 Mbit, the link delivers 400 kbit,
-// and what happens next is whatever `degradationPreference` says - which used
-// to be 1080p at 2 fps.
+// Everything above this line is a ceiling decided before the share starts. None
+// of it can know what the link turned out to carry, and a ceiling is not a plan
+// for missing it: the encoder is handed 1080p60 and 20 Mbit, the link delivers
+// 400 kbit, and `maintain-resolution` answers by holding the size and dropping
+// frames as far as it takes - 1080p at 2 fps.
 //
-// So this is the half that was missing. The congestion controller has already
-// measured the link; `availableOutgoingBitrate` is that measurement. Given a
-// number of bits per second and a frame rate worth holding, the resolution that
-// fits in it is arithmetic, and it is far better arithmetic than an encoder
-// discovering the same thing by failing.
+// This is what does the answering instead, and the shape of it is the whole
+// lesson of getting it wrong twice.
+//
+// **It does not budget.** The first version of this computed the resolution a
+// measured `availableOutgoingBitrate` could carry and applied it. That is wrong
+// in a way that looks right in arithmetic and is disastrous in practice,
+// because *`availableOutgoingBitrate` is not the link's capacity*. It is the
+// congestion controller's estimate, the estimate only grows by probing with
+// real traffic, and an encoder with nothing to send never produces any. A
+// static screen share - a terminal nobody is typing in - sends a few kbps, so
+// the estimate sits at `START_KBPS` forever. Budgeting against it halved a
+// loopback share to 960x540, and a smaller picture sends even less, so the
+// estimate could never climb back out. That is a ratchet, and hysteresis does
+// not save you from it: the climb needs readings of headroom, and headroom
+// never appears because the content was never the thing sending.
+//
+// **So it reacts, and only to a failure it can see.** The encoder says why it
+// is limited - `qualityLimitationReason` - and that is the one signal that
+// separates "the link cannot carry this" from "there is nothing to send". The
+// ladder moves only on `bandwidth`, and only when the frame rate has actually
+// collapsed. On a healthy share, and on a quiet one, it does nothing at all and
+// the share is exactly what the profile asked for.
 
 /**
  * Frame rates a share will hold, best first.
  *
  * 24 is the floor because it is the rate film has used for a century: below it
  * motion stops reading as motion and starts reading as a slideshow, which is
- * the failure being fixed, just slower. Nothing between these is worth a step -
- * the difference between 30 and 24 is a decision, the difference between 30 and
- * 28 is noise.
+ * the failure being fixed, just slower.
  */
 export const FRAME_TIERS = [60, 30, 24] as const;
 
 /**
- * Bits per pixel per frame an H.264 screen encode needs to look clean.
+ * The frame rate below which a share has stopped being a share.
  *
- * Calibrated, not derived: 1080p60 that people call good measures around
- * 10 Mbit, and 10e6 / (1920*1080 * 60) is 0.080. It is the one number here that
- * is a property of the encoder rather than of arithmetic, so it is the knob to
- * turn if shares come out consistently softer or consistently more expensive
- * than they should - screen content with large flat areas beats it easily, and
- * a full-screen film is the case that does not.
+ * Not a target - a target would be read off a quiet screen and acted on. This
+ * is the threshold for "the encoder wanted to send more and could not", and it
+ * only ever gets consulted alongside a `bandwidth` limitation.
  */
-const BITS_PER_PIXEL_FRAME = 0.08;
+const COLLAPSED_FPS = 20;
 
 /**
- * The smallest picture worth giving up a frame rate tier to keep.
+ * The resolution steps the ladder walks, as `scaleResolutionDownBy`.
  *
- * Above this, holding 60 fps is worth the pixels it costs. Below it, the share
- * has become a postage stamp and the next tier down buys back 40% of each edge,
- * which is the better trade. There is no floor under the *last* tier: at 24 fps
- * the picture shrinks as far as the link demands, because the alternative is
- * the frame rate collapsing instead.
+ * Discrete, and coarse on purpose. A continuous scale computed per tick is what
+ * the budgeting version did, and every recomputation is a keyframe: the steps
+ * exist so a struggling share settles on one of four answers instead of
+ * hunting. 1080p through these is 1080p, 720p, 540p, 360p.
  */
-const FLOOR_HEIGHT = 540;
-
-/** Consecutive readings of sustained headroom before a share climbs back up. */
-const CLIMB_TICKS = 5;
+const SCALE_STEPS = [1, 1.5, 2, 3] as const;
 
 /**
- * Scale changes smaller than this are not changes.
+ * Consecutive readings before the ladder moves, in each direction.
  *
- * `availableOutgoingBitrate` wobbles by a few percent every second on a link
- * with nothing wrong with it, and re-encoding at 2.9x instead of 3.0x is a
- * keyframe and a visible hitch bought for nothing.
+ * Down needs fewer than up. A share that has collapsed is already unwatchable,
+ * so waiting is more of the bug; a share that recovered has to prove it,
+ * because the estimate rises by probing and the first good reading is the probe
+ * rather than the link.
  */
-const SCALE_DEADBAND = 0.15;
+const SHRINK_TICKS = 2;
+const CLIMB_TICKS = 6;
 
 export interface ShareAdaptation {
   frameRate: number;
   scaleResolutionDownBy: number;
 }
 
+/** What the sender says about itself, per tick. See `ShareLadder.step`. */
+export interface ShareReading {
+  /** `qualityLimitationReason` on the outbound stream. */
+  limitedBy: 'bandwidth' | 'cpu' | 'other' | null;
+  /** `framesPerSecond` actually leaving the encoder, when it reports one. */
+  framesPerSecond: number | null;
+}
+
 /**
- * What to encode, given what the link says it can carry.
+ * Whether a reading is evidence that the link cannot carry the picture.
  *
- * The highest frame rate whose affordable resolution still clears
- * [FLOOR_HEIGHT], and the scale factor that puts the picture inside the budget
- * at that rate. Pure, so the ladder is a table that can be checked rather than
- * behaviour that has to be reproduced on a bad hotel connection.
- *
- * `available` of `null` means nothing has been measured yet, and the answer is
- * then the full capture at the full rate. That is deliberate and it is not
- * optimism: the estimator only measures what is actually sent, so a share that
- * starts small to be safe is a share that reports a small link, and it never
- * grows. Starting at full size and stepping down off a real reading is the only
- * order that converges.
+ * Both halves are required and that is the entire point. `bandwidth` alone is
+ * reported transiently on shares that are completely fine, and a low frame rate
+ * alone is the normal state of a screen nobody is touching - a capturer only
+ * emits a frame when pixels change, so a still terminal at 4 fps and 5 kbps is
+ * not a fault, it is a correct answer that the first version of this read as
+ * one.
  */
-export function adaptShare(publish: SharePublish, available: number | null): ShareAdaptation {
-  const wanted = publish.maxFramerate;
-  if (available === null || available <= 0) {
-    return { frameRate: wanted, scaleResolutionDownBy: publish.scaleResolutionDownBy };
-  }
-
-  // The link's own reading, held to the share's ceiling: an estimate above what
-  // this share will ever send is headroom, not permission to send more.
-  const budget = Math.min(available, publish.maxBitrate);
-  const pixels = Math.max(1, publish.captured.width * publish.captured.height);
-
-  // Tiers above what somebody asked for are not on offer. A 30 fps override is
-  // a decision about this machine or this connection, and a ladder that climbs
-  // past it is a setting that does nothing.
-  const tiers = FRAME_TIERS.filter((tier) => tier <= wanted);
-  const ladder: readonly number[] = tiers.length > 0 ? tiers : [wanted];
-
-  for (const [index, tier] of ladder.entries()) {
-    const affordable = budget / (tier * BITS_PER_PIXEL_FRAME);
-    // Linear on each edge, so the pixel ratio is the square of it.
-    const scale = Math.sqrt(pixels / affordable);
-    if (scale <= 1) return { frameRate: tier, scaleResolutionDownBy: 1 };
-
-    // The last tier has nothing below it to fall to, so it takes whatever
-    // shrink the link demands.
-    const last = index === ladder.length - 1;
-    if (last || publish.captured.height / scale >= FLOOR_HEIGHT) {
-      // Two decimals: `scaleResolutionDownBy` is a float, and quoting fifteen
-      // of them makes every reading a different value to compare against.
-      return { frameRate: tier, scaleResolutionDownBy: Math.round(scale * 100) / 100 };
-    }
-  }
-
-  // Unreachable - the last tier always returns - but a ladder that fell through
-  // silently would be a share with no settings at all.
-  return { frameRate: ladder[ladder.length - 1] ?? wanted, scaleResolutionDownBy: 1 };
+export function isStarved(reading: ShareReading): boolean {
+  if (reading.limitedBy !== 'bandwidth') return false;
+  if (reading.framesPerSecond === null) return false;
+  return reading.framesPerSecond < COLLAPSED_FPS;
 }
 
 /**
  * One link's position on the ladder, over time.
  *
- * [adaptShare] answers "what fits right now", which is not the same question as
- * "what should change". Applied straight, a per-second reading re-encodes the
- * share every second: the estimate wobbles, the scale follows it, and every
- * change is a keyframe. And applied symmetrically it is worse than that - a
- * link that dips for one second would drag the share down and a share that was
- * dragged down reports a smaller estimate, which is a ratchet that only ever
- * tightens.
- *
- * So the two directions are not symmetric, on purpose:
- *
- * - **Down immediately.** A link that cannot carry the picture is already
- *   dropping frames. Waiting to be sure is five more seconds of the thing being
- *   fixed.
- * - **Up slowly.** [CLIMB_TICKS] consecutive readings with room, because the
- *   estimate rises through probing and the first rise is the probe, not the
- *   link.
- *
- * The run-length shape is [FrameBudget]'s in `camera-effects.ts`, for the same
- * reason: a thing that flips between two states is worse than either state.
+ * Holds an index into [SCALE_STEPS] rather than a computed number, so the only
+ * things that can ever happen are one step down, one step up, or nothing. The
+ * frame rate is the profile's throughout: the resolution is what gets spent,
+ * because `maintain-resolution` is what keeps WebRTC's own adapter from
+ * spending it too - two scalers on one picture is how 960x540 became 660x350.
  */
 export class ShareLadder {
-  private current: ShareAdaptation | null = null;
-  private climbing = 0;
+  private step_ = 0;
+  private starved = 0;
+  private healthy = 0;
 
-  /** The current rung, or null before the first reading. */
+  /** Where the ladder is, or null while it is at the top and has never moved. */
   get position(): ShareAdaptation | null {
-    return this.current;
+    return this.step_ === 0 ? null : { frameRate: 0, scaleResolutionDownBy: SCALE_STEPS[this.step_]! };
+  }
+
+  /** The scale to publish at. 1 while nothing has gone wrong. */
+  get scale(): number {
+    return SCALE_STEPS[this.step_]!;
   }
 
   /**
-   * One reading. Returns what to apply, or null when nothing should change -
-   * which is most ticks, and is the difference between this and a `setParameters`
-   * call a second forever.
+   * One reading. Returns true when the share should be re-published, which is
+   * only on a real move - a `setParameters` per second is a keyframe per second.
    */
-  step(publish: SharePublish, available: number | null): ShareAdaptation | null {
-    const next = adaptShare(publish, available);
-    const now = this.current;
-    if (!now) {
-      this.current = next;
-      return next;
+  step(reading: ShareReading): boolean {
+    if (isStarved(reading)) {
+      this.healthy = 0;
+      if (++this.starved < SHRINK_TICKS) return false;
+      this.starved = 0;
+      if (this.step_ >= SCALE_STEPS.length - 1) return false;
+      this.step_ += 1;
+      return true;
     }
 
-    const scaleDelta = next.scaleResolutionDownBy - now.scaleResolutionDownBy;
-    const worse = next.frameRate < now.frameRate || scaleDelta > SCALE_DEADBAND;
-    const better = next.frameRate > now.frameRate || scaleDelta < -SCALE_DEADBAND;
+    this.starved = 0;
+    // Nothing to climb back from, which is the ordinary case: the ladder spends
+    // almost every call at the top doing nothing.
+    if (this.step_ === 0) return false;
 
-    if (worse) {
-      this.climbing = 0;
-      this.current = next;
-      return next;
-    }
-    if (!better) {
-      // Inside the deadband: the reading agrees with where the share already
-      // is, and a run of agreement is not a run of headroom.
-      this.climbing = 0;
-      return null;
-    }
-    if (++this.climbing < CLIMB_TICKS) return null;
-
-    this.climbing = 0;
-    this.current = next;
-    return next;
+    // A quiet share is not a recovered one, but it is not a reason to stay
+    // shrunk either - there is no evidence left that the link is the problem,
+    // and the only way to find out is to try a bigger picture.
+    if (++this.healthy < CLIMB_TICKS) return false;
+    this.healthy = 0;
+    this.step_ -= 1;
+    return true;
   }
 
-  /** A new capture is a new ladder: the size every rung was computed against changed. */
+  /** A new capture starts at the top; nothing is known about it yet. */
   reset(): void {
-    this.current = null;
-    this.climbing = 0;
+    this.step_ = 0;
+    this.starved = 0;
+    this.healthy = 0;
   }
 }
 

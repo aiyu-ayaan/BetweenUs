@@ -5,9 +5,6 @@ import android.util.DisplayMetrics
 import android.view.WindowManager
 import kotlin.math.max
 import kotlin.math.min
-import kotlin.math.round
-import kotlin.math.sqrt
-import kotlin.math.min
 import kotlin.math.roundToInt
 
 /**
@@ -59,147 +56,115 @@ object ShareQuality {
     const val CAMERA_FRAME_RATE = 30
 
     /**
-     * Frame rates a share will hold, best first.
+     * Frame rates a share will hold, best first. The desktop's `FRAME_TIERS`.
      *
-     * The desktop's `FRAME_TIERS` in `share-quality.ts`, number for number, for
-     * the reason the bitrate ladder mirrors it: a call has both clients in it,
-     * and two ladders that disagree is a picture whose smoothness depends on
-     * who is sending it.
-     *
-     * 24 is the floor because it is the rate film has used for a century. Below
-     * it motion stops reading as motion, which is the failure this exists to
-     * prevent rather than a milder form of it.
+     * 24 is the floor because it is the rate film has used for a century: below
+     * it motion stops reading as motion.
      */
     val FRAME_TIERS = intArrayOf(60, 30, 24)
 
     /**
-     * Bits per pixel per frame an H.264 screen encode needs to look clean.
+     * The frame rate below which a share has stopped being a share.
      *
-     * Calibrated rather than derived: 1080p60 that people call good measures
-     * around 10 Mbit, and 10e6 / (1920*1080 * 60) is 0.080.
+     * Not a target - a target would be read off a quiet screen and acted on.
+     * This is the threshold for "the encoder wanted to send more and could not",
+     * and it is only ever consulted alongside a `bandwidth` limitation.
      */
-    private const val BITS_PER_PIXEL_FRAME = 0.08
-
-    /** The smallest picture worth giving up a frame rate tier to keep. */
-    private const val FLOOR_HEIGHT = 540
-
-    /** What to encode: a frame rate to hold, and the shrink that pays for it. */
-    data class Adaptation(val frameRate: Int, val scale: Double)
+    private const val COLLAPSED_FPS = 20.0
 
     /**
-     * What to encode, given what the link says it can carry.
+     * The resolution steps the ladder walks, as `scaleResolutionDownBy`.
      *
-     * The other half of a ceiling. Everything else here is decided before the
-     * share starts, from the display's size, and none of it can know what the
-     * connection turned out to do - so the encoder was handed 1080p60 and a
-     * 20 Mbit ceiling, the link delivered 400 kbit, and what happened next was
-     * whatever `degradationPreference` said. Under `MAINTAIN_RESOLUTION` that
-     * is 1080p at 2 fps: a full-size slideshow, which is not a better failure
-     * than a small sharp picture but a worse one.
-     *
-     * `available` is `availableOutgoingBitrate` from the nominated candidate
-     * pair - the congestion controller's own measurement, which was being read
-     * and thrown away. Null means nothing has been measured yet, and the answer
-     * is then the whole capture at the full rate: the estimator only measures
-     * what is actually sent, so a share that starts small reports a small link
-     * and never grows out of it.
+     * Discrete and coarse on purpose: a continuous scale recomputed per tick is
+     * a keyframe per tick. 1080p through these is 1080p, 720p, 540p, 360p.
      */
-    fun adapt(captured: Size, ceiling: Int, wantedFrameRate: Int, available: Double?): Adaptation {
-        if (available == null || available <= 0.0) {
-            return Adaptation(wantedFrameRate, 1.0)
-        }
+    private val SCALE_STEPS = doubleArrayOf(1.0, 1.5, 2.0, 3.0)
 
-        // The reading, held to this share's own ceiling: an estimate above what
-        // the share will ever send is headroom, not permission to send more.
-        val budget = min(available, ceiling.toDouble())
-        val pixels = max(1, captured.width * captured.height).toDouble()
+    /**
+     * Readings before the ladder moves, in each direction.
+     *
+     * Down needs fewer than up. A collapsed share is already unwatchable, so
+     * waiting is more of the bug; a recovered one has to prove it, because the
+     * estimate rises by probing and the first good reading is the probe.
+     */
+    private const val SHRINK_TICKS = 2
+    private const val CLIMB_TICKS = 6
 
-        // Tiers above what somebody asked for are not on offer: a 30 fps
-        // setting is a decision, and a ladder that climbs past it does nothing.
-        val ladder = FRAME_TIERS.filter { it <= wantedFrameRate }.ifEmpty { listOf(wantedFrameRate) }
+    /** What the sender says about itself, per tick. See [Ladder.step]. */
+    data class Reading(val limitedBy: String?, val framesPerSecond: Double?)
 
-        for ((index, tier) in ladder.withIndex()) {
-            val affordable = budget / (tier * BITS_PER_PIXEL_FRAME)
-            // Linear on each edge, so the pixel ratio is the square of it.
-            val scale = sqrt(pixels / affordable)
-            if (scale <= 1.0) return Adaptation(tier, 1.0)
-
-            // The last tier has nothing below it to fall to, so it takes
-            // whatever shrink the link demands.
-            val last = index == ladder.size - 1
-            if (last || captured.height / scale >= FLOOR_HEIGHT) {
-                return Adaptation(tier, round(scale * 100) / 100)
-            }
-        }
-
-        return Adaptation(ladder.last(), 1.0)
+    /**
+     * Whether a reading is evidence that the link cannot carry the picture.
+     *
+     * Both halves are required and that is the entire point, and it is the
+     * lesson of getting this wrong: the first version of the ladder budgeted a
+     * resolution against `availableOutgoingBitrate`, which is an *estimate* that
+     * only grows by probing with real traffic. A screen nobody is touching
+     * sends a few kbps, so the estimate sits at its starting value, the budget
+     * shrinks the picture, and a smaller picture sends even less - a ratchet
+     * with no way out. On a loopback link, where capacity is effectively
+     * infinite, it still shrank the share.
+     *
+     * `bandwidth` alone is reported transiently on shares that are completely
+     * fine. A low frame rate alone is the normal state of a still screen, since
+     * a capturer only emits a frame when pixels change - 4 fps at 5 kbps is a
+     * correct answer, not a fault. Only together are they the encoder saying it
+     * wanted to send more and could not.
+     */
+    fun isStarved(reading: Reading): Boolean {
+        if (reading.limitedBy != "bandwidth") return false
+        val fps = reading.framesPerSecond ?: return false
+        return fps < COLLAPSED_FPS
     }
-
-    /** Consecutive readings of sustained headroom before a share climbs back up. */
-    private const val CLIMB_TICKS = 5
-
-    /**
-     * Scale changes smaller than this are not changes.
-     *
-     * `availableOutgoingBitrate` wobbles by a few percent every second on a link
-     * with nothing wrong with it, and re-encoding at 2.9x instead of 3.0x is a
-     * keyframe and a visible hitch bought for nothing.
-     */
-    private const val SCALE_DEADBAND = 0.15
 
     /**
      * One link's position on the ladder, over time. The desktop's `ShareLadder`.
      *
-     * [adapt] answers "what fits right now", which is not "what should change".
-     * Applied straight, a per-second reading re-encodes the share every second;
-     * applied symmetrically it is worse, because a share dragged down by one bad
-     * second reports a smaller estimate, which is a ratchet that only tightens.
-     *
-     * So the directions are deliberately not symmetric. **Down immediately**: a
-     * link that cannot carry the picture is already dropping frames, and waiting
-     * to be sure is more seconds of the thing being fixed. **Up slowly**: the
-     * estimate rises by probing, so the first rise is the probe, not the link.
+     * Holds an index into [SCALE_STEPS] rather than a computed number, so the
+     * only things that can happen are one step down, one step up, or nothing.
+     * The frame rate is the profile's throughout: resolution is what gets
+     * spent, and `MAINTAIN_RESOLUTION` is what keeps WebRTC's own adapter from
+     * spending it too - two scalers on one picture is how a share already
+     * halved to 960x540 arrived at 660x350.
      */
     class Ladder {
-        var position: Adaptation? = null
-            private set
-        private var climbing = 0
+        private var step = 0
+        private var starved = 0
+        private var healthy = 0
 
-        /** One reading. Null when nothing should change, which is most ticks. */
-        fun step(captured: Size, ceiling: Int, wantedFrameRate: Int, available: Double?): Adaptation? {
-            val next = adapt(captured, ceiling, wantedFrameRate, available)
-            val now = position
-            if (now == null) {
-                position = next
-                return next
+        /** The scale to publish at. 1.0 while nothing has gone wrong. */
+        val scale: Double get() = SCALE_STEPS[step]
+
+        /** True when the share should be re-published, which is only on a real move. */
+        fun step(reading: Reading): Boolean {
+            if (isStarved(reading)) {
+                healthy = 0
+                if (++starved < SHRINK_TICKS) return false
+                starved = 0
+                if (step >= SCALE_STEPS.size - 1) return false
+                step += 1
+                return true
             }
 
-            val delta = next.scale - now.scale
-            val worse = next.frameRate < now.frameRate || delta > SCALE_DEADBAND
-            val better = next.frameRate > now.frameRate || delta < -SCALE_DEADBAND
+            starved = 0
+            // Nothing to climb back from, which is the ordinary case: the ladder
+            // spends almost every call at the top doing nothing.
+            if (step == 0) return false
 
-            if (worse) {
-                climbing = 0
-                position = next
-                return next
-            }
-            if (!better) {
-                // Inside the deadband: the reading agrees with where the share
-                // already is, and agreement is not headroom.
-                climbing = 0
-                return null
-            }
-            if (++climbing < CLIMB_TICKS) return null
-
-            climbing = 0
-            position = next
-            return next
+            // A quiet share is not a recovered one, but it is not a reason to
+            // stay shrunk either - there is no evidence left that the link is
+            // the problem, and the only way to find out is a bigger picture.
+            if (++healthy < CLIMB_TICKS) return false
+            healthy = 0
+            step -= 1
+            return true
         }
 
-        /** A new capture is a new budget: every rung was arithmetic on the old size. */
+        /** A new capture starts at the top; nothing is known about it yet. */
         fun reset() {
-            position = null
-            climbing = 0
+            step = 0
+            starved = 0
+            healthy = 0
         }
     }
 

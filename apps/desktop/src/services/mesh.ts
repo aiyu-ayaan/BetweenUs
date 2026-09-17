@@ -89,6 +89,7 @@ import { deviceId } from './e2ee';
 import {
   PLAYOUT_DELAY,
   ShareLadder,
+  type ShareReading,
   ceilingFor,
   patchVideoBandwidth,
   sortPreferredVideoCodecs,
@@ -698,18 +699,19 @@ class PeerLink {
    * so re-applying it after a renegotiation - or after ICE settles on a relayed
    * pair - costs nothing.
    *
-   * The frame rate and the scale come from the ladder once it has a reading,
-   * and from the share's own numbers until then. See `ShareLadder`.
+   * The scale comes from the ladder, which is 1 unless the encoder has reported
+   * it cannot carry the picture. See `ShareLadder`.
    */
   async applyShare(): Promise<void> {
     if (!this.sharePublish) return;
-    const rung = this.shareLadder.position;
     await this.tune(
       'screen',
       {
         maxBitrate: ceilingFor(this.sharePublish, this.relayed),
-        maxFramerate: rung?.frameRate ?? this.sharePublish.maxFramerate,
-        scaleResolutionDownBy: rung?.scaleResolutionDownBy ?? this.sharePublish.scaleResolutionDownBy,
+        // The profile's rate throughout. The ladder spends resolution, never
+        // frames: frames are what the share is for.
+        maxFramerate: this.sharePublish.maxFramerate,
+        scaleResolutionDownBy: this.shareLadder.scale,
         priority: this.sharePublish.priority,
       },
       this.sharePublish.degradationPreference,
@@ -1225,11 +1227,26 @@ class PeerLink {
     const pairs: (RTCStats & Record<string, unknown>)[] = [];
     let selectedPairId: string | null = null;
     const candidates = new Map<string, string>();
+    const reading: ShareReading = { limitedBy: null, framesPerSecond: null };
 
     (await this.pc.getStats()).forEach((report) => {
       const entry = report as RTCStats & Record<string, unknown>;
       if (entry.type === 'inbound-rtp' && entry.kind === 'video' && entry.mid) {
         decoded.set(String(entry.mid), Number(entry.framesDecoded ?? 0));
+        return;
+      }
+      // The share's own sender, which is the only thing that knows whether it
+      // is being held back and why. `bandwidth` next to a collapsed frame rate
+      // is the ladder's entire trigger - see `isStarved`.
+      if (entry.type === 'outbound-rtp' && entry.kind === 'video') {
+        const reason = entry.qualityLimitationReason;
+        if (reason === 'bandwidth' || reason === 'cpu' || reason === 'other') {
+          reading.limitedBy = reason;
+        }
+        const fps = Number(entry.framesPerSecond ?? Number.NaN);
+        if (Number.isFinite(fps)) {
+          reading.framesPerSecond = Math.max(reading.framesPerSecond ?? 0, fps);
+        }
         return;
       }
       if (entry.type === 'candidate-pair') {
@@ -1247,7 +1264,7 @@ class PeerLink {
 
     const nominated = selectedCandidatePair(pairs, selectedPairId);
     await this.applyRelayCeiling(nominated, candidates);
-    await this.applyLadder(nominated);
+    await this.applyLadder(reading);
 
     for (const slot of ['camera', 'screen'] as const) {
       const transceiver = this.transceivers.get(slot);
@@ -1296,30 +1313,27 @@ class PeerLink {
   }
 
   /**
-   * Moves the share to what this link has been measured to carry.
+   * Steps the share down when the encoder says it cannot carry the picture, and
+   * back up when it stops saying so.
    *
-   * `availableOutgoingBitrate` is the congestion controller's own estimate, and
-   * it was being thrown away. Everything the share was configured with came
-   * from the display's size and the machine's guess about itself; the one number
-   * that knows what the connection actually does was sitting in a report this
-   * loop already takes, unread. That is how a share ends up at 1080p and 2 fps:
-   * not because nothing noticed the link was bad, but because nothing asked.
+   * This read `availableOutgoingBitrate` and budgeted a resolution against it,
+   * which is wrong for a reason that is invisible in the arithmetic: that number
+   * is an *estimate*, it only grows by probing with real traffic, and a share of
+   * a screen nobody is touching sends a few kbps. So the estimate sat at its
+   * starting value, the budget halved the picture, and a smaller picture sends
+   * even less - a ratchet with no way back out. On loopback, where the link is
+   * effectively infinite, it still shrank the share.
    *
-   * On the candidate pair rather than the sender, and that matters: it is the
-   * estimate for the *path*, so it is a number about this link and belongs
-   * beside `relayed`. Only a real move re-tunes - `ShareLadder.step` returns
-   * null on the ticks where the answer has not changed, which is most of them.
+   * `qualityLimitationReason` is the signal that cannot be faked by a quiet
+   * screen: it is the encoder saying it wanted to send more and could not.
+   * Paired with a collapsed frame rate - because `bandwidth` alone shows up
+   * transiently on healthy shares - it is the one honest trigger. Everything
+   * else leaves the share alone, which is what a still terminal at 4 fps and
+   * 5 kbps deserved all along.
    */
-  private async applyLadder(nominated: Record<string, unknown> | null): Promise<void> {
-    if (!this.sharePublish || !nominated) return;
-
-    const available = Number(nominated.availableOutgoingBitrate ?? Number.NaN);
-    const next = this.shareLadder.step(
-      this.sharePublish,
-      Number.isFinite(available) && available > 0 ? available : null,
-    );
-    if (!next) return;
-    await this.applyShare();
+  private async applyLadder(reading: ShareReading): Promise<void> {
+    if (!this.sharePublish) return;
+    if (this.shareLadder.step(reading)) await this.applyShare();
   }
 
   /**
