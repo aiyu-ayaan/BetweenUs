@@ -54,6 +54,7 @@ import {
   type Flavor,
   type UpdateOffer,
 } from './updates';
+import { appUserModelIdFor, flavorOf, productNameFor, type AppFlavor } from './flavor';
 
 const dirname = path.dirname(fileURLToPath(import.meta.url));
 const rendererDevUrl = process.env.VITE_DEV_SERVER_URL;
@@ -61,6 +62,22 @@ const rendererDevUrl = process.env.VITE_DEV_SERVER_URL;
 // Two test windows must not share one profile, or they share one login and one
 // key store. `pnpm dev:duo` sets this; a normal run leaves it unset.
 const profile = process.env.BETWEENUS_PROFILE;
+
+/**
+ * Which BetweenUs this is - see electron/flavor.ts.
+ *
+ * This runs before anything reads a path, and it has to: `userData` is derived
+ * from the application name, and Electron resolves it on first use rather than
+ * on demand. Naming the app after the resolution has happened renames the
+ * window and nothing else, which is the failure that looks like it worked - the
+ * Dev channel would go on sharing the installed application's settings, its
+ * secrets, its single-instance lock and its device key.
+ */
+const flavor: AppFlavor = flavorOf(app.isPackaged, app.getName());
+if (!app.isPackaged) {
+  app.setName(productNameFor(flavor));
+  app.setPath('userData', path.join(app.getPath('appData'), app.getName()));
+}
 if (profile) app.setPath('userData', path.join(app.getPath('temp'), `betweenus-${profile}`));
 
 /** `pnpm dev:duo` sets these so two windows are distinguishable and self-signing. */
@@ -234,7 +251,7 @@ function createWindow(hidden = false): BrowserWindow {
     icon: appIcon.isEmpty() ? undefined : appIcon,
     x: numberFromEnv('BETWEENUS_WINDOW_X'),
     y: numberFromEnv('BETWEENUS_WINDOW_Y'),
-    title: windowLabel ? `BetweenUs - ${windowLabel}` : 'BetweenUs',
+    title: windowLabel ? `${app.getName()} - ${windowLabel}` : app.getName(),
     // No native title bar: the workbench paints its own top bar, and the only
     // thing Windows keeps is the three buttons, drawn as an overlay in the
     // right end of that bar. Keeping them native rather than redrawing them
@@ -1347,7 +1364,10 @@ function showMainWindow(): void {
 }
 
 function trayTooltip(): string {
-  const name = windowLabel ? `BetweenUs - ${windowLabel}` : 'BetweenUs';
+  // The application's own name, so a Dev channel tray icon says so: two
+  // identical icons in the tray, one of them pointed at a Vite server, is
+  // exactly the confusion flavours exist to remove.
+  const name = windowLabel ? `${app.getName()} - ${windowLabel}` : app.getName();
   return unreadCount > 0 ? `${name} (${unreadCount} unread)` : name;
 }
 
@@ -1356,7 +1376,7 @@ function refreshTray(): void {
   tray.setToolTip(trayTooltip());
   tray.setContextMenu(
     Menu.buildFromTemplate([
-      { label: 'Open BetweenUs', click: showMainWindow },
+      { label: `Open ${app.getName()}`, click: showMainWindow },
       { type: 'separator' },
       ...(managesAutoStart
         ? ([
@@ -1369,7 +1389,7 @@ function refreshTray(): void {
           ] as Electron.MenuItemConstructorOptions[])
         : []),
       {
-        label: 'Quit BetweenUs',
+        label: `Quit ${app.getName()}`,
         click: () => {
           quitting = true;
           app.quit();
@@ -1513,7 +1533,7 @@ if (!profile && !app.requestSingleInstanceLock()) {
 
 void app.whenReady().then(() => {
   if (process.platform === 'win32') {
-    app.setAppUserModelId(profile ? `com.betweenus.desktop.${profile}` : 'com.betweenus.desktop');
+    app.setAppUserModelId(appUserModelIdFor(flavor, profile));
   }
 
   // No File / Edit / View / Window / Help bar: this is a chat app, not a
@@ -1657,6 +1677,10 @@ ipcMain.handle('update:info', () => ({
 }));
 
 ipcMain.handle('update:check', async (): Promise<UpdateOffer | null> => {
+  // The Dev channel updates by rebuilding it. Every release on GitHub is a
+  // stable-flavour build that installs as the *other* application, so offering
+  // one here would either do nothing visible or replace the wrong install.
+  if (flavor === 'dev') return null;
   const settings = readSettings();
   const offer = await findUpdate(app.getVersion(), settings.updateChannel, updateFlavor());
   // A download from before a channel change, or from an older check, is not

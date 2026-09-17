@@ -1,0 +1,31 @@
+# The Dev channel, packaged.
+#
+# Everything about the released build, with one thing changed: the name. That
+# is the whole flavour - `electron/flavor.ts` says why the name is enough - and
+# keeping it to one file that extends the other is what stops the two configs
+# drifting apart over a target, an icon or an NSIS switch.
+#
+# The result installs *beside* BetweenUs rather than over it: its own appId, so
+# Windows treats it as a separate application; its own product name, so its own
+# `%APPDATA%\BetweenUs Dev`, its own shortcut and its own uninstall entry. Both
+# can be installed, and both can run, at the same time.
+#
+#   pnpm --filter @betweenus/desktop package:dev
+#
+# Never released. `.github/workflows` builds the stable config only, and the
+# app refuses to offer updates to a Dev build - every release on GitHub is a
+# stable-flavour installer and would install as the other application.
+extends:
+  - electron-builder.yml
+appId: com.betweenus.desktop.dev
+# Must match DEV_PRODUCT_NAME in electron/flavor.ts: a packaged build is
+# recognised as the Dev channel by this string and nothing else.
+productName: BetweenUs Dev
+nsis:
+  artifactName: BetweenUs-Dev-${version}-Setup.${ext}
+  shortcutName: BetweenUs Dev
+  uninstallDisplayName: BetweenUs Dev ${version}
+mac:
+  artifactName: BetweenUs-Dev-${version}.${ext}
+linux:
+  artifactName: BetweenUs-Dev-${version}.${ext}

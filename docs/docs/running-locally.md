@@ -36,9 +36,29 @@ alongside it.
 ## Desktop client
 
 ```bash
-pnpm --filter @betweenus/desktop dev    # run in development
+pnpm --filter @betweenus/desktop dev    # run in development (the Dev channel)
 pnpm desktop:package                    # package production executable (.exe / installer)
+pnpm desktop:package:dev                # package the Dev channel, installable beside it
 ```
+
+### Flavours: BetweenUs and BetweenUs Dev
+
+A development run is a *different application* from the BetweenUs somebody has
+installed. It is named `BetweenUs Dev`, and because Electron derives everything
+else from the name, that one difference gives it its own
+`%APPDATA%\BetweenUs Dev` (its own settings, secrets, E2EE device key and
+downloads), its own single-instance lock, its own Windows notification identity
+and its own tray tooltip.
+
+So the installed client can stay open, in the tray, signed in, while you
+develop — closing it first is no longer part of the loop. The rule is one line
+in `apps/desktop/electron/flavor.ts`: unpackaged is always the Dev channel, and
+a packaged build is whatever product name it was built with.
+
+`pnpm desktop:package:dev` builds that Dev channel as a real installer
+(`electron-builder.dev.yml`), which installs beside the stable one rather than
+over it. A Dev build is never offered updates — every GitHub release is a
+stable-flavour installer and would install as the other application.
 
 ## Web client
 

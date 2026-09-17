@@ -583,7 +583,7 @@ notification possible while it is "shut" - and starts with the system by
 default, with both switches in Settings → Notifications.
 
 ```
-pnpm dev:desktop     one client against a running backend
+pnpm dev:desktop     one client against a running backend (the Dev channel)
 pnpm dev:duo         two windows, two profiles, two encryption identities
 pnpm dev:web         the browser client on 5175
 pnpm dev:admin       the admin panel on 5174
@@ -806,6 +806,7 @@ docs/                     full Docusaurus documentation suite (architecture, ser
 | `pnpm dev:backend` | Every service, no renderer |
 | `pnpm dev` | Everything, including the desktop renderer |
 | `pnpm dev:duo` | Two signed-in desktop windows for chat, voice and presence |
+| `pnpm desktop:package:dev` | Package the Dev channel, installable beside the stable client |
 | `pnpm build` | Build every package, service and the desktop bundle |
 | `pnpm typecheck` | Type-check the whole monorepo |
 | `pnpm check` | Package self-checks - crypto, storage, logger, auth, permissions, websocket |
