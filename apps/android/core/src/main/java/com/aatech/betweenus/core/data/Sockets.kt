@@ -32,6 +32,27 @@ open class JsonSocket(private val path: String) {
     private var token: String? = null
     private var attempt = 0
     private var closedByUs = false
+
+    /**
+     * Which attempt a callback belongs to.
+     *
+     * OkHttp goes on delivering from a socket that has been replaced: a
+     * cancelled connection reports its failure whenever the far end gets round
+     * to it, which is routinely after the connection that replaced it is up.
+     * Without this it nulled the live socket's reference and scheduled a
+     * reconnect on top of a working connection - one blip, and from then on two
+     * sockets taking turns to report different states.
+     *
+     * Taken inside [open]'s lock, before OkHttp can deliver anything, so it is
+     * an answer every callback can trust even while the field assignment behind
+     * it is still happening on the thread that started the attempt.
+     */
+    @Volatile
+    private var generation = 0
+
+    /** Set while a [probe] is waiting for an answer, cleared by any frame. */
+    @Volatile
+    private var awaitingPong = false
     /** When this socket was last up, which is what the deadline measures from. */
     private var downSince: Long? = null
     private val listeners = CopyOnWriteArraySet<(JSONObject) -> Unit>()
@@ -68,22 +89,76 @@ open class JsonSocket(private val path: String) {
      * is a banner that stays up until the app is killed, and a button that
      * makes it worse.
      *
-     * A socket that really is connected is left alone. If it turns out not to
-     * be, the ping resumes with the app and finds out inside thirty seconds.
+     * A socket that claims to be connected is asked to prove it rather than
+     * believed. `connected` is a flag this process set when the socket last
+     * opened, and a phone that has been asleep for an hour is exactly where it
+     * is a lie: the OS tore the connection down, OkHttp's keepalive was frozen
+     * with the rest of the process, and nothing has run since to notice. One
+     * frame settles it - see [probe].
      */
     @Synchronized
     fun retry() {
         if (closedByUs || token == null) return
         attempt = 0
-        if (connected) return
-        // Cancelled rather than closed: a close is a handshake, and there may
-        // be nothing at the other end left to complete it.
+        if (connected) {
+            probe()
+            return
+        }
+        reopen()
+    }
+
+    /**
+     * Throw away whatever is there and start again from the bottom of the
+     * ladder.
+     *
+     * Cancelled rather than closed: a close is a handshake, and there may be
+     * nothing at the other end left to complete it. The cancelled socket's
+     * failure arrives later against a generation that has moved on and is
+     * ignored, which is why what it was carrying is cleared here instead.
+     */
+    @Synchronized
+    private fun reopen() {
+        if (closedByUs || token == null) return
+        val had = connected
+        attempt = 0
         socket?.cancel()
         socket = null
+        connected = false
+        awaitingPong = false
         downSince = System.currentTimeMillis()
         log("retry")
         Connectivity.report(path, Connectivity.State.RECONNECTING)
+        if (had) connectionListeners.forEach { it(false) }
         open()
+    }
+
+    /**
+     * Asks the gateway to say something, and treats silence as a dead socket.
+     *
+     * All four gateways answer a `ping` with a `pong`, which makes it the one
+     * question whose answer is visible from here: OkHttp's keepalive is a
+     * protocol ping the application never sees, and a socket that stopped being
+     * a socket while the phone was asleep goes on calling itself open until
+     * something is actually written to it.
+     *
+     * Sent straight down the wire rather than through [send], because a ping
+     * that gets queued for the next connection is a question nobody asked.
+     */
+    @Synchronized
+    private fun probe() {
+        val live = socket ?: return
+        if (awaitingPong) return
+        awaitingPong = true
+        log("probe")
+        live.send(JSONObject().put("type", "ping").toString())
+        Thread {
+            Thread.sleep(PONG_TIMEOUT_MS)
+            synchronized(this) {
+                if (!awaitingPong || socket !== live) return@synchronized
+                log("probe unanswered")
+                reopen()
+            }
+        }.apply { isDaemon = true }.start()
     }
 
     /**
@@ -97,6 +172,7 @@ open class JsonSocket(private val path: String) {
     private fun open() {
         val token = this.token ?: return
         if (socket != null) return
+        val mine = ++generation
 
         // The device goes with the token. `call-service` hangs a peer id on it,
         // so a peer keeps its name across a reconnect instead of arriving as a
@@ -116,10 +192,20 @@ open class JsonSocket(private val path: String) {
             Request.Builder().url(url).build(),
             object : WebSocketListener() {
                 override fun onOpen(webSocket: WebSocket, response: Response) {
-                    log("open")
-                    attempt = 0
-                    downSince = null
-                    connected = true
+                    synchronized(this@JsonSocket) {
+                        // An attempt that has already been replaced, arriving
+                        // late. Letting it through would hand the app a second
+                        // live socket delivering every message twice.
+                        if (stale(mine)) {
+                            webSocket.cancel()
+                            return
+                        }
+                        log("open")
+                        attempt = 0
+                        downSince = null
+                        awaitingPong = false
+                        connected = true
+                    }
                     Connectivity.report(path, Connectivity.State.ONLINE)
                     onConnected()
                     synchronized(this@JsonSocket) {
@@ -129,27 +215,42 @@ open class JsonSocket(private val path: String) {
                 }
 
                 override fun onMessage(webSocket: WebSocket, text: String) {
+                    if (stale(mine)) return
+                    // Any frame at all is proof of life, which is why a busy
+                    // socket is never really probed: the messages are the
+                    // answer, and the `pong` is nothing else's business.
+                    awaitingPong = false
                     val event = runCatching { JSONObject(text) }.getOrNull() ?: return
                     listeners.forEach { it(event) }
                 }
 
                 override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
+                    if (stale(mine)) return
                     log("closed code=$code reason=$reason")
-                    drop(code)
+                    drop(mine, code)
                 }
 
                 override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
+                    if (stale(mine)) return
                     log("failed http=${response?.code ?: 0} ${t.javaClass.simpleName}: ${t.message}")
-                    drop(response?.code ?: 0)
+                    drop(mine, response?.code ?: 0)
                 }
             },
         )
     }
 
+    /** Whether a callback belongs to an attempt that has since been replaced. */
+    private fun stale(mine: Int): Boolean = mine != generation
+
     @Synchronized
-    private fun drop(code: Int) {
+    private fun drop(mine: Int, code: Int) {
+        // Checked again under the lock: a retry may have replaced this socket
+        // between the callback's own check and here, and a `drop` that lands
+        // then takes the *new* socket's reference away with it.
+        if (stale(mine)) return
         socket = null
         connected = false
+        awaitingPong = false
         connectionListeners.forEach { it(false) }
         if (closedByUs) return
         // 4401 is the token being rejected, not the connection failing. A socket
@@ -184,31 +285,19 @@ open class JsonSocket(private val path: String) {
         }.apply { isDaemon = true }.start()
     }
 
-    /**
-     * The phone has a connection again, so stop waiting out a timer that was
-     * measuring a problem which no longer exists.
-     *
-     * The backoff still handles the other case - a server that is refusing
-     * connections, where hammering it is exactly wrong. This is only ever
-     * called when the *phone* changed, and `open()` is a no-op on a socket that
-     * is already up, so a handover firing it twice costs nothing.
-     */
-    @Synchronized
-    private fun networkReturned() {
-        if (closedByUs || token == null || socket != null) return
-        // The next failure starts the ladder from the bottom: whatever the
-        // count had climbed to belonged to a network that has been replaced.
-        // The deadline restarts with it - a socket that had been given up on
-        // is exactly the one a returning network should try again.
-        attempt = 0
-        downSince = System.currentTimeMillis()
-        log("network returned")
-        Connectivity.report(path, Connectivity.State.RECONNECTING)
-        open()
-    }
-
     init {
-        NetworkWatch.onAvailable { networkReturned() }
+        // The phone has a connection again, so stop waiting out a timer that
+        // was measuring a problem which no longer exists - including one that
+        // had already been given up on, because a socket the app stopped
+        // retrying is exactly the one a returning network should try again.
+        //
+        // [retry] rather than an unconditional reconnect: a handover leaves
+        // plenty of sockets that are still perfectly good, and the probe is
+        // what tells those apart from the ones the old network took with it.
+        // The backoff still handles the other case - a server refusing
+        // connections, where hammering it is exactly wrong - because this only
+        // ever fires when the *phone* changed.
+        NetworkWatch.onAvailable { retry() }
     }
 
     /**
@@ -270,6 +359,13 @@ open class JsonSocket(private val path: String) {
          * sitting on its thirty-second step is not.
          */
         const val RECONNECT_DEADLINE_MS = 30_000L
+
+        /**
+         * How long a [probe] waits for an answer before the socket it was sent
+         * on is treated as gone. Matches `PONG_TIMEOUT_MS` on the desktop: the
+         * two clients ask the same question and give it the same time.
+         */
+        const val PONG_TIMEOUT_MS = 10_000L
     }
 }
 

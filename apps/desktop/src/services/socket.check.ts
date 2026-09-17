@@ -83,6 +83,11 @@ assert.ok(
   'a handshake allowed to outlast the deadline means the first attempt is also the last',
 );
 
+// And the phone holds the same policy. A laptop that gives up after thirty
+// seconds and a phone that gives up after ten are two apps, not one.
+assert.equal(RECONNECT_DEADLINE_MS, 30_000, 'Sockets.kt says 30s; both clients wait the same');
+assert.equal(PONG_TIMEOUT_MS, 10_000, 'Sockets.kt says 10s for an unanswered probe');
+
 // --- a socket that opens is online, and one that dies is not ------------------
 
 const socket = new ChatSocket();
