@@ -73,6 +73,20 @@ assert.equal(cleanTitle(''), null);
   // Clamped, because it is interpolated into code that runs in the page.
   assert.match(readScript(9), /v\.volume - 1\b/, 'above one clamps to one');
   assert.match(readScript(-3), /v\.volume - 0\b/, 'below zero clamps to zero');
+
+  // Adverts are run out, not blocked. Nothing here refuses a request, which is
+  // what keeps YouTube's anti-adblock interstitial out of the picture.
+  assert.match(script, /ytp-ad-skip-button/, 'the skip button is pressed when it is there');
+  assert.match(
+    script,
+    /v\.currentTime = v\.duration/,
+    'and an unskippable advert is seeked to its own end',
+  );
+  assert.ok(
+    script.indexOf('if (ad)') < script.indexOf('v.currentTime = v.duration'),
+    'the seek is guarded by there being an advert - it must never touch the track',
+  );
+  assert.match(script, /isFinite\(v\.duration\)/, 'an advert still loading has no duration to seek to');
 }
 
 // --- What the page said -----------------------------------------------------
@@ -124,6 +138,40 @@ assert.equal(stateFrom('nonsense'), null);
   const state = stateFrom({ currentTime: 213, duration: 213, paused: true, ended: true, ad: false, title: 'x - YouTube' });
   assert.equal(state?.ended, true, 'the track itself, though, really did end');
   assert.equal(state?.playing, false);
+}
+
+// --- The moment after an advert ---------------------------------------------
+//
+// The advert and the track are one `<video>` element, and the class telling
+// them apart goes a moment before the track's media arrives. A read landing in
+// that gap sees no advert and an `ended` that belongs to one - and reports that
+// the song finished, skipping a song nobody has heard. Running adverts out
+// deliberately means arriving at that gap deliberately, every single time.
+
+{
+  const justEnded = { currentTime: 15, duration: 15, paused: false, ended: true, ad: false, title: 'x' };
+  assert.equal(
+    stateFrom(justEnded, 300)?.ended,
+    false,
+    "an `ended` 300ms after an advert is the advert's, not the track's",
+  );
+  assert.equal(stateFrom(justEnded, 1999)?.ended, false, 'still settling at the boundary');
+  assert.equal(stateFrom(justEnded, 2000)?.ended, true, 'and believed once the page has settled');
+  assert.equal(
+    stateFrom(justEnded)?.ended,
+    true,
+    'a page that has never had an advert believes its first `ended`',
+  );
+}
+
+{
+  // The suppression is only ever about `ended`. A window that has just sat out
+  // an advert has to rejoin, and it needs its position to do that.
+  const playing = { currentTime: 42, duration: 213, paused: false, ended: false, ad: false, title: 'x' };
+  const state = stateFrom(playing, 100);
+  assert.equal(state?.positionMs, 42000, 'position is reported the moment the advert is over');
+  assert.equal(state?.playing, true);
+  assert.equal(state?.ad, false);
 }
 
 console.log('youtube-page.check.ts: ok');

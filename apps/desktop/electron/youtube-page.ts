@@ -111,6 +111,38 @@ export function cleanTitle(documentTitle: string): string | null {
  * does when the page loads, at a moment nothing here can name. Either one
  * getting through is a player that is present, correct, in step and silent,
  * which is the exact failure this feature has spent its whole life having.
+ *
+ * ## Adverts are run out rather than blocked
+ *
+ * An advert is the one thing that genuinely desynchronises a call: two people
+ * are served different ones, of different lengths, at different moments. So
+ * when one is showing, the skip button is pressed if it is there, and the
+ * advert is seeked to its own end if it is not. Within one poll - half a
+ * second - it is over.
+ *
+ * **Nothing is blocked, and that is the design.** The obvious approach is what
+ * a blocking browser does: refuse the requests. It does not work here and would
+ * cost the feature rather than the advert.
+ *
+ * - A pre-roll is not a request to an advertising host. It arrives inside the
+ *   `youtubei/v1/player` response as `adPlacements`, and the media streams from
+ *   the same `googlevideo.com` host the track does. Blocking that host blocks
+ *   the music.
+ * - Removing it means rewriting a response body, which is what the `json-prune`
+ *   scriptlets in the filter-list world do. Electron's `webRequest` cannot
+ *   modify response bodies at all; it would take a proxy in front of the
+ *   session.
+ * - And a detected block is met with an interstitial that stops playback dead.
+ *   A player that will not play is strictly worse than an advert that lasts
+ *   half a second.
+ *
+ * Seeking asks for nothing and refuses nothing, so there is no block to detect.
+ * If YouTube ever closes it, the failure is graceful: the advert plays as it
+ * used to, the window sits it out as it already does, and nothing breaks.
+ *
+ * None of this applies to the web client, whose player is a cross-origin iframe
+ * this application cannot reach into, or to the browse view, which is muted and
+ * paused and whose adverts nobody hears.
  */
 export function readScript(volume: number): string {
   const wanted = Math.min(1, Math.max(0, volume));
@@ -120,19 +152,47 @@ export function readScript(volume: number): string {
   if (v.muted) v.muted = false;
   if (Math.abs(v.volume - ${wanted}) > 0.01) v.volume = ${wanted};
   const player = document.querySelector('#movie_player');
+  const ad = !!(player && player.classList.contains('ad-showing'));
+  if (ad) {
+    const skip = document.querySelector(
+      '.ytp-ad-skip-button, .ytp-skip-ad-button, .ytp-ad-skip-button-modern',
+    );
+    if (skip) skip.click();
+    if (isFinite(v.duration) && v.duration > 0) v.currentTime = v.duration;
+  }
   return {
     currentTime: v.currentTime,
     duration: v.duration,
     paused: v.paused,
     ended: v.ended,
-    ad: !!(player && player.classList.contains('ad-showing')),
+    ad: ad,
     title: document.title,
   };
 })()`;
 }
 
-/** Turns what the page said into what the call needs, or null if it said nothing. */
-export function stateFrom(raw: unknown): ListenPlayerState | null {
+/**
+ * How long after an advert `ended` stops being believed.
+ *
+ * The advert and the track are the same `<video>` element, and the class that
+ * distinguishes them is removed by the page a moment before the track's media
+ * is in place. A read landing in that gap sees `ad-showing` gone and `ended`
+ * still true *from the advert* - and reports that the track finished, which
+ * skips a song nobody has heard.
+ *
+ * That gap is narrow and was always there. Running adverts out deliberately
+ * means arriving at it deliberately, every time, which is what turned it from
+ * something that had not been seen into something worth closing.
+ */
+const AD_SETTLE_MS = 2000;
+
+/**
+ * Turns what the page said into what the call needs, or null if it said nothing.
+ *
+ * `msSinceAd` is how long ago this page last had an advert on it, which only
+ * the caller can know - see `AD_SETTLE_MS`.
+ */
+export function stateFrom(raw: unknown, msSinceAd = Number.POSITIVE_INFINITY): ListenPlayerState | null {
   if (!raw || typeof raw !== 'object') return null;
   const value = raw as Record<string, unknown>;
   const number = (key: string): number => {
@@ -140,6 +200,7 @@ export function stateFrom(raw: unknown): ListenPlayerState | null {
     return typeof entry === 'number' && Number.isFinite(entry) ? entry : 0;
   };
   const ad = value.ad === true;
+  const settling = msSinceAd < AD_SETTLE_MS;
   return {
     // Zero during an advert: it is the advert's position, and reporting it
     // would drag everybody else to a timestamp in a different piece of audio.
@@ -147,8 +208,9 @@ export function stateFrom(raw: unknown): ListenPlayerState | null {
     durationMs: ad ? 0 : Math.round(number('duration') * 1000),
     playing: value.paused === false,
     // An advert that finishes fires `ended` on the same element. Treating that
-    // as the track ending would skip a song nobody has heard.
-    ended: !ad && value.ended === true,
+    // as the track ending would skip a song nobody has heard - during one, and
+    // for a moment afterwards while the element is still the advert's.
+    ended: !ad && !settling && value.ended === true,
     title: typeof value.title === 'string' ? cleanTitle(value.title) : null,
     ad,
   };

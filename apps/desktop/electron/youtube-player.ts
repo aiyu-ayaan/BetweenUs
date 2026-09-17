@@ -62,6 +62,14 @@ let owner: BrowserWindow | null = null;
 let wanted: string | null = null;
 /** Last volume the renderer asked for, 0-1. Re-asserted on every read. */
 let volume = 0.6;
+/**
+ * When this page last had an advert on it.
+ *
+ * Only this side can know it, and `stateFrom` needs it: for a moment after an
+ * advert ends the element is still the advert's, and believing its `ended` skips
+ * a track nobody has heard. Reset per load, because it is a fact about a page.
+ */
+let lastAdAt = 0;
 
 /** A `loadURL` whose rejection is expected. See the note at the top of the file. */
 function go(url: string): void {
@@ -140,6 +148,7 @@ export function loadListenPlayer(videoId: string, wantedVolume: number): void {
   if (!view) return;
   wanted = videoId;
   volume = Math.min(1, Math.max(0, wantedVolume));
+  lastAdAt = 0;
   go(watchUrl(videoId));
 }
 
@@ -171,7 +180,8 @@ export async function readListenPlayer(): Promise<ListenPlayerState | null> {
   const contents = view?.webContents;
   if (!contents || contents.isDestroyed()) return null;
   const raw = await contents.executeJavaScript(readScript(volume), true).catch(() => null);
-  const state = stateFrom(raw);
+  const state = stateFrom(raw, lastAdAt ? Date.now() - lastAdAt : Number.POSITIVE_INFINITY);
+  if (state?.ad) lastAdAt = Date.now();
   if (state?.ended && wanted) {
     wanted = null;
     go('about:blank');
