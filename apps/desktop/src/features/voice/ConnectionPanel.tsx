@@ -99,6 +99,28 @@ function PeerRow({ link }: { link: LinkStats }): JSX.Element {
           value={link.roundTripMs === null ? '—' : `${link.roundTripMs} ms`}
           tone={rtt >= 300 ? 'bad' : rtt >= 150 ? 'warn' : 'plain'}
         />
+        {/*
+          What congestion control believes the link can carry, which is the
+          whole difference between "my connection is slow" and "WebRTC decided
+          my connection is slow". A 40 Mbps line reading 500 kbps here is an
+          estimate that collapsed and never climbed back, and without this row
+          that is indistinguishable from a link that really is 500 kbps.
+        */}
+        {link.availableOutgoingKbps !== null && (
+          <Stat label="Link est." value={rate(link.availableOutgoingKbps)} />
+        )}
+        {/*
+          Measured since the relay ceiling was written and shown nowhere until
+          now. A relayed link is deliberately held to 8 Mbps and pays for every
+          byte twice, and there was no way to tell it was happening.
+        */}
+        {link.transport && (
+          <Stat
+            label="Path"
+            value={link.transport === 'relay' ? 'via relay' : 'direct'}
+            tone={link.transport === 'relay' ? 'warn' : 'plain'}
+          />
+        )}
         {link.frameWidth && link.frameHeight && (
           <Stat
             label="In"
