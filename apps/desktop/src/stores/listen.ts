@@ -45,7 +45,7 @@ import { useGameStore } from './game';
  * of those is what everybody actually does until they give up and mute. Pulling
  * it down automatically is what a person would do, done in eighty milliseconds.
  */
-const DUCK = 0.25;
+const DUCK = 0.2;
 
 /**
  * How long the music stays down after the last word.

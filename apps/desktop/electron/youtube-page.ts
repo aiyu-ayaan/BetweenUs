@@ -149,9 +149,23 @@ export function readScript(volume: number): string {
   return `(() => {
   const v = document.querySelector('video');
   if (!v) return null;
-  if (v.muted) v.muted = false;
+  if (${wanted} <= 0) {
+    v.muted = true;
+  } else {
+    v.muted = false;
+  }
   if (Math.abs(v.volume - ${wanted}) > 0.01) v.volume = ${wanted};
   const player = document.querySelector('#movie_player');
+  if (player && typeof player.setVolume === 'function') {
+    if (${wanted} <= 0) {
+      if (typeof player.isMuted === 'function' && !player.isMuted()) player.mute();
+    } else {
+      if (typeof player.isMuted === 'function' && player.isMuted()) player.unMute();
+      if (typeof player.getVolume === 'function' && Math.abs(player.getVolume() - Math.round(${wanted} * 100)) > 2) {
+        player.setVolume(Math.round(${wanted} * 100));
+      }
+    }
+  }
   const ad = !!(player && player.classList.contains('ad-showing'));
   if (ad) {
     const skip = document.querySelector(

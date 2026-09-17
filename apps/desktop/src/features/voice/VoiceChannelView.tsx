@@ -428,6 +428,7 @@ function Theatre({ share, tiles }: { share: VoiceShare; tiles: Stage[] }): JSX.E
    * to the machine being driven is not either.
    */
   const [showControls, setShowControls] = useState(true);
+  const [controlsHovered, setControlsHovered] = useState(false);
   const hideTimerRef = useRef<number | null>(null);
 
   // Driving somebody's machine docks it whatever the button says, and the
@@ -438,14 +439,15 @@ function Theatre({ share, tiles }: { share: VoiceShare; tiles: Stage[] }): JSX.E
   const driving = useShareControlStore((state) => state.driving) !== null;
   const immersive = fullscreen && !docked && !driving;
 
-  // Auto-hide after 3 seconds in immersive mode. Every time controls become
-  // visible, start a timer. If they are hidden or we leave immersive, cancel.
+  // Auto-hide after 3 seconds in immersive mode when controls are not hovered.
+  // When the mouse pointer is over the controls (e.g. adjusting volume, scrubbing,
+  // or clicking buttons), auto-hide is suspended so controls never vanish during use.
   useEffect(() => {
     if (hideTimerRef.current !== null) {
       clearTimeout(hideTimerRef.current);
       hideTimerRef.current = null;
     }
-    if (immersive && showControls) {
+    if (immersive && showControls && !controlsHovered) {
       hideTimerRef.current = window.setTimeout(() => {
         setShowControls(false);
         hideTimerRef.current = null;
@@ -457,12 +459,15 @@ function Theatre({ share, tiles }: { share: VoiceShare; tiles: Stage[] }): JSX.E
         hideTimerRef.current = null;
       }
     };
-  }, [immersive, showControls]);
+  }, [immersive, showControls, controlsHovered]);
 
   // Leaving full screen, or docking, brings the strip back: it is the one place
   // the Exit button lives, and a mode with no way out is a trap.
   useEffect(() => {
-    if (!immersive) setShowControls(true);
+    if (!immersive) {
+      setShowControls(true);
+      setControlsHovered(false);
+    }
   }, [immersive]);
 
   /**
@@ -711,6 +716,8 @@ function Theatre({ share, tiles }: { share: VoiceShare; tiles: Stage[] }): JSX.E
         {immersive && (
           <button
             type="button"
+            onMouseEnter={() => setControlsHovered(true)}
+            onMouseLeave={() => setControlsHovered(false)}
             onClick={() => setShowControls((prev) => !prev)}
             aria-expanded={showControls}
             aria-label={showControls ? 'Hide controls' : 'Show controls'}
@@ -729,6 +736,8 @@ function Theatre({ share, tiles }: { share: VoiceShare; tiles: Stage[] }): JSX.E
 
         {immersive ? (
           <div
+            onMouseEnter={() => setControlsHovered(true)}
+            onMouseLeave={() => setControlsHovered(false)}
             className={`pointer-events-none absolute inset-x-0 bottom-0 z-30 flex flex-col items-center gap-3 bg-gradient-to-t from-black/90 via-black/50 to-transparent px-4 pb-4 pt-10 transition-all duration-300 ease-out ${
               showControls ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-6'
             }`}
@@ -737,6 +746,8 @@ function Theatre({ share, tiles }: { share: VoiceShare; tiles: Stage[] }): JSX.E
             {/* Hidden it must also be untouchable: an invisible bar that still
                 takes clicks is a row of dead pixels over the picture. */}
             <div
+              onMouseEnter={() => setControlsHovered(true)}
+              onMouseLeave={() => setControlsHovered(false)}
               className={`flex max-w-full flex-wrap items-center justify-center gap-2 rounded-2xl border border-white/10 bg-black/75 px-3 py-2 backdrop-blur-md shadow-pop ${
                 showControls ? 'pointer-events-auto' : 'pointer-events-none'
               }`}

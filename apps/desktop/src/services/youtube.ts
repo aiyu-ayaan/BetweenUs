@@ -368,9 +368,11 @@ export class YouTubePlayer implements ListenPlayer {
     this.command('seekTo', [positionMs / 1000, true]);
   }
 
-  /** 0 to 100. Used for ducking under whoever is talking, not by a slider. */
+  /** 0 to 100. Scaled quadratically so low volumes keep speech intelligible. */
   setVolume(volume: number): void {
-    this.command('setVolume', [Math.round(Math.min(100, Math.max(0, volume)))]);
+    const fraction = Math.min(100, Math.max(0, volume)) / 100;
+    const gain = Math.round(Math.pow(fraction, 2) * 100);
+    this.command('setVolume', [gain]);
   }
 
   /** The last thing the frame said about itself. */

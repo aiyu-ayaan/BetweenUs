@@ -89,6 +89,19 @@ function guard(): void {
   if (!contents || contents.isDestroyed()) return;
   const url = contents.getURL();
   if (!wanted) return;
+
+  // If YouTube redirects to a consent page, do not fight it in an infinite reload loop;
+  // attempt to auto-accept consent so it proceeds to the watch URL.
+  if (url.includes('consent.youtube.com') || url.includes('consent.google.com')) {
+    void contents
+      .executeJavaScript(
+        'document.querySelector("form[action*=\\"consent\\"] button, button[aria-label*=\\"Accept\\"], button[aria-label*=\\"Agree\\"], #introAgreeButton")?.click();',
+        true,
+      )
+      .catch(() => undefined);
+    return;
+  }
+
   const playing = videoIdOf(url);
   if (playing === wanted) return;
   // Mid-navigation, or the blank page between tracks: neither is the site
@@ -102,12 +115,26 @@ export function openListenPlayer(window: BrowserWindow): void {
   closeListenPlayer();
 
   owner = window;
+  const session = electronSession.fromPartition('persist:youtube');
+
+  // Pre-set consent cookies so fresh/production installs do not stall on consent redirects.
+  const consentCookies = [
+    { url: 'https://www.youtube.com', name: 'SOCS', value: 'CAESEwgDEgk2NDk2OTY1NjAaAmVuIAEaBgiA_L20Bg' },
+    { url: 'https://www.youtube.com', name: 'CONSENT', value: 'PENDING+999' },
+    { url: 'https://youtube.com', name: 'SOCS', value: 'CAESEwgDEgk2NDk2OTY1NjAaAmVuIAEaBgiA_L20Bg' },
+    { url: 'https://youtube.com', name: 'CONSENT', value: 'PENDING+999' },
+    { url: 'https://consent.youtube.com', name: 'SOCS', value: 'CAESEwgDEgk2NDk2OTY1NjAaAmVuIAEaBgiA_L20Bg' },
+  ];
+  for (const cookie of consentCookies) {
+    void session.cookies.set(cookie).catch(() => undefined);
+  }
+
   view = new WebContentsView({
     webPreferences: {
       // The same cookie jar as the browser half, so this is the account the
       // person signed into over there - which is what makes age-restricted
       // tracks play and adverts go away.
-      session: electronSession.fromPartition('persist:youtube'),
+      session,
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
@@ -116,9 +143,6 @@ export function openListenPlayer(window: BrowserWindow): void {
       // renderer polls instead, which costs one IPC every half second and keeps
       // the bridge at zero. The same rule `youtube-view.ts` follows.
       backgroundThrottling: false,
-      // A watch page that waits for a click is a player that never starts:
-      // nobody can click this, because nobody can see it.
-      autoplayPolicy: 'no-user-gesture-required',
     },
   });
 
@@ -158,13 +182,48 @@ export function controlListenPlayer(action: string, value: number): void {
   const run = (code: string): void => {
     void contents.executeJavaScript(code, true).catch(() => undefined);
   };
-  if (action === 'play') run(`document.querySelector('video')?.play().catch(() => {});`);
-  if (action === 'pause') run(`document.querySelector('video')?.pause();`);
-  if (action === 'seek') run(`{ const v = document.querySelector('video'); if (v) v.currentTime = ${value / 1000}; }`);
+  if (action === 'play') {
+    run(`{
+      const p = document.querySelector('#movie_player');
+      if (p && typeof p.playVideo === 'function') p.playVideo();
+      else document.querySelector('video')?.play().catch(() => {});
+    }`);
+  }
+  if (action === 'pause') {
+    run(`{
+      const p = document.querySelector('#movie_player');
+      if (p && typeof p.pauseVideo === 'function') p.pauseVideo();
+      else document.querySelector('video')?.pause();
+    }`);
+  }
+  if (action === 'seek') {
+    run(`{
+      const p = document.querySelector('#movie_player');
+      if (p && typeof p.seekTo === 'function') p.seekTo(${value / 1000}, true);
+      else { const v = document.querySelector('video'); if (v) v.currentTime = ${value / 1000}; }
+    }`);
+  }
   if (action === 'volume') {
     volume = Math.min(1, Math.max(0, value));
-    // Not sent: the next read asserts it, which is within half a second and is
-    // the path that also survives the page reloading underneath it.
+    run(`{
+      const v = document.querySelector('video');
+      const p = document.querySelector('#movie_player');
+      const target = ${volume};
+      if (v) {
+        if (target <= 0) {
+          v.muted = true;
+          v.volume = 0;
+        } else {
+          v.muted = false;
+          v.volume = target;
+        }
+      }
+      if (p && typeof p.setVolume === 'function') {
+        p.setVolume(Math.round(target * 100));
+        if (target <= 0 && typeof p.mute === 'function') p.mute();
+        else if (typeof p.unMute === 'function' && p.isMuted()) p.unMute();
+      }
+    }`);
   }
 }
 
@@ -182,7 +241,8 @@ export async function readListenPlayer(): Promise<ListenPlayerState | null> {
   const raw = await contents.executeJavaScript(readScript(volume), true).catch(() => null);
   const state = stateFrom(raw, lastAdAt ? Date.now() - lastAdAt : Number.POSITIVE_INFINITY);
   if (state?.ad) lastAdAt = Date.now();
-  if (state?.ended && wanted) {
+  const isCurrent = videoIdOf(contents.getURL()) === wanted;
+  if (state?.ended && wanted && isCurrent && (state.positionMs > 1000 || state.durationMs > 0)) {
     wanted = null;
     go('about:blank');
   }

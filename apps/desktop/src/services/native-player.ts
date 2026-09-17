@@ -43,7 +43,7 @@ export class NativeListenPlayer implements ListenPlayer {
    * load carries the current value, so a track that starts while the music is
    * ducked starts ducked rather than at full volume for a beat.
    */
-  private volume = 0.6;
+  private volume = 0.36;
 
   constructor(
     videoId: string,
@@ -92,9 +92,13 @@ export class NativeListenPlayer implements ListenPlayer {
   }
 
   setVolume(volume: number): void {
-    // The interface speaks 0-100, because that is what the embed's own command
-    // takes and what the slider in the panel is. A video element wants 0-1.
-    this.volume = Math.min(100, Math.max(0, volume)) / 100;
+    // The interface speaks 0-100, which is what the slider in the panel is.
+    // A linear scale on a video element makes even 10-15% loud enough to drown
+    // out voice communication in the call. Applying a perceptual quadratic curve
+    // (fraction ^ 2) maps the slider naturally to human hearing so low slider
+    // settings yield quiet, pleasant background audio.
+    const fraction = Math.min(100, Math.max(0, volume)) / 100;
+    this.volume = Math.pow(fraction, 2);
     this.control('volume', this.volume);
   }
 

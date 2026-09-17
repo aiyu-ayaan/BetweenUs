@@ -374,6 +374,10 @@ Dragging and releasing the seek slider commits the new timestamp to the server. 
 
 If an operating system or browser policy refuses background autoplay for a particular client window, the transport marks the local state as blocked with an amber prompt ("press play here"). Clicking it starts audio playback locally with a user gesture, without sending an erroneous global pause command to everyone else in the call.
 
+### Hover-aware Theatre mode controls
+
+In fullscreen immersive Theatre mode, the floating bottom transport controls auto-hide after 3 seconds of inactivity. Whenever the cursor enters the controls bar or toggle button, auto-hide is suspended (`controlsHovered: true`), preventing controls and the volume slider from vanishing while the user is actively adjusting them.
+
 ### Why the site itself is desktop-only, and why that cannot be fixed
 
 youtube.com sends `X-Frame-Options` and a `frame-ancestors` policy. It refuses
@@ -499,6 +503,19 @@ player that is present, correct, in step and silent:
   throttled player is a stalled one. It is the same lesson the iframe host
   learned, and it is why the web client's frame parks at 320×180 off-screen
   rather than at 1×1.
+- **Autoplay policy in production builds.** Chromium's autoplay policy defaults
+  to requiring user gesture interaction on a page before audio plays. In packaged
+  Electron builds, setting `autoplayPolicy` on `WebContentsView`'s web preferences
+  is not recognized by Electron's schema; it must be passed globally via
+  `app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required')`
+  prior to `app.whenReady()`. Without this, background WebContentsViews remain silent.
+- **Perceptual loudness scaling.** Human hearing perceives loudness logarithmically.
+  A linear 0–100 slider translates 10% to 0.1 amplitude, which sounds ~32% as loud
+  and drowns out speaking voices during calls. Both `NativeListenPlayer` and
+  `YouTubePlayer` apply a quadratic curve (`(volume / 100) ^ 2`), mapping 10% to
+  0.01 power for whisper-quiet background ambience that keeps voices intelligible.
+  Volume IPC changes and mute toggles are dispatched immediately to `#movie_player`
+  and `<video>`, rather than deferred to polling ticks.
 
 ### Polled, not pushed
 

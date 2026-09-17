@@ -52,6 +52,7 @@ import {
   SkipBackIcon,
   SkipForwardIcon,
   SpeakerIcon,
+  SpeakerOffIcon,
   TrashIcon,
   XIcon,
 } from '../../components/icons';
@@ -396,6 +397,17 @@ export function Transport({ compact = false }: { compact?: boolean }): JSX.Eleme
   const duration = track.durationMs;
   const shown = scrubbing ?? pending?.positionMs ?? position;
 
+  const [previousVolume, setPreviousVolume] = useState(60);
+
+  const toggleMute = (): void => {
+    if (volume > 0) {
+      setPreviousVolume(volume);
+      useListenStore.getState().setVolume(0);
+    } else {
+      useListenStore.getState().setVolume(previousVolume > 0 ? previousVolume : 60);
+    }
+  };
+
   const release = (): void => {
     if (scrubbing === null) return;
     useListenStore.getState().seek(scrubbing);
@@ -520,16 +532,33 @@ export function Transport({ compact = false }: { compact?: boolean }): JSX.Eleme
         <>
           {/* The only local control here: what is playing is a thing the room
               agrees on, how loud it is in one person's headphones is not. */}
-          <SpeakerIcon className="ms-1 h-4 w-4 shrink-0 text-slate-500" />
-          <input
-            type="range"
-            min={0}
-            max={100}
-            value={volume}
-            aria-label="Volume in this window"
-            onChange={(event) => useListenStore.getState().setVolume(Number(event.target.value))}
-            className="h-1 w-20 cursor-pointer accent-slate-400"
-          />
+          <button
+            type="button"
+            onClick={toggleMute}
+            className="ms-1 cursor-pointer rounded p-1 text-slate-400 transition-colors hover:bg-white/[0.06] hover:text-slate-200"
+            title={volume === 0 ? 'Unmute music' : 'Mute music'}
+            aria-label={volume === 0 ? 'Unmute music' : 'Mute music'}
+          >
+            {volume === 0 ? (
+              <SpeakerOffIcon className="h-4 w-4 shrink-0 text-amber-400" />
+            ) : (
+              <SpeakerIcon className="h-4 w-4 shrink-0 text-slate-400" />
+            )}
+          </button>
+          <div className="flex items-center gap-1.5" title={`Volume: ${volume}%`}>
+            <input
+              type="range"
+              min={0}
+              max={100}
+              value={volume}
+              aria-label="Volume in this window"
+              onChange={(event) => useListenStore.getState().setVolume(Number(event.target.value))}
+              className="h-1 w-20 cursor-pointer accent-amber-400"
+            />
+            <span className="w-6 shrink-0 text-[10px] tabular-nums text-slate-500">
+              {volume}%
+            </span>
+          </div>
           {!open && (
             <button
               type="button"
