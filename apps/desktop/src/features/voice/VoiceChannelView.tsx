@@ -775,33 +775,9 @@ function Theatre({ share, tiles }: { share: VoiceShare; tiles: Stage[] }): JSX.E
         )}
 
         {/* Center Screen Share Stage */}
-        <div className="relative min-h-0 flex-1 overflow-hidden rounded-lg bg-black">
-          {share.track ? (
-            <ShareStage share={share} />
-          ) : (
-            <p className="flex h-full items-center justify-center text-sm text-slate-400">
-              Waiting for {share.isLocal ? 'your' : `${share.name}'s`} screen…
-            </p>
-          )}
-
-          <p className="pointer-events-none absolute start-2 top-2 rounded bg-black/70 px-2 py-1 text-xs text-slate-200">
-            {share.isLocal ? 'Your screen' : `${share.name}'s screen`}
-          </p>
-
-          {/* Floating Show Cameras pill in normal view when hidden */}
-          {!showParticipants && (
-            <button
-              type="button"
-              onClick={() => setShowParticipants(true)}
-              title="Show cameras alongside stream"
-              className="no-drag absolute start-2 top-10 z-10 flex items-center gap-1.5 rounded-full border border-white/10 bg-black/70 px-3 py-1 text-xs font-medium text-slate-200 backdrop-blur-md shadow-lg transition-all duration-200 hover:bg-white/20 hover:text-white"
-            >
-              <UsersIcon className="h-3.5 w-3.5" />
-              <span>Show cameras ({tiles.length})</span>
-            </button>
-          )}
-
-          <div className="absolute end-2 top-2 flex gap-2">
+        <div className="flex min-h-0 flex-1 flex-col gap-2">
+          {/* Toolbar sits above the video so it never covers the shared content. */}
+          <div className="flex shrink-0 justify-end gap-2">
             {!share.isLocal && <ControlButtons share={share} />}
             {share.isLocal && (
               <button
@@ -869,6 +845,33 @@ function Theatre({ share, tiles }: { share: VoiceShare; tiles: Stage[] }): JSX.E
             >
               Back to grid
             </button>
+          </div>
+
+          <div className="relative min-h-0 flex-1 overflow-hidden rounded-lg bg-black">
+            {share.track ? (
+              <ShareStage share={share} />
+            ) : (
+              <p className="flex h-full items-center justify-center text-sm text-slate-400">
+                Waiting for {share.isLocal ? 'your' : `${share.name}'s`} screen…
+              </p>
+            )}
+
+            <p className="pointer-events-none absolute start-2 top-2 rounded bg-black/70 px-2 py-1 text-xs text-slate-200">
+              {share.isLocal ? 'Your screen' : `${share.name}'s screen`}
+            </p>
+
+            {/* Floating Show Cameras pill in normal view when hidden */}
+            {!showParticipants && (
+              <button
+                type="button"
+                onClick={() => setShowParticipants(true)}
+                title="Show cameras alongside stream"
+                className="no-drag absolute start-2 top-10 z-10 flex items-center gap-1.5 rounded-full border border-white/10 bg-black/70 px-3 py-1 text-xs font-medium text-slate-200 backdrop-blur-md shadow-lg transition-all duration-200 hover:bg-white/20 hover:text-white"
+              >
+                <UsersIcon className="h-3.5 w-3.5" />
+                <span>Show cameras ({tiles.length})</span>
+              </button>
+            )}
           </div>
         </div>
 
