@@ -46,7 +46,7 @@
  */
 export interface ShareCapture {
   video: { width: number; height: number; frameRate: number };
-  contentHint: 'text' | 'motion';
+  contentHint: ShareContentHint;
   audio:
     | false
     | (MediaTrackConstraints & { restrictOwnAudio?: boolean });
@@ -84,8 +84,61 @@ const MUSIC_BITRATE = 510_000;
  */
 export type ShareIntent = 'detail' | 'motion';
 
+/**
+ * What the encoder is told it is looking at.
+ *
+ * Both values are *screencast* hints, and that is the point. Chromium turns a
+ * track's content hint into libwebrtc's `is_screencast`, and `is_screencast`
+ * decides two things that matter more than any number in this file:
+ *
+ * - **Periodic ALR probing.** `VideoSendStreamImpl` enables it only for screen
+ *   content. Without it, a send-side bandwidth estimate that collapsed during a
+ *   bad minute has no way back up while the encoder is application-limited -
+ *   the estimator only learns what the link can carry from traffic it actually
+ *   sent, and a 4 fps slideshow sends nothing worth learning from. That is the
+ *   whole of "it went soft and never came back": not a link that stayed bad, a
+ *   link that recovered while the estimate did not.
+ * - **The quality scaler.** Armed when `is_screencast` is false, and its
+ *   resolution half is exactly what `maintain-resolution` is asking it not to
+ *   do. Two mechanisms pulling opposite ways on the same picture.
+ *
+ * So `motion` - the DOM hint for a film - is the one value a screen share must
+ * never carry, however well it describes the content. `detail` is the
+ * photographic screencast hint and is what a film or a game gets instead.
+ */
+export type ShareContentHint = 'text' | 'detail';
+
 /** Codecs worth offering by name. `auto` keeps the profile's own preference. */
 export type CodecChoice = 'auto' | 'H264' | 'VP9' | 'VP8' | 'AV1';
+
+/**
+ * How tall a share may be captured, before anything is encoded.
+ *
+ * Everything else in this file is a ceiling on *bits*. This is a ceiling on
+ * *pixels*, and it is the only one that can be spent before the encoder or the
+ * link ever sees the frame - which is why it was the thing missing.
+ *
+ * A share used to be captured at the display's native size, whatever that was.
+ * On a 1440p or 4K monitor that is a hardware encoder asked for 3.7 or 8.3
+ * megapixels sixty times a second and a link asked for 60-80 Mbit, and neither
+ * consumer hardware nor a home uplink has ever carried it. What comes out is
+ * `qualityLimitationReason: cpu` or `bandwidth`, a frame rate in single
+ * figures, and a picture that looks broken on a connection with nothing wrong
+ * with it. Capturing smaller is not a worse share; it is the share the machine
+ * can actually produce.
+ *
+ * 1080p by default because it is the size a hardware H.264 encoder does at 60
+ * fps without noticing, and because everything above it is a choice somebody
+ * should make deliberately on a link they know can carry it.
+ */
+export const DEFAULT_MAX_HEIGHT = 1080;
+
+/**
+ * The ceilings worth offering, tallest first. `null` is the display's own size,
+ * which is the only honest way to say "as much as this monitor has" - a number
+ * would be wrong on the next monitor.
+ */
+export const MAX_HEIGHTS = [null, 2160, 1440, 1080, 720] as const;
 
 /**
  * What somebody has decided the ladder got wrong.
@@ -108,12 +161,18 @@ export interface QualityOverride {
   /** Capture and publish rate, in frames per second. */
   frameRate: number | null;
   videoCodec: CodecChoice;
+  /**
+   * The tallest picture to capture, in lines, or `null` for the display's own
+   * size. See [DEFAULT_MAX_HEIGHT] for why the default is not `null`.
+   */
+  maxHeight: number | null;
 }
 
 export const NO_OVERRIDE: QualityOverride = {
   maxBitrate: null,
   frameRate: null,
   videoCodec: 'auto',
+  maxHeight: DEFAULT_MAX_HEIGHT,
 };
 
 /**
@@ -134,9 +193,60 @@ export interface ShareSize {
   height: number;
 }
 
+/**
+ * The size to capture at: the display's own, held to whatever ceiling somebody
+ * set, and never enlarged past it.
+ *
+ * A ceiling and not a target, in both directions. A 900p laptop panel with the
+ * 1080p default captures at 900p - asking a display for more lines than it has
+ * is an upscale, which costs bitrate to carry pixels that were invented. And
+ * the aspect ratio is the display's, kept exactly, because a share that arrives
+ * the wrong shape is the one failure nobody can look past.
+ *
+ * Both dimensions come back even. Every H.264 encoder in existence works in
+ * 16x16 macroblocks and an odd dimension is rounded somewhere out of sight;
+ * doing it here means the number this file quotes a bitrate against is the
+ * number the encoder is actually given.
+ */
+export function cappedSize(native: ShareSize, maxHeight: number | null): ShareSize {
+  const width = Math.max(2, Math.round(native.width));
+  const height = Math.max(2, Math.round(native.height));
+  if (maxHeight === null || height <= maxHeight) return { width: even(width), height: even(height) };
+
+  const scale = maxHeight / height;
+  return { width: even(Math.round(width * scale)), height: even(maxHeight) };
+}
+
+/** Down to the nearest even number, never below 2. */
+function even(value: number): number {
+  return Math.max(2, value - (value % 2));
+}
+
+/**
+ * The `video` half of `getDisplayMedia`, from a resolved capture.
+ *
+ * It exists because there are two callers - a share in a call and a remote
+ * session - and both used to write the constraint out by hand with a `max` of
+ * `Math.max(3840, width)` beside an `ideal` of the real size. That `max` is
+ * what made the ceiling above advisory: `ideal` is a preference Chromium scores
+ * and is free to miss, so a 4K display asked for 1080p `ideal` / 4K `max`
+ * happily hands back 4K, and the setting reads as one that does nothing. The
+ * ceiling is the `max`, which is the only constraint form that is not a wish.
+ *
+ * A window smaller than the ceiling is unaffected: `max` never enlarges
+ * anything, and `ideal` on a surface that cannot meet it is simply missed.
+ */
+export function captureConstraints(capture: ShareCapture): MediaTrackConstraints {
+  return {
+    width: { ideal: capture.video.width, max: capture.video.width },
+    height: { ideal: capture.video.height, max: capture.video.height },
+    frameRate: { ideal: capture.video.frameRate, max: capture.video.frameRate },
+  };
+}
+
 interface Profile {
   frameRate: number;
-  contentHint: 'text' | 'motion';
+  contentHint: ShareContentHint;
   degradation: RTCDegradationPreference;
   /** Bitrate ceiling at 1920x1080, scaled by area from there. */
   referenceBitrate: number;
@@ -172,14 +282,13 @@ const PROFILES: Record<ShareIntent, Profile> = {
   // a struggling link goes soft, then choppy, at full size, rather than sharp
   // and smooth at a quarter of it.
   //
-  // ponytail: the content hint stays `motion`, which is what the rate
-  // controller wants for a film - it also means `is_screencast=false`, which
-  // arms the quality scaler, whose resolution half is exactly what this
-  // preference disables. If pixels are still seen to drop, the hint is the
-  // next lever.
+  // The hint is `detail`, not `motion`, and that is deliberate - see
+  // `ShareContentHint`. `motion` is the honest description of a film and it
+  // also switches off the one mechanism that lifts a collapsed bandwidth
+  // estimate back up, which cost more than an accurate label was ever worth.
   motion: {
     frameRate: 60,
-    contentHint: 'motion',
+    contentHint: 'detail',
     degradation: 'maintain-resolution',
     referenceBitrate: 35_000_000,
     minBitrate: 15_000_000,
@@ -223,14 +332,20 @@ export function shareOptions(
   // Clamped rather than trusted: a number typed into a box is the one input
   // here that has not been through any arithmetic at all.
   const frameRate = override.frameRate ?? profile.frameRate;
+  // Before the bitrate, and that ordering is the whole point: the ceiling is
+  // quoted against the pixels that are actually sent. Scaling the picture down
+  // and then sizing the pipe for the picture that was not sent is how a 1080p
+  // share ends up carrying a 4K share's bitrate - or, the way round that
+  // actually bites, how a capped share keeps a ceiling it can never reach.
+  const captured = cappedSize(size, override.maxHeight);
   const maxBitrate =
     override.maxBitrate === null
-      ? bitrateFor(intent, size)
+      ? bitrateFor(intent, captured)
       : Math.min(BITRATE_RANGE.max, Math.max(BITRATE_RANGE.min, override.maxBitrate));
 
   return {
     capture: {
-      video: { width: size.width, height: size.height, frameRate },
+      video: { width: captured.width, height: captured.height, frameRate },
       contentHint: profile.contentHint,
       audio: audio
         ? {
@@ -273,6 +388,37 @@ export function shareOptions(
           : false,
     },
   };
+}
+
+/**
+ * The most a share may ask for when TURN is in the path.
+ *
+ * Every other ceiling in this file is sized for a direct link between two
+ * machines, where the only limits are the two uplinks and there is no third
+ * party paying for anything. A relayed pair is a different problem: the media
+ * goes up to the relay and back down, so one share costs the relay *twice* its
+ * bitrate, and a relay is a small VM on somebody's bill rather than a fabric.
+ * Pointing a 35-80 Mbit share at one does not produce a 35-80 Mbit share. It
+ * produces loss, the estimator reads loss as a link that cannot carry
+ * anything, and the share collapses to a slideshow - on a connection that would
+ * have carried a perfectly good 8 Mbit picture all day.
+ *
+ * So this is the fix for "the relay is not being used properly": it was being
+ * used, at a bitrate no relay was ever going to carry. 8 Mbit is well above
+ * what 1080p60 H.264 needs to look clean and well inside what a modest VM can
+ * forward, and it only ever applies to the links that are actually relayed -
+ * in a mesh, one peer may be direct and the next one not.
+ */
+export const RELAY_MAX_BITRATE = 8_000_000;
+
+/**
+ * A share's ceiling for one link, given whether that link goes through a relay.
+ *
+ * Never raises anything: a manual ceiling below the relay limit stays where
+ * somebody put it.
+ */
+export function ceilingFor(publish: SharePublish, relayed: boolean): number {
+  return relayed ? Math.min(publish.maxBitrate, RELAY_MAX_BITRATE) : publish.maxBitrate;
 }
 
 /**

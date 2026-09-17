@@ -88,6 +88,7 @@ import { wsUrl } from './endpoint';
 import { deviceId } from './e2ee';
 import {
   PLAYOUT_DELAY,
+  ceilingFor,
   patchVideoBandwidth,
   sortPreferredVideoCodecs,
   type SharePublish,
@@ -424,6 +425,15 @@ class PeerLink {
   private shareCodec: SharePublish['videoCodec'] | null = null;
   /** Video slots that have decoded at least one frame. See `pollVideo`. */
   private readonly liveVideo = new Set<Slot>();
+  /**
+   * Whether the media on this link is going through a TURN relay.
+   *
+   * Per link, because in a mesh it is per link: the same share can reach one
+   * person directly and the next through a relay, and only the second one has
+   * to be paid for twice. Read in `pollVideo` off a `getStats` that is already
+   * being taken, and acted on by `applyShare`.
+   */
+  private relayed = false;
   /** How loud this peer is, 0..1. See `pollAudioLevel`. */
   private level = 0;
   /**
@@ -664,22 +674,34 @@ class PeerLink {
     this.preferShareCodec(this.shareCodec ?? 'H264');
     for (const [slot, track] of this.wanted) await this.setTrack(slot, track);
     if (this.micEncoding) await this.tune('mic', { maxBitrate: this.micEncoding.maxBitrate });
-    if (this.sharePublish) {
-      await this.tune(
-        'screen',
-        {
-          maxBitrate: this.sharePublish.maxBitrate,
-          maxFramerate: this.sharePublish.maxFramerate,
-          scaleResolutionDownBy: this.sharePublish.scaleResolutionDownBy,
-          priority: this.sharePublish.priority,
-        },
-        this.sharePublish.degradationPreference,
-      );
-      if (this.sharePublish.audio) {
-        await this.tune('screenAudio', { maxBitrate: this.sharePublish.audio.maxBitrate });
-      }
-    }
+    await this.applyShare();
     await this.applyCameraPublish();
+  }
+
+  /**
+   * The share's ceiling on this link's sender.
+   *
+   * One place rather than three: it used to be written out at every call site
+   * that had a `SharePublish` in hand, and the numbers have to come from this
+   * link rather than from the share, because `relayed` is a fact about the link
+   * and nothing else knows it. Idempotent, so re-applying it after a
+   * renegotiation - or after ICE settles on a relayed pair - costs nothing.
+   */
+  async applyShare(): Promise<void> {
+    if (!this.sharePublish) return;
+    await this.tune(
+      'screen',
+      {
+        maxBitrate: ceilingFor(this.sharePublish, this.relayed),
+        maxFramerate: this.sharePublish.maxFramerate,
+        scaleResolutionDownBy: this.sharePublish.scaleResolutionDownBy,
+        priority: this.sharePublish.priority,
+      },
+      this.sharePublish.degradationPreference,
+    );
+    if (this.sharePublish.audio) {
+      await this.tune('screenAudio', { maxBitrate: this.sharePublish.audio.maxBitrate });
+    }
   }
 
   /**
@@ -1168,12 +1190,29 @@ class PeerLink {
     if (this.closed) return;
 
     const decoded = new Map<string, number>();
+    // Read out of the same report, because the report is already open and this
+    // is the only loop that takes one every second whether or not anybody has
+    // the connection panel up. `sample()` answers the same question for the
+    // panel; that one is not running when it matters.
+    let nominated: Record<string, unknown> | null = null;
+    const candidates = new Map<string, string>();
+
     (await this.pc.getStats()).forEach((report) => {
-      const entry = report as RTCInboundRtpStreamStats & { mid?: string; framesDecoded?: number };
+      const entry = report as RTCStats & Record<string, unknown>;
       if (entry.type === 'inbound-rtp' && entry.kind === 'video' && entry.mid) {
-        decoded.set(entry.mid, entry.framesDecoded ?? 0);
+        decoded.set(String(entry.mid), Number(entry.framesDecoded ?? 0));
+        return;
+      }
+      if (entry.type === 'candidate-pair' && entry.state === 'succeeded' && entry.nominated) {
+        nominated = entry;
+        return;
+      }
+      if (entry.type === 'local-candidate' || entry.type === 'remote-candidate') {
+        candidates.set(String(entry.id), String(entry.candidateType ?? ''));
       }
     });
+
+    await this.applyRelayCeiling(nominated, candidates);
 
     for (const slot of ['camera', 'screen'] as const) {
       const transceiver = this.transceivers.get(slot);
@@ -1189,6 +1228,36 @@ class PeerLink {
       this.liveVideo.add(slot);
       this.events.onTrack(slot, track);
     }
+  }
+
+  /**
+   * Holds the share to what a relay can carry, the moment ICE says one is in
+   * the path.
+   *
+   * It cannot be decided when the share starts: ICE is usually still choosing a
+   * pair then, and a pair can change mid-call - a direct path that dies is
+   * replaced by a relayed one without anything else in this file noticing. So
+   * it is watched, and only a *change* re-tunes: `setParameters` on an
+   * unchanged ceiling is a wasted call a second, forever.
+   *
+   * Either end being a relay candidate is enough. TURN is in the path once,
+   * whichever side put it there, and the cost is the same either way.
+   */
+  private async applyRelayCeiling(
+    nominated: Record<string, unknown> | null,
+    candidates: Map<string, string>,
+  ): Promise<void> {
+    if (!nominated) return;
+    const local = candidates.get(String(nominated.localCandidateId ?? ''));
+    const remote = candidates.get(String(nominated.remoteCandidateId ?? ''));
+    // An unwalked pair says nothing; leaving `relayed` alone is the safe answer
+    // because the previous reading is still the last thing that was known.
+    if (!local || !remote) return;
+
+    const relayed = local === 'relay' || remote === 'relay';
+    if (relayed === this.relayed) return;
+    this.relayed = relayed;
+    await this.applyShare();
   }
 
   /**
@@ -1820,19 +1889,7 @@ export class Mesh {
     }
     if (this.sharePublish) {
       link.setSharePublish(this.sharePublish);
-      await link.tune(
-        'screen',
-        {
-          maxBitrate: this.sharePublish.maxBitrate,
-          maxFramerate: this.sharePublish.maxFramerate,
-          scaleResolutionDownBy: this.sharePublish.scaleResolutionDownBy,
-          priority: this.sharePublish.priority,
-        },
-        this.sharePublish.degradationPreference,
-      );
-      if (this.sharePublish.audio) {
-        await link.tune('screenAudio', { maxBitrate: this.sharePublish.audio.maxBitrate });
-      }
+      await link.applyShare();
     }
     if (this.cameraPublish) {
       link.setCameraPublish(this.cameraPublish);

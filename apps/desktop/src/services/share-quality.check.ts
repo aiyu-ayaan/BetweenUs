@@ -7,13 +7,23 @@
  */
 import assert from 'node:assert/strict';
 import {
+  BITRATE_RANGE,
+  DEFAULT_MAX_HEIGHT,
+  MAX_HEIGHTS,
+  NO_OVERRIDE,
   PLAYOUT_DELAY,
+  RELAY_MAX_BITRATE,
   bitrateFor,
+  cappedSize,
+  captureConstraints,
+  ceilingFor,
   patchVideoBandwidth,
   shareOptions,
   sortPreferredVideoCodecs,
-  BITRATE_RANGE,
 } from './share-quality';
+
+/** The ladder's own answer, with nothing capped, for the assertions below. */
+const UNCAPPED = { ...NO_OVERRIDE, maxHeight: null };
 
 const HD = { width: 1920, height: 1080 };
 const QHD = { width: 2560, height: 1440 };
@@ -44,6 +54,16 @@ for (const intent of ['detail', 'motion'] as const) {
   );
   assert.equal(shareOptions(intent, QHD, false).publish.scaleResolutionDownBy, 1);
 
+  // Both hints are screencast hints. `motion` is the DOM value that would
+  // describe a film best and it is the one value neither profile may carry: it
+  // clears `is_screencast`, which switches off periodic ALR probing, and
+  // without that a bandwidth estimate that collapsed has no way back up.
+  assert.notEqual(
+    shareOptions(intent, QHD, false).capture.contentHint as string,
+    'motion',
+    `${intent} must not clear is_screencast`,
+  );
+
   let previous = 0;
   for (const size of [{ width: 1280, height: 720 }, HD, QHD, UHD]) {
     const rate = bitrateFor(intent, size);
@@ -56,10 +76,11 @@ for (const intent of ['detail', 'motion'] as const) {
 assert.equal(bitrateFor('motion', QHD), 62_222_222);
 assert.equal(bitrateFor('motion', UHD), 80_000_000);
 
-// Capture is asked for at the real size, never left to the 1080p default.
-const movie = shareOptions('motion', QHD, { music: true });
+// Capture is asked for at the real size, never left to a runtime default -
+// once the ceiling below is out of the way.
+const movie = shareOptions('motion', QHD, { music: true }, UNCAPPED);
 assert.deepEqual(movie.capture.video, { width: 2560, height: 1440, frameRate: 60 });
-assert.equal(movie.capture.contentHint, 'motion');
+assert.equal(movie.capture.contentHint, 'detail');
 // Never `maintain-framerate`. It reads as "keep it smooth" and pays in pixels:
 // WebRTC scales by 1.5/2/3/4, so a 1440p film walks down to 480p and stays
 // there. No profile gives up resolution.
@@ -80,7 +101,7 @@ assert.equal(movie.publish.audio !== false && movie.publish.audio.dtx, false);
 assert.equal(movie.publish.audio !== false && movie.publish.audio.stereo, true);
 
 // A desktop makes the opposite trade, and its audio is not a soundtrack.
-const desktop = shareOptions('detail', HD, { music: false });
+const desktop = shareOptions('detail', HD, { music: false }, UNCAPPED);
 assert.equal(desktop.capture.contentHint, 'text');
 assert.equal(desktop.publish.degradationPreference, 'maintain-resolution');
 assert.deepEqual(desktop.capture.audio, { restrictOwnAudio: true });
@@ -96,11 +117,12 @@ assert.equal(shareOptions('detail', HD, false).capture.audio, false);
 
 // Nothing said: the ladder still decides, byte for byte.
 assert.deepEqual(
-  shareOptions('detail', HD, false, { maxBitrate: null, frameRate: null, videoCodec: 'auto' }),
+  shareOptions('detail', HD, false, NO_OVERRIDE),
   shareOptions('detail', HD, false),
 );
 
 const forced = shareOptions('motion', HD, false, {
+  ...NO_OVERRIDE,
   maxBitrate: 40_000_000,
   frameRate: 30,
   videoCodec: 'AV1',
@@ -115,15 +137,72 @@ assert.equal(forced.publish.videoCodec, 'AV1');
 // A number typed into a box is the one input here that has been through no
 // arithmetic at all, so it is clamped rather than trusted.
 assert.equal(
-  shareOptions('detail', HD, false, { maxBitrate: 1, frameRate: null, videoCodec: 'auto' })
-    .publish.maxBitrate,
+  shareOptions('detail', HD, false, { ...NO_OVERRIDE, maxBitrate: 1 }).publish.maxBitrate,
   BITRATE_RANGE.min,
 );
 assert.equal(
-  shareOptions('detail', HD, false, { maxBitrate: 900_000_000, frameRate: null, videoCodec: 'auto' })
-    .publish.maxBitrate,
+  shareOptions('detail', HD, false, { ...NO_OVERRIDE, maxBitrate: 900_000_000 }).publish.maxBitrate,
   BITRATE_RANGE.max,
 );
+
+// --- The resolution ceiling, which is spent before anything is encoded ------
+
+// The default is 1080p, and it is what an unconfigured profile gets.
+assert.equal(NO_OVERRIDE.maxHeight, DEFAULT_MAX_HEIGHT);
+assert.equal(DEFAULT_MAX_HEIGHT, 1080);
+assert.ok(MAX_HEIGHTS.includes(null), 'the display own size has to be offerable');
+assert.ok(MAX_HEIGHTS.includes(DEFAULT_MAX_HEIGHT));
+
+// Taller than the ceiling: scaled to it, with the display's aspect kept exactly.
+assert.deepEqual(cappedSize(UHD, 1080), { width: 1920, height: 1080 });
+assert.deepEqual(cappedSize(QHD, 1080), { width: 1920, height: 1080 });
+assert.deepEqual(cappedSize({ width: 3440, height: 1440 }, 1080), { width: 2580, height: 1080 });
+
+// Shorter than the ceiling: its own size, never enlarged to meet one. This is
+// the "a display below 1080p gets the display's resolution" case, and asking a
+// panel for lines it does not have is an upscale paid for in bitrate.
+assert.deepEqual(cappedSize({ width: 1366, height: 768 }, 1080), { width: 1366, height: 768 });
+assert.deepEqual(cappedSize(HD, 1080), HD);
+
+// `null` is the display's own size at any height.
+assert.deepEqual(cappedSize(UHD, null), UHD);
+
+// Always even: every H.264 encoder works in macroblocks, and an odd dimension
+// is rounded somewhere out of sight if it is not rounded here.
+assert.deepEqual(cappedSize({ width: 1365, height: 767 }, null), { width: 1364, height: 766 });
+assert.deepEqual(cappedSize({ width: 1079, height: 1439 }, 1080), { width: 810, height: 1080 });
+
+// The bitrate is quoted against the pixels that are actually sent, not against
+// the display they were scaled down from - a capped 4K share must not carry a
+// 4K share's ceiling.
+assert.equal(shareOptions('motion', UHD, false).publish.maxBitrate, bitrateFor('motion', HD));
+assert.equal(shareOptions('motion', UHD, false).capture.video.height, 1080);
+assert.ok(
+  shareOptions('motion', UHD, false, UNCAPPED).publish.maxBitrate >
+    shareOptions('motion', UHD, false).publish.maxBitrate,
+);
+
+// The ceiling reaches `getDisplayMedia` as a `max`, because `ideal` is a wish
+// Chromium is free to miss - which is what let the old constraint's
+// `max: 3840` beside an `ideal: 1920` hand back 4K anyway.
+const constraints = captureConstraints(shareOptions('detail', UHD, false).capture);
+assert.deepEqual(constraints.height, { ideal: 1080, max: 1080 });
+assert.deepEqual(constraints.width, { ideal: 1920, max: 1920 });
+assert.deepEqual(constraints.frameRate, { ideal: 60, max: 60 });
+
+// --- A relay in the path ----------------------------------------------------
+
+// A relayed pair costs the relay twice the bitrate, and a relay is a small VM
+// rather than a fabric. Pointing 35 Mbit at one produces loss, not 35 Mbit.
+const relayable = shareOptions('motion', HD, false).publish;
+assert.ok(relayable.maxBitrate > RELAY_MAX_BITRATE);
+assert.equal(ceilingFor(relayable, true), RELAY_MAX_BITRATE);
+assert.equal(ceilingFor(relayable, false), relayable.maxBitrate);
+
+// Never raises anything: a manual ceiling below the relay limit stays put.
+const frugal = shareOptions('detail', HD, false, { ...NO_OVERRIDE, maxBitrate: 3_000_000 }).publish;
+assert.equal(ceilingFor(frugal, true), 3_000_000);
+assert.equal(ceilingFor(frugal, false), 3_000_000);
 
 // Whoever is driving must not be watching the past.
 assert.equal(PLAYOUT_DELAY.driving, 0);
